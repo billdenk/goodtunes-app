@@ -33,6 +33,8 @@ import {
   revokePlaceholderIfUnused,
 } from "./partnerInvites";
 import { pgArray } from "./lib/pgArray";
+import { findChorusStartMs, findChorusCueIndex } from "./lib/chorusFinder";
+import { detectExplicitLyrics } from "./lib/explicitLyrics";
 import { hasArtistShape, personShape } from "./lib/personArtistShape";
 import {
   resolveMakerHostFromBrand as resolveMakerHostFromBrandShared,
@@ -8134,7 +8136,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Kick off Mux ingest the moment the master lands in object storage —
     // fire-and-forget; the admin UI polls muxStatus. Stream-only tracks
     // have no master so this is a no-op (maybeIngestToMux guards on URL).
-    void maybeIngestToMux(song.id, (song as any).audioUrl);
+    void maybeIngestToMux(song.id, (song as any).audioUrl, { freshUpload: true });
     return res.status(201).json(song);
   });
 
@@ -8388,7 +8390,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const updated = await storage.updateSong(id, updates);
     if (!updated) return res.status(404).json({ message: "Song not found" });
     if (updates.audioUrl !== undefined) {
-      void maybeIngestToMux(id, updates.audioUrl);
+      void maybeIngestToMux(id, updates.audioUrl, { freshUpload: true });
     }
     if (previewHideTouched && priorHide) {
       const nextHidden =
@@ -10960,7 +10962,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 } as any);
                 // Auto-ingest to Mux — Dropbox-batch is the primary upload
                 // path, so every new GoodTunes release flows through here.
-                void maybeIngestToMux(song.id, audioUrl);
+                void maybeIngestToMux(song.id, audioUrl, { freshUpload: true });
                 created.push({ id: song.id, trackNumber, title: song.title, filename, duration });
                 console.log(
                   `[import-job] import-tracks-from-dropbox (album=${albumId}) added "${filename}" as track ${trackNumber} (${created.length}/${tmpEntries.length}).`,
@@ -12489,70 +12491,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
-  app.post("/api/admin/songs/:id/auto-sync-lyrics", requireAdminBearer, async (req, res) => {
-    const id = String(req.params.id);
-    const startedAt = new Date();
-    // Logging context written to by the handler as it walks through
-    // the route; flushed exactly once on response finish below. Saves
-    // having to wrap all ~14 return points individually.
-    let runErrorMessage: string | null = null;
-    let runSummary: any = null;
-    let runAlbumId: string | null = null;
-    const apiKey = process.env.ELEVENLABS_API_KEY;
-    if (!apiKey) {
-      runErrorMessage = "ELEVENLABS_API_KEY secret is not set on the server.";
-      return res.status(500).json({ message: "ELEVENLABS_API_KEY not configured" });
-    }
-    const song = await storage.getSongById(id);
-    if (!song) {
-      runErrorMessage = "Song not found.";
-      return res.status(404).json({ message: "Song not found" });
-    }
-    runAlbumId = song.albumId ?? null;
-    // Single audit-row writer for the entire route. Fires whether the
-    // response was 200, 4xx, or 5xx — so a 401 from ElevenLabs (most
-    // common real-world failure: expired API key) leaves the same kind
-    // of trail as the lyrics-import endpoint.
-    res.on("finish", () => {
-      const ok = res.statusCode >= 200 && res.statusCode < 300;
-      storage.recordJobRun({
-        jobType: "auto-sync-lyrics",
-        albumId: runAlbumId,
-        songId: id,
-        status: ok ? "success" : "failed",
-        summary: runSummary,
-        errorMessage: ok ? null : (runErrorMessage || `HTTP ${res.statusCode}`),
-        startedAt,
-      }).catch(() => {});
-    });
-    if (!song.audioUrl) {
-      return res.status(400).json({ message: "Song has no master audio uploaded — upload a master first." });
-    }
-    // Plain lyrics are OPTIONAL. When present, we use them to refine and
-    // hallucination-filter the STT output. When absent, the back-populate
-    // pass below writes the transcription itself into `song.lyrics` so
-    // the operator gets a first-draft Words box from scratch — this is
-    // the path Bill uses when LRCLIB/Genius returned the wrong lyrics
-    // (or none at all) and Scribe heard the real ones.
-    if (song.lyrics && song.lyrics.length > FA_MAX_LYRIC_CHARS) {
-      return res.status(413).json({ message: `Lyrics too long (${song.lyrics.length} chars; cap ${FA_MAX_LYRIC_CHARS}).` });
-    }
+  // ─── Shared GoodSync™ transcription core (Task #2020) ─────────────
+  // Pulls a song's master to a tempfile (Object Storage path or external
+  // HTTPS, SSRF-checked), transcodes to an alignment-grade copy when it's
+  // too big / in an odd container, ships it to ElevenLabs Scribe, and
+  // returns the cleaned word-level events. Extracted so BOTH the manual
+  // /auto-sync-lyrics route AND the background auto-GoodSync orchestrator
+  // run the EXACT same pipeline — they must never drift. Never throws:
+  // returns a discriminated result and owns its own tempfile cleanup.
+  type GoodSyncWord = { text: string; start: number; end: number };
+  type GoodSyncCue = { timeMs: number; endMs: number; text: string };
+  type TranscribeResult =
+    | {
+        ok: true;
+        words: GoodSyncWord[];
+        transcript: string;
+        sourceBytes: number;
+        transcodedBytes: number | null;
+        transcodeMs: number | null;
+        sttMs: number;
+      }
+    | { ok: false; status: number; message: string; code?: string; detail?: string };
 
-    // Pull the master audio onto local disk as a tempfile. Streaming —
-    // never buffering the whole master into RAM — lets us accept the
-    // 24-bit/96kHz WAV masters that used to 413 at the old 150MB cap.
-    // Both sources land in the same `sourceTmpPath` so the
-    // passthrough-vs-transcode decision below is source-agnostic.
-    //
-    //   1) Object Storage paths (`/objects/uploads/<id>`) — uploaded
-    //      via the admin master uploader. Preflight via metadata so a
-    //      genuinely runaway file (> FA_MAX_SOURCE_BYTES) is rejected
-    //      before any download work.
-    //   2) External HTTPS URLs (Dropbox, S3, etc.) — Nick's catalog
-    //      lives on Dropbox today; we stream those through safeStreamFetch
-    //      (SSRF-checked on every hop) with a Content-Length preflight
-    //      AND an in-flight byte counter so a chunked source can't blow
-    //      past FA_MAX_SOURCE_BYTES.
+  async function transcribeMasterToWords(
+    song: { id: string; audioUrl: string | null },
+    apiKey: string,
+  ): Promise<TranscribeResult> {
+    if (!song.audioUrl) {
+      return {
+        ok: false,
+        status: 400,
+        message: "Song has no master audio uploaded — upload a master first.",
+      };
+    }
     let audioMime = "audio/wav";
     let sourceTmpPath: string | null = null;
     let alignmentTmpPath: string | null = null;
@@ -12564,40 +12535,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const { pipeline } = await import("node:stream/promises");
     const srcExt = (song.audioUrl.match(/\.(\w+)$/)?.[1] || "wav").toLowerCase();
     const isExternalUrl = /^https?:\/\//i.test(song.audioUrl);
-    // Upper bound on what we'll pull into memory for an alignment
-    // attempt. Bigger than FA_MAX_AUDIO_BYTES because we may need to
-    // transcode an over-cap master down to the alignment copy before
-    // shipping. 2 GB covers a ~30-minute 24-bit/96 kHz stereo WAV.
-    const FA_SOURCE_FETCH_CAP = 2 * 1024 * 1024 * 1024;
     try {
       try {
         sourceTmpPath = path.join(os.tmpdir(), `${randomUUID()}.${srcExt}`);
         if (isExternalUrl) {
           // 6-minute deadline covers the redirect chain AND the streaming
-          // body — high-bit-depth WAVs over a slow Dropbox CDN can take
-          // a while to land. SSRF/protocol/private-IP checks run on
-          // every hop inside `safeStreamFetch`.
+          // body — high-bit-depth WAVs over a slow Dropbox CDN can take a
+          // while. SSRF/protocol/private-IP checks run on every hop.
           const handle = await safeStreamFetch(song.audioUrl, {
             totalTimeoutMs: 6 * 60_000,
           });
           try {
             const upstream = handle.response;
             if (!upstream.ok || !upstream.body) {
-              return res.status(502).json({
+              return {
+                ok: false,
+                status: 502,
                 message: `Could not fetch master from external URL (HTTP ${upstream.status})`,
-              });
+              };
             }
             const ct = upstream.headers.get("content-type");
             if (ct) audioMime = ct.split(";")[0].trim();
             const cl = Number(upstream.headers.get("content-length") ?? 0);
             if (cl && cl > FA_MAX_SOURCE_BYTES) {
-              return res.status(413).json({
+              return {
+                ok: false,
+                status: 413,
                 message: `Master is too large for auto-sync (${(cl / 1024 / 1024).toFixed(0)}MB; cap ${FA_TRANSCODED_DISPLAY_CAP_MB}MB).`,
-              });
+              };
             }
-            // Stream to disk through a byte counter that tears the pipe
-            // down the instant the cap is crossed. Keeps RAM usage flat
-            // even for multi-GB masters.
             let received = 0;
             let oversized = false;
             const { Transform } = await import("node:stream");
@@ -12620,9 +12586,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               );
             } catch (e: any) {
               if (oversized || /exceeded/.test(String(e?.message))) {
-                return res.status(413).json({
+                return {
+                  ok: false,
+                  status: 413,
                   message: `Master is too large for auto-sync (cap ${FA_TRANSCODED_DISPLAY_CAP_MB}MB).`,
-                });
+                };
               }
               throw e;
             }
@@ -12635,25 +12603,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           if (meta?.contentType) audioMime = String(meta.contentType);
           const size = Number(meta?.size ?? 0);
           if (size && size > FA_MAX_SOURCE_BYTES) {
-            return res.status(413).json({
+            return {
+              ok: false,
+              status: 413,
               message: `Master is too large for auto-sync (${(size / 1024 / 1024).toFixed(0)}MB; cap ${FA_TRANSCODED_DISPLAY_CAP_MB}MB).`,
-            });
+            };
           }
-          await pipeline(
-            file.createReadStream(),
-            createWriteStream(sourceTmpPath),
-          );
+          await pipeline(file.createReadStream(), createWriteStream(sourceTmpPath));
         }
       } catch (err) {
         console.error("auto-sync: failed to fetch master audio", err);
-        return res.status(502).json({ message: "Could not read master audio from storage" });
+        return { ok: false, status: 502, message: "Could not read master audio from storage" };
       }
 
       // Decide passthrough vs transcode. Small files in a Scribe-friendly
-      // container are sent through unchanged — same latency + behaviour
-      // as before for the common case. Anything bigger (or in an oddball
-      // container like .aiff) gets transcoded to a compact 16kHz mono
-      // Opus copy that lands at a few MB regardless of source size.
+      // container go through unchanged; anything bigger (or an oddball
+      // container) is transcoded to a compact 16kHz mono Opus copy.
       let fileToSendPath = sourceTmpPath;
       let fileToSendMime = audioMime || "audio/wav";
       let fileToSendExt = `.${srcExt}`;
@@ -12670,16 +12635,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const conv = await transcodeAudioForAlignment(sourceTmpPath);
           transcodeMs = Date.now() - tStart;
           transcodedBytes = conv.bytes;
-          // Live sanity-test instrumentation (Task #95): log the shrink
-          // ratio + wall-clock so the operator can confirm long masters
-          // stay well under ElevenLabs's 120s timeout and 150MB ceiling.
           console.log(
             `auto-sync transcode: src=${(sourceBytes / 1024 / 1024).toFixed(1)}MB ` +
             `(.${srcExt}) → opus=${(conv.bytes / 1024 / 1024).toFixed(2)}MB in ${transcodeMs}ms`,
           );
-          // `transcodeAudioForAlignment` best-effort-unlinks its input
-          // on success — clear our handle so the finally doesn't double-
-          // unlink and surface a noisy ENOENT.
+          // transcodeAudioForAlignment best-effort-unlinks its input on
+          // success — clear our handle so the finally doesn't double-unlink.
           sourceTmpPath = null;
           alignmentTmpPath = conv.path;
           fileToSendPath = conv.path;
@@ -12687,21 +12648,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           fileToSendExt = conv.ext;
         } catch (err: any) {
           console.error("auto-sync: alignment transcode failed", err);
-          runErrorMessage = err?.message || "Couldn't prepare master for sync.";
-          return res.status(502).json({
+          return {
+            ok: false,
+            status: 502,
             message: "Couldn't prepare master for sync — ffmpeg failed to decode the file.",
             detail: String(err?.message || err).slice(0, 500),
-          });
+          };
         }
       }
 
-      // Call ElevenLabs Speech-to-Text (Scribe v1). We deliberately do NOT
-      // pass our `song.lyrics` as a hint — forced alignment kept failing
-      // because the writers' shorthand (bare `CHORUS`, `Hook x2 OUT`, etc.)
-      // doesn't match the actual sung word count. Transcribing what was
-      // actually sung gives us bulletproof word-level cues, and Bill can
-      // visually compare the transcription against his written lyrics.
-      var stt: {
+      let stt: {
         text?: string;
         words?: Array<{ text: string; start?: number; end?: number; type?: string }>;
       };
@@ -12715,100 +12671,95 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         form.append(
           "file",
           new Blob([fileBuf], { type: fileToSendMime }),
-          `song-${id}${fileToSendExt}`,
+          `song-${song.id}${fileToSendExt}`,
         );
         form.append("model_id", "scribe_v1");
         form.append("timestamps_granularity", "word");
         form.append("language_code", "en");
-
         const upstream = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
           method: "POST",
           headers: { "xi-api-key": apiKey },
           body: form,
           signal: ctl.signal,
         });
-      if (!upstream.ok) {
-        const errBody = await upstream.text().catch(() => "");
-        console.error("ElevenLabs STT failed", upstream.status, errBody);
-        // Detect the common "your key is bad/expired" case so the
-        // dialog can tell the admin to refresh the secret, instead
-        // of showing a generic red "Failed" badge.
-        const isAuth =
-          upstream.status === 401 ||
-          /invalid_api_key|unauthor/i.test(errBody);
-        const friendly = isAuth
-          ? "ElevenLabs sign-in is invalid — refresh the ELEVENLABS_API_KEY secret."
-          : `Transcription failed (${upstream.status})`;
-        runErrorMessage = friendly;
-        return res.status(isAuth ? 401 : 502).json({
-          message: friendly,
-          code: isAuth ? "invalid_api_key" : undefined,
-          detail: errBody.slice(0, 500),
-        });
+        if (!upstream.ok) {
+          const errBody = await upstream.text().catch(() => "");
+          console.error("ElevenLabs STT failed", upstream.status, errBody);
+          const isAuth =
+            upstream.status === 401 || /invalid_api_key|unauthor/i.test(errBody);
+          const friendly = isAuth
+            ? "ElevenLabs sign-in is invalid — refresh the ELEVENLABS_API_KEY secret."
+            : `Transcription failed (${upstream.status})`;
+          return {
+            ok: false,
+            status: isAuth ? 401 : 502,
+            message: friendly,
+            code: isAuth ? "invalid_api_key" : undefined,
+            detail: errBody.slice(0, 500),
+          };
+        }
+        stt = (await upstream.json()) as typeof stt;
+        sttMs = Date.now() - sttStart;
+        console.log(
+          `auto-sync STT: scribe_v1 finished in ${sttMs}ms ` +
+          `(payload=${(fileBuf.length / 1024 / 1024).toFixed(2)}MB)`,
+        );
+      } catch (err: any) {
+        if (err?.name === "AbortError") {
+          console.error("auto-sync: ElevenLabs STT timed out");
+          return { ok: false, status: 504, message: "Transcription timed out" };
+        }
+        console.error("auto-sync: ElevenLabs STT threw", err);
+        return { ok: false, status: 502, message: "Transcription service unreachable" };
+      } finally {
+        clearTimeout(timer);
       }
-      stt = (await upstream.json()) as typeof stt;
-      sttMs = Date.now() - sttStart;
-      console.log(
-        `auto-sync STT: scribe_v1 finished in ${sttMs}ms ` +
-        `(payload=${(fileBuf.length / 1024 / 1024).toFixed(2)}MB)`,
-      );
-    } catch (err: any) {
-      if (err?.name === "AbortError") {
-        console.error("auto-sync: ElevenLabs STT timed out");
-        return res.status(504).json({ message: "Transcription timed out" });
-      }
-      console.error("auto-sync: ElevenLabs STT threw", err);
-      return res.status(502).json({ message: "Transcription service unreachable" });
+
+      const SPECIAL_TOKEN_RE = /<\|[^|>]*\|>/g;
+      const rawWords = Array.isArray(stt?.words) ? stt.words : [];
+      const words: GoodSyncWord[] = rawWords
+        .filter(
+          (w) =>
+            w &&
+            (w.type === undefined || w.type === "word") &&
+            typeof w.text === "string" &&
+            w.text.trim().length > 0 &&
+            typeof w.start === "number",
+        )
+        .map((w) => ({
+          text: w.text!.replace(SPECIAL_TOKEN_RE, "").trim(),
+          start: w.start as number,
+          end: typeof w.end === "number" ? w.end : (w.start as number) + 0.2,
+        }))
+        .filter((w) => w.text.length > 0);
+
+      return {
+        ok: true,
+        words,
+        transcript: stt.text ?? "",
+        sourceBytes,
+        transcodedBytes,
+        transcodeMs,
+        sttMs,
+      };
     } finally {
-      clearTimeout(timer);
+      if (sourceTmpPath) {
+        try { await fsp.unlink(sourceTmpPath); } catch {}
+      }
+      if (alignmentTmpPath) {
+        try { await fsp.unlink(alignmentTmpPath); } catch {}
+      }
     }
+  }
 
-    // Keep only real word events (drop spacing/audio_event entries) and
-    // require usable timestamps. Scribe occasionally returns words without
-    // an end time on the very last token — synthesize one from start.
-    //
-    // Hardening against Whisper-style failure modes (Scribe shares the
-    // same family):
-    //  1) Special tokens like `<|startoftranscript|>`, `<|startofprev|>`,
-    //     `<|notimestamps|>`, `<|nospeech|>` sometimes leak into the
-    //     word text instead of being consumed by the decoder. Strip
-    //     them, and drop any word that's purely a special token.
-    //  2) On silent / instrumental / vocal-effected stretches the model
-    //     hallucinates well-known training-set text (the infamous
-    //     "subscribe to our newsletter / meal plan / weight-loss"
-    //     YouTube boilerplate). We can't perfectly detect that here,
-    //     but if the admin typed Plain lyrics, the post-pass below
-    //     drops cues with near-zero overlap as hallucinations.
-    const SPECIAL_TOKEN_RE = /<\|[^|>]*\|>/g;
-    const rawWords = Array.isArray(stt?.words) ? stt.words : [];
-    const words = rawWords
-      .filter(
-        (w) =>
-          w &&
-          (w.type === undefined || w.type === "word") &&
-          typeof w.text === "string" &&
-          w.text.trim().length > 0 &&
-          typeof w.start === "number",
-      )
-      .map((w) => ({
-        text: w.text!.replace(SPECIAL_TOKEN_RE, "").trim(),
-        start: w.start as number,
-        end: typeof w.end === "number" ? w.end : (w.start as number) + 0.2,
-      }))
-      .filter((w) => w.text.length > 0);
-    if (words.length === 0) {
-      return res.status(502).json({ message: "Transcription returned no words" });
-    }
-
-    // Group transcribed words into lines. Heuristic: a new line begins
-    // when the silence between words exceeds LINE_GAP_S, OR when the
-    // previous word ends with sentence-final punctuation in the source
-    // text (Scribe returns commas/periods attached to the word text).
-    // Cap line length so a quiet section without breath doesn't produce
-    // a 30-word run-on.
+  // Group transcribed words into lines. A new line begins when the
+  // silence between words exceeds LINE_GAP_S, OR when the previous word
+  // ends a sentence, OR when the line hits MAX_WORDS_PER_LINE.
+  function groupWordsIntoCues(words: GoodSyncWord[]): GoodSyncCue[] {
     const LINE_GAP_S = 0.55;
     const MAX_WORDS_PER_LINE = 12;
-    const out: { timeMs: number; endMs: number; text: string }[] = [];
+    const out: GoodSyncCue[] = [];
+    if (words.length === 0) return out;
     let curWords: string[] = [];
     let curStart = words[0].start;
     let curEnd = words[0].end;
@@ -12841,31 +12792,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         text: curWords.join(" "),
       });
     }
+    return out;
+  }
 
-    // ─── Final pass: refine cue text against the typed Plain lyrics ───
-    // STT mishears the occasional word ("till the end" vs "to the
-    // edge", "what we wanted" vs "but we wanted"). When the admin has
-    // typed Plain lyrics, we run a conservative word-level diff and
-    // swap only the words that clearly differ — preserving STT's
-    // natural sentence-casing and punctuation, and skipping stylistic
-    // variants (cuz/cause, yeah/ya, till/until, etc.).
-    //
-    // If Plain is empty, back-populate it from the STT cues (one cue
-    // per line). That gives the artist a one-click first draft to
-    // correct, instead of staring at a blank Lyrics box.
-    const hasPlain = !!(song.lyrics && song.lyrics.trim());
-    const refined = hasPlain
-      ? refineCuesAgainstPlain(out, song.lyrics!)
-      : out;
-
-    // Hallucination filter — drop cues that don't belong to the song.
-    // Only runs when the admin has typed Plain lyrics (we need that as
-    // ground truth). Builds a set of normalized word stems from Plain,
-    // then for each cue measures the fraction of its content words that
-    // appear anywhere in Plain. A cue with <25% overlap is almost
-    // certainly Whisper-style hallucinated boilerplate ("subscribe to
-    // our email list", "Jessica Stover", "meal plans") and gets cut.
-    // Tiny cues (<3 content words) are left alone — too easy to misjudge.
+  // Refine cue text against typed Plain lyrics and drop hallucinated
+  // cues (<25% word overlap). When Plain is empty, return a `plainDraft`
+  // built from the cues so the caller can back-populate the Words box.
+  function refineAndFilterCues(
+    out: GoodSyncCue[],
+    plainLyrics: string | null,
+  ): { filtered: GoodSyncCue[]; plainDraft: string | undefined; droppedCount: number } {
+    const hasPlain = !!(plainLyrics && plainLyrics.trim());
+    const refined = hasPlain ? refineCuesAgainstPlain(out, plainLyrics!) : out;
     const filtered = (() => {
       if (!hasPlain) return refined;
       const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
@@ -12877,7 +12815,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         "out","do","does","did","not","no","yes","oh","ah","yeah","just","got",
       ]);
       const plainSet = new Set<string>();
-      for (const t of song.lyrics!.split(/\s+/)) {
+      for (const t of plainLyrics!.split(/\s+/)) {
         const n = norm(t);
         if (n.length >= 2) plainSet.add(n);
       }
@@ -12885,62 +12823,317 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return refined.filter((cue) => {
         const tokens = cue.text.split(/\s+/).map(norm).filter((t) => t.length >= 2);
         const content = tokens.filter((t) => !STOP.has(t));
-        if (content.length < 3) return true; // too short to judge
+        if (content.length < 3) return true;
         let hit = 0;
         for (const w of content) if (plainSet.has(w)) hit++;
-        const overlap = hit / content.length;
-        return overlap >= 0.25;
+        return hit / content.length >= 0.25;
       });
     })();
+    const plainDraft = hasPlain ? undefined : refined.map((c) => c.text).join("\n");
+    const droppedCount = refined.length - filtered.length;
+    return { filtered, plainDraft, droppedCount };
+  }
 
-    const plainDraft = hasPlain
-      ? undefined
-      : refined.map((c) => c.text).join("\n");
+  app.post("/api/admin/songs/:id/auto-sync-lyrics", requireAdminBearer, async (req, res) => {
+    const id = String(req.params.id);
+    const startedAt = new Date();
+    let runErrorMessage: string | null = null;
+    let runSummary: any = null;
+    let runAlbumId: string | null = null;
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey) {
+      runErrorMessage = "ELEVENLABS_API_KEY secret is not set on the server.";
+      return res.status(500).json({ message: "ELEVENLABS_API_KEY not configured" });
+    }
+    const song = await storage.getSongById(id);
+    if (!song) {
+      runErrorMessage = "Song not found.";
+      return res.status(404).json({ message: "Song not found" });
+    }
+    runAlbumId = song.albumId ?? null;
+    // Single audit-row writer for the entire route. Fires whether the
+    // response was 200, 4xx, or 5xx.
+    res.on("finish", () => {
+      const ok = res.statusCode >= 200 && res.statusCode < 300;
+      storage.recordJobRun({
+        jobType: "auto-sync-lyrics",
+        albumId: runAlbumId,
+        songId: id,
+        status: ok ? "success" : "failed",
+        summary: runSummary,
+        errorMessage: ok ? null : (runErrorMessage || `HTTP ${res.statusCode}`),
+        startedAt,
+      }).catch(() => {});
+    });
+    if (!song.audioUrl) {
+      return res.status(400).json({ message: "Song has no master audio uploaded — upload a master first." });
+    }
+    // Plain lyrics are OPTIONAL. When present, we use them to refine and
+    // hallucination-filter the STT output. When absent, the back-populate
+    // pass below writes the transcription itself into `song.lyrics`.
+    if (song.lyrics && song.lyrics.length > FA_MAX_LYRIC_CHARS) {
+      return res.status(413).json({ message: `Lyrics too long (${song.lyrics.length} chars; cap ${FA_MAX_LYRIC_CHARS}).` });
+    }
+
+    const r = await transcribeMasterToWords(song, apiKey);
+    if (!r.ok) {
+      runErrorMessage = r.message;
+      return res.status(r.status).json({
+        message: r.message,
+        ...(r.code ? { code: r.code } : {}),
+        ...(r.detail ? { detail: r.detail } : {}),
+      });
+    }
+    const { words } = r;
+    if (words.length === 0) {
+      runErrorMessage = "Transcription returned no words";
+      return res.status(502).json({ message: "Transcription returned no words" });
+    }
+
+    const out = groupWordsIntoCues(words);
+    const { filtered, plainDraft, droppedCount } = refineAndFilterCues(out, song.lyrics ?? null);
 
     const updated = await storage.updateSong(id, {
       syncedLyrics: filtered,
       ...(plainDraft !== undefined ? { lyrics: plainDraft } : {}),
     });
-    const droppedCount = refined.length - filtered.length;
     runSummary = {
       lineCount: filtered.length,
       wordCount: words.length,
       backfilledPlainLyrics: plainDraft !== undefined,
       hallucinatedCuesDropped: droppedCount,
-      // Task #136 — persist the same source-MB / transcoded-MB /
-      // transcode-ms / STT-ms numbers we already return in the
-      // response so a slow-creep against the 120s ElevenLabs timeout
-      // (or a transcode that fails to shrink a big WAV) is queryable
-      // from /admin/jobs without tailing the server log.
-      sourceBytes,
-      transcodedBytes,
-      transcodeMs,
-      sttMs,
+      sourceBytes: r.sourceBytes,
+      transcodedBytes: r.transcodedBytes,
+      transcodeMs: r.transcodeMs,
+      sttMs: r.sttMs,
     };
     return res.json({
       song: updated,
       lineCount: filtered.length,
       wordCount: words.length,
       hallucinatedCuesDropped: droppedCount,
-      transcript: stt.text ?? "",
-      // Live-test instrumentation (Task #95) — lets the operator confirm
-      // shrink ratio + timing against ElevenLabs's 150MB / 120s limits
-      // without tailing the server log.
-      sourceBytes,
-      transcodedBytes,
-      transcodeMs,
-      sttMs,
+      transcript: r.transcript,
+      sourceBytes: r.sourceBytes,
+      transcodedBytes: r.transcodedBytes,
+      transcodeMs: r.transcodeMs,
+      sttMs: r.sttMs,
     });
-    } finally {
-      // Always clean up both tempfiles — source download and the
-      // alignment-grade transcoded copy. /tmp would otherwise accumulate
-      // multi-GB WAV downloads across runs.
-      if (sourceTmpPath) {
-        try { await fsp.unlink(sourceTmpPath); } catch {}
+  });
+
+  // ─── Auto-GoodSync™ orchestrator (Task #2020) ─────────────────────
+  // Best-effort, idempotent, fill-blanks-only background pass that runs
+  // after a freshly-uploaded master finishes Mux ingestion. Orchestrates
+  // the EXISTING engines (no new ones): Scribe transcription + time-align
+  // → instrumental detection (too few sung words) → explicit scan →
+  // chorus → previewStartMs. Never overwrites operator-set fields unless
+  // `force` is passed (the manual "Re-run GoodSync" control). Never
+  // throws — every failure lands the song on `failed` and records a job
+  // run. The TRIGGER is gated by claimSongForAutoGoodSync so this only
+  // ever runs for songs stamped `pending` at a fresh-upload callsite,
+  // NOT for catalog-wide reconcile/backfill sweeps.
+  async function runAutoGoodSync(
+    songId: string,
+    opts: { force?: boolean; trigger: string },
+  ): Promise<{ outcome: string; summary: any; errorMessage: string | null }> {
+    const force = !!opts.force;
+    const startedAt = new Date();
+    let summary: any = { force, trigger: opts.trigger };
+    let errorMessage: string | null = null;
+    let finalStatus: "done" | "instrumental" | "failed" = "failed";
+    let albumId: string | null = null;
+    const stampStatus = async (s: string) => {
+      try { await storage.updateSong(songId, { autoGoodSyncStatus: s } as any); } catch {}
+    };
+    try {
+      const song = await storage.getSongById(songId);
+      if (!song) {
+        return { outcome: "failed", summary: { reason: "song-not-found" }, errorMessage: "Song not found" };
       }
-      if (alignmentTmpPath) {
-        try { await fsp.unlink(alignmentTmpPath); } catch {}
+      albumId = song.albumId ?? null;
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      if (!apiKey) {
+        errorMessage = "ELEVENLABS_API_KEY not configured";
+        await stampStatus("failed");
+        await storage.recordJobRun({
+          jobType: "auto-goodsync", albumId, songId, status: "failed",
+          summary, errorMessage, startedAt,
+        }).catch(() => {});
+        return { outcome: "failed", summary, errorMessage };
       }
+      // Operator-set state snapshot — what the fill-blanks-only policy
+      // protects. `force` ignores all of these.
+      const operatorHasLyrics = !!(song.lyrics && song.lyrics.trim());
+      const operatorHasSynced = Array.isArray(song.syncedLyrics) && song.syncedLyrics.length > 0;
+      const operatorPreviewSet = song.previewStartMs != null;
+      const operatorInstrumental = song.instrumental === true;
+      const operatorExplicit = song.isExplicit === true;
+
+      await stampStatus("processing");
+
+      const r = await transcribeMasterToWords(song, apiKey);
+      if (!r.ok) {
+        errorMessage = r.message;
+        await stampStatus("failed");
+        summary = { ...summary, reason: "transcribe-failed", detail: r.detail };
+        await storage.recordJobRun({
+          jobType: "auto-goodsync", albumId, songId, status: "failed",
+          summary, errorMessage, startedAt,
+        }).catch(() => {});
+        return { outcome: "failed", summary, errorMessage };
+      }
+      const { words } = r;
+
+      // Instrumental detection: a track with essentially no sung words.
+      // Only flips the `instrumental` flag when the operator hasn't typed
+      // lyrics (or under force) — never override a human who said this
+      // track DOES have words.
+      const INSTRUMENTAL_WORD_FLOOR = 5;
+      if (words.length < INSTRUMENTAL_WORD_FLOOR) {
+        const setInstrumental = !operatorHasLyrics || force;
+        if (setInstrumental && !operatorInstrumental) {
+          await storage.updateSong(songId, { instrumental: true } as any).catch(() => {});
+        }
+        finalStatus = "instrumental";
+        summary = {
+          ...summary,
+          detected: "instrumental",
+          wordCount: words.length,
+          instrumentalSet: setInstrumental,
+        };
+        await stampStatus("instrumental");
+        await storage.recordJobRun({
+          jobType: "auto-goodsync", albumId, songId, status: "success",
+          summary, errorMessage: null, startedAt,
+        }).catch(() => {});
+        return { outcome: "instrumental", summary, errorMessage: null };
+      }
+
+      const out = groupWordsIntoCues(words);
+      const { filtered, plainDraft, droppedCount } = refineAndFilterCues(out, song.lyrics ?? null);
+
+      const updates: any = {};
+      // Synced lyrics: fill-blanks-only unless force.
+      const writeSynced = !operatorHasSynced || force;
+      if (writeSynced) updates.syncedLyrics = filtered;
+      // Back-populate Plain lyrics only when blank (plainDraft is only
+      // defined when the operator had no Plain lyrics to begin with).
+      if (plainDraft !== undefined && !operatorHasLyrics) updates.lyrics = plainDraft;
+
+      // Lyrics source for explicit + chorus scans: operator copy if they
+      // have it, else our fresh transcription.
+      const lyricsForScan = operatorHasLyrics
+        ? song.lyrics!
+        : (plainDraft ?? filtered.map((c) => c.text).join("\n"));
+
+      // Explicit scan — advisory flag, only ever proposed ON.
+      const explicitScan = detectExplicitLyrics(lyricsForScan);
+      let explicitSet = false;
+      if (explicitScan.explicit && (force || !operatorExplicit)) {
+        updates.isExplicit = true;
+        explicitSet = true;
+      }
+
+      // Chorus → previewStartMs. Deterministic `[Chorus]`-marker match
+      // first (no AI cost); AI fallback only when the lyrics carry no
+      // labeled chorus. Fill-blanks-only unless force.
+      let previewSet: number | null = null;
+      if (force || !operatorPreviewSet) {
+        const cuesForChorus = filtered.map((c) => ({ timeMs: c.timeMs, text: c.text }));
+        let chorusMs = findChorusStartMs(lyricsForScan, cuesForChorus);
+        if (chorusMs == null) {
+          try {
+            const openai = await getOpenAI();
+            const idx = await findChorusCueIndex(cuesForChorus, lyricsForScan, openai);
+            if (idx != null && idx >= 0 && idx < cuesForChorus.length) {
+              chorusMs = Math.max(0, Math.round(cuesForChorus[idx].timeMs));
+            }
+          } catch (e: any) {
+            console.warn(`[auto-goodsync] chorus AI lookup failed: ${e?.message}`);
+          }
+        }
+        if (chorusMs != null) {
+          updates.previewStartMs = chorusMs;
+          previewSet = chorusMs;
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await storage.updateSong(songId, updates);
+      }
+      finalStatus = "done";
+      summary = {
+        ...summary,
+        detected: "lyrics",
+        wordCount: words.length,
+        lineCount: filtered.length,
+        syncedWritten: writeSynced,
+        backfilledPlainLyrics: updates.lyrics !== undefined,
+        hallucinatedCuesDropped: droppedCount,
+        explicitDetected: explicitScan.explicit,
+        explicitSet,
+        explicitMatches: explicitScan.matches,
+        previewStartMs: previewSet,
+        sttMs: r.sttMs,
+      };
+      await stampStatus("done");
+      await storage.recordJobRun({
+        jobType: "auto-goodsync", albumId, songId, status: "success",
+        summary, errorMessage: null, startedAt,
+      }).catch(() => {});
+      return { outcome: "done", summary, errorMessage: null };
+    } catch (err: any) {
+      errorMessage = err?.message || "auto-goodsync crashed";
+      console.error(`[auto-goodsync] song=${songId} crashed`, err?.message);
+      await stampStatus("failed");
+      await storage.recordJobRun({
+        jobType: "auto-goodsync", albumId, songId, status: "failed",
+        summary, errorMessage, startedAt,
+      }).catch(() => {});
+      return { outcome: "failed", summary, errorMessage };
+    }
+  }
+
+  // Fire the orchestrator IF this caller wins the atomic claim. The claim
+  // only succeeds on songs stamped `pending` by a fresh-upload callsite,
+  // so this is safe to call from EVERY Mux "ready" transition (webhook,
+  // synchronous create, reconcile heal) — a catalog song that was never
+  // stamped simply fails the claim and is skipped.
+  async function triggerAutoGoodSyncIfClaimed(songId: string, trigger: string) {
+    try {
+      const claimed = await storage.claimSongForAutoGoodSync(songId);
+      if (!claimed) return;
+      console.log(`[auto-goodsync] claimed song=${songId} (trigger=${trigger})`);
+      void runAutoGoodSync(songId, { trigger });
+    } catch (err: any) {
+      console.error(`[auto-goodsync] claim/trigger failed song=${songId}`, err?.message);
+    }
+  }
+
+  // Task #2020 — manual "Re-run GoodSync" admin control. Runs the
+  // orchestrator SYNCHRONOUSLY (operator is watching the spinner) in
+  // `force` mode by default so it overwrites operator-set fields — this
+  // is the explicit "redo it properly" button, distinct from the
+  // fill-blanks-only auto path. Pass `{ force: false }` to respect the
+  // fill-blanks-only policy.
+  app.post("/api/admin/songs/:id/rerun-goodsync", requireAdminBearer, async (req, res) => {
+    try {
+      const id = String(req.params.id);
+      const song = await storage.getSongById(id);
+      if (!song) return res.status(404).json({ message: "Song not found" });
+      const force = req.body?.force === false ? false : true;
+      // Reset the status slot so the UI shows "processing" immediately and
+      // a crash mid-run can't strand the previous status.
+      await storage.updateSong(id, { autoGoodSyncStatus: "processing" } as any).catch(() => {});
+      const result = await runAutoGoodSync(id, { force, trigger: "manual-rerun" });
+      return res.json({
+        ok: result.outcome !== "failed",
+        outcome: result.outcome,
+        summary: result.summary,
+        errorMessage: result.errorMessage,
+      });
+    } catch (err: any) {
+      console.error(`[auto-goodsync] manual rerun failed`, err?.message);
+      return res.status(500).json({ message: err?.message || "Re-run GoodSync failed" });
     }
   });
 
@@ -20480,9 +20673,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // asset, skips when Mux isn't configured, skips external/streaming URLs.
   // Function *declaration* (not const) so it's hoisted to all callsites,
   // including the song create/update/import endpoints earlier in this file.
-  async function maybeIngestToMux(songId: string, audioUrl: string | null | undefined) {
+  async function maybeIngestToMux(
+    songId: string,
+    audioUrl: string | null | undefined,
+    opts?: { freshUpload?: boolean },
+  ) {
     if (!isMuxConfigured() || !audioUrl) return;
     if (!audioUrl.startsWith("/objects/")) return;
+    // Task #2020 — stamp the auto-GoodSync claim slot on FRESH uploads
+    // only (new song, master swap, Dropbox import). The orchestrator
+    // fires off the Mux "ready" transition, gated by an atomic claim that
+    // only succeeds on `pending`; catalog-wide reconcile/backfill sweeps
+    // call this helper WITHOUT freshUpload, so they never stamp pending
+    // and never auto-GoodSync the back catalog.
+    if (opts?.freshUpload) {
+      try {
+        await storage.updateSong(songId, { autoGoodSyncStatus: "pending" } as any);
+      } catch (e: any) {
+        console.error(`[auto-goodsync] failed to stamp pending song=${songId}`, e?.message);
+      }
+    }
     // Fire-and-forget — never propagate errors back to the caller.
     (async () => {
       try {
@@ -20508,6 +20718,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             : {}),
         });
         console.log(`[mux-auto] song=${songId} asset=${asset.assetId} status=${asset.status}`);
+        // Mux occasionally returns a synchronously-`ready` asset (small
+        // file, warm cache) — the webhook may never add anything. Trigger
+        // the gated auto-GoodSync here too so a fresh upload doesn't wait
+        // on the reconcile sweep. Claim gate makes this a no-op otherwise.
+        if (asset.status === "ready") {
+          void triggerAutoGoodSyncIfClaimed(songId, "mux-ingest-ready");
+        }
       } catch (err: any) {
         // Mark errored so the next boot-backfill or admin retry can pick
         // it back up — without this we'd be stranded in "ingesting".
@@ -21144,6 +21361,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ? { muxRetryCount: 0, muxLastRetryAt: null, muxLastError: null }
           : {}),
       });
+      // Task #2020 — primary auto-GoodSync trigger. The webhook is the
+      // normal signal that a fresh master finished ingesting; fire the
+      // gated orchestrator (no-op unless the song was stamped `pending`
+      // by a fresh-upload callsite, so reconcile-healed catalog rows are
+      // never auto-GoodSync'd).
+      if (newStatus === "ready") {
+        void triggerAutoGoodSyncIfClaimed(song.id, "mux-webhook-ready");
+      }
       res.json({ ok: true });
     } catch (err: any) {
       console.error("[mux-webhook] update failed", err?.message);
@@ -21228,6 +21453,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               : {}),
           });
           healed++;
+          // Task #2020 — safety-net auto-GoodSync trigger for fresh
+          // uploads whose webhook never landed. Still gated by the
+          // atomic `pending` claim, so reconciling the back catalog
+          // (which is never stamped `pending`) does NOT auto-GoodSync.
+          if (realStatus === "ready") {
+            void triggerAutoGoodSyncIfClaimed(s.id, "mux-reconcile-ready");
+          }
         } catch (err: any) {
           console.error(
             `[mux-reconcile:${reason}] reconcile failed for song ${s.id}: ${err?.message}`,

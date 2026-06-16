@@ -7247,4 +7247,29 @@ SQL
 backfill_task_2021_album_artwork_cleanup dev  "${DATABASE_URL:-}"
 backfill_task_2021_album_artwork_cleanup prod "${PROD_DATABASE_URL:-}"
 
+# Task #2020 — Auto-run GoodSync after upload: add auto_goodsync_status to
+# songs on both DBs. Nullable text column tracking the background-GoodSync
+# lifecycle (pending → processing → done|instrumental|failed); adding it is
+# non-destructive and safe on a live database without a lock.
+add_auto_goodsync_status_column() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping auto_goodsync_status column on $label (no URL)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+ALTER TABLE songs
+  ADD COLUMN IF NOT EXISTS auto_goodsync_status text;
+SQL
+  ); then
+    echo "post-merge: auto_goodsync_status column ok on $label"
+  else
+    echo "post-merge: WARNING — auto_goodsync_status column failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+add_auto_goodsync_status_column dev  "${DATABASE_URL:-}"
+add_auto_goodsync_status_column prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror

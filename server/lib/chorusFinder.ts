@@ -21,6 +21,71 @@ export interface ChorusCue {
   text: string;
 }
 
+// ── Deterministic `[Chorus]`-marker finder (server port) ──────────────
+// Mirror of the client `findChorusStartMs` in AdminAlbum.tsx. The auto-
+// GoodSync orchestrator runs entirely server-side, so it can't reach the
+// client helper — it calls this first (no AI cost) and only falls back to
+// `findChorusCueIndex` when the lyrics carry no labeled chorus section.
+// Keep the two in lockstep: behaviour must match what the operator sees
+// from the in-UI "Find the chorus" action.
+const SECTION_HEADER_RE =
+  /^(\[.*\]|V\d+|VERSE(?:\s+\d+)?|PRE(?:-?\s*CHORUS)?|POST(?:-?\s*CHORUS)?|CHORUS|BRIDGE|INTRO|OUTRO)$/;
+
+function isSectionHeaderLine(text: string): boolean {
+  return SECTION_HEADER_RE.test(text.trim());
+}
+
+export function findChorusStartMs(
+  lyricsText: string | null | undefined,
+  cues: ChorusCue[] | null | undefined,
+): number | null {
+  if (!lyricsText || !cues || cues.length === 0) return null;
+  const isChorusHeader = (line: string) => {
+    if (!isSectionHeaderLine(line)) return false;
+    const inner = line
+      .trim()
+      .replace(/^[\[\(]/, "")
+      .replace(/[\]\)]$/, "")
+      .trim();
+    return /^chorus\b/i.test(inner);
+  };
+  const lines = lyricsText.split("\n");
+  let chorusIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!t) continue;
+    if (isChorusHeader(t)) {
+      chorusIdx = i;
+      break;
+    }
+  }
+  if (chorusIdx === -1) return null;
+  let firstSungText: string | null = null;
+  let firstSungIdx = -1;
+  for (let i = chorusIdx + 1; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!t || isSectionHeaderLine(t)) continue;
+    firstSungText = t;
+    firstSungIdx = i;
+    break;
+  }
+  if (firstSungText === null || firstSungIdx === -1) return null;
+  let sungCount = 0;
+  for (let i = 0; i < firstSungIdx; i++) {
+    const t = lines[i].trim();
+    if (t && !isSectionHeaderLine(t)) sungCount++;
+  }
+  const norm = (s: string) => s.trim().toLowerCase();
+  const target = norm(firstSungText);
+  const lo = Math.max(0, sungCount - 2);
+  const hi = Math.min(cues.length - 1, sungCount + 2);
+  for (let i = lo; i <= hi; i++) {
+    if (norm(cues[i].text) === target) return cues[i].timeMs;
+  }
+  if (sungCount < cues.length) return cues[sungCount].timeMs;
+  return null;
+}
+
 // Keep the prompt tight: cap how many cues we ship the model so a very
 // long track (or a transcription that split every word onto its own line)
 // can't blow up cost/latency. The chorus on a pop song almost always lands

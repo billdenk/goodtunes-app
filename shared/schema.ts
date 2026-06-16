@@ -725,6 +725,17 @@ export const songs = pgTable("songs", {
   // outro). The Lyrics status dot then reads "intentionally none" (grey
   // Ban glyph) instead of "missing" (empty grey ring). Default false.
   instrumental: boolean("instrumental").notNull().default(false),
+  // Auto-GoodSync™ orchestration status. Stamped "pending" ONLY when a
+  // fresh master is uploaded (create / master-swap / Dropbox import) and
+  // queued for Mux ingest; never by the catalog-wide reconcile/backfill
+  // sweeps. Once Mux flips the asset to "ready", the orchestrator atomic-
+  // claims the row (pending → processing), runs GoodSync in the
+  // background (transcribe + time-align lyrics, chorus → previewStartMs,
+  // instrumental + explicit detection), then lands on "done",
+  // "instrumental", or "failed". NULL = never auto-run (legacy rows,
+  // stream-only tracks). The per-song admin "Re-run GoodSync" control
+  // drives the same orchestrator with a force flag.
+  autoGoodSyncStatus: text("auto_goodsync_status"),
   // Per-track explicit flag — Apple Music's model. The fan-facing
   // tracklist renders a small "E" pill next to the title when true.
   // Album.isExplicit stays as a separate override (artwork/title

@@ -202,6 +202,12 @@ export interface IStorage {
   // Returns true if THIS caller claimed it — false means someone else
   // already started, so the caller should bail out.
   claimSongForMuxIngest(id: string): Promise<boolean>;
+  // Auto-GoodSync™ atomic claim. Flips a song from the "pending" status
+  // (stamped at fresh-master upload) to "processing" in a single
+  // compare-and-swap, returning true only to the ONE caller that won. The
+  // Mux "ready" webhook can be delivered more than once; this guarantees
+  // the background GoodSync orchestrator fires exactly once per upload.
+  claimSongForAutoGoodSync(id: string): Promise<boolean>;
   deleteSong(id: string): Promise<void>;
 
   // Bonus album content. Public reads expose only the rows attached to
@@ -1627,6 +1633,22 @@ export class DbStorage implements IStorage {
         and(
           eq(songs.id, id),
           sql`(${songs.muxAssetId} IS NULL OR ${songs.muxStatus} = 'errored')`,
+        ),
+      )
+      .returning({ id: songs.id });
+    return rows.length > 0;
+  }
+  async claimSongForAutoGoodSync(id: string): Promise<boolean> {
+    // Atomic compare-and-swap: only the caller that flips the row out of
+    // "pending" wins. Mux can deliver its ready webhook more than once, so
+    // this is what keeps auto-GoodSync from running twice on one upload.
+    const rows = await db
+      .update(songs)
+      .set({ autoGoodSyncStatus: "processing" } as any)
+      .where(
+        and(
+          eq(songs.id, id),
+          eq(songs.autoGoodSyncStatus, "pending"),
         ),
       )
       .returning({ id: songs.id });

@@ -258,6 +258,10 @@ interface SongLite {
   syncedLyrics?: { timeMs: number; endMs?: number; text: string }[] | null;
   instrumental?: boolean | null;
   isExplicit?: boolean | null;
+  // Task #2020 — auto-GoodSync lifecycle: pending (stamped on fresh
+  // upload, waiting on Mux ready) → processing → done | instrumental |
+  // failed. Null on legacy rows / catalog songs never auto-synced.
+  autoGoodSyncStatus?: string | null;
   previewStartMs?: number | null;
   previewEndMs?: number | null;
   // Artist-designated preview single — fan-facing Preview & Purchase
@@ -9464,6 +9468,53 @@ function GoodSyncPanel({
         variant: "destructive",
       }),
   });
+
+  // ── Re-run GoodSync (Task #2020) ──────────────────────────────────
+  // Manual trigger for the full auto-GoodSync orchestrator: transcribe +
+  // time-align, find the chorus → preview start, detect instrumental +
+  // explicit. Runs in `force` mode (overwrites operator-set fields), so
+  // it's gated behind a confirm dialog. Distinct from "Re-sync with
+  // audio" above, which only re-aligns the synced-lyric cues.
+  const [confirmRerun, setConfirmRerun] = useState(false);
+  const rerunGoodSync = useMutation({
+    mutationFn: async () =>
+      apiRequest("POST", `/api/admin/songs/${song.id}/rerun-goodsync`, {
+        force: true,
+      }),
+    onSuccess: async (res: any) => {
+      await onSaved?.();
+      const outcome = res?.outcome;
+      toast({
+        title:
+          outcome === "instrumental"
+            ? "GoodSync™ — detected instrumental"
+            : outcome === "failed"
+              ? "GoodSync™ finished with errors"
+              : "GoodSync™ complete",
+        description:
+          outcome === "failed"
+            ? res?.errorMessage || "Some steps didn't complete."
+            : undefined,
+        variant: outcome === "failed" ? "destructive" : undefined,
+      });
+      setConfirmRerun(false);
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't re-run GoodSync™",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+      setConfirmRerun(false);
+    },
+  });
+
+  // Auto-GoodSync lifecycle badge. `processing`/`pending` show a live
+  // spinner; terminal states show a colored pill. Null = never auto-run
+  // (legacy / catalog) → no badge.
+  const autoStatus = song.autoGoodSyncStatus ?? null;
+  const autoBusy = autoStatus === "pending" || autoStatus === "processing";
+
   // Keep the old `canPlay` name for the audio-element render block —
   // play UI is gated on having real cues now, not on typed lyrics.
   const canPlay = hasSynced;
@@ -9635,6 +9686,46 @@ function GoodSyncPanel({
             </p>
           </PopoverContent>
         </Popover>
+        {/* Auto-GoodSync status badge (Task #2020). Surfaces the
+            post-upload background run so the operator knows GoodSync
+            already ran (or is mid-run) without clicking anything. */}
+        {autoStatus && (
+          <span
+            className={
+              "inline-flex items-center gap-1 h-5 px-1.5 rounded-full text-xs font-semibold flex-shrink-0 " +
+              (autoBusy
+                ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
+                : autoStatus === "done"
+                  ? "bg-emerald-50 text-emerald-700"
+                  : autoStatus === "instrumental"
+                    ? "bg-slate-100 text-slate-500"
+                    : "bg-rose-50 text-rose-600")
+            }
+            title={
+              autoStatus === "pending"
+                ? "Auto-GoodSync queued — waiting on audio to finish processing."
+                : autoStatus === "processing"
+                  ? "Auto-GoodSync is running in the background."
+                  : autoStatus === "done"
+                    ? "Auto-GoodSync ran after upload."
+                    : autoStatus === "instrumental"
+                      ? "Auto-GoodSync detected an instrumental track."
+                      : "Auto-GoodSync hit an error — try Re-run."
+            }
+            data-testid={`badge-auto-goodsync-${song.id}`}
+          >
+            {autoBusy && <Spinner className="w-2.5 h-2.5 animate-spin" />}
+            {autoStatus === "pending"
+              ? "Auto: queued"
+              : autoStatus === "processing"
+                ? "Auto: running"
+                : autoStatus === "done"
+                  ? "Auto ✓"
+                  : autoStatus === "instrumental"
+                    ? "Instrumental"
+                    : "Auto failed"}
+          </span>
+        )}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
         {/* Edit mode shows Cancel + Save and hides the play/sync
@@ -9738,6 +9829,27 @@ function GoodSyncPanel({
                   <Pause className="w-3.5 h-3.5" />
                 ) : (
                   <Play className="w-3.5 h-3.5 translate-x-[1px] fill-current" />
+                )}
+              </button>
+            )}
+            {/* Re-run GoodSync (Task #2020) — runs the full post-upload
+                orchestrator (transcribe + align, chorus → preview,
+                instrumental + explicit detection) in force mode. Needs
+                a master; disabled while a run is in flight. */}
+            {!!song.audioUrl && (
+              <button
+                type="button"
+                onClick={() => setConfirmRerun(true)}
+                disabled={rerunGoodSync.isPending || autoBusy}
+                aria-label="Re-run GoodSync"
+                title="Re-run GoodSync — re-transcribes, re-aligns, and re-detects chorus / instrumental / explicit (overwrites)."
+                className="w-6 h-6 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                data-testid={`button-rerun-goodsync-${song.id}`}
+              >
+                {rerunGoodSync.isPending || autoBusy ? (
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <WaveArrowGlyph className="w-3.5 h-3.5" />
                 )}
               </button>
             )}
@@ -10043,6 +10155,39 @@ function GoodSyncPanel({
             data-testid={`button-confirm-resync-${song.id}`}
           >
             Re-sync
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    <AlertDialog open={confirmRerun} onOpenChange={setConfirmRerun}>
+      <AlertDialogContent data-testid={`dialog-confirm-rerun-goodsync-${song.id}`}>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Re-run GoodSync™?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This re-runs the full post-upload pass against the master:
+            it re-transcribes and re-times the lyrics, finds the chorus to
+            set the 30-second preview start, and re-checks whether the
+            track is instrumental or explicit. It overwrites the synced
+            cues, preview start, and those flags — your typed Plain lyrics
+            are kept. Usually takes 20–30 seconds.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            disabled={rerunGoodSync.isPending}
+            data-testid={`button-cancel-rerun-goodsync-${song.id}`}
+          >
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => {
+              e.preventDefault();
+              rerunGoodSync.mutate();
+            }}
+            disabled={rerunGoodSync.isPending}
+            data-testid={`button-confirm-rerun-goodsync-${song.id}`}
+          >
+            {rerunGoodSync.isPending ? "Running…" : "Re-run GoodSync"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
