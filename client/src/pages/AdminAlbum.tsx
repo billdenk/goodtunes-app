@@ -2893,7 +2893,7 @@ function ShareLinkPanel({
           {/* Full URL + action buttons */}
           <div className="mt-3 flex items-center gap-2">
             {fullUrl ? (
-              <p className="flex-1 text-xs text-slate-500 truncate" data-testid="text-share-link-url">
+              <p className="flex-1 min-w-0 text-xs text-slate-500 truncate" data-testid="text-share-link-url">
                 {fullUrl}
               </p>
             ) : (

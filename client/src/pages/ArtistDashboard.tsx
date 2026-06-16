@@ -1026,7 +1026,7 @@ export function InviteArtistPanel() {
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold truncate text-sm flex items-center gap-1.5" data-testid={`text-artist-invite-name-${iv.id}`}>
-                      <span className="truncate">{iv.scopeName ?? iv.email}</span>
+                      <span className="truncate min-w-0">{iv.scopeName ?? iv.email}</span>
                       {iv.role === "label" && (
                         <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-fan-secondary bg-white/10 rounded px-1.5 py-0.5" data-testid={`tag-artist-invite-role-${iv.id}`}>Label</span>
                       )}

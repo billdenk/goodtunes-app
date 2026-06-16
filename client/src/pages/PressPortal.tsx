@@ -767,7 +767,7 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
         )}
         {a.pressInvoiceUrl && (
           <div className="flex items-center gap-2">
-            <a href={a.pressInvoiceUrl} target="_blank" rel="noreferrer" className="text-xs text-[color:var(--brand-blue)] truncate hover:underline" data-testid={`link-invoice-${a.id}`}>
+            <a href={a.pressInvoiceUrl} target="_blank" rel="noreferrer" className="text-xs text-[color:var(--brand-blue)] truncate min-w-0 hover:underline" data-testid={`link-invoice-${a.id}`}>
               <ExternalLink className="inline w-3 h-3 mr-1" />
               {a.pressInvoiceTotalCents != null ? `$${(a.pressInvoiceTotalCents / 100).toFixed(2)}` : "Invoice"}
             </a>

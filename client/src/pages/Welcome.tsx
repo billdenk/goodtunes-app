@@ -587,7 +587,7 @@ export function Welcome() {
               Send this link to {giftFirst} — when they open it and claim, the album + GoodDeed move to their account.
             </div>
             <div className="flex items-center gap-2 bg-white/[0.06] border border-white/10 rounded-xl px-3 py-2">
-              <code className="text-xs text-fan-primary truncate flex-1" data-testid="text-gift-share-url">
+              <code className="text-xs text-fan-primary truncate flex-1 min-w-0" data-testid="text-gift-share-url">
                 {giftShareUrl}
               </code>
               <button

@@ -120,7 +120,7 @@ function AdminAlbumEngagementInner() {
               <ol className="divide-y divide-slate-100">
                 {data.recentBuyers.map((b, i) => (
                   <li key={i} className="flex items-center gap-3 py-2.5 text-[13.5px]">
-                    <div className="flex-1 truncate text-slate-900">{b.email ?? "—"}</div>
+                    <div className="flex-1 min-w-0 truncate text-slate-900">{b.email ?? "—"}</div>
                     <div className="text-[12px] text-slate-500">{b.createdAt ? new Date(b.createdAt).toLocaleDateString() : ""}</div>
                   </li>
                 ))}

@@ -271,7 +271,7 @@ function OrderDetailBody({ detail }: { detail: AdminOrderDetail }) {
       <Section title="Customer">
         {customer ? (
           <div className="flex items-center gap-2">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="font-medium text-slate-900 truncate">
                 {customer.realName || customer.displayName || customer.email}
               </div>

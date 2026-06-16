@@ -1174,7 +1174,7 @@ function ArtistUrlPanel({ person }: { person: PersonFull }) {
 
       <div className="mt-3 flex items-center gap-2">
         {copyUrl ? (
-          <p className="flex-1 text-xs text-slate-500 truncate" data-testid="text-artist-url-full">
+          <p className="flex-1 min-w-0 text-xs text-slate-500 truncate" data-testid="text-artist-url-full">
             {copyUrl}
           </p>
         ) : (

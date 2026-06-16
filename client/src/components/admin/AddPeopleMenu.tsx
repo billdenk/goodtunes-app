@@ -1060,7 +1060,7 @@ function AttachContactDialog(
               </div>
               <div className="flex items-center gap-2">
                 <code
-                  className="flex-1 text-xs text-slate-800 bg-white border border-slate-200 rounded-md px-2 py-1.5 truncate"
+                  className="flex-1 min-w-0 text-xs text-slate-800 bg-white border border-slate-200 rounded-md px-2 py-1.5 truncate"
                   data-testid={`text-${props.testIdPrefix}-${props.kind}-accept-url`}
                 >
                   {invite.url}

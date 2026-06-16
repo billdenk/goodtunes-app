@@ -1052,7 +1052,7 @@ function ArtistKpiTiles({
           <div className="space-y-1.5">
             {topFans.map((fan, i) => (
               <div key={i} className="flex items-center justify-between gap-2">
-                <span className="text-sm text-slate-700 truncate">{fan.email}</span>
+                <span className="text-sm text-slate-700 truncate min-w-0">{fan.email}</span>
                 <span className="text-sm font-semibold text-slate-900 flex-shrink-0">
                   ${(fan.totalCents / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                 </span>

@@ -340,7 +340,7 @@ function InvitePendingDialog({
             <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Accept link</div>
             <div className="flex items-center gap-2">
               <code
-                className="flex-1 text-xs text-slate-800 bg-white border border-slate-200 rounded-md px-2 py-1.5 truncate"
+                className="flex-1 min-w-0 text-xs text-slate-800 bg-white border border-slate-200 rounded-md px-2 py-1.5 truncate"
                 data-testid={`text-${testIdPrefix}-invite-pending-url`}
               >{invite.url}</code>
               <Button

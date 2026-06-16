@@ -336,7 +336,7 @@ function InvitesTab({ npoId, caps }: { npoId: string | undefined; caps: CallerCa
           {items.map((i) => (
             <li key={i.id} className="flex items-center gap-3 px-4 py-3 text-sm" data-testid={`row-npo-invite-${i.id}`}>
               <Mail className="w-4 h-4 text-white/45" />
-              <span className="flex-1 truncate">
+              <span className="flex-1 min-w-0 truncate">
                 {i.email}{" "}
                 <span className="ml-2 text-xs uppercase tracking-wider text-white/55">{labelForRole(i.role)}</span>
               </span>
