@@ -795,10 +795,9 @@ export function AlbumDashboardPanel({ albumId }: { albumId: string }) {
                 <ul className="divide-y divide-slate-100">
                   {(selectedCity.fanList ?? []).map((f) => (
                     <li key={f.id}>
-                      <Link
+                      <Link className="group flex items-center justify-between gap-3 py-2 text-sm text-slate-700 transition-colors hover:text-[color:var(--brand-blue)]"
                         href={`/admin/customers/${f.id}`}
                         onClick={() => setSelectedCity(null)}
-                        className="group flex items-center justify-between gap-3 py-2 text-sm text-slate-700 transition-colors hover:text-[color:var(--brand-blue)]"
                         data-testid={`link-city-fan-${f.id}`}
                       >
                         <span className="inline-flex min-w-0 items-center gap-2">
