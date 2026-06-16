@@ -968,8 +968,19 @@ async function albumDashboardHandler(req: Request, res: Response) {
 
   // (5) Fan locations — reuse the partner buyer-map (city-level geocode) with
   // a single-album scope filter so the viz matches the artist dashboard.
+  // Operators (super_admin/admin) additionally get a per-city fan list so the
+  // "Where fans live" card can drill into individual /admin/customers/:id
+  // pages; partners (artist/label/manager) never receive customer ids — see
+  // the PII guardrail in server/reports/buyers.ts.
+  const viewerRole = (await getUserRole(req.session?.userId as string))?.role;
+  const isOperator = viewerRole === "super_admin" || viewerRole === "admin";
   const { buyerMap } = await import("./reports/buyers");
-  const geo = await buyerMap(sql`o.album_id = ${albumId}`, new Date(0), new Date(Date.now() + 86400_000));
+  const geo = await buyerMap(
+    sql`o.album_id = ${albumId}`,
+    new Date(0),
+    new Date(Date.now() + 86400_000),
+    { withFanList: isOperator },
+  );
 
   return res.json({
     lifetime,

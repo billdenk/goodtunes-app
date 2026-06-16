@@ -138,6 +138,7 @@ export async function buyerRoster(
   });
 }
 
+export type BuyerMapFan = { id: string; name: string };
 export type BuyerMapPoint = {
   city: string | null;
   region: string | null;
@@ -146,7 +147,17 @@ export type BuyerMapPoint = {
   lon: number;
   orders: number;
   fans: number;
+  // Operator-only: the individual fan accounts in this city, each linkable
+  // to /admin/customers/:id. Attached ONLY when `opts.withFanList` is set
+  // (the operator album dashboard). Omitted for partner-facing surfaces so
+  // customer ids never leak — see the PII guardrail at the top of this file.
+  fanList?: BuyerMapFan[];
 };
+
+// Cap the per-city fan list so a dense metro can't bloat the payload; the
+// popup notes "showing N of M" when it's clipped. City counts are tiny in
+// practice, so this almost never bites.
+const FAN_LIST_CAP = 50;
 
 // City-level geocoded map points for the partner scope. Mirrors the
 // admin Fan Map (server/reports/index.ts fanMap): group by
@@ -156,11 +167,19 @@ export async function buyerMap(
   scopeFilter: SQL,
   from: Date,
   to: Date,
+  opts: { withFanList?: boolean } = {},
 ): Promise<{ points: BuyerMapPoint[]; totalCities: number; geocoded: number }> {
+  const withFanList = opts.withFanList === true;
+  // Resolve each fan's display name only when the caller is allowed to see
+  // the per-city fan list (operators). Partner surfaces skip the join so the
+  // wire shape stays name/city-only.
+  const nameSelect = withFanList ? sql`, cu.display_name AS fan_name, cu.email AS fan_email` : sql``;
+  const nameJoin = withFanList ? sql`LEFT JOIN customer_users cu ON cu.id = o.customer_id` : sql``;
   const rows = await db.execute<any>(sql`
     SELECT ${LOC_CITY} AS city, ${LOC_REGION} AS region, ${LOC_COUNTRY} AS country,
-      o.customer_id
+      o.customer_id${nameSelect}
     FROM orders o
+    ${nameJoin}
     WHERE ${scopeFilter}
       AND o.status IN ('paid','shipped','complete','completed')
       AND o.created_at >= ${from} AND o.created_at < ${to}
@@ -169,6 +188,8 @@ export async function buyerMap(
     string,
     { city: string | null; region: string | null; country: string | null; orders: number; fans: Set<string> }
   >();
+  // customerId → display label, populated only when withFanList.
+  const fanNames = new Map<string, string>();
   for (const r of (rows as any).rows ?? []) {
     const city = (r.city as string | undefined) || null;
     const region = (r.region as string | undefined) || null;
@@ -177,7 +198,16 @@ export async function buyerMap(
     const key = `${(city ?? "").toLowerCase()}|${(region ?? "").toLowerCase()}|${(country ?? "").toLowerCase()}`;
     const slot = groups.get(key) ?? { city, region, country, orders: 0, fans: new Set<string>() };
     slot.orders++;
-    if (r.customer_id) slot.fans.add(r.customer_id);
+    if (r.customer_id) {
+      slot.fans.add(r.customer_id);
+      if (withFanList && !fanNames.has(r.customer_id)) {
+        const label =
+          (r.fan_name as string | undefined)?.trim() ||
+          (r.fan_email as string | undefined)?.trim() ||
+          "Customer";
+        fanNames.set(r.customer_id, label);
+      }
+    }
     groups.set(key, slot);
   }
 
@@ -186,7 +216,7 @@ export async function buyerMap(
   for (const g of Array.from(groups.values())) {
     const pt = await geocode({ city: g.city, region: g.region, country: g.country });
     if (!pt) continue;
-    points.push({
+    const point: BuyerMapPoint = {
       city: g.city,
       region: g.region,
       country: g.country,
@@ -194,7 +224,14 @@ export async function buyerMap(
       lon: pt.lon,
       orders: g.orders,
       fans: g.fans.size,
-    });
+    };
+    if (withFanList) {
+      point.fanList = Array.from(g.fans)
+        .map((id) => ({ id, name: fanNames.get(id) ?? "Customer" }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .slice(0, FAN_LIST_CAP);
+    }
+    points.push(point);
   }
   return { points, totalCities: groups.size, geocoded: points.length };
 }

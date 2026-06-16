@@ -16,7 +16,14 @@ import {
   Repeat,
   Download,
 } from "lucide-react";
+import { Link } from "wouter";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { apiRequest } from "@/lib/queryClient";
 
 // Task #1525 — Per-album performance Dashboard (first/default tab). White-
@@ -42,6 +49,7 @@ type TopSong = {
   completes: number;
   favorites: number;
 };
+type GeoFan = { id: string; name: string };
 type GeoPoint = {
   city: string | null;
   region: string | null;
@@ -50,6 +58,10 @@ type GeoPoint = {
   lon: number;
   orders: number;
   fans: number;
+  // Operator-only: individual fans in this city (each links to
+  // /admin/customers/:id). Undefined for partner viewers — see the PII
+  // guardrail in server/reports/buyers.ts.
+  fanList?: GeoFan[];
 };
 type DashboardPayload = {
   lifetime: Lifetime;
@@ -415,7 +427,13 @@ function pointInUs(p: GeoPoint): boolean {
 // Light-chrome geographic city-dot map. Mirrors the partner SalesMap base
 // layer but tuned for the white admin surface, and auto-focuses the
 // continental US when (nearly) all geocoded points fall inside it.
-function FanMap({ points }: { points: GeoPoint[] }) {
+function FanMap({
+  points,
+  onSelect,
+}: {
+  points: GeoPoint[];
+  onSelect?: (p: GeoPoint) => void;
+}) {
   const useUs = useMemo(() => {
     if (points.length === 0) return false;
     const inUs = points.filter(pointInUs).length;
@@ -449,7 +467,12 @@ function FanMap({ points }: { points: GeoPoint[] }) {
           const [x, y] = proj(p.lon, p.lat);
           const r = 2 + 6 * Math.sqrt(p.orders / maxOrders);
           return (
-            <g key={i} data-testid={`map-dot-${i}`}>
+            <g
+              key={i}
+              data-testid={`map-dot-${i}`}
+              onClick={onSelect ? () => onSelect(p) : undefined}
+              style={onSelect ? { cursor: "pointer" } : undefined}
+            >
               <circle
                 cx={x}
                 cy={y}
@@ -459,6 +482,10 @@ function FanMap({ points }: { points: GeoPoint[] }) {
                 stroke="var(--brand-blue)"
                 strokeWidth={1}
               />
+              {/* Larger transparent hit target so tiny city dots stay tappable. */}
+              {onSelect && (
+                <circle cx={x} cy={y} r={Math.max(r + 6, 11)} fill="transparent" />
+              )}
               <title>
                 {locationStr(p)} — {p.orders} order{p.orders === 1 ? "" : "s"}, {p.fans} fan
                 {p.fans === 1 ? "" : "s"}
@@ -479,6 +506,10 @@ export function AlbumDashboardPanel({ albumId }: { albumId: string }) {
       return (await res.json()) as DashboardPayload;
     },
   });
+  // Operator-only "Where fans live" drill-down: which city the operator
+  // tapped (dot or list row). Hook stays above the loading/error guards so
+  // render order never changes between states (React #310).
+  const [selectedCity, setSelectedCity] = useState<GeoPoint | null>(null);
 
   if (isLoading) {
     return (
@@ -510,6 +541,10 @@ export function AlbumDashboardPanel({ albumId }: { albumId: string }) {
       : 0;
   const maxPlays = Math.max(1, ...topSongs.map((t) => t.plays));
   const sortedCities = [...geo.points].sort((a, b) => b.orders - a.orders);
+  // The server attaches `fanList` only for operators (super_admin/admin);
+  // partners never receive customer ids. So its presence is the signal that
+  // the map and city list should be drill-down-able into /admin/customers/:id.
+  const fansClickable = geo.points.some((p) => Array.isArray(p.fanList));
 
   return (
     <div className="space-y-5" data-testid="panel-dashboard">
@@ -683,23 +718,45 @@ export function AlbumDashboardPanel({ albumId }: { albumId: string }) {
             </p>
           ) : (
             <>
-              <FanMap points={geo.points} />
+              <FanMap
+                points={geo.points}
+                onSelect={fansClickable ? setSelectedCity : undefined}
+              />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
-                {sortedCities.slice(0, 8).map((c, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between gap-3 text-sm"
-                    data-testid={`geo-city-${i}`}
-                  >
-                    <span className="inline-flex items-center gap-1.5 text-slate-700 truncate">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                      <span className="truncate">{locationStr(c)}</span>
-                    </span>
-                    <span className="text-slate-500 tabular-nums whitespace-nowrap">
-                      {c.orders.toLocaleString()} order{c.orders === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                ))}
+                {sortedCities.slice(0, 8).map((c, i) => {
+                  const inner = (
+                    <>
+                      <span className="inline-flex items-center gap-1.5 text-slate-700 truncate">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                        <span className="truncate transition-colors group-hover:text-[color:var(--brand-blue)] group-hover:underline underline-offset-2">
+                          {locationStr(c)}
+                        </span>
+                      </span>
+                      <span className="text-slate-500 tabular-nums whitespace-nowrap">
+                        {c.orders.toLocaleString()} order{c.orders === 1 ? "" : "s"}
+                      </span>
+                    </>
+                  );
+                  return fansClickable ? (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setSelectedCity(c)}
+                      className="group flex w-full items-center justify-between gap-3 text-left text-sm rounded-md -mx-1.5 px-1.5 py-1 hover:bg-slate-50 transition-colors"
+                      data-testid={`geo-city-${i}`}
+                    >
+                      {inner}
+                    </button>
+                  ) : (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between gap-3 text-sm"
+                      data-testid={`geo-city-${i}`}
+                    >
+                      {inner}
+                    </div>
+                  );
+                })}
               </div>
               <p className="text-xs text-slate-400 flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3" />
@@ -709,6 +766,65 @@ export function AlbumDashboardPanel({ albumId }: { albumId: string }) {
           )}
         </div>
       </SectionCard>
+
+      {/* Operator-only drill-down: who the fans in a tapped city are. */}
+      <Dialog
+        open={!!selectedCity}
+        onOpenChange={(open) => {
+          if (!open) setSelectedCity(null);
+        }}
+      >
+        <DialogContent className="max-w-sm" data-testid="dialog-city-fans">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <MapPin className="w-4 h-4 text-[color:var(--brand-blue)]" />
+              {selectedCity ? locationStr(selectedCity) : ""}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedCity && (
+            <div className="space-y-2">
+              <p className="text-xs text-slate-500" data-testid="text-city-summary">
+                {selectedCity.fans.toLocaleString()} fan{selectedCity.fans === 1 ? "" : "s"} ·{" "}
+                {selectedCity.orders.toLocaleString()} order{selectedCity.orders === 1 ? "" : "s"}
+              </p>
+              {(selectedCity.fanList ?? []).length === 0 ? (
+                <p className="text-sm text-slate-500 py-2" data-testid="text-city-fans-empty">
+                  No linked fan accounts in this city yet.
+                </p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {(selectedCity.fanList ?? []).map((f) => (
+                    <li key={f.id}>
+                      <Link
+                        href={`/admin/customers/${f.id}`}
+                        onClick={() => setSelectedCity(null)}
+                        className="group flex items-center justify-between gap-3 py-2 text-sm text-slate-700 transition-colors hover:text-[color:var(--brand-blue)]"
+                        data-testid={`link-city-fan-${f.id}`}
+                      >
+                        <span className="inline-flex min-w-0 items-center gap-2">
+                          <Users className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                          <span className="truncate underline-offset-2 group-hover:underline">
+                            {f.name}
+                          </span>
+                        </span>
+                        <span className="inline-flex flex-shrink-0 items-center gap-1 text-xs text-slate-400 transition-colors group-hover:text-[color:var(--brand-blue)]">
+                          More detail
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {selectedCity.fanList && selectedCity.fans > selectedCity.fanList.length && (
+                <p className="text-xs text-slate-400 pt-1" data-testid="text-city-fans-clipped">
+                  Showing {selectedCity.fanList.length} of {selectedCity.fans.toLocaleString()} fans.
+                </p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
