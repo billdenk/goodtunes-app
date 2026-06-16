@@ -34,6 +34,7 @@ import {
 } from "./partnerInvites";
 import { pgArray } from "./lib/pgArray";
 import { findChorusStartMs, findChorusCueIndex } from "./lib/chorusFinder";
+import { planAutoGoodSyncUpdates, decideInstrumental } from "./lib/autoGoodSyncPolicy";
 import { detectExplicitLyrics } from "./lib/explicitLyrics";
 import { hasArtistShape, personShape } from "./lib/personArtistShape";
 import {
@@ -12989,8 +12990,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // track DOES have words.
       const INSTRUMENTAL_WORD_FLOOR = 5;
       if (words.length < INSTRUMENTAL_WORD_FLOOR) {
-        const setInstrumental = !operatorHasLyrics || force;
-        if (setInstrumental && !operatorInstrumental) {
+        const { setInstrumental, write: writeInstrumental } = decideInstrumental(force, {
+          hasLyrics: operatorHasLyrics,
+          instrumental: operatorInstrumental,
+        });
+        if (writeInstrumental) {
           await storage.updateSong(songId, { instrumental: true } as any).catch(() => {});
         }
         finalStatus = "instrumental";
@@ -13011,14 +13015,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const out = groupWordsIntoCues(words);
       const { filtered, plainDraft, droppedCount } = refineAndFilterCues(out, song.lyrics ?? null);
 
-      const updates: any = {};
-      // Synced lyrics: fill-blanks-only unless force.
-      const writeSynced = !operatorHasSynced || force;
-      if (writeSynced) updates.syncedLyrics = filtered;
-      // Back-populate Plain lyrics only when blank (plainDraft is only
-      // defined when the operator had no Plain lyrics to begin with).
-      if (plainDraft !== undefined && !operatorHasLyrics) updates.lyrics = plainDraft;
-
       // Lyrics source for explicit + chorus scans: operator copy if they
       // have it, else our fresh transcription.
       const lyricsForScan = operatorHasLyrics
@@ -13027,19 +13023,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Explicit scan — advisory flag, only ever proposed ON.
       const explicitScan = detectExplicitLyrics(lyricsForScan);
-      let explicitSet = false;
-      if (explicitScan.explicit && (force || !operatorExplicit)) {
-        updates.isExplicit = true;
-        explicitSet = true;
-      }
 
       // Chorus → previewStartMs. Deterministic `[Chorus]`-marker match
       // first (no AI cost); AI fallback only when the lyrics carry no
-      // labeled chorus. Fill-blanks-only unless force.
-      let previewSet: number | null = null;
+      // labeled chorus. Only computed under the preview-eligible gate so we
+      // never pay AI cost for a preview the operator already set.
+      let chorusMs: number | null = null;
       if (force || !operatorPreviewSet) {
         const cuesForChorus = filtered.map((c) => ({ timeMs: c.timeMs, text: c.text }));
-        let chorusMs = findChorusStartMs(lyricsForScan, cuesForChorus);
+        chorusMs = findChorusStartMs(lyricsForScan, cuesForChorus);
         if (chorusMs == null) {
           try {
             const openai = await getOpenAI();
@@ -13051,11 +13043,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             console.warn(`[auto-goodsync] chorus AI lookup failed: ${e?.message}`);
           }
         }
-        if (chorusMs != null) {
-          updates.previewStartMs = chorusMs;
-          previewSet = chorusMs;
-        }
       }
+
+      // Fill-blanks-only vs. force write decision — pure, unit-tested in
+      // server/lib/autoGoodSyncPolicy.ts so this contract can't silently
+      // regress into clobbering operator-set fields.
+      const plan = planAutoGoodSyncUpdates(
+        force,
+        {
+          hasLyrics: operatorHasLyrics,
+          hasSynced: operatorHasSynced,
+          previewSet: operatorPreviewSet,
+          instrumental: operatorInstrumental,
+          explicit: operatorExplicit,
+        },
+        {
+          filtered,
+          plainDraft,
+          explicitDetected: explicitScan.explicit,
+          chorusMs,
+        },
+      );
+      const { updates, writeSynced, explicitSet, previewSet } = plan;
 
       if (Object.keys(updates).length > 0) {
         await storage.updateSong(songId, updates);
