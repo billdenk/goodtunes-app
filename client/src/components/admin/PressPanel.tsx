@@ -28,6 +28,7 @@ import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPane
 import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
 import { VinylOrderPanel } from "@/components/admin/VinylOrderPanel";
 import type { VinylFormat } from "@shared/vinylFormatRules";
+import type { AlbumPhysicalFormat } from "@shared/schema";
 
 export type PressPanelSong = {
   id: string;
@@ -297,7 +298,7 @@ export function PressPanel({
   // Task #583 — Sell-panel physical-format pick drives whether the Side
   // A / Side B cut block renders inside Masters on file (cassette + no
   // physical format hide the block; the rest of the panel stays).
-  physicalFormat?: "single_lp" | "double_lp" | "seven_inch" | "cassette" | null;
+  physicalFormat?: AlbumPhysicalFormat | null;
   vinylFormat?: VinylFormat | null;
   // Task #1530 — completeness gating for the relocated Go-to-Press
   // affordance. `readyToSend` is true only when every section reads
@@ -307,7 +308,8 @@ export function PressPanel({
   readyToSend?: boolean;
   sendBlockers?: string[];
 }) {
-  const showVinylSides = !!physicalFormat && physicalFormat !== "cassette";
+  const showVinylSides =
+    !!physicalFormat && physicalFormat !== "cassette" && physicalFormat !== "cd";
   const { toast } = useToast();
   const sorted = [...songs].sort((a, b) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0));
   const withMaster = sorted.filter((s) => !!s.audioUrl);

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeAudioUrl } from "@shared/audioUrl";
 import { normalizeShareSlug, validateShareSlug, shareUrlForSlugs, SHARE_LINK_HOST } from "@shared/shareSlug";
+import type { AlbumPhysicalFormat } from "@shared/schema";
 import { createPortal } from "react-dom";
 import { Card } from "@/components/ui/card";
 import { AlbumCover } from "@/components/ui/AlbumCover";
@@ -234,7 +235,7 @@ interface AlbumFull {
   // quote" on the Sell tab and the rest of the album tabs (Press,
   // Shopify, Bonus) unlock.
   sellMode?: "direct" | "shopify" | null;
-  physicalFormat?: "single_lp" | "double_lp" | "seven_inch" | "cassette" | null;
+  physicalFormat?: AlbumPhysicalFormat | null;
   sellQuoteLockedAt?: string | null;
   // Task #541 — Vinyl cut format (12_33_single / 12_33_double / 12_45 /
   // 7_45). Picked on the Tracks → Vinyl-order view; independent of

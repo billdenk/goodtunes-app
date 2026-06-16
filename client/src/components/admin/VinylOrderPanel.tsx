@@ -22,6 +22,7 @@ import {
   type VinylSongInput,
 } from "@shared/vinylSideSolver";
 import { cn } from "@/lib/utils";
+import type { AlbumPhysicalFormat } from "@shared/schema";
 
 // Task #541 — Vinyl-order view. Sits inside the Tracks panel under a
 // segmented toggle (Digital | Vinyl). Drag-and-drop is grouped by
@@ -52,7 +53,7 @@ interface Props {
   vinylFormat: VinylFormat | null;
   // Sell-tab format pick — used as a sensible default when the artist
   // hasn't picked a vinyl-cut format yet.
-  physicalFormat?: "single_lp" | "double_lp" | "seven_inch" | "cassette" | null;
+  physicalFormat?: AlbumPhysicalFormat | null;
 }
 
 // Translate the Sell-panel format (Single LP / Double LP / 7" / Cassette)
@@ -67,6 +68,7 @@ function defaultFormatFor(physical: Props["physicalFormat"]): VinylFormat {
       return "7_45";
     case "single_lp":
     case "cassette":
+    case "cd":
     case null:
     case undefined:
     default:

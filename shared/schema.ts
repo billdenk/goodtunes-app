@@ -546,6 +546,7 @@ export const ALBUM_PHYSICAL_FORMATS = [
   "double_lp",
   "seven_inch",
   "cassette",
+  "cd",
 ] as const;
 export type AlbumPhysicalFormat = (typeof ALBUM_PHYSICAL_FORMATS)[number];
 export const ALBUM_PHYSICAL_FORMAT_LABEL: Record<AlbumPhysicalFormat, string> = {
@@ -553,6 +554,7 @@ export const ALBUM_PHYSICAL_FORMAT_LABEL: Record<AlbumPhysicalFormat, string> = 
   double_lp: "Double LP",
   seven_inch: "7\" Vinyl",
   cassette: "Cassette",
+  cd: "CD",
 };
 // The New Album dialog stores its own format vocabulary
 // (`ALBUM_PHYSICAL_FORMATS`) — Single LP / Double LP / 7" / Cassette.
@@ -564,12 +566,13 @@ export const ALBUM_PHYSICAL_FORMAT_LABEL: Record<AlbumPhysicalFormat, string> = 
 // branch entirely.
 export const PHYSICAL_FORMAT_TO_ALBUM_FORMAT: Record<
   AlbumPhysicalFormat,
-  "7_inch" | "12_lp" | "12_double" | "cassette"
+  "7_inch" | "12_lp" | "12_double" | "cassette" | "cd"
 > = {
   seven_inch: "7_inch",
   single_lp: "12_lp",
   double_lp: "12_double",
   cassette: "cassette",
+  cd: "cd",
 };
 // Reverse of the map above, keyed by the Sell-panel SKU vocabulary
 // (`ALBUM_FORMATS`). Used to keep `albums.physicalFormat` in sync when

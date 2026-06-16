@@ -8,6 +8,17 @@ import {
   type AlbumSellMode,
 } from "@shared/schema";
 
+// Short per-format blurbs shown under each card in the physical-format
+// picker. UI copy only — kept here (not in schema) because it's dialog
+// presentation, not domain data.
+const ALBUM_PHYSICAL_FORMAT_BLURB: Record<AlbumPhysicalFormat, string> = {
+  single_lp: "Standard 12″ vinyl.",
+  double_lp: "Two-disc 12″ set.",
+  seven_inch: "7″ single — fastest turn.",
+  cassette: "Tape — short-run friendly.",
+  cd: "Compact disc — low-cost run.",
+};
+
 /**
  * Task #335 — Two-step "how is this album sold?" dialog.
  *
@@ -159,27 +170,29 @@ export function NewAlbumModeDialog({
                 preview art. You can change it later.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-2 gap-2.5">
-              {ALBUM_PHYSICAL_FORMATS.map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onSubmit({ sellMode: "direct", physicalFormat: f })}
-                  data-testid={`card-format-${f}`}
-                  className="group rounded-lg border border-slate-200 bg-white p-4 text-left hover:border-[color:var(--brand-blue)] hover:shadow-sm transition-all disabled:opacity-60"
-                >
-                  <div className="text-[14px] font-semibold text-slate-900 group-hover:text-[color:var(--brand-blue)] flex items-center gap-1.5">
-                    {ALBUM_PHYSICAL_FORMAT_LABEL[f]}
-                  </div>
-                  <div className="text-[11.5px] text-slate-500 mt-0.5">
-                    {f === "single_lp" && "Standard 12″ vinyl."}
-                    {f === "double_lp" && "Two-disc 12″ set."}
-                    {f === "seven_inch" && "7″ single — fastest turn."}
-                    {f === "cassette" && "Tape — short-run friendly."}
-                  </div>
-                </button>
-              ))}
+            {/* The two 12″ LPs sit side by side on top; the shorter-run
+                formats (7″ / Cassette / CD) share the row below. */}
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
+                {ALBUM_PHYSICAL_FORMATS.slice(0, 2).map((f) => (
+                  <FormatCard
+                    key={f}
+                    f={f}
+                    busy={busy}
+                    onPick={() => onSubmit({ sellMode: "direct", physicalFormat: f })}
+                  />
+                ))}
+              </div>
+              <div className="grid grid-cols-3 gap-2.5">
+                {ALBUM_PHYSICAL_FORMATS.slice(2).map((f) => (
+                  <FormatCard
+                    key={f}
+                    f={f}
+                    busy={busy}
+                    onPick={() => onSubmit({ sellMode: "direct", physicalFormat: f })}
+                  />
+                ))}
+              </div>
             </div>
           </>
         )}
@@ -213,6 +226,33 @@ function ModeCard({
         <span className="text-[14px] font-semibold">{title}</span>
       </div>
       <div className="text-[12px] text-slate-500 mt-1.5 leading-snug">{blurb}</div>
+    </button>
+  );
+}
+
+function FormatCard({
+  f,
+  busy,
+  onPick,
+}: {
+  f: AlbumPhysicalFormat;
+  busy: boolean;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={onPick}
+      data-testid={`card-format-${f}`}
+      className="group rounded-lg border border-slate-200 bg-white p-4 text-left hover:border-[color:var(--brand-blue)] hover:shadow-sm transition-all disabled:opacity-60"
+    >
+      <div className="text-[14px] font-semibold text-slate-900 group-hover:text-[color:var(--brand-blue)] flex items-center gap-1.5">
+        {ALBUM_PHYSICAL_FORMAT_LABEL[f]}
+      </div>
+      <div className="text-[11.5px] text-slate-500 mt-0.5">
+        {ALBUM_PHYSICAL_FORMAT_BLURB[f]}
+      </div>
     </button>
   );
 }

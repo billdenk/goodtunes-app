@@ -66,6 +66,7 @@ import {
   BOOKLET_ELIGIBLE_FORMATS,
   PHYSICAL_FORMAT_TO_ALBUM_FORMAT,
   type AlbumFormat,
+  type AlbumPhysicalFormat,
   type AlbumSku,
   type AlbumAddon,
   type PayoutSettings,
@@ -380,7 +381,7 @@ export function SellPanel({
   // (digital + GoodDeed addon only). Defaults stay "direct" so callers
   // that haven't been migrated yet still get the legacy full panel.
   sellMode?: "direct" | "shopify" | null;
-  physicalFormat?: "single_lp" | "double_lp" | "seven_inch" | "cassette" | null;
+  physicalFormat?: AlbumPhysicalFormat | null;
   sellQuoteLockedAt?: string | null;
   /** Called by the "Lock in quote" / "Unlock quote" button at the bottom
    *  of the direct panel. Toggles `sellQuoteLockedAt` on the album. */
