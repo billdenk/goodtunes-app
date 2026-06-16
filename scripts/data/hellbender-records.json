@@ -1,0 +1,180 @@
+{
+  "source": "PSD: tinted neutral vinyl disc base, one per catalog color",
+  "colors": [
+    {
+      "name": "Black",
+      "slug": "black",
+      "publicUrl": "/objects/uploads/2b84efe9-268f-4265-a0e5-6a5003152866.png"
+    },
+    {
+      "name": "Blue",
+      "slug": "blue",
+      "publicUrl": "/objects/uploads/19f7b070-5baf-4154-abb1-2560c2ac94ac.png"
+    },
+    {
+      "name": "Brown",
+      "slug": "brown",
+      "publicUrl": "/objects/uploads/a11f9fd6-b6ff-4f71-88e8-f88cbe04f461.png"
+    },
+    {
+      "name": "Clear Blue",
+      "slug": "clear-blue",
+      "publicUrl": "/objects/uploads/24b79fce-317b-40d9-8aef-70935d53f2fb.png"
+    },
+    {
+      "name": "Clear Green",
+      "slug": "clear-green",
+      "publicUrl": "/objects/uploads/f0dcf750-e441-4e49-ade1-bd5b8800da2f.png"
+    },
+    {
+      "name": "Clear Orange",
+      "slug": "clear-orange",
+      "publicUrl": "/objects/uploads/56a95ebb-ad1e-42e4-8b8d-e0f31ccc18e0.png"
+    },
+    {
+      "name": "Clear Pink",
+      "slug": "clear-pink",
+      "publicUrl": "/objects/uploads/7d338356-7f9c-42ae-b93c-bffcaf84cb1a.png"
+    },
+    {
+      "name": "Clear Red",
+      "slug": "clear-red",
+      "publicUrl": "/objects/uploads/14e45773-ba08-4972-996e-fcca902989e2.png"
+    },
+    {
+      "name": "Clear Yellow",
+      "slug": "clear-yellow",
+      "publicUrl": "/objects/uploads/23631fee-7faf-483e-a508-32272217b4a8.png"
+    },
+    {
+      "name": "Coke Bottle",
+      "slug": "coke-bottle",
+      "publicUrl": "/objects/uploads/6d0b19d8-e31f-4f44-a7de-ca8197802a0a.png"
+    },
+    {
+      "name": "Dark Green",
+      "slug": "dark-green",
+      "publicUrl": "/objects/uploads/99d66f9e-776e-40e8-9b44-e826fa8cc8a9.png"
+    },
+    {
+      "name": "Deep Purple",
+      "slug": "deep-purple",
+      "publicUrl": "/objects/uploads/ef73a968-f0fb-4cda-83d2-c403d995fa0e.png"
+    },
+    {
+      "name": "Duckie Yellow",
+      "slug": "duckie-yellow",
+      "publicUrl": "/objects/uploads/b4b904e4-0045-472d-8dd3-976b88fe5348.png"
+    },
+    {
+      "name": "Gold",
+      "slug": "gold",
+      "publicUrl": "/objects/uploads/3aadefdd-edf4-469e-aee3-4aca2a8ceb64.png"
+    },
+    {
+      "name": "Green",
+      "slug": "green",
+      "publicUrl": "/objects/uploads/19be07d7-4a95-4e77-9558-2170730101c0.png"
+    },
+    {
+      "name": "Hazy Orange",
+      "slug": "hazy-orange",
+      "publicUrl": "/objects/uploads/9f876330-db26-433a-ba94-cea1ff146899.png"
+    },
+    {
+      "name": "House Mix",
+      "slug": "house-mix",
+      "publicUrl": "/objects/uploads/209ecfc7-89b2-40b1-bfa8-68979b558d40.png"
+    },
+    {
+      "name": "Jade",
+      "slug": "jade",
+      "publicUrl": "/objects/uploads/085ea796-821a-450c-8e8f-d047491e07e7.png"
+    },
+    {
+      "name": "Lime Green",
+      "slug": "lime-green",
+      "publicUrl": "/objects/uploads/4849a617-187c-4751-bd48-a579329b4100.png"
+    },
+    {
+      "name": "Maroon",
+      "slug": "maroon",
+      "publicUrl": "/objects/uploads/0f8968bf-3046-42ba-8d0c-4517d884681d.png"
+    },
+    {
+      "name": "Natural",
+      "slug": "natural",
+      "publicUrl": "/objects/uploads/f45d08bc-1d5b-4350-86be-a1d7debfe337.png"
+    },
+    {
+      "name": "Orange",
+      "slug": "orange",
+      "publicUrl": "/objects/uploads/17a95b4a-541d-49f3-b227-d6248034ff1e.png"
+    },
+    {
+      "name": "Peach",
+      "slug": "peach",
+      "publicUrl": "/objects/uploads/b0a9b357-53fb-4194-92ad-994cf4aab3e1.png"
+    },
+    {
+      "name": "Pink",
+      "slug": "pink",
+      "publicUrl": "/objects/uploads/dd90a93f-a554-45c1-bad1-f7ffe4ca2079.png"
+    },
+    {
+      "name": "Red",
+      "slug": "red",
+      "publicUrl": "/objects/uploads/be85d8cd-0136-4c8d-b013-2b953d0198cb.png"
+    },
+    {
+      "name": "Seaglass Blue",
+      "slug": "seaglass-blue",
+      "publicUrl": "/objects/uploads/85f6bea3-0579-4159-99ac-f374f2e61214.png"
+    },
+    {
+      "name": "Silver",
+      "slug": "silver",
+      "publicUrl": "/objects/uploads/7e15c0c0-17db-44e3-aefb-64fde8285a97.png"
+    },
+    {
+      "name": "Sky Blue",
+      "slug": "sky-blue",
+      "publicUrl": "/objects/uploads/0cb1a225-e5ef-43ca-bd21-723a35fbff24.png"
+    },
+    {
+      "name": "Smokey Clear",
+      "slug": "smokey-clear",
+      "publicUrl": "/objects/uploads/ce45a8d0-8896-4812-b13f-047bbcbaf01a.png"
+    },
+    {
+      "name": "Tan",
+      "slug": "tan",
+      "publicUrl": "/objects/uploads/18ae1f8a-e73d-4bc6-81ae-1556b33a4c2f.png"
+    },
+    {
+      "name": "Turquoise",
+      "slug": "turquoise",
+      "publicUrl": "/objects/uploads/15137ebe-3acb-4163-bfce-d167a8148256.png"
+    },
+    {
+      "name": "Ultra Clear",
+      "slug": "ultra-clear",
+      "publicUrl": "/objects/uploads/b5b735ae-3624-4721-8552-344357fc68cf.png"
+    },
+    {
+      "name": "Violet",
+      "slug": "violet",
+      "publicUrl": "/objects/uploads/5dd6cf76-f362-48cd-b0fa-f052a9ea8d8e.png"
+    },
+    {
+      "name": "White",
+      "slug": "white",
+      "publicUrl": "/objects/uploads/e8c4a31a-cd85-40a1-9ff6-ea93076116b3.png"
+    },
+    {
+      "name": "Yellow",
+      "slug": "yellow",
+      "publicUrl": "/objects/uploads/73208dd0-e252-421a-ba43-3be042ce9299.png"
+    }
+  ]
+}

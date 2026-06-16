@@ -35,3 +35,13 @@ dev and prod via the same script, so the publish dev→prod diff sees no drift e
 though it's not in `shared/schema.ts` (publish diffs dev DB → prod DB, not
 schema → prod). Use `GET DIAGNOSTICS x = ROW_COUNT` + `RAISE NOTICE` to print a
 per-DB summary (rows touched, rows skipped).
+
+**If you hand-apply the backfill directly to real dev+prod NOW (e.g. via a
+standalone `scripts/*.ts` you run with `DATABASE_URL` / `PROD_DATABASE_URL`),
+you MUST also `INSERT` the marker row into `post_merge_data_backfills` on BOTH
+DBs by hand.** Otherwise the post-merge copy still has no marker and re-runs its
+*unconditional* version on the very next merge — re-clobbering any operator edit
+made in between. The post-merge function and the direct run share one marker key;
+applying one without stamping the other defeats the guard. (Caught in review: a
+standalone re-point script that itself updates unconditionally relies entirely on
+the post-merge marker for safety, so the marker must exist before you walk away.)

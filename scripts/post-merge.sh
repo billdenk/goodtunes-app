@@ -2694,6 +2694,48 @@ SQL
 reconcile_hellbender_catalog dev  "${DATABASE_URL:-}"
 reconcile_hellbender_catalog prod "${PROD_DATABASE_URL:-}"
 
+# Hellbender record swatches — replace the old gray/white studio-mockup color
+# swatches with the realistic tinted-vinyl-disc swatches generated from the
+# supplied PSD (one disc per catalog color; see
+# scripts/backfill-hellbender-records.ts). The disc PNGs are already mirrored
+# into the shared Object Storage bucket and their /objects/uploads/<id> URLs
+# are committed in scripts/data/hellbender-records.json, so this never
+# re-uploads — it just re-points every Hellbender press_colors row at its disc
+# image. Main dev+prod were updated directly when the task shipped; this gate
+# lets a freshly-seeded clone converge without a manual pass.
+#
+# Marker-guarded (post_merge_data_backfills / hellbender_record_swatches_v1)
+# so it runs exactly once per DB and never clobbers a later operator swatch
+# edit (the script itself re-points unconditionally, so the guard lives here).
+backfill_hellbender_record_swatches() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping hellbender-record-swatches backfill on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 -tAc \
+       "SELECT 1 FROM post_merge_data_backfills WHERE name = 'hellbender_record_swatches_v1'" \
+       2>/dev/null | grep -q 1; then
+    echo "post-merge: hellbender-record-swatches backfill already applied on $label — skipping"
+    return 0
+  fi
+  if DATABASE_URL="$url" npx tsx scripts/backfill-hellbender-records.ts; then
+    psql "$url" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<'SQL'
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+INSERT INTO post_merge_data_backfills (name) VALUES ('hellbender_record_swatches_v1')
+  ON CONFLICT (name) DO NOTHING;
+SQL
+    echo "post-merge: hellbender-record-swatches backfill ok on $label"
+  else
+    echo "post-merge: WARNING — hellbender-record-swatches backfill failed on $label (continuing)"
+  fi
+}
+backfill_hellbender_record_swatches dev  "${DATABASE_URL:-}"
+backfill_hellbender_record_swatches prod "${PROD_DATABASE_URL:-}"
+
 # Task #394 — profile_photos: drop the bogus user_id→users.id FK, add
 # the new photo_url column, and make the legacy data_url nullable.
 #
