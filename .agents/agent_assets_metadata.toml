@@ -245,3 +245,9 @@ id = "CxFMFZE7pVOgmK4oPUkEo"
 uri = "file://early-access-launch-letter.txt"
 type = "text"
 title = "Updated launch letter (reflects what shipped)"
+
+[[outputs]]
+id = "wVc8kpAwKoMCaBVJoUd5t"
+uri = "file://.local/proof/hellbender-record-swatches-proof.png"
+type = "image"
+title = "Hellbender record swatches — proof (all 35 colors)"
