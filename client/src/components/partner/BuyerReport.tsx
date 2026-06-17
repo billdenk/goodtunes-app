@@ -2,8 +2,8 @@
 // (`/non-profit`) dashboards: a scope-filtered roster (who bought what,
 // newest first) plus a Fan-Map-style "where they live" city map.
 //
-// Both dashboards are dark brand surfaces, so this renders dark panels
-// (unlike the light admin Fan Map). Server-side scoping guarantees no
+// Both dashboards are light admin surfaces, so this renders light panels
+// (matching the light admin Fan Map). Server-side scoping guarantees no
 // cross-partner leakage; this component only ever shows display name,
 // avatar, and city/region/country — never address / email / phone.
 //
@@ -90,56 +90,56 @@ export function BuyerReport({
   return (
     <div className="space-y-4" data-testid="buyer-report">
       {/* Where they live */}
-      <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-4" data-testid="buyer-map">
+      <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4" data-testid="buyer-map">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
             <MapPin className="w-4 h-4" style={{ color: BRAND.blue }} />
             Where your buyers live
           </h3>
           {mapQ.data && (
-            <span className="text-xs text-white/45" data-testid="text-map-coverage">
+            <span className="text-xs text-slate-400" data-testid="text-map-coverage">
               {mapQ.data.geocoded} of {mapQ.data.totalCities} cities mapped
             </span>
           )}
         </div>
         {mapQ.isError ? (
-          <p className="text-sm text-white/55 py-6 text-center">Couldn't load the map.</p>
+          <p className="text-sm text-slate-500 py-6 text-center">Couldn't load the map.</p>
         ) : mapQ.isLoading || !mapQ.data ? (
-          <div className="h-40 rounded-md bg-white/[0.03] animate-pulse" />
+          <div className="h-40 rounded-md bg-slate-100 animate-pulse" />
         ) : mapQ.data.points.length === 0 ? (
-          <p className="text-sm text-white/55 py-6 text-center">No mappable buyers yet.</p>
+          <p className="text-sm text-slate-500 py-6 text-center">No mappable buyers yet.</p>
         ) : (
           <WorldMap points={mapQ.data.points} />
         )}
-        <p className="text-xs text-white/35 mt-3">
+        <p className="text-xs text-slate-400 mt-3">
           Dots are city-level. Geocoding is cached via OpenStreetMap (Nominatim).
         </p>
       </div>
 
       {/* Roster */}
-      <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-4" data-testid="buyer-roster">
+      <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4" data-testid="buyer-roster">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
             <UserIcon className="w-4 h-4" style={{ color: BRAND.blue }} />
             Buyers
           </h3>
           {!buyersQ.isLoading && !buyersQ.isError && (
-            <span className="text-xs text-white/45" data-testid="text-buyer-count">
+            <span className="text-xs text-slate-400" data-testid="text-buyer-count">
               {buyers.length} {buyers.length === 1 ? "order" : "orders"}
             </span>
           )}
         </div>
 
         {buyersQ.isError ? (
-          <p className="text-sm text-white/55 py-6 text-center">Couldn't load buyers.</p>
+          <p className="text-sm text-slate-500 py-6 text-center">Couldn't load buyers.</p>
         ) : buyersQ.isLoading ? (
           <div className="space-y-2">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-16 rounded-xl bg-white/[0.03] animate-pulse" />
+              <div key={i} className="h-16 rounded-xl bg-slate-100 animate-pulse" />
             ))}
           </div>
         ) : buyers.length === 0 ? (
-          <p className="text-sm text-white/55 py-8 text-center" data-testid="text-buyers-empty">
+          <p className="text-sm text-slate-500 py-8 text-center" data-testid="text-buyers-empty">
             {emptyHint}
           </p>
         ) : (
@@ -147,7 +147,7 @@ export function BuyerReport({
             {buyers.map((b) => (
               <li
                 key={b.orderId}
-                className="rounded-xl bg-white/[0.03] ring-1 ring-white/5 p-3"
+                className="rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3"
                 data-testid={`buyer-row-${b.orderId}`}
               >
                 <div className="flex items-start gap-3">
@@ -155,50 +155,50 @@ export function BuyerReport({
                     <img
                       src={b.avatarUrl}
                       alt=""
-                      className="w-11 h-11 rounded-full object-cover flex-shrink-0 ring-1 ring-white/10"
+                      className="w-11 h-11 rounded-full object-cover flex-shrink-0 ring-1 ring-slate-200"
                       data-testid={`img-buyer-avatar-${b.orderId}`}
                     />
                   ) : (
-                    <div className="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
-                      <UserIcon className="w-5 h-5 text-white/40" />
+                    <div className="w-11 h-11 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
+                      <UserIcon className="w-5 h-5 text-slate-400" />
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
                       <p
-                        className="font-semibold text-white truncate"
+                        className="font-semibold text-slate-900 truncate"
                         data-testid={`text-buyer-name-${b.orderId}`}
                       >
                         {b.name}
                       </p>
-                      <span className="text-xs text-white/45 whitespace-nowrap" data-testid={`text-buyer-date-${b.orderId}`}>
+                      <span className="text-xs text-slate-400 whitespace-nowrap" data-testid={`text-buyer-date-${b.orderId}`}>
                         {fmtDate(b.createdAt)}
                       </span>
                     </div>
-                    <p className="text-xs text-white/50 flex items-center gap-1 truncate">
+                    <p className="text-xs text-slate-500 flex items-center gap-1 truncate">
                       <MapPin className="w-3 h-3 flex-shrink-0" />
                       {locLabel(b)}
                     </p>
                     {showAlbum && (
-                      <p className="text-xs text-white/70 mt-0.5 truncate" data-testid={`text-buyer-album-${b.orderId}`}>
+                      <p className="text-xs text-slate-600 mt-0.5 truncate" data-testid={`text-buyer-album-${b.orderId}`}>
                         {b.albumTitle}
                       </p>
                     )}
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       {b.copies.length === 0 ? (
-                        <span className="text-xs text-white/40">
+                        <span className="text-xs text-slate-400">
                           {b.quantity} {b.quantity === 1 ? "copy" : "copies"}
                         </span>
                       ) : (
                         b.copies.map((c, i) => (
                           <span
                             key={i}
-                            className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2 py-0.5 text-xs text-white/75"
+                            className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700"
                             data-testid={`chip-buyer-copy-${b.orderId}-${i}`}
                           >
                             {copyLabel(c)}
                             {c.goodDeedNumber != null && (
-                              <span className="inline-flex items-center gap-0.5 font-semibold" style={{ color: BRAND.mint }}>
+                              <span className="inline-flex items-center gap-0.5 font-semibold text-emerald-700">
                                 <Award className="w-3 h-3" />#{c.goodDeedNumber}
                               </span>
                             )}
@@ -228,17 +228,17 @@ function WorldMap({ points }: { points: MapPoint[] }) {
   }
   const maxOrders = Math.max(1, ...points.map((p) => p.orders));
   return (
-    <div className="relative w-full overflow-hidden rounded-md ring-1 ring-white/10 bg-white/[0.03]">
+    <div className="relative w-full overflow-hidden rounded-md ring-1 ring-slate-200 bg-slate-50">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" data-testid="svg-buyer-map">
         {[-60, -30, 0, 30, 60].map((lat) => {
           const [, y] = proj(lat, 0);
-          return <line key={`la${lat}`} x1={0} x2={W} y1={y} y2={y} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5} />;
+          return <line key={`la${lat}`} x1={0} x2={W} y1={y} y2={y} stroke="rgba(15,23,42,0.08)" strokeWidth={0.5} />;
         })}
         {[-120, -60, 0, 60, 120].map((lon) => {
           const [x] = proj(0, lon);
-          return <line key={`lo${lon}`} x1={x} x2={x} y1={0} y2={H} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5} />;
+          return <line key={`lo${lon}`} x1={x} x2={x} y1={0} y2={H} stroke="rgba(15,23,42,0.08)" strokeWidth={0.5} />;
         })}
-        <line x1={0} x2={W} y1={H / 2} y2={H / 2} stroke="rgba(255,255,255,0.14)" strokeWidth={0.5} />
+        <line x1={0} x2={W} y1={H / 2} y2={H / 2} stroke="rgba(15,23,42,0.14)" strokeWidth={0.5} />
         {points.map((p, i) => {
           const [x, y] = proj(p.lat, p.lon);
           const r = 3 + 8 * Math.sqrt(p.orders / maxOrders);

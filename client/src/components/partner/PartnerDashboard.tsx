@@ -3,7 +3,7 @@
 // One component used by Label, NPO, and Vendor shells as their leftmost
 // "Dashboard" tab. Renders the operator AdminDashboard layout shape
 // (header + range picker + KPI row + Trend card + Recent activity)
-// but in the dark partner-shell chrome already established by
+// but in the light partner-shell chrome already established by
 // `dashboard-controls.tsx` so it sits naturally inside the rest of
 // each partner shell. Backend: `GET /api/partner/:scope/dashboard`.
 
@@ -122,7 +122,7 @@ export function PartnerDashboard({
     const msg = (error as any)?.message || "We couldn't load your dashboard.";
     return (
       <DashboardPanel className="p-6 text-center" padding="none" data-testid={`partner-dashboard-${scope}-error`}>
-        <p className="text-white/70 text-sm">{msg}</p>
+        <p className="text-slate-600 text-sm">{msg}</p>
       </DashboardPanel>
     );
   }
@@ -132,11 +132,11 @@ export function PartnerDashboard({
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-white/55 text-[12px] uppercase tracking-wider font-semibold">Dashboard</p>
+            <p className="text-slate-500 text-[12px] uppercase tracking-wider font-semibold">Dashboard</p>
             <h2 className="text-2xl sm:text-3xl font-bold truncate" data-testid={`heading-partner-dashboard-${scope}`}>
               {title}
             </h2>
-            {subtitle && <p className="text-white/55 text-[13px] mt-0.5">{subtitle}</p>}
+            {subtitle && <p className="text-slate-500 text-[13px] mt-0.5">{subtitle}</p>}
           </div>
           <RangePicker
             presets={RANGE_PRESETS}
@@ -153,8 +153,8 @@ export function PartnerDashboard({
       <DashboardPanel data-testid={`trend-${scope}`}>
         <div className="flex items-baseline justify-between mb-3">
           <div>
-            <h3 className="text-sm font-semibold text-white/85">Trend</h3>
-            <p className="text-[11px] text-white/45">Daily activity over the selected window</p>
+            <h3 className="text-sm font-semibold text-slate-700">Trend</h3>
+            <p className="text-[11px] text-slate-400">Daily activity over the selected window</p>
           </div>
         </div>
         <TrendChart
@@ -165,7 +165,7 @@ export function PartnerDashboard({
       </DashboardPanel>
 
       <DashboardPanel data-testid={`activity-${scope}`}>
-        <h3 className="text-sm font-semibold text-white/85 mb-3">Recent activity</h3>
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">Recent activity</h3>
         <ActivityList items={data?.activity ?? []} loading={isLoading} />
       </DashboardPanel>
     </div>
@@ -200,11 +200,11 @@ function KpiTile({ k, scope }: { k: DashboardKpi; scope: PartnerScopeKind }) {
   return (
     <DashboardPanel
       data-testid={testId}
-      className="transition-colors duration-200 hover:ring-white/20 hover:bg-white/[0.07]"
+      className="transition-colors duration-200 hover:ring-slate-300 hover:bg-slate-50"
     >
-      <p className="text-[11px] uppercase tracking-wider text-white/55 font-semibold">{k.label}</p>
+      <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">{k.label}</p>
       <p
-        className={`mt-1 text-2xl sm:text-[28px] font-bold tabular-nums ${k.comingSoon ? "text-white/40" : ""}`}
+        className={`mt-1 text-2xl sm:text-[28px] font-bold tabular-nums ${k.comingSoon ? "text-slate-400" : ""}`}
         data-testid={`${testId}-value`}
       >
         {value}
@@ -212,12 +212,12 @@ function KpiTile({ k, scope }: { k: DashboardKpi; scope: PartnerScopeKind }) {
       <div className="mt-1 flex items-center gap-2 text-[11px]">
         {showDelta ? (
           <>
-            <span className="text-white/55">vs prior</span>
+            <span className="text-slate-500">vs prior</span>
             <span
               className={`px-1.5 py-0.5 rounded-full font-semibold ${
                 positive
-                  ? "bg-[color:var(--brand-mint)]/15 text-[color:var(--brand-mint)]"
-                  : "bg-rose-500/15 text-rose-300"
+                  ? "bg-emerald-50 text-emerald-700"
+                  : "bg-rose-50 text-rose-700"
               }`}
               data-testid={`${testId}-delta`}
             >
@@ -225,23 +225,23 @@ function KpiTile({ k, scope }: { k: DashboardKpi; scope: PartnerScopeKind }) {
             </span>
           </>
         ) : (
-          <span className="text-white/45">vs prior: —</span>
+          <span className="text-slate-400">vs prior: —</span>
         )}
         {k.note && !k.comingSoon && (
-          <span className="text-white/45 truncate">{k.note}</span>
+          <span className="text-slate-400 truncate">{k.note}</span>
         )}
       </div>
       {k.breakdown && k.breakdown.length > 0 && !k.comingSoon && (
         <dl
-          className="mt-3 space-y-1 border-t border-white/10 pt-2"
+          className="mt-3 space-y-1 border-t border-slate-200 pt-2"
           data-testid={`${testId}-breakdown`}
         >
           {k.breakdown.map((b, i) => (
             <div key={i} className="flex items-center justify-between text-xs">
-              <dt className="text-fan-secondary">{b.label}</dt>
+              <dt className="text-slate-600">{b.label}</dt>
               <dd
                 className={`tabular-nums font-medium ${
-                  b.value < 0 ? "text-rose-300" : "text-fan-primary"
+                  b.value < 0 ? "text-rose-600" : "text-slate-900"
                 }`}
               >
                 {formatValue(b.value, b.format)}
@@ -266,11 +266,11 @@ function TrendChart({
   loading: boolean;
 }) {
   if (loading) {
-    return <div className="h-[220px] bg-white/[0.02] rounded-lg animate-pulse" />;
+    return <div className="h-[220px] bg-slate-100 rounded-lg animate-pulse" />;
   }
   if (!metrics.length || !series.length) {
     return (
-      <div className="h-[220px] flex items-center justify-center text-white/45 text-[12px]" data-testid="trend-empty">
+      <div className="h-[220px] flex items-center justify-center text-slate-400 text-[12px]" data-testid="trend-empty">
         No activity in this window yet.
       </div>
     );
@@ -280,9 +280,9 @@ function TrendChart({
     <div className="h-[220px]">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-          <XAxis dataKey="date" tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 11 }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 11 }} axisLine={false} tickLine={false} width={42} />
+          <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
+          <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} width={42} />
           <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
           {metrics.map((m, i) => (
             <Line
@@ -308,34 +308,34 @@ function ActivityList({ items, loading }: { items: ActivityItem[]; loading: bool
     return (
       <ul className="space-y-2">
         {Array.from({ length: 4 }).map((_, i) => (
-          <li key={i} className="h-10 bg-white/[0.03] rounded animate-pulse" />
+          <li key={i} className="h-10 bg-slate-100 rounded animate-pulse" />
         ))}
       </ul>
     );
   }
   if (!items.length) {
     return (
-      <p className="text-white/45 text-[13px] py-2" data-testid="activity-empty">
+      <p className="text-slate-400 text-[13px] py-2" data-testid="activity-empty">
         Nothing here yet — your latest activity will show up as it comes in.
       </p>
     );
   }
   return (
-    <ul className="divide-y divide-white/5" data-testid="activity-list">
+    <ul className="divide-y divide-slate-100" data-testid="activity-list">
       {items.map((it, i) => (
         <li key={i} className="py-2 flex items-center gap-3" data-testid={`activity-item-${i}`}>
-          <Clock className="w-3.5 h-3.5 text-white/40 shrink-0" />
+          <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           <div className="min-w-0 flex-1">
             {it.href ? (
-              <a href={it.href} className="text-[13px] font-semibold text-white hover:text-[color:var(--brand-blue)] hover:underline truncate block">
+              <a href={it.href} className="text-[13px] font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline truncate block">
                 {it.title}
               </a>
             ) : (
-              <p className="text-[13px] font-semibold text-white truncate">{it.title}</p>
+              <p className="text-[13px] font-semibold text-slate-900 truncate">{it.title}</p>
             )}
-            {it.detail && <p className="text-[11px] text-white/55 truncate">{it.detail}</p>}
+            {it.detail && <p className="text-[11px] text-slate-500 truncate">{it.detail}</p>}
           </div>
-          <time className="text-[11px] text-white/45 tabular-nums shrink-0">
+          <time className="text-[11px] text-slate-400 tabular-nums shrink-0">
             {new Date(it.ts).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
           </time>
         </li>

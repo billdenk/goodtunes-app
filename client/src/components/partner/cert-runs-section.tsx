@@ -38,15 +38,15 @@ type BatchStatus = {
 };
 
 const STATUS_PILL: Record<string, { label: string; cls: string }> = {
-  scheduled: { label: "Scheduled", cls: "bg-white/10 text-white/75" },
-  open: { label: "Open — taking orders", cls: "bg-[color:var(--brand-blue)]/15 text-[color:var(--brand-blue)]" },
+  scheduled: { label: "Scheduled", cls: "bg-slate-100 text-slate-700" },
+  open: { label: "Open — taking orders", cls: "bg-blue-50 text-blue-700 ring-1 ring-blue-200" },
   closed_below_min: {
     label: `Closed below ${SIGNED_CERT_MIN_BATCH} — refunded`,
-    cls: "bg-[color:var(--brand-pink)]/15 text-[color:var(--brand-pink)]",
+    cls: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
   },
-  in_production: { label: "In production", cls: "bg-[color:var(--brand-purple)]/20 text-[color:var(--brand-purple)]" },
-  shipped: { label: "Shipped", cls: "bg-[color:var(--brand-mint)]/20 text-[color:var(--brand-mint)]" },
-  cancelled: { label: "Cancelled", cls: "bg-white/5 text-white/55" },
+  in_production: { label: "In production", cls: "bg-amber-50 text-amber-700 ring-1 ring-amber-200" },
+  shipped: { label: "Shipped", cls: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" },
+  cancelled: { label: "Cancelled", cls: "bg-slate-100 text-slate-500" },
 };
 
 function fmtDate(iso: string | null): string {
@@ -100,16 +100,16 @@ export function CertRunsSection({ kind, qs }: { kind: Kind; qs: string }) {
   if (!anyLoading && cards.length === 0) return null;
 
   return (
-    <section className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-4 sm:p-5" data-testid="section-cert-runs">
+    <section className="rounded-2xl bg-white ring-1 ring-slate-200 p-4 sm:p-5" data-testid="section-cert-runs">
       <div className="flex items-end justify-between gap-3 mb-4">
         <div>
           <h3 className="text-base font-semibold">Signed-cert runs</h3>
-          <p className="text-white/55 text-xs">
+          <p className="text-slate-500 text-xs">
             Live production status for every album with a configured sale window.
           </p>
         </div>
         {anyLoading && cards.length === 0 && (
-          <span className="text-white/45 text-xs inline-flex items-center gap-1">
+          <span className="text-slate-400 text-xs inline-flex items-center gap-1">
             <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading
           </span>
         )}
@@ -125,23 +125,23 @@ export function CertRunsSection({ kind, qs }: { kind: Kind; qs: string }) {
 
 function CertRunCard({ album, status }: { album: AlbumRow; status: BatchStatus }) {
   const w = status.window;
-  const pill = STATUS_PILL[w.status ?? ""] ?? { label: "No window configured", cls: "bg-white/5 text-white/55" };
+  const pill = STATUS_PILL[w.status ?? ""] ?? { label: "No window configured", cls: "bg-slate-100 text-slate-500" };
   const reserved = status.counts.printed;
   const total = status.counts.total;
   const pct = Math.min(100, Math.round((reserved / SIGNED_CERT_MIN_BATCH) * 100));
   const hitMin = reserved >= SIGNED_CERT_MIN_BATCH;
 
   return (
-    <div className="rounded-xl bg-[color:var(--brand-bg)]/40 ring-1 ring-white/10 p-4" data-testid={`card-cert-run-${album.albumId}`}>
+    <div className="rounded-xl bg-slate-50 ring-1 ring-slate-200 p-4" data-testid={`card-cert-run-${album.albumId}`}>
       <div className="flex items-start gap-3 mb-3">
         {album.artwork ? (
           <img src={album.artwork} alt="" className="w-12 h-12 rounded object-cover" />
         ) : (
-          <div className="w-12 h-12 rounded bg-white/5" />
+          <div className="w-12 h-12 rounded bg-slate-100" />
         )}
         <div className="min-w-0 flex-1">
           <p className="font-semibold truncate" data-testid={`text-cert-run-title-${album.albumId}`}>{album.title}</p>
-          <p className="text-white/55 text-xs truncate">{album.artist}</p>
+          <p className="text-slate-500 text-xs truncate">{album.artist}</p>
         </div>
         <span
           className={`px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${pill.cls}`}
@@ -153,21 +153,21 @@ function CertRunCard({ album, status }: { album: AlbumRow; status: BatchStatus }
 
       <div className="mb-3">
         <div className="flex items-baseline justify-between text-xs mb-1">
-          <span className="text-white/55">Reservations</span>
+          <span className="text-slate-500">Reservations</span>
           <span className="tabular-nums" data-testid={`text-cert-reserved-${album.albumId}`}>
-            <strong className="text-white">{reserved}</strong>
-            <span className="text-white/45"> / {SIGNED_CERT_MIN_BATCH} minimum</span>
-            {total > reserved && <span className="text-white/35"> · {total} total</span>}
+            <strong className="text-slate-900">{reserved}</strong>
+            <span className="text-slate-400"> / {SIGNED_CERT_MIN_BATCH} minimum</span>
+            {total > reserved && <span className="text-slate-400"> · {total} total</span>}
           </span>
         </div>
-        <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+        <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
           <div
-            className={`h-full transition-all ${hitMin ? "bg-[color:var(--brand-mint)]" : "bg-[color:var(--brand-blue)]"}`}
+            className={`h-full transition-all ${hitMin ? "bg-emerald-500" : "bg-[color:var(--brand-blue)]"}`}
             style={{ width: `${pct}%` }}
           />
         </div>
         {(w.opensAt || w.closesAt) && (
-          <p className="mt-1.5 text-xs text-white/45">
+          <p className="mt-1.5 text-xs text-slate-400">
             Window {fmtDateShort(w.opensAt)} → {fmtDateShort(w.closesAt)}
             {w.closedAt && ` · closed ${fmtDateShort(w.closedAt)}`}
           </p>
@@ -186,15 +186,15 @@ function CertRunCard({ album, status }: { album: AlbumRow; status: BatchStatus }
               <span
                 className={`w-4 h-4 rounded-sm flex items-center justify-center shrink-0 ${
                   done
-                    ? "bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)]"
-                    : "bg-white/10 text-white/40"
+                    ? "bg-emerald-500 text-white"
+                    : "bg-slate-200 text-slate-400"
                 }`}
               >
                 {done && <Check className="w-3 h-3" strokeWidth={3} />}
               </span>
-              <span className={done ? "text-white" : "text-white/55"}>{s.label}</span>
+              <span className={done ? "text-slate-900" : "text-slate-500"}>{s.label}</span>
               {done && (
-                <span className="ml-auto tabular-nums text-white/45">{fmtDate(s.completedAt)}</span>
+                <span className="ml-auto tabular-nums text-slate-400">{fmtDate(s.completedAt)}</span>
               )}
             </li>
           );

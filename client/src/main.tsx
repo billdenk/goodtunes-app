@@ -63,7 +63,16 @@ try {
 try {
   const h = window.location.host.toLowerCase().split(":")[0];
   const p = window.location.pathname || "";
-  const isAdmin = h === "admin.goodtunes.music" || p.indexOf("/admin") === 0;
+  // Invited-partner portals are light admin surfaces too. Match their EXACT
+  // landing paths (not prefixes — `/artist/:slug` is the dark fan artist page,
+  // only the bare `/artist` is the portal) plus the invite-accept page so the
+  // body is light from the very first paint with no dark flash.
+  const lightPortal =
+    p === "/artist" || p === "/label" || p === "/manager" ||
+    p === "/vendor" || p === "/non-profit" || p === "/publisher" ||
+    p === "/invite" || p.indexOf("/invite/") === 0;
+  const isAdmin =
+    h === "admin.goodtunes.music" || p.indexOf("/admin") === 0 || lightPortal;
   if (isAdmin) document.body.classList.add("gt-admin");
 } catch {}
 

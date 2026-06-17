@@ -22,7 +22,7 @@ export function RangePicker<T extends string>({
       type="single"
       value={value}
       onValueChange={(v) => v && onChange(v as T)}
-      className="rounded-full bg-white/5 p-1 ring-1 ring-white/10 gap-0 justify-start"
+      className="rounded-full bg-slate-100 p-1 ring-1 ring-slate-200 gap-0 justify-start"
       data-testid={testId}
     >
       {presets.map((p) => (
@@ -32,8 +32,8 @@ export function RangePicker<T extends string>({
           aria-label={p.label}
           className={cn(
             "h-11 min-w-[44px] px-4 rounded-full font-semibold transition-colors",
-            "text-white/70 hover:text-white hover:bg-white/5",
-            "data-[state=on]:bg-white data-[state=on]:text-[color:var(--brand-bg)] data-[state=on]:hover:bg-white",
+            "text-slate-600 hover:text-slate-900 hover:bg-white",
+            "data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-sm data-[state=on]:hover:bg-white",
             "focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]",
           )}
           data-testid={`button-range-${p.id}`}
@@ -63,8 +63,8 @@ export function CompareToggle({
       className={cn(
         "ml-auto h-11 min-w-[44px] px-4 rounded-full font-semibold ring-1 transition-colors",
         active
-          ? "bg-[color:var(--brand-blue)]/15 text-[color:var(--brand-blue)] ring-[color:var(--brand-blue)]/30 hover:bg-[color:var(--brand-blue)]/20 hover:text-[color:var(--brand-blue)]"
-          : "bg-transparent text-white/55 ring-white/15 hover:bg-white/5 hover:text-white",
+          ? "bg-blue-50 text-blue-700 ring-blue-200 hover:bg-blue-100 hover:text-blue-700"
+          : "bg-transparent text-slate-600 ring-slate-200 hover:bg-slate-100 hover:text-slate-900",
       )}
       data-testid="button-toggle-compare"
     >
@@ -90,7 +90,7 @@ export function DashboardTabs<T extends string>({
     <TabsPrimitive.Root value={value} onValueChange={(v) => onChange(v as T)}>
       <nav
         className={cn(
-          "sticky top-0 z-10 bg-[color:var(--brand-bg)]/95 backdrop-blur border-b border-white/10",
+          "sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-slate-200",
           className,
         )}
       >
@@ -103,9 +103,9 @@ export function DashboardTabs<T extends string>({
                 className={cn(
                   "h-11 min-h-[44px] inline-flex items-center px-3 font-semibold whitespace-nowrap",
                   "border-b-2 border-transparent transition-colors",
-                  "text-white/55 hover:text-white",
-                  "data-[state=active]:border-[color:var(--brand-mint)] data-[state=active]:text-white",
-                  "focus-visible:outline-none focus-visible:text-white",
+                  "text-slate-500 hover:text-slate-900",
+                  "data-[state=active]:border-[color:var(--brand-blue)] data-[state=active]:text-slate-900",
+                  "focus-visible:outline-none focus-visible:text-slate-900",
                 )}
                 data-testid={`tab-${t.id}`}
               >
@@ -120,9 +120,9 @@ export function DashboardTabs<T extends string>({
 }
 
 /**
- * Dark-mode dashboard panel — the shared "rounded card on a navy page"
- * surface used by Label/Artist/NPO dashboards. Replaces the
- * `rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-4` literal that
+ * Light dashboard panel — the shared "white rounded card on a slate page"
+ * surface used by Label/Artist/NPO/Press dashboards. Replaces the
+ * `rounded-2xl bg-white ring-1 ring-slate-200 p-4` literal that
  * was duplicated across every KPI tile and table wrapper. Accepts an
  * `as` prop so it can render a <ul>, <li>, etc. without losing the
  * shared surface treatment.
@@ -140,7 +140,7 @@ export function DashboardPanel({
   return (
     <Tag
       className={cn(
-        "rounded-2xl bg-white/[0.04] ring-1 ring-white/10",
+        "rounded-2xl bg-white ring-1 ring-slate-200",
         padding === "md" && "p-4",
         padding === "sm" && "p-3",
         className,

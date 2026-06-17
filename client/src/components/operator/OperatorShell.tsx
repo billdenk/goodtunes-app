@@ -1,15 +1,18 @@
 // Task #544 — One shared shell for every partner-role dashboard.
 //
-// Wraps the dark Apple-Music-leaning partner chrome (gradient header,
-// logo + role pill + entity name, optional sticky tab bar, max-width
-// content area) that NPO, Label, Artist, Vendor, Press, and Fulfillment
-// previously hand-rolled. The shell takes the role's module list from
-// `registry.ts` so adding a new tab to an existing role is a one-line
-// registry change rather than a chrome edit.
+// Wraps the light admin-style partner chrome (white header, logo + role
+// pill + entity name, optional sticky tab bar, max-width content area)
+// that NPO, Label, Artist, Vendor, Press, and Fulfillment previously
+// hand-rolled. The shell takes the role's module list from `registry.ts`
+// so adding a new tab to an existing role is a one-line registry change
+// rather than a chrome edit.
 //
-// See docs/design-system.md for the dark partner-surface rules this
-// shell encodes (header gradient, h-11 tabs, 44px touch targets, brand
-// hexes only via CSS vars).
+// Every invited-partner portal is a LIGHT admin surface (matching the
+// operator admin look), so this shell adds the `gt-admin` body class
+// while mounted — the same mechanism AdminFrame uses — so shadcn
+// primitives (Dialog/Input/Select/Button) render with the light tokens,
+// and it uses the slate text scale throughout. See docs/design-system.md
+// → Partner portals are light admin surfaces.
 
 import * as React from "react";
 import type { LucideIcon } from "lucide-react";
@@ -65,19 +68,35 @@ export function OperatorShell<TabId extends string>({
   children,
   testId,
 }: OperatorShellProps<TabId>) {
+  // Partner portals are light admin surfaces. Add the admin light-theme body
+  // class while this shell is mounted so shadcn primitives (Dialog/Input/
+  // Select/Button) pick up the light tokens — same mechanism AdminFrame uses.
+  // Restore the prior state on unmount: if `gt-admin` was already present
+  // (admin host boot / AdminFrame nav) leave it; if THIS shell introduced it
+  // (a partner on a customer host), drop it so fan pages get their dark theme
+  // back when the user navigates away within the SPA.
+  React.useEffect(() => {
+    const body = document.body;
+    const had = body.classList.contains("gt-admin");
+    body.classList.add("gt-admin");
+    return () => {
+      if (!had) body.classList.remove("gt-admin");
+    };
+  }, []);
+
   const maxW = maxWidth === "5xl" ? "max-w-5xl" : "max-w-6xl";
   const radius = logoShape === "circle" ? "rounded-full" : "rounded-2xl";
   return (
     <main
-      className="min-h-screen bg-[color:var(--brand-bg)] text-white pb-20"
+      className="min-h-screen bg-slate-50 text-slate-900 pb-20"
       data-testid={testId ?? "operator-shell"}
     >
-      <header className="border-b border-white/10 bg-gradient-to-b from-[color:var(--brand-header-gradient-top)] to-[color:var(--brand-bg)]">
+      <header className="border-b border-slate-200 bg-white">
         <div className={cn(maxW, "mx-auto px-4 sm:px-6 py-6")}>
           <div className={cn("flex items-center gap-4", (headerExtras || headerActions) && "mb-6")}>
             <div
               className={cn(
-                "w-14 h-14 overflow-hidden flex items-center justify-center bg-white/5 ring-1 ring-white/15",
+                "w-14 h-14 overflow-hidden flex items-center justify-center bg-slate-100 ring-1 ring-slate-200",
                 radius,
               )}
               data-testid="operator-shell-logo"
@@ -85,18 +104,18 @@ export function OperatorShell<TabId extends string>({
               {logoUrl ? (
                 <img src={logoUrl} alt="" className="w-full h-full object-cover" />
               ) : (
-                <FallbackIcon className="w-5 h-5 text-white/45" />
+                <FallbackIcon className="w-5 h-5 text-slate-400" />
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-white/55 text-xs uppercase tracking-wider font-semibold" data-testid="text-operator-role">
+              <p className="text-slate-500 text-xs uppercase tracking-wider font-semibold" data-testid="text-operator-role">
                 {roleLabel}
               </p>
               <h1 className="text-2xl sm:text-3xl font-bold truncate" data-testid="text-operator-name">
                 {name}
               </h1>
               {subtitle && (
-                <div className="text-white/55 text-xs mt-0.5" data-testid="text-operator-subtitle">
+                <div className="text-slate-500 text-xs mt-0.5" data-testid="text-operator-subtitle">
                   {subtitle}
                 </div>
               )}

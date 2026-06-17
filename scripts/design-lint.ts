@@ -89,6 +89,18 @@ function lintFile(rel: string, src: string): Violation[] {
   const isAdmin =
     /client\/src\/(pages\/Admin|components\/admin)/.test(rel) ||
     /gt-admin/.test(src);
+  // Invited-partner portals (Press/Vendor/Artist/Label/NPO/Manager/Publisher)
+  // and the invite-accept page are light admin-style surfaces — they
+  // intentionally use the slate text scale, not the fan Apple tone scale, so
+  // they're exempt from R12 (fan-text-tone). They are deliberately NOT treated
+  // as full admin surfaces (no R2/R4/R11 density rules) because partners use
+  // them on phones with 44px touch targets. See docs/design-system.md →
+  // Partner portals are light admin surfaces.
+  const isInvitedPortal =
+    /client\/src\/components\/(operator|partner)\//.test(rel) ||
+    /client\/src\/pages\/(PressPortal|VendorPortal|ArtistDashboard|LabelDashboard|NonProfitDashboard|ManagerDashboard|PublisherPortal|AcceptInvite)\.tsx$/.test(
+      rel,
+    );
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -128,7 +140,7 @@ function lintFile(rel: string, src: string): Violation[] {
     // `text-fan-faint` (see docs/design-system.md → Text tone). Pure
     // `text-white` (on-accent button labels) is intentionally NOT flagged;
     // `placeholder:text-white/NN` is skipped (placeholders, not body tone).
-    if (!isAdmin) {
+    if (!isAdmin && !isInvitedPortal) {
       const toneMatches = line.match(/(?<!placeholder:)\btext-white\/\d+\b|\btext-slate-(?:100|200|300|400|500|600)\b/g);
       if (toneMatches) {
         for (const m of toneMatches) {
