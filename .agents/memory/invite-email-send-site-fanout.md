@@ -3,16 +3,24 @@ name: Invite email send-site fan-out
 description: Every place that sends the admin/partner invite email, so a signature/template change touches them all.
 ---
 
-# Invite email fans out across 9 send sites
+# Invite email fans out across 10 send sites
 
 `sendAdminInviteEmail(...)` (server/mail.ts) is positional. Any change to its
 signature or to the branded template must be threaded at **all** of these or
 some invites silently drop the new behavior:
 
-- **server/routes.ts** (5): create (`/api/admin/invites` POST), approve held
-  invite, artist resend, label resend, super-admin resend.
+- **server/routes.ts** (6): create (`/api/admin/invites` POST), approve held
+  invite, artist resend, label resend, super-admin resend, **partner-contacts
+  ("Add Admin") create** (`/api/admin/partner-contacts` POST — sends on BOTH
+  the freshly-minted and the reused-pending-invite branch).
 - **server/npoPortal.ts** (2): NPO invite create + resend.
 - **server/pressPortal.ts** (2): press invite create + resend.
+
+The partner-contacts site returns additive `emailDelivered` + `reason` so the
+AddPeopleMenu "Add Admin" dialog shows "We emailed the invite to <email>" on
+success and falls back to the copy-link card on failure (parity with Invite
+Artist). It is copy-link-only no more — the old Task #665 "we don't send invite
+emails from this dialog" comment/copy is gone.
 
 The artist/label *create* paths forward into `/api/admin/invites`, so their
 create branding is resolved inside that one handler — only their **resend**

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, Copy, Loader2, Plus, Search, X } from "lucide-react";
+import { Check, ChevronDown, Copy, Loader2, MailCheck, Plus, Search, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -834,9 +834,9 @@ function AttachContactDialog(
   // instead of dismissing, mirroring InviteArtistDialog's confirmation
   // state. Reused when OrganizationPeople reopens this dialog from the
   // "Invite pending" chip on an existing contact row.
-  const [invite, setInvite] = useState<{ url: string; email: string; personName: string } | null>(
+  const [invite, setInvite] = useState<{ url: string; email: string; personName: string; emailDelivered: boolean } | null>(
     props.initialInvite
-      ? { url: props.initialInvite.acceptUrl, email: props.initialInvite.email, personName: props.initialInvite.personName }
+      ? { url: props.initialInvite.acceptUrl, email: props.initialInvite.email, personName: props.initialInvite.personName, emailDelivered: false }
       : null,
   );
   const [copied, setCopied] = useState(false);
@@ -995,16 +995,31 @@ function AttachContactDialog(
         props.onOpenChange(false);
         return;
       }
-      const body = out.body as { mode: "granted" | "invited"; personName: string; acceptUrl?: string };
+      const body = out.body as {
+        mode: "granted" | "invited";
+        personName: string;
+        acceptUrl?: string;
+        emailDelivered?: boolean;
+      };
       if (body.mode === "granted") {
         toast({ title: `Added ${body.personName} as admin` });
         reset();
         props.onOpenChange(false);
       } else {
+        const emailDelivered = body.emailDelivered ?? false;
         setInvite({
           url: body.acceptUrl ?? "",
           email: email.trim(),
           personName: body.personName,
+          emailDelivered,
+        });
+        // Task #2038 — the partner-contacts invite now emails the branded
+        // link (parity with Invite Artist). Toast the honest outcome; the
+        // dialog still shows the copy-link as a secondary / fallback path.
+        toast({
+          title: emailDelivered
+            ? `Invite emailed to ${email.trim()}`
+            : "Invite ready — copy the link",
         });
       }
     },
@@ -1041,47 +1056,76 @@ function AttachContactDialog(
       >
         <DialogHeader>
           <DialogTitle>
-            {invite ? "Invite ready" : props.title}
+            {invite ? (invite.emailDelivered ? "Invite emailed" : "Invite ready") : props.title}
           </DialogTitle>
           <DialogDescription>
             {invite
-              ? `We don't have an admin account for ${invite.email} yet — send this link so ${invite.personName} can finish setup.`
+              ? invite.emailDelivered
+                ? `We emailed an invite to ${invite.email} so ${invite.personName} can finish setting up their admin account.`
+                : `We don't have an admin account for ${invite.email} yet — send this link so ${invite.personName} can finish setup.`
               : props.description}
           </DialogDescription>
         </DialogHeader>
         {invite ? (
           <div className="space-y-3">
+            {invite.emailDelivered ? (
+              // Task #2038 — branded invite was emailed. Lead with the
+              // confirmation; the copy-link stays below as a secondary path.
+              <div
+                className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 flex items-start gap-2.5"
+                data-testid={`card-${props.testIdPrefix}-${props.kind}-invite-emailed`}
+              >
+                <MailCheck className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                <div className="text-sm text-emerald-900 leading-snug">
+                  We emailed the invite to{" "}
+                  <strong className="break-all">{invite.email}</strong>. The link
+                  is valid for 14 days.
+                </div>
+              </div>
+            ) : (
+              // Task #2038 — send failed (or no transport in dev). Fall back
+              // to the copy-link card and say so honestly.
+              <p
+                className="text-xs text-amber-700 leading-snug"
+                data-testid={`text-${props.testIdPrefix}-${props.kind}-email-failed`}
+              >
+                We couldn't email this invite, so copy the link below and send it
+                to {invite.personName} yourself.
+              </p>
+            )}
             <div
-              className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2"
+              className="rounded-lg border border-slate-200 bg-slate-50 p-3"
               data-testid={`card-${props.testIdPrefix}-${props.kind}-invite-ready`}
             >
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Accept link
-              </div>
-              <div className="flex items-center gap-2">
-                <code
-                  className="flex-1 min-w-0 text-xs text-slate-800 bg-white border border-slate-200 rounded-md px-2 py-1.5 truncate"
-                  data-testid={`text-${props.testIdPrefix}-${props.kind}-accept-url`}
-                >
-                  {invite.url}
-                </code>
-                <Button
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  {invite.emailDelivered ? "Or copy the link" : "Accept link"}
+                </div>
+                <button
                   type="button"
-                  size="sm"
-                  variant="outline"
                   onClick={copyInviteUrl}
+                  className="text-xs font-semibold text-[var(--brand-blue)] hover:underline flex items-center gap-1 shrink-0"
                   data-testid={`button-${props.testIdPrefix}-${props.kind}-copy-invite`}
                 >
                   {copied ? (
-                    <><Check className="w-3.5 h-3.5 mr-1.5" /> Copied</>
+                    <Check className="w-3.5 h-3.5" />
                   ) : (
-                    <><Copy className="w-3.5 h-3.5 mr-1.5" /> Copy</>
+                    <Copy className="w-3.5 h-3.5" />
                   )}
-                </Button>
+                  {copied ? "Copied" : "Copy"}
+                </button>
               </div>
-              <p className="text-xs text-slate-500 leading-snug">
-                Valid for 14 days. Copy this link and paste it into Slack / email / a DM — we don't send invite emails from this dialog.
-              </p>
+              <div
+                className="mt-1 text-xs text-slate-700 break-all font-mono"
+                data-testid={`text-${props.testIdPrefix}-${props.kind}-accept-url`}
+              >
+                {invite.url}
+              </div>
+              {!invite.emailDelivered && (
+                <p className="text-xs text-slate-500 leading-snug mt-2">
+                  Valid for 14 days — paste it into Slack / email / a DM.
+                </p>
+              )}
             </div>
           </div>
         ) : (

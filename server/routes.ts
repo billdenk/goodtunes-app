@@ -26022,7 +26022,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const existingRow = ((existingInvite as any).rows ?? [])[0];
     if (existingRow) {
       const acceptUrl = `${proto}://${host}/invite/${existingRow.token}`;
-      return res.json({ mode: "invited", personId, personName, inviteId: existingRow.id, acceptUrl, reused: true });
+      // Task #2038 — email the branded invite (parity with /api/admin/invites)
+      // even when an existing pending invite is reused. Best-effort: the send
+      // helper never throws and the response still carries the accept URL so
+      // the dialog can fall back to copy-link on a send failure.
+      const inviter = await storage.getUser(req.session.userId!);
+      const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes admin";
+      const branding = await resolveInviterBranding(req.session.userId!);
+      const sendResult = await sendAdminInviteEmail(
+        email,
+        acceptUrl,
+        inviterName,
+        ROLE_LABELS[targetRole] || targetRole,
+        INVITE_TTL_DAYS,
+        branding.photoUrl,
+        branding.onBehalfOf,
+      );
+      console.log(`[partner-contacts] invite reused role=${targetRole} scope=${entityId} inviteId=${existingRow.id} emailDelivered=${sendResult.ok}`);
+      return res.json({
+        mode: "invited", personId, personName, inviteId: existingRow.id, acceptUrl, reused: true,
+        emailDelivered: sendResult.ok,
+        reason: sendResult.ok ? null : sendResult.reason,
+      });
     }
     const token = generateToken();
     const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
@@ -26042,12 +26063,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       inviteRole: entityKind === "manufacturer" && level === "staff" ? "press_staff" : null,
     } as any);
     const acceptUrl = `${proto}://${host}/invite/${token}`;
-    // Task #665 — email send is intentionally out-of-scope for the
-    // partner-contacts flow. The dialog is copy-link only; the
-    // response carries the URL and the operator pastes it into Slack
-    // / DMs / their own email. Keep the audit log token-free.
-    console.log(`[partner-contacts] invite issued role=${targetRole} scope=${entityId} inviteId=${invite.id}`);
-    res.json({ mode: "invited", personId, personName, inviteId: invite.id, acceptUrl });
+    // Task #2038 — email the branded invite (parity with the Invite Artist
+    // flow / /api/admin/invites) instead of copy-link-only. Reuses the shared
+    // sendAdminInviteEmail + resolveInviterBranding so the partner-contacts
+    // invite lands as a real branded email. Best-effort: the send helper never
+    // throws and the response still carries the accept URL so the dialog can
+    // fall back to copy-link on a send failure. Keep the audit log token-free.
+    const inviter = await storage.getUser(req.session.userId!);
+    const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes admin";
+    const branding = await resolveInviterBranding(req.session.userId!);
+    const sendResult = await sendAdminInviteEmail(
+      email,
+      acceptUrl,
+      inviterName,
+      ROLE_LABELS[targetRole] || targetRole,
+      INVITE_TTL_DAYS,
+      branding.photoUrl,
+      branding.onBehalfOf,
+    );
+    console.log(`[partner-contacts] invite issued role=${targetRole} scope=${entityId} inviteId=${invite.id} emailDelivered=${sendResult.ok}`);
+    res.json({
+      mode: "invited", personId, personName, inviteId: invite.id, acceptUrl,
+      emailDelivered: sendResult.ok,
+      reason: sendResult.ok ? null : sendResult.reason,
+    });
   });
 
   // Task #665 — lightweight verb-check used by partner shells
