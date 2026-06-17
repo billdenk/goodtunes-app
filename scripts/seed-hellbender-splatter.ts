@@ -1,32 +1,36 @@
 /**
- * Seed Hellbender "Splatter" tier disc-color swatches.
+ * Load Hellbender "Splatter" tier disc-color swatches from Bill's AUTHORITATIVE
+ * PNG export.
  *
- * Bill confirmed the source: the 32 disc renders in the press's
- * `BONUS_VinylMockUp_Examples.psd`. Those layers were extracted (centered on
- * transparency, trimmed + re-canvased to 600x600) to `scripts/data/splatter-discs/01.png..32.png`
- * and named from the PSD layer labels in `scripts/data/hellbender-splatter-photos.json`.
+ * Source of truth: the 31 disc renders Bill exported himself
+ * (`attached_assets/20260616_Hellbender_-_PNGs_1781669771008.zip`), rebuilt into
+ * `scripts/data/splatter-discs/01.png..31.png` + named in
+ * `scripts/data/hellbender-splatter-photos.json` by
+ * `scripts/build-hellbender-splatter-discs.ts`. The picker shows the disc PNG
+ * (`swatch_image_url`); `swatch_hex` is a never-displayed fallback.
  *
- * Hellbender's 12" Splatter tiers (12_lp + 12_double) currently render EMPTY in
- * the admin SellPanel package designer — there are no color rows. This loads the
- * 32 disc renders the same way "House Mix" was loaded: each render becomes one
- * color row with the disc PNG as its `swatch_image_url` (the picker shows the
- * disc, not a flat hex). `swatch_hex` is a never-displayed fallback.
+ * This SUPERSEDES the earlier PROVISIONAL 32-disc set extracted from the press's
+ * generic `BONUS_VinylMockUp_Examples.psd` (import_source_url
+ * `psd:BONUS_VinylMockUp_Examples`). That provisional set had already landed in
+ * the dev DB; Bill's export drops one color ("Purple / White / Royal Blue
+ * Tri-Color Striped w/ White Splatter") and is the renders he approved. So this
+ * is a scoped clean REPLACE, not a blind insert: per Splatter tier we DELETE the
+ * old PSD-sourced rows, then insert Bill's 31 if-absent-by-name. The delete is
+ * scoped to the old import_source, so genuine operator-added colors are never
+ * touched, and the new rows carry a new import_source so a no-marker re-run is a
+ * no-op (defense in depth on top of the marker).
  *
- * HONEST CAVEAT (for Bill): these 32 are a MIX of effects (splatter, marble,
- * smoke, galaxy, color-in-color, tri-color) from a generic mockup template — not
- * Hellbender's verified per-color catalog — and all sit at the flat Splatter tier
- * price. An operator can rename / reprice / delete any of them in admin.
+ * Curation-safe + one-time: a `post_merge_data_backfills` marker short-circuits
+ * re-runs PER DB (the table lives in each DB), so once this has run an operator
+ * can rename / reprice / delete any Splatter color and a later post-merge run
+ * won't clobber it or resurrect the dropped one.
  *
- * Two idempotent phases (same pattern as backfill-hellbender-photos.ts):
+ * Two idempotent phases:
  *   1. MIRROR each local PNG into Object Storage ONCE. The bucket is shared by
  *      dev + prod, so the resolved `/objects/uploads/<id>` URL resolves in both.
- *      Resolved URLs persist back to the manifest so a second run (prod) reuses
- *      them instead of re-uploading. (We skip maskToVinylDisc — these renders are
- *      already clean transparent discs.)
- *   2. For the target DB, INSERT one color row per render into EACH existing
- *      Splatter tier, only when (tier_id, name) is absent — exactly ensureColor's
- *      contract. We never create a Splatter tier (an unpriced tier breaks SKUs)
- *      and never clobber an existing row, so re-runs + operator edits are safe.
+ *      Resolved URLs persist back to the (committed) manifest so a second run
+ *      (prod) and fresh clones reuse them instead of re-uploading.
+ *   2. For the target DB, scoped-replace the Splatter colors as described above.
  *
  * Hellbender's id and its tier ids DRIFT between dev and prod, so the press is
  * resolved by name and the tiers by (press_id, name) at runtime — never hardcoded.
@@ -46,7 +50,12 @@ const DRY = process.argv.includes("--dry");
 const MANIFEST = "scripts/data/hellbender-splatter-photos.json";
 const DISC_DIR = "scripts/data/splatter-discs";
 const TIER_NAME = "Splatter";
-const IMPORT_SOURCE = "psd:BONUS_VinylMockUp_Examples";
+const EXPECTED_COLORS = 31;
+// New rows carry this source; the old provisional set carried OLD_IMPORT_SOURCE.
+const IMPORT_SOURCE = "hellbender-splatter-export-20260616";
+const OLD_IMPORT_SOURCE = "psd:BONUS_VinylMockUp_Examples";
+// Per-DB one-time guard so operator edits survive future post-merge runs.
+const MARKER = "hellbender_splatter_swatches";
 
 type Color = {
   position: number;
@@ -106,7 +115,7 @@ async function main() {
   // Drift guard: Splatter is a 12" stock — it lives on exactly the two 12"
   // formats. If prod surfaces anything else (a duplicate/archived Hellbender
   // row, or an unexpected 7_inch Splatter tier), stop and let a human look
-  // before we fan 32 rows into the wrong place.
+  // before we fan 31 rows into the wrong place.
   const EXPECTED_FORMATS = ["12_double", "12_lp"];
   const gotFormats = tierRows.rows.map((t) => t.format).sort();
   if (JSON.stringify(gotFormats) !== JSON.stringify(EXPECTED_FORMATS)) {
@@ -118,9 +127,28 @@ async function main() {
     return;
   }
 
+  // Per-DB one-time marker — once applied, leave operator curation alone.
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+      name text PRIMARY KEY,
+      applied_at timestamptz NOT NULL DEFAULT now()
+    )`);
+  const markerRows = await db.execute<{ one: number }>(
+    sql`SELECT 1 AS one FROM post_merge_data_backfills WHERE name = ${MARKER}`,
+  );
+  if (markerRows.rows.length) {
+    console.log(`seed-hellbender-splatter: marker '${MARKER}' present — already applied, skipping`);
+    return;
+  }
+
   const manifest: Manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
-  if (manifest.colors.length !== 32) {
-    console.warn(`! manifest has ${manifest.colors.length} colors (expected 32)`);
+  // Hard-fail BEFORE any write/stamp — a regenerated manifest with the wrong
+  // count must never lock in a partial set behind the one-time marker.
+  if (manifest.colors.length !== EXPECTED_COLORS) {
+    throw new Error(
+      `manifest has ${manifest.colors.length} colors (expected ${EXPECTED_COLORS}) — ` +
+        `re-run scripts/build-hellbender-splatter-discs.ts before seeding.`,
+    );
   }
 
   // ---- Phase 1: mirror local PNGs (idempotent via manifest publicUrl) ----
@@ -132,30 +160,40 @@ async function main() {
       c.publicUrl = await mirrorLocal(c.file);
       done++;
       if (done % 8 === 0 || done === need.length) console.log(`  mirrored ${done}/${need.length}`);
-      writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2));
+      writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2) + "\n");
     }
   } else if (need.length) {
     console.log(`  [DRY] would mirror ${need.length} images.`);
   }
 
-  // ---- Phase 2: insert one color row per render into each Splatter tier ----
+  // ---- Phase 2: scoped clean-replace per Splatter tier ----
   if (DRY) {
     for (const t of tierRows.rows) {
-      const existing = await db.execute<{ name: string }>(
-        sql`SELECT name FROM press_colors WHERE tier_id = ${t.id}`,
+      const oldRows = await db.execute<{ n: number }>(
+        sql`SELECT COUNT(*)::int AS n FROM press_colors WHERE tier_id = ${t.id} AND import_source_url = ${OLD_IMPORT_SOURCE}`,
       );
-      const have = new Set(existing.rows.map((r) => r.name));
-      const add = manifest.colors.filter((c) => !have.has(c.name)).length;
-      console.log(`  [DRY] ${t.format} Splatter: would insert ${add} (already ${have.size})`);
+      const existing = await db.execute<{ name: string }>(
+        sql`SELECT name FROM press_colors WHERE tier_id = ${t.id} AND import_source_url <> ${OLD_IMPORT_SOURCE}`,
+      );
+      const haveAfterDelete = new Set(existing.rows.map((r) => r.name));
+      const add = manifest.colors.filter((c) => !haveAfterDelete.has(c.name)).length;
+      console.log(`  [DRY] ${t.format} Splatter: would delete ${oldRows.rows[0].n} old PSD row(s), insert ${add}`);
     }
-    console.log("\n[DRY] no changes written.");
+    console.log("\n[DRY] no changes written (marker not stamped).");
     return;
   }
 
+  let deleted = 0;
   let inserted = 0;
   let skipped = 0;
   await db.transaction(async (tx) => {
     for (const t of tierRows.rows) {
+      // Remove only the un-approved provisional set; leave operator rows alone.
+      const del = await tx.execute(
+        sql`DELETE FROM press_colors WHERE tier_id = ${t.id} AND import_source_url = ${OLD_IMPORT_SOURCE}`,
+      );
+      deleted += del.rowCount ?? 0;
+
       const existing = await tx.execute<{ name: string }>(
         sql`SELECT name FROM press_colors WHERE tier_id = ${t.id}`,
       );
@@ -175,8 +213,13 @@ async function main() {
         inserted++;
       }
     }
+    await tx.execute(
+      sql`INSERT INTO post_merge_data_backfills (name) VALUES (${MARKER}) ON CONFLICT (name) DO NOTHING`,
+    );
   });
-  console.log(`\nDone. Inserted ${inserted} color row(s), skipped ${skipped} (already present).`);
+  console.log(
+    `\nDone. Deleted ${deleted} old PSD row(s), inserted ${inserted}, skipped ${skipped} (already present). Marker '${MARKER}' stamped.`,
+  );
 
   // ---- Verify ----
   const after = await db.execute<{ format: string; colors: number; with_photo: number }>(sql`

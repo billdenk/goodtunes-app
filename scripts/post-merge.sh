@@ -584,6 +584,31 @@ backfill_gogoods_collectible_ids() {
 backfill_gogoods_collectible_ids dev  "${DATABASE_URL:-}"
 backfill_gogoods_collectible_ids prod "${PROD_DATABASE_URL:-}"
 
+# Hellbender "Splatter" 12" disc swatches — load Bill's authoritative 31-disc
+# export into both Splatter Color tiers (12_lp + 12_double) so the SellPanel
+# "Design your Package" picker renders real discs instead of an empty tier. The
+# disc PNGs are committed (scripts/data/splatter-discs + manifest with resolved
+# /objects URLs from the shared bucket), so a fresh clone reuses them without
+# re-uploading. Self-gates: a clone without the Hellbender press or its Splatter
+# tiers writes nothing and leaves the marker unset to re-check on a later merge.
+# Idempotent + marker-guarded (post_merge_data_backfills) — does a SCOPED
+# clean-replace (drops only the old psd:BONUS_VinylMockUp_Examples provisional
+# rows) so operator renames/reprices/deletes survive future merges.
+backfill_hellbender_splatter() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping hellbender-splatter backfill on $label (no URL set)"
+    return 0
+  fi
+  if DATABASE_URL="$url" npx tsx scripts/seed-hellbender-splatter.ts; then
+    echo "post-merge: hellbender-splatter backfill ok on $label"
+  else
+    echo "post-merge: WARNING — hellbender-splatter backfill failed on $label (continuing)"
+  fi
+}
+backfill_hellbender_splatter dev  "${DATABASE_URL:-}"
+backfill_hellbender_splatter prod "${PROD_DATABASE_URL:-}"
+
 # Gibson sub-brand fold — every product on gibson.com is Gibson (Bill's call:
 # "anything with gibson.com as the URL is Gibson"). The Add-gear scraper used
 # to promote any gibson.com brand string that wasn't exactly "Gibson" into its
