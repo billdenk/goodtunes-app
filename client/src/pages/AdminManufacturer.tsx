@@ -102,14 +102,14 @@ function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
     onError: (e: Error) => toast({ title: "Couldn't update", description: e.message, variant: "destructive" }),
   });
   return (
-    <div className="rounded-xl bg-white/5 ring-1 ring-white/10 p-4" data-testid="panel-auto-trigger-consent">
+    <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-auto-trigger-consent">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="font-semibold flex items-center gap-2">
-            <Zap className="w-4 h-4 text-[color:var(--brand-mint)]" />
+          <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+            <Zap className={`w-4 h-4 ${consented ? "text-[var(--brand-blue)]" : "text-slate-400"}`} />
             Pool-funded early cut
           </div>
-          <p className="text-white/55 text-sm mt-1 max-w-xl">
+          <p className="text-slate-500 text-sm mt-1 max-w-xl">
             Allow GoodTunes to stage masters cuts early for this press's
             albums once their per-sale funding pool covers the minimum-run
             floor. Each cut still needs the artist's opt-in and your approval
@@ -118,21 +118,22 @@ function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
           </p>
           <div className="text-xs mt-2" data-testid="text-consent-state">
             {consented ? (
-              <span className="text-[color:var(--brand-mint)]">Consent on — early cuts can be staged.</span>
+              <span className="text-emerald-700 font-medium">Consent on — early cuts can be staged.</span>
             ) : (
-              <span className="text-white/45">Consent off — pools still build, but no cut is ever staged.</span>
+              <span className="text-slate-500">Consent off — pools still build, but no cut is ever staged.</span>
             )}
           </div>
         </div>
         <Button
           type="button"
           size="sm"
+          variant={consented ? "outline" : "default"}
           onClick={() => toggle.mutate(!consented)}
           disabled={toggle.isPending}
           className={
             consented
-              ? "bg-transparent text-white ring-1 ring-white/15 hover:bg-white/5 border-0"
-              : "bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)] hover:brightness-110 font-semibold"
+              ? "shrink-0 border-slate-300 text-slate-700 hover:bg-slate-50"
+              : "shrink-0 bg-[var(--brand-blue)] text-white hover:bg-[var(--brand-blue)]/90 font-semibold"
           }
           data-testid="button-toggle-auto-trigger"
         >
@@ -142,12 +143,12 @@ function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
 
       {/* Per-album pool ledger: accrued / released / available across this
           press's albums that have a funding pool building. */}
-      <div className="mt-4 border-t border-white/10 pt-3" data-testid="section-early-cut-pools">
-        <div className="text-xs uppercase tracking-wide text-white/40 mb-2">Funding pools</div>
+      <div className="border-t border-slate-100 pt-3" data-testid="section-early-cut-pools">
+        <div className="text-xs uppercase tracking-wide text-slate-400 font-semibold mb-2">Funding pools</div>
         {poolsLoading ? (
-          <div className="text-xs text-white/45" data-testid="text-pools-loading">Loading pools…</div>
+          <div className="text-xs text-slate-500" data-testid="text-pools-loading">Loading pools…</div>
         ) : pools.length === 0 ? (
-          <div className="text-xs text-white/45" data-testid="text-pools-empty">
+          <div className="text-xs text-slate-500" data-testid="text-pools-empty">
             No albums are building a funding pool for this press yet.
           </div>
         ) : (
@@ -155,16 +156,16 @@ function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
             {pools.map((p) => (
               <div
                 key={p.albumId}
-                className="flex items-center gap-3 rounded-lg bg-white/[0.03] ring-1 ring-white/5 px-3 py-2"
+                className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
                 data-testid={`row-pool-${p.albumId}`}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm truncate" data-testid={`text-pool-title-${p.albumId}`}>
+                  <div className="text-sm text-slate-900 truncate" data-testid={`text-pool-title-${p.albumId}`}>
                     {p.albumTitle}
                   </div>
-                  <div className="text-xs text-white/45 flex items-center gap-2 mt-0.5">
+                  <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
                     {p.mastersTriggeredAt ? (
-                      <span className="text-[color:var(--brand-mint)]">Cut staged</span>
+                      <span className="text-emerald-700 font-medium">Cut staged</span>
                     ) : p.artistConsentAt ? (
                       <span>Artist opted in</span>
                     ) : (
@@ -173,10 +174,10 @@ function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="text-sm font-semibold" data-testid={`text-pool-available-${p.albumId}`}>
+                  <div className="text-sm font-semibold text-slate-900" data-testid={`text-pool-available-${p.albumId}`}>
                     {usd(p.availableCents)}
                   </div>
-                  <div className="text-xs text-white/40">
+                  <div className="text-xs text-slate-400">
                     {usd(p.accruedCents)} in · {usd(p.releasedCents)} out
                   </div>
                 </div>
