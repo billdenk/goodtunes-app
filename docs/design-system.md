@@ -58,6 +58,16 @@ Mobile player and desktop admin share **icon glyphs** (Lucide for UI chrome, `re
 
 When in doubt on the mobile player: Apple Music, Apple Music, Apple Music. Don't borrow admin chrome (h-9 squares, slate borders) into the player.
 
+### Invited-partner & operator portals are LIGHT-ONLY (admin slate)
+
+Every invited-partner / operator portal — **Press, Vendor (Maker/Reseller), Artist, Label, Non-Profit, Manager, Publisher** — plus their invite panels, renders in the **light admin (Stripe-leaning slate) theme**, identical to the admin/CMS. They are **operator surfaces, not fan surfaces**, so they must **never** use the navy `#00062B` dark chrome. These portals are **light-only** (not dual-theme): hardcode slate classes mirroring the admin frame.
+
+- **Mechanism.** `OperatorShell` adds `body.gt-admin` (had-guarded add/remove lifecycle) for these portal paths, and `client/src/main.tsx` first-paints `gt-admin` for the exact portal/`/invite` paths so there's no dark flash before hydration. The `isInvitedPortal` predicate in `scripts/design-lint.ts` exempts them from the fan-only `fan-text-tone` rule (they use slate tokens, not `text-fan-*`).
+- **Token vocabulary** (mirror the admin frame, invent no new colors): page `bg-slate-50`; cards `bg-white ring-1 ring-slate-200`; nested fills `bg-slate-50`/`bg-slate-100`; dividers `divide-slate-100`/`border-slate-100`; text scale `text-slate-900` (titles) → `slate-700` → `slate-600` → `slate-500` → `slate-400`; hovers `hover:bg-slate-50`/`slate-100`.
+- **Status / accent pills** (mint `#4AFFCA` and pink `#FF5470` are illegible on white): success/live/paid/shipped → `bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200`; pending/warning → `bg-amber-50 text-amber-700 ring-1 ring-amber-200`; error/destructive → `bg-rose-50 text-rose-700 ring-1 ring-rose-200`; info/neutral/count → `bg-blue-50 text-blue-700 ring-1 ring-blue-200` or `bg-slate-100 text-slate-700`.
+- **Keep** brand-blue links/actions via `var(--brand-blue)` (gt-admin retunes it to `#1f7fb8`) — but never `bg-[color:var(--brand-blue)]/NN` alpha (Tailwind can't alpha a var → renders nothing); use a `bg-blue-50/100` tint or a solid fill. `text-white` stays only as an on-accent label on a **filled** colored button.
+- **Recharts** on these surfaces follow the `PartnerDashboard` precedent: grid `rgba(15,23,42,0.08)`, axis ticks `#64748b`; keep brand data-series colors and the shared `CHART_TOOLTIP_STYLE`.
+
 ## Primitives + Apple HIG defaults
 
 - **Primitives home**: `client/src/components/ui/` is the canonical home. Mockups in `artifacts/mockup-sandbox/` prove a pattern first in a local `_shared.tsx`, then graduate into `client/src/components/ui/` when the pattern ships to real code.

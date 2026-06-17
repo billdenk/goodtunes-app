@@ -27,7 +27,7 @@ function ManufacturerScopeRouter({ pressId, isSuperAdminView }: { pressId: strin
   });
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-[color:var(--brand-bg)] flex items-center justify-center">
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center">
         <Loader2 className="w-6 h-6 text-[color:var(--brand-blue)] animate-spin" />
       </main>
     );
@@ -54,7 +54,7 @@ export function VendorPortal() {
 
   if (authLoading || roleLoading) {
     return (
-      <main className="min-h-screen bg-[color:var(--brand-bg)] flex items-center justify-center">
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center">
         <Loader2 className="w-6 h-6 text-[color:var(--brand-blue)] animate-spin" />
       </main>
     );
@@ -62,8 +62,8 @@ export function VendorPortal() {
 
   if (!user?.isAdmin) {
     return (
-      <main className="min-h-screen bg-[color:var(--brand-bg)] text-white flex items-center justify-center p-8">
-        <p className="text-white/60 text-sm">Sign in to your vendor account first.</p>
+      <main className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-8">
+        <p className="text-slate-500 text-sm">Sign in to your vendor account first.</p>
       </main>
     );
   }
@@ -105,10 +105,10 @@ function RoleRouter({ meRole }: { meRole: MeRole | null | undefined }) {
   const isVendorRole = meRole?.role === "vendor" || meRole?.role === "manufacturer" || meRole?.role === "fulfillment";
   if (!isVendorRole || !meRole?.roleScopeId) {
     return (
-      <main className="min-h-screen bg-[color:var(--brand-bg)] text-white flex items-center justify-center p-8">
+      <main className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-8">
         <div className="text-center space-y-2">
-          <p className="text-white/85 text-sm font-semibold">This account isn't linked to a vendor.</p>
-          <p className="text-white/55 text-xs">Ask GoodTunes to send a fresh vendor invite.</p>
+          <p className="text-slate-700 text-sm font-semibold">This account isn't linked to a vendor.</p>
+          <p className="text-slate-500 text-xs">Ask GoodTunes to send a fresh vendor invite.</p>
         </div>
       </main>
     );
@@ -161,7 +161,7 @@ function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string;
         />
       )}
       {tab === "services" && (
-        <div className="bg-white text-slate-900 rounded-2xl p-4 sm:p-6 ring-1 ring-white/10" data-testid="vendor-services-panel">
+        <div className="bg-white text-slate-900 rounded-2xl p-4 sm:p-6 ring-1 ring-slate-200" data-testid="vendor-services-panel">
           <GoodDeedServicesTab vendorId={vendorId} />
         </div>
       )}

@@ -146,10 +146,10 @@ export function LabelDashboard() {
   if (me.error) {
     const msg = (me.error as any)?.message ?? "";
     return (
-      <main className="min-h-screen bg-[color:var(--brand-bg)] text-white flex items-center justify-center p-6">
+      <main className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-6">
         <div className="max-w-md text-center" data-testid="label-dashboard-gate">
           <h1 className="text-2xl font-bold mb-2">Label dashboard</h1>
-          <p className="text-white/60 text-sm">
+          <p className="text-slate-500 text-sm">
             {msg.includes("Super-admin") ? "Pass ?labelId= to inspect a specific label."
               : msg.includes("Insufficient") ? "This dashboard is for label accounts. Ask a super-admin to invite you."
               : msg.includes("Unauthorized") ? "Sign in with your label account to continue."
@@ -216,21 +216,21 @@ function InvitedByPressRow({ press, hasShippedFirst }: {
   const prefix = hasShippedFirst ? "Originally invited by" : "Invited by";
   return (
     <div
-      className={`mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1.5 ring-1 ${hasShippedFirst ? "bg-white/[0.03] ring-white/10 text-white/55" : "bg-white/[0.05] ring-white/15 text-white/75"}`}
+      className={`mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1.5 ring-1 ${hasShippedFirst ? "bg-white ring-slate-200 text-slate-500" : "bg-white ring-slate-200 text-slate-700"}`}
       data-testid="row-invited-by-press"
     >
       {press.logoUrl ? (
         <img src={press.logoUrl} alt="" className="w-5 h-5 rounded-sm object-cover" />
       ) : (
-        <div className="w-5 h-5 rounded-sm bg-white/10" />
+        <div className="w-5 h-5 rounded-sm bg-slate-100" />
       )}
       <span className="text-[12px]">
         {prefix}{" "}
-        <span className="font-semibold text-white/90" data-testid="text-invited-press-name">{press.name}</span>
+        <span className="font-semibold text-slate-900" data-testid="text-invited-press-name">{press.name}</span>
       </span>
       {!hasShippedFirst && (
         <>
-          <span className="text-white/25">·</span>
+          <span className="text-slate-300">·</span>
           <Link href="/chat">
             <a className="text-xs font-semibold text-[color:var(--brand-blue)] hover:underline" data-testid="link-message-goodtunes">
               Message GoodTunes to switch
@@ -258,13 +258,13 @@ function delta(cur: number, prev: number | null | undefined): { val: string; pos
 function Kpi({ label, value, sub, prev, testId }: { label: React.ReactNode; value: string; sub?: string; prev?: { cur: number; prev: number | null } | null; testId: string }) {
   const d = prev ? delta(prev.cur, prev.prev) : null;
   return (
-    <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-4" data-testid={testId}>
-      <p className="text-[11px] uppercase tracking-wider text-white/55 font-semibold">{label}</p>
+    <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4" data-testid={testId}>
+      <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">{label}</p>
       <p className="mt-1 text-2xl sm:text-[28px] font-bold tabular-nums" data-testid={`${testId}-value`}>{value}</p>
       <div className="mt-1 flex items-center gap-2 text-[11px]">
-        {sub && <span className="text-white/55">{sub}</span>}
+        {sub && <span className="text-slate-500">{sub}</span>}
         {d && (
-          <span className={`px-1.5 py-0.5 rounded-full font-semibold ${d.positive ? "bg-[color:var(--brand-mint)]/15 text-[color:var(--brand-mint)]" : "bg-rose-500/15 text-rose-300"}`} data-testid={`${testId}-delta`}>
+          <span className={`px-1.5 py-0.5 rounded-full font-semibold ${d.positive ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"}`} data-testid={`${testId}-delta`}>
             {d.val}
           </span>
         )}
@@ -290,7 +290,7 @@ function OverviewTab({ qs, labelId, labelName }: { qs: string; labelId: string |
         <Kpi label="Total plays" value={cur ? compact(cur.plays) : "—"} sub={cur ? `${pct(cur.completionRate)} complete` : undefined} prev={cur ? { cur: cur.plays, prev: prev?.plays ?? null } : null} testId="kpi-plays" />
         <Kpi label="Unique listeners" value={cur ? compact(cur.listeners) : "—"} prev={cur ? { cur: cur.listeners, prev: prev?.listeners ?? null } : null} testId="kpi-listeners" />
         <Kpi label="New fans" value={cur ? compact(cur.newFans) : "—"} sub="First-ever play in window" prev={cur ? { cur: cur.newFans, prev: prev?.newFans ?? null } : null} testId="kpi-new-fans" />
-        <Kpi label={<><Star className="w-3 h-3 inline -mt-0.5 mr-1 text-[color:var(--brand-mint)] fill-[color:var(--brand-mint)]" />Roster</>} value={cur ? compact(cur.rosterSize) : "—"} sub={cur ? `${cur.albumCount} album${cur.albumCount === 1 ? "" : "s"}` : undefined} testId="kpi-roster" />
+        <Kpi label={<><Star className="w-3 h-3 inline -mt-0.5 mr-1 text-emerald-500 fill-emerald-500" />Roster</>} value={cur ? compact(cur.rosterSize) : "—"} sub={cur ? `${cur.albumCount} album${cur.albumCount === 1 ? "" : "s"}` : undefined} testId="kpi-roster" />
         <Kpi label="Completion rate" value={cur ? pct(cur.completionRate) : "—"} sub={cur ? `${compact(cur.completions)} completions` : undefined} testId="kpi-completion" />
         <Kpi label="Avg. revenue / artist" value={cur && cur.rosterSize ? dollars(cur.grossCents / cur.rosterSize) : "—"} testId="kpi-arpa" />
       </section>
@@ -304,7 +304,7 @@ function OverviewTab({ qs, labelId, labelName }: { qs: string; labelId: string |
         </Card>
       </section>
 
-      <section className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-4" data-testid="chart-geo">
+      <section className="rounded-2xl bg-white ring-1 ring-slate-200 p-4" data-testid="chart-geo">
         <SalesMap data={geo.data?.sales} loading={geo.isLoading} />
       </section>
 
@@ -452,7 +452,7 @@ function LabelInvitePanel() {
                 key={r}
                 type="button"
                 onClick={() => setInviteeRole(r)}
-                className={`text-xs font-semibold rounded-md px-3 py-1.5 border ${inviteeRole === r ? "bg-[var(--brand-purple)] text-white border-transparent" : "bg-white/5 text-white/70 border-white/15 hover:text-white"}`}
+                className={`text-xs font-semibold rounded-md px-3 py-1.5 border ${inviteeRole === r ? "bg-[var(--brand-purple)] text-white border-transparent" : "bg-white text-slate-600 border-slate-200 hover:text-slate-900"}`}
                 data-testid={`button-label-invitee-role-${r}`}
               >
                 {r === "artist" ? "Artist" : "Label"}
@@ -466,7 +466,7 @@ function LabelInvitePanel() {
               onChange={(e) => setName(e.target.value)}
               placeholder={inviteeRole === "label" ? "Label name" : "Artist name"}
               required
-              className="flex-1 px-3 py-2 rounded-md bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-sm"
+              className="flex-1 px-3 py-2 rounded-md bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm"
               data-testid="input-label-invite-name"
             />
             <input
@@ -475,7 +475,7 @@ function LabelInvitePanel() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="name@example.com"
               required
-              className="flex-1 px-3 py-2 rounded-md bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-sm"
+              className="flex-1 px-3 py-2 rounded-md bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm"
               data-testid="input-label-invite-email"
             />
           </div>
@@ -485,7 +485,7 @@ function LabelInvitePanel() {
             placeholder="Optional personal note (1-2 sentences)"
             maxLength={1000}
             rows={2}
-            className="px-3 py-2 rounded-md bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-sm"
+            className="px-3 py-2 rounded-md bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm"
             data-testid="input-label-invite-welcome-note"
           />
           <div className="flex gap-2">
@@ -500,7 +500,7 @@ function LabelInvitePanel() {
             <button
               type="button"
               onClick={() => { setOpen(false); setEmail(""); setName(""); setWelcomeNote(""); setInviteeRole("artist"); }}
-              className="px-3 py-2 text-sm text-white/70 hover:text-white"
+              className="px-3 py-2 text-sm text-slate-600 hover:text-slate-900"
               data-testid="button-cancel-label-invite"
             >
               Cancel
@@ -510,15 +510,15 @@ function LabelInvitePanel() {
       )}
 
       {invites.length > 0 && (
-        <ul className="mt-4 divide-y divide-white/5" data-testid="list-label-invites">
+        <ul className="mt-4 divide-y divide-slate-100" data-testid="list-label-invites">
           {invites.map((iv) => {
             const accepted = !!iv.usedAt;
             const revoked = !!iv.revokedAt;
             const expired = !accepted && !revoked && new Date(iv.expiresAt) <= new Date();
             const status = accepted ? "Joined" : revoked ? "Revoked" : expired ? "Expired" : "Invited";
             const tone = accepted
-              ? "text-[color:var(--brand-mint)]"
-              : revoked || expired ? "text-white/40"
+              ? "text-emerald-600"
+              : revoked || expired ? "text-slate-400"
               : "text-[color:var(--brand-blue)]";
             const metaBits: string[] = [`Invited ${fmtDate(iv.createdAt)}`];
             if (accepted && iv.usedAt) metaBits.push(`Joined ${fmtDate(iv.usedAt)}`);
@@ -528,18 +528,18 @@ function LabelInvitePanel() {
               <li key={iv.id} className="py-2.5" data-testid={`row-label-invite-${iv.id}`}>
                 <div className="flex items-center gap-3">
                   {iv.scopeThumbUrl ? (
-                    <img src={iv.scopeThumbUrl} alt="" className="w-11 h-11 rounded-full object-cover bg-white/5" />
+                    <img src={iv.scopeThumbUrl} alt="" className="w-11 h-11 rounded-full object-cover bg-slate-100" />
                   ) : (
-                    <div className="w-11 h-11 rounded-full bg-white/5" />
+                    <div className="w-11 h-11 rounded-full bg-slate-100" />
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold truncate text-sm flex items-center gap-1.5" data-testid={`text-label-invite-name-${iv.id}`}>
                       <span className="truncate min-w-0">{iv.scopeName ?? iv.email}</span>
                       {iv.role === "label" && (
-                        <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-white/55 bg-white/10 rounded px-1.5 py-0.5" data-testid={`tag-label-invite-role-${iv.id}`}>Label</span>
+                        <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-slate-700 bg-slate-100 rounded px-1.5 py-0.5" data-testid={`tag-label-invite-role-${iv.id}`}>Label</span>
                       )}
                     </p>
-                    <p className="text-xs text-white/55 truncate">{iv.email}</p>
+                    <p className="text-xs text-slate-500 truncate">{iv.email}</p>
                   </div>
                   <span className={`text-xs font-semibold uppercase tracking-wider ${tone}`} data-testid={`text-label-invite-status-${iv.id}`}>{status}</span>
                   {!accepted && !revoked && (
@@ -548,7 +548,7 @@ function LabelInvitePanel() {
                         <button
                           type="button"
                           onClick={() => copyLink(iv)}
-                          className="text-xs text-white/70 hover:text-white px-2 py-1"
+                          className="text-xs text-slate-600 hover:text-slate-900 px-2 py-1"
                           data-testid={`button-copy-label-invite-${iv.id}`}
                         >
                           {copiedId === iv.id ? "Copied" : "Copy link"}
@@ -558,7 +558,7 @@ function LabelInvitePanel() {
                         type="button"
                         onClick={() => resend.mutate(iv.id)}
                         disabled={resend.isPending}
-                        className="text-xs text-white/70 hover:text-white px-2 py-1 disabled:opacity-40"
+                        className="text-xs text-slate-600 hover:text-slate-900 px-2 py-1 disabled:opacity-40"
                         data-testid={`button-resend-label-invite-${iv.id}`}
                       >
                         Resend
@@ -567,7 +567,7 @@ function LabelInvitePanel() {
                         type="button"
                         onClick={() => { if (confirm(`Revoke invite to ${iv.email}?`)) revoke.mutate(iv.id); }}
                         disabled={revoke.isPending}
-                        className="text-xs text-[color:var(--brand-heart)]/80 hover:text-[color:var(--brand-heart)] px-2 py-1 disabled:opacity-40"
+                        className="text-xs text-rose-600 hover:text-rose-700 px-2 py-1 disabled:opacity-40"
                         data-testid={`button-revoke-label-invite-${iv.id}`}
                       >
                         Revoke
@@ -575,7 +575,7 @@ function LabelInvitePanel() {
                     </>
                   )}
                 </div>
-                <p className="mt-1.5 pl-14 text-xs text-white/55" data-testid={`text-label-invite-meta-${iv.id}`}>
+                <p className="mt-1.5 pl-14 text-xs text-slate-500" data-testid={`text-label-invite-meta-${iv.id}`}>
                   {metaBits.join(" · ")}
                 </p>
               </li>
@@ -597,7 +597,7 @@ function LabelContactsPanel({ labelId, labelName }: { labelId: string; labelName
     },
   });
   return (
-    <section className="rounded-2xl bg-white/[0.04] p-1">
+    <section className="rounded-2xl bg-slate-100 p-1">
       <div className="bg-white rounded-2xl">
         <OrganizationPeople
           apiPath={`/api/labels/${labelId}/people`}
@@ -662,7 +662,7 @@ function RosterTab({ qs, labelIdParam }: { qs: string; labelIdParam: string | nu
     >
       <div className="overflow-x-auto">
         <table className="w-full text-[13px]">
-          <thead className="text-white/45 text-[11px] uppercase tracking-wider">
+          <thead className="text-slate-400 text-[11px] uppercase tracking-wider">
             <tr>
               <SortableTh label="Artist" k="name" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="text-left pr-3" />
               <SortableTh label="Albums" k="albumCount" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="text-right px-2" />
@@ -674,26 +674,26 @@ function RosterTab({ qs, labelIdParam }: { qs: string; labelIdParam: string | nu
             </tr>
           </thead>
           <tbody>
-            {roster.isLoading && <tr><td colSpan={7} className="py-6 text-center text-white/45">Loading…</td></tr>}
-            {!roster.isLoading && rows.length === 0 && <tr><td colSpan={7} className="py-6 text-center text-white/45">No artists on the roster yet.</td></tr>}
+            {roster.isLoading && <tr><td colSpan={7} className="py-6 text-center text-slate-400">Loading…</td></tr>}
+            {!roster.isLoading && rows.length === 0 && <tr><td colSpan={7} className="py-6 text-center text-slate-400">No artists on the roster yet.</td></tr>}
             {rows.map((a) => (
-              <tr key={a.personId} className="border-t border-white/5 hover:bg-white/[0.02] transition" data-testid={`row-artist-${a.personId}`}>
+              <tr key={a.personId} className="border-t border-slate-100 hover:bg-slate-50 transition" data-testid={`row-artist-${a.personId}`}>
                 <td className="py-2 pr-3">
                   <Link href={drillHref(a.personId)}>
                     <a className="flex items-center gap-2 min-w-0 group" data-testid={`link-artist-${a.personId}`}>
                       {a.photoUrl ? (
                         <img src={a.photoUrl} alt="" className="w-11 h-11 rounded-full object-cover" />
                       ) : (
-                        <div className="w-11 h-11 rounded-full bg-[color:var(--brand-blue)]/20 flex items-center justify-center text-xs font-bold">{a.name.slice(0, 1).toUpperCase()}</div>
+                        <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">{a.name.slice(0, 1).toUpperCase()}</div>
                       )}
                       <div className="min-w-0">
                         <p className="truncate font-semibold transition-colors group-hover:text-[color:var(--brand-blue)] group-hover:underline underline-offset-2">{a.name}</p>
-                        <p className="truncate text-white/45 text-[11px]">{a.albumCount} album{a.albumCount === 1 ? "" : "s"}</p>
+                        <p className="truncate text-slate-400 text-[11px]">{a.albumCount} album{a.albumCount === 1 ? "" : "s"}</p>
                       </div>
                     </a>
                   </Link>
                 </td>
-                <td className="px-2 text-right tabular-nums text-white/70">{a.albumCount}</td>
+                <td className="px-2 text-right tabular-nums text-slate-600">{a.albumCount}</td>
                 <td className="px-2 text-right tabular-nums font-semibold">{dollars(a.revenueCents)}</td>
                 <td className="px-2 text-right tabular-nums">{a.units}</td>
                 <td className="px-2 text-right tabular-nums">{a.buyers}</td>
@@ -717,7 +717,7 @@ function SortableTh({ label, k, sortKey, sortDir, onSort, className }: {
       <button
         type="button"
         onClick={() => onSort(k)}
-        className={`inline-flex items-center gap-1 uppercase tracking-wider ${active ? "text-white" : "text-white/45 hover:text-white/75"}`}
+        className={`inline-flex items-center gap-1 uppercase tracking-wider ${active ? "text-slate-900" : "text-slate-400 hover:text-slate-700"}`}
         data-testid={`sort-${k}`}
       >
         {label}
@@ -741,7 +741,7 @@ function CatalogTab({ qs }: { qs: string }) {
       >
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
-            <thead className="text-white/45 text-[11px] uppercase tracking-wider">
+            <thead className="text-slate-400 text-[11px] uppercase tracking-wider">
               <tr>
                 <th className="text-left font-medium py-2 pr-3">Album</th>
                 <th className="text-right font-medium px-2">Revenue</th>
@@ -752,17 +752,17 @@ function CatalogTab({ qs }: { qs: string }) {
               </tr>
             </thead>
             <tbody>
-              {albums.isLoading && <tr><td colSpan={6} className="py-6 text-center text-white/45">Loading…</td></tr>}
-              {!albums.isLoading && (albums.data?.albums.length ?? 0) === 0 && <tr><td colSpan={6} className="py-6 text-center text-white/45">No albums in scope.</td></tr>}
+              {albums.isLoading && <tr><td colSpan={6} className="py-6 text-center text-slate-400">Loading…</td></tr>}
+              {!albums.isLoading && (albums.data?.albums.length ?? 0) === 0 && <tr><td colSpan={6} className="py-6 text-center text-slate-400">No albums in scope.</td></tr>}
               {albums.data?.albums.map((a) => (
-                <tr key={a.albumId} className="border-t border-white/5" data-testid={`row-album-${a.albumId}`}>
+                <tr key={a.albumId} className="border-t border-slate-100" data-testid={`row-album-${a.albumId}`}>
                   <td className="py-2 pr-3">
                     <Link href={`/album/${a.albumId}`}>
                       <a className="flex items-center gap-2 min-w-0 group" data-testid={`link-album-${a.albumId}`}>
                         {a.artwork && <img src={a.artwork} alt="" className="w-9 h-9 rounded object-cover" />}
                         <div className="min-w-0">
                           <p className="truncate font-semibold transition-colors group-hover:text-[color:var(--brand-blue)] group-hover:underline underline-offset-2">{a.title}</p>
-                          <p className="truncate text-white/45 text-[11px]">{a.artist}</p>
+                          <p className="truncate text-slate-400 text-[11px]">{a.artist}</p>
                         </div>
                       </a>
                     </Link>
@@ -787,14 +787,14 @@ function CatalogTab({ qs }: { qs: string }) {
       >
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
-            <thead className="text-white/45 text-[11px] uppercase tracking-wider">
+            <thead className="text-slate-400 text-[11px] uppercase tracking-wider">
               <tr>
                 <th className="text-left font-medium py-2 pr-3">Track</th>
                 <th className="text-right font-medium px-2">Plays</th>
                 <th className="text-right font-medium px-2">Completes</th>
                 <th className="text-right font-medium px-2">
                   <span className="inline-flex items-center gap-1 justify-end">
-                    <Heart className="w-3 h-3 text-[color:var(--brand-pink)]" /> Favorites
+                    <Heart className="w-3 h-3 text-rose-500" /> Favorites
                   </span>
                 </th>
                 <th className="text-right font-medium px-2">Playlist adds</th>
@@ -802,17 +802,17 @@ function CatalogTab({ qs }: { qs: string }) {
               </tr>
             </thead>
             <tbody>
-              {tracks.isLoading && <tr><td colSpan={6} className="py-6 text-center text-white/45">Loading…</td></tr>}
-              {!tracks.isLoading && (tracks.data?.tracks.length ?? 0) === 0 && <tr><td colSpan={6} className="py-6 text-center text-white/45">No plays yet in this window.</td></tr>}
+              {tracks.isLoading && <tr><td colSpan={6} className="py-6 text-center text-slate-400">Loading…</td></tr>}
+              {!tracks.isLoading && (tracks.data?.tracks.length ?? 0) === 0 && <tr><td colSpan={6} className="py-6 text-center text-slate-400">No plays yet in this window.</td></tr>}
               {tracks.data?.tracks.map((t) => (
-                <tr key={t.songId} className="border-t border-white/5" data-testid={`row-track-${t.songId}`}>
+                <tr key={t.songId} className="border-t border-slate-100" data-testid={`row-track-${t.songId}`}>
                   <td className="py-2 pr-3">
                     <p className="font-semibold truncate">{t.title}</p>
-                    <p className="text-white/45 text-[11px] truncate">{t.albumTitle} · {t.albumArtist}</p>
+                    <p className="text-slate-400 text-[11px] truncate">{t.albumTitle} · {t.albumArtist}</p>
                   </td>
                   <td className="px-2 text-right tabular-nums">{compact(t.plays)}</td>
                   <td className="px-2 text-right tabular-nums">{compact(t.completes)}</td>
-                  <td className="px-2 text-right tabular-nums text-[color:var(--brand-pink)]">{compact(t.favorites)}</td>
+                  <td className="px-2 text-right tabular-nums text-rose-500">{compact(t.favorites)}</td>
                   <td className="px-2 text-right tabular-nums">{compact(t.playlistAdds)}</td>
                   <td className="pl-2 text-right tabular-nums">{compact(t.shares)}</td>
                 </tr>
@@ -843,7 +843,7 @@ function OrdersTab({ qs, labelIdParam }: { qs: string; labelIdParam: string | nu
     >
       <div className="overflow-x-auto">
         <table className="w-full text-[13px]">
-          <thead className="text-white/45 text-[11px] uppercase tracking-wider">
+          <thead className="text-slate-400 text-[11px] uppercase tracking-wider">
             <tr>
               <th className="text-left font-medium py-2 pr-3">Date</th>
               <th className="text-left font-medium px-2">Album</th>
@@ -854,20 +854,20 @@ function OrdersTab({ qs, labelIdParam }: { qs: string; labelIdParam: string | nu
             </tr>
           </thead>
           <tbody>
-            {orders.isLoading && <tr><td colSpan={6} className="py-6 text-center text-white/45">Loading…</td></tr>}
-            {!orders.isLoading && (orders.data?.orders.length ?? 0) === 0 && <tr><td colSpan={6} className="py-6 text-center text-white/45">No orders in this window.</td></tr>}
+            {orders.isLoading && <tr><td colSpan={6} className="py-6 text-center text-slate-400">Loading…</td></tr>}
+            {!orders.isLoading && (orders.data?.orders.length ?? 0) === 0 && <tr><td colSpan={6} className="py-6 text-center text-slate-400">No orders in this window.</td></tr>}
             {orders.data?.orders.map((o) => (
-              <tr key={o.id} className="border-t border-white/5" data-testid={`row-order-${o.id}`}>
-                <td className="py-2 pr-3 whitespace-nowrap text-white/75">{new Date(o.createdAt).toLocaleDateString()}</td>
+              <tr key={o.id} className="border-t border-slate-100" data-testid={`row-order-${o.id}`}>
+                <td className="py-2 pr-3 whitespace-nowrap text-slate-700">{new Date(o.createdAt).toLocaleDateString()}</td>
                 <td className="px-2 truncate max-w-[200px]">
                   <Link href={`/album/${o.albumId}`}><a className="transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2">{o.albumTitle}</a></Link>
                 </td>
-                <td className="px-2 truncate max-w-[160px] text-white/75">
+                <td className="px-2 truncate max-w-[160px] text-slate-700">
                   {o.primaryArtistId ? (
                     <Link href={drillHref(o.primaryArtistId)}><a className="transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2">{o.albumArtist}</a></Link>
                   ) : o.albumArtist}
                 </td>
-                <td className="px-2 text-white/65">{o.country ?? "—"}</td>
+                <td className="px-2 text-slate-600">{o.country ?? "—"}</td>
                 <td className="px-2"><StatusPill status={o.status} /></td>
                 <td className="pl-2 text-right tabular-nums font-semibold">{dollarsCents(o.totalCents)}</td>
               </tr>
@@ -884,11 +884,11 @@ const tooltipStyle = CHART_TOOLTIP_STYLE;
 
 function Card({ title, subtitle, children, testId, action }: { title: string; subtitle?: string; children: React.ReactNode; testId: string; action?: React.ReactNode }) {
   return (
-    <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-4" data-testid={testId}>
+    <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4" data-testid={testId}>
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0">
           <h2 className="text-[15px] font-bold">{title}</h2>
-          {subtitle && <p className="text-white/45 text-[12px] mt-0.5">{subtitle}</p>}
+          {subtitle && <p className="text-slate-400 text-[12px] mt-0.5">{subtitle}</p>}
         </div>
         {action}
       </div>
@@ -907,16 +907,16 @@ function CsvButton({ href, label, testId }: { href: string; label: string; testI
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
-    paid: "bg-[color:var(--brand-mint)]/15 text-[color:var(--brand-mint)]",
-    shipped: "bg-[color:var(--brand-blue)]/15 text-[color:var(--brand-blue)]",
-    refunded: "bg-rose-500/15 text-rose-300",
-    pending: "bg-white/10 text-white/55",
+    paid: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+    shipped: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
+    refunded: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+    pending: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
   };
-  return <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${map[status] ?? "bg-white/10 text-white/55"}`}>{status}</span>;
+  return <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${map[status] ?? "bg-slate-100 text-slate-700"}`}>{status}</span>;
 }
 
 function SkeletonBlock() {
-  return <div className="h-48 rounded-2xl bg-white/[0.04] ring-1 ring-white/10 animate-pulse" />;
+  return <div className="h-48 rounded-2xl bg-slate-100 ring-1 ring-slate-200 animate-pulse" />;
 }
 
 function RevenueChart({ data, loading }: { data: Timeseries["revenue"]; loading: boolean }) {
@@ -926,14 +926,14 @@ function RevenueChart({ data, loading }: { data: Timeseries["revenue"]; loading:
     return Array.from(byDay.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([day, total]) => ({ day: day.slice(5), total }));
   }, [data]);
   if (loading) return <SkeletonBlock />;
-  if (rows.length === 0) return <p className="py-10 text-center text-white/45 text-[13px]">No revenue in this window.</p>;
+  if (rows.length === 0) return <p className="py-10 text-center text-slate-400 text-[13px]">No revenue in this window.</p>;
   return (
     <div style={{ width: "100%", height: 260 }}>
       <ResponsiveContainer>
         <BarChart data={rows}>
-          <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-          <XAxis dataKey="day" stroke="rgba(255,255,255,0.45)" tick={{ fontSize: 11 }} />
-          <YAxis stroke="rgba(255,255,255,0.45)" tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+          <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
+          <XAxis dataKey="day" stroke="#cbd5e1" tick={{ fill: "#64748b", fontSize: 11 }} />
+          <YAxis stroke="#cbd5e1" tick={{ fill: "#64748b", fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
           <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => formatUsd(Number(v), { maximumFractionDigits: 0 })} />
           <Bar dataKey="total" fill={C.blue} radius={[4, 4, 0, 0]} />
         </BarChart>
@@ -945,7 +945,7 @@ function RevenueChart({ data, loading }: { data: Timeseries["revenue"]; loading:
 function PlaysChart({ data, loading }: { data: Timeseries["plays"]; loading: boolean }) {
   const rows = useMemo(() => data.map((r) => ({ day: r.day.slice(5), plays: r.starts, listeners: r.listeners })), [data]);
   if (loading) return <SkeletonBlock />;
-  if (rows.length === 0) return <p className="py-10 text-center text-white/45 text-[13px]">No plays in this window.</p>;
+  if (rows.length === 0) return <p className="py-10 text-center text-slate-400 text-[13px]">No plays in this window.</p>;
   return (
     <div style={{ width: "100%", height: 260 }}>
       <ResponsiveContainer>
@@ -956,11 +956,11 @@ function PlaysChart({ data, loading }: { data: Timeseries["plays"]; loading: boo
               <stop offset="100%" stopColor={C.blue} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-          <XAxis dataKey="day" stroke="rgba(255,255,255,0.45)" tick={{ fontSize: 11 }} />
-          <YAxis stroke="rgba(255,255,255,0.45)" tick={{ fontSize: 11 }} />
+          <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
+          <XAxis dataKey="day" stroke="#cbd5e1" tick={{ fill: "#64748b", fontSize: 11 }} />
+          <YAxis stroke="#cbd5e1" tick={{ fill: "#64748b", fontSize: 11 }} />
           <Tooltip contentStyle={tooltipStyle} />
-          <Legend wrapperStyle={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }} />
+          <Legend wrapperStyle={{ fontSize: 11, color: "#64748b" }} />
           <Area type="monotone" dataKey="plays" stroke={C.blue} fill="url(#playsFillLabel)" strokeWidth={2} />
           <Line type="monotone" dataKey="listeners" stroke={C.mint} strokeWidth={2} dot={false} />
         </AreaChart>
@@ -996,25 +996,25 @@ function RevByArtistChart({ data, loading }: { data: RevByArtist | undefined; lo
   }, [data]);
 
   if (loading) return <SkeletonBlock />;
-  if (rows.length === 0) return <p className="py-10 text-center text-white/45 text-[13px]">No revenue in this window.</p>;
+  if (rows.length === 0) return <p className="py-10 text-center text-slate-400 text-[13px]">No revenue in this window.</p>;
   const nameById = new Map(top.map((a) => [a.personId, a.name] as const));
 
   return (
     <div style={{ width: "100%", height: 320 }}>
       <ResponsiveContainer>
         <BarChart data={rows}>
-          <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-          <XAxis dataKey="day" stroke="rgba(255,255,255,0.45)" tick={{ fontSize: 11 }} />
-          <YAxis stroke="rgba(255,255,255,0.45)" tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+          <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
+          <XAxis dataKey="day" stroke="#cbd5e1" tick={{ fill: "#64748b", fontSize: 11 }} />
+          <YAxis stroke="#cbd5e1" tick={{ fill: "#64748b", fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
           <Tooltip
             contentStyle={tooltipStyle}
             formatter={(v: any, key: any) => [formatUsd(Number(v), { maximumFractionDigits: 0 }), key === "_others" ? "Others" : (nameById.get(String(key)) ?? key)]}
           />
-          <Legend wrapperStyle={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }} formatter={(v) => v === "_others" ? "Others" : (nameById.get(String(v)) ?? v)} />
+          <Legend wrapperStyle={{ fontSize: 11, color: "#64748b" }} formatter={(v) => v === "_others" ? "Others" : (nameById.get(String(v)) ?? v)} />
           {top.map((a, i) => (
             <Bar key={a.personId} dataKey={a.personId} stackId="rev" fill={colorFor(i)} />
           ))}
-          {hasOthers && <Bar dataKey="_others" stackId="rev" fill="rgba(255,255,255,0.25)" />}
+          {hasOthers && <Bar dataKey="_others" stackId="rev" fill="#cbd5e1" />}
         </BarChart>
       </ResponsiveContainer>
     </div>

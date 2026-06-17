@@ -81,7 +81,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-[color:var(--brand-bg)] flex items-center justify-center">
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center">
         <Loader2 className="w-6 h-6 text-[color:var(--brand-blue)] animate-spin" />
       </main>
     );
@@ -141,9 +141,9 @@ interface CustomerRow {
 interface SwitchingRow { kind: "artist" | "label"; id: string; name: string; photo: string | null; switched_at: string; }
 
 const STATE_PILL: Record<CustomerRow["state"], { label: string; cls: string }> = {
-  invited:  { label: "Invited",  cls: "bg-white/10 text-white/70" },
-  accepted: { label: "Accepted", cls: "bg-[color:var(--brand-blue)]/15 text-[color:var(--brand-blue)]" },
-  active:   { label: "Active",   cls: "bg-[color:var(--brand-mint)]/20 text-[color:var(--brand-mint)]" },
+  invited:  { label: "Invited",  cls: "bg-slate-100 text-slate-700" },
+  accepted: { label: "Accepted", cls: "bg-blue-50 text-blue-700 ring-1 ring-blue-200" },
+  active:   { label: "Active",   cls: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" },
 };
 
 const STAGE_LABEL: Record<string, string> = {
@@ -171,7 +171,7 @@ function CustomersTab({ pressId }: { pressId: string }) {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h2 className="text-lg font-semibold">Customers</h2>
-            <p className="text-white/55 text-sm mt-1">
+            <p className="text-slate-500 text-sm mt-1">
               {active.length} artist{active.length === 1 ? "" : "s"} and labels —
               invited, accepted, and shipping.
             </p>
@@ -179,7 +179,7 @@ function CustomersTab({ pressId }: { pressId: string }) {
           <Button
             type="button"
             onClick={() => setInviteOpen(true)}
-            className="h-10 rounded-full bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)] hover:brightness-95 font-semibold"
+            className="h-10 rounded-full bg-slate-900 text-white hover:bg-slate-800 font-semibold"
             data-testid="button-invite-artist"
           >
             <Sparkles className="w-4 h-4 mr-2" /> Invite an artist
@@ -188,13 +188,13 @@ function CustomersTab({ pressId }: { pressId: string }) {
         {active.length === 0 ? (
           <EmptyHint text="No customers yet. Invite your first artist to get them onto GoodTunes." />
         ) : (
-          <ul className="mt-4 divide-y divide-white/5" data-testid="list-customers-active">
+          <ul className="mt-4 divide-y divide-slate-100" data-testid="list-customers-active">
             {active.map((c) => {
               const pill = STATE_PILL[c.state];
               return (
                 <li
                   key={`${c.kind}-${c.id}-${c.state}`}
-                  className="flex items-center gap-3 py-3 cursor-pointer hover:bg-white/[0.02] -mx-2 px-2 rounded-lg"
+                  className="flex items-center gap-3 py-3 cursor-pointer hover:bg-slate-50 -mx-2 px-2 rounded-lg"
                   onClick={() => c.state !== "invited" && setDrawerCust(c)}
                   data-testid={`row-customer-${c.id}`}
                 >
@@ -206,7 +206,7 @@ function CustomersTab({ pressId }: { pressId: string }) {
                         {pill.label}
                       </span>
                     </div>
-                    <div className="text-white/55 text-xs">
+                    <div className="text-slate-500 text-xs">
                       {c.kind} · {c.albumCount} album{c.albumCount === 1 ? "" : "s"} · {c.lifetimeUnits} units lifetime
                       {c.latestStage && ` · ${STAGE_LABEL[c.latestStage] ?? c.latestStage}`}
                     </div>
@@ -237,14 +237,14 @@ function CustomersTab({ pressId }: { pressId: string }) {
       {switching.length > 0 && (
         <DashboardPanel padding="md">
           <h3 className="text-base font-semibold">Switching away</h3>
-          <p className="text-white/55 text-sm mt-1">Recently re-homed to another press. Greyed out for 90 days, then they drop off.</p>
+          <p className="text-slate-500 text-sm mt-1">Recently re-homed to another press. Greyed out for 90 days, then they drop off.</p>
           <ul className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2" data-testid="list-customers-switching">
             {switching.map((c) => (
-              <li key={`${c.kind}-${c.id}-${c.switched_at}`} className="flex items-center gap-3 rounded-xl bg-white/[0.02] ring-1 ring-white/10 p-3 opacity-60">
+              <li key={`${c.kind}-${c.id}-${c.switched_at}`} className="flex items-center gap-3 rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3 opacity-60">
                 <Avatar src={c.photo} fallback={c.name} />
                 <div className="min-w-0 flex-1">
                   <div className="font-semibold truncate">{c.name}</div>
-                  <div className="text-white/55 text-xs">Switched {new Date(c.switched_at).toLocaleDateString()}</div>
+                  <div className="text-slate-500 text-xs">Switched {new Date(c.switched_at).toLocaleDateString()}</div>
                 </div>
               </li>
             ))}
@@ -270,7 +270,7 @@ function CustomerDrawer({ pressId, cust, onClose }: { pressId: string; cust: Cus
   });
   return (
     <Dialog open={true} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="bg-[color:var(--brand-bg)] text-white border border-white/10 max-w-lg" data-testid={`drawer-customer-${cust.id}`}>
+      <DialogContent className="bg-white text-slate-900 border border-slate-200 max-w-lg" data-testid={`drawer-customer-${cust.id}`}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <Avatar src={cust.photo} fallback={cust.name} />
@@ -279,19 +279,19 @@ function CustomerDrawer({ pressId, cust, onClose }: { pressId: string; cust: Cus
         </DialogHeader>
         <div className="space-y-4 max-h-[60vh] overflow-y-auto">
           <div>
-            <h4 className="text-xs uppercase tracking-wider text-white/55 font-semibold mb-2">Albums on this press</h4>
+            <h4 className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Albums on this press</h4>
             {(data?.albums ?? []).length === 0 ? (
-              <p className="text-sm text-white/60">No albums yet.</p>
+              <p className="text-sm text-slate-500">No albums yet.</p>
             ) : (
               <ul className="space-y-2" data-testid="list-drawer-albums">
                 {(data?.albums ?? []).map((a) => (
-                  <li key={a.id} className="flex items-center gap-3 rounded-lg bg-white/[0.03] ring-1 ring-white/10 p-2">
-                    <div className="w-10 h-10 rounded bg-white/10 overflow-hidden flex-shrink-0">
+                  <li key={a.id} className="flex items-center gap-3 rounded-lg bg-slate-50 ring-1 ring-slate-200 p-2">
+                    <div className="w-10 h-10 rounded bg-slate-100 overflow-hidden flex-shrink-0">
                       {a.coverUrl && <img src={a.coverUrl} className="w-full h-full object-cover" alt="" />}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="font-semibold truncate text-sm">{a.title}</div>
-                      <div className="text-xs text-white/55">{STAGE_LABEL[a.stage] ?? a.stage}</div>
+                      <div className="text-xs text-slate-500">{STAGE_LABEL[a.stage] ?? a.stage}</div>
                     </div>
                     <Link href={`/admin/albums/${a.id}`} className="text-[color:var(--brand-blue)] text-xs hover:underline">Open</Link>
                   </li>
@@ -301,10 +301,10 @@ function CustomerDrawer({ pressId, cust, onClose }: { pressId: string; cust: Cus
           </div>
           {(data?.switchHistory ?? []).length > 0 && (
             <div>
-              <h4 className="text-xs uppercase tracking-wider text-white/55 font-semibold mb-2">Press-switch history</h4>
+              <h4 className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Press-switch history</h4>
               <ul className="space-y-1 text-sm">
                 {(data?.switchHistory ?? []).map((h, i) => (
-                  <li key={i} className="text-white/70">
+                  <li key={i} className="text-slate-600">
                     {new Date(h.switched_at).toLocaleDateString()} — moved {h.from_press_id === pressId ? "away from us" : "to us"}
                     {h.reason ? ` · ${h.reason}` : ""}
                   </li>
@@ -349,9 +349,9 @@ function DashboardSummary({ pressId }: { pressId: string }) {
         <h2 className="text-lg font-semibold mb-3">Press at a glance</h2>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {kpis.map((k) => (
-            <div key={k.testId} className="rounded-xl bg-white/[0.03] ring-1 ring-white/10 p-3" data-testid={k.testId}>
+            <div key={k.testId} className="rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3" data-testid={k.testId}>
               <div className="text-2xl font-bold">{k.value}</div>
-              <div className="text-white/55 text-xs mt-1">{k.label}</div>
+              <div className="text-slate-500 text-xs mt-1">{k.label}</div>
             </div>
           ))}
         </div>
@@ -360,9 +360,9 @@ function DashboardSummary({ pressId }: { pressId: string }) {
         <h3 className="text-base font-semibold mb-3">By stage</h3>
         <div className="flex flex-wrap gap-2" data-testid="dashboard-by-stage">
           {stageOrder.map((s) => (
-            <div key={s} className="rounded-lg bg-white/[0.04] ring-1 ring-white/10 px-3 py-2 text-sm" data-testid={`stage-count-${s}`}>
+            <div key={s} className="rounded-lg bg-slate-50 ring-1 ring-slate-200 px-3 py-2 text-sm" data-testid={`stage-count-${s}`}>
               <span className="font-semibold mr-2">{data.byStage[s] ?? 0}</span>
-              <span className="text-white/55">{STAGE_LABEL[s]}</span>
+              <span className="text-slate-500">{STAGE_LABEL[s]}</span>
             </div>
           ))}
         </div>
@@ -565,7 +565,7 @@ function InviteActions({
           if (window.confirm("Revoke this invite? The link will stop working.")) revoke.mutate();
         }}
         disabled={revoke.isPending}
-        className="text-[color:var(--brand-heart)]"
+        className="text-rose-600"
         data-testid={`button-revoke-invite-${inviteId}`}
       >
         {revoke.isPending ? <Loader2 className="animate-spin" /> : <XIcon />}
@@ -601,8 +601,8 @@ function PipelineTab({ pressId }: { pressId: string }) {
           return (
             <div key={s.id} className="w-72 flex-shrink-0">
               <div className="flex items-center justify-between mb-2 px-1">
-                <h3 className="text-white/85 text-sm font-semibold uppercase tracking-wide">{s.label}</h3>
-                <span className="text-white/45 text-xs font-mono" data-testid={`text-stage-count-${s.id}`}>
+                <h3 className="text-slate-700 text-sm font-semibold uppercase tracking-wide">{s.label}</h3>
+                <span className="text-slate-400 text-xs font-mono" data-testid={`text-stage-count-${s.id}`}>
                   {rows.length + extraCount}
                 </span>
               </div>
@@ -612,7 +612,7 @@ function PipelineTab({ pressId }: { pressId: string }) {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-semibold truncate" data-testid={`card-invite-${iv.id}`}>{iv.email}</div>
-                        <div className="text-white/55 text-xs mt-1">Pending {iv.role}</div>
+                        <div className="text-slate-500 text-xs mt-1">Pending {iv.role}</div>
                       </div>
                       <InviteActions pressId={pressId} inviteId={iv.id} acceptUrl={iv.acceptUrl} />
                     </div>
@@ -621,14 +621,14 @@ function PipelineTab({ pressId }: { pressId: string }) {
                 {s.id === "accepted" && accepted.map((c) => (
                   <DashboardPanel key={`${c.kind}-${c.id}`} padding="sm">
                     <div className="text-sm font-semibold truncate" data-testid={`card-accepted-${c.kind}-${c.id}`}>{c.name}</div>
-                    <div className="text-white/55 text-xs mt-1 capitalize">{c.kind} · no album yet</div>
+                    <div className="text-slate-500 text-xs mt-1 capitalize">{c.kind} · no album yet</div>
                   </DashboardPanel>
                 ))}
                 {rows.map((a) => (
                   <PipelineCard key={a.id} a={a} pressId={pressId} />
                 ))}
                 {rows.length + extraCount === 0 && (
-                  <div className="text-white/30 text-xs italic px-2 py-4 text-center">No albums</div>
+                  <div className="text-slate-400 text-xs italic px-2 py-4 text-center">No albums</div>
                 )}
               </div>
             </div>
@@ -691,16 +691,16 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
         data-testid={`button-open-pipeline-${a.id}`}
       >
         <div className="flex gap-2">
-          <div className="w-10 h-10 rounded bg-white/5 ring-1 ring-white/10 overflow-hidden flex-shrink-0">
+          <div className="w-10 h-10 rounded bg-slate-100 ring-1 ring-slate-200 overflow-hidden flex-shrink-0">
             {a.coverUrl && <img src={a.coverUrl} alt="" className="w-full h-full object-cover" />}
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold truncate" title={a.title}>{a.title}</div>
-            <div className="text-white/55 text-xs truncate">{a.ownerName} · {a.format}</div>
+            <div className="text-slate-500 text-xs truncate">{a.ownerName} · {a.format}</div>
           </div>
         </div>
       </button>
-      <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs text-white/55">
+      <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs text-slate-500">
         {a.stageEnteredAt && (
           <div data-testid={`text-stage-entered-${a.id}`}>Stage: {timeAgo(a.stageEnteredAt)}</div>
         )}
@@ -720,7 +720,7 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
           means the money's there but a consent is still missing. */}
       {a.earlyCutEligible ? (
         <div
-          className="mt-2 flex items-center gap-1.5 rounded-md bg-[color:var(--brand-mint)]/15 px-2 py-1 text-xs font-semibold text-[color:var(--brand-mint)]"
+          className="mt-2 flex items-center gap-1.5 rounded-md bg-emerald-50 ring-1 ring-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700"
           data-testid={`chip-early-cut-eligible-${a.id}`}
         >
           <Zap className="w-3 h-3" />
@@ -728,7 +728,7 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
         </div>
       ) : a.earlyCutPoolReady ? (
         <div
-          className="mt-2 flex items-center gap-1.5 rounded-md bg-white/5 px-2 py-1 text-xs text-white/60"
+          className="mt-2 flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600"
           data-testid={`chip-early-cut-pool-ready-${a.id}`}
         >
           <Zap className="w-3 h-3" />
@@ -747,7 +747,7 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
           >Trigger masters</Button>
         )}
         {a.stage === "masters_triggered" && (
-          <div className="text-xs text-[color:var(--brand-mint)] font-semibold">Artist approved — cut masters</div>
+          <div className="text-xs text-emerald-700 font-semibold">Artist approved — cut masters</div>
         )}
         {/* Invoice capture is Locked-only per spec: an invoice marks
             the transition INTO In production, so it can't be uploaded
@@ -758,7 +758,7 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
             size="sm"
             variant="outline"
             onClick={() => setInvoiceOpen(true)}
-            className="w-full h-8 text-xs bg-transparent text-white ring-1 ring-white/15 hover:bg-white/5 border-0"
+            className="w-full h-8 text-xs bg-transparent text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 border-0"
             data-testid={`button-upload-invoice-${a.id}`}
           >
             <Upload className="w-3 h-3 mr-1.5" />
@@ -776,10 +776,10 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
                 className={
                   "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold " +
                   (a.invoiceVarianceTier === "flag"
-                    ? "bg-[color:var(--brand-pink)]/20 text-[color:var(--brand-pink)] ring-1 ring-[color:var(--brand-pink)]/40"
+                    ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
                     : a.invoiceVarianceTier === "warn"
-                      ? "bg-amber-400/20 text-amber-300 ring-1 ring-amber-400/30"
-                      : "bg-[color:var(--brand-mint)]/15 text-[color:var(--brand-mint)] ring-1 ring-[color:var(--brand-mint)]/30")
+                      ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                      : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200")
                 }
                 data-testid={`badge-variance-${a.id}`}
                 title={`Variance vs locked quote: ${a.invoiceVarianceCents! >= 0 ? "+" : ""}$${(a.invoiceVarianceCents! / 100).toFixed(2)}`}
@@ -791,17 +791,17 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
           </div>
         )}
         {a.pressInvoiceOutsideSystem && (
-          <div className="text-xs text-white/55 italic">Billed outside the system</div>
+          <div className="text-xs text-slate-500 italic">Billed outside the system</div>
         )}
         {/* Task #527 — Stripe transfer status. Mint happens on invoice
             POST; chip reflects last-known state from the pipeline read. */}
         {a.pressInvoiceTransferId && a.pressInvoiceTransferAmountCents != null && (
-          <div className="text-xs text-[color:var(--brand-mint)]" data-testid={`text-transfer-status-${a.id}`}>
+          <div className="text-xs text-emerald-700" data-testid={`text-transfer-status-${a.id}`}>
             ✓ Earmarked ${(a.pressInvoiceTransferAmountCents / 100).toFixed(2)} to your Stripe
           </div>
         )}
         {!a.pressInvoiceTransferId && a.pressInvoiceTransferError && !a.pressInvoiceOutsideSystem && (
-          <div className="text-xs text-[color:var(--brand-pink)]" data-testid={`text-transfer-error-${a.id}`}>
+          <div className="text-xs text-rose-600" data-testid={`text-transfer-error-${a.id}`}>
             Transfer pending: {a.pressInvoiceTransferError}
           </div>
         )}
@@ -812,7 +812,7 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
               placeholder="Qty"
               value={headsUpQty}
               onChange={(e) => setHeadsUpQty(e.target.value)}
-              className="h-8 bg-white/5 border-white/10 text-white text-xs"
+              className="h-8 bg-white border-slate-200 text-slate-900 text-xs"
               data-testid={`input-heads-up-qty-${a.id}`}
             />
             <Button
@@ -820,18 +820,18 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
               size="sm"
               onClick={() => sendHeadsUp.mutate()}
               disabled={!headsUpQty || sendHeadsUp.isPending}
-              className="h-8 bg-white/10 text-white hover:bg-white/15 text-xs"
+              className="h-8 bg-slate-900 text-white hover:bg-slate-800 text-xs"
               data-testid={`button-heads-up-${a.id}`}
             ><BellRing className="w-3 h-3" /></Button>
           </div>
         )}
         {a.fulfillmentHeadsUpSentAt && (
-          <div className="text-xs text-white/55">
+          <div className="text-xs text-slate-500">
             Heads-up sent · {a.fulfillmentHeadsUpQty ?? "?"} units
           </div>
         )}
         {a.lastNotifiedAt && (
-          <div className="text-xs text-white/55" data-testid={`text-last-notified-${a.id}`}>
+          <div className="text-xs text-slate-500" data-testid={`text-last-notified-${a.id}`}>
             Last notified {timeAgo(a.lastNotifiedAt)}
           </div>
         )}
@@ -1026,13 +1026,13 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
   ];
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 overflow-x-auto border-b border-white/10">
+      <div className="flex gap-1 overflow-x-auto border-b border-slate-200">
         {subTabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setSub(t.id)}
-            className={`h-10 px-3 text-sm font-semibold whitespace-nowrap border-b-2 ${sub === t.id ? "border-[color:var(--brand-mint)] text-white" : "border-transparent text-white/55 hover:text-white"}`}
+            className={`h-10 px-3 text-sm font-semibold whitespace-nowrap border-b-2 ${sub === t.id ? "border-[color:var(--brand-blue)] text-slate-900" : "border-transparent text-slate-500 hover:text-slate-900"}`}
             data-testid={`tab-settings-${t.id}`}
           >{t.label}</button>
         ))}
@@ -1055,10 +1055,10 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
       )}
       {sub === "catalog" && (
         <DashboardPanel padding="md">
-          <p className="text-sm text-white/75">Edit your formats, color tiers, and per-quantity ladders — including the new <strong>masters-prep cost</strong> per tier.</p>
+          <p className="text-sm text-slate-700">Edit your formats, color tiers, and per-quantity ladders — including the new <strong>masters-prep cost</strong> per tier.</p>
           <Link
             href={`/admin/manufacturers/${pressId}?tab=catalog`}
-            className="mt-3 inline-flex items-center gap-1 h-9 px-4 rounded-full bg-white/10 text-white text-sm font-semibold hover:bg-white/15"
+            className="mt-3 inline-flex items-center gap-1 h-9 px-4 rounded-full bg-slate-100 text-slate-900 text-sm font-semibold hover:bg-slate-200"
             data-testid="link-catalog-editor"
           >Open catalog editor <ExternalLink className="w-3 h-3" /></Link>
         </DashboardPanel>
@@ -1155,19 +1155,19 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
   return (
     <DashboardPanel padding="md">
       <h3 className="text-base font-semibold mb-3">Press profile</h3>
-      <p className="text-xs text-white/55 mb-4">Public-facing details artists and labels see when picking a press, plus the contact info platform notifications route to.</p>
+      <p className="text-xs text-slate-500 mb-4">Public-facing details artists and labels see when picking a press, plus the contact info platform notifications route to.</p>
       {!canEdit && (
-        <p className="text-xs text-amber-300 mb-4" data-testid="text-profile-readonly">
+        <p className="text-xs text-amber-700 mb-4" data-testid="text-profile-readonly">
           You have Staff access — you can view this press and invite artists, but only an Owner/Admin can change these settings.
         </p>
       )}
       <div className="space-y-4 max-w-xl">
         {/* Logo */}
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-lg overflow-hidden bg-white/5 ring-1 ring-white/10 grid place-items-center">
+          <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-50 ring-1 ring-slate-200 grid place-items-center">
             {logoUrl
               ? <img src={logoUrl} alt="" className="w-full h-full object-cover" data-testid="img-profile-logo" />
-              : <span className="text-xs text-white/45">Logo</span>}
+              : <span className="text-xs text-slate-400">Logo</span>}
           </div>
           <div className="flex flex-col gap-1">
             {canEdit && (
@@ -1177,7 +1177,7 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
                 size="sm"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploadingLogo}
-                className="h-9 bg-transparent text-white ring-1 ring-white/15 hover:bg-white/5 border-0 text-sm font-semibold"
+                className="h-9 bg-transparent text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 border-0 text-sm font-semibold"
                 data-testid="button-upload-logo"
               >{uploadingLogo ? "Uploading…" : logoUrl ? "Replace logo" : "Upload logo"}</Button>
             )}
@@ -1185,7 +1185,7 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
               <button
                 type="button"
                 onClick={() => { setLogoUrl(null); save.mutate({ logoUrl: null }); }}
-                className="text-xs text-white/55 hover:text-[color:var(--brand-pink)] text-left"
+                className="text-xs text-slate-500 hover:text-rose-600 text-left"
                 data-testid="button-remove-logo"
               >Remove logo</button>
             )}
@@ -1201,36 +1201,36 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
         </div>
 
         <div>
-          <label className="text-xs text-white/55 uppercase tracking-wide">Press name</label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!canEdit} className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-name" />
+          <label className="text-xs text-slate-500 uppercase tracking-wide">Press name</label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!canEdit} className="bg-white border-slate-200 text-slate-900 mt-1" data-testid="input-profile-name" />
         </div>
         <div>
-          <label className="text-xs text-white/55 uppercase tracking-wide">Public bio</label>
-          <Textarea value={bio} onChange={(e) => setBio(e.target.value)} disabled={!canEdit} rows={3} placeholder="What artists and labels should know about your plant…" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-bio" />
+          <label className="text-xs text-slate-500 uppercase tracking-wide">Public bio</label>
+          <Textarea value={bio} onChange={(e) => setBio(e.target.value)} disabled={!canEdit} rows={3} placeholder="What artists and labels should know about your plant…" className="bg-white border-slate-200 text-slate-900 mt-1" data-testid="input-profile-bio" />
         </div>
         <div>
-          <label className="text-xs text-white/55 uppercase tracking-wide">Shipping address</label>
-          <Textarea value={location} onChange={(e) => setLocation(e.target.value)} disabled={!canEdit} rows={2} placeholder="Street, city, state, ZIP — where masters & artwork get sent" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-address" />
+          <label className="text-xs text-slate-500 uppercase tracking-wide">Shipping address</label>
+          <Textarea value={location} onChange={(e) => setLocation(e.target.value)} disabled={!canEdit} rows={2} placeholder="Street, city, state, ZIP — where masters & artwork get sent" className="bg-white border-slate-200 text-slate-900 mt-1" data-testid="input-profile-address" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-white/55 uppercase tracking-wide">Website</label>
-            <Input value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} disabled={!canEdit} placeholder="https://…" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-website" />
+            <label className="text-xs text-slate-500 uppercase tracking-wide">Website</label>
+            <Input value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} disabled={!canEdit} placeholder="https://…" className="bg-white border-slate-200 text-slate-900 mt-1" data-testid="input-profile-website" />
           </div>
           <div>
-            <label className="text-xs text-white/55 uppercase tracking-wide">Contact email</label>
-            <Input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} type="email" disabled={!canEdit} placeholder="orders@press.com" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-email" />
+            <label className="text-xs text-slate-500 uppercase tracking-wide">Contact email</label>
+            <Input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} type="email" disabled={!canEdit} placeholder="orders@press.com" className="bg-white border-slate-200 text-slate-900 mt-1" data-testid="input-profile-email" />
           </div>
           <div>
-            <label className="text-xs text-white/55 uppercase tracking-wide">Contact phone</label>
-            <Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} disabled={!canEdit} placeholder="(555) 555-1234" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-phone" />
+            <label className="text-xs text-slate-500 uppercase tracking-wide">Contact phone</label>
+            <Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} disabled={!canEdit} placeholder="(555) 555-1234" className="bg-white border-slate-200 text-slate-900 mt-1" data-testid="input-profile-phone" />
           </div>
         </div>
         {canEdit && (
           <Button
             onClick={() => save.mutate({ name, websiteUrl, contactEmail, contactPhone, location, bio })}
             disabled={save.isPending}
-            className="h-9 bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)] hover:brightness-95 font-semibold"
+            className="h-9 bg-slate-900 text-white hover:bg-slate-800 font-semibold"
             data-testid="button-save-profile"
           >{save.isPending ? "Saving…" : "Save profile"}</Button>
         )}
@@ -1282,21 +1282,21 @@ function PayoutsSubTab({ pressId }: { pressId: string }) {
       <DashboardPanel padding="md">
         <h3 className="text-base font-semibold mb-2">Stripe payouts</h3>
         {acct?.stripeAccountId && acct.payoutsEnabled ? (
-          <div className="text-sm text-[color:var(--brand-mint)]" data-testid="text-payouts-enabled">
+          <div className="text-sm text-emerald-700" data-testid="text-payouts-enabled">
             ✓ Connected — invoice captures earmark to your Stripe account automatically.
           </div>
         ) : acct?.stripeAccountId ? (
-          <div className="text-sm text-amber-300" data-testid="text-payouts-pending">
+          <div className="text-sm text-amber-700" data-testid="text-payouts-pending">
             Stripe account connected but not yet payouts-enabled. Finish onboarding to receive earmarks.
           </div>
         ) : (
-          <div className="text-sm text-white/75" data-testid="text-payouts-missing">
+          <div className="text-sm text-slate-700" data-testid="text-payouts-missing">
             No Stripe Connect account yet. Captured invoices won't be earmarked until you connect one.
           </div>
         )}
         <Link
           href={`/admin/manufacturers/${pressId}?tab=payouts`}
-          className="mt-3 inline-flex items-center gap-1 h-9 px-4 rounded-full bg-white/10 text-white text-sm font-semibold hover:bg-white/15"
+          className="mt-3 inline-flex items-center gap-1 h-9 px-4 rounded-full bg-slate-100 text-slate-900 text-sm font-semibold hover:bg-slate-200"
           data-testid="link-payouts-editor"
         >Open payouts <ExternalLink className="w-3 h-3" /></Link>
       </DashboardPanel>
@@ -1304,15 +1304,15 @@ function PayoutsSubTab({ pressId }: { pressId: string }) {
       <DashboardPanel padding="md">
         <h3 className="text-base font-semibold mb-3">Recent invoice captures</h3>
         {invoices.length === 0 ? (
-          <p className="text-sm text-white/55">No invoices captured yet.</p>
+          <p className="text-sm text-slate-500">No invoices captured yet.</p>
         ) : (
-          <div className="divide-y divide-white/10">
+          <div className="divide-y divide-slate-100">
             {invoices.map((inv) => (
               <div key={inv.albumId} className="py-2 flex items-start gap-3" data-testid={`row-payout-invoice-${inv.albumId}`}>
                 {inv.coverUrl && <img src={inv.coverUrl} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />}
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold truncate">{inv.title}</div>
-                  <div className="text-xs text-white/55 flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                  <div className="text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
                     {inv.outsideSystem ? (
                       <span className="italic">Billed outside the system</span>
                     ) : (
@@ -1333,10 +1333,10 @@ function PayoutsSubTab({ pressId }: { pressId: string }) {
                       className={
                         "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold " +
                         (inv.varianceTier === "flag"
-                          ? "bg-[color:var(--brand-pink)]/20 text-[color:var(--brand-pink)] ring-1 ring-[color:var(--brand-pink)]/40"
+                          ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
                           : inv.varianceTier === "warn"
-                            ? "bg-amber-400/20 text-amber-300 ring-1 ring-amber-400/30"
-                            : "bg-[color:var(--brand-mint)]/15 text-[color:var(--brand-mint)] ring-1 ring-[color:var(--brand-mint)]/30")
+                            ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                            : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200")
                       }
                       data-testid={`badge-payout-variance-${inv.albumId}`}
                       title={`Variance vs locked quote: ${(inv.varianceCents ?? 0) >= 0 ? "+" : ""}$${((inv.varianceCents ?? 0) / 100).toFixed(2)}`}
@@ -1345,15 +1345,15 @@ function PayoutsSubTab({ pressId }: { pressId: string }) {
                     </span>
                   )}
                   {inv.transferId && inv.transferAmountCents != null ? (
-                    <span className="text-xs text-[color:var(--brand-mint)]" data-testid={`text-payout-transferred-${inv.albumId}`}>
+                    <span className="text-xs text-emerald-700" data-testid={`text-payout-transferred-${inv.albumId}`}>
                       ✓ ${(inv.transferAmountCents / 100).toFixed(2)} earmarked
                     </span>
                   ) : inv.outsideSystem ? (
-                    <span className="text-xs text-white/55">No transfer</span>
+                    <span className="text-xs text-slate-500">No transfer</span>
                   ) : inv.transferError ? (
-                    <span className="text-xs text-[color:var(--brand-pink)]" data-testid={`text-payout-error-${inv.albumId}`}>{inv.transferError}</span>
+                    <span className="text-xs text-rose-600" data-testid={`text-payout-error-${inv.albumId}`}>{inv.transferError}</span>
                   ) : (
-                    <span className="text-xs text-white/55">Pending</span>
+                    <span className="text-xs text-slate-500">Pending</span>
                   )}
                 </div>
               </div>
@@ -1384,26 +1384,26 @@ function NotificationsSubTab({ pressId }: { pressId: string }) {
       <h3 className="text-base font-semibold mb-3">Notifications</h3>
       <div className="space-y-4 max-w-md">
         <div>
-          <label className="text-xs text-white/55 uppercase tracking-wide">Pipeline alerts recipient</label>
+          <label className="text-xs text-slate-500 uppercase tracking-wide">Pipeline alerts recipient</label>
           <Input
             value={recipient}
             onChange={(e) => setRecipient(e.target.value)}
             type="email"
             placeholder="ops@press.com"
-            className="bg-white/5 border-white/10 text-white mt-1"
+            className="bg-white border-slate-200 text-slate-900 mt-1"
             data-testid="input-notifications-recipient"
           />
-          <p className="text-xs text-white/55 mt-1.5">Used as the From-reply for masters-ready emails artists receive about your plant. Save here also updates the profile contact email.</p>
+          <p className="text-xs text-slate-500 mt-1.5">Used as the From-reply for masters-ready emails artists receive about your plant. Save here also updates the profile contact email.</p>
         </div>
         <Button
           onClick={() => save.mutate()}
           disabled={save.isPending}
-          className="h-9 bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)] hover:brightness-95 font-semibold"
+          className="h-9 bg-slate-900 text-white hover:bg-slate-800 font-semibold"
           data-testid="button-save-notifications"
         >{save.isPending ? "Saving…" : "Save"}</Button>
-        <div className="pt-3 border-t border-white/10">
+        <div className="pt-3 border-t border-slate-200">
           <h4 className="text-sm font-semibold mb-1">How automatic alerts fire</h4>
-          <ul className="text-xs text-white/65 space-y-1 list-disc pl-4">
+          <ul className="text-xs text-slate-600 space-y-1 list-disc pl-4">
             <li>Masters-ready: emailed to the album's artist when earmarked preorders cross your masters-prep threshold.</li>
             <li>Fulfillment heads-up: sent to your platform fulfillment partner when an album enters Locked, and re-fires only on &gt;5% qty drift before In production.</li>
             <li>Invoice variance: variances over 10% vs the locked quote are flagged for admin review (logged with <code className="font-mono">[admin-alert]</code>).</li>
@@ -1419,18 +1419,18 @@ function NotificationsSubTab({ pressId }: { pressId: string }) {
 function PanelLoading() {
   return (
     <DashboardPanel padding="md" className="grid place-items-center min-h-[200px]">
-      <Loader2 className="w-5 h-5 text-white/45 animate-spin" />
+      <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
     </DashboardPanel>
   );
 }
 function EmptyHint({ text }: { text: string }) {
-  return <div className="text-white/45 text-sm italic mt-4">{text}</div>;
+  return <div className="text-slate-400 text-sm italic mt-4">{text}</div>;
 }
 function Avatar({ src, fallback }: { src: string | null; fallback: string }) {
   return (
-    <div className="w-11 h-11 rounded-full bg-white/10 ring-1 ring-white/10 overflow-hidden flex items-center justify-center flex-shrink-0">
+    <div className="w-11 h-11 rounded-full bg-slate-100 ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
       {src ? <img src={src} alt="" className="w-full h-full object-cover" /> : (
-        <span className="text-white/55 text-sm font-semibold">{fallback.slice(0, 1).toUpperCase()}</span>
+        <span className="text-slate-500 text-sm font-semibold">{fallback.slice(0, 1).toUpperCase()}</span>
       )}
     </div>
   );

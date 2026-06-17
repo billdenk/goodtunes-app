@@ -103,10 +103,10 @@ export function NonProfitDashboard() {
   if (me.error) {
     const msg = (me.error as any)?.message || "We couldn't load your non-profit scope.";
     return (
-      <main className="min-h-screen bg-[color:var(--brand-bg)] text-white flex items-center justify-center p-6">
+      <main className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-6">
         <div className="max-w-md text-center" data-testid="non-profit-gate">
           <h1 className="text-2xl font-bold mb-2">Non-profit dashboard</h1>
-          <p className="text-white/60 text-sm">{msg}</p>
+          <p className="text-slate-500 text-sm">{msg}</p>
         </div>
       </main>
     );
@@ -173,13 +173,13 @@ function ArtistsTab() {
       </section>
 
       <section className="mt-6">
-        <h2 className="text-sm font-semibold text-white/85 mb-3">Your artists</h2>
+        <h2 className="text-sm font-semibold text-slate-700 mb-3">Your artists</h2>
         {dash.isLoading ? (
-          <p className="py-8 text-center text-white/45 text-sm">Loading…</p>
+          <p className="py-8 text-center text-slate-400 text-sm">Loading…</p>
         ) : (dash.data?.artists.length ?? 0) === 0 ? (
           <DashboardPanel className="p-8 text-center" padding="none" data-testid="empty-npo-artists">
-            <Heart className="w-8 h-8 text-[color:var(--brand-pink)] mx-auto mb-3" />
-            <p className="text-sm text-white/65">
+            <Heart className="w-8 h-8 text-rose-500 mx-auto mb-3" />
+            <p className="text-sm text-slate-600">
               You haven't referred any artists yet. Use the Invites tab to send your first artist invite —
               you'll earn $1 on every paid unit they ship.
             </p>
@@ -191,13 +191,13 @@ function ArtistsTab() {
               <DashboardPanel>
                 <div className="group/artist flex items-center gap-3 mb-3">
                   {a.photoUrl ? (
-                    <img src={a.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover bg-white/5" />
+                    <img src={a.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover bg-slate-100" />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-white/5" />
+                    <div className="w-10 h-10 rounded-full bg-slate-100" />
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold truncate">{a.name}</p>
-                    <p className="text-xs text-white/55">{a.albums.length} album{a.albums.length === 1 ? "" : "s"} listed</p>
+                    <p className="text-xs text-slate-500">{a.albums.length} album{a.albums.length === 1 ? "" : "s"} listed</p>
                   </div>
                   {a.status === "active" && (
                     <AmbassadorChip personId={a.id} canInviteAmbassadors={a.canInviteAmbassadors} />
@@ -205,8 +205,8 @@ function ArtistsTab() {
                   <span
                     className={`px-2 py-0.5 rounded-full text-xs uppercase tracking-wider font-semibold ${
                       a.status === "active"
-                        ? "bg-[color:var(--brand-mint)]/15 text-[color:var(--brand-mint)] ring-1 ring-[color:var(--brand-mint)]/30"
-                        : "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30"
+                        ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                        : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
                     }`}
                     data-testid={`status-npo-artist-${a.id}`}
                   >
@@ -215,17 +215,17 @@ function ArtistsTab() {
                   <Link href={`/artist/${a.id}`} className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors">View →</Link>
                 </div>
                 {a.albums.length > 0 && (
-                  <ul className="divide-y divide-white/5">
+                  <ul className="divide-y divide-slate-100">
                     {a.albums.map((al) => (
                       <li key={al.id} className="flex items-center gap-3 py-2" data-testid={`row-npo-album-${al.id}`}>
                         {al.coverUrl ? (
                           <img src={al.coverUrl} alt="" className="w-9 h-9 rounded object-cover" />
                         ) : (
-                          <div className="w-9 h-9 rounded bg-white/5 flex items-center justify-center"><MusicIcon className="w-4 h-4 text-white/30" /></div>
+                          <div className="w-9 h-9 rounded bg-slate-100 flex items-center justify-center"><MusicIcon className="w-4 h-4 text-slate-400" /></div>
                         )}
                         <p className="flex-1 min-w-0 text-sm truncate">{al.title}</p>
-                        <span className="text-xs text-white/55 tabular-nums">
-                          {al.paidUnits} paid · <span className="text-[color:var(--brand-mint)]">{fmt(al.paidUnits * 100)}</span>
+                        <span className="text-xs text-slate-500 tabular-nums">
+                          {al.paidUnits} paid · <span className="text-emerald-600">{fmt(al.paidUnits * 100)}</span>
                         </span>
                       </li>
                     ))}
@@ -279,7 +279,7 @@ function InvitesTab({ npoId, caps }: { npoId: string | undefined; caps: CallerCa
   });
 
   if (!caps?.ok) {
-    return <p className="py-8 text-center text-white/45 text-sm">Loading…</p>;
+    return <p className="py-8 text-center text-slate-400 text-sm">Loading…</p>;
   }
 
   const ctas: { id: "ambassador" | "staff" | "artist"; label: string; enabled: boolean; testId: string }[] = [
@@ -296,25 +296,25 @@ function InvitesTab({ npoId, caps }: { npoId: string | undefined; caps: CallerCa
             key={c.id}
             type="button"
             onClick={() => { setOpenKind(c.id); setLastUrl(null); }}
-            className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--brand-blue)] hover:bg-[color:var(--brand-blue)]/85 px-3 py-2 text-sm font-semibold text-white transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--brand-blue)] hover:opacity-90 px-3 py-2 text-sm font-semibold text-white transition-colors"
             data-testid={c.testId}
           >
             <UserPlus className="w-4 h-4" /> {c.label}
           </button>
         ))}
         {ctas.length === 0 && (
-          <p className="text-xs text-white/55">Ask your NPO admin to grant invite permissions.</p>
+          <p className="text-xs text-slate-500">Ask your NPO admin to grant invite permissions.</p>
         )}
       </div>
 
       {lastUrl && (
         <DashboardPanel className="mb-4 flex flex-wrap items-center gap-2 px-4 py-3 text-xs" padding="none" data-testid="invite-link-banner">
-          <span className="text-white/55">Accept link:</span>
-          <code className="flex-1 min-w-0 truncate font-mono text-white/85">{lastUrl}</code>
+          <span className="text-slate-500">Accept link:</span>
+          <code className="flex-1 min-w-0 truncate font-mono text-slate-700">{lastUrl}</code>
           <button
             type="button"
             onClick={async () => { await navigator.clipboard.writeText(lastUrl); setCopied(true); setTimeout(() => setCopied(false), 1200); }}
-            className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/15 px-2 py-1 font-semibold"
+            className="inline-flex items-center gap-1 rounded-md bg-slate-100 hover:bg-slate-200 px-2 py-1 font-semibold"
             data-testid="button-copy-invite-link"
           >
             {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -323,24 +323,24 @@ function InvitesTab({ npoId, caps }: { npoId: string | undefined; caps: CallerCa
         </DashboardPanel>
       )}
 
-      <h2 className="text-sm font-semibold text-white/85 mb-3">Outstanding invites</h2>
+      <h2 className="text-sm font-semibold text-slate-700 mb-3">Outstanding invites</h2>
       {dash.isLoading ? (
-        <p className="py-8 text-center text-white/45 text-sm">Loading…</p>
+        <p className="py-8 text-center text-slate-400 text-sm">Loading…</p>
       ) : items.length === 0 ? (
         <DashboardPanel className="p-8 text-center" padding="none" data-testid="empty-npo-invites">
-          <Mail className="w-8 h-8 text-white/30 mx-auto mb-3" />
-          <p className="text-sm text-white/65">No outstanding ambassador / staff invites.</p>
+          <Mail className="w-8 h-8 text-slate-400 mx-auto mb-3" />
+          <p className="text-sm text-slate-600">No outstanding ambassador / staff invites.</p>
         </DashboardPanel>
       ) : (
-        <DashboardPanel as="ul" padding="none" className="divide-y divide-white/5" data-testid="list-npo-invites">
+        <DashboardPanel as="ul" padding="none" className="divide-y divide-slate-100" data-testid="list-npo-invites">
           {items.map((i) => (
             <li key={i.id} className="flex items-center gap-3 px-4 py-3 text-sm" data-testid={`row-npo-invite-${i.id}`}>
-              <Mail className="w-4 h-4 text-white/45" />
+              <Mail className="w-4 h-4 text-slate-400" />
               <span className="flex-1 min-w-0 truncate">
                 {i.email}{" "}
-                <span className="ml-2 text-xs uppercase tracking-wider text-white/55">{labelForRole(i.role)}</span>
+                <span className="ml-2 text-xs uppercase tracking-wider text-slate-500">{labelForRole(i.role)}</span>
               </span>
-              <span className="text-xs text-white/55 inline-flex items-center gap-1">
+              <span className="text-xs text-slate-500 inline-flex items-center gap-1">
                 <Clock className="w-3 h-3" /> expires {new Date(i.expiresAt).toLocaleDateString()}
               </span>
               {caps.isAdmin && (
@@ -349,7 +349,7 @@ function InvitesTab({ npoId, caps }: { npoId: string | undefined; caps: CallerCa
                     type="button"
                     onClick={() => resend.mutate(i.id)}
                     disabled={resend.isPending}
-                    className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/15 px-2 py-1 text-xs font-semibold disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-md bg-slate-100 hover:bg-slate-200 px-2 py-1 text-xs font-semibold disabled:opacity-50"
                     data-testid={`button-resend-invite-${i.id}`}
                   >
                     <Send className="w-3.5 h-3.5" /> Resend
@@ -358,7 +358,7 @@ function InvitesTab({ npoId, caps }: { npoId: string | undefined; caps: CallerCa
                     type="button"
                     onClick={() => { if (confirm(`Revoke invite for ${i.email}?`)) revoke.mutate(i.id); }}
                     disabled={revoke.isPending}
-                    className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 hover:bg-rose-500/25 text-rose-200 px-2 py-1 text-xs font-semibold disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 ring-1 ring-rose-200 px-2 py-1 text-xs font-semibold disabled:opacity-50"
                     data-testid={`button-revoke-invite-${i.id}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" /> Revoke
@@ -399,7 +399,7 @@ function NpoContactsPanel({ npoId }: { npoId: string }) {
     },
   });
   return (
-    <section className="mt-6 rounded-2xl bg-white/[0.04] p-1">
+    <section className="mt-6 rounded-2xl bg-white p-1">
       <div className="bg-white rounded-2xl">
         <OrganizationPeople
           apiPath={`/api/non-profits/${npoId}/people`}
@@ -476,57 +476,57 @@ function InviteDialog({
       <form
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => { e.preventDefault(); m.mutate(); }}
-        className="w-full max-w-md rounded-2xl bg-[color:var(--brand-bg)] border border-white/15 p-6 text-white"
+        className="w-full max-w-md rounded-2xl bg-white border border-slate-200 p-6 text-slate-900"
       >
         <h3 className="text-lg font-bold mb-1">{title}</h3>
-        <p className="text-xs text-white/60 mb-4">{blurb}</p>
-        <label className="block text-xs uppercase tracking-wider text-white/55 mb-1 font-semibold">Email</label>
+        <p className="text-xs text-slate-500 mb-4">{blurb}</p>
+        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1 font-semibold">Email</label>
         <input
           type="email" required value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="name@example.com"
-          className="w-full px-3 py-2 mb-3 rounded-lg bg-white/5 ring-1 ring-white/15 focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
+          className="w-full px-3 py-2 mb-3 rounded-lg bg-slate-100 ring-1 ring-slate-200 focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
           data-testid="input-invite-email"
         />
         {kind === "artist" && (
           <>
-            <label className="block text-xs uppercase tracking-wider text-white/55 mb-1 font-semibold">Artist name</label>
+            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1 font-semibold">Artist name</label>
             <input
               type="text" value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Stage or band name (optional)"
-              className="w-full px-3 py-2 mb-3 rounded-lg bg-white/5 ring-1 ring-white/15 focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
+              className="w-full px-3 py-2 mb-3 rounded-lg bg-slate-100 ring-1 ring-slate-200 focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
               data-testid="input-invite-name"
             />
           </>
         )}
         {(kind === "ambassador" || kind === "staff") && (
           <>
-            <label className="block text-xs uppercase tracking-wider text-white/55 mb-1 font-semibold">Name (optional)</label>
+            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1 font-semibold">Name (optional)</label>
             <input
               type="text" value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Their name"
-              className="w-full px-3 py-2 mb-3 rounded-lg bg-white/5 ring-1 ring-white/15 focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
+              className="w-full px-3 py-2 mb-3 rounded-lg bg-slate-100 ring-1 ring-slate-200 focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
               data-testid="input-invite-name"
             />
           </>
         )}
-        <label className="block text-xs uppercase tracking-wider text-white/55 mb-1 font-semibold">Welcome note (optional)</label>
+        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1 font-semibold">Welcome note (optional)</label>
         <textarea
           value={note} onChange={(e) => setNote(e.target.value)} rows={3}
           placeholder="A short note that ships in the invite email."
-          className="w-full px-3 py-2 mb-4 rounded-lg bg-white/5 ring-1 ring-white/15 focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
+          className="w-full px-3 py-2 mb-4 rounded-lg bg-slate-100 ring-1 ring-slate-200 focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
           data-testid="textarea-invite-note"
         />
         <div className="flex items-center justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-3 py-2 text-sm text-white/70 hover:text-white" data-testid="button-cancel-invite">
+          <button type="button" onClick={onClose} className="px-3 py-2 text-sm text-slate-600 hover:text-slate-900" data-testid="button-cancel-invite">
             Cancel
           </button>
           <button
             type="submit"
             disabled={m.isPending || !email.trim()}
-            className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--brand-blue)] hover:bg-[color:var(--brand-blue)]/85 disabled:opacity-50 px-3 py-2 text-sm font-semibold"
+            className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--brand-blue)] hover:opacity-90 disabled:opacity-50 px-3 py-2 text-sm font-semibold text-white"
             data-testid="button-submit-invite"
           >
             <Send className="w-4 h-4" /> {m.isPending ? "Sending…" : "Send invite"}
@@ -540,39 +540,39 @@ function InviteDialog({
 function TreeTab({ npoId }: { npoId: string }) {
   const tree = useQuery<Tree>({ queryKey: ["/api/non-profit", npoId, "tree"] });
   if (tree.isLoading) {
-    return <p className="py-8 text-center text-white/45 text-sm">Loading tree…</p>;
+    return <p className="py-8 text-center text-slate-400 text-sm">Loading tree…</p>;
   }
   const data = tree.data;
   if (!data) return null;
   return (
     <section data-testid="npo-tree">
-      <h2 className="text-sm font-semibold text-white/85 mb-3">Who invited whom</h2>
+      <h2 className="text-sm font-semibold text-slate-700 mb-3">Who invited whom</h2>
       <DashboardPanel className="p-5">
         <div className="flex items-center gap-3 mb-4">
           {data.npo.logoUrl ? (
-            <img src={data.npo.logoUrl} alt="" className="w-10 h-10 rounded-lg object-cover bg-white/10" />
+            <img src={data.npo.logoUrl} alt="" className="w-10 h-10 rounded-lg object-cover bg-slate-100" />
           ) : (
-            <div className="w-10 h-10 rounded-lg bg-[color:var(--brand-purple)]/30 flex items-center justify-center">
-              <Heart className="w-5 h-5 text-[color:var(--brand-pink)]" />
+            <div className="w-10 h-10 rounded-lg bg-rose-50 flex items-center justify-center">
+              <Heart className="w-5 h-5 text-rose-500" />
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wider text-white/55 font-semibold">Non-profit</p>
+            <p className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Non-profit</p>
             <p className="font-semibold truncate">{data.npo.name}</p>
           </div>
         </div>
         {data.team.length === 0 ? (
-          <p className="text-sm text-white/55">No teammates yet. Invite an ambassador or staff to grow the tree.</p>
+          <p className="text-sm text-slate-500">No teammates yet. Invite an ambassador or staff to grow the tree.</p>
         ) : (
-          <ul className="space-y-3 border-l border-white/10 pl-4">
+          <ul className="space-y-3 border-l border-slate-200 pl-4">
             {data.team.map((n) => (
               <TreeTeamNodeRow key={n.id} node={n} />
             ))}
           </ul>
         )}
         {data.orphanArtists.length > 0 && (
-          <div className="mt-5 pt-4 border-t border-white/10">
-            <p className="text-xs uppercase tracking-wider text-white/55 font-semibold mb-2">Other referred artists</p>
+          <div className="mt-5 pt-4 border-t border-slate-200">
+            <p className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Other referred artists</p>
             <ul className="space-y-1">
               {data.orphanArtists.map((a) => (
                 <TreeArtistRow key={a.id} artist={a} />
@@ -588,31 +588,31 @@ function TreeTab({ npoId }: { npoId: string }) {
 function TreeTeamNodeRow({ node }: { node: TreeTeamNode }) {
   const [open, setOpen] = useState(true);
   const badge =
-    node.subRole === "admin" ? { bg: "bg-white/10", text: "text-white/85", label: "Admin" }
-      : node.subRole === "ambassador" ? { bg: "bg-[color:var(--brand-mint)]/15", text: "text-[color:var(--brand-mint)]", label: "Ambassador" }
-      : { bg: "bg-[color:var(--brand-blue)]/15", text: "text-[color:var(--brand-blue)]", label: "Staff" };
+    node.subRole === "admin" ? { bg: "bg-slate-100 ring-1 ring-slate-200", text: "text-slate-700", label: "Admin" }
+      : node.subRole === "ambassador" ? { bg: "bg-emerald-50 ring-1 ring-emerald-200", text: "text-emerald-700", label: "Ambassador" }
+      : { bg: "bg-blue-50 ring-1 ring-blue-200", text: "text-blue-700", label: "Staff" };
   return (
     <li data-testid={`tree-node-${node.id}`}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 w-full text-left hover:text-white/100 transition-colors"
+        className="flex items-center gap-2 w-full text-left hover:text-slate-900 transition-colors"
       >
-        <ChevronDown className={`w-4 h-4 text-white/45 transition-transform ${open ? "" : "-rotate-90"}`} />
-        <Users className="w-4 h-4 text-white/55" />
+        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
+        <Users className="w-4 h-4 text-slate-500" />
         <span className="text-sm font-semibold truncate">{node.name}</span>
         <span className={`px-2 py-0.5 rounded-full text-xs uppercase tracking-wider font-semibold ${badge.bg} ${badge.text}`}>
           {badge.label}
         </span>
         {node.nodeKind === "pending" && (
-          <span className="text-xs uppercase tracking-wider text-amber-300/90">Pending</span>
+          <span className="text-xs uppercase tracking-wider text-amber-700">Pending</span>
         )}
-        <span className="ml-auto text-xs text-white/55">
+        <span className="ml-auto text-xs text-slate-500">
           {node.artists.length} artist{node.artists.length === 1 ? "" : "s"}
         </span>
       </button>
       {open && node.artists.length > 0 && (
-        <ul className="mt-2 ml-6 space-y-1 border-l border-white/10 pl-3">
+        <ul className="mt-2 ml-6 space-y-1 border-l border-slate-200 pl-3">
           {node.artists.map((a) => (
             <TreeArtistRow key={a.id} artist={a} />
           ))}
@@ -626,16 +626,16 @@ function TreeArtistRow({ artist }: { artist: TreeArtist }) {
   return (
     <li className="flex items-center gap-2 text-xs" data-testid={`tree-artist-${artist.id}`}>
       {artist.photoUrl ? (
-        <img src={artist.photoUrl} alt="" className="w-6 h-6 rounded-md object-cover bg-white/5" />
+        <img src={artist.photoUrl} alt="" className="w-6 h-6 rounded-md object-cover bg-slate-100" />
       ) : (
-        <div className="w-6 h-6 rounded-md bg-white/5" />
+        <div className="w-6 h-6 rounded-md bg-slate-100" />
       )}
       <span className="truncate">{artist.name}</span>
       <span
         className={`px-1.5 py-0.5 rounded text-xs uppercase tracking-wider font-semibold ${
           artist.status === "accepted"
-            ? "bg-[color:var(--brand-mint)]/15 text-[color:var(--brand-mint)]"
-            : "bg-amber-500/15 text-amber-300"
+            ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+            : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
         }`}
       >
         {artist.status === "accepted" ? "Active" : "Pending"}
@@ -676,10 +676,10 @@ function AmbassadorChip({ personId, canInviteAmbassadors }: { personId: string; 
       className={[
         "inline-flex w-[20px] h-[20px] items-center justify-center rounded-[5px]",
         "font-mono text-xs font-bold leading-none transition-opacity",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]/60 focus-visible:opacity-100",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] focus-visible:opacity-100",
         on
           ? "bg-[color:var(--brand-blue)] text-white"
-          : "bg-white/10 text-white/55 ring-1 ring-inset ring-white/15 opacity-0 group-hover/artist:opacity-100",
+          : "bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-200 opacity-0 group-hover/artist:opacity-100",
         m.isPending && "opacity-60 cursor-wait",
       ].filter(Boolean).join(" ")}
       data-testid={`chip-npo-ambassador-${personId}`}
@@ -694,9 +694,9 @@ function AmbassadorChip({ personId, canInviteAmbassadors }: { personId: string; 
 function Kpi({ label, value, sub, testId }: { label: string; value: string; sub?: string; testId: string }) {
   return (
     <DashboardPanel data-testid={testId}>
-      <p className="text-xs uppercase tracking-wider text-white/55 font-semibold">{label}</p>
+      <p className="text-xs uppercase tracking-wider text-slate-500 font-semibold">{label}</p>
       <p className="mt-1 text-2xl font-bold tabular-nums" data-testid={`${testId}-value`}>{value}</p>
-      {sub && <p className="mt-1 text-xs text-white/55">{sub}</p>}
+      {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
     </DashboardPanel>
   );
 }
