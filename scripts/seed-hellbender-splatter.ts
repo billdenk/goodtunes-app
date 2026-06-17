@@ -87,9 +87,20 @@ async function mirrorLocal(file: string): Promise<string> {
 }
 
 async function main() {
-  // Hellbender's id drifts across dev/prod — resolve by name.
+  // Hellbender's id drifts across dev/prod, so resolve at runtime — never
+  // hardcode. Anchor to the canonical press identity (domain) and exclude
+  // soft-deleted/archived rows so a leftover duplicate can't be selected
+  // nondeterministically (a dead row carrying matching Splatter tiers would
+  // slip past the format guard below and silently seed the wrong press,
+  // leaving the live picker empty). post-merge.sh's Hellbender catalog
+  // reconcile keys off this same domain. Falls back to a deterministic,
+  // still-live name match if `domain` is unset on an older clone.
   const pressRows = await db.execute<{ id: string; name: string }>(
-    sql`SELECT id, name FROM manufacturers WHERE name ILIKE '%hellbender%' LIMIT 1`,
+    sql`SELECT id, name FROM manufacturers
+        WHERE deleted_at IS NULL
+          AND (domain = 'hellbendervinyl.com' OR name ILIKE '%hellbender%')
+        ORDER BY (domain = 'hellbendervinyl.com') DESC, name
+        LIMIT 1`,
   );
   const press = pressRows.rows[0];
   if (!press) {
