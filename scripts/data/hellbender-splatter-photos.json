@@ -1,0 +1,231 @@
+{
+  "source": "BONUS_VinylMockUp_Examples.psd (1126_UltimateVinylMockUp)",
+  "note": "Hellbender Splatter-tier disc renders. swatchHex is a fallback only; swatchImageUrl (the disc render) always wins in the picker.",
+  "discDir": "scripts/data/splatter-discs",
+  "colors": [
+    {
+      "position": 1,
+      "name": "Royal Blue Cloudy",
+      "file": "01.png",
+      "swatchHex": "#7281a8",
+      "publicUrl": "/objects/uploads/7b254f9d-7886-48e2-92b8-96b21f6b43d6.png"
+    },
+    {
+      "position": 2,
+      "name": "Purple Cloudy",
+      "file": "02.png",
+      "swatchHex": "#7c558b",
+      "publicUrl": "/objects/uploads/1c09ad7b-e44d-43ec-a479-970d6d573a94.png"
+    },
+    {
+      "position": 3,
+      "name": "Mint + White Cornetto w/ Light Yellow Splatter",
+      "file": "03.png",
+      "swatchHex": "#aec09c",
+      "publicUrl": "/objects/uploads/c444a14d-ee5f-4038-a431-bc86bf21534e.png"
+    },
+    {
+      "position": 4,
+      "name": "Oxblood + Silver Cornetto w/ Black Splatter",
+      "file": "04.png",
+      "swatchHex": "#634048",
+      "publicUrl": "/objects/uploads/08f53a9d-af93-4c0d-9ad0-b89312899ae9.png"
+    },
+    {
+      "position": 5,
+      "name": "Cadet Blue + Silver Butterfly w/ Black Splatter",
+      "file": "05.png",
+      "swatchHex": "#6d7774",
+      "publicUrl": "/objects/uploads/7c410e26-c71c-4055-9fe9-a40db41c8a02.png"
+    },
+    {
+      "position": 6,
+      "name": "Ultra Clear + Cobalt Butterfly w/ Black Splatter",
+      "file": "06.png",
+      "swatchHex": "#62677b",
+      "publicUrl": "/objects/uploads/6e4b9213-f5a0-4bb9-b14c-d68134916585.png"
+    },
+    {
+      "position": 7,
+      "name": "Black in Purple w/ Black Splatter",
+      "file": "07.png",
+      "swatchHex": "#503b57",
+      "publicUrl": "/objects/uploads/d855eb81-2def-498c-88e0-0bfffe09fd1d.png"
+    },
+    {
+      "position": 8,
+      "name": "Oxblood in Light Yellow w/ Neon Pink Splatter",
+      "file": "08.png",
+      "swatchHex": "#ad7e68",
+      "publicUrl": "/objects/uploads/afb1c85d-27fb-49ba-99ba-769ea9499a51.png"
+    },
+    {
+      "position": 9,
+      "name": "Silver / Black / White Tri-Color Striped w/ Black Splatter",
+      "file": "09.png",
+      "swatchHex": "#4d4e4d",
+      "publicUrl": "/objects/uploads/55f896c3-2141-4df0-a0da-5ba022e8a647.png"
+    },
+    {
+      "position": 10,
+      "name": "Purple / White / Royal Blue Tri-Color Striped w/ White Splatter",
+      "file": "10.png",
+      "swatchHex": "#b7b3c5",
+      "publicUrl": "/objects/uploads/8ca70b9f-0a58-4210-908e-9229da583b73.png"
+    },
+    {
+      "position": 11,
+      "name": "Black + White Side A/B w/ Silver Splatter",
+      "file": "11.png",
+      "swatchHex": "#5c5c5c",
+      "publicUrl": "/objects/uploads/077e2a54-2cc9-4ed7-ab37-41f759834fcd.png"
+    },
+    {
+      "position": 12,
+      "name": "Bone + Brown Side A/B w/ Orange Splatter",
+      "file": "12.png",
+      "swatchHex": "#ac7a56",
+      "publicUrl": "/objects/uploads/4f74b16e-a680-49ea-9d00-c0ff1c05ea26.png"
+    },
+    {
+      "position": 13,
+      "name": "Mint + Blue + Purple Tri-Color Side A/B",
+      "file": "13.png",
+      "swatchHex": "#6f779e",
+      "publicUrl": "/objects/uploads/ad6a18d8-7b60-43e1-be9b-5740e7b15730.png"
+    },
+    {
+      "position": 14,
+      "name": "Canary Yellow + Orange + Evergreen Tri-Color Side A/B",
+      "file": "14.png",
+      "swatchHex": "#989553",
+      "publicUrl": "/objects/uploads/2593e64c-88e2-471b-980f-3775fc771d27.png"
+    },
+    {
+      "position": 15,
+      "name": "White + Silver Side A/B w/ Black + Mint Splatter",
+      "file": "15.png",
+      "swatchHex": "#636664",
+      "publicUrl": "/objects/uploads/5c5852dc-5fdc-4ca6-a152-8786307311a2.png"
+    },
+    {
+      "position": 16,
+      "name": "Mint + Purple Side A/B w/ Black + Canary Yellow Splatter",
+      "file": "16.png",
+      "swatchHex": "#6e616d",
+      "publicUrl": "/objects/uploads/4bfd05be-742e-4523-9895-30b2c8643179.png"
+    },
+    {
+      "position": 17,
+      "name": "Color-in-Color Black in Ultra Clear",
+      "file": "17.png",
+      "swatchHex": "#7d7d7d",
+      "publicUrl": "/objects/uploads/7b75871d-8414-4e6c-a372-874cb5d54b8d.png"
+    },
+    {
+      "position": 18,
+      "name": "Color-in-Color Neon Pink in Cadet Blue",
+      "file": "18.png",
+      "swatchHex": "#ab7a97",
+      "publicUrl": "/objects/uploads/b4ae8876-a172-4ec7-b213-65a5a34bb389.png"
+    },
+    {
+      "position": 19,
+      "name": "Double Color-in-Color Mint in Orange in Cadet Blue",
+      "file": "19.png",
+      "swatchHex": "#bba089",
+      "publicUrl": "/objects/uploads/37b5c503-25e9-40a2-8ace-2c99c793bc03.png"
+    },
+    {
+      "position": 20,
+      "name": "Double Color-in-Color Black in Purple in Royal Blue",
+      "file": "20.png",
+      "swatchHex": "#6a6893",
+      "publicUrl": "/objects/uploads/1d5a7c42-d806-4cf1-a1c8-a799088094c8.png"
+    },
+    {
+      "position": 21,
+      "name": "Black in Cloudy Clear w/ Black + Neon Orange Splatter",
+      "file": "21.png",
+      "swatchHex": "#8a7b76",
+      "publicUrl": "/objects/uploads/b5e42266-62e0-41bd-bb0c-d6ae41dba962.png"
+    },
+    {
+      "position": 22,
+      "name": "Trans Purple w/ Black + Oxblood + Light Blue Splatter",
+      "file": "22.png",
+      "swatchHex": "#5e4863",
+      "publicUrl": "/objects/uploads/d59582a4-eb26-4022-afb0-5b9ccee6b242.png"
+    },
+    {
+      "position": 23,
+      "name": "Royal Blue w/ Black Smoke",
+      "file": "23.png",
+      "swatchHex": "#566ea8",
+      "publicUrl": "/objects/uploads/e2cfdce7-3dba-469d-8c54-f9f787f2669a.png"
+    },
+    {
+      "position": 24,
+      "name": "Cadet Blue w/ Neon Pink Smoke",
+      "file": "24.png",
+      "swatchHex": "#9fabaa",
+      "publicUrl": "/objects/uploads/1f9082b7-dde3-4f18-9321-1fc7554962c5.png"
+    },
+    {
+      "position": 25,
+      "name": "Silver / Black Split w/ Black Splatter",
+      "file": "25.png",
+      "swatchHex": "#454645",
+      "publicUrl": "/objects/uploads/540e263a-59ea-462e-8c39-308915a30ecc.png"
+    },
+    {
+      "position": 26,
+      "name": "Neon Orange / Cloudy Clear Split w/ Black + Cream Splatter",
+      "file": "26.png",
+      "swatchHex": "#87655b",
+      "publicUrl": "/objects/uploads/c9acffa3-d922-4d46-9c57-c31401a03003.png"
+    },
+    {
+      "position": 27,
+      "name": "Mint Green / Silver Blended",
+      "file": "27.png",
+      "swatchHex": "#758779",
+      "publicUrl": "/objects/uploads/8f4bcb21-0f6b-4f25-a08b-227551efc476.png"
+    },
+    {
+      "position": 28,
+      "name": "Purple / Sky Blue Blended",
+      "file": "28.png",
+      "swatchHex": "#8b87ad",
+      "publicUrl": "/objects/uploads/dd39ea00-d047-48fd-a820-cce9c99c6545.png"
+    },
+    {
+      "position": 29,
+      "name": "Mint + Silver Galaxy",
+      "file": "29.png",
+      "swatchHex": "#798f7e",
+      "publicUrl": "/objects/uploads/70927036-1140-4cef-a6cb-bd8cd814b445.png"
+    },
+    {
+      "position": 30,
+      "name": "Cream + Gold Galaxy",
+      "file": "30.png",
+      "swatchHex": "#afa37a",
+      "publicUrl": "/objects/uploads/b7ac9f54-eec0-401f-9079-f5a29d059146.png"
+    },
+    {
+      "position": 31,
+      "name": "Hot Light Pink w/ Black Marble",
+      "file": "31.png",
+      "swatchHex": "#a16277",
+      "publicUrl": "/objects/uploads/2e01a999-521b-4697-8755-9b28d9bcf58f.png"
+    },
+    {
+      "position": 32,
+      "name": "Silver w/ Black Marble",
+      "file": "32.png",
+      "swatchHex": "#5f6160",
+      "publicUrl": "/objects/uploads/5ae1038f-6334-43cb-aeeb-5be168d9afc9.png"
+    }
+  ]
+}

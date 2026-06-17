@@ -251,3 +251,9 @@ id = "wVc8kpAwKoMCaBVJoUd5t"
 uri = "file://.local/proof/hellbender-record-swatches-proof.png"
 type = "image"
 title = "Hellbender record swatches — proof (all 35 colors)"
+
+[[outputs]]
+id = "VoOdNo5CZUHnS5XXMeqey"
+uri = "file://.local/splatter_loaded.png"
+type = "image"
+title = "Hellbender 12\" Splatter — 32 disc swatches now loaded"
