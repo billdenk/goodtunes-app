@@ -1011,6 +1011,12 @@ function InvoiceDialog({ open, onOpenChange, pressId, albumId }: { open: boolean
 
 function SettingsTab({ pressId, pressName }: { pressId: string; pressName: string }) {
   const [sub, setSub] = useState<"profile" | "staff" | "catalog" | "payouts" | "notifications">("profile");
+  // Task #2039 — the Partner-permissions toggles are GoodTunes-internal gates
+  // only a super-admin can move (from /admin/manufacturers/:id). Press
+  // owners/admins/staff can never change them, so don't show partners a
+  // read-only panel. Same signal the panel itself derives from /api/me/role.
+  const { data: role } = useQuery<{ role?: string }>({ queryKey: ["/api/me/role"] });
+  const isSuperAdmin = role?.role === "super_admin";
   const subTabs = [
     { id: "profile" as const, label: "Profile" },
     { id: "staff" as const, label: "Staff" },
@@ -1040,9 +1046,11 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
           <DashboardPanel padding="md">
             <PressContactsPanel pressId={pressId} pressName={pressName} />
           </DashboardPanel>
-          <DashboardPanel padding="md">
-            <PartnerPermissionsPanel scopeKind="manufacturer" scopeId={pressId} scopeName={pressName} />
-          </DashboardPanel>
+          {isSuperAdmin && (
+            <DashboardPanel padding="md">
+              <PartnerPermissionsPanel scopeKind="manufacturer" scopeId={pressId} scopeName={pressName} />
+            </DashboardPanel>
+          )}
         </div>
       )}
       {sub === "catalog" && (
