@@ -102,6 +102,14 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 // negative handling. `dollars(123456)` → "$1,234.56", `dollars(-50)` → "-$0.50".
 // Routed through the shared formatter (shared/money.ts).
 const dollars = (c: number) => formatUsdCents(c);
+
+// Demo switch (Task #2033) — when false, the GoodTunes-internal broker
+// disclosures are hidden everywhere in the Sell panel so a press never sees
+// them during a live demo: the "Internal — GoodTunes only" boxes (discounted
+// mfg + broker margin to GoodTunes) and the "Internal margin (− mfg discount)"
+// line. Flip to true to restore them; the existing super-admin + broker-
+// discount gate still applies on top.
+const SHOW_INTERNAL_BROKER = false;
 const parseDollars = (v: string): number | null => {
   const n = Number.parseFloat(v.replace(/[^0-9.]/g, ""));
   if (!Number.isFinite(n) || n < 0) return null;
@@ -2292,7 +2300,7 @@ function CostTooltip({
         <Row label="Payment processing" cents={breakdown.paymentProcessingCents} />
         <Row label="GoodTunes" cents={breakdown.goodtunesCents} />
         <Row label="Total" cents={total} bold />
-        {isSuperAdmin && brokerDiscountPct && brokerDiscountPct > 0 && (
+        {SHOW_INTERNAL_BROKER && isSuperAdmin && brokerDiscountPct && brokerDiscountPct > 0 && (
           <div className="mt-2 pt-2 border-t border-slate-100 space-y-1">
             <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
               Internal — GoodTunes only
@@ -3303,11 +3311,12 @@ function SkuRow({
   // vinyl card layout. Closed by default; the chevron reveals the
   // per-unit cost breakdown inline (replaces the old CostTooltip
   // popover for vinyl rows).
-  // Task #705 — per-pricing-block Profit disclosure. The primary block
-  // defaults open (so the breakdown reads at a glance); duplicated
-  // blocks default closed to keep the 2-up grid compact.
+  // Task #705 — per-pricing-block Profit disclosure.
+  // Task #2033 — every block (including the primary) now defaults closed so
+  // the "Profit · Per unit sold" breakdown stays collapsed until the operator
+  // expands it live during a demo. The chevron toggle still opens any block.
   const [openProfitKeys, setOpenProfitKeys] = useState<Set<string>>(
-    () => new Set(["primary"]),
+    () => new Set<string>(),
   );
   const toggleProfit = (key: string) =>
     setOpenProfitKeys((prev) => {
@@ -5441,7 +5450,7 @@ function SkuRow({
                     className="mt-2 ml-1 pl-3 border-l border-slate-200 space-y-1"
                     data-testid={`breakdown-${idSuffix}`}
                   >
-                    {isSuperAdmin && brokerDiscountPct > 0 && (
+                    {SHOW_INTERNAL_BROKER && isSuperAdmin && brokerDiscountPct > 0 && (
                       <div className="-ml-3 -mr-1 mb-1 px-3 py-1.5 rounded-md bg-amber-50 border border-amber-200 space-y-0.5">
                         <div className="text-xs uppercase tracking-wider text-amber-700 font-semibold">
                           Internal — GoodTunes only
@@ -5493,7 +5502,7 @@ function SkuRow({
                         {econ.costPerUnit === null ? "—" : dollars(econ.costPerUnit)}
                       </span>
                     </div>
-                    {isSuperAdmin && brokerDiscountPct > 0 && blockInternalProfit !== null && (
+                    {SHOW_INTERNAL_BROKER && isSuperAdmin && brokerDiscountPct > 0 && blockInternalProfit !== null && (
                       <div className="flex items-center justify-between gap-6 text-xs text-amber-800 font-semibold">
                         <span>{`Internal margin (− mfg discount)`}</span>
                         <span
