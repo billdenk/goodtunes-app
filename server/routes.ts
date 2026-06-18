@@ -24990,7 +24990,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const vendor = await storage.getVendorById(req.params.id);
       if (!vendor) return res.status(404).json({ message: "Vendor not found" });
       const rows = await vgdp.listVendorGoodDeedServices(req.params.id);
-      res.json({ vendor: { id: vendor.id, name: vendor.name, logoUrl: vendor.logoUrl, isReseller: vendor.isReseller, isMaker: vendor.isMaker }, services: rows });
+      res.json({ vendor: { id: vendor.id, name: vendor.name, logoUrl: vendor.logoUrl, isReseller: vendor.isReseller, isMaker: vendor.isMaker, isQuickprinter: vendor.isQuickprinter }, services: rows });
     },
   );
 

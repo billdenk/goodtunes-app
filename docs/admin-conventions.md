@@ -89,6 +89,23 @@ The Quickprinter's price ladder is per-paper-size (`vendor_gooddeed_services.siz
 
 **How to apply:** any new per-album operational-routing field that always resolves to the same vendor across albums should default at the platform level (payout_settings singleton) with the per-album column kept only as a back-compat override. New paper sizes extend `PaperSize` in `server/vendorGoodDeedPricing.ts` and add a tab in the Quickprinter ladder editor; the walking rule stays the same.
 
+## Quickprinter portal — scoped print-shop partner shell (Print Queue centerpiece)
+
+A vendor flagged `is_quickprinter = true` signs into its own scoped partner portal (`client/src/pages/PrinterPortal.tsx`) instead of the generic GoodDeed-Services-only vendor shell. Routing lives in `VendorPortal.tsx` → `VendorScopeRouter`: it reads the vendor's `gooddeed-services` payload (which now carries an `isQuickprinter` flag) and branches to `PrinterPortal` for quickprinters, `VendorBody` for everyone else — on both the `role==='vendor'` path and the super-admin vendor-scope path. The six tabs are registered as the `"printer"` operator role in `client/src/components/operator/registry.ts`.
+
+All data is served from `/api/printer/:id/*` (`server/printerPortal.ts`, registered from `commerce.ts`), gated by `requirePrinterScope` (super_admin **or** `findMembershipForScope(userId,"vendor",vendorId)`) **and** an `is_quickprinter` assertion — a non-quickprinter vendor 403s here. The tabs:
+
+- **Dashboard** — queue counts (awaiting / ready / locked / printed) + recently-printed list, scoped to certs that route to this printer.
+- **Print Queue (centerpiece)** — mirrors the admin Print queue scoped to this vendor: list certs by status, batch-download a ZIP of single-page PDFs / one merged PDF / single-stock Letter or A4 splits, override paper size + recipient name per cert, preview a cert PDF. **Downloading a batch flips those rows to `printed`** (server-side, via the shared `runCertPrintBatch` helper in `server/certificates.ts` — the same helper the admin batch route now calls, so there is one print-and-mark code path).
+- **Catalog** — the existing `GoodDeedServicesTab` pricing editor, relabeled. Same vendor-self-gated `/api/admin/vendors/:id/gooddeed-services` endpoint.
+- **Albums** — derived, read-only. Releases with GoodDeed certs routed here.
+- **People & Labels** — derived, read-only reference of the artists/labels behind the print jobs. **Not** an invite roster.
+- **Settings** — Profile (paste-a-URL logo), Staff (reuses `OrganizationPeople` with `entityKind="vendor"`, `canInviteSubusers={false}` + `canAddAdmins={false}` — printers get no artist-invite surface), Payouts (read-only Stripe status), Notifications.
+
+**Why:** the certificate printer is a real partner that needs to see and work its own queue, but it must never touch routing, pricing rungs, or the press/reseller/fulfillment/GoodDeed-vendor surfaces — so it gets a read-mostly shell whose only write surfaces are its own profile, its GoodDeed-Services pricing, and "mark printed via download."
+
+**How to apply:** a quickprinter's queue = certs whose resolved print vendor (`album_addons.print_vendor_id` legacy override ?? `payout_settings.default_print_vendor_id`) is this vendor; an empty queue is the correct, graceful state for any printer that isn't the platform default. Reuse `runCertPrintBatch` for any new print-and-mark path rather than re-implementing lock→render→printed. Never add an invite/roster surface to this portal.
+
 ## Production-partner capabilities — one press, up to three jobs (Vinyl / GoodDeeds / Fulfillment)
 
 A single production partner can do more than one job. The capability model lives on the canonical `manufacturers` table as three notNull booleans — `does_vinyl` (default true), `does_good_deed` (default false), `does_fulfillment` (default false) — guarded by a `manufacturers_capability_at_least_one` CHECK so a partner can never end up with zero capabilities. `insertManufacturerSchema` picks them up automatically; `POST`/`PUT /api/admin/manufacturers` accept the three flags (PUT merges the patch over the current row) and reject an all-off payload with a 400, mirroring the `vendors` Maker/Reseller at-least-one guard.

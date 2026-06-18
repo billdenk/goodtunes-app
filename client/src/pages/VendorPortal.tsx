@@ -17,6 +17,31 @@ import { modulesForRole, type OperatorRole } from "@/components/operator/registr
 // Task #522 — manufacturer (is_maker / press) admins get the press
 // portal shell instead of the legacy vendor shell.
 import { PressPortal } from "./PressPortal";
+// Task #2047 — GoodDeed quickprinter (is_quickprinter) vendors get a
+// print-centric portal instead of the legacy GoodDeed-Services shell.
+import { PrinterPortal } from "./PrinterPortal";
+
+// Routes a vendor-role scope to either the new PrinterPortal (when the
+// vendor is flagged `is_quickprinter`) or the legacy VendorBody shell
+// (GoodDeed resellers/services vendors). Resolved off the vendor block
+// of the gooddeed-services payload (cheap; cached by RQ), which every
+// vendor scope can read.
+function VendorScopeRouter({ vendorId, superAdminScopeKind }: { vendorId: string; superAdminScopeKind?: "vendor" }) {
+  const { data, isLoading } = useQuery<{ vendor: { id: string; name: string; logoUrl: string | null; isQuickprinter?: boolean } }>({
+    queryKey: ["/api/admin/vendors", vendorId, "gooddeed-services"],
+  });
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-[color:var(--brand-bg)] flex items-center justify-center">
+        <Loader2 className="w-6 h-6 text-[color:var(--brand-blue)] animate-spin" />
+      </main>
+    );
+  }
+  if (data?.vendor?.isQuickprinter) {
+    return <PrinterPortal vendorId={vendorId} isSuperAdminView={!!superAdminScopeKind} />;
+  }
+  return <VendorBody vendorId={vendorId} role="vendor" superAdminScopeKind={superAdminScopeKind} />;
+}
 
 // Routes a manufacturer-role scope to either the new PressPortal
 // (when the vendor is flagged `is_maker`) or the legacy VendorBody
@@ -89,6 +114,7 @@ function RoleRouter({ meRole }: { meRole: MeRole | null | undefined }) {
     const sk = skRaw === "manufacturer" || skRaw === "fulfillment" ? skRaw : "vendor";
     if (sid) {
       if (sk === "manufacturer") return <ManufacturerScopeRouter pressId={sid} isSuperAdminView={true} />;
+      if (sk === "vendor") return <VendorScopeRouter vendorId={sid} superAdminScopeKind="vendor" />;
       return <VendorBody vendorId={sid} role={sk} superAdminScopeKind={sk} />;
     }
     return <Redirect to="/admin/vendors" />;
@@ -112,6 +138,12 @@ function RoleRouter({ meRole }: { meRole: MeRole | null | undefined }) {
         </div>
       </main>
     );
+  }
+
+  // A plain vendor scope may be a GoodDeed quickprinter — route through
+  // VendorScopeRouter, which flips to PrinterPortal when is_quickprinter.
+  if (meRole.role === "vendor") {
+    return <VendorScopeRouter vendorId={meRole.roleScopeId} />;
   }
 
   return <VendorBody vendorId={meRole.roleScopeId} role={meRole.role} />;

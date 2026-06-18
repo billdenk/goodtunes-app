@@ -26,7 +26,11 @@ export type OperatorRole =
   | "manufacturer"
   | "vendor"
   | "fulfillment"
-  | "press";
+  | "press"
+  // Synthetic entry (like "press") for GoodDeed quickprinters — vendors
+  // flagged is_quickprinter. They share the vendor role server-side but
+  // get a print-centric portal (PrinterPortal.tsx). See VendorScopeRouter.
+  | "printer";
 
 export type PartnerVerb =
   | "edit_metadata"
@@ -87,6 +91,17 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "customers", label: "Customers", roles: ["press"] },
   { id: "pipeline",  label: "Pipeline",  roles: ["press"] },
   { id: "settings",  label: "Settings",  roles: ["press"] },
+
+  // GoodDeed Quickprinter shell — `/vendor` routed via VendorScopeRouter
+  // for is_quickprinter vendors (PrinterPortal.tsx). Print Queue is the
+  // centerpiece; Catalog is the GoodDeed Services pricing editor; Albums
+  // and People are derived read-only views of who they print for.
+  { id: "dashboard",   label: "Dashboard",       roles: ["printer"] },
+  { id: "print-queue", label: "Print Queue",     roles: ["printer"] },
+  { id: "catalog",     label: "Catalog",         roles: ["printer"] },
+  { id: "albums",      label: "Albums",          roles: ["printer"] },
+  { id: "people",      label: "People & Labels", roles: ["printer"] },
+  { id: "settings",    label: "Settings",        roles: ["printer"] },
 ];
 
 export function modulesForRole(

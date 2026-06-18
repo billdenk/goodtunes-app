@@ -296,14 +296,14 @@ function slugify(s: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
 }
-function certFilename(ctx: CertContext): string {
+export function certFilename(ctx: CertContext): string {
   const num = ctx.order.goodDeedNumber != null ? `No${String(ctx.order.goodDeedNumber).padStart(3, "0")}` : `No-${ctx.cert.shortId}`;
   const nameSlug = slugify(ctx.cert.confirmedName ?? ctx.order.buyerName ?? "Recipient");
   return `GoodDeed-${slugify(ctx.album.artist)}-${slugify(ctx.album.title)}-${num}-${nameSlug}.pdf`;
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────
-function absoluteOrigin(req: Request): string {
+export function absoluteOrigin(req: Request): string {
   const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0]?.trim() || req.protocol || "http";
   const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
   return `${proto}://${host}`;
@@ -1098,78 +1098,18 @@ export function registerCertificateRoutes(app: Express) {
     if (!me) return res.status(403).json({ message: "Admin only" });
     const certIds: string[] = Array.isArray(req.body?.certIds) ? req.body.certIds : [];
     const format: "zip" | "merged_pdf" = req.body?.format === "merged_pdf" ? "merged_pdf" : "zip";
-    if (certIds.length === 0) return res.status(400).json({ message: "certIds required" });
-    const certs = await db.select().from(signedCertCertificates).where(inArray(signedCertCertificates.id, certIds));
-    const eligible = certs.filter((c) => c.nameStatus === "confirmed" || c.nameStatus === "locked_for_print");
-    if (eligible.length === 0) return res.status(400).json({ message: "No confirmed certificates in batch" });
+    const result = await runCertPrintBatch(certIds, format, absoluteOrigin(req), me.userId);
+    if (!result.ok) return res.status(result.status).json({ message: result.message });
+    res.setHeader("Content-Type", result.contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${result.filename}"`);
+    res.send(result.buffer);
 
-    const [batch] = await db
-      .insert(certPrintBatches)
-      .values({ format, certCount: eligible.length, downloadedByAdminId: me.userId })
-      .returning();
-
-    // Lock everything in the batch.
-    await db
-      .update(signedCertCertificates)
-      .set({
-        nameStatus: "locked_for_print",
-        lockedAt: sql`COALESCE(${signedCertCertificates.lockedAt}, NOW())`,
-        printBatchId: batch.id,
-        updatedAt: new Date(),
-      })
-      .where(inArray(signedCertCertificates.id, eligible.map((c) => c.id)));
-
-    const origin = absoluteOrigin(req);
-    const contexts: CertContext[] = [];
-    for (const c of eligible) {
-      const ctx = await loadCertContext(c.id, origin);
-      if (ctx) contexts.push(ctx);
-    }
-    if (contexts.length === 0) return res.status(500).json({ message: "Could not load contexts" });
-
-    if (format === "zip") {
-      const zip = new AdmZip();
-      for (const ctx of contexts) {
-        // Fulfillment batch → signed (holographic placement guide) variant.
-        const pdf = await renderCertPdf(ctx, true);
-        zip.addFile(certFilename(ctx), pdf);
-      }
-      const buf = zip.toBuffer();
-      res.setHeader("Content-Type", "application/zip");
-      res.setHeader("Content-Disposition", `attachment; filename="gooddeed-print-batch-${batch.id}.zip"`);
-      res.send(buf);
-    } else {
-      // Merged PDF — render each into the same doc by drawing on a new
-      // page sized to that cert's paperSize. pdfkit lets us switch page
-      // size per `addPage`.
-      // No default margin — drawCertOnto manages its own mat/bleed math.
-      const merged = new PDFDocument({ autoFirstPage: false, margin: 0 });
-      const chunks: Buffer[] = [];
-      merged.on("data", (c: Buffer) => chunks.push(c));
-      const done = new Promise<Buffer>((resolve) => merged.on("end", () => resolve(Buffer.concat(chunks))));
-      // Simplest correct approach: render each cert to its own PDF then
-      // re-emit page-by-page into the merged doc. pdfkit can't import
-      // other PDFs natively, so we instead just call renderCertPdf into
-      // pages inline. We re-implement by adding pages to `merged`
-      // directly to keep a single PDF object.
-      for (const ctx of contexts) {
-        // Add a new page to `merged` matching this cert's size.
-        merged.addPage({ size: ctx.cert.paperSize === "a4" ? "A4" : "LETTER", margin: 0 });
-        // Fulfillment batch → signed (holographic placement guide) variant.
-        await drawCertOnto(merged, ctx, true);
-      }
-      merged.end();
-      const buf = await done;
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="gooddeed-print-batch-${batch.id}.pdf"`);
-      res.send(buf);
-    }
-
-    // Flip to printed once the file is sent.
+    // Flip to printed once the file is sent (a send failure leaves the rows
+    // at `locked_for_print` so the same ids re-emit without re-confirming).
     await db
       .update(signedCertCertificates)
       .set({ nameStatus: "printed", printedAt: new Date(), updatedAt: new Date() })
-      .where(inArray(signedCertCertificates.id, eligible.map((c) => c.id)));
+      .where(inArray(signedCertCertificates.id, result.printedCertIds));
   });
 }
 
@@ -1199,4 +1139,92 @@ function ctxToTemplateInputs(ctx: CertContext, signed = false): GoodDeedPrintInp
 }
 async function drawCertOnto(doc: PDFKit.PDFDocument, ctx: CertContext, signed = false): Promise<void> {
   await drawGoodDeedPageOnto(doc, ctxToTemplateInputs(ctx, signed));
+}
+
+// Task #2047 — shared GoodDeed print-batch builder used by BOTH the admin
+// print queue (server/certificates.ts) and the scoped Quickprinter portal
+// (server/printerPortal.ts). Given a set of cert ids it: filters to
+// printable rows (confirmed | locked_for_print), records a cert_print_batch,
+// locks every row in the batch (idempotent for already-locked), renders the
+// ZIP / merged PDF, and returns the buffer plus the ids to flip to `printed`.
+// The CALLER flips `printedCertIds` to printed AFTER streaming the file so a
+// send failure leaves the rows at `locked_for_print` (re-downloading the same
+// ids re-emits PDFs without re-confirming). Callers that scope to a single
+// printer must pre-filter `certIds` to that printer's certs first.
+export async function runCertPrintBatch(
+  certIds: string[],
+  format: "zip" | "merged_pdf",
+  origin: string,
+  adminId: string,
+): Promise<
+  | { ok: true; buffer: Buffer; filename: string; contentType: string; printedCertIds: string[] }
+  | { ok: false; status: number; message: string }
+> {
+  if (certIds.length === 0) return { ok: false, status: 400, message: "certIds required" };
+  const certs = await db
+    .select()
+    .from(signedCertCertificates)
+    .where(inArray(signedCertCertificates.id, certIds));
+  const eligible = certs.filter(
+    (c) => c.nameStatus === "confirmed" || c.nameStatus === "locked_for_print",
+  );
+  if (eligible.length === 0) return { ok: false, status: 400, message: "No confirmed certificates in batch" };
+
+  const [batch] = await db
+    .insert(certPrintBatches)
+    .values({ format, certCount: eligible.length, downloadedByAdminId: adminId })
+    .returning();
+
+  // Lock everything in the batch.
+  await db
+    .update(signedCertCertificates)
+    .set({
+      nameStatus: "locked_for_print",
+      lockedAt: sql`COALESCE(${signedCertCertificates.lockedAt}, NOW())`,
+      printBatchId: batch.id,
+      updatedAt: new Date(),
+    })
+    .where(inArray(signedCertCertificates.id, eligible.map((c) => c.id)));
+
+  const contexts: CertContext[] = [];
+  for (const c of eligible) {
+    const ctx = await loadCertContext(c.id, origin);
+    if (ctx) contexts.push(ctx);
+  }
+  if (contexts.length === 0) return { ok: false, status: 500, message: "Could not load contexts" };
+
+  if (format === "zip") {
+    const zip = new AdmZip();
+    for (const ctx of contexts) {
+      // Fulfillment batch → signed (holographic placement guide) variant.
+      const pdf = await renderCertPdf(ctx, true);
+      zip.addFile(certFilename(ctx), pdf);
+    }
+    return {
+      ok: true,
+      buffer: zip.toBuffer(),
+      contentType: "application/zip",
+      filename: `gooddeed-print-batch-${batch.id}.zip`,
+      printedCertIds: eligible.map((c) => c.id),
+    };
+  }
+
+  // Merged PDF — one page per cert, sized to that cert's paperSize.
+  const merged = new PDFDocument({ autoFirstPage: false, margin: 0 });
+  const chunks: Buffer[] = [];
+  merged.on("data", (c: Buffer) => chunks.push(c));
+  const done = new Promise<Buffer>((resolve) => merged.on("end", () => resolve(Buffer.concat(chunks))));
+  for (const ctx of contexts) {
+    merged.addPage({ size: ctx.cert.paperSize === "a4" ? "A4" : "LETTER", margin: 0 });
+    // Fulfillment batch → signed (holographic placement guide) variant.
+    await drawCertOnto(merged, ctx, true);
+  }
+  merged.end();
+  return {
+    ok: true,
+    buffer: await done,
+    contentType: "application/pdf",
+    filename: `gooddeed-print-batch-${batch.id}.pdf`,
+    printedCertIds: eligible.map((c) => c.id),
+  };
 }

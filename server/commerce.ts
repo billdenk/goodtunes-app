@@ -71,6 +71,7 @@ import {
   MRP_DOMAIN,
 } from "./pressCatalog";
 import { registerPressPortalRoutes } from "./pressPortal";
+import { registerPrinterPortalRoutes } from "./printerPortal";
 import { grantLltBonusIfEligible } from "./lltBonus";
 import { hasReachedSunset } from "@shared/albumStage";
 import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
@@ -1319,6 +1320,10 @@ export function registerCommerceRoutes(app: Express) {
   // Task #522 — Press portal endpoints (customers/pipeline/invite/etc.)
   // share the same press-scope gate.
   registerPressPortalRoutes(app, requireAdmin, requirePressScope);
+
+  // Task #2047 — GoodDeed Quickprinter portal. Its own scope gate (vendor
+  // membership + isQuickprinter assertion) lives inside the module.
+  registerPrinterPortalRoutes(app, requireAdmin);
 
   app.get("/api/admin/manufacturers/:id/format-costs", requireAdmin, requirePressScope, async (req, res) => {
     const pressId = String(req.params.id);

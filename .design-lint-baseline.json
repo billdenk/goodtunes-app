@@ -20740,6 +20740,281 @@
     "snippet": "className=\"w-9 h-9 rounded-full flex items-center justify-center text-white\""
   },
   {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "{ label: \"Printed\", value: counts.printed, accent: \"text-white/70\" },"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<p className=\"text-sm text-white/75\" data-testid=\"text-no-routing\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"text-xs text-white/55 mt-1\">{c.label}</div>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<p className=\"text-sm text-white/80\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<p className=\"text-sm text-white/55\" data-testid=\"text-no-recent-printed\">Nothing printed yet.</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"text-white/50 text-xs truncate\">{r.albumTitle} — {r.albumArtist}</div>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"text-white/45 text-xs whitespace-nowrap\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "printed: \"bg-slate-100 text-slate-500\","
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<p className=\"text-slate-500 text-[13px] mb-5\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "tab === t.key ? \"bg-slate-900 text-white\" : \"bg-slate-100 text-slate-600 hover:bg-slate-200\""
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<label className=\"flex items-center gap-2 text-[12px] text-slate-600 cursor-pointer\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "{isLoading && <div className=\"text-slate-500 text-sm\" data-testid=\"loading\">Loading…</div>}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-500\" data-testid=\"empty\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<span className=\"text-[11px] text-slate-500\" data-testid={`gooddeed-${r.id}`}>#{r.goodDeedNumber}</span>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<span className=\"text-[11px] text-slate-400\">{r.shippingCountry ?? \"?\"}</span>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "{r.confirmedName ?? <span className=\"text-slate-400 italic\">No name yet</span>}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"text-[12px] text-slate-500 truncate\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<span className=\"text-slate-300\">·</span>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "className=\"text-[11px] text-slate-600 hover:text-slate-900 active:opacity-70\""
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"text-[11px] text-slate-400 mt-4\" data-testid=\"ready-summary\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<p className=\"text-xs text-white/55 mb-4\">Read-only. Every release with GoodDeed certificates routed to your shop.</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<p className=\"text-sm text-white/55\" data-testid=\"text-no-albums\">No albums route their GoodDeed prints to you yet.</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "{a.artwork ? <img src={a.artwork} alt=\"\" className=\"w-full h-full object-cover\" /> : <Disc3 className=\"w-5 h-5 text-white/30\" />}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"text-xs text-white/50 truncate\">{a.artist}</div>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"text-xs text-white/55 whitespace-nowrap text-right\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"text-white/40\">{a.printedCount} printed</div>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<p className=\"text-xs text-white/55 mb-4\">Read-only reference of the artists and labels behind your print jobs.</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<p className=\"text-sm text-white/55\" data-testid=\"text-no-people\">No artists or labels route prints to you yet.</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"text-xs uppercase tracking-wide text-white/45 mb-2\">Artists</div>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "{p.photoUrl ? <img src={p.photoUrl} alt=\"\" className=\"w-full h-full object-cover\" /> : <Users className=\"w-4 h-4 text-white/30\" />}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"text-xs uppercase tracking-wide text-white/45 mb-2\">Labels</div>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "{l.logoUrl ? <img src={l.logoUrl} alt=\"\" className=\"w-full h-full object-cover\" /> : <Users className=\"w-4 h-4 text-white/30\" />}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "className={`h-10 px-3 text-sm font-semibold whitespace-nowrap border-b-2 ${sub === t.id ? \"border-[color:var(--brand-mint)] text-white\" : \"border-transparent text-white/55 hover:text-white\"}`}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<p className=\"text-xs text-white/55 mb-4\">Details GoodTunes shows internally and uses for contact. Paste a logo image URL if you'd like one shown.</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<p className=\"text-white/80\">Stripe payout account connected (••••{data.stripeAccountIdLast4}).</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<p className=\"text-white/55 text-xs\">Payouts {data.payoutsEnabled ? \"enabled\" : \"pending\"} · Charges {data.chargesEnabled ? \"enabled\" : \"pending\"}</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<p className=\"text-sm text-white/70\" data-testid=\"payouts-not-connected\">{data?.note ?? \"No payout account connected.\"}</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<p className=\"text-sm text-white/70\" data-testid=\"text-notifications\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<span className=\"block text-xs font-semibold text-white/65 mb-1\">{label}</span>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"flex items-center gap-2 text-white/55 text-sm\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<h2 className=\"text-[20px] font-semibold text-slate-900 mb-1\">Print queue</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<p className=\"text-slate-500 text-[13px] mb-5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "className={`px-3 py-1.5 rounded-full text-[12px] font-semibold ${"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<label className=\"flex items-center gap-2 text-[12px] text-slate-600 cursor-pointer\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "className=\"px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "className=\"px-3 py-1.5 rounded-full bg-slate-900 text-white text-[12px] font-semibold hover:bg-slate-800 disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${STATUS_PILL[r.nameStatus]}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<span className=\"text-[11px] text-slate-500\" data-testid={`gooddeed-${r.id}`}>#{r.goodDeedNumber}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<span className=\"text-[11px] text-slate-400\">{r.shippingCountry ?? \"?\"}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"text-[14px] font-medium text-slate-900 truncate mt-0.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"text-[12px] text-slate-500 truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "className=\"bg-white border border-slate-200 text-slate-700 text-[11px] rounded px-2 py-1\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "className=\"text-[11px] text-[color:var(--brand-blue)] hover:underline active:opacity-70\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "className=\"text-[11px] text-slate-600 hover:text-slate-900 active:opacity-70\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<div className=\"text-[11px] text-slate-400 mt-4\" data-testid=\"ready-summary\">"
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Recents.tsx",
     "snippet": "className=\"text-[#319ED8] text-[14px] font-semibold active:opacity-60\""
