@@ -1,6 +1,6 @@
 // Task #2047 — GoodDeed Quickprinter portal (vendor admin shell).
 //
-// Six-tab dark partner shell for `is_quickprinter` vendors. Replaces the
+// Six-tab light partner shell for `is_quickprinter` vendors. Replaces the
 // legacy GoodDeed-Services-only vendor shell when the signed-in vendor is
 // flagged as a quickprinter (routed via VendorScopeRouter in VendorPortal).
 //
@@ -56,7 +56,7 @@ export function PrinterPortal({ vendorId, isSuperAdminView }: { vendorId: string
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-[color:var(--brand-bg)] flex items-center justify-center">
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center">
         <Loader2 className="w-6 h-6 text-[color:var(--brand-blue)] animate-spin" />
       </main>
     );
@@ -78,7 +78,7 @@ export function PrinterPortal({ vendorId, isSuperAdminView }: { vendorId: string
       {tab === "dashboard" && <DashboardTab vendorId={vendorId} onGoToQueue={() => setTab("print-queue")} />}
       {tab === "print-queue" && <PrintQueueTab vendorId={vendorId} />}
       {tab === "catalog" && (
-        <div className="bg-white text-slate-900 rounded-2xl p-4 sm:p-6 ring-1 ring-white/10" data-testid="printer-catalog-panel">
+        <div className="bg-white text-slate-900 rounded-2xl p-4 sm:p-6 ring-1 ring-slate-200" data-testid="printer-catalog-panel">
           <GoodDeedServicesTab vendorId={vendorId} />
         </div>
       )}
@@ -112,16 +112,16 @@ function DashboardTab({ vendorId, onGoToQueue }: { vendorId: string; onGoToQueue
   if (isLoading) return <PanelLoading />;
   const counts = data?.counts ?? { awaiting: 0, confirmed: 0, locked_for_print: 0, printed: 0 };
   const cards = [
-    { label: "Ready to print", value: counts.confirmed, accent: "text-emerald-300" },
-    { label: "Awaiting fan", value: counts.awaiting, accent: "text-amber-300" },
-    { label: "Locked", value: counts.locked_for_print, accent: "text-indigo-300" },
-    { label: "Printed", value: counts.printed, accent: "text-white/70" },
+    { label: "Ready to print", value: counts.confirmed, accent: "text-emerald-600" },
+    { label: "Awaiting fan", value: counts.awaiting, accent: "text-amber-600" },
+    { label: "Locked", value: counts.locked_for_print, accent: "text-indigo-600" },
+    { label: "Printed", value: counts.printed, accent: "text-slate-700" },
   ];
   return (
     <div className="space-y-4" data-testid="printer-dashboard">
       {!data?.isDefaultPrinter && data?.totalInScope === 0 && (
         <DashboardPanel padding="md">
-          <p className="text-sm text-white/75" data-testid="text-no-routing">
+          <p className="text-sm text-slate-600" data-testid="text-no-routing">
             No GoodDeed certificates route to your shop yet. When GoodTunes assigns print jobs to you,
             they'll appear here and in your Print Queue automatically.
           </p>
@@ -131,15 +131,15 @@ function DashboardTab({ vendorId, onGoToQueue }: { vendorId: string; onGoToQueue
         {cards.map((c) => (
           <DashboardPanel key={c.label} padding="md">
             <div className={`text-3xl font-bold ${c.accent}`} data-testid={`stat-${c.label.replace(/\s+/g, "-").toLowerCase()}`}>{c.value}</div>
-            <div className="text-xs text-white/55 mt-1">{c.label}</div>
+            <div className="text-xs text-slate-500 mt-1">{c.label}</div>
           </DashboardPanel>
         ))}
       </div>
       {counts.confirmed > 0 && (
         <DashboardPanel padding="md">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-white/80">
-              <strong className="text-white">{counts.confirmed}</strong> certificate(s) are ready to print right now.
+            <p className="text-sm text-slate-700">
+              <strong className="text-slate-900">{counts.confirmed}</strong> certificate(s) are ready to print right now.
             </p>
             <Button onClick={onGoToQueue} className="rounded-full" data-testid="button-go-to-queue">
               Open Print Queue
@@ -150,16 +150,16 @@ function DashboardTab({ vendorId, onGoToQueue }: { vendorId: string; onGoToQueue
       <DashboardPanel padding="md">
         <h3 className="text-base font-semibold mb-3">Recently printed</h3>
         {(data?.recentPrinted?.length ?? 0) === 0 ? (
-          <p className="text-sm text-white/55" data-testid="text-no-recent-printed">Nothing printed yet.</p>
+          <p className="text-sm text-slate-500" data-testid="text-no-recent-printed">Nothing printed yet.</p>
         ) : (
           <div className="flex flex-col gap-2">
             {data!.recentPrinted.map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-3 text-sm" data-testid={`recent-printed-${r.id}`}>
                 <div className="min-w-0">
-                  <div className="text-white truncate">{r.confirmedName ?? "—"}</div>
-                  <div className="text-white/50 text-xs truncate">{r.albumTitle} — {r.albumArtist}</div>
+                  <div className="text-slate-900 truncate">{r.confirmedName ?? "—"}</div>
+                  <div className="text-slate-500 text-xs truncate">{r.albumTitle} — {r.albumArtist}</div>
                 </div>
-                <div className="text-white/45 text-xs whitespace-nowrap">
+                <div className="text-slate-400 text-xs whitespace-nowrap">
                   {r.goodDeedNumber !== null ? `#${r.goodDeedNumber}` : ""}
                 </div>
               </div>
@@ -337,7 +337,7 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
   );
 
   return (
-    <div className="bg-white text-slate-900 rounded-2xl p-4 sm:p-6 ring-1 ring-white/10" data-testid="printer-print-queue">
+    <div className="bg-white text-slate-900 rounded-2xl p-4 sm:p-6 ring-1 ring-slate-200" data-testid="printer-print-queue">
       <h2 className="text-[20px] font-semibold text-slate-900 mb-1">Print queue</h2>
       <p className="text-slate-500 text-[13px] mb-5">
         GoodDeed certificates routed to your shop. Confirmed rows are ready to print — batch them into a ZIP of single-page PDFs,
@@ -523,23 +523,23 @@ function AlbumsTab({ vendorId }: { vendorId: string }) {
   return (
     <DashboardPanel padding="md">
       <h3 className="text-base font-semibold mb-1">Albums you print for</h3>
-      <p className="text-xs text-white/55 mb-4">Read-only. Every release with GoodDeed certificates routed to your shop.</p>
+      <p className="text-xs text-slate-500 mb-4">Read-only. Every release with GoodDeed certificates routed to your shop.</p>
       {albums.length === 0 ? (
-        <p className="text-sm text-white/55" data-testid="text-no-albums">No albums route their GoodDeed prints to you yet.</p>
+        <p className="text-sm text-slate-500" data-testid="text-no-albums">No albums route their GoodDeed prints to you yet.</p>
       ) : (
         <div className="flex flex-col gap-2">
           {albums.map((a, i) => (
             <div key={`${a.title}-${i}`} className="flex items-center gap-3" data-testid={`album-row-${i}`}>
-              <div className="w-11 h-11 rounded-md overflow-hidden bg-white/5 ring-1 ring-white/10 grid place-items-center flex-shrink-0">
-                {a.artwork ? <img src={a.artwork} alt="" className="w-full h-full object-cover" /> : <Disc3 className="w-5 h-5 text-white/30" />}
+              <div className="w-11 h-11 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 grid place-items-center flex-shrink-0">
+                {a.artwork ? <img src={a.artwork} alt="" className="w-full h-full object-cover" /> : <Disc3 className="w-5 h-5 text-slate-400" />}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-sm text-white truncate">{a.title}</div>
-                <div className="text-xs text-white/50 truncate">{a.artist}</div>
+                <div className="text-sm text-slate-900 truncate">{a.title}</div>
+                <div className="text-xs text-slate-500 truncate">{a.artist}</div>
               </div>
-              <div className="text-xs text-white/55 whitespace-nowrap text-right">
+              <div className="text-xs text-slate-500 whitespace-nowrap text-right">
                 <div>{a.certCount} cert(s)</div>
-                <div className="text-white/40">{a.printedCount} printed</div>
+                <div className="text-slate-400">{a.printedCount} printed</div>
               </div>
             </div>
           ))}
@@ -567,21 +567,21 @@ function PeopleTab({ vendorId }: { vendorId: string }) {
   return (
     <DashboardPanel padding="md">
       <h3 className="text-base font-semibold mb-1">Who you print for</h3>
-      <p className="text-xs text-white/55 mb-4">Read-only reference of the artists and labels behind your print jobs.</p>
+      <p className="text-xs text-slate-500 mb-4">Read-only reference of the artists and labels behind your print jobs.</p>
       {empty ? (
-        <p className="text-sm text-white/55" data-testid="text-no-people">No artists or labels route prints to you yet.</p>
+        <p className="text-sm text-slate-500" data-testid="text-no-people">No artists or labels route prints to you yet.</p>
       ) : (
         <div className="space-y-5">
           {people.length > 0 && (
             <div>
-              <div className="text-xs uppercase tracking-wide text-white/45 mb-2">Artists</div>
+              <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Artists</div>
               <div className="flex flex-col gap-2">
                 {people.map((p, i) => (
                   <div key={p.id ?? `loose-${i}`} className="flex items-center gap-3" data-testid={`artist-row-${i}`}>
-                    <div className="w-11 h-11 rounded-full overflow-hidden bg-white/5 ring-1 ring-white/10 grid place-items-center flex-shrink-0">
-                      {p.photoUrl ? <img src={p.photoUrl} alt="" className="w-full h-full object-cover" /> : <Users className="w-4 h-4 text-white/30" />}
+                    <div className="w-11 h-11 rounded-full overflow-hidden bg-slate-100 ring-1 ring-slate-200 grid place-items-center flex-shrink-0">
+                      {p.photoUrl ? <img src={p.photoUrl} alt="" className="w-full h-full object-cover" /> : <Users className="w-4 h-4 text-slate-400" />}
                     </div>
-                    <div className="text-sm text-white truncate">{p.name}</div>
+                    <div className="text-sm text-slate-900 truncate">{p.name}</div>
                   </div>
                 ))}
               </div>
@@ -589,14 +589,14 @@ function PeopleTab({ vendorId }: { vendorId: string }) {
           )}
           {labels.length > 0 && (
             <div>
-              <div className="text-xs uppercase tracking-wide text-white/45 mb-2">Labels</div>
+              <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Labels</div>
               <div className="flex flex-col gap-2">
                 {labels.map((l) => (
                   <div key={l.id} className="flex items-center gap-3" data-testid={`label-row-${l.id}`}>
-                    <div className="w-9 h-9 rounded-md overflow-hidden bg-white/5 ring-1 ring-white/10 grid place-items-center flex-shrink-0">
-                      {l.logoUrl ? <img src={l.logoUrl} alt="" className="w-full h-full object-cover" /> : <Users className="w-4 h-4 text-white/30" />}
+                    <div className="w-9 h-9 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 grid place-items-center flex-shrink-0">
+                      {l.logoUrl ? <img src={l.logoUrl} alt="" className="w-full h-full object-cover" /> : <Users className="w-4 h-4 text-slate-400" />}
                     </div>
-                    <div className="text-sm text-white truncate">{l.name}</div>
+                    <div className="text-sm text-slate-900 truncate">{l.name}</div>
                   </div>
                 ))}
               </div>
@@ -620,13 +620,13 @@ function SettingsTab({ vendorId, printerName }: { vendorId: string; printerName:
   ];
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 overflow-x-auto border-b border-white/10">
+      <div className="flex gap-1 overflow-x-auto border-b border-slate-200">
         {subTabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setSub(t.id)}
-            className={`h-10 px-3 text-sm font-semibold whitespace-nowrap border-b-2 ${sub === t.id ? "border-[color:var(--brand-mint)] text-white" : "border-transparent text-white/55 hover:text-white"}`}
+            className={`h-10 px-3 text-sm font-semibold whitespace-nowrap border-b-2 ${sub === t.id ? "border-[color:var(--brand-blue)] text-slate-900" : "border-transparent text-slate-500 hover:text-slate-900"}`}
             data-testid={`tab-settings-${t.id}`}
           >{t.label}</button>
         ))}
@@ -687,7 +687,7 @@ function ProfileSubTab({ vendorId }: { vendorId: string }) {
   return (
     <DashboardPanel padding="md">
       <h3 className="text-base font-semibold mb-3">Print shop profile</h3>
-      <p className="text-xs text-white/55 mb-4">Details GoodTunes shows internally and uses for contact. Paste a logo image URL if you'd like one shown.</p>
+      <p className="text-xs text-slate-500 mb-4">Details GoodTunes shows internally and uses for contact. Paste a logo image URL if you'd like one shown.</p>
       <div className="space-y-4 max-w-xl">
         <Field label="Name">
           <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!canEdit} data-testid="input-name" />
@@ -738,11 +738,11 @@ function PayoutsSubTab({ vendorId }: { vendorId: string }) {
       <h3 className="text-base font-semibold mb-3">Payouts</h3>
       {data?.connected ? (
         <div className="space-y-2 text-sm" data-testid="payouts-connected">
-          <p className="text-white/80">Stripe payout account connected (••••{data.stripeAccountIdLast4}).</p>
-          <p className="text-white/55 text-xs">Payouts {data.payoutsEnabled ? "enabled" : "pending"} · Charges {data.chargesEnabled ? "enabled" : "pending"}</p>
+          <p className="text-slate-700">Stripe payout account connected (••••{data.stripeAccountIdLast4}).</p>
+          <p className="text-slate-500 text-xs">Payouts {data.payoutsEnabled ? "enabled" : "pending"} · Charges {data.chargesEnabled ? "enabled" : "pending"}</p>
         </div>
       ) : (
-        <p className="text-sm text-white/70" data-testid="payouts-not-connected">{data?.note ?? "No payout account connected."}</p>
+        <p className="text-sm text-slate-600" data-testid="payouts-not-connected">{data?.note ?? "No payout account connected."}</p>
       )}
     </DashboardPanel>
   );
@@ -752,9 +752,9 @@ function NotificationsSubTab({ vendorId }: { vendorId: string }) {
   return (
     <DashboardPanel padding="md">
       <h3 className="text-base font-semibold mb-3">Notifications</h3>
-      <p className="text-sm text-white/70" data-testid="text-notifications">
+      <p className="text-sm text-slate-600" data-testid="text-notifications">
         GoodTunes emails your print-shop contact when new GoodDeed certificates are routed to you and ready to print.
-        To change which address gets these, update the contact email on your <span className="text-white">Profile</span> tab.
+        To change which address gets these, update the contact email on your <span className="text-slate-900">Profile</span> tab.
       </p>
     </DashboardPanel>
   );
@@ -765,7 +765,7 @@ function NotificationsSubTab({ vendorId }: { vendorId: string }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-xs font-semibold text-white/65 mb-1">{label}</span>
+      <span className="block text-xs font-semibold text-slate-600 mb-1">{label}</span>
       {children}
     </label>
   );
@@ -774,7 +774,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function PanelLoading() {
   return (
     <DashboardPanel padding="md">
-      <div className="flex items-center gap-2 text-white/55 text-sm">
+      <div className="flex items-center gap-2 text-slate-500 text-sm">
         <Loader2 className="w-4 h-4 animate-spin" /> Loading…
       </div>
     </DashboardPanel>

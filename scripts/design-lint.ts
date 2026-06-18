@@ -98,7 +98,7 @@ function lintFile(rel: string, src: string): Violation[] {
   // Partner portals are light admin surfaces.
   const isInvitedPortal =
     /client\/src\/components\/(operator|partner)\//.test(rel) ||
-    /client\/src\/pages\/(PressPortal|VendorPortal|ArtistDashboard|LabelDashboard|NonProfitDashboard|ManagerDashboard|PublisherPortal|AcceptInvite)\.tsx$/.test(
+    /client\/src\/pages\/(PressPortal|PrinterPortal|VendorPortal|ArtistDashboard|LabelDashboard|NonProfitDashboard|ManagerDashboard|PublisherPortal|AcceptInvite)\.tsx$/.test(
       rel,
     );
 

@@ -1,6 +1,6 @@
 // Task #522 — Press portal (manufacturer admin shell).
 //
-// Four-tab dark partner shell for is_maker presses (Hellbender today,
+// Four-tab light partner shell for is_maker presses (Hellbender today,
 // MRP / PMP next). Replaces the old vendor/services-only shell when
 // the signed-in admin's role is `manufacturer`.
 //
@@ -590,8 +590,7 @@ function PipelineTab({ pressId }: { pressId: string }) {
     byStage[a.stage].push(a);
   });
   return (
-    <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
-      <div className="flex gap-3 min-w-max pb-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-6 items-start" data-testid="pipeline-grid">
         {STAGE_DEFS.map((s) => {
           const rows = byStage[s.id] ?? [];
           const extraCount =
@@ -599,7 +598,7 @@ function PipelineTab({ pressId }: { pressId: string }) {
             : s.id === "accepted" ? accepted.length
             : 0;
           return (
-            <div key={s.id} className="w-72 flex-shrink-0">
+            <div key={s.id} data-testid={`pipeline-stage-${s.id}`}>
               <div className="flex items-center justify-between mb-2 px-1">
                 <h3 className="text-slate-700 text-sm font-semibold uppercase tracking-wide">{s.label}</h3>
                 <span className="text-slate-400 text-xs font-mono" data-testid={`text-stage-count-${s.id}`}>
@@ -634,7 +633,6 @@ function PipelineTab({ pressId }: { pressId: string }) {
             </div>
           );
         })}
-      </div>
     </div>
   );
 }
@@ -1384,7 +1382,7 @@ function NotificationsSubTab({ pressId }: { pressId: string }) {
       <h3 className="text-base font-semibold mb-3">Notifications</h3>
       <div className="space-y-4 max-w-md">
         <div>
-          <label className="text-xs text-slate-500 uppercase tracking-wide">Pipeline alerts recipient</label>
+          <label className="text-xs text-slate-500 uppercase tracking-wide">Notification recipient</label>
           <Input
             value={recipient}
             onChange={(e) => setRecipient(e.target.value)}
@@ -1393,7 +1391,7 @@ function NotificationsSubTab({ pressId }: { pressId: string }) {
             className="bg-white border-slate-200 text-slate-900 mt-1"
             data-testid="input-notifications-recipient"
           />
-          <p className="text-xs text-slate-500 mt-1.5">Used as the From-reply for masters-ready emails artists receive about your plant. Save here also updates the profile contact email.</p>
+          <p className="text-xs text-slate-500 mt-1.5">Where GoodTunes emails your plant as the releases you press move through the pipeline. This is also your profile's contact email.</p>
         </div>
         <Button
           onClick={() => save.mutate()}
@@ -1402,11 +1400,11 @@ function NotificationsSubTab({ pressId }: { pressId: string }) {
           data-testid="button-save-notifications"
         >{save.isPending ? "Saving…" : "Save"}</Button>
         <div className="pt-3 border-t border-slate-200">
-          <h4 className="text-sm font-semibold mb-1">How automatic alerts fire</h4>
+          <h4 className="text-sm font-semibold mb-1">What we send you</h4>
           <ul className="text-xs text-slate-600 space-y-1 list-disc pl-4">
-            <li>Masters-ready: emailed to the album's artist when earmarked preorders cross your masters-prep threshold.</li>
-            <li>Fulfillment heads-up: sent to your platform fulfillment partner when an album enters Locked, and re-fires only on &gt;5% qty drift before In production.</li>
-            <li>Invoice variance: variances over 10% vs the locked quote are flagged for admin review (logged with <code className="font-mono">[admin-alert]</code>).</li>
+            <li>When an artist or label accepts your invite and joins your roster.</li>
+            <li>When a release you press is ready for its next step on your machines — masters to cut, or a preorder run to lock.</li>
+            <li>When a release you're pressing moves into production or ships.</li>
           </ul>
         </div>
       </div>
