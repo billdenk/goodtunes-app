@@ -28,7 +28,6 @@ const VARIANTS: Record<string, WelcomeVariant> = {
     blurb: (s) =>
       `${s} is set up as a pressing partner. Your jobs, pricing, and payouts all live in your press dashboard.`,
     primary: { href: "/vendor", label: "Open your press dashboard" },
-    secondary: { href: "/admin/gooddeed-pricing", label: "Review GoodDeed pricing" },
     footnote:
       "When an album is routed to you, the pressing job shows up on your dashboard with everything you need to quote and fulfil it.",
   },
