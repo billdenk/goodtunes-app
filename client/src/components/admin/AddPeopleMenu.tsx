@@ -1266,11 +1266,17 @@ function AttachContactDialog(
                 </div>
               </div>
             )}
-            {/* A single locked card showing the access being granted. The
-                creative-credits chip rail was dropped from "Add Admin" to keep
-                the dialog focused on access; creative credits are tagged on the
-                Person separately. RolePicker hides the creative section when
-                `onCreativeChange` is absent. */}
+            {/* Task #824 — one coherent role step: a locked card showing
+                the access being granted.
+                Task #1051 / #2037 — the creative-credits chip rail read as
+                overwhelming noise in the "Add Admin" dialog, so it's omitted
+                for every partner kind (label and other business contacts
+                first, then the press case too). We don't pass the creative
+                props at all; RolePicker hides the whole section when
+                `onCreativeChange` is absent. The creative state is kept in
+                place so a picked person's existing tags are preserved on
+                save. Creative tagging now lives in the People editor and the
+                album-artist dialog, where it's genuinely the point. */}
             <RolePicker
               testIdPrefix={`${props.testIdPrefix}-${props.kind}`}
               accessOptions={[accessRole]}
