@@ -378,8 +378,6 @@ export function registerGiftRoutes(app: Express) {
   app.post("/api/orders/:id/gift", async (req, res) => {
     const me = await requireCustomer(req, res);
     if (!me) return;
-    const { requirePhoneVerified } = await import("./auth/phoneOtp");
-    if (await requirePhoneVerified(req, res, "gifting")) return;
     const gift = await createGiftRecord(req, res, {
       orderId: String(req.params.id),
       copyId: null,
@@ -393,8 +391,6 @@ export function registerGiftRoutes(app: Express) {
   app.post("/api/orders/:id/copies/:copyId/gift", async (req, res) => {
     const me = await requireCustomer(req, res);
     if (!me) return;
-    const { requirePhoneVerified } = await import("./auth/phoneOtp");
-    if (await requirePhoneVerified(req, res, "gifting")) return;
     const gift = await createGiftRecord(req, res, {
       orderId: String(req.params.id),
       copyId: String(req.params.copyId),
@@ -408,8 +404,6 @@ export function registerGiftRoutes(app: Express) {
   app.patch("/api/orders/:id/gift", async (req, res) => {
     const me = await requireCustomer(req, res);
     if (!me) return;
-    const { requirePhoneVerified } = await import("./auth/phoneOtp");
-    if (await requirePhoneVerified(req, res, "gifting")) return;
     const orderId = String(req.params.id);
     const parsed = parseRecipient(req.body);
     if (!parsed.ok) return res.status(400).json({ message: parsed.message });

@@ -663,35 +663,43 @@ export function Welcome() {
           </button>
         )}
 
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5">
-          <label className="block text-fan-faint text-[11px] uppercase tracking-wider font-semibold mb-1.5">
-            Pick your handle
-          </label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fan-faint text-sm pointer-events-none">@</span>
-            <input
-              type="text"
-              value={usernameInput}
-              onChange={(e) => setUsernameInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
-              placeholder={suggestedUsername || "username"}
-              className="w-full border border-white/10 rounded-2xl pl-7 pr-4 py-3 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] bg-white/[0.06]"
-              data-testid="input-welcome-username"
-            />
-          </div>
-          <p className="text-fan-faint text-[11px] mt-1.5 ml-1">
-            We picked this from your email — change it any time.
-          </p>
-        </div>
+        {/* Task #2062 — while the buyer is mid-gift (chose "Gift this" but
+            hasn't minted the claim link yet), keep the gift form the single
+            primary action. The handle picker + "Open my player" reappear once
+            the gift link exists, or the buyer backed out / chose "decide later". */}
+        {!(giftHubChoice === "gift" && !giftShareUrl) && (
+          <>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5">
+              <label className="block text-fan-faint text-[11px] uppercase tracking-wider font-semibold mb-1.5">
+                Pick your handle
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fan-faint text-sm pointer-events-none">@</span>
+                <input
+                  type="text"
+                  value={usernameInput}
+                  onChange={(e) => setUsernameInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                  placeholder={suggestedUsername || "username"}
+                  className="w-full border border-white/10 rounded-2xl pl-7 pr-4 py-3 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] bg-white/[0.06]"
+                  data-testid="input-welcome-username"
+                />
+              </div>
+              <p className="text-fan-faint text-[11px] mt-1.5 ml-1">
+                We picked this from your email — change it any time.
+              </p>
+            </div>
 
-        <button
-          onClick={finish}
-          disabled={savingUsername}
-          className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 transition-all active:scale-[0.98]"
-          style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
-          data-testid="button-welcome-open"
-        >
-          {savingUsername ? "One second…" : "Open my player"}
-        </button>
+            <button
+              onClick={finish}
+              disabled={savingUsername}
+              className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 transition-all active:scale-[0.98]"
+              style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+              data-testid="button-welcome-open"
+            >
+              {savingUsername ? "One second…" : "Open my player"}
+            </button>
+          </>
+        )}
       </div>
 
       {showPersonalizer && data.order && (
