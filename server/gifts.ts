@@ -21,7 +21,7 @@
 // /api/gifts/:token only returns sanitized data (no recipient contact).
 import type { Express, Request, Response } from "express";
 import { randomBytes } from "crypto";
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "./db";
 import { storage } from "./storage";
 import { grantLltBonusIfEligible } from "./lltBonus";
@@ -33,7 +33,9 @@ import {
   customerUsers,
   userAlbums,
   payoutSettings,
+  customAddonGiftBoxes,
   type Gift,
+  type CustomAddonGiftBox,
 } from "@shared/schema";
 
 const SHARE_BASE_PATH = "/gift/";
@@ -660,6 +662,190 @@ export function registerGiftRoutes(app: Express) {
     const [updated] = await db.select().from(gifts).where(eq(gifts.id, gift.id));
     res.json({ gift: updated, albumId: albumIdOut });
   });
+
+  // ─── Custom add-on gift boxes (Task #2061) ──────────────────────────
+  // A custom add-on (e.g. the Nightbirde "Gift of Hope" donation box) is
+  // bought in quantity; each purchased box becomes one gift-able unit the
+  // buyer personalizes AFTER checkout. These two routes back the
+  // post-purchase "Who's the gift for?" stepper. Buyer-scoped (the box's
+  // snapshotted buyerUserId), no phone-verify (gifting a donation box ships
+  // nothing to the buyer and reveals no entitlement). Generic — nothing
+  // here is Nightbirde-specific.
+
+  // GET — the buyer's own boxes for one order, PII included (it's their data).
+  app.get("/api/orders/:id/gift-boxes", async (req, res) => {
+    const me = await requireCustomer(req, res);
+    if (!me) return;
+    const orderId = String(req.params.id);
+    const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    const boxes = await db
+      .select()
+      .from(customAddonGiftBoxes)
+      .where(and(eq(customAddonGiftBoxes.orderId, orderId), eq(customAddonGiftBoxes.buyerUserId, me.userId)))
+      .orderBy(asc(customAddonGiftBoxes.orderItemId), asc(customAddonGiftBoxes.position));
+    // Only the original buyer personalizes these. If the order has boxes but
+    // none belong to this user, treat it as not-yours rather than leaking an
+    // empty list for someone else's order.
+    if (boxes.length === 0) {
+      const [anyBox] = await db
+        .select({ id: customAddonGiftBoxes.id })
+        .from(customAddonGiftBoxes)
+        .where(eq(customAddonGiftBoxes.orderId, orderId))
+        .limit(1);
+      if (anyBox) return res.status(403).json({ message: "Not your gift boxes" });
+    }
+    res.json({ boxes: boxes.map(serializeGiftBox) });
+  });
+
+  // PATCH — personalize one box. mode 'foundation' (the foundation picks the
+  // recipient) needs only the optional from-name/message; mode 'known' (the
+  // buyer names someone) requires recipient name + phone + shipping address so
+  // the fulfiller can mail the physical box.
+  app.patch("/api/orders/:id/gift-boxes/:boxId", async (req, res) => {
+    const me = await requireCustomer(req, res);
+    if (!me) return;
+    const orderId = String(req.params.id);
+    const boxId = String(req.params.boxId);
+    const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    // Personalization is only meaningful on a paid, un-refunded order.
+    if (order.status !== "paid") return res.status(400).json({ message: "This order isn't ready for gifting yet" });
+    if (order.refundedAt) return res.status(400).json({ message: "This order was refunded" });
+
+    const [box] = await db.select().from(customAddonGiftBoxes).where(eq(customAddonGiftBoxes.id, boxId));
+    if (!box || box.orderId !== orderId) return res.status(404).json({ message: "Gift box not found" });
+    if (box.buyerUserId !== me.userId) return res.status(403).json({ message: "Not your gift box" });
+
+    const parsed = parseGiftBox(req.body);
+    if (!parsed.ok) return res.status(400).json({ message: parsed.message });
+
+    const [updated] = await db
+      .update(customAddonGiftBoxes)
+      .set({ ...parsed.v, personalizedAt: new Date() })
+      .where(eq(customAddonGiftBoxes.id, boxId))
+      .returning();
+    res.json({ box: serializeGiftBox(updated) });
+  });
+}
+
+// ─── Gift-box helpers (Task #2061) ────────────────────────────────────
+const GIFT_BOX_NAME_MAX = 120;
+const GIFT_BOX_MESSAGE_MAX = 500;
+const GIFT_BOX_ADDR_MAX = 200;
+const GIFT_BOX_SHORT_MAX = 60;
+
+function clampStr(v: unknown, max: number): string | null {
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  return s.slice(0, max);
+}
+
+type ParsedGiftBox = {
+  mode: "foundation" | "known";
+  recipientName: string | null;
+  recipientPhone: string | null;
+  address1: string | null;
+  address2: string | null;
+  city: string | null;
+  zip: string | null;
+  state: string | null;
+  giverName: string | null;
+  message: string | null;
+};
+
+// Validate a personalization payload. "foundation" only needs the optional
+// from-name + note; "known" requires a recipient name, phone, and a mailable
+// address (street/zip/state) so the fulfiller can ship the box.
+function parseGiftBox(body: any): { ok: true; v: ParsedGiftBox } | { ok: false; message: string } {
+  const mode = String(body?.mode ?? "").trim();
+  if (mode !== "foundation" && mode !== "known") {
+    return { ok: false, message: "Pick who the gift is for" };
+  }
+  const giverName = clampStr(body?.giverName, GIFT_BOX_NAME_MAX);
+  const message = clampStr(body?.message, GIFT_BOX_MESSAGE_MAX);
+  if (mode === "foundation") {
+    return {
+      ok: true,
+      v: {
+        mode,
+        recipientName: null,
+        recipientPhone: null,
+        address1: null,
+        address2: null,
+        city: null,
+        zip: null,
+        state: null,
+        giverName,
+        message,
+      },
+    };
+  }
+  const recipientName = clampStr(body?.recipientName, GIFT_BOX_NAME_MAX);
+  const recipientPhone = clampStr(body?.recipientPhone, GIFT_BOX_SHORT_MAX);
+  const address1 = clampStr(body?.address1, GIFT_BOX_ADDR_MAX);
+  const address2 = clampStr(body?.address2, GIFT_BOX_ADDR_MAX);
+  // City is optional — the June Figma collects street / address-2 / ZIP /
+  // state but no discrete city field (it's derivable from the ZIP). The
+  // column stays so a future design can surface it; we just don't require it.
+  const city = clampStr(body?.city, GIFT_BOX_SHORT_MAX);
+  const zip = clampStr(body?.zip, GIFT_BOX_SHORT_MAX);
+  const state = clampStr(body?.state, GIFT_BOX_SHORT_MAX);
+  if (!recipientName) return { ok: false, message: "Add the recipient's name" };
+  if (!recipientPhone) return { ok: false, message: "Add a phone number so the box can be delivered" };
+  if (!address1) return { ok: false, message: "Add a street address" };
+  if (!state) return { ok: false, message: "Add a state" };
+  if (!zip) return { ok: false, message: "Add a ZIP code" };
+  return {
+    ok: true,
+    v: { mode, recipientName, recipientPhone, address1, address2, city, zip, state, giverName, message },
+  };
+}
+
+// Buyer-safe shape. The buyer owns this data, so we return everything except
+// internal snapshot bookkeeping the client doesn't need.
+function serializeGiftBox(b: CustomAddonGiftBox) {
+  return {
+    id: b.id,
+    orderId: b.orderId,
+    orderItemId: b.orderItemId,
+    position: b.position,
+    orgName: b.orgName,
+    mode: b.mode,
+    recipientName: b.recipientName,
+    recipientPhone: b.recipientPhone,
+    address1: b.address1,
+    address2: b.address2,
+    city: b.city,
+    zip: b.zip,
+    state: b.state,
+    giverName: b.giverName,
+    message: b.message,
+    personalized: !!b.mode,
+    personalizedAt: b.personalizedAt,
+  };
+}
+
+// Per-order {total, personalized} counts for the Orders list + Welcome
+// payload so each surface can show "2 of 3 personalized" without pulling
+// every box. Scoped to the buyer's own boxes.
+export async function loadGiftBoxSummaries(
+  orderIds: string[],
+  buyerUserId: string,
+): Promise<Map<string, { total: number; personalized: number }>> {
+  const out = new Map<string, { total: number; personalized: number }>();
+  if (orderIds.length === 0) return out;
+  const rows = await db
+    .select({ orderId: customAddonGiftBoxes.orderId, mode: customAddonGiftBoxes.mode })
+    .from(customAddonGiftBoxes)
+    .where(and(inArray(customAddonGiftBoxes.orderId, orderIds), eq(customAddonGiftBoxes.buyerUserId, buyerUserId)));
+  for (const r of rows) {
+    const cur = out.get(r.orderId) ?? { total: 0, personalized: 0 };
+    cur.total += 1;
+    if (r.mode) cur.personalized += 1;
+    out.set(r.orderId, cur);
+  }
+  return out;
 }
 
 // Helper used by /api/orders + /api/admin/orders to enrich rows with

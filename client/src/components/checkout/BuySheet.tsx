@@ -27,7 +27,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { IconButton } from "@/components/ui/IconButton";
 import { SheetBack, SheetClose } from "@/components/ui/SheetChrome";
 import { cn } from "@/lib/utils";
-import { Check, ChevronRight, Gift, Minus, Plus, ShoppingBag } from "lucide-react";
+import { Check, ChevronRight, Gift, Minus, Plus, ShoppingBag, Sparkles } from "lucide-react";
 import { VinylPreview } from "@/components/VinylPreview";
 import {
   DEFAULT_JACKET_UPGRADE,
@@ -162,35 +162,224 @@ function Group({
   );
 }
 
-// Task #1630 — small round +/- control for the custom-addon quantity
-// stepper. 44px touch target per the brand's touch-target rule.
-function IconStep({
-  icon,
-  onClick,
-  disabled,
-  testId,
-  label,
+// Task #1630 / #2061 — Apple-Music rounded stepper pill: − value + inside one
+// capsule (matches the June Figma). Both controls keep a 44px touch target per
+// the brand's touch-target rule. Used for the donation box quantity and the
+// fan-chosen gift amount.
+function StepperPill({
+  value,
+  onDec,
+  onInc,
+  decDisabled,
+  incDisabled,
+  decLabel,
+  incLabel,
+  decTestId,
+  incTestId,
+  valueTestId,
+  valueClassName,
 }: {
-  icon: React.ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  testId: string;
-  label: string;
+  value: React.ReactNode;
+  onDec: () => void;
+  onInc: () => void;
+  decDisabled?: boolean;
+  incDisabled?: boolean;
+  decLabel: string;
+  incLabel: string;
+  decTestId: string;
+  incTestId: string;
+  valueTestId?: string;
+  valueClassName?: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      data-testid={testId}
-      className={cn(
-        "flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.08] transition-colors",
-        disabled ? "text-fan-faint" : "text-fan-primary hover:bg-white/[0.14]",
+    <div className="inline-flex items-center rounded-full bg-white/[0.08]">
+      <IconButton
+        variant="ghost"
+        label={decLabel}
+        onClick={onDec}
+        disabled={decDisabled}
+        data-testid={decTestId}
+      >
+        <Minus strokeWidth={2.5} />
+      </IconButton>
+      <span
+        className={cn("text-center text-base font-semibold tabular-nums px-1", valueClassName)}
+        data-testid={valueTestId}
+      >
+        {value}
+      </span>
+      <IconButton
+        variant="ghost"
+        label={incLabel}
+        onClick={onInc}
+        disabled={incDisabled}
+        data-testid={incTestId}
+      >
+        <Plus strokeWidth={2.5} />
+      </IconButton>
+    </div>
+  );
+}
+
+// Task #2061 — the two "personalize after purchase" reassurance lines from the
+// June Figma. They replace the old inline anonymous/specific recipient toggle:
+// recipient choice now happens AFTER checkout (the post-purchase "Who's the
+// gift for?" step), so the buy sheet only reassures the fan it'll be easy.
+function ReassuranceLines({ className }: { className?: string }) {
+  return (
+    <div className={cn("grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4", className)}>
+      <div className="flex items-start gap-2.5">
+        <Sparkles
+          className="w-4 h-4 mt-0.5 flex-shrink-0 text-[color:var(--brand-mint)]"
+          strokeWidth={2.25}
+        />
+        <div className="flex flex-col">
+          <span className="text-sm font-semibold text-fan-primary leading-snug">
+            Personalize after purchase
+          </span>
+          <span className="text-xs text-fan-faint leading-snug mt-0.5">
+            Keep a gift anonymous or add a message, and choose who receives each box.
+          </span>
+        </div>
+      </div>
+      <div className="flex items-start gap-2.5">
+        <Gift
+          className="w-4 h-4 mt-0.5 flex-shrink-0 text-[color:var(--brand-mint)]"
+          strokeWidth={2.25}
+        />
+        <div className="flex flex-col">
+          <span className="text-sm font-semibold text-fan-primary leading-snug">
+            Giving more than one?
+          </span>
+          <span className="text-xs text-fan-faint leading-snug mt-0.5">
+            Tell us who each gift is for after checkout — we'll make it easy.
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Task #844 / #1630 / #1842 / #2061 — a single Gift-of-Hope-style donation
+// add-on card, shared by the mobile and desktop buy sheets so the two can no
+// longer drift. Selection is driven by the inline quantity stepper (0 = not
+// added); when ≥1 AND the add-on lets the fan choose an amount, the donation
+// tiers appear. Recipient assignment happens after checkout — see
+// <ReassuranceLines>. Kept generic: any non-profit reuses this under its own
+// add-on name (never hard-codes Nightbirde).
+function CustomAddonCard({
+  addon,
+  qty,
+  amountCents,
+  onQtyChange,
+  onAmountChange,
+  maxQty,
+}: {
+  addon: CustomAddon;
+  qty: number;
+  amountCents: number;
+  onQtyChange: (next: number) => void;
+  onAmountChange: (cents: number) => void;
+  maxQty: number;
+}) {
+  const selected = qty > 0;
+  const minCents = addon.minAmountCents ?? 0;
+  const presets = addon.presetAmountsCents ?? [];
+  const AMOUNT_STEP = 2500;
+  const setQty = (next: number) => onQtyChange(Math.max(0, Math.min(maxQty, next)));
+  const setAmount = (cents: number) => onAmountChange(Math.max(minCents, cents));
+  return (
+    <div className="rounded-2xl bg-white/[0.05] p-4" data-testid={`card-custom-addon-${addon.id}`}>
+      <div className="flex gap-3.5">
+        <div
+          className="w-20 h-20 rounded-xl bg-white/[0.06] flex-shrink-0 overflow-hidden flex items-center justify-center"
+          data-testid={`img-custom-addon-${addon.id}`}
+        >
+          {addon.imageUrl ? (
+            <img src={addon.imageUrl} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <Gift className="w-6 h-6 text-fan-faint" />
+          )}
+        </div>
+        <div className="flex flex-col flex-1 min-w-0">
+          <span className="text-base font-semibold text-fan-primary">{addon.name}</span>
+          <span className="text-xs text-fan-secondary leading-snug mt-0.5">
+            {addon.description || `Supports ${addon.orgName}.`}
+          </span>
+          <div className="flex items-center gap-3 mt-3">
+            <StepperPill
+              value={qty}
+              onDec={() => setQty(qty - 1)}
+              onInc={() => setQty(qty + 1)}
+              decDisabled={qty <= 0}
+              incDisabled={qty >= maxQty}
+              decLabel="Remove one box"
+              incLabel="Add one box"
+              decTestId={`button-custom-addon-qty-dec-${addon.id}`}
+              incTestId={`button-custom-addon-qty-inc-${addon.id}`}
+              valueTestId={`text-custom-addon-qty-${addon.id}`}
+              valueClassName="min-w-[1.75rem]"
+            />
+            {addon.fanChoosesAmount ? (
+              <span className="text-sm text-fan-faint">Optional</span>
+            ) : (
+              <span className="ml-auto text-sm font-semibold text-fan-primary">
+                + {dollars(addon.priceCents)} each
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Task #1842 — donation tiers, shown only when the operator flagged the
+          add-on as fan-chooses-amount and the fan has added at least one box.
+          Presets are quick-select chips; the stepper fine-tunes a custom amount.
+          The minimum floor is enforced here and again server-side. */}
+      {addon.fanChoosesAmount && selected && (
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-sm font-semibold text-fan-secondary">Your gift</span>
+            {minCents > 0 && (
+              <span className="text-xs text-fan-faint">
+                Minimum {dollars(minCents)} per box
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {presets.map((presetCents) => (
+              <button
+                key={presetCents}
+                type="button"
+                onClick={() => setAmount(presetCents)}
+                className={cn(
+                  "rounded-full px-4 py-2 text-sm font-semibold transition-colors",
+                  amountCents === presetCents
+                    ? "bg-white text-[color:var(--brand-bg)]"
+                    : "bg-white/[0.07] text-fan-secondary hover:bg-white/[0.11]",
+                )}
+                data-testid={`button-custom-addon-preset-${addon.id}-${presetCents}`}
+              >
+                {dollars(presetCents)}
+              </button>
+            ))}
+            <StepperPill
+              value={dollars(amountCents)}
+              onDec={() => setAmount(amountCents - AMOUNT_STEP)}
+              onInc={() => setAmount(amountCents + AMOUNT_STEP)}
+              decDisabled={amountCents <= minCents}
+              decLabel="Decrease gift amount"
+              incLabel="Increase gift amount"
+              decTestId={`button-custom-addon-amount-dec-${addon.id}`}
+              incTestId={`button-custom-addon-amount-inc-${addon.id}`}
+              valueTestId={`text-custom-addon-amount-${addon.id}`}
+              valueClassName="min-w-[4.5rem]"
+            />
+          </div>
+        </div>
       )}
-    >
-      {icon}
-    </button>
+
+      <ReassuranceLines className="mt-4 pt-4 border-t border-white/[0.06]" />
+    </div>
   );
 }
 
@@ -374,21 +563,17 @@ export function BuySheet({
   // toggling on), so the displayed total can't drift from what we
   // POST to /api/checkout/session.
   const [booklet, setBooklet] = useState(false);
-  // Task #844 / #1630 — custom non-profit add-ons (e.g. Nightbirde's
-  // "Gift of Hope" donation box) the fan ticked. Each can now be bought
-  // in quantity, and carries an anonymous/specific recipient choice the
-  // fan makes here. `customAddonQty` maps addon id → count (absent/0 =
-  // not selected); `customAddonMode` maps addon id → recipient choice
-  // (defaults to "anonymous"). Independent of every other line; the
-  // server re-validates eligibility + price on checkout.
+  // Task #844 / #1630 / #2061 — custom non-profit add-ons (e.g. Nightbirde's
+  // "Gift of Hope" donation box) the fan ticked. Each can be bought in
+  // quantity. `customAddonQty` maps addon id → count (absent/0 = not
+  // selected). Recipient assignment no longer happens here — the buyer
+  // personalizes each box after checkout. Independent of every other line;
+  // the server re-validates eligibility + price on checkout.
   const [customAddonQty, setCustomAddonQty] = useState<Record<string, number>>(() =>
     activeSelection?.giftAddonId && activeSelection.giftBoxQty
       ? { [activeSelection.giftAddonId]: activeSelection.giftBoxQty }
       : {},
   );
-  const [customAddonMode, setCustomAddonMode] = useState<
-    Record<string, "anonymous" | "specific">
-  >({});
   // Task #1842 — for variable-amount add-ons: maps addon id → fan-chosen
   // amount in cents. Initialized from the add-on's priceCents when the fan
   // first expands the picker; preset chips snap-select here.
@@ -768,14 +953,14 @@ export function BuySheet({
         booklet: booklet && bookletAvailable,
         bookletPriceCents:
           booklet && bookletAvailable ? bookletAddon!.priceCents : undefined,
-        // Task #844 / #1630 — ticked custom non-profit add-ons with the
-        // chosen quantity + anonymous/specific recipient intent. Server
+        // Task #844 / #1630 / #2061 — ticked custom non-profit add-ons with
+        // the chosen quantity. Recipient assignment no longer happens at
+        // checkout — the buyer personalizes each box after paying. Server
         // re-validates each is active + targets this album's artist and
         // always uses the stored price.
         customAddons: selectedCustomAddons.map((x) => ({
           id: x.addon.id,
           quantity: x.qty,
-          recipientMode: customAddonMode[x.addon.id] ?? "anonymous",
           // Task #1842 — send chosen amount for variable-amount add-ons.
           // The server enforces the minimum floor regardless.
           ...(x.addon.fanChoosesAmount && customAddonAmount[x.addon.id]
@@ -1203,188 +1388,30 @@ export function BuySheet({
                       </button>
                     )}
 
-                    {/* Custom non-profit add-ons */}
+                    {/* Task #844 / #2061 — custom non-profit donation add-ons
+                        (Gift of Hope). Shared <CustomAddonCard>; recipient
+                        assignment now happens after checkout via the
+                        "Who's the gift for?" step (see ReassuranceLines). */}
                     {selectedSku && customAddonsList.length > 0 && (
                       <div className="mb-2">
                         <SectionLabel>Add a little extra</SectionLabel>
-                        <Group>
-                          {customAddonsList.map((ca) => {
-                            const qty = customAddonQty[ca.id] ?? 0;
-                            const selected = qty > 0;
-                            const mode = customAddonMode[ca.id] ?? "anonymous";
-                            const setQty = (next: number) =>
-                              setCustomAddonQty((prev) => {
-                                const clamped = Math.max(0, Math.min(MAX_CUSTOM_ADDON_QTY, next));
-                                return { ...prev, [ca.id]: clamped };
-                              });
-                            return (
-                              <div key={ca.id}>
-                                <button
-                                  type="button"
-                                  onClick={() => setQty(selected ? 0 : 1)}
-                                  className={cn(
-                                    "w-full flex items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors",
-                                    selected
-                                      ? "bg-[color:var(--brand-mint)]/15"
-                                      : "hover:bg-white/[0.03]",
-                                  )}
-                                  data-testid={`button-toggle-custom-addon-${ca.id}`}
-                                >
-                                  <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
-                                    <div
-                                      className="w-12 h-12 rounded-md bg-white/[0.06] flex-shrink-0 overflow-hidden flex items-center justify-center"
-                                      data-testid={`img-custom-addon-${ca.id}`}
-                                    >
-                                      {ca.imageUrl ? (
-                                        <img src={ca.imageUrl} alt="" className="w-full h-full object-cover" />
-                                      ) : (
-                                        <Gift className="w-5 h-5 text-white/40" />
-                                      )}
-                                    </div>
-                                    <div className="flex flex-col flex-1 min-w-0">
-                                      <span className="text-sm font-medium">{ca.name}</span>
-                                      <span className="text-[12px] text-white/55 leading-snug mt-0.5">
-                                        {ca.description || `Supports ${ca.orgName}.`}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2 whitespace-nowrap">
-                                    <span className="text-[14px] font-semibold whitespace-nowrap">
-                                      {ca.fanChoosesAmount
-                                        ? selected
-                                          ? `+ ${dollars(customAddonAmount[ca.id] ?? ca.priceCents)}`
-                                          : "You choose"
-                                        : `+ ${dollars(ca.priceCents)}`}
-                                    </span>
-                                    {selected && (
-                                      <Check
-                                        className="w-[18px] h-[18px] text-[color:var(--brand-mint)]"
-                                        strokeWidth={2.75}
-                                      />
-                                    )}
-                                  </div>
-                                </button>
-                                {selected && (
-                                  <div className="px-4 pb-4 pt-1 flex flex-col gap-3 border-t border-white/[0.06]">
-                                    {ca.fanChoosesAmount && (() => {
-                                      const minCents = ca.minAmountCents ?? 0;
-                                      const currentCents = customAddonAmount[ca.id] ?? ca.priceCents;
-                                      const presets = ca.presetAmountsCents ?? [];
-                                      const setAmount = (cents: number) =>
-                                        setCustomAddonAmount((prev) => ({
-                                          ...prev,
-                                          [ca.id]: Math.max(minCents, cents),
-                                        }));
-                                      return (
-                                        <div className="flex flex-col gap-3 pt-3">
-                                          <span className="text-sm text-fan-secondary">Your gift</span>
-                                          {presets.length > 0 && (
-                                            <div className="flex flex-wrap gap-2">
-                                              {presets.map((presetCents) => (
-                                                <button
-                                                  key={presetCents}
-                                                  type="button"
-                                                  onClick={() => setAmount(presetCents)}
-                                                  className={cn(
-                                                    "rounded-full px-4 py-1.5 text-sm font-semibold transition-colors",
-                                                    currentCents === presetCents
-                                                      ? "bg-[color:var(--brand-mint)]/20 text-[color:var(--brand-mint)]"
-                                                      : "bg-white/[0.07] text-fan-secondary hover:bg-white/[0.11]",
-                                                  )}
-                                                  data-testid={`button-custom-addon-preset-${ca.id}-${presetCents}`}
-                                                >
-                                                  {dollars(presetCents)}
-                                                </button>
-                                              ))}
-                                            </div>
-                                          )}
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-fan-secondary text-sm">$</span>
-                                            <input
-                                              type="number"
-                                              min={(minCents / 100).toFixed(2)}
-                                              step="1"
-                                              value={(currentCents / 100).toFixed(2)}
-                                              onChange={(e) => {
-                                                const raw = parseFloat(e.target.value);
-                                                if (!isNaN(raw) && raw > 0) setAmount(Math.round(raw * 100));
-                                              }}
-                                              className="flex-1 h-10 px-3 rounded-2xl bg-white/[0.07] border border-white/[0.09] text-base text-fan-primary placeholder:text-white/35 appearance-none focus:outline-none focus:border-white/25 tabular-nums"
-                                              data-testid={`input-custom-addon-amount-${ca.id}`}
-                                            />
-                                          </div>
-                                          {minCents > 0 && (
-                                            <p className="text-xs text-fan-faint">
-                                              Minimum gift: {dollars(minCents)}
-                                            </p>
-                                          )}
-                                        </div>
-                                      );
-                                    })()}
-                                    <div className="flex items-center justify-between gap-3 pt-3">
-                                      <span className="text-sm text-fan-secondary">How many?</span>
-                                      <div className="flex items-center gap-3">
-                                        <IconStep
-                                          icon={<Minus className="w-4 h-4" strokeWidth={2.5} />}
-                                          onClick={() => setQty(qty - 1)}
-                                          disabled={qty <= 1}
-                                          testId={`button-custom-addon-qty-dec-${ca.id}`}
-                                          label="Decrease quantity"
-                                        />
-                                        <span
-                                          className="text-base font-semibold tabular-nums w-6 text-center"
-                                          data-testid={`text-custom-addon-qty-${ca.id}`}
-                                        >
-                                          {qty}
-                                        </span>
-                                        <IconStep
-                                          icon={<Plus className="w-4 h-4" strokeWidth={2.5} />}
-                                          onClick={() => setQty(qty + 1)}
-                                          disabled={qty >= MAX_CUSTOM_ADDON_QTY}
-                                          testId={`button-custom-addon-qty-inc-${ca.id}`}
-                                          label="Increase quantity"
-                                        />
-                                      </div>
-                                    </div>
-                                    <div className="flex flex-col gap-2">
-                                      <span className="text-sm text-fan-secondary">Who is this for?</span>
-                                      <div className="grid grid-cols-2 gap-1 rounded-lg bg-white/[0.04] p-1">
-                                        {(
-                                          [
-                                            ["anonymous", "Anyone in need"],
-                                            ["specific", "Someone specific"],
-                                          ] as const
-                                        ).map(([value, copy]) => (
-                                          <button
-                                            key={value}
-                                            type="button"
-                                            onClick={() =>
-                                              setCustomAddonMode((prev) => ({ ...prev, [ca.id]: value }))
-                                            }
-                                            className={cn(
-                                              "rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                                              mode === value
-                                                ? "bg-[color:var(--brand-mint)]/20 text-fan-primary"
-                                                : "text-fan-secondary hover:text-fan-primary",
-                                            )}
-                                            data-testid={`button-custom-addon-recipient-${value}-${ca.id}`}
-                                          >
-                                            {copy}
-                                          </button>
-                                        ))}
-                                      </div>
-                                      <p className="text-xs text-fan-faint leading-snug">
-                                        {mode === "specific"
-                                          ? "You'll be able to assign the copies and certificates you purchase to specific recipients after checkout."
-                                          : "These go to fans the foundation chooses. You can still assign your own purchased copies and certificates to recipients after checkout."}
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </Group>
+                        <div className="flex flex-col gap-3">
+                          {customAddonsList.map((ca) => (
+                            <CustomAddonCard
+                              key={ca.id}
+                              addon={ca}
+                              qty={customAddonQty[ca.id] ?? 0}
+                              amountCents={customAddonAmount[ca.id] ?? ca.priceCents}
+                              maxQty={MAX_CUSTOM_ADDON_QTY}
+                              onQtyChange={(next) =>
+                                setCustomAddonQty((prev) => ({ ...prev, [ca.id]: next }))
+                              }
+                              onAmountChange={(cents) =>
+                                setCustomAddonAmount((prev) => ({ ...prev, [ca.id]: cents }))
+                              }
+                            />
+                          ))}
+                        </div>
                       </div>
                     )}
                   </>
@@ -2164,200 +2191,30 @@ export function BuySheet({
                   </button>
                 )}
 
-                {/* Task #844 / #1630 — Operator-built custom non-profit
-                    add-ons (e.g. Nightbirde's "Gift of Hope" donation
-                    box). Each can be bought in quantity and carries an
-                    anonymous/specific recipient choice. Shows the owning
-                    non-profit so the fan knows where the money goes. */}
+                {/* Task #844 / #2061 — Operator-built custom non-profit
+                    add-ons (e.g. Nightbirde's "Gift of Hope" donation box).
+                    Shared <CustomAddonCard>; recipient assignment now happens
+                    after checkout via the "Who's the gift for?" step. */}
                 {selectedSku && customAddonsList.length > 0 && !isCdPlaceholder && (
                   <div className="mb-5">
                     <SectionLabel>Add a little extra</SectionLabel>
-                    <Group>
-                      {customAddonsList.map((ca) => {
-                        const qty = customAddonQty[ca.id] ?? 0;
-                        const selected = qty > 0;
-                        const mode = customAddonMode[ca.id] ?? "anonymous";
-                        const setQty = (next: number) =>
-                          setCustomAddonQty((prev) => {
-                            const clamped = Math.max(0, Math.min(MAX_CUSTOM_ADDON_QTY, next));
-                            return { ...prev, [ca.id]: clamped };
-                          });
-                        return (
-                          <div key={ca.id}>
-                            <button
-                              type="button"
-                              onClick={() => setQty(selected ? 0 : 1)}
-                              className={cn(
-                                "w-full flex items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors",
-                                selected
-                                  ? "bg-[color:var(--brand-mint)]/15"
-                                  : "hover:bg-white/[0.03]",
-                              )}
-                              data-testid={`button-toggle-custom-addon-${ca.id}`}
-                            >
-                              <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
-                                <div
-                                  className="w-12 h-12 rounded-md bg-white/[0.06] flex-shrink-0 overflow-hidden flex items-center justify-center"
-                                  data-testid={`img-custom-addon-${ca.id}`}
-                                >
-                                  {ca.imageUrl ? (
-                                    <img src={ca.imageUrl} alt="" className="w-full h-full object-cover" />
-                                  ) : (
-                                    <Gift className="w-5 h-5 text-white/40" />
-                                  )}
-                                </div>
-                                <div className="flex flex-col flex-1 min-w-0">
-                                  <span className="text-sm font-medium">{ca.name}</span>
-                                  <span className="text-[12px] text-white/55 leading-snug mt-0.5">
-                                    {ca.description || `Supports ${ca.orgName}.`}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 whitespace-nowrap">
-                                <span className="text-[14px] font-semibold whitespace-nowrap">
-                                  {ca.fanChoosesAmount
-                                    ? selected
-                                      ? `+ ${dollars(customAddonAmount[ca.id] ?? ca.priceCents)}`
-                                      : "You choose"
-                                    : `+ ${dollars(ca.priceCents)}`}
-                                </span>
-                                {selected && (
-                                  <Check
-                                    className="w-[18px] h-[18px] text-[color:var(--brand-mint)]"
-                                    strokeWidth={2.75}
-                                  />
-                                )}
-                              </div>
-                            </button>
-                            {selected && (
-                              <div className="px-4 pb-4 pt-1 flex flex-col gap-3 border-t border-white/[0.06]">
-                                {/* Task #1842 — variable-amount picker. Shown
-                                    when the operator has flagged this add-on
-                                    as fan-chooses-amount. Presets are quick-
-                                    select chips; the text input lets the fan
-                                    type their own amount. The minimum floor is
-                                    enforced here and again server-side. */}
-                                {ca.fanChoosesAmount && (() => {
-                                  const minCents = ca.minAmountCents ?? 0;
-                                  const currentCents = customAddonAmount[ca.id] ?? ca.priceCents;
-                                  const presets = ca.presetAmountsCents ?? [];
-                                  const setAmount = (cents: number) =>
-                                    setCustomAddonAmount((prev) => ({
-                                      ...prev,
-                                      [ca.id]: Math.max(minCents, cents),
-                                    }));
-                                  return (
-                                    <div className="flex flex-col gap-3 pt-3">
-                                      <span className="text-sm text-fan-secondary">Your gift</span>
-                                      {presets.length > 0 && (
-                                        <div className="flex flex-wrap gap-2">
-                                          {presets.map((presetCents) => (
-                                            <button
-                                              key={presetCents}
-                                              type="button"
-                                              onClick={() => setAmount(presetCents)}
-                                              className={cn(
-                                                "rounded-full px-4 py-1.5 text-sm font-semibold transition-colors",
-                                                currentCents === presetCents
-                                                  ? "bg-[color:var(--brand-mint)]/20 text-[color:var(--brand-mint)]"
-                                                  : "bg-white/[0.07] text-fan-secondary hover:bg-white/[0.11]",
-                                              )}
-                                              data-testid={`button-custom-addon-preset-${ca.id}-${presetCents}`}
-                                            >
-                                              {dollars(presetCents)}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      )}
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-fan-secondary text-sm">$</span>
-                                        <input
-                                          type="number"
-                                          min={(minCents / 100).toFixed(2)}
-                                          step="1"
-                                          value={(currentCents / 100).toFixed(2)}
-                                          onChange={(e) => {
-                                            const raw = parseFloat(e.target.value);
-                                            if (!isNaN(raw) && raw > 0) setAmount(Math.round(raw * 100));
-                                          }}
-                                          className="flex-1 h-10 px-3 rounded-2xl bg-white/[0.07] border border-white/[0.09] text-base text-fan-primary placeholder:text-white/35 appearance-none focus:outline-none focus:border-white/25 tabular-nums"
-                                          data-testid={`input-custom-addon-amount-${ca.id}`}
-                                        />
-                                      </div>
-                                      {minCents > 0 && (
-                                        <p className="text-xs text-fan-faint">
-                                          Minimum gift: {dollars(minCents)}
-                                        </p>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
-                                {/* Quantity stepper — total scales by count */}
-                                <div className="flex items-center justify-between gap-3 pt-3">
-                                  <span className="text-sm text-fan-secondary">How many?</span>
-                                  <div className="flex items-center gap-3">
-                                    <IconStep
-                                      icon={<Minus className="w-4 h-4" strokeWidth={2.5} />}
-                                      onClick={() => setQty(qty - 1)}
-                                      disabled={qty <= 1}
-                                      testId={`button-custom-addon-qty-dec-${ca.id}`}
-                                      label="Decrease quantity"
-                                    />
-                                    <span
-                                      className="text-base font-semibold tabular-nums w-6 text-center"
-                                      data-testid={`text-custom-addon-qty-${ca.id}`}
-                                    >
-                                      {qty}
-                                    </span>
-                                    <IconStep
-                                      icon={<Plus className="w-4 h-4" strokeWidth={2.5} />}
-                                      onClick={() => setQty(qty + 1)}
-                                      disabled={qty >= MAX_CUSTOM_ADDON_QTY}
-                                      testId={`button-custom-addon-qty-inc-${ca.id}`}
-                                      label="Increase quantity"
-                                    />
-                                  </div>
-                                </div>
-                                {/* Anonymous vs. specific recipient choice */}
-                                <div className="flex flex-col gap-2">
-                                  <span className="text-sm text-fan-secondary">Who is this for?</span>
-                                  <div className="grid grid-cols-2 gap-1 rounded-lg bg-white/[0.04] p-1">
-                                    {(
-                                      [
-                                        ["anonymous", "Anyone in need"],
-                                        ["specific", "Someone specific"],
-                                      ] as const
-                                    ).map(([value, copy]) => (
-                                      <button
-                                        key={value}
-                                        type="button"
-                                        onClick={() =>
-                                          setCustomAddonMode((prev) => ({ ...prev, [ca.id]: value }))
-                                        }
-                                        className={cn(
-                                          "rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                                          mode === value
-                                            ? "bg-[color:var(--brand-mint)]/20 text-fan-primary"
-                                            : "text-fan-secondary hover:text-fan-primary",
-                                        )}
-                                        data-testid={`button-custom-addon-recipient-${value}-${ca.id}`}
-                                      >
-                                        {copy}
-                                      </button>
-                                    ))}
-                                  </div>
-                                  <p className="text-xs text-fan-faint leading-snug">
-                                    {mode === "specific"
-                                      ? "You'll be able to assign the copies and certificates you purchase to specific recipients after checkout."
-                                      : "These go to fans the foundation chooses. You can still assign your own purchased copies and certificates to recipients after checkout."}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </Group>
+                    <div className="flex flex-col gap-3">
+                      {customAddonsList.map((ca) => (
+                        <CustomAddonCard
+                          key={ca.id}
+                          addon={ca}
+                          qty={customAddonQty[ca.id] ?? 0}
+                          amountCents={customAddonAmount[ca.id] ?? ca.priceCents}
+                          maxQty={MAX_CUSTOM_ADDON_QTY}
+                          onQtyChange={(next) =>
+                            setCustomAddonQty((prev) => ({ ...prev, [ca.id]: next }))
+                          }
+                          onAmountChange={(cents) =>
+                            setCustomAddonAmount((prev) => ({ ...prev, [ca.id]: cents }))
+                          }
+                        />
+                      ))}
+                    </div>
                   </div>
                 )}
                 </>

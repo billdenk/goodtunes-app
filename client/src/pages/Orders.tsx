@@ -16,7 +16,8 @@ import { track } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { CertPdfViewerSheet } from "@/components/ui/CertPdfViewerSheet";
-import { Check, Truck, Package, MapPin, ExternalLink, Award, Clock, Lock, Printer } from "lucide-react";
+import { Check, Truck, Package, MapPin, ExternalLink, Award, Clock, Lock, Printer, Gift } from "lucide-react";
+import { GiftBoxPersonalizer } from "@/components/checkout/GiftBoxPersonalizer";
 import type { StripeAddressSnapshot, AlbumFormat } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 import { buyEnabled } from "@/lib/platform";
@@ -109,6 +110,10 @@ type OrderRow = {
     jacketUpgrade?: JacketUpgrade | null;
   }[];
   gift: GiftInfo | null;
+  // Task #2061 — per-recipient gift boxes for custom ("Gift of Hope")
+  // add-ons. `total` boxes were created at checkout; `personalized` have
+  // had a recipient/mode chosen. Null on orders with no custom add-on.
+  giftBoxSummary?: { total: number; personalized: number } | null;
 };
 
 const PHYSICAL_KINDS = new Set(["vinyl", "cassette", "cd", "bundle"]);
@@ -178,6 +183,8 @@ export function Orders() {
   const { data: orders, isLoading } = useQuery<OrderRow[]>({ queryKey: ["/api/orders"] });
   const { toast } = useToast();
   const [openOrderId, setOpenOrderId] = useState<string | null>(null);
+  // Task #2061 — which order's gift-box personalizer sheet is open.
+  const [giftBoxOrderId, setGiftBoxOrderId] = useState<string | null>(null);
   // Task #538 — phone verification gate for gift mutations. The server
   // returns `{ requiresPhoneVerification: true }` on 403; we open the
   // shared verify sheet and re-run the pending mutation on success.
@@ -453,6 +460,30 @@ export function Orders() {
                   <span aria-hidden className="text-fan-faint">›</span>
                 </button>
 
+                {o.giftBoxSummary && o.giftBoxSummary.total > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setGiftBoxOrderId(o.id)}
+                    className="mt-3 w-full text-left rounded-xl border border-[#FF7C06]/40 bg-[#FF7C06]/10 px-3 py-2.5 flex items-center gap-2.5 active:opacity-80"
+                    data-testid={`button-personalize-gifts-${o.id}`}
+                  >
+                    <Gift className="w-4 h-4 flex-shrink-0 text-[color:var(--brand-orange)]" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-white">
+                        {o.giftBoxSummary.personalized >= o.giftBoxSummary.total
+                          ? "Your gifts are set"
+                          : "Who are your gifts for?"}
+                      </span>
+                      <span className="block text-xs text-fan-secondary" data-testid={`text-giftbox-summary-${o.id}`}>
+                        {o.giftBoxSummary.personalized} of {o.giftBoxSummary.total} personalized
+                      </span>
+                    </span>
+                    <span className="flex-shrink-0 text-sm font-semibold text-[color:var(--brand-mint)]">
+                      {o.giftBoxSummary.personalized >= o.giftBoxSummary.total ? "Review" : "Personalize"}
+                    </span>
+                  </button>
+                )}
+
                 {o.cert && (
                   <CertConfirmationCard order={o} cert={o.cert} />
                 )}
@@ -539,6 +570,13 @@ export function Orders() {
         </div>
 
         <OrderDetailSheet order={openOrder} onClose={() => setOpenOrderId(null)} />
+
+        {giftBoxOrderId && (
+          <GiftBoxPersonalizer
+            orderId={giftBoxOrderId}
+            onClose={() => setGiftBoxOrderId(null)}
+          />
+        )}
 
         {/* Task #538 — phone verification sheet, opens whenever a gift
             mutation comes back with requiresPhoneVerification. */}

@@ -13,6 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { track } from "@/lib/analytics";
 import { VinylPreview } from "@/components/VinylPreview";
 import { CertNameConfirmCard } from "@/components/ui/CertNameConfirmCard";
+import { GiftBoxPersonalizer } from "@/components/checkout/GiftBoxPersonalizer";
+import { Gift } from "lucide-react";
 import {
   DEFAULT_JACKET_UPGRADE,
   resolveVinylColor,
@@ -69,6 +71,9 @@ type SessionResponse = {
   items: OrderItem[];
   copies?: OrderCopy[];
   album: AlbumLite | null;
+  // Task #2061 — count of "Gift of Hope" boxes on this order so we can
+  // auto-open the "Who's the gift for?" stepper when any are un-personalized.
+  giftBoxSummary?: { total: number; personalized: number } | null;
 };
 
 export function Welcome() {
@@ -100,6 +105,8 @@ export function Welcome() {
   const [giftSubmitting, setGiftSubmitting] = useState(false);
   const [giftShareUrl, setGiftShareUrl] = useState<string | null>(null);
   const [giftCopied, setGiftCopied] = useState(false);
+  // Task #2061 — post-purchase gift-box personalizer ("Who's the gift for?").
+  const [showPersonalizer, setShowPersonalizer] = useState(false);
 
   useEffect(() => {
     const sessionId = new URL(window.location.href).searchParams.get("session_id");
@@ -152,6 +159,33 @@ export function Welcome() {
     setSuggestedUsername(local);
     setUsernameInput(local);
   }, [user?.email]);
+
+  // Task #2061 — auto-open the gift-box stepper once when a freshly-paid order
+  // carries un-personalized boxes. Guarded per-order in sessionStorage so a
+  // buyer who closes it isn't re-prompted on every poll / revisit.
+  useEffect(() => {
+    const s = data?.giftBoxSummary;
+    if (!data?.order || !s || s.total <= 0) return;
+    const key = `gt:giftbox-autoopen:${data.order.id}`;
+    if (sessionStorage.getItem(key)) return;
+    if (s.personalized < s.total) {
+      sessionStorage.setItem(key, "1");
+      setShowPersonalizer(true);
+    }
+  }, [data?.order?.id, data?.giftBoxSummary?.total, data?.giftBoxSummary?.personalized]);
+
+  // Re-pull the checkout session so the gift-box count on this page reflects
+  // any boxes the buyer just personalized in the stepper.
+  const refreshSession = async () => {
+    const sessionId = new URL(window.location.href).searchParams.get("session_id");
+    if (!sessionId) return;
+    try {
+      const r = await apiRequest("GET", `/api/checkout/session/${sessionId}`);
+      setData(await r.json());
+    } catch {
+      /* best-effort — the stepper already saved server-side */
+    }
+  };
 
   const submitGift = async () => {
     if (!data?.order) return;
@@ -602,6 +636,33 @@ export function Welcome() {
           </div>
         )}
 
+        {/* Task #2061 — gift-box personalizer entry. The stepper auto-opens
+            once after checkout; this card lets the buyer reopen it and shows
+            how many of their gift boxes still need a recipient. */}
+        {data.giftBoxSummary && data.giftBoxSummary.total > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowPersonalizer(true)}
+            className="w-full text-left rounded-2xl border border-[#FF7C06]/40 bg-[#FF7C06]/10 p-4 mb-5 flex items-center gap-3 active:scale-[0.99] transition-transform"
+            data-testid="button-open-personalizer"
+          >
+            <span className="flex-shrink-0 w-11 h-11 rounded-full bg-[#FF7C06]/20 flex items-center justify-center text-[color:var(--brand-orange)]">
+              <Gift className="w-5 h-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-base font-semibold text-white">
+                {data.giftBoxSummary.personalized >= data.giftBoxSummary.total ? "Your gifts are set" : "Who are your gifts for?"}
+              </span>
+              <span className="block text-xs text-fan-secondary" data-testid="text-giftbox-summary">
+                {data.giftBoxSummary.personalized} of {data.giftBoxSummary.total} personalized
+              </span>
+            </span>
+            <span className="flex-shrink-0 text-sm font-semibold text-[color:var(--brand-mint)]">
+              {data.giftBoxSummary.personalized >= data.giftBoxSummary.total ? "Review" : "Personalize"}
+            </span>
+          </button>
+        )}
+
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5">
           <label className="block text-fan-faint text-[11px] uppercase tracking-wider font-semibold mb-1.5">
             Pick your handle
@@ -632,6 +693,20 @@ export function Welcome() {
           {savingUsername ? "One second…" : "Open my player"}
         </button>
       </div>
+
+      {showPersonalizer && data.order && (
+        <GiftBoxPersonalizer
+          orderId={data.order.id}
+          onClose={() => {
+            setShowPersonalizer(false);
+            void refreshSession();
+          }}
+          onAllDone={() => {
+            void refreshSession();
+            toast({ title: "Thanks — your gifts are on the way" });
+          }}
+        />
+      )}
     </main>
   );
 }

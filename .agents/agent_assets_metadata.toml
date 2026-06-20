@@ -257,3 +257,9 @@ id = "VoOdNo5CZUHnS5XXMeqey"
 uri = "file://.local/splatter_loaded.png"
 type = "image"
 title = "Hellbender 12\" Splatter — 32 disc swatches now loaded"
+
+[[outputs]]
+id = "VUqxF6CRxsnaanTUWJg-_"
+uri = "file://attached_assets/GoodDeed-Hope-2_1781912691192.pdf"
+type = "pdf"
+title = "GoodDeed — Hope (Nightbirde)"

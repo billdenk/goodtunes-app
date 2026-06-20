@@ -22,6 +22,7 @@ import {
   albumAddons,
   customAddons,
   customAddonArtists,
+  customAddonGiftBoxes,
   organizations,
   payoutFormatCosts,
   pressFormatCosts,
@@ -502,6 +503,36 @@ async function getOrderItems(orderId: string): Promise<OrderItemWithVinyl[]> {
       jacketUpgrade: (sku?.jacketUpgrade as JacketUpgrade | null) ?? null,
     };
   });
+}
+
+// Task #2061 — serialize one Gift-of-Hope box for the admin order queue.
+// `canSeePII` decides whether recipient name / phone / address / message
+// (and giver name) come through. When false the row is status-only so a
+// fulfiller can see "personalized, foundation chooses" without the PII.
+function adminGiftBoxView(
+  b: typeof customAddonGiftBoxes.$inferSelect,
+  canSeePII: boolean,
+) {
+  const base = {
+    id: b.id,
+    position: b.position,
+    mode: b.mode,
+    personalized: !!b.mode,
+    piiVisible: canSeePII,
+  };
+  if (!canSeePII) return base;
+  return {
+    ...base,
+    recipientName: b.recipientName,
+    recipientPhone: b.recipientPhone,
+    address1: b.address1,
+    address2: b.address2,
+    city: b.city,
+    zip: b.zip,
+    state: b.state,
+    giverName: b.giverName,
+    message: b.message,
+  };
 }
 
 // Assigns the next per-album GoodDeed number atomically. We rank by
@@ -2810,12 +2841,20 @@ export function registerCommerceRoutes(app: Express) {
     const copies = order
       ? await db.select().from(orderCopies).where(eq(orderCopies.orderId, order.id)).orderBy(asc(orderCopies.position))
       : [];
+    // Task #2061 — gift-box counts so /welcome can auto-open the "Who's the
+    // gift for?" stepper when this order carries un-personalized boxes.
+    let giftBoxSummary: { total: number; personalized: number } | null = null;
+    if (order) {
+      const { loadGiftBoxSummaries } = await import("./gifts");
+      giftBoxSummary = (await loadGiftBoxSummaries([order.id], a.userId)).get(order.id) ?? null;
+    }
     res.json({
       paymentStatus: session.payment_status,
       status: session.status,
       order: order ?? null,
       items: order ? await getOrderItems(order.id) : [],
       copies,
+      giftBoxSummary,
       album: album ? { artwork: album.artwork ?? null } : null,
     });
   });
@@ -2934,17 +2973,23 @@ export function registerCommerceRoutes(app: Express) {
       ? await db.select().from(signedCertCertificates).where(inArray(signedCertCertificates.orderId, orderIds))
       : [];
     const certByOrder = new Map(certRows.map((c) => [c.orderId, c]));
+    // Task #2061 — per-order gift-box counts so the Orders list can show
+    // "2 of 3 personalized" without pulling every box. Scoped to this buyer.
+    const { loadGiftBoxSummaries } = await import("./gifts");
+    const giftBoxByOrder = await loadGiftBoxSummaries(orderIds, a.userId);
     // Flat shape matches client/src/pages/Orders.tsx OrderRow.
     const out = await Promise.all(
       rows.map(async (r) => {
         const g = giftByOrder.get(r.order.id);
         const cert = certByOrder.get(r.order.id) ?? null;
+        const giftBoxSummary = giftBoxByOrder.get(r.order.id) ?? null;
         return {
           ...r.order,
           albumTitle: r.album.title,
           albumArtist: r.album.artist,
           albumArtwork: r.album.artwork,
           cert,
+          giftBoxSummary,
           items: await getOrderItems(r.order.id),
           gift: g
             ? {
@@ -2976,9 +3021,16 @@ export function registerCommerceRoutes(app: Express) {
     // Artist scoping: artists only see orders for their own albums.
     const userId = (req as any).session?.userId as string | undefined;
     let artistAlbumIds: string[] | null = null;
+    // Task #2061 — who may see Gift-of-Hope recipient PII. super_admin /
+    // admin see every box; a non_profit partner sees it only for boxes their
+    // own org owns; everyone else (fulfillment, artist, vendor) sees status only.
+    let viewerRole: string | null = null;
+    let viewerScopeId: string | null = null;
     if (userId) {
       const { getUserRole } = await import("./auth/roles");
       const roleInfo = await getUserRole(userId);
+      viewerRole = roleInfo?.role ?? null;
+      viewerScopeId = roleInfo?.roleScopeId ?? null;
       if (roleInfo?.role === "artist" && roleInfo.roleScopeId) {
         const albumRows = await db.execute<{ id: string }>(sql`
           SELECT id FROM albums
@@ -3017,6 +3069,20 @@ export function registerCommerceRoutes(app: Express) {
       .from(customAddons)
       .innerJoin(organizations, eq(organizations.id, customAddons.organizationId));
     const orgByAddonId = new Map(caRows.map((c) => [c.id, c.orgName]));
+    // Task #2061 — per-box gift assignments for the custom_addon lines. Load
+    // every box for this page in one shot, group by the order_item it belongs
+    // to, then serialize with PII gated by the viewer's role (see above).
+    const canSeeAllPii = viewerRole === "super_admin" || viewerRole === "admin";
+    const npoScopeId = viewerRole === "non_profit" ? viewerScopeId : null;
+    const giftBoxRows = orderIds.length > 0
+      ? await db.select().from(customAddonGiftBoxes).where(inArray(customAddonGiftBoxes.orderId, orderIds))
+      : [];
+    const giftBoxesByItem = new Map<string, typeof giftBoxRows>();
+    for (const b of giftBoxRows) {
+      const arr = giftBoxesByItem.get(b.orderItemId) ?? [];
+      arr.push(b);
+      giftBoxesByItem.set(b.orderItemId, arr);
+    }
     // Flat shape matches client/src/pages/AdminOrders.tsx AdminOrderRow.
     const out = await Promise.all(
       rows.map(async (r) => {
@@ -3024,7 +3090,19 @@ export function registerCommerceRoutes(app: Express) {
         const g = giftByOrder.get(r.order.id);
         const items = (await getOrderItems(r.order.id)).map((it) =>
           it.kind === "custom_addon"
-            ? { ...it, orgName: orgByAddonId.get(it.sku) ?? null }
+            ? {
+                ...it,
+                orgName: orgByAddonId.get(it.sku) ?? null,
+                giftBoxes: (giftBoxesByItem.get(it.id) ?? [])
+                  .slice()
+                  .sort((a, b) => a.position - b.position)
+                  .map((b) =>
+                    adminGiftBoxView(
+                      b,
+                      canSeeAllPii || (!!npoScopeId && b.organizationId === npoScopeId),
+                    ),
+                  ),
+              }
             : it,
         );
         return {
@@ -3327,6 +3405,57 @@ async function dispatchOrderReceipt(order: Order): Promise<void> {
 // `/welcome` page's just-in-case fetch. Safe to call twice — the unique
 // index on `stripe_checkout_session_id` prevents duplicates and we no-op
 // if the order is already paid.
+// Task #2061 — fan-out each paid custom-addon line into one gift-box row per
+// purchased unit so the buyer can personalize each box AFTER checkout (the
+// "Gift of Hope" gifting flow). Idempotent: positions are uniquely indexed
+// by (order_item_id, position) and we onConflictDoNothing, so re-running this
+// on a webhook replay or a second materialize never duplicates or clobbers a
+// row the buyer has already personalized. org/orgName/fulfiller are snapshotted
+// from the add-on at sale time so a later operator edit (or add-on deletion)
+// never rewrites who an already-paid box benefits. Generic — nothing here is
+// Nightbirde-specific.
+async function ensureGiftBoxesForOrder(order: Order): Promise<void> {
+  const caItems = await db
+    .select()
+    .from(orderItems)
+    .where(and(eq(orderItems.orderId, order.id), eq(orderItems.kind, "custom_addon")));
+  if (caItems.length === 0) return;
+  const addonIds = Array.from(new Set(caItems.map((i) => i.sku).filter(Boolean)));
+  // Resolve the owning non-profit for each add-on. The add-on may have been
+  // deleted since the sale; missing rows simply leave organizationId/orgName
+  // null on the snapshot (fulfiller still rides off the order_item).
+  const orgRows = addonIds.length
+    ? await db
+        .select({ id: customAddons.id, organizationId: customAddons.organizationId, orgName: organizations.name })
+        .from(customAddons)
+        .innerJoin(organizations, eq(organizations.id, customAddons.organizationId))
+        .where(inArray(customAddons.id, addonIds))
+    : [];
+  const orgByAddon = new Map(orgRows.map((r) => [r.id, { organizationId: r.organizationId, orgName: r.orgName }]));
+  const rows: (typeof customAddonGiftBoxes.$inferInsert)[] = [];
+  for (const item of caItems) {
+    const qty = Math.max(1, item.quantity ?? 1);
+    const org = orgByAddon.get(item.sku);
+    for (let pos = 1; pos <= qty; pos++) {
+      rows.push({
+        orderId: order.id,
+        orderItemId: item.id,
+        addonId: item.sku,
+        buyerUserId: order.customerId,
+        organizationId: org?.organizationId ?? null,
+        orgName: org?.orgName ?? null,
+        fulfiller: item.fulfiller ?? null,
+        position: pos,
+      });
+    }
+  }
+  if (rows.length === 0) return;
+  await db
+    .insert(customAddonGiftBoxes)
+    .values(rows)
+    .onConflictDoNothing({ target: [customAddonGiftBoxes.orderItemId, customAddonGiftBoxes.position] });
+}
+
 // `deps.stripe` is a test-only seam: production always passes nothing and we
 // build a fresh client via getStripe(). The order-snapshot test
 // (server/commerce.orderSnapshots.db.test.ts) injects a stub so it can drive
@@ -3737,6 +3866,10 @@ export async function materializeOrderFromSession(
     // unlocks the shared "Love Life Tragedy (Bonus)" album. No-op for any
     // other album; idempotent (skips if already owned).
     await grantLltBonusIfEligible(db, customerId, albumId);
+    // Task #2061 — fan-out paid custom-addon lines into per-box rows the
+    // buyer personalizes after checkout. Idempotent; no-op when the order
+    // carries no custom-addon line.
+    await ensureGiftBoxesForOrder(order);
     // Decrement stock — guarded by `wasAlreadyPaid` so concurrent
     // materializations of the same session don't double-decrement.
     // Task #549 — multi-quantity orders subtract N, not 1.

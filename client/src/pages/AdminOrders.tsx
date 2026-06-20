@@ -80,6 +80,25 @@ export type AdminOrderRow = {
     // format / addon rows.
     fulfiller?: string | null;
     orgName?: string | null;
+    // Task #2061 — per-recipient gift boxes for this custom_addon line.
+    // PII fields only present when the viewer may see them (super_admin /
+    // admin, or the owning non-profit); otherwise status-only.
+    giftBoxes?: {
+      id: string;
+      position: number;
+      mode: "foundation" | "known" | null;
+      personalized: boolean;
+      piiVisible: boolean;
+      recipientName?: string | null;
+      recipientPhone?: string | null;
+      address1?: string | null;
+      address2?: string | null;
+      city?: string | null;
+      zip?: string | null;
+      state?: string | null;
+      giverName?: string | null;
+      message?: string | null;
+    }[];
   }[];
   gift: GiftInfo | null;
   // Task #73 — Order Desk fulfillment lifecycle.
@@ -670,6 +689,57 @@ function AdminOrdersInner() {
                                 </span>
                               </span>
                             </div>
+                            {/* Task #2061 — per-recipient gift boxes. Status is
+                                always shown; recipient PII appears only when the
+                                server marked the box visible to this viewer. */}
+                            {it.giftBoxes && it.giftBoxes.length > 0 && (
+                              <div className="mt-1.5 flex flex-col gap-1.5" data-testid={`admin-gift-boxes-${it.id}`}>
+                                {it.giftBoxes.map((b) => {
+                                  const addr = [b.address1, b.address2].filter(Boolean).join(", ");
+                                  const cityLine = [b.city, b.state, b.zip].filter(Boolean).join(" ");
+                                  return (
+                                    <div
+                                      key={b.id}
+                                      className="rounded border border-emerald-200 bg-white px-2 py-1.5"
+                                      data-testid={`admin-gift-box-${b.id}`}
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="font-medium text-slate-700">Gift {b.position + 1}</span>
+                                        <span
+                                          className={`text-xs px-1.5 py-0.5 rounded-full ${
+                                            b.personalized
+                                              ? "bg-emerald-100 text-emerald-700"
+                                              : "bg-slate-100 text-slate-500"
+                                          }`}
+                                          data-testid={`admin-gift-box-status-${b.id}`}
+                                        >
+                                          {b.personalized
+                                            ? b.mode === "foundation"
+                                              ? "Foundation chooses"
+                                              : "Recipient added"
+                                            : "Awaiting recipient"}
+                                        </span>
+                                      </div>
+                                      {b.mode === "known" &&
+                                        (b.piiVisible ? (
+                                          <div className="mt-1 text-slate-600" data-testid={`admin-gift-box-pii-${b.id}`}>
+                                            <div className="font-medium text-slate-800">{b.recipientName || "—"}</div>
+                                            {b.recipientPhone && <div>{b.recipientPhone}</div>}
+                                            {addr && <div>{addr}</div>}
+                                            {cityLine && <div>{cityLine}</div>}
+                                            {b.giverName && <div className="text-slate-500">From {b.giverName}</div>}
+                                            {b.message && <div className="text-slate-500 italic">“{b.message}”</div>}
+                                          </div>
+                                        ) : (
+                                          <div className="mt-1 text-slate-400" data-testid={`admin-gift-box-pii-hidden-${b.id}`}>
+                                            Recipient details hidden
+                                          </div>
+                                        ))}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}

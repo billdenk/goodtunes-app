@@ -1685,6 +1685,66 @@ export const customAddonArtists = pgTable(
 );
 export type CustomAddonArtist = typeof customAddonArtists.$inferSelect;
 
+// ----- Per-box recipient personalization for custom add-ons (Task #2061) --
+// A custom add-on (e.g. the Nightbirde "Gift of Hope" donation box) can be
+// bought in quantity. Each purchased box becomes one collectable, gift-able
+// unit the BUYER personalizes AFTER checkout: either let the owning
+// foundation choose the recipient ("foundation") or hand it to someone the
+// buyer names + ships to ("known"). The owning non-profit / fulfiller reads
+// the named recipient's name + shipping address off these rows so they know
+// where to send the physical box.
+//
+// One row per purchased box (qty fans out at materialize time, mode=null =
+// not yet personalized). organizationId / orgName / fulfiller are snapshotted
+// from the add-on at sale so a later operator edit (or add-on deletion) never
+// rewrites who an already-paid box benefits. buyerUserId is who personalizes
+// it — snapshotted because album-copy ownership can transfer via gifting, but
+// the donation box stays with the original buyer. Generic by design: nothing
+// here is Nightbirde-specific.
+export const customAddonGiftBoxes = pgTable(
+  "custom_addon_gift_boxes",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+    orderItemId: varchar("order_item_id").notNull().references(() => orderItems.id, { onDelete: "cascade" }),
+    // Snapshot of custom_addons.id (no FK — the add-on may be deleted later
+    // while paid boxes must stay readable).
+    addonId: varchar("addon_id").notNull(),
+    // Who personalizes the box. The original buyer, snapshotted.
+    buyerUserId: varchar("buyer_user_id").notNull().references(() => customerUsers.id, { onDelete: "cascade" }),
+    // Snapshot of the owning non-profit + its display name + the free-text
+    // fulfiller string, all captured at sale (organizationId drives admin /
+    // foundation PII gating).
+    organizationId: varchar("organization_id"),
+    orgName: text("org_name"),
+    fulfiller: text("fulfiller"),
+    // 1..quantity within the order line.
+    position: integer("position").notNull().default(0),
+    // null = not personalized yet; "foundation" = foundation picks the
+    // recipient; "known" = buyer named a specific recipient (fields below).
+    mode: text("mode"),
+    recipientName: text("recipient_name"),
+    recipientPhone: text("recipient_phone"),
+    address1: text("address1"),
+    address2: text("address2"),
+    city: text("city"),
+    zip: text("zip"),
+    state: text("state"),
+    // Optional buyer-supplied "from" name + note that rides with the gift.
+    giverName: text("giver_name"),
+    message: text("message"),
+    personalizedAt: timestamp("personalized_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    itemPosUniq: uniqueIndex("custom_addon_gift_boxes_item_position_uniq").on(t.orderItemId, t.position),
+    orderIdx: index("custom_addon_gift_boxes_order_idx").on(t.orderId),
+    buyerIdx: index("custom_addon_gift_boxes_buyer_idx").on(t.buyerUserId),
+    orgIdx: index("custom_addon_gift_boxes_org_idx").on(t.organizationId),
+  }),
+);
+export type CustomAddonGiftBox = typeof customAddonGiftBoxes.$inferSelect;
+
 // ----- Generic entity ↔ Person contacts ---------------------------------
 // Task #294 — every entity kind that has contacts (vendor / manufacturer /
 // label / fulfillment_partner) shares a single join table here so the

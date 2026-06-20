@@ -7297,4 +7297,61 @@ SQL
 add_auto_goodsync_status_column dev  "${DATABASE_URL:-}"
 add_auto_goodsync_status_column prod "${PROD_DATABASE_URL:-}"
 
+# Task #2061 — per-box recipient personalization for custom add-ons (the
+# "Gift of Hope" gifting flow). custom_addon_gift_boxes holds one row per
+# purchased donation box; the buyer personalizes each AFTER checkout so the
+# owning non-profit / fulfiller gets a recipient name + shipping address.
+# shared/schema.ts declares the table; hand-apply the canonical CREATE TABLE
+# on BOTH dev and prod so the schema-drift guard stays green on a freshly-
+# cloned dev and the publish dev→prod diff stays empty. Idempotent.
+migrate_custom_addon_gift_boxes() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping custom_addon_gift_boxes migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS custom_addon_gift_boxes (
+  id              varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id        varchar NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  order_item_id   varchar NOT NULL REFERENCES order_items(id) ON DELETE CASCADE,
+  addon_id        varchar NOT NULL,
+  buyer_user_id   varchar NOT NULL REFERENCES customer_users(id) ON DELETE CASCADE,
+  organization_id varchar,
+  org_name        text,
+  fulfiller       text,
+  position        integer NOT NULL DEFAULT 0,
+  mode            text,
+  recipient_name  text,
+  recipient_phone text,
+  address1        text,
+  address2        text,
+  city            text,
+  zip             text,
+  state           text,
+  giver_name      text,
+  message         text,
+  personalized_at timestamp,
+  created_at      timestamp DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS custom_addon_gift_boxes_item_position_uniq
+  ON custom_addon_gift_boxes (order_item_id, position);
+CREATE INDEX IF NOT EXISTS custom_addon_gift_boxes_order_idx
+  ON custom_addon_gift_boxes (order_id);
+CREATE INDEX IF NOT EXISTS custom_addon_gift_boxes_buyer_idx
+  ON custom_addon_gift_boxes (buyer_user_id);
+CREATE INDEX IF NOT EXISTS custom_addon_gift_boxes_org_idx
+  ON custom_addon_gift_boxes (organization_id);
+COMMIT;
+SQL
+  then
+    echo "post-merge: custom_addon_gift_boxes migration ok on $label"
+  else
+    echo "post-merge: WARNING — custom_addon_gift_boxes migration failed on $label (continuing)"
+  fi
+}
+migrate_custom_addon_gift_boxes dev  "${DATABASE_URL:-}"
+migrate_custom_addon_gift_boxes prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror
