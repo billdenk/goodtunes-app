@@ -6445,6 +6445,52 @@ SQL
 backfill_task_1710_strip_apple_bio dev  "${DATABASE_URL:-}"
 backfill_task_1710_strip_apple_bio prod "${PROD_DATABASE_URL:-}"
 
+# Task #2057 — Re-strip Apple Music's boilerplate "Listen to music by … on
+# Apple Music." sentence out of person bios. The original task-1710 sweep
+# already ran (its marker is consumed), but the Apple Music *artist scraper*
+# path never routed its bio through the strip helper, so artists imported from
+# an Apple Music URL since then (e.g. CAKE) re-introduced the sentence into
+# people.bio. The import + save paths are now fixed in code; this fresh
+# marker-guarded sweep cleans the rows that re-dirtied in the meantime. Runs
+# once per DB on BOTH dev and prod. Idempotent + best-effort: a failure here
+# never blocks a merge.
+backfill_task_2057_restrip_apple_bio() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2057 apple-bio re-strip on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2057_restrip_apple_bio') THEN
+    RAISE NOTICE 'task-2057 apple-bio re-strip already applied — skipping';
+    RETURN;
+  END IF;
+
+  -- Remove the boilerplate sentence; if nothing alphanumeric survives, null it.
+  UPDATE people
+  SET bio = NULLIF(
+    trim(regexp_replace(bio, 'listen to music by .+? on apple music\.?', ' ', 'gi')),
+    ''
+  )
+  WHERE bio ~* 'listen to music by .+? on apple music';
+  UPDATE people SET bio = NULL
+  WHERE bio IS NOT NULL AND bio !~ '[A-Za-z0-9]';
+
+  INSERT INTO post_merge_data_backfills (name) VALUES ('task_2057_restrip_apple_bio');
+  RAISE NOTICE 'task-2057 apple-bio re-strip applied';
+END $$;
+SQL
+  then
+    echo "post-merge: task-2057 apple-bio re-strip ok on $label"
+  else
+    echo "post-merge: WARNING — task-2057 apple-bio re-strip failed on $label (continuing)"
+  fi
+}
+backfill_task_2057_restrip_apple_bio dev  "${DATABASE_URL:-}"
+backfill_task_2057_restrip_apple_bio prod "${PROD_DATABASE_URL:-}"
+
 # Task #1718 — Keep the GitHub build mirror in lock-step automatically.
 # Codemagic builds iOS from github.com/billdenk/goodtunes-app (branch main).
 # Replit is the source of truth; GitHub is only a build mirror. This step runs

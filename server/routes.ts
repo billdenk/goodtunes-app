@@ -14772,7 +14772,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       name: String(b.name),
       photoUrl,
       coverUrl: opt(b.coverUrl),
-      bio: opt(b.bio),
+      // Defense at the save path — a boilerplate-only Apple Music bio can
+      // never land in people.bio regardless of which preview produced it.
+      // opt() coerces to string|null first so a malformed non-string payload
+      // can't throw inside the strip helper.
+      bio: stripAppleMusicBoilerplate(opt(b.bio)) || null,
       appleMusicUrl: opt(b.appleMusicUrl),
       spotifyUrl: opt(b.spotifyUrl),
       tidalUrl: opt(b.tidalUrl),
@@ -14823,7 +14827,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.name !== undefined) updates.name = String(b.name);
     if (b.photoUrl !== undefined) updates.photoUrl = opt(b.photoUrl);
     if (b.coverUrl !== undefined) updates.coverUrl = opt(b.coverUrl);
-    if (b.bio !== undefined) updates.bio = opt(b.bio);
+    // Defense at the save path — strip the Apple Music boilerplate so a
+    // boilerplate-only bio collapses to empty instead of being persisted.
+    // opt() coerces to string|null first so a malformed non-string payload
+    // can't throw inside the strip helper.
+    if (b.bio !== undefined) updates.bio = stripAppleMusicBoilerplate(opt(b.bio)) || null;
     if (b.appleMusicUrl !== undefined) updates.appleMusicUrl = opt(b.appleMusicUrl);
     if (b.spotifyUrl !== undefined) {
       updates.spotifyUrl = opt(b.spotifyUrl);
@@ -15978,6 +15986,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // og:description is usually the real artist blurb, so we keep it.
         if (bio && /^artist\s*[·•|-]\s*[\d.,]+\s*[kmb]?\s*monthly listeners\.?$/i.test(bio.trim())) {
           bio = null;
+        }
+        // Apple Music's og:description is usually the real artist blurb, but
+        // frequently it's just "Listen to music by <Artist> on Apple Music."
+        // Every other scraper (generic person, label, vendor, plant,
+        // fulfillment) routes the bio through this helper; the streaming-
+        // artist path never did, so the boilerplate reached the admin BIO
+        // field raw. Strip it here too — collapse to null if nothing of
+        // substance survives.
+        if (bio) {
+          bio = stripAppleMusicBoilerplate(bio) || null;
         }
         rawImage = meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
         if (rawImage?.startsWith("//")) rawImage = `https:${rawImage}`;
