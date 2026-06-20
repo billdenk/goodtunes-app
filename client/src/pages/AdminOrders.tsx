@@ -704,7 +704,7 @@ function AdminOrdersInner() {
                                       data-testid={`admin-gift-box-${b.id}`}
                                     >
                                       <div className="flex items-center justify-between gap-2">
-                                        <span className="font-medium text-slate-700">Gift {b.position + 1}</span>
+                                        <span className="font-medium text-slate-700">Gift {b.position}</span>
                                         <span
                                           className={`text-xs px-1.5 py-0.5 rounded-full ${
                                             b.personalized

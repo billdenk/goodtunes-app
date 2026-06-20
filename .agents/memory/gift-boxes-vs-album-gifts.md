@@ -1,34 +1,33 @@
 ---
 name: Gift boxes vs album-claim gifts
-description: server/gifts.ts now hosts TWO unrelated gifting subsystems — don't conflate them
+description: Two unrelated gifting subsystems live side by side — don't conflate them
 ---
 
-`server/gifts.ts` contains two distinct, unrelated gifting flows. Confusing them
-breaks things.
+There are TWO distinct gifting flows that sound alike. Treat them as separate.
 
-1. **Album-claim gifts** (`gifts` table) — buyer marks a paid order/copy as a
-   gift, gets a `/gift/:token` claim link; the album + GoodDeed entitlement
-   transfers to whoever claims it. Recipient contact is for the claim link only.
+1. **Album-claim gifts** — buyer marks a paid order/copy as a gift and shares a
+   claim link; the album + GoodDeed entitlement transfers to whoever claims it.
+   Recipient contact exists only to deliver the claim link.
 
-2. **Custom-addon gift boxes** (`custom_addon_gift_boxes` table) — per-recipient
-   personalization of "fan-chooses-amount" donation add-ons (e.g. Gift of Hope).
-   One row per purchased box (quantity), materialized EMPTY at paid-time in
-   `materializeOrderFromSession` (idempotent, onConflictDoNothing), snapshotting
-   org/orgName/fulfiller. Buyer personalizes AFTER checkout via
-   `GET/PATCH /api/orders/:id/gift-boxes[/:boxId]`. Nothing is emailed to the
-   recipient — the foundation ships the box.
+2. **Custom-addon gift boxes** — per-recipient personalization of
+   fan-chooses-amount donation add-ons (e.g. Gift of Hope). One box per
+   purchased unit; the foundation physically ships each box. Nothing is emailed
+   to the recipient — the buyer fills in who each box is for after checkout.
 
-**PII boundary (custom-addon gift boxes):** recipient name/phone/address/message
-is visible only to super_admin/admin OR the `non_profit` partner whose role scope
-=== `box.organizationId`. The buyer can read their own boxes (gated on
-`box.buyerUserId`). Mirror this gate on any new read path or recipient PII leaks
-across orgs.
+**Guardrails (apply to the gift-box flow):**
+- Stay GENERIC. Every label comes from the box's snapshot org name — never
+  hard-code Nightbirde / "Gift of Hope".
+- Boxes are created EMPTY at paid-time and personalized later; creation must stay
+  idempotent (uniqueness is per order-item + position), so replays/webhook
+  retries never duplicate.
+- **PII boundary:** recipient name/phone/address/message is visible only to
+  super_admin/admin, the buyer for their own boxes, and the non_profit whose role
+  scope matches the box's org. Mirror this on any NEW read path or recipient PII
+  leaks across orgs.
+- **Positions are 1-based.** Boxes store `position` 1..N; render the stored value
+  directly. Adding `+1` anywhere produces an off-by-one (this already bit the
+  admin order view once).
 
-**Why:** A real purchase test (Andrew) gifted the album fine but was never
-prompted to say who each Gift of Hope box was for — the foundation got no
-recipient/address, so boxes couldn't ship. The two flows look similar ("gift")
-but solve different problems.
-
-**How to apply:** Keep it generic — all labels come from the snapshot `orgName`,
-never hard-code Nightbirde. The "known recipient" form collects addr1/addr2/zip/
-state (no city/country field — per Figma; zip+state is what the foundation gets).
+**Why:** A real purchase test gifted the album fine but the buyer was never asked
+who each donation box was for, so the foundation got no recipient/address and
+couldn't ship. The two flows look similar but solve different problems.
