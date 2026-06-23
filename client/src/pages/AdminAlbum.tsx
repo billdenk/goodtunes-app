@@ -120,6 +120,7 @@ import { PressPanel } from "@/components/admin/PressPanel";
 import { ShopifyPanel } from "@/components/admin/ShopifyPanel";
 import { AlbumCustomersPanel } from "@/components/admin/AlbumCustomersPanel";
 import { AlbumWaitlistPanel } from "@/components/admin/AlbumWaitlistPanel";
+import { NewMusicAnnouncePanel } from "@/components/admin/NewMusicAnnouncePanel";
 import { AlbumDashboardPanel } from "@/components/admin/AlbumDashboardPanel";
 import { NewAlbumModeDialog } from "@/components/admin/NewAlbumModeDialog";
 import {
@@ -314,6 +315,12 @@ type AirPlayAudioElement = HTMLAudioElement & {
 };
 
 type Tab = "dashboard" | "overview" | "tracks" | "sell" | "press" | "shopify" | "customers" | "waitlist";
+
+// Task #2005 — deep-link target from the Albums "Needs attention" audit. Each
+// per-dimension cell appends `?section=…`; masters/lyrics/credits (and tracks)
+// all live under the Digital (Tracks) tab, so any section value lands that tab,
+// and TracksPanel focuses the matching per-track sub-section.
+type AuditSection = "tracks" | "masters" | "lyrics" | "credits";
 // Task #335 — the visible tab set is now driven by `sellMode` +
 // `sellQuoteLockedAt`. Before the operator locks a quote we only show
 // Overview/Tracks/Sell so the page stays focused on "decide what we're
@@ -520,12 +527,28 @@ export function AdminAlbum() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Task #2005 — `?section=` from the Albums audit table. masters/lyrics/credits
+  // (and tracks) all live under the Digital tab, so any valid section lands that
+  // tab here; the specific sub-section focus happens inside TracksPanel. Read
+  // once on mount, like the other deep-link params above.
+  const initialSection = useMemo<AuditSection | null>(() => {
+    try {
+      const s = new URLSearchParams(search).get("section");
+      const valid: AuditSection[] = ["tracks", "masters", "lyrics", "credits"];
+      return valid.includes(s as AuditSection) ? (s as AuditSection) : null;
+    } catch {
+      return null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [tab, setTab] = useState<Tab>(
     initialTrackId
       ? "tracks"
-      : initialOnboarding
-        ? "sell"
-        : initialTab ?? "dashboard",
+      : initialSection
+        ? "tracks"
+        : initialOnboarding
+          ? "sell"
+          : initialTab ?? "dashboard",
   );
   // Mode-picker modal state. Opens automatically when `sellMode` is
   // null (a fresh row), or when the operator clicks "Change mode" in
@@ -1492,6 +1515,7 @@ export function AdminAlbum() {
                   album={album}
                   onEdit={openInClassicAdmin}
                   highlightTrackId={initialTrackId}
+                  initialSection={initialSection}
                   selectionMode={selectionMode}
                   selectedTrackIds={selectedTrackIds}
                   onToggleTrack={(id) =>
@@ -1556,7 +1580,10 @@ export function AdminAlbum() {
                 <AlbumCustomersPanel albumId={album.id} />
               )}
               {safeTab === "waitlist" && allowed.has("waitlist") && (
-                <AlbumWaitlistPanel albumId={album.id} />
+                <>
+                  <AlbumWaitlistPanel albumId={album.id} />
+                  <NewMusicAnnouncePanel albumId={album.id} />
+                </>
               )}
             </>
           );
@@ -3574,6 +3601,7 @@ function TracksPanel({
   album,
   onEdit,
   highlightTrackId,
+  initialSection,
   selectionMode,
   selectedTrackIds,
   onToggleTrack,
@@ -3586,6 +3614,10 @@ function TracksPanel({
   // brief highlight. Rows are now tap-targets that navigate to the track
   // page — there is no inline expansion to seed any more.
   highlightTrackId: string | null;
+  // Task #2005 — section deep-link from the Albums "Needs attention" audit
+  // (masters/lyrics/credits/tracks). Used once on mount to land the operator on
+  // the first track still missing that dimension with its editor open.
+  initialSection: AuditSection | null;
   // Multi-select state lives at the page level so the Delete-Options
   // trigger up in the tab strip can re-label itself with the live
   // count. The panel just threads the props down to each TrackRow.
@@ -3632,11 +3664,43 @@ function TracksPanel({
     refetchInterval: 60 * 1000,
   });
 
+  // Task #2005 — resolve a section deep-link (`?section=…` from the Albums
+  // audit) to a concrete track + editor mode. masters → master audio, lyrics →
+  // lyrics, credits → credits; "tracks" carries no sub-section so it just lands
+  // the tab. We pick the FIRST track still missing that dimension (falling back
+  // to the first track), then seed both the disclosure and that row's editor
+  // mode so the operator lands directly on the work. Read once on mount so a
+  // later edit/refetch doesn't re-pop a section the operator has moved past;
+  // when no track resolves we fall back to the plain tab (whole-row) view.
+  const sectionTarget = useMemo<{ songId: string; mode: TrackMode } | null>(() => {
+    if (!initialSection || initialSection === "tracks") return null;
+    const mode: TrackMode =
+      initialSection === "masters"
+        ? "audio"
+        : initialSection === "lyrics"
+          ? "lyrics"
+          : "credits";
+    const needsWork = (s: SongLite): boolean => {
+      if (initialSection === "masters")
+        return !(s.muxStatus === "ready" && !!s.muxPlaybackId);
+      if (initialSection === "lyrics")
+        return !(s.lyrics || s.syncedLyrics || s.instrumental);
+      const c = albumCredits?.bySongId[s.id];
+      return !((c?.writers.length ?? 0) > 0 && (c?.performers.length ?? 0) > 0);
+    };
+    const target = sorted.find(needsWork) ?? sorted[0];
+    return target ? { songId: target.id, mode } : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Inline accordion controller — exactly one track row open at a time
   // (Stripe order-rows pattern). Seeded with the `?track=<id>` deep link
   // so a row arrived-at via the smart-back crumb or a shared link opens
-  // expanded. See docs/design-system.md ("Expandable row lists").
-  const disclosure = useExclusiveDisclosure<string>(highlightTrackId);
+  // expanded; a `?section=…` audit deep link seeds the resolved row instead.
+  // See docs/design-system.md ("Expandable row lists").
+  const disclosure = useExclusiveDisclosure<string>(
+    highlightTrackId ?? sectionTarget?.songId ?? null,
+  );
 
   // Drag-to-reorder state lives at the panel level so a row knows when
   // another row is being dragged over it. We pair an optimistic cache
@@ -4377,7 +4441,13 @@ function TracksPanel({
               onToggleSelect={onToggleTrack}
               userExpanded={disclosure.isOpen(song.id)}
               onSetUserExpanded={(open) => disclosure.setOpen(song.id, open)}
-              highlightOnMount={highlightTrackId === song.id}
+              highlightOnMount={
+                highlightTrackId === song.id ||
+                sectionTarget?.songId === song.id
+              }
+              initialMode={
+                sectionTarget?.songId === song.id ? sectionTarget.mode : null
+              }
               muxRetry={muxStatus?.retryState?.[song.id] ?? null}
               muxServerNow={muxStatus?.serverNow ?? null}
             />
@@ -7909,6 +7979,7 @@ function TrackRow({
   userExpanded,
   onSetUserExpanded,
   highlightOnMount,
+  initialMode,
   muxRetry,
   muxServerNow,
 }: {
@@ -7943,6 +8014,10 @@ function TrackRow({
   // track page's "Back to tracklist"). Scrolls the row into view AND pulses
   // a brief highlight so the user lands looking at the right row.
   highlightOnMount: boolean;
+  // Task #2005 — when the page was deep-linked from the Albums audit with a
+  // `?section=…` value resolving to this row, the matching editor mode is seeded
+  // open on mount (masters → "audio", lyrics → "lyrics", credits → "credits").
+  initialMode?: TrackMode | null;
   // Task #369 — auto-retry state from /api/admin/mux-status for this song
   // (only present when the backfill sweep has touched it). The server clock
   // comes alongside so the countdown renders against the same `now` the
@@ -7963,7 +8038,7 @@ function TrackRow({
   // `userExpanded`/`onSetUserExpanded` is the exclusive-disclosure pair
   // owned by TracksPanel so only one row is open at a time. Any open
   // editor force-expands the row so the tile context stays visible.
-  const [mode, setMode] = useState<TrackMode>("view");
+  const [mode, setMode] = useState<TrackMode>(initialMode ?? "view");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const setUserExpanded = onSetUserExpanded;
   // Expansion is owned SOLELY by the exclusive-disclosure controller so

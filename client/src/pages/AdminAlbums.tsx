@@ -129,6 +129,22 @@ function albumHref(albumId: string, listQuery: string): string {
   return `${base}?from=albums&albumsReturn=${encodeURIComponent(listQuery)}`;
 }
 
+// Task #2005 — per-dimension deep link into the album editor. Each audit cell
+// (Tracks / Masters / Lyrics / Credits) layers `&section=…` on top of the
+// whole-row `albumHref` so the list-query round-trip is preserved and "Back to
+// albums" still returns to this audit view. AdminAlbum reads `section` once on
+// mount and lands the Digital tab focused on the matching sub-section; an
+// unknown/absent section degrades to the plain whole-row link.
+type AuditSection = "tracks" | "masters" | "lyrics" | "credits";
+function albumSectionHref(
+  albumId: string,
+  listQuery: string,
+  section: AuditSection,
+): string {
+  // albumHref always emits a query string (`?from=albums…`), so `&` is safe.
+  return `${albumHref(albumId, listQuery)}&section=${section}`;
+}
+
 // Task #2021 — decide whether an album row carries a *real* cover. `artwork`
 // is a NOT-NULL string, so "no cover" arrives as one of several sentinels: the
 // empty string, the literal "null"/"undefined" (a stale `String(nullish)`
@@ -1133,24 +1149,46 @@ function CountCell({
   total,
   testId,
   showTotal = true,
+  href,
+  linkTestId,
 }: {
   value: number;
   total: number;
   testId: string;
   showTotal?: boolean;
+  // Task #2005 — when set, the cell becomes a deep link into the album editor
+  // focused on this dimension's sub-section. The wrapping link stops click
+  // propagation so it doesn't also fire the row's whole-album navigation, and
+  // carries the shared admin inline-link hover treatment.
+  href?: string;
+  linkTestId?: string;
 }) {
   const complete = showTotal ? total > 0 && value >= total : value > 0;
+  const badge = (
+    <span
+      className={`inline-flex items-center justify-end gap-1 px-1.5 py-0.5 rounded text-xs font-semibold tabular-nums ${
+        complete ? "text-slate-600" : "bg-amber-100 text-amber-800"
+      }`}
+      data-testid={testId}
+    >
+      {!complete && <AlertTriangle className="w-3 h-3 flex-shrink-0" />}
+      {showTotal ? `${value}/${total}` : value}
+    </span>
+  );
   return (
     <td className="px-3 py-2.5 text-right">
-      <span
-        className={`inline-flex items-center justify-end gap-1 px-1.5 py-0.5 rounded text-xs font-semibold tabular-nums ${
-          complete ? "text-slate-600" : "bg-amber-100 text-amber-800"
-        }`}
-        data-testid={testId}
-      >
-        {!complete && <AlertTriangle className="w-3 h-3 flex-shrink-0" />}
-        {showTotal ? `${value}/${total}` : value}
-      </span>
+      {href ? (
+        <Link
+          href={href}
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex rounded hover:underline underline-offset-2 decoration-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
+          data-testid={linkTestId}
+        >
+          {badge}
+        </Link>
+      ) : (
+        badge
+      )}
     </td>
   );
 }
@@ -1280,21 +1318,29 @@ function NeedsAttentionTable({
                   total={0}
                   showTotal={false}
                   testId={`cell-tracks-${r.id}`}
+                  href={albumSectionHref(r.id, listQuery, "tracks")}
+                  linkTestId={`link-cell-tracks-${r.id}`}
                 />
                 <CountCell
                   value={r.mastersReady}
                   total={r.trackCount}
                   testId={`cell-masters-${r.id}`}
+                  href={albumSectionHref(r.id, listQuery, "masters")}
+                  linkTestId={`link-cell-masters-${r.id}`}
                 />
                 <CountCell
                   value={r.lyricsSatisfied}
                   total={r.trackCount}
                   testId={`cell-lyrics-${r.id}`}
+                  href={albumSectionHref(r.id, listQuery, "lyrics")}
+                  linkTestId={`link-cell-lyrics-${r.id}`}
                 />
                 <CountCell
                   value={r.creditsComplete}
                   total={r.trackCount}
                   testId={`cell-credits-${r.id}`}
+                  href={albumSectionHref(r.id, listQuery, "credits")}
+                  linkTestId={`link-cell-credits-${r.id}`}
                 />
               </tr>
             );

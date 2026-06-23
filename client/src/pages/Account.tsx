@@ -9,7 +9,7 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { clearLocalAnalytics } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
-import { ChevronLeft, Pencil } from "lucide-react";
+import { ChevronLeft, Pencil, Bell, BellOff } from "lucide-react";
 import {
   ordersEnabled,
   streamingHandoffEnabled,
@@ -17,6 +17,7 @@ import {
   aboutEnabled,
   linkedAccountsEnabled,
   setPasswordEnabled,
+  isNativeIOS,
 } from "@/lib/platform";
 import {
   STREAMING_SERVICES,
@@ -427,6 +428,47 @@ export function Account() {
     if (latestOrder.status === "paid") return "Latest: Paid · digital ready";
     return `Latest: ${latestOrder.status}`;
   })();
+
+  // Task #2011 — "Notify me when new music drops" opt-in. The current
+  // preference rides the shared new-fan-welcome state endpoint (it carries
+  // `notifyOptIn`), and the standalone PATCH writes it back without
+  // re-surfacing the welcome sheet. Hidden on iOS native — push there is
+  // handled separately through Capacitor — so we don't even fetch the
+  // state on that surface. Toggling flips the cache optimistically so the
+  // switch responds instantly, then invalidates to confirm with the server.
+  const isCustomer = user?.kind === "customer";
+  const showNotifyToggle = isCustomer && !isNativeIOS;
+  const { data: notifyState } = useQuery<{ shouldShow: boolean; notifyOptIn?: boolean | null }>({
+    queryKey: ["/api/me/new-fan-welcome/state"],
+    enabled: showNotifyToggle,
+  });
+  const notifyOptIn = notifyState?.notifyOptIn ?? false;
+  const notifyMutation = useMutation({
+    mutationFn: async (next: boolean) => {
+      await apiRequest("PATCH", "/api/me/notify-opt-in", { notifyOptIn: next });
+      return next;
+    },
+    onMutate: async (next: boolean) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/me/new-fan-welcome/state"] });
+      const prev = queryClient.getQueryData<{ shouldShow: boolean; notifyOptIn?: boolean | null }>([
+        "/api/me/new-fan-welcome/state",
+      ]);
+      queryClient.setQueryData<{ shouldShow: boolean; notifyOptIn?: boolean | null }>(
+        ["/api/me/new-fan-welcome/state"],
+        (old) => (old ? { ...old, notifyOptIn: next } : { shouldShow: false, notifyOptIn: next }),
+      );
+      return { prev };
+    },
+    onError: (_err, _next, ctx) => {
+      if (ctx?.prev !== undefined) {
+        queryClient.setQueryData(["/api/me/new-fan-welcome/state"], ctx.prev);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/me/new-fan-welcome/state"] });
+    },
+  });
+
   const railOpen = useLyricsRailOpen();
   return (
     <main
@@ -590,6 +632,60 @@ export function Account() {
               </button>
             ))}
           </div>
+
+          {/* Task #2011 — New-music opt-in. A fan can turn on release
+              notifications here; the choice mirrors the new-fan welcome
+              sheet (same `notifyNewMusicOptIn` flag) and persists via PATCH
+              with an optimistic switch flip. Hidden on iOS native — push
+              there is handled separately through Capacitor. */}
+          {showNotifyToggle && (
+            <>
+              <p className="text-fan-faint text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Notifications</p>
+              <div className="rounded-2xl overflow-hidden mb-2" style={{ background: "rgba(255,255,255,0.05)" }}>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={notifyOptIn}
+                  disabled={notifyMutation.isPending}
+                  onClick={() => notifyMutation.mutate(!notifyOptIn)}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left active:bg-white/[0.06] disabled:opacity-60"
+                  data-testid="switch-notify-new-music"
+                >
+                  <span className="flex items-center gap-3 min-w-0">
+                    <span
+                      className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: notifyOptIn ? "rgba(49,158,216,0.18)" : "rgba(255,255,255,0.06)" }}
+                    >
+                      {notifyOptIn ? (
+                        <Bell className="w-[18px] h-[18px] text-[var(--brand-blue)]" />
+                      ) : (
+                        <BellOff className="w-[18px] h-[18px] text-fan-faint" />
+                      )}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-fan-primary text-base">Notify me when new music drops</span>
+                      <span className="block text-fan-secondary text-xs leading-snug mt-0.5">
+                        Be first to know when a new album lands on GoodTunes.
+                      </span>
+                    </span>
+                  </span>
+                  {/* Visual switch — the parent button owns the toggle role */}
+                  <span
+                    aria-hidden="true"
+                    className={`relative flex-shrink-0 w-12 h-7 rounded-full transition-colors duration-200 ${notifyOptIn ? "bg-[var(--brand-blue)]" : "bg-white/15"}`}
+                  >
+                    <span
+                      className={`absolute top-1 bg-white shadow transition-all duration-200 ${notifyOptIn ? "left-6" : "left-1"}`}
+                      style={{ width: 20, height: 20, borderRadius: "50%" }}
+                    />
+                  </span>
+                </button>
+              </div>
+              <p className="text-fan-faint text-xs leading-relaxed px-1 mb-6" data-testid="text-notify-new-music-help">
+                Only GoodTunes release notifications — no spam. Change it any time.
+              </p>
+            </>
+          )}
 
           {user?.email && user.email.endsWith("@privaterelay.appleid.com") && (
             <PrivateRelayBanner relayEmail={user.email} />

@@ -7400,4 +7400,28 @@ SQL
 migrate_custom_addon_gift_boxes dev  "${DATABASE_URL:-}"
 migrate_custom_addon_gift_boxes prod "${PROD_DATABASE_URL:-}"
 
+# Task #2012 — per-album "announced to the global new-music opt-in list" marker.
+# Idempotent additive column so the schema-drift guard passes on both DBs and
+# the operator single-shot announce guard has somewhere to stamp.
+migrate_album_new_music_notified() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping albums.new_music_notified_at migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE IF EXISTS albums
+  ADD COLUMN IF NOT EXISTS new_music_notified_at timestamp;
+COMMIT;
+SQL
+  then
+    echo "post-merge: albums.new_music_notified_at migration ok on $label"
+  else
+    echo "post-merge: WARNING — albums.new_music_notified_at migration failed on $label (continuing)"
+  fi
+}
+migrate_album_new_music_notified dev  "${DATABASE_URL:-}"
+migrate_album_new_music_notified prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror

@@ -239,6 +239,17 @@ export interface IStorage {
   // Admin reporting: how many signups have been notified, and how many of
   // those came back to buy the album after their notifiedAt stamp.
   releaseNotifyStats(albumId: string): Promise<{ total: number; notified: number; cameBack: number }>;
+  // Task #2012 — the GLOBAL new-music opt-in audience
+  // (customer_users.notify_new_music_opt_in = true), distinct from a single
+  // album's release waitlist. Count for the operator preview; list for the
+  // actual send. claimAlbumNewMusicAnnounce atomically stamps the per-album
+  // single-shot marker so a release can't be blasted to the whole list twice.
+  countNewMusicOptInRecipients(): Promise<number>;
+  listNewMusicOptInRecipients(): Promise<{ id: string; email: string }[]>;
+  // Atomic single-shot claim: stamps new_music_notified_at only if it is still
+  // null AND the release is live. Returns true if THIS call won the claim, so
+  // two concurrent sends can never both blast the global opt-in list.
+  claimAlbumNewMusicAnnounce(albumId: string): Promise<boolean>;
   addRigQuoteRequest(data: InsertRigQuoteRequest): Promise<RigQuoteRequest>;
   listRigQuoteRequests(): Promise<RigQuoteRequest[]>;
 
@@ -1575,6 +1586,48 @@ export class DbStorage implements IStorage {
       )
       .returning({ id: releaseNotifySignups.id });
     return rows.length;
+  }
+  async countNewMusicOptInRecipients(): Promise<number> {
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(customerUsers)
+      .where(
+        and(
+          eq(customerUsers.notifyNewMusicOptIn, true),
+          isNull(customerUsers.mergedIntoId),
+          sql`${customerUsers.email} is not null and length(trim(${customerUsers.email})) > 0`,
+        ),
+      );
+    return row?.n ?? 0;
+  }
+  async listNewMusicOptInRecipients(): Promise<{ id: string; email: string }[]> {
+    const rows = await db
+      .select({ id: customerUsers.id, email: customerUsers.email })
+      .from(customerUsers)
+      .where(
+        and(
+          eq(customerUsers.notifyNewMusicOptIn, true),
+          isNull(customerUsers.mergedIntoId),
+          sql`${customerUsers.email} is not null and length(trim(${customerUsers.email})) > 0`,
+        ),
+      );
+    return rows
+      .filter((r): r is { id: string; email: string } => !!r.email)
+      .map((r) => ({ id: r.id, email: r.email! }));
+  }
+  async claimAlbumNewMusicAnnounce(albumId: string): Promise<boolean> {
+    const rows = await db
+      .update(albums)
+      .set({ newMusicNotifiedAt: new Date() })
+      .where(
+        and(
+          eq(albums.id, albumId),
+          isNull(albums.newMusicNotifiedAt),
+          eq(albums.isPrepping, false),
+        ),
+      )
+      .returning({ id: albums.id });
+    return rows.length > 0;
   }
   async releaseNotifyStats(
     albumId: string,

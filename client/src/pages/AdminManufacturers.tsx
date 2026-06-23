@@ -494,10 +494,16 @@ function CapabilityChips({ press, className = "" }: { press: Manufacturer; class
 }
 
 function PressCard({ press }: { press: Manufacturer }) {
+  // Task #1962 — every grid card reserves the same footprint regardless of
+  // how much optional metadata it carries (location, turnaround label,
+  // capability chips). The richest case (logo + name + location + turnaround
+  // + chips) needs ~118px of content; `min-h-[8rem]` reserves that room so a
+  // metadata-rich press (Memphis) and a sparse one (Hoover) sit at the same
+  // height side by side, with lighter cards centering into the same box.
   return (
     <Link
       href={`/admin/manufacturers/${press.id}`}
-      className="group text-left rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5 underline-offset-2"
+      className="group text-left rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 min-h-[8rem] flex items-center gap-3.5 underline-offset-2"
       data-testid={`card-manufacturer-${press.id}`}
     >
       <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">

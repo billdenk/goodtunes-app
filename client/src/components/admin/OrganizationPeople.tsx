@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, apiErrorBody } from "@/lib/queryClient";
 import {
   AddPeopleMenu,
   type AddPeopleMenuEntityKind,
@@ -51,18 +51,10 @@ type Contact = {
 };
 
 function humanizeApiError(err: unknown): string {
+  const body = apiErrorBody<{ message?: string }>(err);
+  if (body?.message && String(body.message).trim()) return String(body.message).trim();
   const raw = err instanceof Error ? err.message : String(err ?? "");
-  const m = raw.match(/^\d{3}:\s*(.*)$/);
-  if (m) {
-    try {
-      const body = JSON.parse(m[1]);
-      if (body?.message) return String(body.message);
-    } catch {
-      /* fall through */
-    }
-    return m[1];
-  }
-  return raw || "Something went wrong.";
+  return raw.replace(/^\d{3}:\s*/, "") || "Something went wrong.";
 }
 
 // Each org kind's admin detail route. Used to build the breadcrumb

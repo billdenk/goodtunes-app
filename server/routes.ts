@@ -2005,8 +2005,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.json({ shouldShow: false, notifyOptIn: (c as any).notifyNewMusicOptIn ?? null });
     }
     // Legacy-imported fans go to the existing WhatsNew / WelcomeBack flow.
+    // Still echo notifyOptIn so the Account settings toggle (Task #2011)
+    // can reflect their saved preference even though the sheet never shows.
     if ((c as any).legacyGogoodsId) {
-      return res.json({ shouldShow: false });
+      return res.json({ shouldShow: false, notifyOptIn: (c as any).notifyNewMusicOptIn ?? null });
     }
     // Fans who own at least one album are returning buyers — WhatsNew is
     // their greeting; this sheet is for genuine free signups only.
@@ -2017,7 +2019,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       .where(eq(userAlbums.userId, c.id));
     const libraryCount = row?.n ?? 0;
     if (libraryCount > 0) {
-      return res.json({ shouldShow: false });
+      return res.json({ shouldShow: false, notifyOptIn: (c as any).notifyNewMusicOptIn ?? null });
     }
     return res.json({
       shouldShow: true,
@@ -14090,6 +14092,181 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     const stats = await storage.releaseNotifyStats(albumId);
     return res.json({ ok: true, recipients: pending.length, sent, failed, stats });
+  });
+
+  // ─── Task #2012 — announce a release to the GLOBAL new-music opt-in list ──
+  // Distinct from the per-album early-access waitlist above: this blasts the
+  // platform-wide "Notify me when new music drops" audience
+  // (customer_users.notify_new_music_opt_in). Operator-gated (requireAdmin
+  // admits partner accounts, so we re-check for a real super_admin/admin) and
+  // single-shot per album (albums.new_music_notified_at) so the whole opted-in
+  // audience can never be accidentally double-emailed about the same release.
+  app.get("/api/admin/albums/:id/new-music-announce", requireAdmin, async (req, res) => {
+    const auth = await getAuthFromRequest(req);
+    if (!auth || auth.kind !== "admin") {
+      return res.status(403).json({ message: "Operators only." });
+    }
+    const role = (await getUserRole(auth.userId))?.role;
+    if (role !== "super_admin" && role !== "admin") {
+      return res.status(403).json({ message: "Operators only." });
+    }
+    const albumId = String(req.params.id);
+    const album = await storage.getAlbumById(albumId);
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    const recipientCount = await storage.countNewMusicOptInRecipients();
+    return res.json({
+      recipientCount,
+      notifiedAt: (album as any).newMusicNotifiedAt ?? null,
+      isPrepping: !!album.isPrepping,
+    });
+  });
+
+  app.post("/api/admin/albums/:id/new-music-announce/send", requireAdmin, async (req, res) => {
+    const auth = await getAuthFromRequest(req);
+    if (!auth || auth.kind !== "admin") {
+      return res.status(403).json({ message: "Operators only." });
+    }
+    const role = (await getUserRole(auth.userId))?.role;
+    if (role !== "super_admin" && role !== "admin") {
+      return res.status(403).json({ message: "Operators only." });
+    }
+
+    const albumId = String(req.params.id);
+    const album = await storage.getAlbumById(albumId);
+    if (!album) return res.status(404).json({ message: "Album not found" });
+
+    // Refuse to announce a release that isn't live yet — an opted-in fan who
+    // tapped through would hit a prepping/locked page.
+    if (album.isPrepping) {
+      return res.status(400).json({ message: "Publish the release before announcing it." });
+    }
+    // Single-shot: once announced, refuse a second global blast.
+    if ((album as any).newMusicNotifiedAt) {
+      return res.status(409).json({
+        message: "This release has already been announced to the new-music list.",
+        notifiedAt: (album as any).newMusicNotifiedAt,
+      });
+    }
+
+    let artistName: string | null = null;
+    let artistShareSlug: string | null = null;
+    if (album.primaryArtistId) {
+      const person = await storage.getPersonById(album.primaryArtistId);
+      artistName = person?.name ?? null;
+      artistShareSlug = person?.artistShareSlug ?? null;
+    }
+    const albumUrl = earlyAccessAlbumUrl(album, artistShareSlug);
+
+    const { customerOriginFromReq } = await import("./welcomeBack");
+    const origin = customerOriginFromReq(req);
+    const { signUnsubscribeToken, assertUnsubscribeTokenConfigured } = await import("./unsubscribeToken");
+    const { sendNewMusicAnnouncementEmail } = await import("./mail");
+
+    // Preflight the unsubscribe-token config BEFORE doing anything irreversible.
+    // signUnsubscribeToken() throws in production when TOTP_ENC_KEY is unset;
+    // if we discovered that mid-loop the album would already be claimed
+    // (stamped) yet no email would carry a working unsubscribe link, and the
+    // single-shot guard would then permanently block a future legit blast.
+    // Fail closed here instead, leaving newMusicNotifiedAt null.
+    try {
+      assertUnsubscribeTokenConfigured();
+    } catch {
+      return res.status(500).json({
+        message: "Email is not configured for announcements. Contact support.",
+      });
+    }
+
+    const recipients = await storage.listNewMusicOptInRecipients();
+    // Refuse an empty blast: never permanently stamp a release as "announced"
+    // when there was no one to announce it to (a stale/direct POST otherwise
+    // blocks a future, legitimate announcement once fans have opted in).
+    if (recipients.length === 0) {
+      return res.status(400).json({ message: "No fans have opted in to new-music updates yet." });
+    }
+
+    // Atomically claim the single-shot BEFORE sending. Two concurrent sends
+    // (double-click, two tabs, retry/replay) can otherwise both read
+    // notifiedAt === null and both blast the whole list. Only the request that
+    // wins this conditional UPDATE proceeds; the loser gets a 409.
+    const claimed = await storage.claimAlbumNewMusicAnnounce(albumId);
+    if (!claimed) {
+      return res.status(409).json({
+        message: "This release has already been announced to the new-music list.",
+      });
+    }
+
+    let sent = 0;
+    let failed = 0;
+    for (const r of recipients) {
+      try {
+        const unsubscribeUrl = `${origin}/api/notify/new-music/unsubscribe?token=${encodeURIComponent(
+          signUnsubscribeToken(r.id),
+        )}`;
+        const result = await sendNewMusicAnnouncementEmail(
+          r.email,
+          album.title,
+          artistName,
+          albumUrl,
+          unsubscribeUrl,
+        );
+        if (result?.ok) sent += 1;
+        else failed += 1;
+      } catch (err) {
+        failed += 1;
+        // Log the customer id, never the fan's email address (PII), so a blast
+        // can't dump recipient addresses into server logs.
+        console.error("[new-music-announce] send failed for recipient", r.id, err);
+      }
+    }
+    // The album was already claimed (stamped) above — the single-shot guard is
+    // about never re-blasting the WHOLE list. Operators can still reach
+    // stragglers via the per-album early-access waitlist.
+
+    return res.json({
+      ok: true,
+      recipients: recipients.length,
+      sent,
+      failed,
+      notifiedAt: new Date().toISOString(),
+    });
+  });
+
+  // Public one-tap unsubscribe from the new-music announcement list. No auth:
+  // the signed token (HMAC over the customer id) IS the credential. Idempotent
+  // and reversible — the fan can re-enable from Account settings. Returns a
+  // small branded HTML page since it's opened from an email client.
+  app.get("/api/notify/new-music/unsubscribe", async (req, res) => {
+    const { verifyUnsubscribeToken } = await import("./unsubscribeToken");
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    const customerId = verifyUnsubscribeToken(token);
+    const page = (title: string, body: string) =>
+      `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title></head>` +
+      `<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#00062B;color:#fff;margin:0;padding:0;">` +
+      `<div style="max-width:480px;margin:0 auto;padding:64px 24px;text-align:center;">` +
+      `<div style="font-size:20px;font-weight:700;margin-bottom:12px;">${title}</div>` +
+      `<div style="font-size:15px;line-height:1.55;color:#c9d2e3;">${body}</div>` +
+      `</div></body></html>`;
+    if (!customerId) {
+      res.status(400).set("Content-Type", "text/html; charset=utf-8");
+      return res.send(
+        page(
+          "Link expired",
+          "This unsubscribe link is invalid or has expired. You can manage email preferences from Account settings in the app.",
+        ),
+      );
+    }
+    try {
+      await storage.updateCustomer(customerId, { notifyNewMusicOptIn: false } as any);
+    } catch (err) {
+      console.error("[new-music-unsubscribe] failed for", customerId, err);
+    }
+    res.set("Content-Type", "text/html; charset=utf-8");
+    return res.send(
+      page(
+        "You're unsubscribed",
+        "You won't get new-music emails from GoodTunes anymore. Changed your mind? Turn notifications back on under Account settings in the app.",
+      ),
+    );
   });
 
   app.post("/api/admin/albums/:id/videos", requireAdminBearer, async (req, res) => {

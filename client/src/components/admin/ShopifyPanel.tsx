@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { formatUsdCents } from "@shared/money";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, apiErrorBody } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   Link as LinkIcon,
@@ -195,18 +195,12 @@ export function ShopifyPanel({
     },
     onError: async (e: any) => {
       // 409 conflict — surface the field list so the operator can
-      // confirm-overwrite. apiRequest throws on non-2xx with a string
-      // body that may include the JSON payload.
-      const msg = String(e?.message ?? "");
-      const m = msg.match(/\{[\s\S]*\}/);
-      if (m) {
-        try {
-          const j = JSON.parse(m[0]);
-          if (Array.isArray(j.conflicts) && j.conflicts.length > 0) {
-            setPushConflicts(j.conflicts);
-            return;
-          }
-        } catch {}
+      // confirm-overwrite. The API client attaches the parsed JSON body
+      // (e.g. `{ conflicts: [...] }`) as `err.body`.
+      const body = apiErrorBody<{ conflicts?: unknown }>(e);
+      if (body && Array.isArray(body.conflicts) && body.conflicts.length > 0) {
+        setPushConflicts(body.conflicts as string[]);
+        return;
       }
       toast({ title: "Push failed", description: e?.message, variant: "destructive" });
     },

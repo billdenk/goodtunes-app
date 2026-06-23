@@ -16,7 +16,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiErrorBody } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { RecentsRail } from "@/components/admin/RecentsRail";
@@ -336,20 +336,14 @@ function AddInstrumentFromUrl({
         description: `${created.name} — selected on this credit.`,
       });
     } catch (e: any) {
-      // apiRequest throws "<status>: <body>" — pull a clean `message`
-      // out of the JSON body when present so the admin doesn't see raw
-      // JSON ("400: {\"message\":\"…\"}") in the error row.
-      const raw = e?.message || "";
-      let msg = raw || "Couldn't read that page.";
-      const m = raw.match(/^\d+:\s*(.+)$/s);
-      if (m) {
-        try {
-          const parsed = JSON.parse(m[1]);
-          if (parsed?.message) msg = String(parsed.message);
-        } catch {
-          msg = m[1];
-        }
-      }
+      // Prefer the structured body the API client attaches (`err.body`);
+      // fall back to the message text (status prefix stripped) for
+      // plain-string errors so the admin never sees raw JSON in the row.
+      const body = apiErrorBody<{ message?: string }>(e);
+      const msg =
+        (body?.message && String(body.message).trim()) ||
+        (e?.message ? String(e.message).replace(/^\d+:\s*/, "") : "") ||
+        "Couldn't read that page.";
       setErr(msg);
     } finally {
       setBusy(false);
@@ -1140,17 +1134,11 @@ function DropboxCreditsImportDialog({
         setParseError("The AI didn't find any credit rows in that file.");
       }
     } catch (e: any) {
-      const raw = e?.message || "Couldn't read that link.";
-      let msg = raw;
-      const m = raw.match(/^\d+:\s*(.+)$/s);
-      if (m) {
-        try {
-          const parsed = JSON.parse(m[1]);
-          if (parsed?.message) msg = String(parsed.message);
-        } catch {
-          msg = m[1];
-        }
-      }
+      const body = apiErrorBody<{ message?: string }>(e);
+      const msg =
+        (body?.message && String(body.message).trim()) ||
+        (e?.message ? String(e.message).replace(/^\d+:\s*/, "") : "") ||
+        "Couldn't read that link.";
       setParseError(msg);
     } finally {
       setParsing(false);

@@ -336,6 +336,54 @@ export async function sendEarlyAccessEmail(
   return sendViaResend("early-access", toEmail, subject, html, text);
 }
 
+// Task #2012 — the "new music just dropped" email blasted to the GLOBAL
+// new-music opt-in audience (customer_users.notify_new_music_opt_in), not a
+// single album's early-access waitlist. Operator-gated, one blast per album.
+// Carries a one-tap unsubscribe link that turns the opt-in back off.
+export async function sendNewMusicAnnouncementEmail(
+  toEmail: string,
+  albumTitle: string,
+  artistName: string | null,
+  albumUrl: string,
+  unsubscribeUrl: string,
+): Promise<SendResult> {
+  const artistLine = (artistName ?? "").trim();
+  const subject = artistLine
+    ? `New music on GoodTunes — ${albumTitle} by ${artistLine}`
+    : `New music on GoodTunes — ${albumTitle}`;
+  const safeUnsub = unsubscribeUrl.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+
+  const text = [
+    `New music just dropped on GoodTunes: ${albumTitle}${artistLine ? ` by ${artistLine}` : ""}.`,
+    ``,
+    `You asked us to let you know when new music lands. Tap to listen:`,
+    albumUrl,
+    ``,
+    `— The GoodTunes team`,
+    ``,
+    `Don't want these emails? Unsubscribe: ${unsubscribeUrl}`,
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">New music just dropped</div>
+      <h1 style="font-size: 26px; margin: 12px 0 16px; font-weight: 700; line-height: 1.2;">${escapeHtml(albumTitle)}${artistLine ? `<span style="color: #4a4a4a; font-weight: 600;"> by ${escapeHtml(artistLine)}</span>` : ""}</h1>
+      <p style="font-size: 15px; color: #333; line-height: 1.55; margin: 0 0 20px;">
+        You asked us to let you know when new music lands on GoodTunes. It's here — tap below to listen.
+      </p>
+      <div style="margin: 28px 0;">
+        ${bulletproofButton(albumUrl, "Listen now", { bgColor: "#7F10A7", gradient: "linear-gradient(135deg,#7F10A7,#319ED8)", paddingV: 14, paddingH: 24, borderRadius: 12 })}
+      </div>
+      <p style="font-size: 13px; color: #888; line-height: 1.55; margin: 24px 0 0;">
+        You're getting this because you opted in to new-music updates on GoodTunes.
+        <a href="${safeUnsub}" style="color: #888; text-decoration: underline;">Unsubscribe</a>.
+      </p>
+    </div>
+  `;
+  return sendViaResend("new-music-announcement", toEmail, subject, html, text);
+}
+
 // ---- Bulletproof email CTA button -------------------------------------------
 // Outlook on Windows renders email through the Word engine, which ignores CSS
 // `background` gradients, `border-radius`, and `padding` on <a> elements —

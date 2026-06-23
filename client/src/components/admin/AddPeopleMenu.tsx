@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { RolePicker, type AccessRoleOption } from "@/components/admin/RolePicker";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, apiErrorBody, apiErrorStatus } from "@/lib/queryClient";
 
 // Task #421 — unified "+ Add ▾" trigger for partner-detail People
 // panels. Replaces the old "Search existing / Paste LinkedIn" tabs on
@@ -106,24 +106,14 @@ export interface AddPeopleMenuProps {
 type PersonLite = { id: string; name: string; photoUrl: string | null };
 
 function humanizeApiError(err: unknown): string {
+  const body = apiErrorBody<{ message?: string }>(err);
+  if (body?.message && String(body.message).trim()) return String(body.message).trim();
   const raw = err instanceof Error ? err.message : String(err ?? "");
-  const m = raw.match(/^(\d{3}):\s*(.*)$/);
-  if (m) {
-    try {
-      const body = JSON.parse(m[2]);
-      if (body?.message) return String(body.message);
-    } catch {
-      /* fall through */
-    }
-    return m[2];
-  }
-  return raw || "Something went wrong.";
+  return raw.replace(/^\d{3}:\s*/, "") || "Something went wrong.";
 }
 
 function errorStatus(err: unknown): number | null {
-  const raw = err instanceof Error ? err.message : String(err ?? "");
-  const m = raw.match(/^(\d{3}):/);
-  return m ? Number(m[1]) : null;
+  return apiErrorStatus(err) ?? null;
 }
 
 export function AddPeopleMenu(props: AddPeopleMenuProps) {
@@ -1424,15 +1414,13 @@ function InviteArtistDialog(
       });
     },
     onError: (e: Error) => {
-      try {
-        const m = e.message.match(/\{[\s\S]*\}/);
-        const payload = m ? JSON.parse(m[0]) : null;
-        if (payload?.code === "duplicate_in_subtree" && payload?.existing?.name) {
-          setDuplicate(payload.existing.name);
-          return;
-        }
-      } catch {
-        /* fall through */
+      // The API client attaches the parsed JSON body as `err.body`, so the
+      // duplicate hint survives instead of being regexed back out of the
+      // (now JSON-stripped) message.
+      const payload = apiErrorBody<{ code?: string; existing?: { name?: string } }>(e);
+      if (payload?.code === "duplicate_in_subtree" && payload.existing?.name) {
+        setDuplicate(payload.existing.name);
+        return;
       }
       toast({
         title: "Couldn't send invite",

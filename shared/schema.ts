@@ -300,6 +300,14 @@ export const albums = pgTable("albums", {
   // now-hidden tab (?tab=sell/press/shopify) falls back to Overview.
   // ZERO fan-facing behavior (no Library/lifecycle/playback effect).
   isSpinPromo: boolean("is_spin_promo").notNull().default(false),
+  // Task #2012 — operator-gated "new music" announcement marker. Stamped when
+  // an admin blasts the GLOBAL new-music opt-in audience
+  // (customer_users.notify_new_music_opt_in) about THIS release from the
+  // Early-access tab. Distinct from the per-album release waitlist
+  // (release_notify_signups). Non-null = already announced; the operator
+  // action refuses a second blast so the whole opted-in audience can't be
+  // accidentally double-emailed about the same release.
+  newMusicNotifiedAt: timestamp("new_music_notified_at"),
   // Task #965 — clean per-release share slug for get.goodtunes.music/<slug>.
   // Optional; null means the album has no clean link (UUID still works).
   // Unique on non-null. Normalized + validated (reserved-word check) at the

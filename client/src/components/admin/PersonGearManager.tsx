@@ -345,6 +345,17 @@ export function PersonGearManager({
         >
           {gearRows.map((g) => {
             const isOpen = expandedRow === g.instrumentId;
+            // Distinct accessory types already attached to this gear (across
+            // every matching rig), surfaced on the collapsed row so an
+            // operator sees strings/picks/capo at a glance. Derived from the
+            // same `matchingRigs` the expanded accessory editor edits.
+            const accessoryTypes = Array.from(
+              new Set(
+                g.matchingRigs.flatMap((r) =>
+                  r.accessories.map((a) => a.type.trim()).filter(Boolean),
+                ),
+              ),
+            );
             return (
               <li key={g.instrumentId} data-testid={`row-admin-person-gear-${g.instrumentId}`}>
                 <button
@@ -368,6 +379,29 @@ export function PersonGearManager({
                       {g.instrumentCategory ?? "Instrument"} · {g.tracks.length} track
                       {g.tracks.length === 1 ? "" : "s"}
                     </p>
+                    {accessoryTypes.length > 0 ? (
+                      <div
+                        className="mt-1 flex flex-wrap items-center gap-1"
+                        data-testid={`accessory-summary-${g.instrumentId}`}
+                      >
+                        {accessoryTypes.map((type) => (
+                          <span
+                            key={type}
+                            className="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600"
+                            data-testid={`chip-accessory-summary-${g.instrumentId}-${type.toLowerCase().replace(/\s+/g, "-")}`}
+                          >
+                            {type}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span
+                        className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand-blue)]"
+                        data-testid={`accessory-add-hint-${g.instrumentId}`}
+                      >
+                        <PlusIcon className="w-3.5 h-3.5" /> Add accessories
+                      </span>
+                    )}
                   </div>
                   <span className="text-slate-300 text-[11px]">{isOpen ? "▾" : "▸"}</span>
                 </button>
@@ -1139,6 +1173,14 @@ export function AddGearPanel({
           Cancel
         </button>
       </div>
+
+      <p
+        className="text-slate-500 text-xs"
+        data-testid="text-add-gear-accessories-hint"
+      >
+        Accessories (strings, picks, capo, etc.) are added after saving — expand
+        the saved gear row to attach them.
+      </p>
 
       <Field label="Instrument" as="div">
         <InstrumentPicker

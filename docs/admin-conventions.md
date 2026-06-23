@@ -295,3 +295,20 @@ Two operator affordances make iterating on that page possible:
 2. **"View as a fan" toggle.** Admin/full-access accounts are exempted from preview-first (`useFullPlaybackAccess`), so they always see the *unlocked owner* view and can't tell what a visitor gets. The floating pill (`client/src/hooks/useFanPreview.tsx`, mounted in `AlbumDetail`) flips the whole page into the locked visitor view by overriding ownership/full-access to `false`; it's mirrored to `?fan=1` (shareable), and renders only for privileged accounts — real fans never see it.
 
 **How to apply:** to demo a not-yet-public release, set its `share_slug`, leave it `prepping`, and hit the slug while signed in as an operator; use "View as a fan" to see the locked experience. Flip `prepping` off only when it's ready for the world.
+
+## Two distinct "tell fans" lists — per-album waitlist vs the global new-music opt-in
+
+There are **two separate notify lists**, and they must not be confused:
+
+1. **Per-album early-access waitlist** (`release_notify_*`, AlbumWaitlistPanel "Early access" tab) — fans who asked to be told when *this specific* release goes live. "Send early access email" walks the not-yet-notified rows for that album.
+2. **Global new-music opt-in** (`customer_users.notify_new_music_opt_in`) — fans who turned on "notify me when new music drops" (welcome sheet or Account settings). The album's **New-music announce** panel emails this whole list about the release, independent of any per-album waitlist.
+
+Both are operator-gated and never auto-fire. The global announce has three hard rules that any similar mass-email surface must copy:
+
+- **Preview the count first, refuse zero.** The panel shows a live recipient count; the send route refuses (400) when there are zero opted-in recipients, so an operator never fires an empty blast or assumes it "worked."
+- **Claim before you send, never mark after.** The per-album sent state is set with an atomic claim (`claimAlbumNewMusicAnnounce` — `UPDATE … WHERE id = ? AND new_music_notified_at IS NULL AND is_prepping = false RETURNING`). The route claims **before** the send loop and a lost claim returns 409, so two operators (or a double-click / retry) can never double-blast the same release. Don't "mark as notified" *after* sending — that leaves a race window.
+- **Every email carries a real unsubscribe.** The announcement links a one-tap unsubscribe (`GET /api/notify/new-music/unsubscribe?token=…`, no login) that flips the fan's global preference off. The token is a signed HMAC (keyed off `TOTP_ENC_KEY`); an invalid/missing/expired token renders a branded "Link expired" page, never a crash or raw JSON. Token signing **throws in production if the key is unset** — fail closed, never sign with a placeholder.
+
+**Why:** a global blast to every opted-in fan is the single most damaging thing to send twice or send empty, and an unsubscribe that doesn't work is a compliance problem. The claim-before-send + refuse-zero + working-unsubscribe trio is the contract for any future broadcast.
+
+**How to apply:** the per-album "this release is out" marker lives on `albums.new_music_notified_at` and is added idempotently in `scripts/post-merge.sh` for **both** dev and prod (schema-drift guard). Any new broadcast surface reuses the same shape — count endpoint, claim-before-send, signed unsubscribe — rather than a fresh fire-and-forget loop.

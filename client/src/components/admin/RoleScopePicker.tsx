@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Link2, Plus, X } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiErrorBody } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Spinner } from "@/components/ui/Spinner";
 
@@ -220,18 +220,14 @@ export const SCOPE_CONFIG: Record<string, ScopeCfg> = {
 
 export type ScopeEntity = { id: string; name: string; photoUrl?: string | null; logoUrl?: string | null };
 
-// Pull a clean human message out of an apiRequest error (which embeds the JSON
-// body after a "NNN: " status prefix).
-function humanizeScopeError(e: any): string {
-  const msg: string = e?.message || "Something went wrong. Try again.";
-  try {
-    const m = msg.match(/\{[\s\S]*\}/);
-    if (m) {
-      const p = JSON.parse(m[0]);
-      if (p?.message) return p.message;
-    }
-  } catch { /* fall through */ }
-  return msg.replace(/^\d{3}:\s*/, "");
+// Pull a clean human message out of an apiRequest error — prefer the
+// structured body the API client attaches (`err.body`), falling back to the
+// message text (status prefix stripped) for plain-string errors.
+function humanizeScopeError(e: unknown): string {
+  const body = apiErrorBody<{ message?: string }>(e);
+  if (body?.message && String(body.message).trim()) return String(body.message).trim();
+  const msg = e instanceof Error ? e.message : String(e ?? "");
+  return msg.replace(/^\d{3}:\s*/, "") || "Something went wrong. Try again.";
 }
 
 export function ScopePicker({
