@@ -31,7 +31,7 @@ import { TERMS_URL, PRIVACY_POLICY_URL } from "@shared/schema";
 //         server-suggested handle from the email local-part).
 // Step "verify": 6-digit email code (customer only — the Task #44 gate
 //         that proves email ownership before the password sticks).
-type Step = 1 | 2 | "verify";
+type Step = 1 | 2 | "verify" | "exists";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const isValidEmail = (v: string) => EMAIL_RE.test(v.trim());
@@ -343,10 +343,24 @@ export function Login() {
   // Blur-triggered (not change-triggered) so each character doesn't
   // burn a request against the per-IP rate limiter.
   const [lookupProvider, setLookupProvider] = useState<"password" | "google" | "apple" | null>(null);
+  // Task #2059 — OAuth email-collision recovery banner. When the Google/
+  // Apple callback finds an existing account for the chosen email it bounces
+  // back with ?prompt=link&email=…&provider=…; we keep that here so the
+  // login screen can show a persistent, actionable banner (password sign-in
+  // OR a one-tap welcome-back link) instead of a single ephemeral toast.
+  const [oauthLinkPrompt, setOauthLinkPrompt] = useState<{ email: string; provider: string } | null>(null);
   useEffect(() => {
     // Any change to the email clears the previous answer so a stale
     // OAuth-swap state can't strand a fan on the wrong provider.
     setLookupProvider(null);
+    // Task #2059 — drop the OAuth-collision banner once the fan edits the
+    // email to something other than the one the callback flagged, so it
+    // can't linger over a different address. The prompt effect sets
+    // loginIdent to the flagged email, so they match and the banner stays
+    // on first render. Functional update keeps oauthLinkPrompt out of deps.
+    setOauthLinkPrompt((prev) =>
+      prev && prev.email.toLowerCase() !== loginIdent.trim().toLowerCase() ? null : prev,
+    );
   }, [loginIdent, mode]);
   const runLookup = async () => {
     if (isAdmin) return;
@@ -392,10 +406,11 @@ export function Login() {
     // customer mid-flow.
     const loginPath = window.location.pathname.startsWith("/admin") ? "/admin/login" : "/login";
     if (prompt === "link" && emailQ) {
-      toast({
-        title: "Account exists",
-        description: `An account with ${emailQ} already exists. Sign in with your password, then link ${provider} from your profile.`,
-      });
+      // Task #2059 — surface a persistent, actionable recovery banner
+      // instead of an ephemeral toast. A passwordless fan (legacy import
+      // or OAuth-only) has no password to "sign in with first", so the
+      // banner also offers the one-tap welcome-back sign-in link.
+      setOauthLinkPrompt({ email: emailQ, provider: provider ?? "" });
       setLoginIdent(emailQ);
       setMode("login");
       window.history.replaceState({}, "", loginPath);
@@ -527,12 +542,24 @@ export function Login() {
   const [verifyToken, setVerifyToken] = useState<string | null>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [devCode, setDevCode] = useState<string | null>(null);
+  // Task #2059 — busy flag for the "email me a sign-in link" recovery
+  // action shared by the signup-collision branch and the OAuth banner.
+  const [linkBusy, setLinkBusy] = useState(false);
 
   const startCustomerVerify = async () => {
     setVerifyBusy(true); setVerifyError(null); setDevCode(null);
     try {
       const res = await apiRequest("POST", "/api/email-verifications/start", { email: email.trim() });
       const j = await res.json();
+      // Task #2059 — the email already has an account. No code was sent,
+      // so don't drop into the code-entry step (that's what used to burn
+      // codes and end in the misleading "that code didn't match"). Show
+      // the recovery branch instead.
+      if (j.accountExists) {
+        clearPendingVerify();
+        setStep("exists");
+        return;
+      }
       if (j.devCode) setDevCode(String(j.devCode));
       writePendingVerify(email.trim());
       setStep("verify");
@@ -540,6 +567,30 @@ export function Login() {
       setVerifyError(e?.message ?? "Couldn't send a code — check the email and try again");
     } finally {
       setVerifyBusy(false);
+    }
+  };
+
+  // Task #2059 — email a one-tap welcome-back sign-in link to a fan who
+  // hit either recovery surface: the signup "you already have an account"
+  // branch, or the OAuth email-collision banner. Reuses the
+  // non-enumerating /api/welcome-back/start rail, which mints a link for
+  // ANY existing non-merged fan (passwordless included), so the on-screen
+  // confirmation is the same neutral toast whether or not the email hit.
+  const sendSignInLink = async (targetEmail: string) => {
+    const addr = targetEmail.trim().toLowerCase();
+    if (!isValidEmail(addr)) {
+      toast({ title: "Enter your email first", description: "Type your email so we can send the sign-in link." });
+      return;
+    }
+    setLinkBusy(true);
+    try {
+      await apiRequest("POST", "/api/welcome-back/start", { email: addr });
+    } catch {
+      // Endpoint is intentionally non-enumerating — fall through to the
+      // same neutral toast so timing/errors never reveal account presence.
+    } finally {
+      setLinkBusy(false);
+      toast({ title: "Check your inbox", description: "If that email is on file, a one-tap sign-in link is on its way." });
     }
   };
 
@@ -972,7 +1023,7 @@ export function Login() {
             </button>
           </div>
         )}
-        {mode === "register" && (
+        {mode === "register" && step !== "exists" && (
           <div className="flex items-center justify-center gap-2 mb-5">
             <div className={s.step1Tick(step === 1)} />
             <div className={s.step2Tick(step === 2)} />
@@ -986,6 +1037,38 @@ export function Login() {
             /api/welcome-back/start with constant-floor latency and
             no-enumeration semantics, so it's safe to show pre-auth. */}
         {!isAdmin && mode === "login" && <WelcomeBackPill />}
+        {/* Task #2059 — OAuth email-collision recovery banner. The Google/
+            Apple callback bounced back with ?prompt=link because the chosen
+            email already has an account. Instead of a single ephemeral
+            toast that dead-ends a passwordless (legacy/OAuth-only) fan, show
+            a persistent banner that keeps the password sign-in path AND
+            offers a one-tap welcome-back link. No-auto-merge stays: linking
+            the provider happens from the profile after they're in. */}
+        {!isAdmin && mode === "login" && oauthLinkPrompt && (
+          <div
+            className="mb-4 rounded-2xl p-4"
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }}
+            data-testid="banner-oauth-link"
+          >
+            <p className="text-sm font-semibold text-fan-primary">You already have an account</p>
+            <p className="mt-1 text-xs leading-relaxed text-fan-secondary">
+              <strong className="text-fan-primary">{oauthLinkPrompt.email}</strong> is already registered. Sign in below
+              {oauthLinkPrompt.provider
+                ? ` to finish linking ${oauthLinkPrompt.provider[0].toUpperCase()}${oauthLinkPrompt.provider.slice(1)} from your profile`
+                : ""}
+              {" "}— or, if you never set a password, email yourself a one-tap sign-in link instead.
+            </p>
+            <button
+              type="button"
+              onClick={() => sendSignInLink(oauthLinkPrompt.email)}
+              disabled={linkBusy}
+              className={s.ghostBtn}
+              data-testid="button-oauth-link-send"
+            >
+              {linkBusy ? "Sending…" : "Email me a sign-in link"}
+            </button>
+          </div>
+        )}
         {mode === "login" && (
           <form onSubmit={handleLogin} className="flex flex-col gap-3">
             <div>
@@ -1233,6 +1316,45 @@ export function Login() {
           </form>
         )}
 
+        {/* Task #2059 — signup "account already exists" recovery branch.
+            Reached when /api/email-verifications/start reports the email is
+            already registered, BEFORE any code is minted. Replaces the old
+            dead-end (burn codes → "that code didn't match"). Customer-only:
+            this step is only ever set from startCustomerVerify. */}
+        {mode === "register" && step === "exists" && !isAdmin && (
+          <div className="flex flex-col gap-3" data-testid="step-account-exists">
+            <div
+              className="rounded-2xl p-4"
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }}
+            >
+              <p className="text-sm font-semibold text-fan-primary">You already have an account</p>
+              <p className="mt-1 text-xs leading-relaxed text-fan-secondary">
+                <strong className="text-fan-primary">{email.trim()}</strong> is already registered with GoodTunes. No new
+                code was sent. Sign in to pick up where you left off — or, if you never set a password, email yourself a
+                one-tap sign-in link.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => sendSignInLink(email)}
+              disabled={linkBusy}
+              className={s.primaryBtn}
+              style={s.primaryBtnStyle}
+              data-testid="button-exists-send-link"
+            >
+              {linkBusy ? "Sending…" : "Email me a sign-in link"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLoginIdent(email.trim()); setPassword(""); setMode("login"); setStep(1); }}
+              className={s.ghostBtn}
+              data-testid="button-exists-signin"
+            >
+              Sign in with a password instead
+            </button>
+          </div>
+        )}
+
         {mode === "register" && step === 2 && isAdmin && (
           <form onSubmit={handleRegister} className="flex flex-col gap-3">
             <div>
@@ -1285,7 +1407,7 @@ export function Login() {
           </form>
         )}
 
-        {!(mode === "register" && (step === 2 || step === "verify")) && (
+        {!(mode === "register" && (step === 2 || step === "verify" || step === "exists")) && (
           <>
             <div className="flex items-center gap-3 my-5">
               <div className={s.divider} />
@@ -1325,7 +1447,7 @@ export function Login() {
             consent is captured on the invite-accept page. Links open the
             public policy pages in a new tab. Inline-link treatment:
             inherit color at rest, brand-blue + underline on hover. */}
-        {!isAdmin && mode === "register" && (
+        {!isAdmin && mode === "register" && step !== "exists" && (
           <p className="mt-5 text-center text-xs leading-relaxed text-white/40" data-testid="text-terms-consent">
             By continuing, you agree to our{" "}
             <a

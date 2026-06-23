@@ -1803,6 +1803,23 @@ export function registerCommerceRoutes(app: Express) {
   app.post("/api/email-verifications/start", async (req, res) => {
     const email = normalizeEmail(req.body?.email ?? "");
     if (!isValidEmail(email)) return res.status(400).json({ message: "Please enter a valid email" });
+    // Task #2059 — pre-check existence BEFORE minting/sending a code. A
+    // fan whose email already has an account (commonly a passwordless
+    // legacy gogoods import) used to burn a fresh 6-digit code on every
+    // signup attempt: confirm consumed the code, signup-with-code then
+    // 409'd, and once the codes ran out the *verify* step showed the
+    // misleading "that code didn't match" error — so the fan thought the
+    // code was broken when the real problem was an account they couldn't
+    // get into. Detect the collision up front and tell the client to
+    // surface the "account already exists → email me a sign-in link"
+    // recovery branch instead of sending a code at all. (`/api/auth/lookup`
+    // already exposes account existence to the login form, so this adds no
+    // new enumeration surface.) signup-with-code keeps its own 409 as
+    // defense-in-depth.
+    const existingCustomer = await storage.getCustomerByEmail(email);
+    if (existingCustomer) {
+      return res.json({ ok: true, accountExists: true });
+    }
     const code = generateSixDigitCode();
     const codeHash = await hashCode(code);
     const expiresAt = new Date(Date.now() + 15 * 60_000);

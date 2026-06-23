@@ -43,6 +43,9 @@ Read the doc that matches your task before changing code:
 
 Save preferences here that don't fit a topic doc. Topic-scoped preferences belong in the matching doc above (design system rules in `docs/design-system.md`, etc.).
 
+### Don't end in a "waiting for input" state for optional questions
+Bill found it confusing when a task finishes by pausing on a non-blocking, optional preference ("let me know if you'd prefer X instead"). Don't do that. Make the sensible default call, ship it, and state plainly what you chose and how to change it later. Only pause for genuine blockers — missing access/secrets, a destructive/irreversible action, or a real fork where you can't infer the intent.
+
 ### Who's who
 - **Bill** is the operator / decision-maker running GoodTunes — talk to Bill as the customer for everything in this repo (plans, copy approvals, deal math, roadmap calls).
 - **Nick** is an artist on the platform (Nick Carter). Do not assign him operator/PM responsibilities in tasks or docs.

@@ -117,6 +117,32 @@ link on the sign-in screen routes a typed email straight to the verify
 step. The key is cleared on successful signup, on backing out of verify,
 and on switching auth mode.
 
+**Existing-email signup pre-check (Task #2059).** A fan who tries to
+*sign up* with an email that already has an account used to dead-end:
+`/api/email-verifications/start` minted and sent a fresh 6-digit code,
+`confirm` consumed it, `signup-with-code` then 409'd, and once the codes
+ran out the *verify* step showed the misleading "that code didn't match"
+— so the fan blamed the code when the real problem was an account they
+couldn't get into (commonly a passwordless legacy gogoods import).
+`start` now calls `storage.getCustomerByEmail` **before** minting or
+sending anything; on a hit it returns `{ ok: true, accountExists: true }`
+and the client drops into a dedicated `step === "exists"` recovery branch
+(no code sent) offering both **sign in with a password** and **email me a
+one-tap sign-in link** (the same `/api/welcome-back/start` rail). This
+adds no enumeration surface — `/api/auth/lookup` already exposes account
+existence to the login form — and `signup-with-code` keeps its 409 as
+defense-in-depth.
+
+**OAuth email-collision recovery (Task #2059).** When the Google/Apple
+callback finds an existing account for the chosen email it bounces back to
+the login screen with `?prompt=link&email=…&provider=…`. That used to
+fire a single ephemeral toast ("sign in with your password, then link"),
+which dead-ends a passwordless / OAuth-only fan who has no password to
+sign in with. `Login.tsx` now renders a **persistent** banner
+(`oauthLinkPrompt`) that keeps the password sign-in path *and* offers the
+one-tap welcome-back link. No-auto-merge is unchanged: the provider is
+linked from the profile after the fan is in, never silently joined here.
+
 ### Finish-signup for OAuth-minted fans (Task #537)
 
 OAuth (Google/Apple) creates a `customer_users` row with whatever the
