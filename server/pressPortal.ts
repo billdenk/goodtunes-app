@@ -920,6 +920,111 @@ export function registerPressPortalRoutes(
     res.json({ id: invite.id, email: invite.email, acceptUrl, emailDelivered: result.ok });
   });
 
+  // POST /api/press/:id/start-album — Task #2044. A press starts a draft
+  // album by inviting an artist, with the artist's profile prefilled from
+  // a streaming search (Spotify / Apple, via the same admin endpoints the
+  // operator's New-Album dialog uses) — NEVER by browsing our People
+  // roster. The whole thing is held for operator approval before anything
+  // becomes live: we mint the Person (or reuse one by email), create an
+  // un-homed draft album, and create the invite with review_status =
+  // 'pending_review' (so the email does NOT go out yet — it sends on
+  // approve). On approve the operator homes the album to this press and
+  // pins the press↔artist relationship; on reject the draft is trashed.
+  const startAlbumBodySchema = z.object({
+    email: z.string().email(),
+    name: z.string().min(1).max(200),
+    title: z.string().max(200).optional().nullable(),
+    welcomeNote: z.string().max(1000).optional().nullable(),
+    // Streaming prefill — all optional (the press can also enter a name
+    // manually and skip the search). These mirror the scrape result shape.
+    photoUrl: z.string().max(2000).optional().nullable(),
+    bio: z.string().max(5000).optional().nullable(),
+    spotifyUrl: z.string().max(2000).optional().nullable(),
+    appleMusicUrl: z.string().max(2000).optional().nullable(),
+    itunesArtistId: z.string().max(64).optional().nullable(),
+  });
+  app.post("/api/press/:id/start-album", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const parsed = startAlbumBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request" });
+    }
+    const { email, name, title, welcomeNote, photoUrl, bio, spotifyUrl, appleMusicUrl, itunesArtistId } = parsed.data;
+    const lower = email.toLowerCase();
+
+    // Resolve the artist Person: reuse by email if one already exists
+    // (don't let a press overwrite a curated profile), else mint a fresh
+    // row from the streaming prefill. We stamp `invited_by_press_id`
+    // provenance now, but DON'T pin `default_press_id` on the person —
+    // that relationship only goes live when an operator approves.
+    const existing = await db.execute<{ id: string }>(sql`
+      SELECT id FROM people WHERE LOWER(email) = ${lower} LIMIT 1
+    `);
+    let personId: string = ((existing as any).rows ?? [])[0]?.id;
+    if (!personId) {
+      const created = await db.execute<{ id: string }>(sql`
+        INSERT INTO people (name, email, invited_by_press_id, photo_url, bio, spotify_url, apple_music_url, itunes_artist_id)
+        VALUES (
+          ${name}, ${lower}, ${pressId},
+          ${photoUrl ?? null}, ${bio ?? null},
+          ${spotifyUrl ?? null}, ${appleMusicUrl ?? null}, ${itunesArtistId ?? null}
+        )
+        RETURNING id
+      `);
+      personId = (created as any).rows[0].id;
+    }
+
+    // Create the un-homed draft album. It stays invisible to the press's
+    // Albums tab until the operator approves (which creates the homing
+    // pressing_order_request); the invite's preFlightedAlbumId lands the
+    // artist straight on the editor once they accept post-approval.
+    const draft = await storage.createAlbum({
+      title: (title && title.trim()) || `${name} — untitled album`,
+      artist: name,
+      artwork: "/album-placeholder.svg",
+      type: "LP",
+      isGoodTunesRelease: true,
+      isPrepping: true,
+      primaryArtistId: personId,
+    } as any);
+
+    // Mint the held invite. createAdminInvite carries the base fields; a
+    // follow-up UPDATE stamps the press provenance + identity-invite shape
+    // + the pending-review hold (mirrors the /invite endpoint's pattern of
+    // a post-insert UPDATE for default_press_id).
+    const crypto = await import("crypto");
+    const token = crypto.randomBytes(32).toString("base64url");
+    const INVITE_TTL_DAYS = 14;
+    const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+    const invite = await storage.createAdminInvite({
+      email: lower,
+      role: "artist",
+      roleScopeId: personId,
+      token,
+      expiresAt,
+      createdByUserId: (req.session as any).userId,
+      referrerKind: "manufacturer",
+      referrerScopeId: pressId,
+      welcomeNote: welcomeNote ?? null,
+      inviteRole: "identity",
+      targetPersonId: personId,
+      preFlightedAlbumId: draft.id,
+      reviewStatus: "pending_review",
+    } as any);
+    await db.execute(sql`
+      UPDATE admin_invites SET default_press_id = ${pressId} WHERE id = ${invite.id}
+    `);
+
+    // No email here — it fires when the operator approves the held invite.
+    res.json({
+      ok: true,
+      held: true,
+      inviteId: invite.id,
+      albumId: draft.id,
+      personId,
+    });
+  });
+
   // POST /api/press/:id/invites/:inviteId/resend — mint a fresh token,
   // extend expiry, re-email. Scoped to invites belonging to this press
   // (default_press_id match) so one press can't touch another's queue.

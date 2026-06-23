@@ -26,7 +26,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
 import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
@@ -371,34 +371,118 @@ function DashboardSummary({ pressId }: { pressId: string }) {
   );
 }
 
+// Streaming-prefill candidate for the press "start an album" artist
+// picker. The press searches Spotify / Apple (the SAME admin endpoints the
+// operator's New-Album dialog uses) and NEVER browses our local People
+// roster — pressing a candidate fills the artist's name + profile so the
+// held draft starts with real metadata.
+interface StreamCandidate {
+  id: string;
+  name: string;
+  source: "spotify" | "apple";
+  spotifyUrl?: string;
+  appleMusicUrl?: string;
+  itunesArtistId?: string;
+  photoUrl: string | null;
+}
+
 function InviteDialog({ open, onOpenChange, pressId }: { open: boolean; onOpenChange: (o: boolean) => void; pressId: string }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<"artist" | "label">("artist");
   const [welcomeNote, setWelcomeNote] = useState("");
+  const [albumTitle, setAlbumTitle] = useState("");
+  // Streaming search/prefill state (artist path only).
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [candidates, setCandidates] = useState<StreamCandidate[]>([]);
+  const [searched, setSearched] = useState(false);
+  const [picked, setPicked] = useState<StreamCandidate | null>(null);
   const { toast } = useToast();
-  const m = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", `/api/press/${pressId}/invite`, {
-        email, name, role, welcomeNote: welcomeNote || null,
-      });
-    },
+
+  const reset = () => {
+    setEmail(""); setName(""); setWelcomeNote(""); setAlbumTitle("");
+    setQuery(""); setCandidates([]); setSearched(false); setPicked(null);
+    setSearching(false); setRole("artist");
+  };
+
+  // Spotify search with Apple fallback — mirrors NewAlbumArtistDialog.
+  const runSearch = async () => {
+    const q = query.trim();
+    if (!q) return;
+    setSearching(true);
+    setSearched(true);
+    setCandidates([]);
+    const token = getAuthToken();
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    let list: StreamCandidate[] = [];
+    try {
+      const res = await fetch(`/api/admin/spotify/artist-search?q=${encodeURIComponent(q)}`, { credentials: "include", headers });
+      if (res.ok) {
+        const json = (await res.json()) as { candidates: Array<{ id: string; name: string; spotifyUrl?: string; photoUrl: string | null }> };
+        list = (json.candidates ?? []).map((c) => ({ id: `spotify-${c.id}`, name: c.name, source: "spotify" as const, spotifyUrl: c.spotifyUrl, photoUrl: c.photoUrl }));
+      }
+    } catch { /* fall through to Apple */ }
+    if (list.length === 0) {
+      try {
+        const res = await fetch(`/api/admin/apple/artist-search?q=${encodeURIComponent(q)}`, { credentials: "include", headers });
+        if (res.ok) {
+          const json = (await res.json()) as { candidates: Array<{ artistId: string; name: string; appleMusicUrl: string }> };
+          list = (json.candidates ?? []).map((a) => ({ id: `apple-${a.artistId}`, name: a.name, source: "apple" as const, appleMusicUrl: a.appleMusicUrl, itunesArtistId: a.artistId, photoUrl: null }));
+        }
+      } catch { /* leave empty */ }
+    }
+    setCandidates(list);
+    setSearching(false);
+  };
+
+  const pickCandidate = (c: StreamCandidate) => {
+    setPicked(c);
+    setName(c.name);
+  };
+
+  // Label path → existing /invite (fires email immediately).
+  const labelInvite = useMutation({
+    mutationFn: async () => apiRequest("POST", `/api/press/${pressId}/invite`, { email, name, role: "label", welcomeNote: welcomeNote || null }),
     onSuccess: () => {
       toast({ title: "Invite sent", description: `${email} will land in your Customers list when they accept.` });
       queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/customers`] });
       queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/pipeline`] });
       onOpenChange(false);
-      setEmail(""); setName(""); setWelcomeNote("");
+      reset();
     },
-    onError: (e: any) => {
-      toast({ title: "Invite failed", description: e?.message ?? "Try again.", variant: "destructive" });
-    },
+    onError: (e: any) => toast({ title: "Invite failed", description: e?.message ?? "Try again.", variant: "destructive" }),
   });
+
+  // Artist path → /start-album (held for operator approval, no email yet).
+  const startAlbum = useMutation({
+    mutationFn: async () => apiRequest("POST", `/api/press/${pressId}/start-album`, {
+      email,
+      name,
+      title: albumTitle || null,
+      welcomeNote: welcomeNote || null,
+      photoUrl: picked?.photoUrl ?? null,
+      spotifyUrl: picked?.spotifyUrl ?? null,
+      appleMusicUrl: picked?.appleMusicUrl ?? null,
+      itunesArtistId: picked?.itunesArtistId ?? null,
+    }),
+    onSuccess: () => {
+      toast({ title: "Sent for approval", description: `We'll email ${email} to start their album once a GoodTunes operator approves it.` });
+      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/customers`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/pipeline`] });
+      onOpenChange(false);
+      reset();
+    },
+    onError: (e: any) => toast({ title: "Couldn't start album", description: e?.message ?? "Try again.", variant: "destructive" }),
+  });
+
+  const busy = labelInvite.isPending || startAlbum.isPending;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(o) => { if (busy && !o) return; onOpenChange(o); if (!o) reset(); }}>
       <DialogContent className="bg-white text-slate-900" data-testid="dialog-invite-artist">
         <DialogHeader>
-          <DialogTitle>Invite an artist or label</DialogTitle>
+          <DialogTitle>{role === "artist" ? "Start an album with an artist" : "Invite a label"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="flex gap-2">
@@ -415,12 +499,84 @@ function InviteDialog({ open, onOpenChange, pressId }: { open: boolean; onOpenCh
               data-testid="button-role-label"
             >Label</button>
           </div>
-          <Input
-            placeholder={role === "artist" ? "Artist name" : "Label name"}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            data-testid="input-invite-name"
-          />
+
+          {role === "artist" ? (
+            <>
+              {/* Streaming search — find the artist on Spotify / Apple so the
+                  draft starts with their real name + photo. */}
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Search Spotify / Apple for the artist"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); runSearch(); } }}
+                  data-testid="input-invite-streaming-search"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={runSearch}
+                  disabled={searching || !query.trim()}
+                  className="h-9 shrink-0"
+                  data-testid="button-invite-streaming-search"
+                >
+                  {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
+                </Button>
+              </div>
+              {searched && !searching && candidates.length === 0 && (
+                <p className="text-xs text-slate-500" data-testid="text-invite-no-candidates">
+                  No streaming matches. Pick again or type the artist name below.
+                </p>
+              )}
+              {candidates.length > 0 && (
+                <ul className="max-h-48 overflow-y-auto rounded-md border border-slate-200 divide-y divide-slate-100" data-testid="list-invite-candidates">
+                  {candidates.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        onClick={() => pickCandidate(c)}
+                        className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 ${picked?.id === c.id ? "bg-slate-100" : ""}`}
+                        data-testid={`button-pick-candidate-${c.id}`}
+                      >
+                        {c.photoUrl ? (
+                          <img src={c.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover bg-slate-100 shrink-0" />
+                        ) : (
+                          <span className="w-9 h-9 rounded-full bg-[var(--brand-blue)] text-white text-sm font-semibold inline-flex items-center justify-center shrink-0">
+                            {c.name.slice(0, 1).toUpperCase()}
+                          </span>
+                        )}
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-semibold text-slate-900 truncate">{c.name}</span>
+                          <span className="block text-[11px] uppercase tracking-wide text-slate-400">{c.source}</span>
+                        </span>
+                        {picked?.id === c.id && <span className="text-[var(--brand-blue)] text-xs font-semibold">Selected</span>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Input
+                placeholder="Artist name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                data-testid="input-invite-name"
+              />
+              <Input
+                placeholder="Album title (optional)"
+                value={albumTitle}
+                onChange={(e) => setAlbumTitle(e.target.value)}
+                data-testid="input-invite-album-title"
+              />
+            </>
+          ) : (
+            <Input
+              placeholder="Label name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              data-testid="input-invite-name"
+            />
+          )}
+
           <Input
             placeholder="email@example.com"
             type="email"
@@ -435,17 +591,33 @@ function InviteDialog({ open, onOpenChange, pressId }: { open: boolean; onOpenCh
             rows={3}
             data-testid="input-invite-note"
           />
+          {role === "artist" && (
+            <p className="text-xs text-slate-500" data-testid="text-invite-approval-hint">
+              A GoodTunes operator reviews this before the artist is emailed.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="h-9">Cancel</Button>
-          <Button
-            onClick={() => m.mutate()}
-            disabled={m.isPending || !email || !name}
-            className="h-9 bg-slate-900 text-white hover:bg-slate-800"
-            data-testid="button-send-invite"
-          >
-            {m.isPending ? "Sending…" : "Send invite"}
-          </Button>
+          {role === "artist" ? (
+            <Button
+              onClick={() => startAlbum.mutate()}
+              disabled={busy || !email || !name}
+              className="h-9 bg-slate-900 text-white hover:bg-slate-800"
+              data-testid="button-send-invite"
+            >
+              {startAlbum.isPending ? "Sending…" : "Send for approval"}
+            </Button>
+          ) : (
+            <Button
+              onClick={() => labelInvite.mutate()}
+              disabled={busy || !email || !name}
+              className="h-9 bg-slate-900 text-white hover:bg-slate-800"
+              data-testid="button-send-invite"
+            >
+              {labelInvite.isPending ? "Sending…" : "Send invite"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

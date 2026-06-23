@@ -12141,106 +12141,6 @@
   },
   {
     "rule": "brand-hex-literal",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "{g.copyId && <Gift className=\"w-3.5 h-3.5 text-[#FF5470]\" />}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "<div className=\"mt-1.5 text-[11.5px] text-[#4AFFCA]\">Claimed {new Date(g.claimedAt).toLocaleDateString()}</div>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "className=\"px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#FF5470]/20 text-[#FF5470] hover:bg-[#FF5470]/30 disabled:opacity-50\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "className=\"px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#7F10A7]/30 text-[#c89dff] hover:bg-[#7F10A7]/40 disabled:opacity-50\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "<span className=\"text-[11px] font-medium text-[#4AFFCA]\">Yours</span>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-full text-[12px] font-semibold bg-[#FF5470] text-white hover:opacity-90 disabled:opacity-50\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "className=\"mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#FF5470]/20 text-[#FF5470] hover:bg-[#FF5470]/30\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "<span className=\"text-[11px] font-semibold uppercase tracking-wider text-fan-secondary\">{label}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "<div className=\"mt-1 text-[12px] text-fan-secondary leading-snug\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "<div className=\"mt-1.5 text-[11.5px] text-[#4AFFCA]\">Claimed {new Date(g.claimedAt).toLocaleDateString()}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "className=\"px-3 py-1 rounded-full text-[11.5px] font-medium bg-white/10 text-white hover:bg-white/15\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "className=\"px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#FF5470]/20 text-[#FF5470] hover:bg-[#FF5470]/30 disabled:opacity-50\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "className=\"px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#7F10A7]/30 text-[#c89dff] hover:bg-[#7F10A7]/40 disabled:opacity-50\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "<span className=\"text-[11px] font-medium text-[#4AFFCA]\">Yours</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "<div className=\"mt-1.5 text-[11.5px] text-fan-secondary\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "className=\"min-w-0 flex-1 rounded-lg bg-white/10 px-3 py-2 text-[13px] text-fan-primary placeholder:text-fan-secondary/60 outline-none focus:bg-white/15\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "className=\"rounded-lg bg-white/10 px-2 py-2 text-[13px] text-fan-primary outline-none focus:bg-white/15\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-full text-[12px] font-semibold bg-[#FF5470] text-white hover:opacity-90 disabled:opacity-50\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-full text-[12px] font-medium bg-white/10 text-fan-secondary hover:bg-white/15\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/gift/CopyGiftCard.tsx",
-    "snippet": "className=\"mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#FF5470]/20 text-[#FF5470] hover:bg-[#FF5470]/30\""
-  },
-  {
-    "rule": "brand-hex-literal",
     "file": "client/src/components/GlobalErrorBoundary.tsx",
     "snippet": "\"background:#FF5470\","
   },
@@ -16762,6 +16662,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "className=\"px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-n"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
     "snippet": "className=\"inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded bg-[var(--brand-blue)]/10 text-[#266a93] text-[11.5px] font-medium\""
   },
   {
@@ -20841,6 +20746,21 @@
   },
   {
     "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<span className=\"block text-[11px] uppercase tracking-wide text-slate-400\">{c.source}</span>"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<img src={c.photoUrl} alt=\"\" className=\"w-9 h-9 rounded-full object-cover bg-slate-100 shrink-0\" />"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<span className=\"w-9 h-9 rounded-full bg-[var(--brand-blue)] text-white text-sm font-semibold inline-flex items-center justify-center shrink-0\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
     "file": "client/src/pages/PrinterPortal.tsx",
     "snippet": "<h2 className=\"text-[20px] font-semibold text-slate-900 mb-1\">Print queue</h2>"
   },
@@ -21183,16 +21103,6 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Welcome.tsx",
     "snippet": "<span className=\"ml-1.5 text-[11px] text-[#FF5470] font-medium\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Welcome.tsx",
-    "snippet": "className=\"border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Welcome.tsx",
-    "snippet": "className=\"w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]\""
   },
   {
     "rule": "brand-hex-literal",

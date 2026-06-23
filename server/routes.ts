@@ -7027,6 +7027,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // release created without an Apple URL. Fire-and-forget so the create
       // response isn't blocked on a Spotify lookup.
       maybeAutoResolveSpotifyLink(album);
+      // Task #2044 — Operator "Add album from the press page": optional
+      // pressId homes the new album to that press immediately (no approval
+      // step — an operator is trusted). Gated to real operators
+      // (super_admin/admin); requireAdmin also admits partner accounts, who
+      // must NOT be able to self-home an album by POSTing a pressId here
+      // (the press-originated flow runs through /api/press/:id/start-album
+      // and is held for operator approval instead).
+      const rawPressId = req.body?.pressId ? String(req.body.pressId) : null;
+      if (rawPressId) {
+        const actorRole = (await getUserRole(req.session.userId!))?.role;
+        if (actorRole !== "super_admin" && actorRole !== "admin") {
+          return res.status(403).json({ message: "Only an operator can home an album to a press." });
+        }
+        if (!(await storage.getManufacturerById(rawPressId))) {
+          return res.status(400).json({ message: "Unknown pressId" });
+        }
+        await homeAlbumToPress(album.id, rawPressId, req.session.userId!);
+      }
       return res.status(201).json(artistLabelConflict ? { ...album, artistLabelConflict } : album);
     } catch (err: any) {
       // Task #872 — the create path previously had no try/catch, so any
@@ -22698,6 +22716,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return { inQueue, released };
   }
 
+  // Task #2044 — Home an album to a press the same way an artist's "Go to
+  // Press!" does: a pending pressing_order_request whose package snapshot
+  // carries the press id. This is the ONLY mechanism that ties an album to
+  // a press (there is no albums.press_id column), so both the operator
+  // "Add album from the press page" flow and the approval of a
+  // press-originated album draft route through here. Snapshot is minimal
+  // (no color/quantity tier yet) — the artist or operator fills the real
+  // pressing package in later from the album's Sell panel.
+  async function homeAlbumToPress(
+    albumId: string,
+    pressId: string,
+    submittedByUserId: string,
+  ) {
+    const press = await storage.getManufacturerById(pressId);
+    const album = await storage.getAlbumById(albumId);
+    const snapshot = {
+      format: (album as any)?.physicalFormat || (album as any)?.type || "LP",
+      pressId,
+      pressName: press?.name ?? null,
+      vinylColor: null,
+      vinylColorTier: null,
+      jacketUpgrade: null,
+      quantityTier: null,
+    };
+    return storage.insertPressingOrderRequest({
+      albumId,
+      packageSnapshot: snapshot as any,
+      quantity: 0,
+      unitCents: 0,
+      totalCents: 0,
+      preflightStatus: null,
+      submittedByUserId,
+    });
+  }
+
   // Builds the analytics response from analytics_events for the given
   // connected album / person / gear scopes. Counts plays + views by
   // album, and clicks per person/gear scope. Each bucket is capped so
@@ -24181,10 +24234,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ai.created_by_user_id AS "createdByUserId",
         u.display_name AS "createdByName",
         p.name AS "targetPersonName", p.photo_url AS "targetPersonPhoto",
-        p.is_group AS "targetIsGroup", p.spotify_url AS "targetSpotifyId"
+        p.is_group AS "targetIsGroup", p.spotify_url AS "targetSpotifyId",
+        ai.referrer_kind AS "referrerKind",
+        m.name AS "invitingPressName",
+        al.title AS "draftAlbumTitle"
       FROM admin_invites ai
       LEFT JOIN users u ON u.id = ai.created_by_user_id
       LEFT JOIN people p ON p.id = ai.target_person_id
+      LEFT JOIN manufacturers m ON ai.referrer_kind = 'manufacturer' AND m.id = ai.referrer_scope_id
+      LEFT JOIN albums al ON al.id = ai.pre_flighted_album_id
       WHERE ai.review_status = 'pending_review'
         AND ai.used_at IS NULL AND ai.revoked_at IS NULL
       ORDER BY ai.created_at DESC
@@ -24206,6 +24264,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const inviter = await storage.getUser((invite as any).createdByUserId);
     const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes admin";
     const branding = await resolveInviterBranding((invite as any).createdByUserId);
+    // Task #2044 — press-originated album invite (a press started a draft
+    // album for an artist; held until now). On approval the press↔artist
+    // relationship + album go live for the press: home the draft album to
+    // the inviting press and pin the artist's default press. Marker =
+    // manufacturer referrer + a pre-flighted draft album.
+    const isPressAlbum =
+      (invite as any).referrerKind === "manufacturer" &&
+      !!(invite as any).preFlightedAlbumId &&
+      !!(invite as any).referrerScopeId;
+    if (isPressAlbum) {
+      const pressId = String((invite as any).referrerScopeId);
+      const draftAlbumId = String((invite as any).preFlightedAlbumId);
+      const personId = (invite as any).targetPersonId ?? (invite as any).roleScopeId;
+      await homeAlbumToPress(draftAlbumId, pressId, req.session.userId!);
+      if (personId) {
+        await db.execute(sql`
+          UPDATE people SET default_press_id = ${pressId}
+          WHERE id = ${personId} AND default_press_id IS NULL
+        `);
+      }
+    }
     const result = await sendAdminInviteEmail(invite.email, acceptUrl, inviterName, ROLE_LABELS[invite.role] || invite.role, INVITE_TTL_DAYS, branding.photoUrl, branding.onBehalfOf);
     await db.execute(sql`
       UPDATE admin_invites
@@ -24230,6 +24309,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           reviewed_at = NOW(), review_note = ${reason}, revoked_at = NOW()
       WHERE id = ${id}
     `);
+    // Task #2044 — rejecting a press-originated album invite trashes the
+    // held draft album (it was never homed or live, so a soft-delete just
+    // makes the orphan disappear). The placeholder Person is left alone —
+    // it may have been a pre-existing roster row reused by email, and a
+    // never-pinned default_press means it isn't claimed by the press.
+    const isPressAlbum =
+      (invite as any).referrerKind === "manufacturer" &&
+      !!(invite as any).preFlightedAlbumId;
+    if (isPressAlbum) {
+      try {
+        await storage.deleteAlbum(String((invite as any).preFlightedAlbumId), req.session.userId!);
+      } catch (e: any) {
+        console.error("[admin] reject press-album draft cleanup failed", { id, message: e?.message });
+      }
+    }
     res.json({ ok: true });
   });
 

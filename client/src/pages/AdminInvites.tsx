@@ -896,6 +896,7 @@ function ReviewQueuePanel() {
     targetPersonName: string | null; targetPersonPhoto: string | null;
     targetIsGroup: boolean | null; targetSpotifyId: string | null;
     createdByName: string | null; createdAt: string;
+    referrerKind: string | null; invitingPressName: string | null; draftAlbumTitle: string | null;
   }>>({
     queryKey: ["/api/admin/invites/review"],
     retry: false,
@@ -999,7 +1000,15 @@ function ReviewQueuePanel() {
                 {inv.targetSpotifyId && <> · <span className="text-amber-700">Spotify-claimed</span></>}
                 {inv.targetIsGroup && <> · <span className="text-amber-700">group</span></>}
                 {inv.createdByName && <> · invited by {inv.createdByName}</>}
+                {inv.referrerKind === "manufacturer" && inv.invitingPressName && (
+                  <> · <span className="text-[var(--brand-blue)] font-medium">via {inv.invitingPressName}</span></>
+                )}
               </div>
+              {inv.referrerKind === "manufacturer" && inv.draftAlbumTitle && (
+                <div className="text-xs text-slate-500 mt-0.5" data-testid={`text-review-draft-album-${inv.id}`}>
+                  Draft album: <span className="font-medium text-slate-700">{inv.draftAlbumTitle}</span>
+                </div>
+              )}
             </div>
             <button
               type="button"

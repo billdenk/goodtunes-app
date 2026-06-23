@@ -31,6 +31,8 @@ import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard"
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
+import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
+import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { SaveLink, CardHeader } from "@/components/admin/EditCardChrome";
 import { Button } from "@/components/ui/button";
@@ -204,12 +206,20 @@ export function AdminManufacturer() {
     enabled: !!user?.isAdmin,
   });
   const isSuperAdmin = meRole?.role === "super_admin";
+  // Task #2044 — only real operators (super_admin/admin) can add an album
+  // straight onto a press (auto-homed, no approval). Partner admins viewing
+  // a press they belong to don't get the button (the server also gates it).
+  const isOperator = meRole?.role === "super_admin" || meRole?.role === "admin";
   const [, params] = useRoute<{ id: string }>("/admin/manufacturers/:id");
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const id = params?.id ?? "";
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [logoEditorOpen, setLogoEditorOpen] = useState(false);
+  // Task #2044 — operator "Add album" two-step flow, mirroring AdminAlbums.
+  const [artistDialogOpen, setArtistDialogOpen] = useState(false);
+  const [titleDialogOpen, setTitleDialogOpen] = useState(false);
+  const [pendingArtist, setPendingArtist] = useState<{ name: string; id: string } | null>(null);
   // Task #295 — Overview / People / Albums / Analytics parity with
   // the Maker template. Overview keeps the editable profile + press
   // catalog + permissions cards; the other three tabs are shared
@@ -254,6 +264,34 @@ export function AdminManufacturer() {
     },
     onError: (e: any) =>
       toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
+  });
+
+  // Task #2044 — operator "Add album" homed to this press. Reuses the
+  // shared POST /api/admin/albums with an optional `pressId`, which the
+  // server homes via a pressing_order_request (no approval — an operator
+  // is trusted). Lands on the new draft's onboarding flow, same as the
+  // global AdminAlbums create.
+  const createAlbum = useMutation({
+    mutationFn: async (args: { title: string; artist?: { name: string; id: string } }) => {
+      const r = await apiRequest("POST", "/api/admin/albums", {
+        title: args.title,
+        artist: args.artist?.name || "Unknown artist",
+        artwork: "/album-placeholder.svg",
+        type: "LP",
+        isGoodTunesRelease: true,
+        isPrepping: true,
+        primaryArtistId: args.artist?.id || null,
+        pressId: id,
+      });
+      return (await r.json()) as { id: string };
+    },
+    onSuccess: (a) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/manufacturers/${id}/albums`] });
+      navigate(`/admin/albums/${a.id}?onboarding=1`);
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't create album", description: e?.message || "Please try again.", variant: "destructive" }),
   });
 
   const rescrape = useMutation({
@@ -527,11 +565,55 @@ export function AdminManufacturer() {
           />
         )}
         {tab === "albums" && (
-          <EntityAlbumsTab
-            apiPath={`/api/admin/manufacturers/${m.id}/albums`}
-            testIdPrefix="press"
-            emptyHint="No pressing-order requests have resolved to this press yet."
-          />
+          <div className="space-y-4">
+            {isOperator && (
+              <div className="flex items-center justify-end">
+                <button
+                  type="button"
+                  disabled={createAlbum.isPending}
+                  onClick={() => { if (!createAlbum.isPending) setArtistDialogOpen(true); }}
+                  className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  data-testid="button-press-add-album"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add album
+                </button>
+              </div>
+            )}
+            <EntityAlbumsTab
+              apiPath={`/api/admin/manufacturers/${m.id}/albums`}
+              testIdPrefix="press"
+              emptyHint="No pressing-order requests have resolved to this press yet."
+            />
+            <NewAlbumArtistDialog
+              open={artistDialogOpen}
+              onOpenChange={(next) => { if (createAlbum.isPending && !next) return; setArtistDialogOpen(next); }}
+              busy={createAlbum.isPending}
+              mode="album"
+              onSelect={({ name, id: artistId }) => {
+                if (createAlbum.isPending) return;
+                setPendingArtist({ name, id: artistId });
+                setArtistDialogOpen(false);
+                setTitleDialogOpen(true);
+              }}
+              onSkip={() => {
+                if (createAlbum.isPending) return;
+                setPendingArtist(null);
+                setArtistDialogOpen(false);
+                setTitleDialogOpen(true);
+              }}
+            />
+            <NewAlbumTitleDialog
+              open={titleDialogOpen}
+              onOpenChange={(next) => { if (createAlbum.isPending && !next) return; setTitleDialogOpen(next); }}
+              artistName={pendingArtist?.name ?? null}
+              busy={createAlbum.isPending}
+              onSubmit={(title) => {
+                if (createAlbum.isPending) return;
+                createAlbum.mutate({ title, artist: pendingArtist ?? undefined });
+              }}
+            />
+          </div>
         )}
         {tab === "catalog" && (
           <>
