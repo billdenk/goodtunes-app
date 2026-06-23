@@ -33,6 +33,10 @@ const missingLyricsAlbum = id("album-lyrics");
 const missingCreditsAlbum = id("album-credits");
 const emptyAlbum = id("album-empty");
 const nonGoodtunesAlbum = id("album-nongt");
+// Soft-delete coverage (the audit must ignore trashed songs + credit rows).
+const trashedSongAlbum = id("album-trashed-song");
+const deletedWriterAlbum = id("album-deleted-writer");
+const deletedAlbum = id("album-deleted");
 
 const allAlbumIds = [
   completeAlbum,
@@ -42,6 +46,9 @@ const allAlbumIds = [
   missingCreditsAlbum,
   emptyAlbum,
   nonGoodtunesAlbum,
+  trashedSongAlbum,
+  deletedWriterAlbum,
+  deletedAlbum,
 ];
 
 // Seed an album (GoodTunes release by default) plus a song with controllable
@@ -66,23 +73,30 @@ async function seedSong(
     lyrics?: string | null;
     writer?: boolean;
     performer?: boolean;
+    // Soft-delete the song itself (sets songs.deleted_at).
+    deleted?: boolean;
+    // Soft-delete the credit rows (sets track_writers/performers.deleted_at)
+    // while leaving the row in place, mimicking the album editor's delete.
+    writerDeleted?: boolean;
+    performerDeleted?: boolean;
   },
 ) {
   await exec(sql`
-    INSERT INTO songs (id, album_id, title, track_number, mux_status, instrumental, lyrics)
+    INSERT INTO songs (id, album_id, title, track_number, mux_status, instrumental, lyrics, deleted_at)
     VALUES (${songId}, ${albumId}, ${"Track " + songId}, 1,
-            ${opts.muxStatus ?? null}, ${opts.instrumental ?? false}, ${opts.lyrics ?? null})
+            ${opts.muxStatus ?? null}, ${opts.instrumental ?? false}, ${opts.lyrics ?? null},
+            ${opts.deleted ? sql`now()` : null})
   `);
   if (opts.writer) {
     await exec(sql`
-      INSERT INTO track_writers (song_id, name, role, position)
-      VALUES (${songId}, 'A Writer', 'Composer', 0)
+      INSERT INTO track_writers (song_id, name, role, position, deleted_at)
+      VALUES (${songId}, 'A Writer', 'Composer', 0, ${opts.writerDeleted ? sql`now()` : null})
     `);
   }
   if (opts.performer) {
     await exec(sql`
-      INSERT INTO track_performers (song_id, name, role, position)
-      VALUES (${songId}, 'A Performer', 'Guitar', 0)
+      INSERT INTO track_performers (song_id, name, role, position, deleted_at)
+      VALUES (${songId}, 'A Performer', 'Guitar', 0, ${opts.performerDeleted ? sql`now()` : null})
     `);
   }
 }
@@ -146,6 +160,45 @@ before(async () => {
   //    GoodTunes-releases only).
   await seedAlbum(nonGoodtunesAlbum, { isGoodtunes: false });
   await seedSong(id("song-nongt"), nonGoodtunesAlbum, { muxStatus: null });
+
+  // 8. Soft-deleted song: one fully-complete live track PLUS a trashed,
+  //    master-less song. The trashed song's deleted_at must keep it out of the
+  //    audit entirely — counting it would (a) inflate trackCount and (b) drop
+  //    the album into the audit because of its missing master. With the filter
+  //    working the album is COMPLETE and must be EXCLUDED.
+  await seedAlbum(trashedSongAlbum);
+  await seedSong(id("song-live"), trashedSongAlbum, {
+    muxStatus: "ready",
+    lyrics: "words",
+    writer: true,
+    performer: true,
+  });
+  await seedSong(id("song-trashed"), trashedSongAlbum, {
+    muxStatus: null, // master-less — would mark the album incomplete if counted
+    lyrics: null,
+    deleted: true,
+  });
+
+  // 9. Soft-deleted writer credit: a single track that is otherwise complete
+  //    (ready master, lyrics, a live performer) but whose ONLY writer row is
+  //    soft-deleted. The EXISTS subquery filters on deleted_at IS NULL, so the
+  //    live credits are performer-only → creditsComplete must be 0 and the
+  //    album must be INCLUDED. A regression that counted deleted credit rows
+  //    would report creditsComplete = 1 and silently drop the album.
+  await seedAlbum(deletedWriterAlbum);
+  await seedSong(id("song-delwriter"), deletedWriterAlbum, {
+    muxStatus: "ready",
+    lyrics: "words",
+    writer: true,
+    writerDeleted: true,
+    performer: true,
+  });
+
+  // 10. Soft-deleted album: incomplete (master-less song) but a.deleted_at is
+  //     set, so it must never appear regardless of completeness.
+  await seedAlbum(deletedAlbum);
+  await exec(sql`UPDATE albums SET deleted_at = now() WHERE id = ${deletedAlbum}`);
+  await seedSong(id("song-delalbum"), deletedAlbum, { muxStatus: null });
 });
 
 after(async () => {
@@ -218,4 +271,38 @@ test("an album with zero tracks is included", async () => {
 test("non-GoodTunes-release albums never appear, however incomplete", async () => {
   const { rows } = await incompleteAlbums();
   assert.equal(byId(rows, nonGoodtunesAlbum), undefined, "audit is GoodTunes-releases only");
+});
+
+test("a soft-deleted (trashed) song is ignored and doesn't skew the audit", async () => {
+  const { rows } = await incompleteAlbums();
+  // The album's only live track is complete, so the trashed master-less song
+  // must NOT pull it into the audit.
+  assert.equal(
+    byId(rows, trashedSongAlbum),
+    undefined,
+    "a trashed master-less song must not count against an otherwise-complete album",
+  );
+});
+
+test("a soft-deleted credit row is not counted toward creditsComplete", async () => {
+  const { rows } = await incompleteAlbums();
+  const row = byId(rows, deletedWriterAlbum);
+  assert.ok(row, "an album whose only writer credit is trashed must appear");
+  assert.equal(row!.trackCount, 1);
+  assert.equal(row!.mastersReady, 1);
+  assert.equal(row!.lyricsSatisfied, 1);
+  assert.equal(
+    row!.creditsComplete,
+    0,
+    "a soft-deleted writer leaves the track performer-only, so credits are incomplete",
+  );
+});
+
+test("a soft-deleted album never appears, however incomplete", async () => {
+  const { rows } = await incompleteAlbums();
+  assert.equal(
+    byId(rows, deletedAlbum),
+    undefined,
+    "albums with deleted_at set are excluded from the audit",
+  );
 });
