@@ -8,15 +8,15 @@ There are TWO distinct gifting flows that sound alike. Treat them as separate.
 1. **Album-claim gifts** — buyer marks a paid order/copy as a gift and shares a
    claim link; the album + GoodDeed entitlement transfers to whoever claims it.
    Recipient contact exists only to deliver the claim link.
-   - **Album-claim gifting is intentionally NOT phone-gated.** All three gift
-     routes (whole-order POST, per-copy POST, change-recipient PATCH) used to call
-     `requirePhoneVerified(req,res,"gifting")` and 403'd unverified buyers. Bill's
-     product call: removing friction beats the anti-abuse gate here — do NOT
-     reintroduce a phone gate on gifting. The `requirePhoneVerified` helper still
-     gates **payouts** (server/payouts.ts) and **recovery**, so the helper stays;
-     only the gifting callers were dropped. The post-purchase "Open my player"
-     finish CTA on Welcome.tsx is hidden while mid-gift (`giftHubChoice==="gift" &&
-     !giftShareUrl`) so finishing/sharing the gift is the primary step.
+   - **Album-claim gifting is intentionally NOT phone-gated** (whole-order,
+     per-copy, and change-recipient all create/manage gifts with no phone-verify
+     403). Bill's product call: removing friction beats the anti-abuse gate here —
+     do NOT reintroduce a phone gate on gifting. The phone-verify helper still
+     gates **payouts** and **account recovery**, so keep the helper and only the
+     gifting callers stay dropped. **Why:** an unverified buyer hit a raw 403 toast
+     trying to gift. On the post-purchase screen the "Open my player" finish CTA is
+     held back while the buyer is mid-gift (chose "Gift this" but hasn't minted the
+     claim link) so finishing/sharing the gift is the primary step.
 
 2. **Custom-addon gift boxes** — per-recipient personalization of
    fan-chooses-amount donation add-ons (e.g. Gift of Hope). One box per
