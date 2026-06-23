@@ -11927,11 +11927,6 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<Gift className=\"w-5 h-5 text-white/40\" />"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
     "snippet": "<span className=\"text-xs text-white/40 font-semibold uppercase tracking-wider\">"
   },
   {
@@ -12143,6 +12138,106 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/gear/GearDetailBody.tsx",
     "snippet": "<span className=\"text-white text-[14px] font-semibold tabular-nums\">{index + 1} / {photos.length}</span>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "{g.copyId && <Gift className=\"w-3.5 h-3.5 text-[#FF5470]\" />}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "<div className=\"mt-1.5 text-[11.5px] text-[#4AFFCA]\">Claimed {new Date(g.claimedAt).toLocaleDateString()}</div>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "className=\"px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#FF5470]/20 text-[#FF5470] hover:bg-[#FF5470]/30 disabled:opacity-50\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "className=\"px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#7F10A7]/30 text-[#c89dff] hover:bg-[#7F10A7]/40 disabled:opacity-50\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "<span className=\"text-[11px] font-medium text-[#4AFFCA]\">Yours</span>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "className=\"px-3 py-1.5 rounded-full text-[12px] font-semibold bg-[#FF5470] text-white hover:opacity-90 disabled:opacity-50\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "className=\"mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#FF5470]/20 text-[#FF5470] hover:bg-[#FF5470]/30\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "<span className=\"text-[11px] font-semibold uppercase tracking-wider text-fan-secondary\">{label}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "<div className=\"mt-1 text-[12px] text-fan-secondary leading-snug\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "<div className=\"mt-1.5 text-[11.5px] text-[#4AFFCA]\">Claimed {new Date(g.claimedAt).toLocaleDateString()}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "className=\"px-3 py-1 rounded-full text-[11.5px] font-medium bg-white/10 text-white hover:bg-white/15\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "className=\"px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#FF5470]/20 text-[#FF5470] hover:bg-[#FF5470]/30 disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "className=\"px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#7F10A7]/30 text-[#c89dff] hover:bg-[#7F10A7]/40 disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "<span className=\"text-[11px] font-medium text-[#4AFFCA]\">Yours</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "<div className=\"mt-1.5 text-[11.5px] text-fan-secondary\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "className=\"min-w-0 flex-1 rounded-lg bg-white/10 px-3 py-2 text-[13px] text-fan-primary placeholder:text-fan-secondary/60 outline-none focus:bg-white/15\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "className=\"rounded-lg bg-white/10 px-2 py-2 text-[13px] text-fan-primary outline-none focus:bg-white/15\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "className=\"px-3 py-1.5 rounded-full text-[12px] font-semibold bg-[#FF5470] text-white hover:opacity-90 disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "className=\"px-3 py-1.5 rounded-full text-[12px] font-medium bg-white/10 text-fan-secondary hover:bg-white/15\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gift/CopyGiftCard.tsx",
+    "snippet": "className=\"mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#FF5470]/20 text-[#FF5470] hover:bg-[#FF5470]/30\""
   },
   {
     "rule": "brand-hex-literal",
@@ -20237,6 +20332,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Orders.tsx",
+    "snippet": "<div className=\"text-[12px] text-fan-secondary mb-2\">Gift a copy — keep the rest</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Orders.tsx",
     "snippet": "<div className=\"text-[12px] text-fan-secondary leading-snug\">"
   },
   {
@@ -20740,206 +20840,6 @@
     "snippet": "className=\"w-9 h-9 rounded-full flex items-center justify-center text-white\""
   },
   {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "{ label: \"Printed\", value: counts.printed, accent: \"text-white/70\" },"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<p className=\"text-sm text-white/75\" data-testid=\"text-no-routing\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"text-xs text-white/55 mt-1\">{c.label}</div>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<p className=\"text-sm text-white/80\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<p className=\"text-sm text-white/55\" data-testid=\"text-no-recent-printed\">Nothing printed yet.</p>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"text-white/50 text-xs truncate\">{r.albumTitle} — {r.albumArtist}</div>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"text-white/45 text-xs whitespace-nowrap\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "printed: \"bg-slate-100 text-slate-500\","
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<p className=\"text-slate-500 text-[13px] mb-5\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "tab === t.key ? \"bg-slate-900 text-white\" : \"bg-slate-100 text-slate-600 hover:bg-slate-200\""
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<label className=\"flex items-center gap-2 text-[12px] text-slate-600 cursor-pointer\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "{isLoading && <div className=\"text-slate-500 text-sm\" data-testid=\"loading\">Loading…</div>}"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-500\" data-testid=\"empty\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<span className=\"text-[11px] text-slate-500\" data-testid={`gooddeed-${r.id}`}>#{r.goodDeedNumber}</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<span className=\"text-[11px] text-slate-400\">{r.shippingCountry ?? \"?\"}</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "{r.confirmedName ?? <span className=\"text-slate-400 italic\">No name yet</span>}"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-500 truncate\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<span className=\"text-slate-300\">·</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "className=\"text-[11px] text-slate-600 hover:text-slate-900 active:opacity-70\""
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"text-[11px] text-slate-400 mt-4\" data-testid=\"ready-summary\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<p className=\"text-xs text-white/55 mb-4\">Read-only. Every release with GoodDeed certificates routed to your shop.</p>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<p className=\"text-sm text-white/55\" data-testid=\"text-no-albums\">No albums route their GoodDeed prints to you yet.</p>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "{a.artwork ? <img src={a.artwork} alt=\"\" className=\"w-full h-full object-cover\" /> : <Disc3 className=\"w-5 h-5 text-white/30\" />}"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"text-xs text-white/50 truncate\">{a.artist}</div>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"text-xs text-white/55 whitespace-nowrap text-right\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"text-white/40\">{a.printedCount} printed</div>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<p className=\"text-xs text-white/55 mb-4\">Read-only reference of the artists and labels behind your print jobs.</p>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<p className=\"text-sm text-white/55\" data-testid=\"text-no-people\">No artists or labels route prints to you yet.</p>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"text-xs uppercase tracking-wide text-white/45 mb-2\">Artists</div>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "{p.photoUrl ? <img src={p.photoUrl} alt=\"\" className=\"w-full h-full object-cover\" /> : <Users className=\"w-4 h-4 text-white/30\" />}"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"text-xs uppercase tracking-wide text-white/45 mb-2\">Labels</div>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "{l.logoUrl ? <img src={l.logoUrl} alt=\"\" className=\"w-full h-full object-cover\" /> : <Users className=\"w-4 h-4 text-white/30\" />}"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "className={`h-10 px-3 text-sm font-semibold whitespace-nowrap border-b-2 ${sub === t.id ? \"border-[color:var(--brand-mint)] text-white\" : \"border-transparent text-white/55 hover:text-white\"}`}"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<p className=\"text-xs text-white/55 mb-4\">Details GoodTunes shows internally and uses for contact. Paste a logo image URL if you'd like one shown.</p>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<p className=\"text-white/80\">Stripe payout account connected (••••{data.stripeAccountIdLast4}).</p>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<p className=\"text-white/55 text-xs\">Payouts {data.payoutsEnabled ? \"enabled\" : \"pending\"} · Charges {data.chargesEnabled ? \"enabled\" : \"pending\"}</p>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<p className=\"text-sm text-white/70\" data-testid=\"payouts-not-connected\">{data?.note ?? \"No payout account connected.\"}</p>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<p className=\"text-sm text-white/70\" data-testid=\"text-notifications\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<span className=\"block text-xs font-semibold text-white/65 mb-1\">{label}</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"flex items-center gap-2 text-white/55 text-sm\">"
-  },
-  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PrinterPortal.tsx",
     "snippet": "<h2 className=\"text-[20px] font-semibold text-slate-900 mb-1\">Print queue</h2>"
@@ -21388,6 +21288,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Welcome.tsx",
     "snippet": "<span className=\"text-fan-secondary text-[13px]\">Total</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Welcome.tsx",
+    "snippet": "<p className=\"text-fan-secondary text-[12px] mb-3 leading-snug\">"
   },
   {
     "rule": "hardcoded-font-size",

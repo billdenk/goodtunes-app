@@ -18,6 +18,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { CertPdfViewerSheet } from "@/components/ui/CertPdfViewerSheet";
 import { Check, Truck, Package, MapPin, ExternalLink, Award, Clock, Lock, Printer, Gift } from "lucide-react";
 import { GiftBoxPersonalizer } from "@/components/checkout/GiftBoxPersonalizer";
+import { CopyGiftCard, type CopyGift, type GiftableCopy } from "@/components/gift/CopyGiftCard";
 import type { StripeAddressSnapshot, AlbumFormat } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 import { buyEnabled } from "@/lib/platform";
@@ -109,6 +110,10 @@ type OrderRow = {
     jacketUpgrade?: JacketUpgrade | null;
   }[];
   gift: GiftInfo | null;
+  // Task #2063 — one entitlement per physical copy, each carrying its own
+  // per-copy gift (if any). Present on multi-quantity orders; the per-copy
+  // gift UI renders only when the WHOLE order isn't itself a gift.
+  copies?: (GiftableCopy & { gift: CopyGift | null })[];
   // Task #2061 — per-recipient gift boxes for custom ("Gift of Hope")
   // add-ons. `total` boxes were created at checkout; `personalized` have
   // had a recipient/mode chosen. Null on orders with no custom add-on.
@@ -453,6 +458,29 @@ export function Orders() {
 
                 {o.cert && (
                   <CertConfirmationCard order={o} cert={o.cert} />
+                )}
+
+                {/* Task #2063 — per-copy gifting for multi-copy orders that
+                    aren't already a whole-order gift. Each copy manages its
+                    own state + self-serve controls. */}
+                {(o.copies?.length ?? 0) >= 2 && !o.gift && (
+                  <div className="mt-3 pt-3 border-t border-white/10" data-testid={`copy-gifts-${o.id}`}>
+                    <div className="text-[12px] text-fan-secondary mb-2">Gift a copy — keep the rest</div>
+                    <div className="space-y-2">
+                      {o.copies!.map((c, i) => (
+                        <CopyGiftCard
+                          key={c.id}
+                          orderId={o.id}
+                          copy={c}
+                          index={i + 1}
+                          total={o.copies!.length}
+                          wholeOrderGifted={!!o.gift}
+                          fulfillmentStatus={o.fulfillmentStatus}
+                          onMutated={() => queryClient.invalidateQueries({ queryKey: ["/api/orders"] })}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 )}
 
                 {g && g.isBuyer && (

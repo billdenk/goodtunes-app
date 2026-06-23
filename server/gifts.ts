@@ -215,86 +215,125 @@ async function createGiftRecord(
     return null;
   }
 
-  const [order] = await db.select().from(orders).where(eq(orders.id, opts.orderId));
-  if (!order) { res.status(404).json({ message: "Order not found" }); return null; }
-  if (order.customerId !== opts.userId) { res.status(403).json({ message: "Not your order" }); return null; }
-  if (order.status !== "paid") { res.status(400).json({ message: "Only paid orders can be gifted" }); return null; }
-
-  // Post-purchase gifting window (configurable). Always allow if the
-  // order was placed within the window; the at-checkout path on
-  // Welcome.tsx falls inside the window by construction.
+  // Post-purchase gifting window (configurable). Resolved before the
+  // transaction — it's order-independent.
   const windowDays = await getGiftingWindowDays();
-  const ageMs = Date.now() - new Date(order.createdAt).getTime();
-  if (ageMs > windowDays * 24 * 60 * 60 * 1000) {
-    res.status(400).json({ message: `Gifts can only be sent within ${windowDays} days of purchase` });
-    return null;
-  }
-
-  // Per-copy: validate the copy belongs to this order and isn't
-  // already gifted. Whole-order: refuse if the order already has any
-  // gift attached (legacy single-gift contract).
-  if (opts.copyId) {
-    const [copy] = await db.select().from(orderCopies).where(eq(orderCopies.id, opts.copyId));
-    if (!copy || copy.orderId !== order.id) {
-      res.status(404).json({ message: "Copy not found on this order" });
-      return null;
-    }
-    const [existing] = await db
-      .select({ id: gifts.id })
-      .from(gifts)
-      .where(and(eq(gifts.orderId, order.id), eq(gifts.copyId, opts.copyId)))
-      .limit(1);
-    if (existing) {
-      res.status(409).json({ message: "This copy has already been marked as a gift" });
-      return null;
-    }
-  } else {
-    if (order.giftId) {
-      res.status(409).json({ message: "This order has already been marked as a gift" });
-      return null;
-    }
-    // Also refuse if any per-copy gift exists on this order — would
-    // collide with the "whole order" semantics.
-    const [anyCopyGift] = await db
-      .select({ id: gifts.id })
-      .from(gifts)
-      .where(and(eq(gifts.orderId, order.id), sql`${gifts.copyId} IS NOT NULL`))
-      .limit(1);
-    if (anyCopyGift) {
-      res.status(409).json({ message: "This order already has per-copy gifts — pick a copy instead" });
-      return null;
-    }
-  }
-
+  // Recipient → existing-user lookup is also order-independent; resolve it
+  // up front so the locked transaction below stays short.
   const recipientUserId = await lookupRecipientUserId(parsed.v.email, parsed.v.phone);
   const token = newToken();
   const expiresAt = new Date(Date.now() + CLAIM_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-  const [gift] = await db
-    .insert(gifts)
-    .values({
-      orderId: order.id,
-      copyId: opts.copyId,
-      buyerUserId: opts.userId,
-      recipientFirstName: parsed.v.firstName,
-      recipientLastName: parsed.v.lastName,
-      recipientEmail: parsed.v.email,
-      recipientPhone: parsed.v.phone,
-      recipientUserId,
-      message: parsed.v.message,
-      deliverOn: parsed.v.deliverOn,
-      claimToken: token,
-      expiresAt,
-      lastSentAt: new Date(),
-    })
-    .returning();
 
-  // Legacy bookkeeping: orders.giftId still tracks whole-order gifts
-  // so the existing /api/orders + /api/admin/orders join keeps lighting
-  // up the order-level gift pill. Per-copy gifts surface via the new
-  // copyGifts[] field added alongside.
-  if (!opts.copyId) {
-    await db.update(orders).set({ giftId: gift.id }).where(eq(orders.id, order.id));
+  type Outcome = { gift: Gift } | { fail: { status: number; message: string } };
+
+  // Everything that decides whole-order vs per-copy coexistence runs inside
+  // one transaction that locks the order row (SELECT ... FOR UPDATE). The
+  // two partial unique indexes (gifts_order_whole_uniq /
+  // gifts_order_copy_uniq) only conflict *within* a kind — they can't stop a
+  // concurrent whole-order create and per-copy create from both inserting.
+  // Serializing on the order row is what actually enforces the
+  // mutually-exclusive invariant: the second create waits for the first to
+  // commit, then sees its gift / stamped giftId and bails with a 409.
+  let outcome: Outcome;
+  try {
+    outcome = await db.transaction(async (tx): Promise<Outcome> => {
+      const [order] = await tx
+        .select()
+        .from(orders)
+        .where(eq(orders.id, opts.orderId))
+        .for("update");
+      if (!order) return { fail: { status: 404, message: "Order not found" } };
+      if (order.customerId !== opts.userId) return { fail: { status: 403, message: "Not your order" } };
+      if (order.status !== "paid") return { fail: { status: 400, message: "Only paid orders can be gifted" } };
+
+      const ageMs = Date.now() - new Date(order.createdAt).getTime();
+      if (ageMs > windowDays * 24 * 60 * 60 * 1000) {
+        return { fail: { status: 400, message: `Gifts can only be sent within ${windowDays} days of purchase` } };
+      }
+
+      // Per-copy: validate the copy belongs to this order and isn't already
+      // gifted, and refuse if the order is being gifted as a whole. Whole-
+      // order: refuse if the order already has a whole-order gift OR any
+      // per-copy gift (mutually exclusive flows).
+      if (opts.copyId) {
+        const [copy] = await tx.select().from(orderCopies).where(eq(orderCopies.id, opts.copyId));
+        if (!copy || copy.orderId !== order.id) {
+          return { fail: { status: 404, message: "Copy not found on this order" } };
+        }
+        if (order.giftId) {
+          return { fail: { status: 409, message: "This order is already being gifted as a whole — you can't also gift a single copy" } };
+        }
+        const [existing] = await tx
+          .select({ id: gifts.id })
+          .from(gifts)
+          .where(and(eq(gifts.orderId, order.id), eq(gifts.copyId, opts.copyId)))
+          .limit(1);
+        if (existing) {
+          return { fail: { status: 409, message: "This copy has already been marked as a gift" } };
+        }
+      } else {
+        if (order.giftId) {
+          return { fail: { status: 409, message: "This order has already been marked as a gift" } };
+        }
+        const [anyCopyGift] = await tx
+          .select({ id: gifts.id })
+          .from(gifts)
+          .where(and(eq(gifts.orderId, order.id), sql`${gifts.copyId} IS NOT NULL`))
+          .limit(1);
+        if (anyCopyGift) {
+          return { fail: { status: 409, message: "This order already has per-copy gifts — pick a copy instead" } };
+        }
+      }
+
+      const [gift] = await tx
+        .insert(gifts)
+        .values({
+          orderId: order.id,
+          copyId: opts.copyId,
+          buyerUserId: opts.userId,
+          recipientFirstName: parsed.v.firstName,
+          recipientLastName: parsed.v.lastName,
+          recipientEmail: parsed.v.email,
+          recipientPhone: parsed.v.phone,
+          recipientUserId,
+          message: parsed.v.message,
+          deliverOn: parsed.v.deliverOn,
+          claimToken: token,
+          expiresAt,
+          lastSentAt: new Date(),
+        })
+        .returning();
+
+      // Legacy bookkeeping: orders.giftId still tracks whole-order gifts so
+      // the existing /api/orders + /api/admin/orders join keeps lighting up
+      // the order-level gift pill. Per-copy gifts surface via copyGifts[].
+      if (!opts.copyId) {
+        await tx.update(orders).set({ giftId: gift.id }).where(eq(orders.id, order.id));
+      }
+      return { gift };
+    });
+  } catch (e: any) {
+    // The partial unique indexes still backstop intra-kind duplicate races
+    // that slip past the SELECT (e.g. two identical per-copy creates): a
+    // 23505 unique violation lands here. Map it to the same friendly 409.
+    // (The real pg error is on err.cause for drizzle-wrapped queries.)
+    const code = e?.cause?.code ?? e?.code;
+    if (code === "23505") {
+      res.status(409).json({
+        message: opts.copyId
+          ? "This copy has already been marked as a gift"
+          : "This order has already been marked as a gift",
+      });
+      return null;
+    }
+    throw e;
   }
+
+  if ("fail" in outcome) {
+    res.status(outcome.fail.status).json({ message: outcome.fail.message });
+    return null;
+  }
+  const gift = outcome.gift;
 
   // Notification stub — log only until SMS/email infra lands. A
   // scheduled (deliverOn set) gift logs "scheduled" so the operator
@@ -306,6 +345,120 @@ async function createGiftRecord(
   if (parsed.v.phone) console.log(`[gift] notify${scheduledTag} sms=${parsed.v.phone} url=${url}${reservedTag}`);
 
   return gift;
+}
+
+// Buyer-facing gift projection. Superset of the public projection — it
+// includes recipient contact details and (for the buyer only) the claim
+// token, plus the per-copy `copyId` and the buyer-revoke / refund-revert
+// flags the Orders + Welcome surfaces read. Used by /api/orders (legacy
+// whole-order gift) and the per-copy reads on /welcome + /api/orders.
+export function serializeGiftForBuyer(g: Gift, viewerUserId: string) {
+  const isBuyer = g.buyerUserId === viewerUserId;
+  return {
+    id: g.id,
+    copyId: g.copyId,
+    buyerUserId: g.buyerUserId,
+    recipientFirstName: g.recipientFirstName,
+    recipientLastName: g.recipientLastName,
+    recipientEmail: g.recipientEmail,
+    recipientPhone: g.recipientPhone,
+    // Only the buyer who sent the gift may see/copy the live claim link.
+    claimToken: isBuyer ? g.claimToken : null,
+    claimed: !!g.claimedAt,
+    claimedAt: g.claimedAt,
+    // Buyer-initiated revoke (distinct from refund-revert below).
+    revokedAt: g.buyerRevokedAt,
+    // System-stamped on refund-before-claim.
+    reverted: !!g.revertedAt,
+    deliverOn: g.deliverOn,
+    deliveredAt: g.deliveredAt,
+    expiresAt: g.expiresAt,
+    createdAt: g.createdAt,
+    resendCount: g.resendCount,
+    isBuyer,
+  };
+}
+
+// ─── Shared gift-mutation helpers (whole-order + per-copy) ──────────
+// These apply the actual DB mutation only; each route resolves the gift
+// (whole-order via order.giftId, per-copy via orderId+copyId) and runs
+// its own ownership / claimed / window / fulfillment gates first.
+
+// Rotate the claim token, push the expiry, bump the resend counter.
+async function rotateAndResend(req: Request, gift: Gift): Promise<{ gift: Gift; shareUrl: string }> {
+  const token = newToken();
+  const expiresAt = new Date(Date.now() + CLAIM_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const [updated] = await db
+    .update(gifts)
+    .set({ claimToken: token, expiresAt, resendCount: gift.resendCount + 1, lastSentAt: new Date() })
+    .where(eq(gifts.id, gift.id))
+    .returning();
+  const url = shareUrlFor(req, updated.claimToken);
+  if (updated.recipientEmail) console.log(`[gift] resend email=${updated.recipientEmail} url=${url}`);
+  if (updated.recipientPhone) console.log(`[gift] resend sms=${updated.recipientPhone} url=${url}`);
+  return { gift: updated, shareUrl: url };
+}
+
+// Apply a recipient change (re-resolve recipientUserId, rotate token,
+// wipe a previously-stamped delivery so a rescheduled gift isn't shown
+// as already delivered).
+async function applyRecipientChange(req: Request, gift: Gift, v: ParsedRecipient): Promise<{ gift: Gift; shareUrl: string }> {
+  const recipientUserId = await lookupRecipientUserId(v.email, v.phone);
+  const token = newToken();
+  const expiresAt = new Date(Date.now() + CLAIM_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const [updated] = await db
+    .update(gifts)
+    .set({
+      recipientFirstName: v.firstName,
+      recipientLastName: v.lastName,
+      recipientEmail: v.email,
+      recipientPhone: v.phone,
+      recipientUserId,
+      message: v.message,
+      deliverOn: v.deliverOn,
+      deliveredAt: null,
+      claimToken: token,
+      expiresAt,
+      lastSentAt: new Date(),
+    })
+    .where(eq(gifts.id, gift.id))
+    .returning();
+  const url = shareUrlFor(req, token);
+  if (v.email) console.log(`[gift] notify email=${v.email} url=${url}`);
+  if (v.phone) console.log(`[gift] notify sms=${v.phone} url=${url}`);
+  return { gift: updated, shareUrl: url };
+}
+
+// Buyer-initiated revoke — stamp buyerRevokedAt (the claim link stops
+// working; the entitlement stays with the buyer).
+async function applyBuyerRevoke(gift: Gift): Promise<Gift> {
+  const [updated] = await db
+    .update(gifts)
+    .set({ buyerRevokedAt: new Date() })
+    .where(eq(gifts.id, gift.id))
+    .returning();
+  return updated;
+}
+
+// Resolve a per-copy gift owned by the caller from the (id, copyId) route
+// params. Mirrors the whole-order routes' inline order.giftId resolution.
+// Sends the appropriate 4xx via res and returns null on any failure.
+async function resolveOwnedCopyGift(
+  req: Request,
+  res: Response,
+  userId: string,
+): Promise<{ order: typeof orders.$inferSelect; gift: Gift } | null> {
+  const orderId = String(req.params.id);
+  const copyId = String(req.params.copyId);
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+  if (!order) { res.status(404).json({ message: "Order not found" }); return null; }
+  const [gift] = await db
+    .select()
+    .from(gifts)
+    .where(and(eq(gifts.orderId, orderId), eq(gifts.copyId, copyId)));
+  if (!gift) { res.status(404).json({ message: "No gift on this copy" }); return null; }
+  if (gift.buyerUserId !== userId) { res.status(403).json({ message: "Not your gift" }); return null; }
+  return { order, gift };
 }
 
 export function registerGiftRoutes(app: Express) {
@@ -400,6 +553,56 @@ export function registerGiftRoutes(app: Express) {
     res.json({ gift, shareUrl: shareUrlFor(req, gift.claimToken) });
   });
 
+  // ─── Per-copy gift management — whole-order analogues scoped to one
+  //     copy. Resolution is by (orderId, copyId); the shared mutation
+  //     helpers do the writes. Gates mirror the whole-order routes. ─────
+  app.patch("/api/orders/:id/copies/:copyId/gift", async (req, res) => {
+    const me = await requireCustomer(req, res);
+    if (!me) return;
+    const parsed = parseRecipient(req.body);
+    if (!parsed.ok) return res.status(400).json({ message: parsed.message });
+    const resolved = await resolveOwnedCopyGift(req, res, me.userId);
+    if (!resolved) return;
+    const { gift } = resolved;
+    if (gift.claimedAt) return res.status(400).json({ message: "Already claimed — can't change recipient" });
+    if (Date.now() - gift.createdAt.getTime() > RECIPIENT_EDIT_WINDOW_MS) {
+      return res.status(400).json({ message: "Recipient can only be changed within 24h of creating the gift" });
+    }
+    const { gift: updated, shareUrl } = await applyRecipientChange(req, gift, parsed.v);
+    res.json({ gift: updated, shareUrl });
+  });
+
+  app.post("/api/orders/:id/copies/:copyId/gift/resend", async (req, res) => {
+    const me = await requireCustomer(req, res);
+    if (!me) return;
+    const resolved = await resolveOwnedCopyGift(req, res, me.userId);
+    if (!resolved) return;
+    const { gift } = resolved;
+    if (gift.claimedAt) return res.status(400).json({ message: "Already claimed" });
+    const { gift: updated, shareUrl } = await rotateAndResend(req, gift);
+    res.json({ gift: updated, shareUrl });
+  });
+
+  app.post("/api/orders/:id/copies/:copyId/gift/revoke", async (req, res) => {
+    const me = await requireCustomer(req, res);
+    if (!me) return;
+    const resolved = await resolveOwnedCopyGift(req, res, me.userId);
+    if (!resolved) return;
+    const { order, gift } = resolved;
+    if (gift.claimedAt) return res.status(400).json({ message: "Already claimed — can't revoke" });
+    if (gift.buyerRevokedAt) return res.status(400).json({ message: "Already revoked" });
+    // Block once physical fulfillment is underway (vinyl can't be re-routed).
+    const LOCKED_STATUSES = new Set(["in_fulfillment", "shipped", "delivered"]);
+    if (order.fulfillmentStatus && LOCKED_STATUSES.has(order.fulfillmentStatus)) {
+      return res.status(400).json({
+        message: "Can't revoke — fulfillment of the physical record has already started.",
+      });
+    }
+    const updated = await applyBuyerRevoke(gift);
+    console.log(`[gift revoke copy] buyer=${me.userId} gift=${gift.id} order=${order.id} copy=${gift.copyId}`);
+    res.json({ gift: updated });
+  });
+
   // ─── Update gift recipient (within 24h, pre-claim) ─────────────────
   app.patch("/api/orders/:id/gift", async (req, res) => {
     const me = await requireCustomer(req, res);
@@ -419,31 +622,8 @@ export function registerGiftRoutes(app: Express) {
       return res.status(400).json({ message: "Recipient can only be changed within 24h of creating the gift" });
     }
 
-    const recipientUserId = await lookupRecipientUserId(parsed.v.email, parsed.v.phone);
-    const token = newToken();
-    const expiresAt = new Date(Date.now() + CLAIM_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-    const [updated] = await db
-      .update(gifts)
-      .set({
-        recipientFirstName: parsed.v.firstName,
-        recipientLastName: parsed.v.lastName,
-        recipientEmail: parsed.v.email,
-        recipientPhone: parsed.v.phone,
-        recipientUserId,
-        message: parsed.v.message,
-        deliverOn: parsed.v.deliverOn,
-        deliveredAt: null,
-        claimToken: token,
-        expiresAt,
-        lastSentAt: new Date(),
-      })
-      .where(eq(gifts.id, gift.id))
-      .returning();
-
-    const url = shareUrlFor(req, token);
-    if (parsed.v.email) console.log(`[gift] notify email=${parsed.v.email} url=${url}`);
-    if (parsed.v.phone) console.log(`[gift] notify sms=${parsed.v.phone} url=${url}`);
-    res.json({ gift: updated, shareUrl: url });
+    const { gift: updated, shareUrl } = await applyRecipientChange(req, gift, parsed.v);
+    res.json({ gift: updated, shareUrl });
   });
 
   // ─── Buyer-initiated revoke (pre-claim, pre-fulfillment only) ────────
@@ -469,11 +649,7 @@ export function registerGiftRoutes(app: Express) {
         message: "Can't revoke — fulfillment of the physical record has already started.",
       });
     }
-    const [updated] = await db
-      .update(gifts)
-      .set({ buyerRevokedAt: new Date() })
-      .where(eq(gifts.id, gift.id))
-      .returning();
+    const updated = await applyBuyerRevoke(gift);
     console.log(`[gift revoke] buyer=${me.userId} gift=${gift.id} order=${orderId}`);
     res.json({ gift: updated });
   });
@@ -512,17 +688,8 @@ export function registerGiftRoutes(app: Express) {
     if (gift.buyerUserId !== me.userId) return res.status(403).json({ message: "Not your gift" });
     if (gift.claimedAt) return res.status(400).json({ message: "Already claimed" });
 
-    const token = newToken();
-    const expiresAt = new Date(Date.now() + CLAIM_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-    const [updated] = await db
-      .update(gifts)
-      .set({ claimToken: token, expiresAt, resendCount: gift.resendCount + 1, lastSentAt: new Date() })
-      .where(eq(gifts.id, gift.id))
-      .returning();
-    const url = shareUrlFor(req, updated.claimToken);
-    if (updated.recipientEmail) console.log(`[gift] resend email=${updated.recipientEmail} url=${url}`);
-    if (updated.recipientPhone) console.log(`[gift] resend sms=${updated.recipientPhone} url=${url}`);
-    res.json({ gift: updated, shareUrl: url });
+    const { gift: updated, shareUrl } = await rotateAndResend(req, gift);
+    res.json({ gift: updated, shareUrl });
   });
 
   // ─── Public claim-page data ────────────────────────────────────────

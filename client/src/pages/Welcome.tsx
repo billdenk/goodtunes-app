@@ -14,6 +14,7 @@ import { track } from "@/lib/analytics";
 import { VinylPreview } from "@/components/VinylPreview";
 import { CertNameConfirmCard } from "@/components/ui/CertNameConfirmCard";
 import { GiftBoxPersonalizer } from "@/components/checkout/GiftBoxPersonalizer";
+import { CopyGiftCard, type CopyGift } from "@/components/gift/CopyGiftCard";
 import { Gift } from "lucide-react";
 import {
   DEFAULT_JACKET_UPGRADE,
@@ -48,6 +49,10 @@ type Order = {
   taxCents: number | null;
   shippingName: string | null;
   createdAt: string;
+  // Task #2063 — set when the WHOLE order was gifted via the legacy hub.
+  // Per-copy and whole-order gifting must not coexist, so when this is set
+  // we keep the legacy hub and skip the per-copy gift section.
+  giftId: string | null;
 };
 type AlbumLite = { artwork: string | null };
 // Task #549 — one entitlement per physical copy. Multi-quantity orders
@@ -63,6 +68,8 @@ type OrderCopy = {
   goodDeedNumber: number | null;
   vinylColor: string | null;
   jacketUpgrade: JacketUpgrade | null;
+  // Task #2063 — per-copy gift attached server-side.
+  gift?: CopyGift | null;
 };
 type SessionResponse = {
   paymentStatus: string;
@@ -462,8 +469,33 @@ export function Welcome() {
         {/* Task #1938 — post-purchase gift hub. Replaces the simple
             "This is a gift" toggle with a 3-option decision screen:
             Gift now | Keep for myself | Decide later.
-            Once a share link is minted, the panel flips to the share card. */}
-        {!giftShareUrl ? (
+            Once a share link is minted, the panel flips to the share card.
+            Task #2063 — a multi-copy order that isn't already a whole-order
+            gift gets the per-copy section instead, so the buyer can gift one
+            copy and keep the rest. */}
+        {(data.copies?.length ?? 0) >= 2 && !data.order.giftId ? (
+          <div className="rounded-2xl bg-white/[0.07] p-5 mb-5" data-testid="welcome-copy-gifts">
+            <div className="text-fan-faint text-xs uppercase tracking-wider font-semibold mb-3">
+              Gift a copy — keep the rest
+            </div>
+            <p className="text-fan-secondary text-[12px] mb-3 leading-snug">
+              You bought {data.copies!.length} copies. Send any one as a gift and keep the others in your collection.
+            </p>
+            <div className="space-y-2">
+              {data.copies!.map((c, i) => (
+                <CopyGiftCard
+                  key={c.id}
+                  orderId={data.order!.id}
+                  copy={c}
+                  index={i + 1}
+                  total={data.copies!.length}
+                  wholeOrderGifted={!!data.order!.giftId}
+                  onMutated={refreshSession}
+                />
+              ))}
+            </div>
+          </div>
+        ) : !giftShareUrl ? (
           <div className="rounded-2xl bg-white/[0.07] p-5 mb-5" data-testid="welcome-gift-hub">
 
             {/* ── Choice tiles ── shown while no gift has been initiated */}

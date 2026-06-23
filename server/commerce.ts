@@ -2855,9 +2855,21 @@ export function registerCommerceRoutes(app: Express) {
     const album = order ? await storage.getAlbumById(order.albumId) : null;
     // Task #549 — per-copy entitlements so the receipt can list each
     // copy with its own GoodDeed number and signed-cert state.
-    const copies = order
+    const copyRows = order
       ? await db.select().from(orderCopies).where(eq(orderCopies.orderId, order.id)).orderBy(asc(orderCopies.position))
       : [];
+    // Task #2063 — attach each copy's per-copy gift (if any) so the
+    // /welcome receipt can render per-copy gift state + self-serve manage.
+    let copies: any[] = copyRows;
+    if (order && copyRows.length > 0) {
+      const { loadCopyGiftsForOrders, serializeGiftForBuyer } = await import("./gifts");
+      const copyGifts = (await loadCopyGiftsForOrders([order.id])).get(order.id) ?? [];
+      const giftByCopy = new Map(copyGifts.map((g) => [g.copyId as string, g]));
+      copies = copyRows.map((c) => {
+        const g = giftByCopy.get(c.id);
+        return { ...c, gift: g ? serializeGiftForBuyer(g, a.userId) : null };
+      });
+    }
     // Task #2061 — gift-box counts so /welcome can auto-open the "Who's the
     // gift for?" stepper when this order carries un-personalized boxes.
     let giftBoxSummary: { total: number; personalized: number } | null = null;
@@ -2978,10 +2990,21 @@ export function registerCommerceRoutes(app: Express) {
       .where(whereClause)
       .orderBy(desc(orders.createdAt));
     const orderIds = rows.map((r) => r.order.id);
-    const giftRows = orderIds.length > 0
-      ? await db.select().from(gifts).where(inArray(gifts.orderId, orderIds))
+    // Task #2063 — whole-order gift (copyId IS NULL) and per-copy gifts are
+    // loaded separately so a per-copy gift never masquerades as the legacy
+    // order-level gift pill.
+    const { loadGiftForOrders, loadCopyGiftsForOrders, serializeGiftForBuyer } = await import("./gifts");
+    const giftByOrder = await loadGiftForOrders(orderIds);
+    const copyGiftsByOrder = await loadCopyGiftsForOrders(orderIds);
+    const copyRows = orderIds.length > 0
+      ? await db.select().from(orderCopies).where(inArray(orderCopies.orderId, orderIds)).orderBy(asc(orderCopies.position))
       : [];
-    const giftByOrder = new Map(giftRows.map((g) => [g.orderId, g]));
+    const copiesByOrder = new Map<string, typeof copyRows>();
+    for (const c of copyRows) {
+      const arr = copiesByOrder.get(c.orderId) ?? [];
+      arr.push(c);
+      copiesByOrder.set(c.orderId, arr);
+    }
     // Task #128 — also surface the signed_cert certificate row so the
     // fan-side Orders page can render the name-confirmation card without
     // a second roundtrip.
@@ -3000,6 +3023,14 @@ export function registerCommerceRoutes(app: Express) {
         const g = giftByOrder.get(r.order.id);
         const cert = certByOrder.get(r.order.id) ?? null;
         const giftBoxSummary = giftBoxByOrder.get(r.order.id) ?? null;
+        // Task #2063 — per-copy gifts attached to each copy so the Orders
+        // page can render per-copy state + self-serve manage controls.
+        const copyGifts = copyGiftsByOrder.get(r.order.id) ?? [];
+        const giftByCopy = new Map(copyGifts.map((cg) => [cg.copyId as string, cg]));
+        const copies = (copiesByOrder.get(r.order.id) ?? []).map((c) => {
+          const cg = giftByCopy.get(c.id);
+          return { ...c, gift: cg ? serializeGiftForBuyer(cg, a.userId) : null };
+        });
         return {
           ...r.order,
           albumTitle: r.album.title,
@@ -3008,23 +3039,8 @@ export function registerCommerceRoutes(app: Express) {
           cert,
           giftBoxSummary,
           items: await getOrderItems(r.order.id),
-          gift: g
-            ? {
-                id: g.id,
-                buyerUserId: g.buyerUserId,
-                recipientFirstName: g.recipientFirstName,
-                recipientLastName: g.recipientLastName,
-                recipientEmail: g.recipientEmail,
-                recipientPhone: g.recipientPhone,
-                claimToken: g.buyerUserId === a.userId ? g.claimToken : null,
-                claimed: !!g.claimedAt,
-                claimedAt: g.claimedAt,
-                expiresAt: g.expiresAt,
-                createdAt: g.createdAt,
-                resendCount: g.resendCount,
-                isBuyer: g.buyerUserId === a.userId,
-              }
-            : null,
+          copies,
+          gift: g ? serializeGiftForBuyer(g, a.userId) : null,
         };
       }),
     );
