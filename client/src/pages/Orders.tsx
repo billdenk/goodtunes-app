@@ -21,7 +21,7 @@ import { GiftBoxPersonalizer } from "@/components/checkout/GiftBoxPersonalizer";
 import { CopyGiftCard, type CopyGift, type GiftableCopy } from "@/components/gift/CopyGiftCard";
 import type { StripeAddressSnapshot, AlbumFormat } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
-import { buyEnabled } from "@/lib/platform";
+import { buyEnabled, giftEnabled } from "@/lib/platform";
 import { VinylPreview } from "@/components/VinylPreview";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { BottomNav } from "@/components/BottomNav";
@@ -463,7 +463,7 @@ export function Orders() {
                 {/* Task #2063 — per-copy gifting for multi-copy orders that
                     aren't already a whole-order gift. Each copy manages its
                     own state + self-serve controls. */}
-                {(o.copies?.length ?? 0) >= 2 && !o.gift && (
+                {(o.copies?.length ?? 0) >= 2 && !o.gift && giftEnabled && (
                   <div className="mt-3 pt-3 border-t border-white/10" data-testid={`copy-gifts-${o.id}`}>
                     <div className="text-[12px] text-fan-secondary mb-2">Gift a copy — keep the rest</div>
                     <div className="space-y-2">
@@ -483,7 +483,7 @@ export function Orders() {
                   </div>
                 )}
 
-                {g && g.isBuyer && (
+                {g && g.isBuyer && giftEnabled && (
                   <div className="mt-3 pt-3 border-t border-white/10" data-testid={`gift-controls-${o.id}`}>
                     <div className="text-[12px] text-fan-secondary leading-snug">
                       Gift to{" "}

@@ -269,7 +269,7 @@ export function FinishSetup() {
 
         {/* Handle */}
         <label className="block mt-8 text-xs uppercase tracking-wider text-white/50">Your handle</label>
-        <div className="mt-2 flex items-center bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus-within:border-[var(--brand-blue)]">
+        <div className="mt-2 flex items-center bg-[color:var(--fan-surface-strong)] border border-[color:var(--fan-field-border)] rounded-xl px-4 py-3 focus-within:border-[var(--brand-blue)]">
           <span className="text-white/40 text-lg">@</span>
           <input
             type="text"
@@ -299,7 +299,7 @@ export function FinishSetup() {
                   key={s}
                   type="button"
                   onClick={() => setHandle(s)}
-                  className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white hover:border-[var(--brand-blue)] transition-colors"
+                  className="px-3 py-1.5 rounded-full bg-[color:var(--fan-surface)] border border-[color:var(--fan-field-border)] text-sm text-white hover:border-[var(--brand-blue)] transition-colors"
                   data-testid={`button-suggest-${s}`}
                 >
                   @{s}
@@ -320,7 +320,7 @@ export function FinishSetup() {
           onChange={(e) => setRealName(e.target.value.slice(0, 120))}
           placeholder="Your name"
           autoComplete="name"
-          className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none text-lg focus:border-[var(--brand-blue)]"
+          className="mt-2 w-full bg-[color:var(--fan-surface-strong)] border border-[color:var(--fan-field-border)] rounded-xl px-4 py-3 outline-none text-lg focus:border-[var(--brand-blue)]"
           data-testid="input-real-name"
         />
 
@@ -331,13 +331,13 @@ export function FinishSetup() {
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value.slice(0, 80))}
           placeholder="What should we call you?"
-          className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none text-lg focus:border-[var(--brand-blue)]"
+          className="mt-2 w-full bg-[color:var(--fan-surface-strong)] border border-[color:var(--fan-field-border)] rounded-xl px-4 py-3 outline-none text-lg focus:border-[var(--brand-blue)]"
           data-testid="input-display-name"
         />
 
         {/* Private-relay contact (Apple only) */}
         {state.requiresContact && (
-          <div className="mt-8 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="mt-8 rounded-xl bg-[color:var(--fan-surface)] p-4">
             <p className="text-sm text-white/80">
               Apple is hiding your email from us — add a way to send you receipts, gift notifications, and order updates.
             </p>
@@ -350,7 +350,7 @@ export function FinishSetup() {
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
-              className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none text-lg focus:border-[var(--brand-blue)]"
+              className="mt-2 w-full bg-[color:var(--fan-surface-strong)] border border-[color:var(--fan-field-border)] rounded-xl px-4 py-3 outline-none text-lg focus:border-[var(--brand-blue)]"
               data-testid="input-contact-email"
             />
             <p className="mt-3 text-center text-xs text-white/40">or</p>
@@ -360,7 +360,7 @@ export function FinishSetup() {
               value={contactPhone}
               onChange={(e) => setContactPhone(e.target.value)}
               placeholder="+1 555 555 5555"
-              className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none text-lg focus:border-[var(--brand-blue)]"
+              className="mt-2 w-full bg-[color:var(--fan-surface-strong)] border border-[color:var(--fan-field-border)] rounded-xl px-4 py-3 outline-none text-lg focus:border-[var(--brand-blue)]"
               data-testid="input-contact-phone"
             />
           </div>

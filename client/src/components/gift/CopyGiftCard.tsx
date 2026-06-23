@@ -47,6 +47,14 @@ export type GiftableCopy = {
 const RECIPIENT_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const FULFILLMENT_LOCKED = new Set(["in_fulfillment", "shipped", "delivered"]);
 
+// ─── Shared surface tokens (Task #2063 design pass) ──────────────────
+// Brand-blue tints, never the muddy gray that white-alpha fills become over
+// the navy fan bg. Cards have NO hard outline; fields keep a DIM white
+// hairline that warms to brand-blue on focus.
+const CARD = "rounded-2xl bg-[color:var(--fan-surface)] px-3.5 py-3";
+const FIELD =
+  "rounded-lg bg-[color:var(--fan-surface-strong)] border border-[color:var(--fan-field-border)] text-sm text-fan-primary outline-none focus:border-[color:var(--brand-blue)]";
+
 type Props = {
   orderId: string;
   copy: GiftableCopy;
@@ -187,14 +195,14 @@ export function CopyGiftCard({ orderId, copy, index, total, wholeOrderGifted, fu
     const fulfillmentLocked = !!fulfillmentStatus && FULFILLMENT_LOCKED.has(fulfillmentStatus);
     return (
       <div
-        className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5"
+        className={CARD}
         data-testid={`copy-gift-card-${copy.id}`}
       >
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-fan-secondary">{label}</span>
-          {g.copyId && <Gift className="w-3.5 h-3.5 text-[#FF5470]" />}
+          <span className="text-xs font-semibold uppercase tracking-wider text-fan-secondary">{label}</span>
+          {g.copyId && <Gift className="w-3.5 h-3.5 text-[color:var(--brand-heart)]" />}
         </div>
-        <div className="mt-1 text-[12px] text-fan-secondary leading-snug">
+        <div className="mt-1 text-xs text-fan-secondary leading-snug">
           Gift to{" "}
           <span className="text-fan-primary font-medium">
             {g.recipientFirstName} {g.recipientLastName}
@@ -209,14 +217,14 @@ export function CopyGiftCard({ orderId, copy, index, total, wholeOrderGifted, fu
             Gift cancelled {new Date(g.revokedAt).toLocaleDateString()} — this copy stays with you.
           </div>
         ) : g.claimed && g.claimedAt ? (
-          <div className="mt-1.5 text-[11.5px] text-[#4AFFCA]">Claimed {new Date(g.claimedAt).toLocaleDateString()}</div>
+          <div className="mt-1.5 text-xs text-[color:var(--brand-mint)]">Claimed {new Date(g.claimedAt).toLocaleDateString()}</div>
         ) : (
           <div className="mt-2 flex flex-wrap gap-2">
             {g.claimToken && !expired && (
               <button
                 type="button"
                 onClick={copyLink}
-                className="px-3 py-1 rounded-full text-[11.5px] font-medium bg-white/10 text-white hover:bg-white/15"
+                className="px-3 py-1 rounded-full text-xs font-medium bg-[color:var(--brand-blue-soft)] text-[color:var(--brand-blue)] hover:bg-[color:var(--fan-surface-strong)]"
                 data-testid={`button-copy-link-copy-${copy.id}`}
               >
                 Copy link
@@ -226,7 +234,7 @@ export function CopyGiftCard({ orderId, copy, index, total, wholeOrderGifted, fu
               type="button"
               onClick={() => resendGift.mutate()}
               disabled={resendGift.isPending}
-              className="px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#FF5470]/20 text-[#FF5470] hover:bg-[#FF5470]/30 disabled:opacity-50"
+              className="px-3 py-1 rounded-full text-xs font-medium bg-[color:var(--brand-pink-soft)] text-[color:var(--brand-pink)] hover:bg-[color:var(--brand-pink-soft-hover)] disabled:opacity-50"
               data-testid={`button-resend-gift-copy-${copy.id}`}
             >
               {expired ? "Recover expired link" : "Resend link"}
@@ -236,7 +244,7 @@ export function CopyGiftCard({ orderId, copy, index, total, wholeOrderGifted, fu
                 type="button"
                 onClick={promptChangeRecipient}
                 disabled={patchGift.isPending}
-                className="px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#7F10A7]/30 text-[#c89dff] hover:bg-[#7F10A7]/40 disabled:opacity-50"
+                className="px-3 py-1 rounded-full text-xs font-medium bg-[color:var(--brand-purple-soft)] text-[#c89dff] hover:bg-[color:var(--brand-purple-soft-hover)] disabled:opacity-50"
                 data-testid={`button-change-recipient-copy-${copy.id}`}
               >
                 Change recipient
@@ -251,7 +259,7 @@ export function CopyGiftCard({ orderId, copy, index, total, wholeOrderGifted, fu
                   }
                 }}
                 disabled={revokeGift.isPending}
-                className="px-3 py-1 rounded-full text-xs font-medium bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 disabled:opacity-50"
+                className="px-3 py-1 rounded-full text-xs font-medium bg-[color:var(--brand-rose-soft)] text-rose-300 hover:bg-[color:var(--brand-rose-soft-hover)] disabled:opacity-50"
                 data-testid={`button-revoke-gift-copy-${copy.id}`}
               >
                 Cancel gift
@@ -266,15 +274,15 @@ export function CopyGiftCard({ orderId, copy, index, total, wholeOrderGifted, fu
   // ─── No gift yet: "yours" — offer to gift this copy ────────────────
   return (
     <div
-      className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5"
+      className={CARD}
       data-testid={`copy-gift-card-${copy.id}`}
     >
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-fan-secondary">{label}</span>
-        <span className="text-[11px] font-medium text-[#4AFFCA]">Yours</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-fan-secondary">{label}</span>
+        <span className="text-xs font-medium text-[color:var(--brand-mint)]">Yours</span>
       </div>
       {wholeOrderGifted ? (
-        <div className="mt-1.5 text-[11.5px] text-fan-secondary">
+        <div className="mt-1.5 text-xs text-fan-secondary">
           This whole order is already a gift, so individual copies can't be gifted separately.
         </div>
       ) : creating ? (
@@ -284,14 +292,14 @@ export function CopyGiftCard({ orderId, copy, index, total, wholeOrderGifted, fu
               value={first}
               onChange={(e) => setFirst(e.target.value)}
               placeholder="First name"
-              className="min-w-0 flex-1 rounded-lg bg-white/10 px-3 py-2 text-[13px] text-fan-primary placeholder:text-fan-secondary/60 outline-none focus:bg-white/15"
+              className={`min-w-0 flex-1 px-3 py-2 placeholder:text-fan-secondary/60 ${FIELD}`}
               data-testid={`input-gift-first-copy-${copy.id}`}
             />
             <input
               value={last}
               onChange={(e) => setLast(e.target.value)}
               placeholder="Last name"
-              className="min-w-0 flex-1 rounded-lg bg-white/10 px-3 py-2 text-[13px] text-fan-primary placeholder:text-fan-secondary/60 outline-none focus:bg-white/15"
+              className={`min-w-0 flex-1 px-3 py-2 placeholder:text-fan-secondary/60 ${FIELD}`}
               data-testid={`input-gift-last-copy-${copy.id}`}
             />
           </div>
@@ -299,7 +307,7 @@ export function CopyGiftCard({ orderId, copy, index, total, wholeOrderGifted, fu
             <select
               value={contactKind}
               onChange={(e) => setContactKind(e.target.value as "email" | "phone")}
-              className="rounded-lg bg-white/10 px-2 py-2 text-[13px] text-fan-primary outline-none focus:bg-white/15"
+              className={`px-2 py-2 ${FIELD}`}
               data-testid={`select-gift-contact-kind-copy-${copy.id}`}
             >
               <option value="email">Email</option>
@@ -309,7 +317,7 @@ export function CopyGiftCard({ orderId, copy, index, total, wholeOrderGifted, fu
               value={contact}
               onChange={(e) => setContact(e.target.value)}
               placeholder={contactKind === "email" ? "recipient@email.com" : "Phone number"}
-              className="min-w-0 flex-1 rounded-lg bg-white/10 px-3 py-2 text-[13px] text-fan-primary placeholder:text-fan-secondary/60 outline-none focus:bg-white/15"
+              className={`min-w-0 flex-1 px-3 py-2 placeholder:text-fan-secondary/60 ${FIELD}`}
               data-testid={`input-gift-contact-copy-${copy.id}`}
             />
           </div>
@@ -318,7 +326,7 @@ export function CopyGiftCard({ orderId, copy, index, total, wholeOrderGifted, fu
               type="button"
               onClick={submitCreate}
               disabled={createGift.isPending}
-              className="px-3 py-1.5 rounded-full text-[12px] font-semibold bg-[#FF5470] text-white hover:opacity-90 disabled:opacity-50"
+              className="px-3 py-1.5 rounded-full text-xs font-semibold bg-[color:var(--brand-pink)] text-white hover:opacity-90 disabled:opacity-50"
               data-testid={`button-submit-gift-copy-${copy.id}`}
             >
               {createGift.isPending ? "Creating…" : "Create gift link"}
@@ -326,7 +334,7 @@ export function CopyGiftCard({ orderId, copy, index, total, wholeOrderGifted, fu
             <button
               type="button"
               onClick={() => setCreating(false)}
-              className="px-3 py-1.5 rounded-full text-[12px] font-medium bg-white/10 text-fan-secondary hover:bg-white/15"
+              className="px-3 py-1.5 rounded-full text-xs font-medium bg-[color:var(--fan-surface-strong)] text-fan-secondary hover:bg-[color:var(--brand-blue-soft)]"
               data-testid={`button-cancel-gift-copy-${copy.id}`}
             >
               Cancel
@@ -337,7 +345,7 @@ export function CopyGiftCard({ orderId, copy, index, total, wholeOrderGifted, fu
         <button
           type="button"
           onClick={() => setCreating(true)}
-          className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#FF5470]/20 text-[#FF5470] hover:bg-[#FF5470]/30"
+          className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[color:var(--brand-pink-soft)] text-[color:var(--brand-pink)] hover:bg-[color:var(--brand-pink-soft-hover)]"
           data-testid={`button-gift-copy-${copy.id}`}
         >
           <Gift className="w-3.5 h-3.5" /> Gift this copy

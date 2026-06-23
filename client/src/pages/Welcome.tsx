@@ -15,6 +15,7 @@ import { VinylPreview } from "@/components/VinylPreview";
 import { CertNameConfirmCard } from "@/components/ui/CertNameConfirmCard";
 import { GiftBoxPersonalizer } from "@/components/checkout/GiftBoxPersonalizer";
 import { CopyGiftCard, type CopyGift } from "@/components/gift/CopyGiftCard";
+import { giftEnabled } from "@/lib/platform";
 import { Gift } from "lucide-react";
 import {
   DEFAULT_JACKET_UPGRADE,
@@ -473,8 +474,8 @@ export function Welcome() {
             Task #2063 — a multi-copy order that isn't already a whole-order
             gift gets the per-copy section instead, so the buyer can gift one
             copy and keep the rest. */}
-        {(data.copies?.length ?? 0) >= 2 && !data.order.giftId ? (
-          <div className="rounded-2xl bg-white/[0.07] p-5 mb-5" data-testid="welcome-copy-gifts">
+        {giftEnabled && ((data.copies?.length ?? 0) >= 2 && !data.order.giftId ? (
+          <div className="rounded-2xl bg-[color:var(--fan-surface)] p-5 mb-5" data-testid="welcome-copy-gifts">
             <div className="text-fan-faint text-xs uppercase tracking-wider font-semibold mb-3">
               Gift a copy — keep the rest
             </div>
@@ -496,7 +497,7 @@ export function Welcome() {
             </div>
           </div>
         ) : !giftShareUrl ? (
-          <div className="rounded-2xl bg-white/[0.07] p-5 mb-5" data-testid="welcome-gift-hub">
+          <div className="rounded-2xl bg-[color:var(--fan-surface)] p-5 mb-5" data-testid="welcome-gift-hub">
 
             {/* ── Choice tiles ── shown while no gift has been initiated */}
             {giftHubChoice !== "gift" && (
@@ -525,8 +526,8 @@ export function Welcome() {
                       }}
                       className={`flex flex-col items-center gap-1.5 rounded-2xl py-3 px-2 text-center text-xs font-medium transition-colors ${
                         giftHubChoice === key
-                          ? "bg-[color:var(--brand-blue)]/15 text-[color:var(--brand-blue)]"
-                          : "bg-white/[0.05] text-fan-secondary hover:bg-white/[0.07]"
+                          ? "bg-[color:var(--brand-blue-soft)] text-[color:var(--brand-blue)]"
+                          : "bg-[color:var(--fan-surface-strong)] text-fan-secondary hover:bg-[color:var(--brand-blue-soft)]"
                       }`}
                       data-testid={`button-hub-${key}`}
                     >
@@ -571,7 +572,7 @@ export function Welcome() {
                       value={giftFirst}
                       onChange={(e) => setGiftFirst(e.target.value)}
                       placeholder="First name"
-                      className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]"
+                      className="border border-[color:var(--fan-field-border)] rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-[color:var(--fan-surface-strong)] focus:outline-none focus:border-[color:var(--brand-blue)]"
                       data-testid="input-gift-first"
                     />
                     <input
@@ -579,18 +580,18 @@ export function Welcome() {
                       value={giftLast}
                       onChange={(e) => setGiftLast(e.target.value)}
                       placeholder="Last name"
-                      className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]"
+                      className="border border-[color:var(--fan-field-border)] rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-[color:var(--fan-surface-strong)] focus:outline-none focus:border-[color:var(--brand-blue)]"
                       data-testid="input-gift-last"
                     />
                   </div>
-                  <div className="flex p-0.5 rounded-xl bg-white/[0.06] border border-white/10">
+                  <div className="flex p-0.5 rounded-xl bg-[color:var(--fan-surface-strong)] border border-[color:var(--fan-field-border)]">
                     {(["email", "phone"] as const).map((k) => (
                       <button
                         key={k}
                         type="button"
                         onClick={() => { setGiftContactKind(k); setGiftContact(""); }}
                         className={`flex-1 py-1.5 rounded-lg text-[12px] font-medium capitalize ${
-                          giftContactKind === k ? "bg-white/15 text-white" : "text-fan-secondary"
+                          giftContactKind === k ? "bg-[color:var(--brand-blue-soft)] text-[color:var(--brand-blue)]" : "text-fan-secondary"
                         }`}
                         data-testid={`toggle-gift-${k}`}
                       >
@@ -603,7 +604,7 @@ export function Welcome() {
                     value={giftContact}
                     onChange={(e) => setGiftContact(e.target.value)}
                     placeholder={giftContactKind === "email" ? "their@email.com" : "+1 555 555 5555"}
-                    className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]"
+                    className="w-full border border-[color:var(--fan-field-border)] rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-[color:var(--fan-surface-strong)] focus:outline-none focus:border-[color:var(--brand-blue)]"
                     data-testid="input-gift-contact"
                   />
                   <textarea
@@ -611,7 +612,7 @@ export function Welcome() {
                     onChange={(e) => setGiftMessage(e.target.value.slice(0, 500))}
                     placeholder="Optional message (500 chars)"
                     rows={2}
-                    className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none resize-none"
+                    className="w-full border border-[color:var(--fan-field-border)] rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-[color:var(--fan-surface-strong)] focus:outline-none resize-none"
                     data-testid="input-gift-message"
                   />
                   <div>
@@ -623,7 +624,7 @@ export function Welcome() {
                       value={giftDeliverOn}
                       onChange={(e) => setGiftDeliverOn(e.target.value)}
                       min={new Date().toISOString().slice(0, 10)}
-                      className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm bg-white/[0.06] focus:outline-none"
+                      className="w-full border border-[color:var(--fan-field-border)] rounded-xl px-3 py-2.5 text-white text-sm bg-[color:var(--fan-surface-strong)] focus:outline-none"
                       data-testid="input-gift-deliver-on"
                     />
                   </div>
@@ -652,7 +653,7 @@ export function Welcome() {
             <div className="text-[13px] text-fan-primary mb-3 leading-snug">
               Send this link to {giftFirst} — when they open it and claim, the album + GoodDeed move to their account.
             </div>
-            <div className="flex items-center gap-2 bg-white/[0.06] border border-white/10 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-2 bg-[color:var(--fan-surface-strong)] border border-[color:var(--fan-field-border)] rounded-xl px-3 py-2">
               <code className="text-xs text-fan-primary truncate flex-1 min-w-0" data-testid="text-gift-share-url">
                 {giftShareUrl}
               </code>
@@ -666,7 +667,7 @@ export function Welcome() {
               </button>
             </div>
           </div>
-        )}
+        ))}
 
         {/* Task #2061 — gift-box personalizer entry. The stepper auto-opens
             once after checkout; this card lets the buyer reopen it and shows

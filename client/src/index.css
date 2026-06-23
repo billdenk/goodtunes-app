@@ -192,6 +192,27 @@
      same indigo-to-navy fade without hardcoding `#0B1457` per file. */
   --brand-header-gradient-top: #0B1457;
 
+  /* ── Fan card + field surfaces (Task #2063 design pass) ──────────────
+     Over the navy fan bg, white-alpha fills (`bg-white/5`) desaturate into a
+     muddy GRAY. These tokens tint toward the brand blue instead, so panels
+     read as a *lighter blue* — full-color, never gray. Fields get a slightly
+     stronger fill plus a DIM white hairline (a subtle outline on an input is
+     fine; the fill itself is always blue). Keep in lock-step with
+     `--brand-blue`. */
+  --fan-surface: rgba(49, 158, 216, 0.08);
+  --fan-surface-strong: rgba(49, 158, 216, 0.14);
+  --fan-field-border: rgba(255, 255, 255, 0.14);
+  /* Translucent brand-action fills. Defined as full rgba() so call sites can
+     reach them via `bg-[color:var(--…)]` without hitting the Tailwind
+     "can't alpha a bare var" gotcha (a blue/pink/purple fill with an opacity
+     suffix silently renders no color). */
+  --brand-pink-soft: rgba(255, 84, 112, 0.18);
+  --brand-pink-soft-hover: rgba(255, 84, 112, 0.28);
+  --brand-purple-soft: rgba(127, 16, 167, 0.32);
+  --brand-purple-soft-hover: rgba(127, 16, 167, 0.44);
+  --brand-rose-soft: rgba(244, 63, 94, 0.16);
+  --brand-rose-soft-hover: rgba(244, 63, 94, 0.26);
+
   /* Apple-style fan text-tone scale (Task #1089). ONE layered label
      hierarchy for every fan-facing surface (mobile + desktop) so titles,
      metadata, and faint captions read as a consistent quietness instead

@@ -108,9 +108,16 @@ Rules:
 
 ## Card surfaces on the dark fan shell — fill defines the card, no white outline
 
-Filled cards that sit on the navy fan shell — gear-door rows in "On this track", credit cards, and similar standalone tappable tiles — are defined by their **fill alone**: a soft `white/[0.06]` wash, or the blue→purple gradient for a highlighted/leading row. **Don't wrap them in a hard `border border-white/10` (or any white hairline).** On the dark shell a white card border reads as a bright outline — "white lines" — that fights the Apple-Music calm, and the fill already separates the card from the background. Reference: `GearDoorShell` in `AlbumCreditsSheet.tsx` and the `gear-rig-cards` mockups.
+Filled cards that sit on the navy fan shell — gear-door rows in "On this track", credit cards, gift cards, and similar standalone tappable tiles — are defined by their **fill alone**, and that fill is a **blue tint, never gray**. **Don't wrap them in a hard `border border-white/10` (or any white hairline).** On the dark shell a white card border reads as a bright outline — "white lines" — that fights the Apple-Music calm, and the fill already separates the card from the background. Reference: `GearDoorShell` in `AlbumCreditsSheet.tsx` and the `gear-rig-cards` mockups.
 
-This is distinct from the track-row hairline above: that hairline is a *divider between rows in a list* and stays. The rule here is about the *outline around a standalone filled card* — drop it.
+**Reach for the fan-surface tokens, not a `white/[0.06]` wash.** A white-alpha fill desaturates to a muddy *gray* over the `#00062B` navy — the opposite of the brand. Use these vars (defined in `index.css`) so fan cards stay full-color blue:
+
+- `--fan-surface` (`rgba(49,158,216,0.08)`) — the default card/panel fill. `bg-[color:var(--fan-surface)]`.
+- `--fan-surface-strong` (`rgba(49,158,216,0.14)`) — input/field fills and the slightly-raised inner tile.
+- `--fan-field-border` (`rgba(255,255,255,0.14)`) — inputs **may** keep one *dim* white hairline (an input wants an edge); keep it subtle, never a bright `white/40`, and warm it to `--brand-blue` on focus. Card *fills* still take no border.
+- Soft action fills for pill buttons on fan cards: `--brand-blue-soft`, `--brand-pink-soft(-hover)`, `--brand-purple-soft(-hover)`, `--brand-rose-soft(-hover)` — full `rgba()` so you write `bg-[color:var(--brand-pink-soft)]` and dodge the Tailwind "can't alpha a bare var" gotcha (never `bg-[var(--x)]/NN`).
+
+A highlighted/leading row can still use the blue→purple gradient. This is distinct from the track-row hairline above: that hairline is a *divider between rows in a list* and stays. The rule here is about the *outline around a standalone filled card* — drop it, and make the fill blue.
 
 ## Save semantics — default to auto-save, reserve explicit Save for the few cases that need it
 

@@ -63,7 +63,7 @@ function isBlockedPath(pathname: string): boolean {
 
 // ─── Shared surface tokens (Apple-Music / ElevenLabs, mirrors WelcomeBack.tsx)
 const CARD =
-  "rounded-3xl border border-white/[0.08] bg-gradient-to-b from-white/[0.07] to-white/[0.02] shadow-[0_18px_50px_-24px_rgba(0,0,0,0.85)] backdrop-blur-xl";
+  "rounded-3xl bg-[color:var(--fan-surface)] shadow-[0_18px_50px_-24px_rgba(0,0,0,0.85)] backdrop-blur-xl";
 
 // Value-prop rows on screen 1.
 const VALUE_PROPS = [

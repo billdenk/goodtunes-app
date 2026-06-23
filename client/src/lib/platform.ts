@@ -87,6 +87,19 @@ export const nativeDownloadsEnabled = isNative && nativePlatform === "android";
 export const buyEnabled = !isNative;
 
 /**
+ * Fan-facing GIFTING affordances (gift a copy of a multi-copy order, manage
+ * the claim link, the post-purchase "gift this" hub on Welcome).
+ *
+ * Web-only, mirroring `buyEnabled`. Gifting hands an owned entitlement to
+ * another account via a one-time claim link; whether that's permissible
+ * inside an iOS app under App Review guideline 3.1.1 (digital-goods / reader
+ * rules) is unsettled, so the cautious launch posture keeps ALL gifting on
+ * the web and leaves the native apps a pure owned-content player. Re-enable
+ * (or gate on `nativePlatform`) once the policy is confirmed.
+ */
+export const giftEnabled = !isNative;
+
+/**
  * Orders & order-tracking entry point (Account "My Orders" row → /orders).
  * Web-only for the first native build: the in-app Orders/Library cards
  * aren't built yet, so native fans check orders on the web. Widen this
