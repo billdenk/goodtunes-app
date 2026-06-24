@@ -155,6 +155,14 @@ not after.
 **Current expiry: `2026-09-22` (≈90 days).** Rotated on 2026-06-24. Set a reminder ~1 week
 before this date.
 
+**You also get an automatic heads-up.** The running app reads the token's real expiry (the
+`github-authentication-token-expiration` header GitHub returns on any authenticated request)
+twice a day and, once fewer than ~14 days remain, fires a loud throttled ops alert (email to
+`OPS_ALERT_EMAIL` / log) naming the **"GoodTunes Push"** token and pointing back to this
+section — so rotation no longer depends on a human remembering the date. It only surfaces the
+expiry *date*, never the token value, and never blocks a merge. (Code: `server/githubTokenExpiry.ts`,
+armed from `server/index.ts`; it's a quiet no-op when `GITHUB_TOKEN` is unset.)
+
 **How to rotate (Bill does the GitHub part — the agent can't):**
 1. Go to **https://github.com/settings/tokens?type=beta** (your account's *Developer settings*
    → *Personal access tokens* → *Fine-grained tokens* — **not** a repo's settings, which has no

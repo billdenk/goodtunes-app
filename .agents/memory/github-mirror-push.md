@@ -183,3 +183,15 @@ the `github-authentication-token-expiration` header on any authenticated `api.gi
 response. Note the bash tool's `$GITHUB_TOKEN` can lag a freshly-saved secret — an unchanged
 exact-second expiry after a "rotation" means the OLD token is still in the shell's env; re-check
 after the secret actually propagates.
+
+## Auto pre-warn before the token expires (in-app, not CI)
+
+`server/githubTokenExpiry.ts` (armed from `server/index.ts`, same boot-daemon shape as the
+other schedulers) reads the token's REAL expiry from the
+`github-authentication-token-expiration` header on an authenticated `api.github.com` request
+twice a day and fires a throttled `alertOps` (the existing 5xx email/log path) when <14 days
+remain (or already expired). It names the "GoodTunes Push" token + points at the runbook;
+only the expiry DATE is ever surfaced, never the token value. Quiet no-op when `GITHUB_TOKEN`
+is unset; never throws / never blocks a merge. Imports `log` from `./index` (circular but fine
+— index dynamically imports it after listen, like odoo.ts/giftScheduler.ts), so it can't be
+unit-imported standalone without booting the server (test the fetch+parse logic separately).
