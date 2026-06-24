@@ -19,6 +19,14 @@ The order-status pill is **duplicated verbatim** as a local `StatusPill` in Arti
 
 **Why:** parallel subagents independently diverged here (one made shipped=emerald losing the paid/shipped distinction, another made pending=slate). The admin itself distinguishes paid(emerald) from shipped(blue), so that's the tiebreaker.
 
+## OperatorShell leftnav must stay class-parity with AdminFrame's SidebarLink
+
+The standalone portals (label/manager/non_profit/publisher) ride `OperatorShell layout="leftnav"`, but a partner reaches shared admin tools (Reports, album detail) through `AdminFrame`'s trimmed rail (`SidebarLink`). Both are 220px white columns, so the nav-item styling of OperatorShell's leftnav buttons/navExtras links must match SidebarLink's, or the partner sees a styling jump when they cross over. Treat the two as one visual system that must move together.
+
+**Why:** the structural unification (shared leftnav) shipped first but left the two rails styled differently — OperatorShell's active item read gray + taller + heavier, SidebarLink's read brand-blue — a visible jump on Reports. This is the classic foot-gun for the planned shared nav-item primitive.
+
+**How to apply:** Mirror SidebarLink's treatment, with two gotchas: (1) use the `text-sm` scale token rather than SidebarLink's grandfathered hardcoded ~13.5px size — the sub-pixel diff is imperceptible and a literal `text-[13.5px]` (even in a comment) trips design-lint's hardcoded-size rule. (2) Don't "fix" only OperatorShell's active background to a visible tint — SidebarLink's active bg is an alpha-on-var no-op (renders nothing, see trap below), so matching that no-op keeps both rails identical; changing one alone re-introduces the inconsistency.
+
 ## Alpha-on-CSS-var renders nothing
 
 `bg-[color:var(--brand-blue)]/NN` (or any `var(--brand-*)/NN` alpha) produces **no color** — Tailwind can't alpha a CSS var. On the old dark surfaces this was silently broken too. Use a `bg-blue-100`/`bg-blue-50` tint or a solid `var(--brand-blue)` fill instead. (See also `tailwind-var-opacity.md`.)

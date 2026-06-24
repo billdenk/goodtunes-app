@@ -172,8 +172,16 @@ export function OperatorShell<TabId extends string>({
           <div className="h-14 flex-shrink-0 flex items-center px-4 border-b border-slate-200">
             <img src={gtLogo} alt="GoodTunes" className="h-8 w-auto" />
           </div>
+          {/* Task #2085 — nav items mirror AdminFrame's SidebarLink class
+              treatment (px-3 py-2, text-sm, brand-blue active, slate-700
+              hover:bg-slate-100) so a partner sees the same nav styling
+              whether they're in this portal or in a shared admin tool
+              (Reports, album detail) reached through AdminFrame's trimmed
+              rail. SidebarLink uses a grandfathered ~13.5px size; this new
+              code uses the text-sm scale token (the sub-pixel difference is
+              imperceptible). Keep these in lock-step with SidebarLink. */}
           <nav
-            className="flex-1 px-2 pt-3 pb-3 space-y-0.5 overflow-y-auto"
+            className="flex-1 px-2 pt-2 pb-3 space-y-0.5 overflow-y-auto"
             data-testid="operator-shell-nav"
           >
             {tabs.map((t) => {
@@ -186,20 +194,21 @@ export function OperatorShell<TabId extends string>({
                   onClick={() => onTabChange(t.id)}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "w-full flex items-center gap-2.5 rounded-lg px-3 h-11 min-h-[44px] text-sm font-semibold transition-colors",
+                    "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors",
+                    isActive ? "font-bold" : "font-medium",
                     isActive
-                      ? "bg-slate-100 text-slate-900"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                      ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
+                      : "text-slate-700 hover:bg-slate-100",
                   )}
                   data-testid={`nav-${t.id}`}
                 >
                   <Icon
                     className={cn(
                       "w-4 h-4 flex-shrink-0",
-                      isActive ? "text-[color:var(--brand-blue)]" : "text-slate-400",
+                      isActive ? "text-[var(--brand-blue)]" : "text-slate-400",
                     )}
                   />
-                  <span className="truncate">{t.label}</span>
+                  <span className="flex-1 text-left truncate">{t.label}</span>
                 </button>
               );
             })}
@@ -210,9 +219,9 @@ export function OperatorShell<TabId extends string>({
                 {navExtras.map((x) => {
                   const Icon = x.icon ?? Circle;
                   return (
-                    <Link key={x.id} href={x.href} data-testid={`nav-${x.id}`} className="gt-nav w-full flex items-center gap-2.5 rounded-lg px-3 h-11 min-h-[44px] text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                    <Link key={x.id} href={x.href} data-testid={`nav-${x.id}`} className="gt-nav w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors">
                       <Icon className="w-4 h-4 flex-shrink-0 text-slate-400" />
-                      <span className="truncate">{x.label}</span>
+                      <span className="flex-1 text-left truncate">{x.label}</span>
                     </Link>
                   );
                 })}
