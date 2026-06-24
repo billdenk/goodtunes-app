@@ -25,6 +25,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, matchInvitedPressToVendor, defaultPreflightVendor, type VendorId } from "@shared/vendorSpecs";
 import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
+import { CompletedTemplatePanel } from "@/components/admin/CompletedTemplatePanel";
 import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
 import { VinylOrderPanel } from "@/components/admin/VinylOrderPanel";
 import type { VinylFormat } from "@shared/vinylFormatRules";
@@ -798,6 +799,9 @@ export function PressPanel({
 
         {/* ── Print-ready PDFs (Task #327, moved from Sell) ──────────── */}
         <PrintPdfsPanel albumId={albumId} vendor={vendorId} />
+
+        {/* ── Completed-template confirmation (Task #2109) ───────────── */}
+        <CompletedTemplatePanel albumId={albumId} vendor={vendorId} />
       </div>
     </div>
   );

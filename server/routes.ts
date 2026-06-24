@@ -84,6 +84,22 @@ import { adminLoginPasswordOk, isLinkableEmail, isProviderVerifiedEmailForLink }
 import { applyAppleFirstAuthName } from "./auth/appleName";
 import { getUserRole } from "./auth/roles";
 import { resolveInviterBranding } from "./inviteBranding";
+import {
+  requiredFinishedComponents,
+  resolveFinishedComponents,
+  completedTemplateConfigToAlbumFormat,
+  matchInvitedPressToVendor,
+  defaultCompletedTemplateConfig,
+  type VendorId,
+  type CompletedTemplateConfig,
+} from "@shared/vendorSpecs";
+import {
+  rollupCompletedTemplate,
+  rollupStatus,
+  type CompletedTemplateComponent,
+  type CompletedTemplateVerdict,
+} from "@shared/uploadValidation";
+import { validateCompletedComponent, fetchAndScanPdf } from "./validators/completedTemplate";
 
 const scryptAsync = promisify(scrypt);
 
@@ -28824,6 +28840,335 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await storage.deleteUploadValidation(req.params.id);
     res.json({ ok: true });
   });
+
+  // ─── Task #2109 — Completed-template confirmation ────────────────────
+  // Admin-only "Confirm a completed PDF matches the press specs" on a
+  // release's Press section. requireAdminBearer enforces the bearer + the
+  // base admin gate, but it also admits partner accounts — a finished-
+  // template confirmation is operator-only, so every handler re-checks
+  // super_admin/admin. State lives in its OWN row (one per album) so it
+  // never pollutes the upload_validations art/audio rollup feeding the
+  // Orders preflight badge. We persist the pasted URL + filename + the
+  // measured check results only — never the (350–530MB) blob.
+  const completedConfigSchema = z.object({
+    size: z.enum(['7"', '10"', '12"']),
+    discs: z.number().int().min(1).max(8),
+    jacket: z.enum(["single", "gatefold", "gatefold_oldstyle", "widespine"]),
+    innerSleeves: z.enum(["none", "printed", "generic"]),
+    labelColor: z.enum(["process-4c", "spot-1c", "none"]),
+  });
+
+  async function requireOperator(req: Request, res: Response): Promise<boolean> {
+    const role = (await getUserRole(req.session.userId!))?.role;
+    if (role !== "super_admin" && role !== "admin") {
+      res.status(403).json({ message: "Only an operator can run a completed-template confirmation." });
+      return false;
+    }
+    return true;
+  }
+
+  // Re-tag the presence of every stored (file-bearing) component against
+  // the current required-slot set and roll up the verdict. Stored
+  // components always carry a file, so each is either "present" (matches a
+  // required slot) or "extra" (config changed out from under it). A
+  // required slot with no stored component is "missing" — handled by the
+  // rollup via absence, not a stored row.
+  function retagCompleted(
+    components: CompletedTemplateComponent[],
+    requiredIds: string[],
+  ): { components: CompletedTemplateComponent[]; status: CompletedTemplateVerdict } {
+    const reqSet = new Set(requiredIds);
+    const tagged = components.map((c) => ({
+      ...c,
+      presence: reqSet.has(c.componentId) ? ("present" as const) : ("extra" as const),
+    }));
+    return { components: tagged, status: rollupCompletedTemplate(tagged, requiredIds) };
+  }
+
+  // Task #2109 — bridge the operator-picked VendorId to the catalog
+  // manufacturers.id (no stored map — mirror matchInvitedPressToVendor by
+  // name, the reverse of how PressPanel resolves the vendor) so the
+  // completed-template check can pull operator-edited specs from the press
+  // catalog. Album-independent: the check's own vendorId is the source of
+  // truth for which press's specs to compare against. Returns null when no
+  // manufacturer name maps to the vendor → resolveRequired falls back to
+  // the measured constants (never worse than before this table existed).
+  async function pressIdForVendor(vendorId: VendorId): Promise<string | null> {
+    const all = await storage.getManufacturers();
+    const match = all.find((m) => matchInvitedPressToVendor(m.name) === vendorId);
+    return match?.id ?? null;
+  }
+
+  // The required finished components for (vendor, config) with any
+  // operator-stored catalog specs merged OVER the measured-constant
+  // baseline. Drop-in async replacement for requiredFinishedComponents().
+  async function resolveRequired(
+    vendorId: VendorId,
+    config: CompletedTemplateConfig,
+  ): Promise<ReturnType<typeof requiredFinishedComponents>> {
+    const format = completedTemplateConfigToAlbumFormat(config);
+    let storeRows: Awaited<ReturnType<typeof storage.listPressTemplateSpecs>> = [];
+    if (format) {
+      const pressId = await pressIdForVendor(vendorId);
+      if (pressId) storeRows = await storage.listPressTemplateSpecs(pressId, format);
+    }
+    return resolveFinishedComponents({ vendorId, config, storeRows });
+  }
+
+  // Shape the persisted row (+ a default when none exists) into the panel
+  // payload: the configured vendor/config, the required-slot specs the
+  // operator must satisfy, the supplied components (presence re-tagged),
+  // and the rolled-up verdict.
+  async function completedTemplatePayload(albumId: string) {
+    const row = await storage.getCompletedTemplateCheck(albumId);
+    if (!row || !row.vendorId) {
+      return {
+        configured: false,
+        vendorId: null as VendorId | null,
+        config: defaultCompletedTemplateConfig(),
+        requiredComponents: [] as ReturnType<typeof requiredFinishedComponents>,
+        components: [] as CompletedTemplateComponent[],
+        status: "empty" as CompletedTemplateVerdict,
+        updatedAt: null as string | null,
+      };
+    }
+    const vendorId = row.vendorId as VendorId;
+    const config = row.config as CompletedTemplateConfig;
+    const required = await resolveRequired(vendorId, config);
+    const { components, status } = retagCompleted(
+      (row.components ?? []) as CompletedTemplateComponent[],
+      required.map((r) => r.id),
+    );
+    return {
+      configured: true,
+      vendorId,
+      config,
+      requiredComponents: required,
+      components,
+      status,
+      updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
+    };
+  }
+
+  // GET the persisted confirmation + the required-component specs for the
+  // album's current vendor/config.
+  app.get("/api/admin/albums/:id/completed-template", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperator(req, res))) return;
+    const album = await storage.getAlbumById(req.params.id, { includeHidden: true });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    res.json(await completedTemplatePayload(req.params.id));
+  });
+
+  // Set / update the vendor + product configuration. Recomputes presence
+  // for any already-supplied files against the new required-slot set
+  // (a file that no longer maps to a slot becomes "extra", never lost).
+  app.post("/api/admin/albums/:id/completed-template/config", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperator(req, res))) return;
+    const album = await storage.getAlbumById(req.params.id, { includeHidden: true });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    const vendor = z.enum(["mrp", "pmp", "hellbender"]).safeParse(req.body?.vendorId);
+    if (!vendor.success) return res.status(400).json({ message: "Pick a valid vendor (MRP, PMP, or Hellbender)." });
+    const cfg = completedConfigSchema.safeParse(req.body?.config);
+    if (!cfg.success) return res.status(400).json({ message: cfg.error.message });
+    const existing = await storage.getCompletedTemplateCheck(req.params.id);
+    const required = await resolveRequired(vendor.data, cfg.data);
+    const { components, status } = retagCompleted(
+      (existing?.components ?? []) as CompletedTemplateComponent[],
+      required.map((r) => r.id),
+    );
+    await storage.saveCompletedTemplateCheck({
+      albumId: req.params.id,
+      vendorId: vendor.data,
+      config: cfg.data,
+      components,
+      status,
+    });
+    res.json(await completedTemplatePayload(req.params.id));
+  });
+
+  // Match a pasted (Dropbox/etc.) print-ready PDF URL to a required slot,
+  // stream-scan it, run the finished-template checks, and persist the
+  // result. Re-checking a slot clears any prior override (new file).
+  app.post("/api/admin/albums/:id/completed-template/check", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperator(req, res))) return;
+    const album = await storage.getAlbumById(req.params.id, { includeHidden: true });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    const body = z
+      .object({ componentId: z.string().trim().min(1), url: z.string().trim().min(1) })
+      .safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: body.error.message });
+
+    const existing = await storage.getCompletedTemplateCheck(req.params.id);
+    if (!existing || !existing.vendorId) {
+      return res.status(400).json({ message: "Pick a vendor and product configuration first." });
+    }
+    const vendorId = existing.vendorId as VendorId;
+    const config = existing.config as CompletedTemplateConfig;
+    const required = await resolveRequired(vendorId, config);
+    const spec = required.find((r) => r.id === body.data.componentId);
+    if (!spec) return res.status(400).json({ message: "That component isn't required for this configuration." });
+
+    const fetched = await fetchAndScanPdf(body.data.url);
+    if (!fetched.ok) return res.status(400).json({ message: fetched.error });
+
+    const checks = validateCompletedComponent(fetched.scan, spec);
+    const component: CompletedTemplateComponent = {
+      componentId: spec.id,
+      label: spec.label,
+      presence: "present",
+      assetUrl: fetched.finalUrl,
+      fileName: fetched.fileName,
+      checks,
+      status: rollupStatus(checks),
+      override: null,
+    };
+    const merged = ((existing.components ?? []) as CompletedTemplateComponent[]).filter(
+      (c) => c.componentId !== component.componentId,
+    );
+    merged.push(component);
+    const { components, status } = retagCompleted(merged, required.map((r) => r.id));
+    await storage.saveCompletedTemplateCheck({
+      albumId: req.params.id,
+      vendorId,
+      config,
+      components,
+      status,
+    });
+    res.json(await completedTemplatePayload(req.params.id));
+  });
+
+  // Remove a supplied file from a slot (correct a mistaken paste). The
+  // slot reverts to "missing" if it's still required.
+  app.post("/api/admin/albums/:id/completed-template/remove", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperator(req, res))) return;
+    const body = z.object({ componentId: z.string().trim().min(1) }).safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: body.error.message });
+    const existing = await storage.getCompletedTemplateCheck(req.params.id);
+    if (!existing || !existing.vendorId) return res.status(404).json({ message: "Nothing to remove." });
+    const vendorId = existing.vendorId as VendorId;
+    const config = existing.config as CompletedTemplateConfig;
+    const required = await resolveRequired(vendorId, config);
+    const remaining = ((existing.components ?? []) as CompletedTemplateComponent[]).filter(
+      (c) => c.componentId !== body.data.componentId,
+    );
+    const { components, status } = retagCompleted(remaining, required.map((r) => r.id));
+    await storage.saveCompletedTemplateCheck({
+      albumId: req.params.id,
+      vendorId,
+      config,
+      components,
+      status,
+    });
+    res.json(await completedTemplatePayload(req.params.id));
+  });
+
+  // Override-with-justification for a single supplied component. Stamps
+  // the operator + reason into the component so the rollup treats it as
+  // sendable (warnings, not blocked).
+  app.post("/api/admin/albums/:id/completed-template/override", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperator(req, res))) return;
+    const body = z
+      .object({
+        componentId: z.string().trim().min(1),
+        justification: z.string().trim().min(8, "Justification must be at least 8 characters"),
+      })
+      .safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: body.error.message });
+    const existing = await storage.getCompletedTemplateCheck(req.params.id);
+    if (!existing || !existing.vendorId) return res.status(404).json({ message: "Nothing to override yet." });
+    const components = (existing.components ?? []) as CompletedTemplateComponent[];
+    const target = components.find((c) => c.componentId === body.data.componentId);
+    if (!target) return res.status(404).json({ message: "No file matched to that component yet." });
+    const user = await storage.getUser(req.session.userId!);
+    target.override = {
+      byUserId: req.session.userId!,
+      byDisplayName: user?.displayName ?? null,
+      justification: body.data.justification,
+      at: new Date().toISOString(),
+    };
+    const vendorId = existing.vendorId as VendorId;
+    const config = existing.config as CompletedTemplateConfig;
+    const required = await resolveRequired(vendorId, config);
+    const { components: retagged, status } = retagCompleted(components, required.map((r) => r.id));
+    await storage.saveCompletedTemplateCheck({
+      albumId: req.params.id,
+      vendorId,
+      config,
+      components: retagged,
+      status,
+    });
+    res.json(await completedTemplatePayload(req.params.id));
+  });
+
+  // ─── Task #2109 — Operator-editable press template specs (catalog) ───
+  // The completed-template check above resolves these OVER the measured-
+  // constant baseline (resolveRequired → resolveFinishedComponents).
+  // Keyed by manufacturers.id; one row per (format, component, jacket
+  // variant, disc count). Operator-only (super_admin / admin). The
+  // spec-entry UI lands with the redesigned catalog; these endpoints are
+  // the data layer behind it. variantKey is meaningful for jacket rows
+  // only ("" = applies to any jacket); labels / inner sleeves are
+  // variant-less. templateFileUrl is stored as reference metadata and is
+  // NEVER fetched server-side (no SSRF surface).
+  const templateSpecBodySchema = z.object({
+    format: z.enum(["7_inch", "12_lp", "12_double", "cassette", "cd"]),
+    componentKey: z.enum(["jacket", "labels", "inner_sleeve"]),
+    variantKey: z.string().trim().max(40).optional().default(""),
+    discCount: z.number().int().min(0).max(12).optional().default(0),
+    artboardWInches: z.number().positive().max(120).nullable().optional(),
+    artboardHInches: z.number().positive().max(120).nullable().optional(),
+    expectedPages: z.number().int().min(1).max(64).nullable().optional(),
+    color: z.enum(["process-4c", "cmyk-or-pms"]).nullable().optional(),
+    fontsRule: z.string().trim().max(200).nullable().optional(),
+    templateFileUrl: z.string().trim().url().max(2000).nullable().optional(),
+  });
+
+  app.get("/api/admin/manufacturers/:id/template-specs", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperator(req, res))) return;
+    const press = await storage.getManufacturerById(req.params.id);
+    if (!press) return res.status(404).json({ message: "Press not found" });
+    const format = typeof req.query.format === "string" ? req.query.format : undefined;
+    res.json({ specs: await storage.listPressTemplateSpecs(req.params.id, format) });
+  });
+
+  app.put("/api/admin/manufacturers/:id/template-specs", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperator(req, res))) return;
+    const press = await storage.getManufacturerById(req.params.id);
+    if (!press) return res.status(404).json({ message: "Press not found" });
+    const body = templateSpecBodySchema.safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: body.error.message });
+    // Jacket rows may be variant-specific (a JacketKind) or variant-less
+    // ("" = applies to any jacket); labels / inner sleeves are always
+    // variant-less so the unique key + resolver lookup agree.
+    const variantKey = body.data.componentKey === "jacket" ? (body.data.variantKey ?? "") : "";
+    const spec = await storage.upsertPressTemplateSpec(
+      {
+        pressId: req.params.id,
+        format: body.data.format,
+        componentKey: body.data.componentKey,
+        variantKey,
+        discCount: body.data.discCount ?? 0,
+        artboardWInches: body.data.artboardWInches ?? null,
+        artboardHInches: body.data.artboardHInches ?? null,
+        expectedPages: body.data.expectedPages ?? null,
+        color: body.data.color ?? null,
+        fontsRule: body.data.fontsRule ?? null,
+        templateFileUrl: body.data.templateFileUrl ?? null,
+      },
+      req.session.userId ?? null,
+    );
+    res.json({ spec });
+  });
+
+  app.delete(
+    "/api/admin/manufacturers/:id/template-specs/:specId",
+    requireAdminBearer,
+    async (req, res) => {
+      if (!(await requireOperator(req, res))) return;
+      await storage.deletePressTemplateSpec(req.params.id, req.params.specId);
+      res.json({ ok: true });
+    },
+  );
 
   // ─── Task #225 — Pressing-order requests (artist → GoodTunes review) ──
   // The bridge between "I've made my Sell-tab choices" and "GoodTunes

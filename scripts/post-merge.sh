@@ -194,6 +194,40 @@ SQL
 migrate_rig_quote_requests dev  "${DATABASE_URL:-}"
 migrate_rig_quote_requests prod "${PROD_DATABASE_URL:-}"
 
+# Task #2109 — admin "Confirm a completed PDF matches the press specs".
+# shared/schema.ts declares completed_template_checks (one row per album);
+# hand-apply the canonical CREATE TABLE on BOTH dev and prod to keep the
+# schema-drift guard green and the publish dev→prod diff empty. Idempotent.
+migrate_completed_template_checks() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping completed_template_checks migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS completed_template_checks (
+  id         varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id   varchar NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  vendor_id  text    NOT NULL,
+  config     jsonb   NOT NULL,
+  components jsonb   NOT NULL DEFAULT '[]'::jsonb,
+  status     text    NOT NULL DEFAULT 'empty',
+  updated_at timestamp NOT NULL DEFAULT now(),
+  created_at timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS completed_template_checks_album_uniq ON completed_template_checks (album_id);
+COMMIT;
+SQL
+  then
+    echo "post-merge: completed_template_checks migration ok on $label"
+  else
+    echo "post-merge: WARNING — completed_template_checks migration failed on $label (continuing)"
+  fi
+}
+migrate_completed_template_checks dev  "${DATABASE_URL:-}"
+migrate_completed_template_checks prod "${PROD_DATABASE_URL:-}"
+
 # Task #1036 — TRUE ONE-TIME backfill: give every existing account exactly
 # ONE membership reproducing its current users.role / role_scope_id +
 # folded partner_permission_overrides. Marker-guarded in
@@ -7638,5 +7672,109 @@ SQL
 }
 migrate_album_new_music_notified dev  "${DATABASE_URL:-}"
 migrate_album_new_music_notified prod "${PROD_DATABASE_URL:-}"
+
+# Task #2109 — operator-editable press template specs, stored in the press
+# CATALOG (keyed manufacturers.id → AlbumFormat → component). The album
+# Pressing completed-template check resolves these OVER the measured
+# baseline constants. Schema-drift-guard covers the table; this creates it
+# on both DBs. Named unique index (not a constraint) mirrors the
+# completed_template_checks precedent — the storage upsert + seed both
+# conflict on the column LIST, so index-vs-constraint is functionally moot.
+migrate_press_template_specs() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press_template_specs migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS press_template_specs (
+  id                  varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id            varchar NOT NULL,
+  format              text    NOT NULL,
+  component_key       text    NOT NULL,
+  variant_key         text    NOT NULL DEFAULT '',
+  disc_count          integer NOT NULL DEFAULT 0,
+  artboard_w_inches   double precision,
+  artboard_h_inches   double precision,
+  expected_pages      integer,
+  color               text,
+  fonts_rule          text,
+  template_file_url   text,
+  updated_by_user_id  varchar,
+  updated_at          timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS press_template_spec_uniq
+  ON press_template_specs (press_id, format, component_key, variant_key, disc_count);
+COMMIT;
+SQL
+  then
+    echo "post-merge: press_template_specs migration ok on $label"
+  else
+    echo "post-merge: WARNING — press_template_specs migration failed on $label (continuing)"
+  fi
+}
+migrate_press_template_specs dev  "${DATABASE_URL:-}"
+migrate_press_template_specs prod "${PROD_DATABASE_URL:-}"
+
+# Task #2109 — ONE-TIME seed: migrate MRP's measured artboard sizes (real
+# Nov-2025 print-ready files) into Memphis Record Pressing's catalog so the
+# one press we have confirmed data for is genuinely catalog-backed, not
+# code-only. Seeds ONLY the disc-count-independent artboard dimensions
+# (labels, per-disc inner sleeve, old-style gatefold jacket) — color and
+# page counts stay NULL so the per-disc baseline still governs them, making
+# this a behavior-neutral migration whose only effect is that the dims now
+# live in the editable catalog. Marker-guarded + ON CONFLICT DO NOTHING so
+# later operator edits are never clobbered; marker is only stamped once a
+# Memphis row exists, so a not-yet-seeded clone retries on a later merge.
+seed_task_2109_mrp_template_specs() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2109 mrp template specs seed on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2109_mrp_template_specs'
+  ) AND EXISTS (
+    SELECT 1 FROM manufacturers WHERE lower(name) LIKE '%memphis%'
+  ) THEN
+    INSERT INTO press_template_specs
+      (press_id, format, component_key, variant_key, disc_count,
+       artboard_w_inches, artboard_h_inches)
+    SELECT m.id, f.fmt, c.comp, c.variant, 0, c.w, c.h
+    FROM manufacturers m
+    CROSS JOIN (VALUES
+      ('labels',       '',                  6.5::double precision,    7.6811::double precision),
+      ('inner_sleeve', '',                 19.0935::double precision, 30.9685::double precision),
+      ('jacket',       'gatefold_oldstyle', 27.25::double precision,  27.0::double precision)
+    ) AS c(comp, variant, w, h)
+    CROSS JOIN (VALUES ('12_lp'), ('12_double')) AS f(fmt)
+    WHERE lower(m.name) LIKE '%memphis%'
+    ON CONFLICT (press_id, format, component_key, variant_key, disc_count) DO NOTHING;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_2109_mrp_template_specs');
+    RAISE NOTICE 'task-2109 mrp template specs seeded: % rows', v_count;
+  END IF;
+END $$;
+COMMIT;
+SQL
+  then
+    echo "post-merge: task-2109 mrp template specs seed ok on $label"
+  else
+    echo "post-merge: WARNING — task-2109 mrp template specs seed failed on $label (continuing)"
+  fi
+}
+seed_task_2109_mrp_template_specs dev  "${DATABASE_URL:-}"
+seed_task_2109_mrp_template_specs prod "${PROD_DATABASE_URL:-}"
 
 sync_github_build_mirror

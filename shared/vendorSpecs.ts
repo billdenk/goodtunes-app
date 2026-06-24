@@ -230,3 +230,295 @@ export function matchInvitedPressToVendor(pressName: string | null | undefined):
   }
   return null;
 }
+
+// ─── Task #2109 — Completed-template confirmation specs ───────────────
+// The admin "Confirm a completed PDF matches the press specs" surface
+// needs, per (vendor, product configuration), the exact set of print
+// components a finished release must supply and the checks each is held
+// to.
+//
+// CRUCIAL distinction from the art-preflight TemplateSpec above: those
+// describe the artist's BLANK template (finished trim + bleed). A
+// COMPLETED, print-ready file is laid out on the vendor's own artboard,
+// whose flat page size is NOT finished+bleed — it carries the plant's
+// bleed and fold/turn-in/glue allowances. Measured proof (MRP, real
+// files sent to print, Nov 2025 — Nick Carter 2LP):
+//   • 12" 2LP center labels  → 4 pages, each 6.5000 × 7.6811 in
+//   • 12" inner sleeve (board-weight Euro) → 1 page, 19.0935 × 30.9685 in
+//     (delivered as one file PER DISC, not one multi-page file)
+//   • 12" gatefold OLD-STYLE jacket (North America, 1/2 pocket)
+//                            → 1 page, 27.2500 × 27.0000 in
+// A naive finished+bleed target (a 24×12 gatefold, or a ~4.19" 100mm
+// label) would FALSE-FAIL every one of those real files — hence we
+// hard-check against the MEASURED artboard where we have it
+// (`templatePageInches`) and fall back to computed finished+bleed
+// (clearly flagged "no vendor template on file") as a WARN-only target
+// everywhere else.
+//
+// NOTE on variants: a single canonical artboard per (vendor, jacket kind)
+// is necessarily approximate — MRP issues region- and pocket-specific
+// gatefold templates whose flat size differs (a blank gatefold measured
+// 33.00×32.53 vs the 27.25×27.00 North-America file actually sent). The
+// size check is EXACT against the canonical artboard and admin
+// override-with-justification is the documented escape hatch for a
+// legitimate variant. Out of scope: auto-detecting the variant.
+
+export type JacketKind = "single" | "gatefold" | "gatefold_oldstyle" | "widespine";
+export type InnerSleeveKind = "none" | "printed" | "generic";
+export type LabelColorKind = "process-4c" | "spot-1c" | "none";
+
+export type CompletedTemplateConfig = {
+  size: VinylSize;
+  /** Discs in the package (1 = single LP, 2 = double LP, …). */
+  discs: number;
+  jacket: JacketKind;
+  innerSleeves: InnerSleeveKind;
+  labelColor: LabelColorKind;
+};
+
+export function defaultCompletedTemplateConfig(): CompletedTemplateConfig {
+  return { size: '12"', discs: 1, jacket: "single", innerSleeves: "none", labelColor: "process-4c" };
+}
+
+/** Plate requirement for a finished component. */
+export type FinishedComponentColor = "process-4c" | "cmyk-or-pms";
+
+export type FinishedComponentSpec = {
+  /** Stable slot key, unique within a confirmation. */
+  id: string;
+  /** Human label ("12" gatefold jacket", "Center labels (4 faces)"). */
+  label: string;
+  /**
+   * Authoritative flat artboard size (inches) measured from a real
+   * vendor template / print-ready file. When set, a completed file is
+   * hard-checked EXACTLY against this on every page. Null = no vendor
+   * template on file → computed finished+bleed is used as a WARN target.
+   */
+  templatePageInches: { w: number; h: number } | null;
+  /** Computed fallback basis (finished trim) when no template on file. */
+  finishedInches: { w: number; h: number };
+  bleedInches: number;
+  /** Pages/faces the completed file for this slot must contain. */
+  expectedPages: number;
+  color: FinishedComponentColor;
+};
+
+// Measured flat artboard sizes (inches) keyed by
+// `${vendorId}:${component}:${sizeKey}[:${variant}]`. Sourced ONLY from
+// real measured files — never a published "finished" number. See the
+// note above for provenance.
+const MEASURED_TEMPLATE_ARTBOARDS: Record<string, { w: number; h: number }> = {
+  "mrp:labels:12in": { w: 6.5, h: 7.6811 },
+  "mrp:inner_sleeve:12in": { w: 19.0935, h: 30.9685 },
+  "mrp:jacket:12in:gatefold_oldstyle": { w: 27.25, h: 27.0 },
+};
+
+const SINGLE_JACKET_FINISHED: Record<VinylSize, { w: number; h: number }> = {
+  '12"': { w: 12, h: 12 },
+  '10"': { w: 10, h: 10 },
+  '7"': { w: 7.0625, h: 7.0625 },
+};
+const LABEL_FINISHED: Record<VinylSize, { w: number; h: number }> = {
+  '12"': { w: 3.875, h: 3.875 },
+  '10"': { w: 3.5, h: 3.5 },
+  '7"': { w: 3.5, h: 3.5 },
+};
+const INNER_SLEEVE_FINISHED: Record<VinylSize, { w: number; h: number }> = {
+  '12"': { w: 12.375, h: 12.375 },
+  '10"': { w: 10.375, h: 10.375 },
+  '7"': { w: 7.4375, h: 7.4375 },
+};
+
+function sizeKeyOf(size: VinylSize): "12in" | "10in" | "7in" {
+  return size === '12"' ? "12in" : size === '10"' ? "10in" : "7in";
+}
+
+function jacketFinishedInches(size: VinylSize, kind: JacketKind): { w: number; h: number } {
+  const single = SINGLE_JACKET_FINISHED[size];
+  if (kind === "gatefold" || kind === "gatefold_oldstyle") return { w: single.w * 2, h: single.h };
+  return single; // single + widespine use the single face as the computed basis
+}
+
+function jacketExpectedPages(kind: JacketKind): number {
+  // Old-style tip-on wraps print as one flat sheet; the rest export as
+  // outside + inside spreads (2 pages). Authoritative only where we also
+  // have a measured artboard.
+  return kind === "gatefold_oldstyle" ? 1 : 2;
+}
+
+const JACKET_LABELS: Record<JacketKind, string> = {
+  single: "single jacket",
+  gatefold: "gatefold jacket",
+  gatefold_oldstyle: "gatefold jacket (old-style tip-on)",
+  widespine: "widespine jacket",
+};
+
+/**
+ * The set of print components a completed release must supply for the
+ * chosen vendor + product configuration, each with the finished-template
+ * checks it's held to. Drives both the required-slot list in the admin
+ * panel and the server-side per-component validator.
+ */
+export function requiredFinishedComponents(
+  vendorId: VendorId,
+  config: CompletedTemplateConfig,
+): FinishedComponentSpec[] {
+  const out: FinishedComponentSpec[] = [];
+  const discs = Math.max(1, Math.floor(Number(config.discs) || 1));
+  const sizeKey = sizeKeyOf(config.size);
+
+  // Jacket — always exactly one.
+  out.push({
+    id: "jacket",
+    label: `${config.size} ${JACKET_LABELS[config.jacket]}`,
+    templatePageInches:
+      MEASURED_TEMPLATE_ARTBOARDS[`${vendorId}:jacket:${sizeKey}:${config.jacket}`] ?? null,
+    finishedInches: jacketFinishedInches(config.size, config.jacket),
+    bleedInches: 0.125,
+    expectedPages: jacketExpectedPages(config.jacket),
+    color: "cmyk-or-pms",
+  });
+
+  // Center labels — one component, two faces per disc, delivered as one
+  // multi-page file (confirmed: a 2LP ships a single 4-page label PDF).
+  if (config.labelColor !== "none") {
+    const faces = discs * 2;
+    out.push({
+      id: "labels",
+      label: `Center labels (${faces} faces)`,
+      templatePageInches: MEASURED_TEMPLATE_ARTBOARDS[`${vendorId}:labels:${sizeKey}`] ?? null,
+      finishedInches: LABEL_FINISHED[config.size],
+      bleedInches: 0.125,
+      expectedPages: faces,
+      color: config.labelColor === "process-4c" ? "process-4c" : "cmyk-or-pms",
+    });
+  }
+
+  // Printed inner sleeves — one slot PER DISC (confirmed: each disc ships
+  // its own 1-page sleeve file).
+  if (config.innerSleeves === "printed") {
+    const measured = MEASURED_TEMPLATE_ARTBOARDS[`${vendorId}:inner_sleeve:${sizeKey}`] ?? null;
+    for (let d = 1; d <= discs; d++) {
+      out.push({
+        id: `inner_sleeve_${d}`,
+        label: discs > 1 ? `Printed inner sleeve — disc ${d}` : "Printed inner sleeve",
+        templatePageInches: measured,
+        finishedInches: INNER_SLEEVE_FINISHED[config.size],
+        bleedInches: 0.125,
+        expectedPages: 1,
+        color: "cmyk-or-pms",
+      });
+    }
+  }
+
+  return out;
+}
+
+// ─── Catalog-stored press template specs (operator-editable) ──────────
+// Task #2109 expansion. The MEASURED_TEMPLATE_ARTBOARDS constants above
+// are the permanent baseline. Operators can additionally store per-press,
+// per-format, per-component artboard / page / color specs in the press
+// CATALOG (press_template_specs, keyed by manufacturers.id). When a
+// stored row exists for the resolved (press, format, component[, jacket
+// variant][, disc count]) it overrides the matching baseline FIELD; an
+// absent row — or an absent field on a row — always falls back to the
+// constant. Same finished-template check, now backed by operator-curated
+// data without ever losing the measured-from-real-files defaults.
+
+/**
+ * One operator-editable spec row, shaped loosely so the resolver can
+ * consume drizzle's `PressTemplateSpec` rows directly (structural typing)
+ * without importing the DB schema into this shared module.
+ */
+export type PressTemplateSpecRow = {
+  format: string;
+  /** 'jacket' | 'labels' | 'inner_sleeve'. */
+  componentKey: string;
+  /** JacketKind for jacket rows; "" (no variant) for labels / sleeves. */
+  variantKey: string;
+  /** Discs this row is specific to; 0 = generic (applies to any count). */
+  discCount: number;
+  artboardWInches: number | null;
+  artboardHInches: number | null;
+  expectedPages: number | null;
+  /** 'process-4c' | 'cmyk-or-pms' | null (keep baseline). */
+  color: string | null;
+  fontsRule?: string | null;
+  templateFileUrl?: string | null;
+};
+
+/**
+ * Map a completed-template product config to the catalog AlbumFormat key
+ * the press catalog (and press_template_specs) is keyed by. 10" has no
+ * catalog format → null (no stored specs; baseline / computed only).
+ */
+export function completedTemplateConfigToAlbumFormat(
+  config: CompletedTemplateConfig,
+): string | null {
+  const discs = Math.max(1, Math.floor(Number(config.discs) || 1));
+  if (config.size === '7"') return "7_inch";
+  if (config.size === '12"') return discs >= 2 ? "12_double" : "12_lp";
+  return null; // 10" (and any future size) has no catalog format yet
+}
+
+/**
+ * The catalog lookup coordinates for a required-component spec: which
+ * component_key + variant_key a stored row must carry to override it.
+ * Jacket rows are variant-specific (by JacketKind); labels and the
+ * per-disc inner sleeves share one variant-less ("") row each.
+ */
+function specLookupCoords(
+  specId: string,
+  config: CompletedTemplateConfig,
+): { componentKey: string; variantKey: string } {
+  if (specId === "jacket") return { componentKey: "jacket", variantKey: config.jacket };
+  if (specId === "labels") return { componentKey: "labels", variantKey: "" };
+  if (specId.startsWith("inner_sleeve")) return { componentKey: "inner_sleeve", variantKey: "" };
+  return { componentKey: specId, variantKey: "" };
+}
+
+/**
+ * The required finished components for (vendor, config), with any
+ * operator-stored catalog specs merged OVER the measured-constant
+ * baseline per field. Both artboard dimensions must be present to
+ * override the template artboard (a half-specified row is ignored for
+ * sizing); expectedPages / color override individually when set. A
+ * jacket row may be variant-specific (wins) or variant-less ("" = applies
+ * to any JacketKind). Each candidate prefers an exact disc-count row,
+ * then the generic (discCount 0) row.
+ */
+export function resolveFinishedComponents(args: {
+  vendorId: VendorId;
+  config: CompletedTemplateConfig;
+  storeRows?: PressTemplateSpecRow[];
+}): FinishedComponentSpec[] {
+  const baseline = requiredFinishedComponents(args.vendorId, args.config);
+  const format = completedTemplateConfigToAlbumFormat(args.config);
+  const rows = (args.storeRows ?? []).filter((r) => !format || r.format === format);
+  if (rows.length === 0) return baseline;
+  const discs = Math.max(1, Math.floor(Number(args.config.discs) || 1));
+  return baseline.map((spec) => {
+    const { componentKey, variantKey } = specLookupCoords(spec.id, args.config);
+    const variantCandidates =
+      componentKey === "jacket" && variantKey !== "" ? [variantKey, ""] : [variantKey];
+    let match: PressTemplateSpecRow | undefined;
+    for (const vk of variantCandidates) {
+      match =
+        rows.find(
+          (r) => r.componentKey === componentKey && (r.variantKey ?? "") === vk && r.discCount === discs,
+        ) ??
+        rows.find(
+          (r) => r.componentKey === componentKey && (r.variantKey ?? "") === vk && r.discCount === 0,
+        );
+      if (match) break;
+    }
+    if (!match) return spec;
+    const next: FinishedComponentSpec = { ...spec };
+    if (match.artboardWInches != null && match.artboardHInches != null) {
+      next.templatePageInches = { w: match.artboardWInches, h: match.artboardHInches };
+    }
+    if (match.expectedPages != null) next.expectedPages = match.expectedPages;
+    if (match.color === "process-4c" || match.color === "cmyk-or-pms") next.color = match.color;
+    return next;
+  });
+}

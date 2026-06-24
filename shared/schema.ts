@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqueIndex, unique, check, primaryKey, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqueIndex, unique, check, primaryKey, index, doublePrecision } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import type { SignedCertLadderRung } from "./signedCertLadder";
+import type { CompletedTemplateConfig } from "./vendorSpecs";
+import type { CompletedTemplateComponent } from "./uploadValidation";
 
 // Task #475 — 30-day soft-delete Trash. Every admin-deletable entity
 // (albums, songs, people, vendors, instruments, labels, manufacturers,
@@ -2437,6 +2439,52 @@ export const pressTierJacketLadders = pgTable(
 );
 export type PressTierJacketLadder = typeof pressTierJacketLadders.$inferSelect;
 
+// Task #2109 — operator-editable finished-template specs, stored in the
+// press catalog keyed by manufacturers.id → AlbumFormat → component. The
+// completed-template check resolves these OVER the measured-constant
+// baseline in shared/vendorSpecs.ts (see resolveFinishedComponents): a
+// stored row overrides the matching component's artboard / page count /
+// color; an absent row falls back to the permanent constant. variantKey
+// carries the JacketKind for jacket rows ("" = applies to any jacket) and
+// "" (no variant) for labels / inner sleeves; discCount 0 = generic
+// (applies to any disc count), a positive value pins the row to that
+// exact count. templateFileUrl / fontsRule are operator reference
+// metadata only — never fetched server-side (no SSRF surface).
+export const pressTemplateSpecs = pgTable(
+  "press_template_specs",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    pressId: varchar("press_id").notNull(),
+    format: text("format").notNull(),
+    componentKey: text("component_key").notNull(),
+    variantKey: text("variant_key").notNull().default(""),
+    discCount: integer("disc_count").notNull().default(0),
+    artboardWInches: doublePrecision("artboard_w_inches"),
+    artboardHInches: doublePrecision("artboard_h_inches"),
+    expectedPages: integer("expected_pages"),
+    color: text("color"),
+    fontsRule: text("fonts_rule"),
+    templateFileUrl: text("template_file_url"),
+    updatedByUserId: varchar("updated_by_user_id"),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    pressTemplateSpecUniq: unique("press_template_spec_uniq").on(
+      t.pressId,
+      t.format,
+      t.componentKey,
+      t.variantKey,
+      t.discCount,
+    ),
+  }),
+);
+export type PressTemplateSpec = typeof pressTemplateSpecs.$inferSelect;
+export const insertPressTemplateSpecSchema = createInsertSchema(pressTemplateSpecs).omit({
+  id: true,
+  updatedAt: true,
+});
+export type InsertPressTemplateSpec = z.infer<typeof insertPressTemplateSpecSchema>;
+
 // Task #670 — audit log for automated pricing imports (Hellbender's
 // Shopify scrape today; future MRP/PMP sync rows land here too).
 // One row per scrape attempt with the resolved proposal + counts +
@@ -4857,6 +4905,37 @@ export const uploadValidations = pgTable("upload_validations", {
 
 export type UploadValidation = typeof uploadValidations.$inferSelect;
 export type InsertUploadValidation = typeof uploadValidations.$inferInsert;
+
+// ─── Task #2109 — Completed-template confirmation ──────────────────────
+// Admin-only "Confirm a completed PDF matches the press specs" surface.
+// ONE row per album (unique album_id). Unlike upload_validations (one row
+// per uploaded art/audio file, feeding the Orders preflight badge), this
+// holds an ENTIRE completed-template confirmation for a release: the
+// operator's chosen vendor + product configuration, the per-component
+// match/check results (present/missing/extra + the finished-template
+// checks each ran, with per-component override-with-justification stamped
+// inside the JSONB), and a rolled-up "ready to send" verdict. Kept
+// separate so it never pollutes the art/audio preflight rollup. We persist
+// each component's source URL + filename + measured results, NOT the
+// (350–530MB) print-ready blob itself.
+export const completedTemplateChecks = pgTable("completed_template_checks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  vendorId: text("vendor_id").notNull(), // "mrp" | "pmp" | "hellbender"
+  config: jsonb("config").$type<CompletedTemplateConfig>().notNull(),
+  components: jsonb("components")
+    .$type<CompletedTemplateComponent[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  status: text("status").notNull().default(sql`'empty'`), // verdict: ready | warnings | blocked | empty
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  onefPerAlbum: uniqueIndex("completed_template_checks_album_uniq").on(t.albumId),
+}));
+
+export type CompletedTemplateCheck = typeof completedTemplateChecks.$inferSelect;
+export type InsertCompletedTemplateCheck = typeof completedTemplateChecks.$inferInsert;
 
 // ─── Task #225 — Pressing-order requests (artist → GoodTunes review) ────
 // One row per "Go to Press!" submission from the artist Sell tab. Status

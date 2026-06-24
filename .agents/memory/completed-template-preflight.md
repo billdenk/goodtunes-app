@@ -1,0 +1,23 @@
+---
+name: Completed-template preflight (Press section)
+description: Durable facts + locked decisions behind the admin "confirm a finished print template matches the press specs" check (MRP/PMP/Hellbender).
+---
+
+The admin-only "Confirm finished templates" check on a release's Press section validates the **completed / print-ready** PDFs an operator is about to send a press — distinct from the art/audio upload preflight.
+
+## Measured facts (NOT code-derivable — from real MRP print-ready files, Nick Carter 2LP, Nov 2025)
+- A *completed* template is NOT a *blank* template. The blank gatefold template measured ~33.00×32.53 in; the **finished** North-America 1/2-pkt gatefold measured **27.25×27.00 in**. So size checks use MEASURED finished artboards, and a single canonical artboard per (vendor, jacket-kind) is only approximate → the EXACT check plus override-with-justification is what handles legit variants.
+- 12" 2LP center labels = **ONE 4-page file**, each page 6.5000×7.6811 in, CMYK (+spot/rgb), fonts embedded. Page/face count = discs×2.
+- 12" inner sleeve (board-weight Euro) = **19.0935×30.9685 in, ONE FILE PER DISC** (not one file for all discs).
+- Every real MRP file carries a **dieline/template token on a non-printing layer**, and **RGB coexists with CMYK** in all of them. Therefore the dieline check MUST be a WARN/advisory (never a hard block) and color is "CMYK-wins" (RGB presence never fails) — otherwise every correct file false-fails.
+- In MRP files Trim == Bleed == Media (artboard already includes bleed); ArtBox is the inner safe area and is ignored for sizing.
+
+## Locked decisions
+- **Input is paste-a-URL (share link), NOT multipart upload.** Real files are 350–530MB → over the 200MB upload cap and delivered as Dropbox-style links. Server SSRF-guards + streams the URL through a bounded-memory chunked scanner; it persists URL + filename + measured results only, never the blob. (Normalize Dropbox `dl=0`→`dl=1`.)
+- **Separate table `completed_template_checks`** (one row per album, unique album_id), kept out of upload_validations so it never pollutes the art/audio preflight rollup that feeds the Orders badge. Migration lives in scripts/post-merge.sh (CREATE TABLE IF NOT EXISTS on BOTH dev+prod) and is covered by schema-drift-guard.
+- **Verdict rollup**: ready = all required present & pass/overridden; warnings = only warns/overridden/extra (STILL sendable, "Ready to send · N advisories"); blocked = a required slot missing or failing un-overridden; empty = nothing yet. Dieline advisory lands in warnings, never blocks.
+- **Size check tiering**: EXACT (tol ~0.02in) only where a measured templatePageInches exists (MRP 12"); elsewhere (PMP/Hellbender, 10"/7", untested kinds) fall back to computed finished+bleed as a WARN flagged "no vendor template on file".
+- Override is per-component, stamped into the components jsonb, keyed to the new table (NOT upload_validations.id).
+- **Intake is ONE-URL-PER-COMPONENT-SLOT by design — do NOT "fix" it into an auto-matcher or a combined-PDF splitter.** A code review pushed back twice asking for arbitrary multi-file intake + auto-classification + cross-component page allocation; both were retracted once given the delivery reality. **Why**: the finished assets are separate 350–530MB files with mutually-incompatible flat artboards (jacket ≈27.25×27, labels 6.5×7.68, sleeve 19×31, one file per disc), so a single combined PDF spanning components doesn't exist; the operator already knows which named file is which. The only multi-page case is *within* one component (the 4-up label file), handled by expectedPages.
+- **process-4c labels with spot-only color (no CMYK) BLOCK (fail), not warn** — a spot-only file is a 1-color imprint = the wrong process for a full-color label, so it must never roll up "Ready to send"; override-with-justification is the escape hatch for a deliberate spot-as-process job. (cmyk-or-pms slots still pass on spot alone — that rule is labels-only.)
+- **Why**: the whole point is to catch a wrong finished file before a press job ships; false-failing correct files (on dieline layers, RGB previews, or approximate jacket sizes) would make operators ignore the check, so advisories + override are load-bearing, not nice-to-haves.

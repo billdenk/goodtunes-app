@@ -137,6 +137,11 @@ import {
   type PressingOrderPackageSnapshot,
   printGenerations,
   printArtifacts,
+  completedTemplateChecks,
+  type CompletedTemplateCheck,
+  pressTemplateSpecs,
+  type PressTemplateSpec,
+  type InsertPressTemplateSpec,
 } from "@shared/schema";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -868,6 +873,32 @@ export interface IStorage {
     byUserId: string,
   ): Promise<UploadValidationRow | undefined>;
   deleteUploadValidation(id: string): Promise<void>;
+
+  // ---- Task #2109 — Completed-template confirmation ----------------
+  // One self-contained row per album (unique album_id) holding the
+  // operator's vendor + product config, the per-component finished-
+  // template check results, and the rolled-up "ready to send" verdict.
+  // Kept separate from upload_validations so the completed-PDF
+  // confirmation never pollutes the art/audio preflight rollup.
+  getCompletedTemplateCheck(albumId: string): Promise<CompletedTemplateCheck | undefined>;
+  saveCompletedTemplateCheck(args: {
+    albumId: string;
+    vendorId: string;
+    config: CompletedTemplateCheck["config"];
+    components: CompletedTemplateCheck["components"];
+    status: string;
+  }): Promise<CompletedTemplateCheck>;
+
+  // ---- Task #2109 — Operator-editable press template specs ----------
+  // Stored in the press catalog (keyed manufacturers.id → AlbumFormat →
+  // component). The completed-template check resolves these OVER the
+  // measured-constant baseline; absent rows fall back to the constants.
+  listPressTemplateSpecs(pressId: string, format?: string): Promise<PressTemplateSpec[]>;
+  upsertPressTemplateSpec(
+    input: InsertPressTemplateSpec,
+    updatedByUserId: string | null,
+  ): Promise<PressTemplateSpec>;
+  deletePressTemplateSpec(pressId: string, specId: string): Promise<void>;
 
   // ---- Task #225 — Pressing-order requests --------------------------
   listPressingOrderRequests(opts: {
@@ -5007,6 +5038,101 @@ export class DbStorage implements IStorage {
   }
   async deleteUploadValidation(id: string): Promise<void> {
     await db.delete(uploadValidations).where(eq(uploadValidations.id, id));
+  }
+
+  // ---- Task #2109 — Completed-template confirmation ----------------
+  async getCompletedTemplateCheck(albumId: string): Promise<CompletedTemplateCheck | undefined> {
+    const [row] = await db
+      .select()
+      .from(completedTemplateChecks)
+      .where(eq(completedTemplateChecks.albumId, albumId));
+    return row ?? undefined;
+  }
+  async saveCompletedTemplateCheck(args: {
+    albumId: string;
+    vendorId: string;
+    config: CompletedTemplateCheck["config"];
+    components: CompletedTemplateCheck["components"];
+    status: string;
+  }): Promise<CompletedTemplateCheck> {
+    const [row] = await db
+      .insert(completedTemplateChecks)
+      .values({
+        albumId: args.albumId,
+        vendorId: args.vendorId,
+        config: args.config,
+        components: args.components,
+        status: args.status,
+      })
+      .onConflictDoUpdate({
+        target: completedTemplateChecks.albumId,
+        set: {
+          vendorId: args.vendorId,
+          config: args.config,
+          components: args.components,
+          status: args.status,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
+  }
+
+  // ---- Task #2109 — Operator-editable press template specs ----------
+  async listPressTemplateSpecs(pressId: string, format?: string): Promise<PressTemplateSpec[]> {
+    const conds = [eq(pressTemplateSpecs.pressId, pressId)];
+    if (format) conds.push(eq(pressTemplateSpecs.format, format));
+    return db
+      .select()
+      .from(pressTemplateSpecs)
+      .where(and(...conds))
+      .orderBy(
+        asc(pressTemplateSpecs.format),
+        asc(pressTemplateSpecs.componentKey),
+        asc(pressTemplateSpecs.variantKey),
+        asc(pressTemplateSpecs.discCount),
+      );
+  }
+  async upsertPressTemplateSpec(
+    input: InsertPressTemplateSpec,
+    updatedByUserId: string | null,
+  ): Promise<PressTemplateSpec> {
+    const values = {
+      ...input,
+      variantKey: input.variantKey ?? "",
+      discCount: input.discCount ?? 0,
+      updatedByUserId,
+      updatedAt: new Date(),
+    };
+    const [row] = await db
+      .insert(pressTemplateSpecs)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [
+          pressTemplateSpecs.pressId,
+          pressTemplateSpecs.format,
+          pressTemplateSpecs.componentKey,
+          pressTemplateSpecs.variantKey,
+          pressTemplateSpecs.discCount,
+        ],
+        set: {
+          artboardWInches: values.artboardWInches ?? null,
+          artboardHInches: values.artboardHInches ?? null,
+          expectedPages: values.expectedPages ?? null,
+          color: values.color ?? null,
+          fontsRule: values.fontsRule ?? null,
+          templateFileUrl: values.templateFileUrl ?? null,
+          updatedByUserId,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
+  }
+  async deletePressTemplateSpec(pressId: string, specId: string): Promise<void> {
+    await db
+      .delete(pressTemplateSpecs)
+      .where(and(eq(pressTemplateSpecs.pressId, pressId), eq(pressTemplateSpecs.id, specId)));
   }
 
   // ---- Task #225 — Pressing-order requests --------------------------
