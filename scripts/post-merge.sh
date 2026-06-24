@@ -6654,28 +6654,45 @@ backfill_task_2057_restrip_apple_bio prod "${PROD_DATABASE_URL:-}"
 # post-merge window — no more manual catch-up pushes, no more silent drift.
 #
 # Three gotchas (see .agents/memory/github-mirror-push.md for the full story):
-#   1. HTTPS password auth is dead — authenticate with the Replit-provided
-#      GITHUB_TOKEN as an Authorization: Basic base64(x-access-token:TOKEN)
-#      header. Never echo the token or the base64 blob.
+#   1. Auth is a repo-scoped SSH DEPLOY KEY (GITHUB_MIRROR_DEPLOY_KEY secret),
+#      not a PAT — it never expires and only works on this one mirror repo. The
+#      private key is written to a 600 temp file, GIT_SSH_COMMAND points ssh at
+#      it with IdentitiesOnly=yes, and GitHub's host identity is pinned via a
+#      bundled known_hosts (StrictHostKeyChecking=yes — never disabled). The key
+#      file is shredded on every exit path; it is never echoed.
 #   2. The repo's LFS pre-push hook blocks on an SSH password prompt for the
 #      Replit lfsurl, so the ref push uses --no-verify + GIT_LFS_SKIP_PUSH=1.
 #      But GitHub's GH008 hook then rejects any commit that references an LFS
 #      object GitHub's LFS store doesn't have yet, so STEP 2 first uploads —
 #      targeted by oid, no fat-history walk — any attached_assets/*.{mp4,mov,
-#      wav,zip,...} object the new commits added. The video files themselves
-#      stay irrelevant to the build; this just keeps GitHub's hook satisfied.
+#      wav,zip,...} object the new commits added (over the SAME SSH transport).
+#      The video files themselves stay irrelevant to the build; this just keeps
+#      GitHub's hook satisfied.
 #   3. The remote NAME differs per environment (and may be absent in a fresh
-#      post-merge clone), so we push to the URL directly instead of a remote
+#      post-merge clone), so we push to the SSH URL directly instead of a remote
 #      name. We force-push (mirror semantics): GitHub main is disposable and
 #      must always equal project main even across history rewrites/rebases.
 #
-# Best-effort by design: a sync failure (offline, token missing, GitHub
+# Best-effort by design: a sync failure (offline, key missing, GitHub
 # hiccup) logs a WARNING — now WITH the real git stderr (the old code piped it
 # to /dev/null, which is how the mirror silently drifted ~2 days) — and never
 # fails the merge. STEP 1 fetches the remote tip first so a diverged history
 # can't balloon the push into a multi-GB pack that GitHub 500s on; steady-state
 # pushes are then a handful of commits that finish in seconds.
-GITHUB_MIRROR_URL="https://github.com/billdenk/goodtunes-app.git"
+GITHUB_MIRROR_URL="git@github.com:billdenk/goodtunes-app.git"
+
+# GitHub's published SSH host public keys (source: https://api.github.com/meta
+# -> .ssh_keys, and docs.github.com "GitHub's SSH key fingerprints"). Pinned in
+# a known_hosts so the mirror push can VERIFY GitHub's identity without ever
+# falling back to StrictHostKeyChecking=no (which would accept a MITM host key).
+# If GitHub ever rotates these, refresh from api.github.com/meta.
+github_mirror_known_hosts_contents() {
+  cat <<'KNOWN_HOSTS'
+github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
+github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=
+KNOWN_HOSTS
+}
 # Best-effort: scrub Replit's internal npm proxy host out of package-lock.json
 # before we force-push the mirror. Those `resolved` URLs (package-firewall.replit.local)
 # only resolve inside Replit's network, so if one ever leaks into the lockfile the
@@ -6696,20 +6713,67 @@ sanitize_lockfile_for_mirror() {
     echo "post-merge: WARNING — could not commit sanitized lockfile (continuing)"
   fi
 }
+# The GITHUB_MIRROR_DEPLOY_KEY secret is a multi-line OpenSSH private key, but
+# secret-store and copy-paste round-trips routinely COLLAPSE its line breaks into
+# spaces (single line). OpenSSH then rejects it ("Load key: error in libcrypto"
+# -> Permission denied) and the mirror silently stops syncing. Rebuild a
+# canonical PEM from whatever we receive: the base64 body never contains
+# whitespace and the BEGIN/END markers are fixed, so stripping the markers + ALL
+# whitespace and re-wrapping at 70 cols is loss-free AND idempotent (a correctly
+# multi-line key round-trips byte-for-byte to the same canonical form). Any
+# non-OpenSSH key is written verbatim (with the trailing newline OpenSSH needs)
+# and left for ssh to validate. See .agents/memory/github-mirror-push.md.
+write_normalized_deploy_key() {
+  local raw="$1" out="$2" body
+  case "$raw" in
+    *"BEGIN OPENSSH PRIVATE KEY"*"END OPENSSH PRIVATE KEY"*)
+      body=$(printf '%s' "$raw" \
+        | sed -e 's/-----BEGIN OPENSSH PRIVATE KEY-----//' \
+              -e 's/-----END OPENSSH PRIVATE KEY-----//' \
+        | tr -d '[:space:]')
+      {
+        printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\n'
+        printf '%s' "$body" | fold -w 70
+        printf '\n-----END OPENSSH PRIVATE KEY-----\n'
+      } > "$out"
+      ;;
+    *)
+      printf '%s\n' "$raw" > "$out"
+      ;;
+  esac
+}
 sync_github_build_mirror() {
-  if [ -z "${GITHUB_TOKEN:-}" ]; then
-    echo "post-merge: skipping GitHub mirror sync (GITHUB_TOKEN not set)"
+  if [ -z "${GITHUB_MIRROR_DEPLOY_KEY:-}" ]; then
+    echo "post-merge: skipping GitHub mirror sync (GITHUB_MIRROR_DEPLOY_KEY not set)"
     return 0
   fi
   sanitize_lockfile_for_mirror
-  local head auth
+  local head
   head=$(git rev-parse HEAD 2>/dev/null || true)
   if [ -z "$head" ]; then
     echo "post-merge: WARNING — GitHub mirror sync skipped (could not resolve HEAD)"
     return 0
   fi
-  auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
-  local scrub='s#x-access-token:[^@]*@#x-access-token:***@#g'
+
+  # Auth = repo-scoped SSH deploy key (GITHUB_MIRROR_DEPLOY_KEY). Write the
+  # private key + the pinned known_hosts to 600 temp files and shred them — plus
+  # any temp ghlfs remote — on EVERY exit path via a single RETURN trap, so no
+  # key material can linger on disk or in .git/config. The key value is never
+  # echoed; only file PATHS appear in GIT_SSH_COMMAND.
+  local keyfile knownhosts
+  keyfile=$(mktemp) || { echo "post-merge: WARNING — GitHub mirror sync skipped (mktemp failed)"; return 0; }
+  knownhosts=$(mktemp) || { rm -f "$keyfile"; echo "post-merge: WARNING — GitHub mirror sync skipped (mktemp failed)"; return 0; }
+  trap 'rm -f "$keyfile" "$knownhosts" >/dev/null 2>&1; unset GIT_SSH_COMMAND; git remote remove ghlfs >/dev/null 2>&1 || true' RETURN
+  chmod 600 "$keyfile" "$knownhosts"
+  # Normalize the key into a canonical multi-line PEM (handles secret-store
+  # newline-collapse; see write_normalized_deploy_key above).
+  write_normalized_deploy_key "$GITHUB_MIRROR_DEPLOY_KEY" "$keyfile"
+  github_mirror_known_hosts_contents > "$knownhosts"
+  # IdentitiesOnly=yes  -> use ONLY this deploy key (ignore any agent/identity).
+  # StrictHostKeyChecking=yes + pinned UserKnownHostsFile -> verify GitHub's host
+  # key, never trust-on-first-use. BatchMode=yes -> never prompt (no tty here).
+  export GIT_SSH_COMMAND="ssh -i $keyfile -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$knownhosts -o BatchMode=yes"
+
   echo "post-merge: syncing GitHub build mirror (main -> github.com/billdenk/goodtunes-app)"
 
   # TIME BUDGET (load-bearing): this whole function is the LAST, best-effort step
@@ -6744,8 +6808,7 @@ sync_github_build_mirror() {
   # is skipped -> every new LFS object GH008-rejects the push forever. The '+'
   # resets the tracking ref to GitHub's actual tip so the delta/LFS diff is real.
   if GIT_TERMINAL_PROMPT=0 timeout "$remain" \
-       git -c http.extraheader="Authorization: Basic $auth" \
-           fetch --no-tags "$GITHUB_MIRROR_URL" "+main:refs/remotes/ghmirror/main" >/dev/null 2>&1
+       git fetch --no-tags "$GITHUB_MIRROR_URL" "+main:refs/remotes/ghmirror/main" >/dev/null 2>&1
   then
     have_remote=1
   else
@@ -6756,11 +6819,11 @@ sync_github_build_mirror() {
   # GitHub's LFS store lacks (gotcha #2). Targeted by oid so there is NO
   # fat-history walk (`git lfs push --all` walks the whole ~4GB closure and
   # effectively hangs). Skipped when the fetch above gave us no base to diff.
-  # The token-bearing temp remote (ghlfs) is added only for this block; a RETURN
-  # trap guarantees it's removed on EVERY exit path so the token can't linger in
-  # .git/config. Each object is clamped to the remaining budget and we stop early
-  # (WARN) rather than overrun — a still-missing object just GH008s the push,
-  # which WARNs and self-heals on a later merge.
+  # The temp remote (ghlfs) carries the SSH URL so LFS auth rides the deploy key
+  # too; the outer RETURN trap removes it on every exit path. Each object is
+  # clamped to the remaining budget and we stop early (WARN) rather than overrun —
+  # a still-missing object just GH008s the push, which WARNs and self-heals on a
+  # later merge.
   if [ "$have_remote" = 1 ]; then
     local missing oid
     missing=$(comm -23 \
@@ -6769,9 +6832,8 @@ sync_github_build_mirror() {
       2>/dev/null || true)
     if [ -n "$missing" ]; then
       echo "post-merge: uploading $(printf '%s\n' "$missing" | grep -c .) new LFS object(s) to GitHub LFS"
-      trap 'git remote remove ghlfs >/dev/null 2>&1 || true' RETURN
       git remote remove ghlfs >/dev/null 2>&1 || true
-      git remote add ghlfs "https://x-access-token:${GITHUB_TOKEN}@github.com/billdenk/goodtunes-app.git" >/dev/null 2>&1 || true
+      git remote add ghlfs "$GITHUB_MIRROR_URL" >/dev/null 2>&1 || true
       for oid in $missing; do
         remain=$((mirror_deadline - SECONDS))
         if [ "$remain" -lt 15 ]; then
@@ -6779,10 +6841,9 @@ sync_github_build_mirror() {
           break
         fi
         if [ "$remain" -gt 120 ]; then remain=120; fi
-        GIT_TERMINAL_PROMPT=0 timeout "$remain" git lfs push --object-id ghlfs "$oid" 2>&1 | sed -E "$scrub" || true
+        GIT_TERMINAL_PROMPT=0 timeout "$remain" git lfs push --object-id ghlfs "$oid" 2>&1 || true
       done
       git remote remove ghlfs >/dev/null 2>&1 || true
-      trap - RETURN
     fi
   fi
 
@@ -6797,9 +6858,7 @@ sync_github_build_mirror() {
   fi
   if [ "$remain" -gt 90 ]; then remain=90; fi
   out=$(GIT_LFS_SKIP_PUSH=1 GIT_TERMINAL_PROMPT=0 timeout "$remain" \
-          git -c http.extraheader="Authorization: Basic $auth" \
-              push --no-verify --force "$GITHUB_MIRROR_URL" "HEAD:refs/heads/main" 2>&1) || rc=$?
-  out=$(printf '%s' "$out" | sed -E "$scrub")
+          git push --no-verify --force "$GITHUB_MIRROR_URL" "HEAD:refs/heads/main" 2>&1) || rc=$?
   if [ "$rc" = 0 ]; then
     echo "post-merge: GitHub mirror sync ok ($head)"
   else

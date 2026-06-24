@@ -4,7 +4,7 @@ This is the plain-English runbook for cutting GoodTunes iOS builds **without a M
 
 The pipeline itself lives in [`codemagic.yaml`](../codemagic.yaml) at the repo root. You don't have to read it — this doc covers everything you actually do. For the older Mac-in-Xcode way (the fallback if Codemagic is ever down), see [`native-builds.md`](./native-builds.md).
 
-> **Where Codemagic gets the code:** Codemagic builds from the GitHub mirror `github.com/billdenk/goodtunes-app` (branch `main`). Replit is the source of truth; GitHub is just a build mirror. That mirror now updates **automatically on every merge** to the project's main — `scripts/post-merge.sh` force-pushes the merged code to GitHub at the end of each merge, so a Codemagic build always picks up the latest. You don't push anything by hand. The sync now fetches GitHub's tip before pushing (so a diverged history can't balloon into a multi-GB pack that GitHub rejects with HTTP 500), uploads any new LFS objects so GitHub's `GH008` hook accepts the push, and — if it ever does fail — logs the **real git error** in the merge output instead of swallowing it. (If GitHub ever drifts behind anyway — e.g. the push token was revoked — the manual catch-up recipe lives in `.agents/memory/github-mirror-push.md`.) The push authenticates with the manually-managed **`GITHUB_TOKEN`** secret, which expires and must be rotated on a schedule — see [*Rotating the GitHub mirror push token*](#rotating-the-github-mirror-push-token-do-this-before-it-expires) below (**current expiry: 2026-09-22**).
+> **Where Codemagic gets the code:** Codemagic builds from the GitHub mirror `github.com/billdenk/goodtunes-app` (branch `main`). Replit is the source of truth; GitHub is just a build mirror. That mirror now updates **automatically on every merge** to the project's main — `scripts/post-merge.sh` force-pushes the merged code to GitHub at the end of each merge, so a Codemagic build always picks up the latest. You don't push anything by hand. The sync now fetches GitHub's tip before pushing (so a diverged history can't balloon into a multi-GB pack that GitHub rejects with HTTP 500), uploads any new LFS objects so GitHub's `GH008` hook accepts the push, and — if it ever does fail — logs the **real git error** in the merge output instead of swallowing it. (If GitHub ever drifts behind anyway — e.g. the deploy key was removed — the manual catch-up recipe lives in `.agents/memory/github-mirror-push.md`.) The push authenticates with a **non-expiring, repo-scoped SSH deploy key** (the **`GITHUB_MIRROR_DEPLOY_KEY`** secret) — there is nothing to rotate on a schedule. See [*The GitHub mirror push deploy key*](#the-github-mirror-push-deploy-key-no-expiry) below for the one-time operator setup.
 
 ---
 
@@ -136,58 +136,60 @@ Once those are set, builds run on their own; you can also start one by hand anyt
 
 ---
 
-## Rotating the GitHub mirror push token (do this before it expires)
+## The GitHub mirror push deploy key (no expiry)
 
-The automatic mirror push authenticates with a single secret — **`GITHUB_TOKEN`** (stored
-in Replit Secrets, read by `scripts/post-merge.sh` → `sync_github_build_mirror`). It is a
-**manually-managed fine-grained personal access token** named **"GoodTunes Push"** on Bill's
-GitHub account, scoped to the **`billdenk/goodtunes-app`** repo with **Contents: Read and
-write** (that's what lets the code + Git-LFS objects push to the mirror). GitHub caps
-fine-grained tokens at a finite expiry, so this token has to be rotated by hand on a schedule.
+The automatic mirror push authenticates with a single secret — **`GITHUB_MIRROR_DEPLOY_KEY`**
+(stored in Replit Secrets, read by `scripts/post-merge.sh` → `sync_github_build_mirror`). It is
+the **private half of an SSH deploy key** scoped to **just the `billdenk/goodtunes-app` repo**,
+with **write access** (that's what lets the code + Git-LFS objects push to the mirror over SSH).
 
-**Why it matters:** when the token lapses, the post-merge mirror push fails *silently* — it's
-best-effort and only logs a WARNING, never fails the merge. Because the Android
-`android-internal` workflow auto-builds from this mirror on every push to `main`, a lapsed
-token means iOS quietly builds from stale code and Android internal-testing testers keep
-getting the old `.aab` with **no failed-build signal**. So rotate it *before* the expiry date,
-not after.
+**Why a deploy key instead of a token:** the old approach used a fine-grained personal access
+token (`GITHUB_TOKEN`) that GitHub forces to expire every ~90 days. When it lapsed, the
+post-merge mirror push failed *silently* (best-effort, only logs a WARNING, never fails the
+merge), so iOS quietly built from stale code and Android internal-testing testers kept getting
+the old `.aab` with no failed-build signal. A **repo-scoped SSH deploy key does not expire**, so
+there is nothing to rotate on a schedule and no expiry watcher to maintain. (The Task #2084
+token-expiry pre-warn scheduler was retired along with the PAT.)
 
-**Current expiry: `2026-09-22` (≈90 days).** Rotated on 2026-06-24. Set a reminder ~1 week
-before this date.
+**Security properties of the current setup:**
+- The push uses SSH (`git@github.com:billdenk/goodtunes-app.git`), not HTTPS.
+- The private key is written to a `600` temp file at sync time and **shredded by a `RETURN`
+  trap** the moment the function exits — it never persists on disk and never appears in logs.
+- GitHub's SSH host keys are **pinned** via a bundled `known_hosts` (the three keys GitHub
+  publishes at `https://api.github.com/meta`) with `StrictHostKeyChecking=yes`, so the push
+  can't be MITM'd by a spoofed `github.com`.
+- If `GITHUB_MIRROR_DEPLOY_KEY` is unset, the sync **skips gracefully** (logs a one-line
+  notice, returns 0) — exactly like the old token-absent no-op.
 
-**You also get an automatic heads-up.** The running app reads the token's real expiry (the
-`github-authentication-token-expiration` header GitHub returns on any authenticated request)
-twice a day and, once fewer than ~14 days remain, fires a loud throttled ops alert (email to
-`OPS_ALERT_EMAIL` / log) naming the **"GoodTunes Push"** token and pointing back to this
-section — so rotation no longer depends on a human remembering the date. It only surfaces the
-expiry *date*, never the token value, and never blocks a merge. (Code: `server/githubTokenExpiry.ts`,
-armed from `server/index.ts`; it's a quiet no-op when `GITHUB_TOKEN` is unset.)
-
-**How to rotate (Bill does the GitHub part — the agent can't):**
-1. Go to **https://github.com/settings/tokens?type=beta** (your account's *Developer settings*
-   → *Personal access tokens* → *Fine-grained tokens* — **not** a repo's settings, which has no
-   "Developer settings" entry).
-2. Click the **"GoodTunes Push"** token → **Regenerate token**.
-3. Set a new expiration (**90 days** is the standing default) and **leave the permissions
-   unchanged** (Contents: Read and write on `billdenk/goodtunes-app`).
-4. **Copy** the new `github_pat_…` value (GitHub shows it once) and save it as the
-   **`GITHUB_TOKEN`** secret in Replit (Secrets pane, or hand it to the agent's secret-request
-   prompt — never paste a token into chat, a doc, or a commit).
-5. **Verify** without pushing anything: an authenticated request to the mirror's
-   `git-receive-pack` advertisement returns HTTP 200 only if the token has push permission —
+**One-time operator setup (Bill does the GitHub part — the agent can't):**
+1. Generate a fresh keypair locally (no passphrase, so CI can use it non-interactively):
    ```bash
-   AUTH=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
-   curl -sS -o /dev/null -w "%{http_code}\n" -H "Authorization: Basic $AUTH" \
-     -H "Accept: application/x-git-receive-pack-advertisement" \
-     "https://github.com/billdenk/goodtunes-app.git/info/refs?service=git-receive-pack"
-   # 200 = push works; 403 = wrong/insufficient permissions; 401 = bad token
+   ssh-keygen -t ed25519 -C "goodtunes-mirror-deploy" -N "" -f goodtunes_mirror_deploy
+   # creates goodtunes_mirror_deploy (private) and goodtunes_mirror_deploy.pub (public)
    ```
-   Read its real expiry from `github-authentication-token-expiration` on any authenticated
-   `api.github.com` response. The next real merge's `sync_github_build_mirror` step then
-   force-pushes with the new token and logs success (no WARNING).
+2. Add the **public** key to the mirror repo: **https://github.com/billdenk/goodtunes-app/settings/keys**
+   → **Add deploy key** → paste the contents of `goodtunes_mirror_deploy.pub`, **check "Allow
+   write access"**, save.
+3. Save the **private** key (`goodtunes_mirror_deploy`, the full
+   `-----BEGIN OPENSSH PRIVATE KEY-----` … `-----END OPENSSH PRIVATE KEY-----` block) as the
+   **`GITHUB_MIRROR_DEPLOY_KEY`** secret in Replit (Secrets pane, or hand it to the agent's
+   secret-request prompt — never paste a private key into chat, a doc, or a commit). Then delete
+   both local key files. *Don't sweat exact formatting:* the sync rebuilds a canonical PEM from
+   the secret before use, so a paste that collapsed the key's line breaks into spaces or added
+   stray whitespace (a common secret-store quirk that otherwise surfaces as `Load key: error in
+   libcrypto` / `Permission denied`) still works — just make sure the whole
+   `-----BEGIN…END-----` block is present.
+4. The next real merge's `sync_github_build_mirror` step force-pushes over SSH and logs success
+   (no WARNING). To verify host-key pinning + key acceptance without pushing:
+   ```bash
+   ssh -i <path-to-private-key> -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+     -o UserKnownHostsFile=<bundled known_hosts> -o BatchMode=yes -T git@github.com
+   # "Hi billdenk/goodtunes-app! You've successfully authenticated…" = key works
+   # "Host key verification failed" = pinned known_hosts is stale (refresh from api.github.com/meta)
+   ```
 
-This refreshes only the credential — the sync mechanism itself (fetch-first, LFS upload, time
-budget) is unchanged; see [`.agents/memory/github-mirror-push.md`](../.agents/memory/github-mirror-push.md).
+The sync mechanism itself (fetch-first, LFS upload, lockfile sanitize, time budget, force-push)
+is unchanged; see [`.agents/memory/github-mirror-push.md`](../.agents/memory/github-mirror-push.md).
 
 ---
 

@@ -458,17 +458,11 @@ async function bootstrapAccessGuard() {
     log(`gift scheduler init failed: ${e?.message ?? e}`, "gift-scheduler");
   }
 
-  // Task #2084 — Pre-warn before the GitHub build-mirror push token expires.
-  // The post-merge mirror push uses GITHUB_TOKEN, a hand-rotated ~90-day PAT;
-  // on lapse the push fails silently (iOS builds stale, Android testers stuck
-  // on the old .aab). This reads the token's real expiry header and pages
-  // on-call (via alertOps) when <14 days remain. No token → quiet no-op.
-  try {
-    const { armGithubTokenExpiryScheduler } = await import("./githubTokenExpiry");
-    armGithubTokenExpiryScheduler();
-  } catch (e: any) {
-    log(`github-token expiry watch init failed: ${e?.message ?? e}`, "github-token");
-  }
+  // NOTE: the GitHub build-mirror push no longer uses an expiring PAT — it now
+  // authenticates with a non-expiring repo-scoped SSH deploy key
+  // (GITHUB_MIRROR_DEPLOY_KEY; see scripts/post-merge.sh → sync_github_build_mirror
+  // and docs/codemagic-builds.md). The old token-expiry pre-warn scheduler
+  // (Task #2084) was retired with the PAT since there is no expiry to watch.
 
   // Task #1976 — Odoo printer integration. In-process poll scheduler that
   // pulls production/shipping status out of Odoo and reconciles it onto our

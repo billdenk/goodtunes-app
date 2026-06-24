@@ -21,12 +21,12 @@ best-effort (a failure only logs a WARNING, never fails the merge):
    optional — see "Always fetch before you push" below.
 2. **Upload any new LFS objects** the merged commits added, targeted by `--object-id`
    (never `git lfs push --all`) — see "GH008 / LFS" below.
-3. **Force-push** HEAD to `main` via the URL directly (token header + `--no-verify` +
+3. **Force-push** HEAD to `main` via the SSH URL directly (`--no-verify` +
    `GIT_LFS_SKIP_PUSH=1`), capturing stderr so a WARNING prints the real git error.
 
 Steady-state pushes are a handful of commits and finish in seconds. The manual recipe below
-is the fallback for a one-time catch-up if the auto-sync ever WARNs repeatedly (e.g. token
-revoked, GitHub outage, LFS quota) and GitHub drifts behind.
+is the fallback for a one-time catch-up if the auto-sync ever WARNs repeatedly (e.g. deploy
+key removed, GitHub outage, LFS quota) and GitHub drifts behind.
 
 ## Time-budget coupling: keep the mirror's per-step timeouts UNDER the platform budget
 
@@ -53,9 +53,9 @@ the budget.)
    diverged case the fetch-first already collapses. A bounded-out mirror is harmless (self-heals
    on the next merge's force-push); a budget-blown post-merge is a scary false failure. NB the
    step is best-effort and uses `set -e`, so keep numeric comparisons inside `if [ … ]` guards
-   (a bare `[ … ]` that's false would exit the whole script). The token-bearing temp `ghlfs`
-   remote is wrapped in a `trap '… remote remove ghlfs' RETURN` so the token can't linger in
-   `.git/config` on any early-return/out-of-budget path.
+   (a bare `[ … ]` that's false would exit the whole script). A single `RETURN` trap shreds the
+   SSH private-key + pinned known_hosts temp files AND removes the temp `ghlfs` remote on every
+   early-return/out-of-budget path, so no key material lingers on disk or in `.git/config`.
 
 **Silent-staleness coupling (matters now that Android auto-builds).** `codemagic.yaml`'s
 `android-internal` workflow auto-triggers on every push to `main` of this mirror (iOS stays
@@ -68,11 +68,15 @@ regressed → full pack), GH008 (a new LFS object wasn't uploaded), or auth/quot
 
 ## The two gotchas that make a naive `git push` fail
 
-1. **Password auth is dead.** `git push subrepl-8shaawlm ...` fails instantly with
-   "Password authentication is not supported." Auth via the `GITHUB_TOKEN` env var
-   (Replit-provided, has admin/push on this repo) using an HTTP header:
-   `AUTH=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64); git -c http.extraheader="Authorization: Basic $AUTH" push ...`
-   Never print the token; redact base64 blobs in any logged output.
+1. **Auth is an SSH deploy key, not a token.** Push over SSH
+   (`git@github.com:billdenk/goodtunes-app.git`), authenticated by the `GITHUB_MIRROR_DEPLOY_KEY`
+   secret (private half of a repo-scoped, write-enabled, **non-expiring** GitHub deploy key). The
+   sync writes the key + a pinned `known_hosts` (GitHub's 3 published host keys from
+   `api.github.com/meta`) to `600` temp files, sets
+   `GIT_SSH_COMMAND="ssh -i <key> -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=<kh> -o BatchMode=yes"`,
+   and a `RETURN` trap shreds both temp files. The OLD approach (an HTTPS fine-grained PAT
+   `GITHUB_TOKEN` via `http.extraheader="Authorization: Basic …"`) was retired — it expired ~90d
+   and lapsed silently. Never print the key; it must never appear in logs.
 
 2. **LFS pre-push hook hangs.** The remote has
    `remote.subrepl-8shaawlm.lfsurl ssh://git@ssh.kirk.replit.dev/...` and a `pre-push`
@@ -110,7 +114,8 @@ with `GIT_LFS_SKIP_PUSH=1` (the pre-push hook hangs on Replit's SSH lfsurl), the
 don't ride along — and GitHub's **`GH008`** pre-receive hook then REJECTS any commit that
 references an LFS object GitHub's LFS store lacks (this is what broke every push the day a 99 MB
 recording landed). Fix: upload the missing object(s) to GitHub LFS **before** the ref push,
-**targeted by id**, against a temp token-URL remote:
+**targeted by id**, against a temp SSH-URL remote (`ghlfs`, same deploy-key
+`GIT_SSH_COMMAND`; LFS-over-SSH works via `git-lfs-authenticate`):
 `git lfs push --object-id <remote> <oid>`. Compute the missing set as oids in HEAD not in the
 fetched remote tip: `comm -23 <(git lfs ls-files -l HEAD | awk '{print $1}' | sort -u) <(git lfs ls-files -l refs/remotes/ghmirror/main | awk '{print $1}' | sort -u)`.
 - **Never `git lfs push --all`** — it runs `rev-list --do-walk` over the whole fat history and
@@ -164,34 +169,43 @@ steps present, guard scripts return HTTP 200. Histories diverge (GitHub tip is n
 local history) but share a common ancestor, so it is a force-push of the delta, not a
 full-repo upload.
 
-## The token is a manually-managed PAT that EXPIRES (rotate on a schedule)
+## Auth is a non-expiring SSH deploy key (no rotation, no expiry watcher)
 
-`GITHUB_TOKEN` is a **fine-grained PAT** named **"GoodTunes Push"** on Bill's account, scoped
-to `billdenk/goodtunes-app` with **Contents: Read and write**. GitHub caps its expiry, so it
-must be rotated by hand. On lapse the post-merge push fails *silently* (best-effort WARNING
-only) → iOS builds stale + Android internal testers get the old `.aab` with no failed-build
-signal. **Operator rotation runbook + the current expiry date live in `docs/codemagic-builds.md`
-("Rotating the GitHub mirror push token") — that doc is the source of truth for the date; don't
-duplicate it here.** Bill regenerates it in GitHub (agent can't); the agent only updates the
-secret + verifies.
+`GITHUB_MIRROR_DEPLOY_KEY` is the private half of an SSH **deploy key** on the
+`billdenk/goodtunes-app` repo (write access), so it **does not expire** — there is nothing to
+rotate on a schedule. This replaced the old fine-grained PAT `GITHUB_TOKEN` ("GoodTunes Push"),
+which GitHub forced to expire ~90d and which lapsed *silently* (best-effort WARNING only → iOS
+builds stale + Android internal testers stuck on the old `.aab`). The Task #2084 in-app
+token-expiry pre-warn scheduler (`server/githubTokenExpiry.ts`, armed from `server/index.ts`)
+was **deleted** along with the PAT — there's no expiry left to watch.
 
-**Verify a rotated token WITHOUT pushing** (isolated task env: don't force-push the task HEAD to
-mirror `main` — only the real post-merge sync should): hit the mirror's git smart-HTTP
-advertisements with the token. `git-upload-pack` 200 = fetch/read auth works; **`git-receive-pack`
-200 = push permission works** (403 = insufficient perms, 401 = bad token). Read real expiry from
-the `github-authentication-token-expiration` header on any authenticated `api.github.com`
-response. Note the bash tool's `$GITHUB_TOKEN` can lag a freshly-saved secret — an unchanged
-exact-second expiry after a "rotation" means the OLD token is still in the shell's env; re-check
-after the secret actually propagates.
+**One-time operator setup (Bill does the GitHub part — agent can't):** `ssh-keygen -t ed25519
+-N ""`, add the PUBLIC key at `github.com/billdenk/goodtunes-app/settings/keys` with **Allow
+write access**, store the PRIVATE key as the `GITHUB_MIRROR_DEPLOY_KEY` Replit secret. Full
+runbook: `docs/codemagic-builds.md` → "The GitHub mirror push deploy key". If the secret is
+unset the sync skips gracefully (one-line notice, returns 0).
 
-## Auto pre-warn before the token expires (in-app, not CI)
+**Verify WITHOUT pushing** (isolated task env: don't force-push the task HEAD to mirror `main` —
+only the real post-merge sync should): `ssh -i <key> -o IdentitiesOnly=yes
+-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<pinned known_hosts> -o BatchMode=yes -T
+git@github.com` → "Hi billdenk/goodtunes-app! You've successfully authenticated…" means the key
+works; "Host key verification failed" means the pinned `known_hosts` is stale (refresh GitHub's
+3 keys from `api.github.com/meta`). Reaching "Permission denied (publickey)" still proves
+host-key pinning passed (auth stage reached) — useful when testing the pin with a bogus key.
 
-`server/githubTokenExpiry.ts` (armed from `server/index.ts`, same boot-daemon shape as the
-other schedulers) reads the token's REAL expiry from the
-`github-authentication-token-expiration` header on an authenticated `api.github.com` request
-twice a day and fires a throttled `alertOps` (the existing 5xx email/log path) when <14 days
-remain (or already expired). It names the "GoodTunes Push" token + points at the runbook;
-only the expiry DATE is ever surfaced, never the token value. Quiet no-op when `GITHUB_TOKEN`
-is unset; never throws / never blocks a merge. Imports `log` from `./index` (circular but fine
-— index dynamically imports it after listen, like odoo.ts/giftScheduler.ts), so it can't be
-unit-imported standalone without booting the server (test the fetch+parse logic separately).
+**`Load key: error in libcrypto` → `Permission denied (publickey)` with the REAL key = the
+secret's newlines got collapsed, NOT a bad key.** Secret stores / copy-paste routinely flatten
+the multi-line OpenSSH PEM into one space-separated line, which OpenSSH can't parse. The sync
+defends against this: `write_normalized_deploy_key()` rebuilds a canonical PEM (strip the
+BEGIN/END markers + ALL whitespace → re-wrap the base64 body at 70 cols → re-add markers). It's
+loss-free (base64 has no internal whitespace) and idempotent (an already-correct key round-trips
+byte-identical). So on a `libcrypto` error, DON'T ask for a re-paste — the script already handles
+spacing/newline mangling; just confirm the whole BEGIN…END block landed in the secret. (To test
+the normalizer offline: `eval "$(sed -n '/^write_normalized_deploy_key() {/,/^}/p' scripts/post-merge.sh)"`,
+then `write_normalized_deploy_key "$GITHUB_MIRROR_DEPLOY_KEY" out && ssh-keygen -y -f out`.)
+
+**Host-key pinning:** `github_mirror_known_hosts_contents()` in `scripts/post-merge.sh` embeds
+GitHub's 3 published host keys (ed25519/ecdsa/rsa) inline via heredoc. The **rsa** key rotated
+in **March 2023** (the old `…IEs4TT4qFOj4XBQ==` was leaked/revoked; current is
+`…IEs4TT4jk+S4dhPeAUC5y+…wsjk=`) — if you ever re-pin, copy the live values from
+`api.github.com/meta` `ssh_keys`, don't trust a remembered blob.
