@@ -920,6 +920,40 @@ test("callback collision: UNCLAIMED account + UNVERIFIED email ⇒ NO auto-link,
   );
 });
 
+test("callback collision: account that ALREADY has a social login + VERIFIED email ⇒ NO second login bolted on, diverts to ?prompt=link", async () => {
+  // The headline case for this task: an account that already has ONE social
+  // login (no password — but an attached OAuth identity is itself a
+  // credential) must never have a SECOND, different social login silently
+  // bolted on just because the new provider asserts a matching verified
+  // email. isUnclaimedCustomer() returns false the moment any identity is
+  // attached, so the conjunction fails and the callback falls back to the
+  // ?prompt=link takeover guard instead of auto-linking.
+  const email = "collide_hasoauth_" + randomUUID().slice(0, 8) + "@example.test";
+  const existingSub = "gsub-existing-" + randomUUID().slice(0, 8);
+  const newSub = "gsub-new-" + randomUUID().slice(0, 8);
+  const custId = await seedCustomer({ password: null, email });
+  // Pre-attach an existing social login (its own provider sub) — this is the
+  // "account that already has one".
+  await addCustomerIdentity(custId, "google", existingSub);
+
+  const r = await driveGoogleCollision({ email, emailVerified: true, sub: newSub });
+  assert.equal(r.status, 302);
+  assert.ok(
+    (r.location ?? "").startsWith("/login?prompt=link"),
+    `an account with an existing social login is claimed — a verified email is not permission to bolt a new one on, got ${r.location}`,
+  );
+  assert.equal(
+    await customerHasIdentity(custId, "google", newSub),
+    false,
+    "the NEW provider sub must NOT be attached to an account that already has a social login",
+  );
+  assert.equal(
+    await customerHasIdentity(custId, "google", existingSub),
+    true,
+    "the account's original social login is left untouched",
+  );
+});
+
 after(async () => {
   __setTestOauthExchange(null);
   if (httpServer) await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
