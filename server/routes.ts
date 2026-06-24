@@ -135,6 +135,20 @@ declare module "express-session" {
     // bids) everywhere. Read-only override applied at the /invited-press
     // resolution — save paths are untouched, so Live data is never mutated.
     demoMode?: { kind: "press"; pressId: string } | { kind: "competitive" };
+    // Task #2076 — Apple "Hide My Email" claim hand-off. When a relay
+    // sign-in can't be matched to an existing identity or stored-relay
+    // legacy row, the verified Apple identity is parked here while the fan
+    // proves ownership of their real email (6-digit code) on the claim
+    // screen. Consumed (and cleared) by POST /api/auth/claim/*; it never
+    // outlives that one browser session.
+    pendingOauthClaim?: {
+      provider: "google" | "apple";
+      sub: string;
+      email: string | null;
+      emailVerified: boolean;
+      name: string | null;
+      picture: string | null;
+    };
   }
 }
 
@@ -1476,6 +1490,64 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/auth/google/start", startProvider("google"));
   app.get("/api/auth/apple/start", startProvider("apple"));
 
+  // Task #537 / #2076 — mint a fresh customer row from a verified OAuth
+  // identity (customer side only; admin OAuth sign-up is invite-only).
+  // Shared by the first-time-signup branch in the callback AND the
+  // "continue as new" path of the Hide-My-Email claim flow, so the
+  // username-dedup / Terms / identity-attach / verified-email / avatar
+  // logic lives in exactly one place. Returns the new customer id.
+  async function createCustomerFromOAuthIdentity(
+    provider: "google" | "apple",
+    identity: { sub: string; email: string | null; emailVerified?: boolean; name?: string | null; picture?: string | null },
+  ): Promise<string> {
+    const baseLocal = (identity.email?.split("@")[0] || "user").toLowerCase().replace(/[^a-z0-9_]/g, "") || "user";
+    let username = baseLocal;
+    let n = 0;
+    while (true) {
+      const taken = await storage.getCustomerByUsername(username);
+      if (!taken) break;
+      n += 1;
+      username = `${baseLocal}${n}`;
+      if (n > 999) { username = `${baseLocal}${randomBytes(3).toString("hex")}`; break; }
+    }
+    const displayName = (identity.name && identity.name.trim()) || identity.email?.split("@")[0] || username;
+    const providerRealName = (identity.name && identity.name.trim()) || null;
+    const placeholderPwd = await hashPassword(randomBytes(16).toString("hex"));
+    const c = await storage.createCustomer({
+      username,
+      email: identity.email ?? `${username}@oauth.local`,
+      displayName,
+      realName: providerRealName,
+      password: placeholderPwd,
+    });
+    // Task #860 — record Terms acceptance (consented via inline microcopy
+    // under the OAuth buttons on the signup screen).
+    await storage.updateCustomer(c.id, {
+      termsAcceptedAt: new Date(),
+      termsVersion: TERMS_VERSION,
+    });
+    await storage.linkIdentity("customer", { userId: c.id, provider, providerUserId: identity.sub, email: identity.email });
+    // Task #862 — stamp email verification when the provider already
+    // proved a real (non-relay) address.
+    const isRelay = !!identity.email && /@privaterelay\.appleid\.com$/i.test(identity.email);
+    if (identity.email && identity.emailVerified === true && !isRelay) {
+      await storage.updateCustomer(c.id, { emailVerifiedAt: new Date() });
+    }
+    // Capture Google's profile picture on first signup (best-effort).
+    if (provider === "google" && identity.picture) {
+      try {
+        const already = await storage.hasProfilePhoto(c.id);
+        if (!already) {
+          const hosted = await rehostRemoteImage(identity.picture);
+          await storage.setProfilePhoto(c.id, hosted);
+        }
+      } catch (err: any) {
+        console.warn(`[oauth] google avatar rehost failed for ${c.id}: ${err?.message}`);
+      }
+    }
+    return c.id;
+  }
+
   async function handleProviderCallback(provider: "google" | "apple", req: Request, res: Response) {
     const stateBag = (req.session as any).oauthState as
       | { state: string; kind: "admin" | "customer"; provider: string; linkToUserId?: string; inviteToken?: string }
@@ -1745,8 +1817,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ? await storage.getUserByEmail(identity.email)
           : await storage.getCustomerByEmail(identity.email);
         if (existing) {
-          const params = new URLSearchParams({ prompt: "link", provider, email: identity.email });
-          return res.redirect(`/login?${params.toString()}`);
+          // Task #2076 — auto-link a verified social login to an UNCLAIMED
+          // account (no password AND no existing OAuth identity) instead of
+          // bouncing to the ?prompt=link takeover guard. ~2,000 legacy
+          // gogoods fans have an email on file but no credential, so the
+          // guard's "sign in with your password to link" advice was a dead
+          // end for them. The provider has verified the address and there
+          // is nothing to hijack, so attaching the identity + signing in is
+          // safe. The guard stays fully intact for any account that DOES
+          // have a password or a linked social identity.
+          const { isUnclaimedCustomer, mirrorIdentityToLinked } = await import("./auth/identityLink");
+          if (kind === "customer" && providerVerifiedEmail && (await isUnclaimedCustomer(existing.id))) {
+            await storage.linkIdentity(kind, { userId: existing.id, provider, providerUserId: identity.sub, email: identity.email });
+            await mirrorIdentityToLinked(kind, existing.id, { provider, providerUserId: identity.sub, email: identity.email });
+            userId = existing.id;
+          } else {
+            const params = new URLSearchParams({ prompt: "link", provider, email: identity.email });
+            return res.redirect(`/login?${params.toString()}`);
+          }
         }
       } else if (kind === "customer") {
         // Task #400 — Apple private-relay reattach for imported gogoods
@@ -1765,6 +1853,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const { mirrorIdentityToLinked } = await import("./auth/identityLink");
           await mirrorIdentityToLinked(kind, existing.id, { provider, providerUserId: identity.sub, email: identity.email });
           userId = existing.id;
+        } else {
+          // Task #2076 — Apple "Hide My Email" with no identity match and
+          // no stored-relay reattach. We can't match the fan by the relay
+          // address, so before silently minting a brand-new empty account
+          // (which is what stranded ~2,000 legacy fans), offer a one-step
+          // email-code claim: stash the pending Apple identity on the
+          // session and divert to the claim screen. There the fan enters
+          // the real email they used; on a verified 6-digit code we attach
+          // this Apple identity to their unclaimed legacy account and sign
+          // them in. A genuinely new fan taps "I'm new" and a fresh account
+          // is created from the same stashed identity (see /api/auth/claim).
+          (req.session as any).pendingOauthClaim = {
+            provider,
+            sub: identity.sub,
+            email: identity.email,
+            emailVerified: identity.emailVerified === true,
+            name: identity.name ?? null,
+            picture: identity.picture ?? null,
+          };
+          return res.redirect(`/login?prompt=claim&provider=${provider}`);
         }
       }
     }
@@ -1779,81 +1887,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     if (!userId) {
-      // First-time sign-up via OAuth — customer side only. Username is
-      // derived from the email local-part (or a random fallback when
-      // Apple's private-relay hides everything).
-      const baseLocal = (identity.email?.split("@")[0] || "user").toLowerCase().replace(/[^a-z0-9_]/g, "") || "user";
-      let username = baseLocal;
-      let n = 0;
-      while (true) {
-        const taken = kind === "admin"
-          ? await storage.getUserByUsername(username)
-          : await storage.getCustomerByUsername(username);
-        if (!taken) break;
-        n += 1;
-        username = `${baseLocal}${n}`;
-        if (n > 999) { username = `${baseLocal}${randomBytes(3).toString("hex")}`; break; }
-      }
-      // Task #537 — prefer the provider's name (Google passes it; Apple
-      // sends it ONCE on the very first authorize). Falls back to the
-      // email local-part so we always have *something* — the fan will
-      // confirm/edit it on /finish-setup before they ever land in the
-      // player.
-      const displayName = (identity.name && identity.name.trim()) || identity.email?.split("@")[0] || username;
-      const placeholderPwd = await hashPassword(randomBytes(16).toString("hex"));
-      // Admin OAuth sign-up is gated above (Task #78 invite-only); only
-      // customers reach this branch.
-      // Store the provider's full name as the account's real name too
-      // (Google passes it; Apple sends it once on first authorize — see
-      // the form_post parse above) so the profile can lead with it. Falls
-      // back to null when the provider gave us nothing (e.g. Apple
-      // Hide-My-Email with no name) — the fan can add it on /finish-setup.
-      const providerRealName = (identity.name && identity.name.trim()) || null;
-      const c = await storage.createCustomer({
-        username,
-        email: identity.email ?? `${username}@oauth.local`,
-        displayName,
-        realName: providerRealName,
-        password: placeholderPwd,
-      });
-      userId = c.id;
-      // Task #860 — record Terms acceptance for first-time OAuth signups.
-      // The fan consented via the inline microcopy under the OAuth
-      // buttons on the signup screen. Returning OAuth fans never reach
-      // this branch, so they're never re-consented.
-      await storage.updateCustomer(c.id, {
-        termsAcceptedAt: new Date(),
-        termsVersion: TERMS_VERSION,
-      });
+      // First-time sign-up via OAuth — customer side only (admin OAuth
+      // sign-up is gated above, Task #78 invite-only). All of the
+      // username-dedup / Terms / identity-attach / verified-email / avatar
+      // logic lives in createCustomerFromOAuthIdentity so the "continue as
+      // new" path of the Hide-My-Email claim flow reuses the exact same
+      // account-minting behavior.
+      userId = await createCustomerFromOAuthIdentity(provider, identity);
       // Task #537 — flag this branch for the redirect below. Existing
       // OAuth fans (the `userId` was set on the linkIdentity branch
       // above) skip /finish-setup; first-time OAuth signups go there.
       isNewOauthSignup = true;
-      await storage.linkIdentity(kind, { userId, provider, providerUserId: identity.sub, email: identity.email });
-
-      // Task #862 — stamp email verification straight away when the
-      // provider already proved a real (non-relay) address, so the fan
-      // shows VERIFIED in the admin customer view without us ever
-      // sending a GoodTunes verification email.
-      if (providerVerifiedEmail) {
-        await storage.updateCustomer(userId, { emailVerifiedAt: new Date() });
-      }
-
-      // Capture Google's profile picture on first signup. Only set it if
-      // we don't already have one for this user (we never overwrite a
-      // returning user's own upload on subsequent logins). Best-effort —
-      // a Google CDN hiccup must NOT fail signup, so we swallow errors.
-      if (provider === "google" && identity.picture) {
-        try {
-          const already = await storage.hasProfilePhoto(userId);
-          if (!already) {
-            const hosted = await rehostRemoteImage(identity.picture);
-            await storage.setProfilePhoto(userId, hosted);
-          }
-        } catch (err: any) {
-          console.warn(`[oauth] google avatar rehost failed for ${userId}: ${err?.message}`);
-        }
-      }
     }
 
     // Task #862 — returning OAuth fan whose row is still unverified. If
@@ -1917,6 +1961,126 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Apple uses form_post on the callback — express.urlencoded is already
   // installed in server/index.ts so req.body works on this POST.
   app.post("/api/auth/apple/callback", (req, res) => handleProviderCallback("apple", req, res));
+
+  // ─── Task #2076 — Apple "Hide My Email" claim flow ─────────────────
+  // When an Apple relay sign-in can't be matched to an existing identity
+  // or a stored-relay legacy row, the callback parks the verified Apple
+  // identity on `req.session.pendingOauthClaim` and diverts the fan to
+  // /login?prompt=claim. These three endpoints finish the hand-off:
+  //   start   — fan types the real email they used at gogoods; we mail a
+  //             6-digit code (reusing the emailVerifications table).
+  //   confirm — on a verified code we attach the parked Apple identity to
+  //             that email's UNCLAIMED account and sign them in. An account
+  //             that already has a credential (password or other identity)
+  //             is refused here — the takeover guard stays intact.
+  //   skip    — "I'm new": mint a fresh account from the parked identity.
+  const CLAIM_CODE_TTL_MS = 15 * 60_000;
+  app.post("/api/auth/claim/start", async (req, res) => {
+    const pending = req.session.pendingOauthClaim;
+    if (!pending) return res.status(400).json({ message: "Nothing to claim — start again from sign in." });
+    const emailRaw = String(req.body?.email ?? "").trim().toLowerCase();
+    if (!emailRaw || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailRaw)) {
+      return res.status(400).json({ message: "Enter a valid email address." });
+    }
+    if (emailRaw.endsWith("@privaterelay.appleid.com")) {
+      return res.status(400).json({ message: "That's an Apple relay address — enter the real email you signed up with." });
+    }
+    const { emailVerifications } = await import("@shared/schema");
+    const { hashCode, generateSixDigitCode } = await import("./commerce");
+    const code = generateSixDigitCode();
+    const codeHash = await hashCode(code);
+    const expiresAt = new Date(Date.now() + CLAIM_CODE_TTL_MS);
+    await db.insert(emailVerifications).values({ email: emailRaw, codeHash, expiresAt });
+    try {
+      const { sendCustomerSignupCodeEmail } = await import("./mail");
+      await sendCustomerSignupCodeEmail(emailRaw, code, 15);
+    } catch (err: any) {
+      console.warn(`[claim] code email failed for ${emailRaw}: ${err?.message}`);
+    }
+    if (process.env.NODE_ENV === "production") {
+      console.log(`[claim] code sent provider=${pending.provider} (15min ttl)`);
+    } else {
+      console.log(`[claim] provider=${pending.provider} email=${emailRaw} code=${code} (15min ttl)`);
+    }
+    return res.json({ ok: true, devCode: process.env.NODE_ENV === "production" ? undefined : code });
+  });
+
+  app.post("/api/auth/claim/confirm", async (req, res) => {
+    const pending = req.session.pendingOauthClaim;
+    if (!pending) return res.status(400).json({ message: "Nothing to claim — start again from sign in." });
+    const emailRaw = String(req.body?.email ?? "").trim().toLowerCase();
+    const code = String(req.body?.code ?? "").trim();
+    if (!emailRaw || !/^\d{6}$/.test(code)) {
+      return res.status(400).json({ message: "Enter the 6-digit code from your email." });
+    }
+    const { emailVerifications } = await import("@shared/schema");
+    const { verifyCode } = await import("./commerce");
+    const rows = await db
+      .select()
+      .from(emailVerifications)
+      .where(and(eq(emailVerifications.email, emailRaw), sql`${emailVerifications.consumedAt} IS NULL`))
+      .orderBy(desc(emailVerifications.createdAt))
+      .limit(5);
+    let verified = false;
+    for (const row of rows) {
+      if (row.expiresAt && row.expiresAt < new Date()) continue;
+      if (row.attempts >= 5) continue;
+      const match = await verifyCode(code, row.codeHash);
+      await db.update(emailVerifications).set({ attempts: row.attempts + 1 }).where(eq(emailVerifications.id, row.id));
+      if (match) {
+        await db.update(emailVerifications).set({ consumedAt: new Date() }).where(eq(emailVerifications.id, row.id));
+        verified = true;
+        break;
+      }
+    }
+    if (!verified) {
+      return res.status(400).json({ message: "That code didn't match — check the latest email and try again." });
+    }
+    const existing = await storage.getCustomerByEmail(emailRaw);
+    if (!existing) {
+      // No account on that email — there's nothing to claim. Tell the fan
+      // to continue as new (the skip endpoint) rather than silently
+      // creating one here, so the UI can keep the two choices distinct.
+      return res.status(404).json({ message: "No GoodTunes account uses that email yet.", noAccount: true });
+    }
+    const { isUnclaimedCustomer, mirrorIdentityToLinked } = await import("./auth/identityLink");
+    if (!(await isUnclaimedCustomer(existing.id))) {
+      // The takeover guard: this account already has a real credential
+      // (password or a linked social identity). A code to its email is NOT
+      // permission to bolt a brand-new Apple login onto it. Tell the fan
+      // to sign in with what they already have, then link from Settings.
+      return res.status(409).json({
+        message: "That account already has a sign-in. Sign in with your password or existing social login, then connect Apple from Settings.",
+        hasCredential: true,
+      });
+    }
+    await storage.linkIdentity("customer", { userId: existing.id, provider: pending.provider, providerUserId: pending.sub, email: pending.email });
+    await mirrorIdentityToLinked("customer", existing.id, { provider: pending.provider, providerUserId: pending.sub, email: pending.email });
+    req.session.pendingOauthClaim = undefined;
+    const token = generateToken();
+    await storage.createAuthToken(token, existing.id, "customer");
+    req.session.userId = existing.id;
+    req.session.kind = "customer";
+    return res.json({ ok: true, token, landing: "/account" });
+  });
+
+  app.post("/api/auth/claim/skip", async (req, res) => {
+    const pending = req.session.pendingOauthClaim;
+    if (!pending) return res.status(400).json({ message: "Nothing to claim — start again from sign in." });
+    const userId = await createCustomerFromOAuthIdentity(pending.provider, {
+      sub: pending.sub,
+      email: pending.email,
+      emailVerified: pending.emailVerified,
+      name: pending.name,
+      picture: pending.picture,
+    });
+    req.session.pendingOauthClaim = undefined;
+    const token = generateToken();
+    await storage.createAuthToken(token, userId, "customer");
+    req.session.userId = userId;
+    req.session.kind = "customer";
+    return res.json({ ok: true, token, landing: "/finish-setup" });
+  });
 
   // Task #400 — welcome-back for imported gogoods.com fans. All routes
   // live in their own module so the campaign + onboarding + merge

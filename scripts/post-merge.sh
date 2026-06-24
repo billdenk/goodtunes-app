@@ -282,6 +282,155 @@ SQL
 backfill_task_1036_memberships dev  "${DATABASE_URL:-}"
 backfill_task_1036_memberships prod "${PROD_DATABASE_URL:-}"
 
+# Task #2076 — ONE-TIME reconciliation of legacy GoGoods fans who got
+# stranded in a fresh, empty OAuth account by a forced iOS re-auth
+# (Apple "Hide My Email" mints a relay-mask `email` that never collides
+# with the legacy real-email row, so the old callback created a NEW
+# account instead of linking). For each such stranded duplicate we keep
+# the LEGACY library row as the survivor — it already owns the collection
+# + legacy_gogoods_id + QR provenance — and MOVE the OAuth identity onto
+# it (performAccountMerge deliberately never moves identities, so the
+# admin "Combine accounts" tool makes the OAuth holder the survivor; here
+# we move the single identity row by hand to avoid migrating the whole
+# legacy collection the other direction). Marker-guarded in
+# post_merge_data_backfills so a later real merge / operator edit is never
+# clobbered on a subsequent post-merge run. Dev clones carry no legacy
+# rows so this no-ops there; the real work lands once on prod.
+#
+# Pairing is intentionally conservative: a LEGACY account (legacy_gogoods_id
+# set, not merged, no real password, zero identities, owns >=1 user_albums)
+# is matched to a STRANDED OAuth account (no legacy id, not merged, has a
+# contact_email, has >=1 identity) only when the legacy login email equals
+# the OAuth account's captured contact_email AND that email maps to exactly
+# ONE legacy row and exactly ONE OAuth row (any ambiguity is skipped, left
+# for the manual admin tool). All six side-effects run in one statement via
+# data-modifying CTEs (always executed to completion), so the whole pass is
+# atomic inside the surrounding transaction.
+reconcile_task_2076_legacy_oauth() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2076 legacy/oauth reconcile on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_pairs integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2076_reconcile_legacy_oauth'
+  ) THEN
+    WITH pairs AS MATERIALIZED (
+      WITH legacy AS (
+        SELECT cu.id, lower(cu.email) AS real_email
+        FROM customer_users cu
+        WHERE cu.legacy_gogoods_id IS NOT NULL
+          AND cu.merged_into_id IS NULL
+          AND (cu.password IS NULL OR cu.password LIKE '!oauth-only:%')
+          AND cu.email IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM customer_identities ci WHERE ci.user_id = cu.id)
+          AND EXISTS (SELECT 1 FROM user_albums ua WHERE ua.user_id = cu.id)
+      ),
+      oauth_new AS (
+        SELECT cu.id, lower(cu.contact_email) AS real_email
+        FROM customer_users cu
+        WHERE cu.legacy_gogoods_id IS NULL
+          AND cu.merged_into_id IS NULL
+          AND cu.contact_email IS NOT NULL
+          AND cu.contact_email <> ''
+          AND EXISTS (SELECT 1 FROM customer_identities ci WHERE ci.user_id = cu.id)
+      ),
+      candidates AS (
+        SELECT l.id AS legacy_id, n.id AS oauth_id, l.real_email
+        FROM legacy l
+        JOIN oauth_new n ON n.real_email = l.real_email AND n.id <> l.id
+      )
+      SELECT c.legacy_id, c.oauth_id, c.real_email
+      FROM candidates c
+      WHERE NOT EXISTS (SELECT 1 FROM candidates d WHERE d.legacy_id = c.legacy_id AND d.oauth_id <> c.oauth_id)
+        AND NOT EXISTS (SELECT 1 FROM candidates d WHERE d.oauth_id = c.oauth_id AND d.legacy_id <> c.legacy_id)
+    ),
+    mv_idents AS (
+      UPDATE customer_identities ci
+         SET user_id = p.legacy_id
+        FROM pairs p
+       WHERE ci.user_id = p.oauth_id
+      RETURNING 1
+    ),
+    mv_albums AS (
+      UPDATE user_albums ua
+         SET user_id = p.legacy_id
+        FROM pairs p
+       WHERE ua.user_id = p.oauth_id
+         AND NOT EXISTS (
+           SELECT 1 FROM user_albums x
+            WHERE x.user_id = p.legacy_id AND x.album_id = ua.album_id
+         )
+      RETURNING 1
+    ),
+    mv_orders AS (
+      UPDATE orders o
+         SET customer_id = p.legacy_id
+        FROM pairs p
+       WHERE o.customer_id = p.oauth_id
+      RETURNING 1
+    ),
+    mv_playlists AS (
+      UPDATE playlists pl
+         SET user_id = p.legacy_id
+        FROM pairs p
+       WHERE pl.user_id = p.oauth_id
+      RETURNING 1
+    ),
+    del_tokens AS (
+      DELETE FROM auth_tokens a
+        USING pairs p
+       WHERE a.customer_user_id = p.oauth_id
+      RETURNING 1
+    ),
+    audit AS (
+      INSERT INTO customer_merges (surviving_id, losing_id, losing_email, triggered_by)
+      SELECT p.legacy_id, p.oauth_id, COALESCE(cu.email, p.real_email), 'task_2076_reconcile'
+      FROM pairs p
+      JOIN customer_users cu ON cu.id = p.oauth_id
+      RETURNING 1
+    ),
+    soft_del AS (
+      UPDATE customer_users cu
+         SET merged_into_id = p.legacy_id
+        FROM pairs p
+       WHERE cu.id = p.oauth_id
+      RETURNING 1
+    )
+    SELECT count(*) INTO v_pairs FROM pairs;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_2076_reconcile_legacy_oauth');
+
+    RAISE NOTICE 'task-2076 reconcile applied: % legacy/oauth pairs reconciled', v_pairs;
+  ELSE
+    RAISE NOTICE 'task-2076 reconcile already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2076 legacy/oauth reconcile ok on $label"
+    echo "$out" | grep -i 'task-2076' || true
+  else
+    echo "post-merge: WARNING — task-2076 legacy/oauth reconcile failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+reconcile_task_2076_legacy_oauth dev  "${DATABASE_URL:-}"
+reconcile_task_2076_legacy_oauth prod "${PROD_DATABASE_URL:-}"
+
 # Real fan shipping — schema. orders gains a base/markup/charged/band
 # breakdown and a new shipping_rates rate-card table (one row per
 # partner × destination × band). shared/schema.ts declares both; we

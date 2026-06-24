@@ -79,6 +79,65 @@ Non-relay emails always fall through to the standard collision prompt
 (`?prompt=link`) — we never silently merge two different fans into
 the same row.
 
+### Don't strand legacy fans on forced re-auth (Task #2076)
+
+Task #400's relay reattach only fires when the imported row's email
+*is* the same Apple relay Apple just handed back. That covers the ~211
+Apple-share-relay imports, but leaves two big gaps for the ~2,000
+legacy gogoods fans who have an email and **no credential** (no real
+password — `password` is `NULL` or an `!oauth-only:` placeholder — and
+**zero** `customer_identities`): a forced iOS re-auth dropped them into
+a fresh empty account instead of their real collection. The shared
+predicate is **`isUnclaimedCustomer(customerId)`** in
+`server/auth/identityLink.ts` — true only when the row is not merged,
+has no real password, and has zero linked identities. An "unclaimed"
+row has nothing to take over, so attaching a provider-verified identity
+to it is a rejoin, not a hijack.
+
+- **Auto-link unclaimed on social sign-in (Google + Apple-share).** In
+  `handleProviderCallback`'s email-collision branch, when the matched
+  `customer_users` row is **unclaimed** *and* the provider gave us a
+  **verified** email for that same address, we `linkIdentity` +
+  `mirrorIdentityToLinked` + sign the fan in (token + session) instead
+  of bouncing to `?prompt=link`. Any account that **does** carry a
+  credential still gets the `?prompt=link` banner — the takeover guard
+  is unchanged.
+- **Apple Hide-My-Email claim (`?prompt=claim`).** A relay sign-in
+  carries no real email to collide on, so the callback can't find the
+  legacy row. When the identity lookup misses, the email is a relay
+  mask, and it isn't a Task #400 reattach, we stash the verified Apple
+  identity on `req.session.pendingOauthClaim` and redirect to
+  `/login?prompt=claim&provider=apple`. The fan proves they own the
+  real email they signed up with via a 6-digit code:
+  `POST /api/auth/claim/{start,confirm,skip}` reuse the
+  `emailVerifications` plumbing (`hashCode` / `verifyCode` /
+  `sendCustomerSignupCodeEmail`). `confirm` **refuses** with `409
+  hasCredential` if the matched account is *not* unclaimed (same guard),
+  `404 noAccount` when no row uses that email, and otherwise links the
+  Apple identity + mints a token. `skip` mints a fresh account from the
+  pending identity (shared `createCustomerFromOAuthIdentity` helper, the
+  same path inline OAuth signup uses) and lands on `/finish-setup`. The
+  claim card lives in `Login.tsx` (email → code → connect, or "I'm
+  new").
+- **One-time reconciliation of already-stranded duplicates.** Fans who
+  were stranded *before* this fix already have two rows: an unclaimed
+  legacy library row and a separate empty OAuth row. A marker-guarded
+  block in `scripts/post-merge.sh`
+  (`task_2076_reconcile_legacy_oauth` in `post_merge_data_backfills`,
+  dev + prod) pairs them 1:1 by `lower(legacy.email) =
+  lower(oauth.contact_email)` — only when that email maps to exactly one
+  legacy row and exactly one OAuth row — then keeps the **legacy** row
+  as the survivor (it already owns the collection + `legacy_gogoods_id`
+  + QR provenance), **moves** the OAuth identity onto it, reparents
+  `user_albums` (skipping albums the survivor already owns) / `orders` /
+  `playlists`, deletes the loser's `auth_tokens`, soft-deletes the OAuth
+  row (`merged_into_id`), and audits the move into `customer_merges`
+  (`triggered_by = 'task_2076_reconcile'`). This is the mirror image of
+  the admin "Combine accounts" tool, which keeps the OAuth holder as
+  survivor because `performAccountMerge` never moves identities; here we
+  move the single identity by hand so the legacy collection never has to
+  migrate the other direction.
+
 See [`docs/migrations/gogoods-welcome-back.md`](./migrations/gogoods-welcome-back.md)
 for the whole welcome-back flow (single-use email-link sign-in,
 3-screen onboarding, admin wave-1 campaign, fan-initiated merge).

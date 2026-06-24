@@ -210,6 +210,36 @@ export async function writeLinkedPassword(opts: {
   }
 }
 
+// Task #2076 — an UNCLAIMED customer account is one with no real
+// credential to hijack: no usable password (NULL or an `!oauth-only:`
+// placeholder is not a real hash) AND no attached OAuth identity. A
+// merged row is never a valid target. The takeover guard exists to stop
+// a new social login from seizing an account that has a credential; an
+// unclaimed account has none, and the social provider has already proven
+// the person controls the email — so auto-attaching a verified social
+// login to an unclaimed account is safe. This is the single gate that
+// decides whether the OAuth callback auto-links or falls back to the
+// ?prompt=link guard.
+export async function isUnclaimedCustomer(customerId: string): Promise<boolean> {
+  const r = await db.execute<{ password: string | null; merged_into_id: string | null; identity_count: number }>(sql`
+    SELECT c.password,
+           c.merged_into_id,
+           (SELECT count(*)::int FROM customer_identities ci WHERE ci.user_id = c.id) AS identity_count
+      FROM customer_users c
+     WHERE c.id = ${customerId}
+     LIMIT 1
+  `);
+  const row = (r as any).rows?.[0] as
+    | { password: string | null; merged_into_id: string | null; identity_count: number }
+    | undefined;
+  if (!row) return false;
+  if (row.merged_into_id) return false;
+  const hasRealPassword = !!row.password && !String(row.password).startsWith("!oauth-only:");
+  if (hasRealPassword) return false;
+  if (Number(row.identity_count) > 0) return false;
+  return true;
+}
+
 // Email-based linking is only safe for a REAL, operator- or provider-
 // verified address. Apple "Hide my email" relay masks
 // (`@privaterelay.appleid.com`) and our synthetic OAuth-no-email

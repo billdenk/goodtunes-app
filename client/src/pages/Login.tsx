@@ -4,7 +4,7 @@ import { useAuthKind } from "@/hooks/useAuthKind";
 import { useLocation } from "wouter";
 import { GoodTunesLogo } from "@/components/GoodTunesLogo";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, setAuthToken, queryClient } from "@/lib/queryClient";
+import { apiRequest, setAuthToken, queryClient, apiErrorBody, apiErrorStatus } from "@/lib/queryClient";
 import { track } from "@/lib/analytics";
 import { FriendlyError } from "@/components/FriendlyError";
 import {
@@ -349,6 +349,18 @@ export function Login() {
   // login screen can show a persistent, actionable banner (password sign-in
   // OR a one-tap welcome-back link) instead of a single ephemeral toast.
   const [oauthLinkPrompt, setOauthLinkPrompt] = useState<{ email: string; provider: string } | null>(null);
+  // Task #2076 — Apple "Hide My Email" claim. When the callback can't match
+  // a relay sign-in to an account it parks the verified identity on the
+  // session and bounces back with ?prompt=claim. The fan proves ownership
+  // of the real email they used (6-digit code) to attach this Apple login
+  // to their existing collection, or taps "I'm new" to mint a fresh one.
+  const [claimPrompt, setClaimPrompt] = useState<{ provider: string } | null>(null);
+  const [claimPhase, setClaimPhase] = useState<"email" | "code">("email");
+  const [claimEmail, setClaimEmail] = useState("");
+  const [claimCode, setClaimCode] = useState("");
+  const [claimDevCode, setClaimDevCode] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [claimBusy, setClaimBusy] = useState(false);
   useEffect(() => {
     // Any change to the email clears the previous answer so a stale
     // OAuth-swap state can't strand a fan on the wrong provider.
@@ -426,6 +438,16 @@ export function Login() {
           "Partner accounts are invite-only. Ask a super-admin for an invite link, or email nick@goodtunes.fm.",
         variant: "destructive",
       });
+      setMode("login");
+      window.history.replaceState({}, "", loginPath);
+    }
+    // Task #2076 — Apple "Hide My Email" claim. The relay sign-in couldn't be
+    // matched to an account, so the verified identity is parked on the session
+    // and we render the claim card (enter real email → code → connect, or
+    // "I'm new"). Customer side only.
+    if (prompt === "claim") {
+      setClaimPrompt({ provider: provider ?? "apple" });
+      setClaimPhase("email");
       setMode("login");
       window.history.replaceState({}, "", loginPath);
     }
@@ -545,6 +567,68 @@ export function Login() {
   // Task #2059 — busy flag for the "email me a sign-in link" recovery
   // action shared by the signup-collision branch and the OAuth banner.
   const [linkBusy, setLinkBusy] = useState(false);
+
+  // Task #2076 — Apple "Hide My Email" claim handlers. After a successful
+  // confirm/skip the server mints a customer token; we stash it and do a
+  // full navigation so the app boots signed-in on the fan's real library.
+  const claimStart = async () => {
+    const email = claimEmail.trim().toLowerCase();
+    if (!isValidEmail(email)) {
+      setClaimError("Enter the email you signed up with.");
+      return;
+    }
+    setClaimBusy(true); setClaimError(null); setClaimDevCode(null);
+    try {
+      const res = await apiRequest("POST", "/api/auth/claim/start", { email });
+      const j = await res.json();
+      if (j?.devCode) setClaimDevCode(String(j.devCode));
+      setClaimPhase("code");
+    } catch (err) {
+      setClaimError((apiErrorBody<{ message?: string }>(err)?.message) || "Couldn't send a code. Try again.");
+    } finally {
+      setClaimBusy(false);
+    }
+  };
+
+  const claimConfirm = async () => {
+    const email = claimEmail.trim().toLowerCase();
+    const code = claimCode.trim();
+    if (!/^\d{6}$/.test(code)) {
+      setClaimError("Enter the 6-digit code from your email.");
+      return;
+    }
+    setClaimBusy(true); setClaimError(null);
+    try {
+      const res = await apiRequest("POST", "/api/auth/claim/confirm", { email, code });
+      const j = await res.json();
+      if (j?.token) setAuthToken(String(j.token));
+      window.location.assign(j?.landing || "/account");
+    } catch (err) {
+      const status = apiErrorStatus(err);
+      const body = apiErrorBody<{ message?: string; noAccount?: boolean; hasCredential?: boolean }>(err);
+      if (status === 404 && body?.noAccount) {
+        setClaimError("No account uses that email yet — tap “I'm new” below to create one.");
+      } else {
+        setClaimError(body?.message || "That code didn't match. Try again.");
+      }
+    } finally {
+      setClaimBusy(false);
+    }
+  };
+
+  const claimSkip = async () => {
+    setClaimBusy(true); setClaimError(null);
+    try {
+      const res = await apiRequest("POST", "/api/auth/claim/skip", {});
+      const j = await res.json();
+      if (j?.token) setAuthToken(String(j.token));
+      window.location.assign(j?.landing || "/finish-setup");
+    } catch (err) {
+      setClaimError((apiErrorBody<{ message?: string }>(err)?.message) || "Couldn't continue. Try again.");
+    } finally {
+      setClaimBusy(false);
+    }
+  };
 
   const startCustomerVerify = async () => {
     setVerifyBusy(true); setVerifyError(null); setDevCode(null);
@@ -1037,6 +1121,93 @@ export function Login() {
             /api/welcome-back/start with constant-floor latency and
             no-enumeration semantics, so it's safe to show pre-auth. */}
         {!isAdmin && mode === "login" && <WelcomeBackPill />}
+        {/* Task #2076 — Apple "Hide My Email" claim card. The relay sign-in
+            couldn't be matched to an account; the verified Apple identity is
+            parked on the session. The fan enters the real email they used to
+            attach this Apple login to their existing collection (email → code
+            → connect), or taps "I'm new" to mint a fresh account. */}
+        {!isAdmin && mode === "login" && claimPrompt && (
+          <div
+            className="mb-4 rounded-2xl p-4"
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }}
+            data-testid="card-oauth-claim"
+          >
+            <p className="text-sm font-semibold text-fan-primary">Connect your account</p>
+            <p className="mt-1 text-xs leading-relaxed text-fan-secondary">
+              You signed in with Apple’s private email. Enter the email you originally
+              used so we can connect this sign-in to your existing collection.
+            </p>
+            {claimPhase === "email" ? (
+              <div className="mt-3 flex flex-col gap-2.5">
+                <input
+                  type="email"
+                  value={claimEmail}
+                  onChange={(e) => { setClaimEmail(e.target.value.replace(/\s/g, "")); setClaimError(null); }}
+                  placeholder="you@example.com"
+                  autoComplete="email" autoCapitalize="none" spellCheck={false} inputMode="email"
+                  className={s.input} style={inputBg}
+                  data-testid="input-claim-email"
+                />
+                <button
+                  type="button"
+                  onClick={claimStart}
+                  disabled={claimBusy}
+                  className={s.oauthBtn}
+                  data-testid="button-claim-send-code"
+                >
+                  {claimBusy ? "Sending…" : "Send me a code"}
+                </button>
+              </div>
+            ) : (
+              <div className="mt-3 flex flex-col gap-2.5">
+                <p className="text-xs text-fan-secondary">
+                  Enter the 6-digit code we sent to <strong className="text-fan-primary">{claimEmail}</strong>.
+                </p>
+                <input
+                  type="text"
+                  value={claimCode}
+                  onChange={(e) => { setClaimCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setClaimError(null); }}
+                  placeholder="000000"
+                  autoComplete="one-time-code" inputMode="numeric" maxLength={6}
+                  className={s.input} style={inputBg}
+                  data-testid="input-claim-code"
+                />
+                {claimDevCode && (
+                  <p className="text-xs text-fan-faint" data-testid="text-claim-devcode">Dev code: {claimDevCode}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={claimConfirm}
+                  disabled={claimBusy}
+                  className={s.oauthBtn}
+                  data-testid="button-claim-confirm"
+                >
+                  {claimBusy ? "Connecting…" : "Connect my account"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setClaimPhase("email"); setClaimCode(""); setClaimError(null); }}
+                  className={s.ghostBtn}
+                  data-testid="button-claim-change-email"
+                >
+                  Use a different email
+                </button>
+              </div>
+            )}
+            {claimError && (
+              <p className="mt-2 text-xs text-fan-heart" data-testid="text-claim-error">{claimError}</p>
+            )}
+            <button
+              type="button"
+              onClick={claimSkip}
+              disabled={claimBusy}
+              className={`${s.ghostBtn} mt-2`}
+              data-testid="button-claim-skip"
+            >
+              I’m new — create a fresh account
+            </button>
+          </div>
+        )}
         {/* Task #2059 — OAuth email-collision recovery banner. The Google/
             Apple callback bounced back with ?prompt=link because the chosen
             email already has an account. Instead of a single ephemeral
