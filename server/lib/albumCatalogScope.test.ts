@@ -12,8 +12,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   filterAlbumsForPartnerRole,
+  partnerRoleCanSeeHiddenAlbum,
   NO_ALBUM_LIST_ROLES,
-  PORTAL_SCOPED_NON_OPERATOR_ROLES,
 } from "./albumCatalogScope";
 
 const A1 = { id: "alb-1", primaryArtistId: "artist-a", labelId: "label-x" };
@@ -127,23 +127,58 @@ test("no-list roles are exactly manufacturer/fulfillment/vendor/non_profit/publi
   );
 });
 
-// Task #2081 — the scoped, non-operator portal roles never get the operator
-// `includeHidden` god-view on the admin-aware album-detail read. This set is
-// deliberately NARROWER than NO_ALBUM_LIST_ROLES: manufacturer/vendor/
-// fulfillment keep their existing operator-grade album reads (out of scope).
-test("portal-scoped non-operator roles are exactly label/manager/non_profit/publisher", () => {
-  assert.deepEqual(
-    [...PORTAL_SCOPED_NON_OPERATOR_ROLES].sort(),
-    ["label", "manager", "non_profit", "publisher"],
-  );
+// ── Per-album hidden god-view (GET /api/albums/:id) ──────────────────────────
+// Task #2087 — the admin-aware detail read may only hand the `includeHidden`
+// god-view to operators OR to a partner-admin role for an album INSIDE its own
+// scope. Every other case (out-of-scope partner, no-list partner) falls back
+// to released-only visibility so a partner can't deep-link a hidden release by
+// guessing the UUID.
+
+test("hidden god-view — operators see any hidden album", () => {
+  for (const role of ["super_admin", "admin"]) {
+    assert.equal(
+      partnerRoleCanSeeHiddenAlbum(A1, { role, roleScopeId: null }),
+      true,
+      `operator "${role}" must keep the full includeHidden read`,
+    );
+  }
 });
 
-test("operator/artist/press roles are NOT in the god-view-denied set", () => {
-  for (const role of ["super_admin", "admin", "artist", "manufacturer", "vendor", "fulfillment"]) {
+test("hidden god-view — artist sees a hidden album INSIDE its scope", () => {
+  assert.equal(partnerRoleCanSeeHiddenAlbum(A1, { role: "artist", roleScopeId: "artist-a" }), true);
+});
+
+test("hidden god-view — artist BLOCKED from a hidden album outside its scope", () => {
+  assert.equal(partnerRoleCanSeeHiddenAlbum(A2, { role: "artist", roleScopeId: "artist-a" }), false);
+});
+
+test("hidden god-view — label sees its own hidden album but not another label's", () => {
+  assert.equal(partnerRoleCanSeeHiddenAlbum(A1, { role: "label", roleScopeId: "label-x" }), true);
+  assert.equal(partnerRoleCanSeeHiddenAlbum(A2, { role: "label", roleScopeId: "label-x" }), false);
+});
+
+test("hidden god-view — manager sees only roster artists' hidden albums", () => {
+  const roster = new Set(["artist-a"]);
+  assert.equal(partnerRoleCanSeeHiddenAlbum(A1, { role: "manager", roleScopeId: "mgr-1" }, roster), true);
+  assert.equal(partnerRoleCanSeeHiddenAlbum(A2, { role: "manager", roleScopeId: "mgr-1" }, roster), false);
+});
+
+test("hidden god-view — unattached partner is always blocked", () => {
+  for (const role of ["artist", "label", "manager"]) {
     assert.equal(
-      PORTAL_SCOPED_NON_OPERATOR_ROLES.has(role),
+      partnerRoleCanSeeHiddenAlbum(A1, { role, roleScopeId: null }),
       false,
-      `role "${role}" must keep the operator includeHidden album read`,
+      `unattached "${role}" must not see a hidden album`,
+    );
+  }
+});
+
+test("hidden god-view — no-list partner roles are always blocked", () => {
+  for (const role of [...NO_ALBUM_LIST_ROLES]) {
+    assert.equal(
+      partnerRoleCanSeeHiddenAlbum(A1, { role, roleScopeId: "some-scope" }),
+      false,
+      `no-list role "${role}" must never get the hidden god-view`,
     );
   }
 });

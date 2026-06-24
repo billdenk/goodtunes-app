@@ -35,20 +35,35 @@ export const NO_ALBUM_LIST_ROLES = new Set([
   "publisher",
 ]);
 
-// Task #2081 — the scoped, non-operator partner roles that each live in a
-// dedicated left-nav portal (/label, /manager, /non-profit, /publisher).
-// On the PUBLIC, admin-aware album reads (e.g. GET /api/albums/:id) these
-// roles must be treated like a normal fan — NEVER handed the operator
-// `includeHidden` god-view — so an isAdmin-flagged partner can't deep-link a
-// hidden/staged/sunrise release outside its scope. This is intentionally
-// NARROWER than NO_ALBUM_LIST_ROLES: manufacturer/vendor/fulfillment keep
-// their existing operator-grade album reads (out of scope for this task).
-export const PORTAL_SCOPED_NON_OPERATOR_ROLES = new Set([
-  "label",
-  "manager",
-  "non_profit",
-  "publisher",
-]);
+/**
+ * Decide whether the caller may see a single HIDDEN/unreleased album on the
+ * admin-aware detail read (GET /api/albums/:id).
+ *
+ * Operators (super_admin / admin) keep the full god-view. Every other
+ * partner-admin role carries `isAdmin=true` but must only get the hidden
+ * god-view for albums INSIDE its own scope — otherwise an isAdmin-flagged
+ * partner (label, manager, manufacturer, vendor, fulfillment, non_profit,
+ * publisher, artist, …) could deep-link a hidden/staged/sunrise release it
+ * doesn't own by guessing the UUID. Released albums stay public regardless and
+ * are resolved by the caller without this gate.
+ *
+ * Reuses `filterAlbumsForPartnerRole` on a single-album list so the per-role
+ * scoping logic lives in exactly one place. A non-empty result = in scope;
+ * `null` (the full-catalog signal) is only ever returned for operators, who
+ * are short-circuited above — so for any non-operator role we fail closed.
+ *
+ * @param managerRoster  Pre-resolved roster Set — only required when
+ *                       role==="manager" (same contract as filterAlbums…).
+ */
+export function partnerRoleCanSeeHiddenAlbum(
+  album: AlbumStub,
+  info: RoleInfo,
+  managerRoster?: Set<string>,
+): boolean {
+  if (info.role === "super_admin" || info.role === "admin") return true;
+  const scoped = filterAlbumsForPartnerRole([album], info, managerRoster);
+  return !!scoped && scoped.length > 0;
+}
 
 /**
  * Return the subset of `albums` visible to a partner-admin, or `null` when

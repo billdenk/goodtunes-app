@@ -83,7 +83,6 @@ import { resolveStreamingLinksFromAppleCollectionId, resolveStreamingLinksForCol
 import { adminLoginPasswordOk, isLinkableEmail, isProviderVerifiedEmailForLink } from "./auth/identityLink";
 import { applyAppleFirstAuthName } from "./auth/appleName";
 import { getUserRole } from "./auth/roles";
-import { PORTAL_SCOPED_NON_OPERATOR_ROLES } from "./lib/albumCatalogScope";
 import { resolveInviterBranding } from "./inviteBranding";
 
 const scryptAsync = promisify(scrypt);
@@ -324,21 +323,50 @@ async function isAdminUser(req: Request): Promise<boolean> {
   return !!user?.isAdmin;
 }
 
-// Task #2081 — admin-aware album reads (GET /api/albums/:id) hand operators
+// Task #2087 — admin-aware album reads (GET /api/albums/:id) hand operators
 // the `includeHidden` god-view so a staged/hidden release renders in the CMS.
-// Partner-admin roles all carry isAdmin=true, so the bare isAdminUser() check
-// above would also leak that god-view to the scoped, non-operator portals
-// (label/manager/non_profit/publisher) — letting one deep-link a hidden release
-// outside its scope. Treat those roles like a normal fan here; operators and
-// the roles intentionally left unchanged (artist, manufacturer, vendor,
-// fulfillment, quickprinter) keep the god-view.
-async function albumReadIncludeHidden(req: Request): Promise<boolean> {
+// Every partner-admin role carries isAdmin=true, so the bare isAdminUser()
+// check above would leak that god-view to EVERY partner (label, manager,
+// non_profit, publisher, manufacturer, vendor, fulfillment, artist, …) —
+// letting one deep-link a hidden/staged/sunrise release outside its scope by
+// guessing the UUID. Gate the god-view per-album: operators see everything;
+// every other partner role only gets `includeHidden` for an album INSIDE its
+// own scope (resolved via the shared catalog filter). Out-of-scope partners,
+// fans, and anon callers fall back to released-only visibility (released
+// albums stay public by design; genuine owner-bypass is handled at the route).
+async function albumReadIncludeHidden(req: Request, albumId: string): Promise<boolean> {
   const a = await getAuthFromRequest(req);
   if (!a || a.kind !== "admin") return false;
   const user = await storage.getUser(a.userId);
   if (!user?.isAdmin) return false;
-  const role = (await getUserRole(a.userId))?.role;
-  return !(role && PORTAL_SCOPED_NON_OPERATOR_ROLES.has(role));
+  const info = await getUserRole(a.userId);
+  if (!info) return false;
+  // Operators get the full god-view without touching the album row.
+  if (info.role === "super_admin" || info.role === "admin") return true;
+  // Partner-admin role: resolve the album stub (server-side only — never
+  // returned unless it's in scope) and run the shared per-role scope filter.
+  const stub = await storage.getAlbumById(albumId, { includeHidden: true });
+  if (!stub) return false;
+  // Manager scoping needs an async roster lookup before the pure filter — same
+  // query the list route uses.
+  let managerRoster: Set<string> | undefined;
+  if (info.role === "manager" && info.roleScopeId) {
+    const rosterRows = await db.execute<{ id: string }>(sql`
+      SELECT id FROM people WHERE manager_id = ${info.roleScopeId} AND deleted_at IS NULL
+    `);
+    managerRoster = new Set(
+      ((rosterRows as any).rows || []).map((r: any) => r.id as string),
+    );
+  }
+  const { partnerRoleCanSeeHiddenAlbum } = await import("./lib/albumCatalogScope");
+  return partnerRoleCanSeeHiddenAlbum(
+    {
+      primaryArtistId: (stub as any).primaryArtistId ?? null,
+      labelId: (stub as any).labelId ?? null,
+    },
+    info,
+    managerRoster,
+  );
 }
 
 // ── Pre-launch campaign preview gating ────────────────────────────────
@@ -20120,7 +20148,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // payload, so this exposes nothing new.
   app.get("/api/albums/:id", optionalAuth, async (req, res) => {
     const id = String(req.params.id);
-    const includeHidden = await albumReadIncludeHidden(req);
+    const includeHidden = await albumReadIncludeHidden(req, id);
     let album = await storage.getAlbumById(id, { includeHidden });
     // Owner-bypass: a fan who actually owns this album (real purchase/comp,
     // or an unexpired preview) can always open it from their Orders/Library,
