@@ -525,6 +525,19 @@ export async function requireReportScope(req: Request, res: Response, next: Next
       .status(403)
       .json({ message: "Publishers use the publisher statement, not partner reports." });
   }
+  // Task #2082 — operational partner roles (vendor incl. quickprinter,
+  // manufacturer incl. reseller, fulfillment) likewise own NO albums and
+  // have no album/org scope. effectiveScopeFilter returns null for them, so
+  // resolveScope would hand them the same `albumIds: null` god-view across
+  // EVERY partner's sales/plays/payouts/fans. Their real data lives in their
+  // dedicated, server-scoped dashboards (PartnerDashboard → /api/partner/:scope/*,
+  // GoodDeed jobs via /api/printer/:id/*), not this album-sales reports module.
+  // Fail closed — this is the SECURITY backbone for the scoped portals.
+  if (scope.role === "vendor" || scope.role === "manufacturer" || scope.role === "fulfillment") {
+    return res
+      .status(403)
+      .json({ message: "This partner uses its own scoped dashboard, not partner reports." });
+  }
   (req as any).reportScope = scope;
   next();
 }

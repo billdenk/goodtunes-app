@@ -183,6 +183,16 @@ test("hidden god-view — no-list partner roles are always blocked", () => {
   }
 });
 
+test("vendor + fulfillment are denied the includeHidden god-view (Task #2082)", () => {
+  for (const role of ["vendor", "fulfillment"]) {
+    assert.equal(
+      partnerRoleCanSeeHiddenAlbum(A1, { role, roleScopeId: "some-scope" }),
+      false,
+      `role "${role}" must be treated as a fan on the public album-detail read`,
+    );
+  }
+});
+
 // ── Invariant: no partner role leaks the full catalog ────────────────────────
 
 const PARTNER_ROLES = ["artist", "label", "manager", "manufacturer", "fulfillment", "vendor", "non_profit", "publisher"];

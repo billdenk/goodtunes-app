@@ -21,7 +21,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Printer, Loader2, Disc3, Users } from "lucide-react";
+import { Printer, Loader2, Disc3, Users, LayoutDashboard, BadgeDollarSign, Settings as SettingsIcon } from "lucide-react";
 import { apiRequest, queryClient, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { OperatorShell } from "@/components/operator/OperatorShell";
@@ -74,6 +74,15 @@ export function PrinterPortal({ vendorId, isSuperAdminView }: { vendorId: string
       tabs={tabs}
       activeTab={tab}
       onTabChange={setTab}
+      layout="leftnav"
+      navIcons={{
+        dashboard: LayoutDashboard,
+        "print-queue": Printer,
+        catalog: BadgeDollarSign,
+        albums: Disc3,
+        people: Users,
+        settings: SettingsIcon,
+      }}
     >
       {tab === "dashboard" && <DashboardTab vendorId={vendorId} onGoToQueue={() => setTab("print-queue")} />}
       {tab === "print-queue" && <PrintQueueTab vendorId={vendorId} />}

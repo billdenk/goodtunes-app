@@ -434,6 +434,17 @@ function Router() {
   const isLabelPartner = adminRole.data?.role === "label";
   const isManagerPartner = adminRole.data?.role === "manager";
   const isNonProfitPartner = adminRole.data?.role === "non_profit";
+  // Task #2082 — operational partners with a scoped left-nav portal at
+  // /vendor: a plain vendor, a quickprinter (role "vendor" + is_quickprinter,
+  // routed to PrinterPortal), and a fulfillment partner. Like the publisher
+  // they have NO operator surface — requireAdmin gives them no /api/admin/*
+  // data and their reports/catalog reads are fail-closed server-side — so
+  // every operator-only /admin/* deep link bounces back to /vendor. (A
+  // manufacturer/reseller also lives at /vendor, but role "manufacturer" is
+  // shared with presses whose portal deep-links into /admin/manufacturers/:id,
+  // so it is intentionally NOT guarded here — that is Task #2075's surface.)
+  const isVendorFamilyPartner =
+    adminRole.data?.role === "vendor" || adminRole.data?.role === "fulfillment";
 
   // Host-based gating: customer host blocks /admin* paths (redirect into
   // /account). Admin host blocks the customer player surfaces (redirect
@@ -597,6 +608,32 @@ function Router() {
         location.startsWith(ownCatalogPath + "?") ||
         location.startsWith(ownCatalogPath + "/"));
     if (!isAuthPath && !isOwnCatalog) {
+      return <Redirect to="/vendor" />;
+    }
+  }
+
+  // Task #2082 — vendor / quickprinter / fulfillment partner route guard.
+  // These operational partners have a scoped left-nav portal at /vendor and
+  // NO operator surface (reports + catalog are fail-closed server-side, and
+  // requireAdmin hands them no /api/admin/* data). Bounce every operator-only
+  // /admin/* deep link back to /vendor. Auth paths stay open (sign-in/reset)
+  // and the shared /admin/security 2FA page is allowed via the same
+  // canAccessAdminSecurity predicate the account menu uses, so it can't drift.
+  if (isVendorFamilyPartner && location.startsWith("/admin")) {
+    const isAuthPath =
+      location.startsWith("/admin/login") ||
+      location.startsWith("/admin/logout") ||
+      location.startsWith("/admin/register") ||
+      location.startsWith("/admin/forgot-password") ||
+      location.startsWith("/admin/reset-password");
+    const isSecurityPath =
+      location === "/admin/security" ||
+      location.startsWith("/admin/security?") ||
+      location.startsWith("/admin/security/");
+    const isAllowed =
+      isAuthPath ||
+      (isSecurityPath && canAccessAdminSecurity(adminRole.data?.role));
+    if (!isAllowed) {
       return <Redirect to="/vendor" />;
     }
   }

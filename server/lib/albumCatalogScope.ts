@@ -47,6 +47,10 @@ export const NO_ALBUM_LIST_ROLES = new Set([
  * doesn't own by guessing the UUID. Released albums stay public regardless and
  * are resolved by the caller without this gate.
  *
+ * Task #2082: the vendor + fulfillment portal roles fall through to the
+ * `NO_ALBUM_LIST_ROLES` default below (→ `[]` → false), so they are already
+ * treated like a fan here — no separate role set is needed.
+ *
  * Reuses `filterAlbumsForPartnerRole` on a single-album list so the per-role
  * scoping logic lives in exactly one place. A non-empty result = in scope;
  * `null` (the full-catalog signal) is only ever returned for operators, who

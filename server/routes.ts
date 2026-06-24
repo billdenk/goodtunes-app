@@ -298,6 +298,35 @@ async function requireAdmin(req: Request, res: Response, next: Function) {
   next();
 }
 
+// Task #2082 — defense-in-depth for the scoped operational partners. A
+// `vendor` (incl. quickprinter, role "vendor") and a `fulfillment` partner
+// each live in a scoped left-nav portal with NO operator surface; their own
+// data flows through dedicated scoped endpoints (/api/printer/:id/* and the
+// vendor pricing routes). They carry is_admin=true so they clear requireAdmin,
+// which means the operator-only global god-view list/detail routes must also
+// reject them server-side — even on a hand-rolled / curled request that never
+// touched the (nav-hidden) client. Layer this AFTER requireAdmin on those
+// routes. (`manufacturer` is intentionally excluded: that role is shared with
+// presses, whose scoped portal — Task #2075 — still reads these operator
+// detail routes; the reseller lockdown rides with that task. The reports
+// god-view is already failed-closed for manufacturer in requireReportScope.)
+async function denyScopedVendorFulfillment(
+  req: Request,
+  res: Response,
+  next: Function,
+) {
+  const a = await getAuthFromRequest(req);
+  if (!a || a.kind !== "admin")
+    return res.status(401).json({ message: "Unauthorized" });
+  const role = (await getUserRole(a.userId))?.role;
+  if (role === "vendor" || role === "fulfillment") {
+    return res
+      .status(403)
+      .json({ message: "Out of scope for this account" });
+  }
+  next();
+}
+
 async function requireCustomer(req: Request, res: Response, next: Function) {
   const a = await getAuthFromRequest(req);
   if (!a || a.kind !== "customer") return res.status(401).json({ message: "Unauthorized" });
@@ -14995,7 +15024,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Soft-deleted People are already excluded by storage.searchPeople;
   // excludeIds (People already attached to the entity) is applied
   // client-side by the picker.
-  app.get("/api/admin/people", requireAdmin, async (req, res) => {
+  app.get("/api/admin/people", requireAdmin, denyScopedVendorFulfillment, async (req, res) => {
     const q = String(req.query.q ?? "").trim();
     const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 25);
     if (q.length < 2) return res.json([]);
@@ -15015,7 +15044,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(ranked);
   });
 
-  app.get("/api/admin/people/:id", requireAdmin, async (req, res) => {
+  app.get("/api/admin/people/:id", requireAdmin, denyScopedVendorFulfillment, async (req, res) => {
     const id = String(req.params.id);
     // Artist scope: only allow access to people credited on their albums.
     const callerPeople = await getUserRole(req.session.userId!);
@@ -17218,7 +17247,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // receiving-dock addresses) that should not be public. Gate read
   // access behind requireAdmin today — once the manufacturer/fulfillment
   // role middleware lands, swap to requireRole(...) + scope-by-id.
-  app.get("/api/manufacturers", requireAdmin, async (_req, res) => {
+  app.get("/api/manufacturers", requireAdmin, denyScopedVendorFulfillment, async (_req, res) => {
     // Task #194 — make sure the three founding pressing plants (MRP,
     // PMP, Hellbender) exist on first read so a fresh deploy gets a
     // populated Presses panel without a separate manual seed. Each
@@ -17230,7 +17259,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await ensureFoundingPresses();
     return res.json(await storage.getManufacturers());
   });
-  app.get("/api/manufacturers/:id", requireAdmin, async (req, res) => {
+  app.get("/api/manufacturers/:id", requireAdmin, denyScopedVendorFulfillment, async (req, res) => {
     const m = await storage.getManufacturerById(String(req.params.id));
     if (!m) return res.status(404).json({ message: "Manufacturer not found" });
     return res.json(m);
