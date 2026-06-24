@@ -121,7 +121,9 @@ to it is a rejoin, not a hijack.
   new").
 - **One-time reconciliation of already-stranded duplicates.** Fans who
   were stranded *before* this fix already have two rows: an unclaimed
-  legacy library row and a separate empty OAuth row. A marker-guarded
+  legacy library row and a separate OAuth row (usually empty, but it
+  may carry its own real password — the unclaimed guard only protects
+  the *survivor*, never the loser). A marker-guarded
   block in `scripts/post-merge.sh`
   (`task_2076_reconcile_legacy_oauth` in `post_merge_data_backfills`,
   dev + prod) pairs them 1:1 by `lower(legacy.email) =

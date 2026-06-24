@@ -37,3 +37,18 @@ and ONLY when that email maps to exactly one legacy row and exactly one OAuth ro
 (no fan-out merges). The real ~2,000 legacy fans are PROD-ONLY — dev clones have
 none, so a dev ROLLBACK validation always reports "0 pairs"; the actual move only
 happens when post-merge runs against prod on publish.
+
+**Prod outcome (verified after the publish that shipped task-2076):** the reconcile
+matched exactly **1** pair, not thousands. That's expected — the one-time block only
+fixes *already-stranded* dupes (an unclaimed legacy row AND a separate re-authed OAuth
+row sharing the email). Most legacy fans (≈815 unclaimed rows with albums) simply have
+NO duplicate yet, so there's nothing to reconcile; they ride the live auto-link/claim
+flows on their next sign-in. So a low pair count is correct, not a bug.
+
+**The loser OAuth row is NOT guaranteed empty/credential-less.** Docs once said "empty
+OAuth row," but the unclaimed guard (`isUnclaimedCustomer`) protects only the SURVIVOR
+(the legacy row, which must have no real password + 0 identities). The loser can carry
+its own real password and still be soft-merged — that's fine because the fan's real
+sign-in path is OAuth (Apple/Google), whose identity is moved onto the survivor, and a
+relay-masked loser email can't be used for email+password login anyway. Don't add a
+password check to `oauth_new` thinking it's a safety gap.
