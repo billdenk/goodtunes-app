@@ -201,7 +201,32 @@ function makeSessionClient() {
     }
     return { status: res.status, location: res.headers.get("location") };
   }
-  return { post, getNoFollow };
+  // Apple uses form_post on its callback, so the genuine entry point is a
+  // urlencoded POST that 30x-redirects. Mirror getNoFollow but send a real
+  // application/x-www-form-urlencoded body (the same shape Apple posts back)
+  // and capture the Location WITHOUT following it.
+  async function postFormNoFollow(
+    path: string,
+    form: Record<string, string>,
+  ): Promise<{ status: number; location: string | null }> {
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "x-forwarded-proto": "https",
+        ...(cookie ? { cookie } : {}),
+      },
+      body: new URLSearchParams(form).toString(),
+    });
+    const setCookies = (res.headers as any).getSetCookie?.() ?? [];
+    for (const sc of setCookies as string[]) {
+      const first = sc.split(";")[0];
+      if (first.startsWith("connect.sid=")) cookie = first;
+    }
+    return { status: res.status, location: res.headers.get("location") };
+  }
+  return { post, getNoFollow, postFormNoFollow };
 }
 
 async function seedAdmin(opts: { password: string; email?: string }): Promise<string> {
@@ -951,6 +976,108 @@ test("callback collision: account that ALREADY has a social login + VERIFIED ema
     await customerHasIdentity(custId, "google", existingSub),
     true,
     "the account's original social login is left untouched",
+  );
+});
+
+// ─── Route-boundary: the Apple Hide-My-Email callback PARKS the claim ─────
+//
+// The mirror of the Google email-collision case above. When Apple "Hide My
+// Email" hands back an `@privaterelay.appleid.com` forwarder that matches no
+// existing identity (sub) and no stored-relay legacy row, the callback CANNOT
+// email-link the fan — the relay mask isn't proof of a shared human. Instead
+// of silently minting a fresh empty account (which stranded ~2,000 legacy
+// gogoods fans), it parks the verified Apple identity on
+// `req.session.pendingOauthClaim` and diverts to the 6-digit claim flow.
+//
+// The /api/auth/claim/* half is already covered above (seeded via the
+// /__test/seed-claim seam). This drives the OTHER half end-to-end: the REAL
+// POST /api/auth/apple/callback form_post entry point that does the PARKING.
+// We reuse __setTestOauthExchange (returns a canned relay identity instead of
+// hitting Apple) + /__test/seed-oauth-state (parks the state bag the callback
+// validates). We then PROVE the park actually happened by consuming it on the
+// SAME session: the parked Apple sub is what claim/confirm attaches.
+
+// Drive an Apple form_post callback for a relay (Hide-My-Email) identity,
+// returning the resulting redirect. Keeps the same `client` (session/cookie)
+// so the caller can then exercise the parked claim on the same session.
+async function driveAppleRelayCallback(
+  client: ReturnType<typeof makeSessionClient>,
+  opts: { relayEmail: string; sub: string },
+): Promise<{ status: number; location: string | null }> {
+  const state = "st_" + opts.sub;
+  await client.post("/__test/seed-oauth-state", {
+    state: { state, kind: "customer", provider: "apple" },
+  });
+  nextOauthIdentity = {
+    sub: opts.sub,
+    email: opts.relayEmail,
+    emailVerified: true,
+    name: null,
+    picture: null,
+  };
+  try {
+    return await client.postFormNoFollow("/api/auth/apple/callback", {
+      state,
+      code: "testcode",
+    });
+  } finally {
+    nextOauthIdentity = null;
+  }
+}
+
+test("callback (Apple Hide-My-Email): an unmatched relay identity PARKS the claim and diverts to the 6-digit claim flow (no auto-link, no token)", async () => {
+  const sub = "appleparkredirect-" + randomUUID().slice(0, 8);
+  const relayEmail = randomUUID().slice(0, 8) + "@privaterelay.appleid.com";
+
+  const client = makeSessionClient();
+  const r = await driveAppleRelayCallback(client, { relayEmail, sub });
+
+  assert.equal(r.status, 302);
+  assert.equal(
+    r.location,
+    "/login?prompt=claim&provider=apple",
+    `a relay mask that matches no identity must divert into the claim flow, got ${r.location}`,
+  );
+  // It is emphatically NOT a signed-in token redirect — no account was
+  // minted or linked, so no auth token can have been handed out.
+  assert.ok(
+    !(r.location ?? "").includes("#token="),
+    "the callback must NOT sign anyone in — the fan still has to prove the email via a code",
+  );
+});
+
+test("callback (Apple Hide-My-Email): the parked claim is consumable — claim/confirm on the SAME session attaches the parked Apple sub", async () => {
+  // The real email the fan used at gogoods (the unclaimed legacy row they'll
+  // recover) is DIFFERENT from the per-app relay forwarder Apple hands back.
+  const realEmail = "applepark_real_" + randomUUID().slice(0, 8) + "@example.test";
+  claimEmails.add(realEmail);
+  const relayEmail = randomUUID().slice(0, 8) + "@privaterelay.appleid.com";
+  const sub = "appleparkconsume-" + randomUUID().slice(0, 8);
+  // Unclaimed: no password, no identity — exactly the legacy-fan shape the
+  // claim flow exists to recover.
+  const custId = await seedCustomer({ password: null, email: realEmail });
+
+  const client = makeSessionClient();
+  const r = await driveAppleRelayCallback(client, { relayEmail, sub });
+  assert.equal(r.location, "/login?prompt=claim&provider=apple", "callback parked + diverted");
+
+  // The claim was parked on THIS session by the callback above (not by the
+  // /__test/seed-claim seam). Now the fan types their real email and the
+  // pipeline mints + verifies a code, attaching the parked Apple sub.
+  const start = await client.post("/api/auth/claim/start", { email: realEmail });
+  assert.equal(start.status, 200, "claim/start should mail a code for the real email");
+  const code = start.json?.devCode as string | undefined;
+  assert.ok(code, "non-prod claim/start returns the dev code");
+
+  const confirm = await client.post("/api/auth/claim/confirm", { email: realEmail, code });
+  assert.equal(confirm.status, 200, "an unclaimed account is claimable via the parked Apple identity");
+  assert.equal(confirm.json?.ok, true);
+  assert.ok(confirm.json?.token, "a fresh auth token is issued for the now-claimed account");
+
+  assert.equal(
+    await customerHasIdentity(custId, "apple", sub),
+    true,
+    "the Apple sub PARKED by the real callback is the one attached on confirm — the hand-off is end-to-end",
   );
 });
 
