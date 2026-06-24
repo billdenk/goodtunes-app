@@ -458,11 +458,24 @@ async function bootstrapAccessGuard() {
     log(`gift scheduler init failed: ${e?.message ?? e}`, "gift-scheduler");
   }
 
-  // NOTE: the GitHub build-mirror push no longer uses an expiring PAT — it now
-  // authenticates with a non-expiring repo-scoped SSH deploy key
-  // (GITHUB_MIRROR_DEPLOY_KEY; see scripts/post-merge.sh → sync_github_build_mirror
-  // and docs/codemagic-builds.md). The old token-expiry pre-warn scheduler
-  // (Task #2084) was retired with the PAT since there is no expiry to watch.
+  // Pre-warn before any hand-managed, time-limited credential lapses. A small
+  // registry (server/credentialExpiry.ts) probes each credential a couple of
+  // times a day and pages on-call (via alertOps) when it nears expiry / is
+  // rejected: the Apple Sign-In .p8, APNs key, FCM key, and Stripe webhook
+  // secret (operator-recorded `<NAME>_EXPIRES_AT` dates). Unconfigured
+  // credentials are quiet no-ops; nothing here blocks boot or a request.
+  //
+  // NOTE: the GitHub build-mirror push is NOT watched here — it no longer uses
+  // an expiring PAT, it authenticates with a non-expiring repo-scoped SSH deploy
+  // key (GITHUB_MIRROR_DEPLOY_KEY; see scripts/post-merge.sh →
+  // sync_github_build_mirror and docs/codemagic-builds.md), so there is no
+  // GitHub expiry left to watch.
+  try {
+    const { armCredentialExpiryScheduler } = await import("./credentialExpiry");
+    armCredentialExpiryScheduler();
+  } catch (e: any) {
+    log(`credential expiry watch init failed: ${e?.message ?? e}`, "cred-expiry");
+  }
 
   // Task #1976 — Odoo printer integration. In-process poll scheduler that
   // pulls production/shipping status out of Odoo and reconciles it onto our

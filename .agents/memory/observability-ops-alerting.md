@@ -56,6 +56,36 @@ detail layer.
 externals needed. Full prod validation (event has request context) needs a real DSN +
 forced 500 against the built server.
 
+## Credential expiry registry (`server/credentialExpiry.ts`)
+Hand-managed, time-limited credentials each get a throttled ops-alert (via
+`alertOps`) before they lapse, off one 12h in-process scheduler armed at boot.
+Each credential is a `CredentialSource` in `buildRegistry()`.
+
+**Why the design:** most of these creds expose NO machine-readable expiry, so the
+registry supports two probe sources. LIVE — the API hands the expiry back, so
+read it live (GitHub's `github-authentication-token-expiration` header;
+`certNotAfterProbe` reads an X.509 PEM's notAfter via `node:crypto`). RECORDED —
+no API expiry, so the operator records the rotation date in a `<NAME>_EXPIRES_AT`
+secret and `operatorRecordedProbe` reads it. Prefer live whenever the API offers
+it; recorded is the honest fallback, not the default.
+
+**Probe-kind → policy (the durable rule):** not-configured=silent (an unset
+credential must never nag), unmonitored=configured-but-no-recorded-date is
+log-only never page (nothing to warn against yet), transient probe failure=log
+only, rejected (e.g. an auth 401/403)=page now, expires=page only inside the warn
+window (14d default, per-source `warnWindowDays`).
+
+**How to apply / extend:** add a `CredentialSource`; `certNotAfterProbe` for real
+certs, `operatorRecordedProbe` for hand-rotated keys. Keep the decision in the
+PURE `classifyProbe(source, probe, now)` (silent/log/alert) separate from the
+side-effecting `handleProbe`, so policy is unit-tested without a live mailer.
+Never log/alert a secret value — only its expiry date/status.
+
+**Gotcha (reusable):** any server util that wants `log` and is also imported by a
+unit test must require it LAZILY (`require("./index").log`) — importing
+`server/index.ts` runs its module top-level, which boots the server and hangs the
+test. A static `import { log }` there is the trap.
+
 ## Per-instance pg pool cap (`server/db.ts`)
 On Replit autoscale each instance owns its **own** pool, so total DB connections =
 instances × pool max. Pool is capped `max=PG_POOL_MAX||5` (conservative default) with
