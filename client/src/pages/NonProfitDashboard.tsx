@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { formatUsdCents } from "@shared/money";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Heart, Music as MusicIcon, Mail, Clock, UserPlus, Users, Trash2, Send, Copy, Check, ChevronDown } from "lucide-react";
+import { Heart, Music as MusicIcon, Mail, Clock, UserPlus, Users, Trash2, Send, Copy, Check, ChevronDown, LayoutDashboard, ShoppingBag, ScrollText, Network } from "lucide-react";
 import { DashboardPanel } from "@/components/partner/dashboard-controls";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
@@ -139,6 +139,15 @@ export function NonProfitDashboard() {
       tabs={tabs}
       activeTab={tab}
       onTabChange={setTab as (id: string) => void}
+      layout="leftnav"
+      navIcons={{
+        dashboard: LayoutDashboard,
+        artists: Users,
+        buyers: ShoppingBag,
+        invites: UserPlus,
+        ledger: ScrollText,
+        tree: Network,
+      }}
     >
       {tab === "dashboard" && (
         <PartnerDashboard

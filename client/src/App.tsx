@@ -420,6 +420,20 @@ function Router() {
     enabled: !!user && kind === "admin",
   });
   const isArtistPartner = adminRole.data?.role === "artist";
+  // Task #2081 — a publisher/writer partner has a single dedicated portal
+  // (/publisher — a read-only mechanical statement). It has NO operator
+  // surface: requireAdmin 403s it on every /api/admin/* route and its
+  // catalog/report reads are now fully scoped server-side. Mirror that
+  // client-side so a /admin/* deep link bounces back to the portal.
+  const isPublisherPartner = adminRole.data?.role === "publisher";
+  // Task #2081 — label / manager / non_profit partners each have their own
+  // scoped left-nav portal (/label, /manager, /non-profit). They keep
+  // access to the shared, server-scoped Reports page (and NPO's GoodDeed
+  // pricing) but every other operator-only /admin/* surface bounces back
+  // to their portal — UI hiding that agrees with the server-side scope.
+  const isLabelPartner = adminRole.data?.role === "label";
+  const isManagerPartner = adminRole.data?.role === "manager";
+  const isNonProfitPartner = adminRole.data?.role === "non_profit";
 
   // Host-based gating: customer host blocks /admin* paths (redirect into
   // /account). Admin host blocks the customer player surfaces (redirect
@@ -538,6 +552,64 @@ function Router() {
           ));
     if (!isAllowed) {
       return <Redirect to="/admin/dashboard" />;
+    }
+  }
+
+  // Publisher partner route guard. Unlike artists (who have a sectioned nav),
+  // a publisher has no operator surface at all — bounce every /admin/* deep
+  // link back to /publisher. Auth paths stay open so a locked-out publisher
+  // can still sign in / reset their password.
+  if (isPublisherPartner && location.startsWith("/admin")) {
+    const isAuthPath =
+      location.startsWith("/admin/login") ||
+      location.startsWith("/admin/logout") ||
+      location.startsWith("/admin/register") ||
+      location.startsWith("/admin/forgot-password") ||
+      location.startsWith("/admin/reset-password");
+    if (!isAuthPath) {
+      return <Redirect to="/publisher" />;
+    }
+  }
+
+  // Label / manager / non_profit partner route guard. Each has a scoped
+  // left-nav portal; inside /admin they keep only the shared, server-scoped
+  // Reports page (plus NPO's GoodDeed pricing and the security/2FA page).
+  // Every other operator-only /admin/* deep link bounces back to the
+  // partner's own portal home — matching the server-side scope so a typed
+  // URL can never render a global operator page.
+  if (
+    (isLabelPartner || isManagerPartner || isNonProfitPartner) &&
+    location.startsWith("/admin")
+  ) {
+    const isAuthPath =
+      location.startsWith("/admin/login") ||
+      location.startsWith("/admin/logout") ||
+      location.startsWith("/admin/register") ||
+      location.startsWith("/admin/forgot-password") ||
+      location.startsWith("/admin/reset-password");
+    // Shared scoped surfaces these partners legitimately reach via their
+    // portal nav. NPO additionally keeps GoodDeed pricing (its existing
+    // trimmed admin nav). /admin/security is gated separately below.
+    const allowedPrefixes = isNonProfitPartner
+      ? ["/admin/reports", "/admin/gooddeed-pricing"]
+      : ["/admin/reports"];
+    const isSecurityPath =
+      location === "/admin/security" ||
+      location.startsWith("/admin/security?") ||
+      location.startsWith("/admin/security/");
+    const isAllowed =
+      isAuthPath ||
+      (isSecurityPath
+        ? canAccessAdminSecurity(adminRole.data?.role)
+        : allowedPrefixes.some(
+            (p) =>
+              location === p ||
+              location.startsWith(p + "?") ||
+              location.startsWith(p + "/"),
+          ));
+    if (!isAllowed) {
+      const home = isLabelPartner ? "/label" : isManagerPartner ? "/manager" : "/non-profit";
+      return <Redirect to={home} />;
     }
   }
 

@@ -28,6 +28,26 @@ export const NO_ALBUM_LIST_ROLES = new Set([
   "fulfillment",
   "vendor",
   "non_profit",
+  // Task #2081 — a publisher/writer account is scoped to its own mechanical
+  // statement (GET /api/publisher/statement) and has no shared-catalog access.
+  // Without this it fell through to the operator full catalog (including hidden
+  // releases) on GET /api/albums. Fail closed.
+  "publisher",
+]);
+
+// Task #2081 — the scoped, non-operator partner roles that each live in a
+// dedicated left-nav portal (/label, /manager, /non-profit, /publisher).
+// On the PUBLIC, admin-aware album reads (e.g. GET /api/albums/:id) these
+// roles must be treated like a normal fan — NEVER handed the operator
+// `includeHidden` god-view — so an isAdmin-flagged partner can't deep-link a
+// hidden/staged/sunrise release outside its scope. This is intentionally
+// NARROWER than NO_ALBUM_LIST_ROLES: manufacturer/vendor/fulfillment keep
+// their existing operator-grade album reads (out of scope for this task).
+export const PORTAL_SCOPED_NON_OPERATOR_ROLES = new Set([
+  "label",
+  "manager",
+  "non_profit",
+  "publisher",
 ]);
 
 /**
@@ -69,8 +89,8 @@ export function filterAlbumsForPartnerRole<T extends AlbumStub>(
 
     default:
       // All other partner-admin roles (manufacturer, fulfillment, vendor,
-      // non_profit) have dedicated per-partner album endpoints.  Fail closed
-      // here so they never see the shared catalog.
+      // non_profit, publisher) have dedicated per-partner endpoints.  Fail
+      // closed here so they never see the shared catalog.
       return NO_ALBUM_LIST_ROLES.has(info.role) ? [] : null;
   }
 }

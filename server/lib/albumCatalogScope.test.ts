@@ -10,7 +10,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { filterAlbumsForPartnerRole, NO_ALBUM_LIST_ROLES } from "./albumCatalogScope";
+import {
+  filterAlbumsForPartnerRole,
+  NO_ALBUM_LIST_ROLES,
+  PORTAL_SCOPED_NON_OPERATOR_ROLES,
+} from "./albumCatalogScope";
 
 const A1 = { id: "alb-1", primaryArtistId: "artist-a", labelId: "label-x" };
 const A2 = { id: "alb-2", primaryArtistId: "artist-b", labelId: "label-y" };
@@ -109,16 +113,44 @@ test("non_profit → empty list", () => {
   assert.deepEqual(result, []);
 });
 
-test("no-list roles are exactly manufacturer/fulfillment/vendor/non_profit", () => {
+// Task #2081 — a publisher/writer account has no shared-catalog access; its
+// data lives in GET /api/publisher/statement. Must fail closed here.
+test("publisher → empty list (uses /api/publisher/statement)", () => {
+  const result = filterAlbumsForPartnerRole(ALL, { role: "publisher", roleScopeId: "pub-1" });
+  assert.deepEqual(result, []);
+});
+
+test("no-list roles are exactly manufacturer/fulfillment/vendor/non_profit/publisher", () => {
   assert.deepEqual(
     [...NO_ALBUM_LIST_ROLES].sort(),
-    ["fulfillment", "manufacturer", "non_profit", "vendor"],
+    ["fulfillment", "manufacturer", "non_profit", "publisher", "vendor"],
   );
+});
+
+// Task #2081 — the scoped, non-operator portal roles never get the operator
+// `includeHidden` god-view on the admin-aware album-detail read. This set is
+// deliberately NARROWER than NO_ALBUM_LIST_ROLES: manufacturer/vendor/
+// fulfillment keep their existing operator-grade album reads (out of scope).
+test("portal-scoped non-operator roles are exactly label/manager/non_profit/publisher", () => {
+  assert.deepEqual(
+    [...PORTAL_SCOPED_NON_OPERATOR_ROLES].sort(),
+    ["label", "manager", "non_profit", "publisher"],
+  );
+});
+
+test("operator/artist/press roles are NOT in the god-view-denied set", () => {
+  for (const role of ["super_admin", "admin", "artist", "manufacturer", "vendor", "fulfillment"]) {
+    assert.equal(
+      PORTAL_SCOPED_NON_OPERATOR_ROLES.has(role),
+      false,
+      `role "${role}" must keep the operator includeHidden album read`,
+    );
+  }
 });
 
 // ── Invariant: no partner role leaks the full catalog ────────────────────────
 
-const PARTNER_ROLES = ["artist", "label", "manager", "manufacturer", "fulfillment", "vendor", "non_profit"];
+const PARTNER_ROLES = ["artist", "label", "manager", "manufacturer", "fulfillment", "vendor", "non_profit", "publisher"];
 
 test("invariant: no partner role returns null (full catalog)", () => {
   for (const role of PARTNER_ROLES) {

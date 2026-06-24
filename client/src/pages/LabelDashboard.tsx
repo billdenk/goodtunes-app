@@ -23,7 +23,7 @@ import {
 // Heart for song-favorite metrics, Star for artist-roster metrics —
 // per docs/design-system.md the brand uses these two icons as a quick
 // visual cue for what a count means (favorites vs roster size).
-import { Heart, Star, Building2 } from "lucide-react";
+import { Heart, Star, Building2, LayoutDashboard, BarChart3, Users, Disc3, ShoppingBag, FileBarChart } from "lucide-react";
 import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
@@ -185,6 +185,15 @@ export function LabelDashboard() {
       activeTab={tab}
       onTabChange={setTab}
       spaceContent
+      layout="leftnav"
+      navIcons={{
+        dashboard: LayoutDashboard,
+        overview: BarChart3,
+        roster: Users,
+        catalog: Disc3,
+        orders: ShoppingBag,
+      }}
+      navExtras={[{ id: "reports", label: "Reports", href: "/admin/reports", icon: FileBarChart }]}
     >
       {tab === "dashboard" && (
         <PartnerDashboard

@@ -13,7 +13,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { formatUsdCents } from "@shared/money";
-import { CheckCircle2, Clock, ExternalLink, Music2 } from "lucide-react";
+import { CheckCircle2, Clock, ExternalLink, Music2, ScrollText } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -251,6 +251,8 @@ export function PublisherPortal() {
       onTabChange={setTab}
       spaceContent
       testId="publisher-portal"
+      layout="leftnav"
+      navIcons={{ statement: ScrollText }}
     >
       {/* Payout onboarding CTA */}
       {me && !me.payoutsEnabled && (

@@ -510,6 +510,16 @@ export async function resolveReportScope(req: Request): Promise<PartnerScope | n
 export async function requireReportScope(req: Request, res: Response, next: NextFunction) {
   const scope = await resolveReportScope(req);
   if (!scope) return res.status(401).json({ message: "Unauthorized" });
+  // Task #2081 — a publisher/writer account is NOT a reporting partner. Its
+  // only data surface is the self-scoped GET /api/publisher/statement. It must
+  // never reach the partner-reports module: a role with no album/org scope
+  // falls through to resolveScope's `albumIds: null` super_admin god-view
+  // (every partner's sales/plays/payouts/fans). Fail closed.
+  if (scope.role === "publisher") {
+    return res
+      .status(403)
+      .json({ message: "Publishers use the publisher statement, not partner reports." });
+  }
   (req as any).reportScope = scope;
   next();
 }

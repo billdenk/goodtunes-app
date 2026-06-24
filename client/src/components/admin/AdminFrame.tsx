@@ -404,10 +404,25 @@ export function AdminFrame({
   // they can only read Reports + GoodDeed pricing.
   const isPress = roleInfo?.role === "manufacturer";
   const isNonProfit = roleInfo?.role === "non_profit";
+  // Task #2081 — label & manager partners live in their own scoped
+  // left-nav portal (/label, /manager). Inside the shared admin shell
+  // (reached only via the scoped Reports link) they are trimmed to
+  // Dashboard (back to their portal) + Reports — never the global
+  // catalog/people/labels nav or global search.
+  const isLabel = roleInfo?.role === "label";
+  const isManager = roleInfo?.role === "manager";
   // isTrimmedPartner gates the global search bar (artists are included
   // since global search spans all entities, not just theirs).
-  const isTrimmedPartner = isArtist || isPress || isNonProfit;
-  const partnerHome = isPress ? "/vendor" : isNonProfit ? "/non-profit" : "/admin/dashboard";
+  const isTrimmedPartner = isArtist || isPress || isNonProfit || isLabel || isManager;
+  const partnerHome = isPress
+    ? "/vendor"
+    : isNonProfit
+      ? "/non-profit"
+      : isLabel
+        ? "/label"
+        : isManager
+          ? "/manager"
+          : "/admin/dashboard";
 
   // Task #273 + #309 — Collapsible sidebar sections (Stripe-style),
   // accordion: at most one section open at a time. State persists to
@@ -625,6 +640,28 @@ export function AdminFrame({
                     />
                   </Section>
                 )}
+              </>
+            ) : isLabel || isManager ? (
+              // Task #2081 — label/manager scoped admin nav. Reached only
+              // via the portal's "Reports" link; mirrors the press/NPO
+              // trim minus GoodDeed pricing (label/manager don't print).
+              <>
+                <SidebarLink
+                  icon={LayoutDashboard}
+                  label="Dashboard"
+                  count={-1}
+                  active={false}
+                  onClick={() => navigate(partnerHome)}
+                  testId="nav-partner-home"
+                />
+                <SidebarLink
+                  icon={BarChart3}
+                  label="Reports"
+                  count={-1}
+                  active={active === "reports"}
+                  onClick={() => navigate("/admin/reports")}
+                  testId="nav-reports"
+                />
               </>
             ) : isPress || isNonProfit ? (
               <>
