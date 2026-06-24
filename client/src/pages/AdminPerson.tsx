@@ -46,6 +46,7 @@ import { InviteToArtistPanel } from "@/components/admin/InviteToArtistPanel";
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
 import { RolePicker } from "@/components/admin/RolePicker";
+import { BusinessTitlePicker } from "@/components/admin/BusinessTitlePicker";
 import { PersonSplitsRail } from "@/components/admin/SplitsPanels";
 import { PersonGearManager } from "@/components/admin/PersonGearManager";
 import { NotificationsCard } from "@/components/admin/NotificationsCard";
@@ -623,6 +624,12 @@ export function AdminPerson() {
         )}
         {tab === "permissions" && (
           <>
+            {/* Task #2071 — make explicit that everything on this tab
+                governs the person AS AN ARTIST. When they're also partner
+                staff, their label/press/vendor access is governed on that
+                partner's OWN page (single source of truth), so we point
+                there rather than duplicate an editable matrix here. */}
+            <ArtistScopeNote person={person} />
             <PartnerPermissionsPanel scopeKind="artist" scopeId={person.id} scopeName={person.name} />
             {/* Task #1020 — Invite someone to this artist without leaving
                 the page; scope is hard-locked to this Person. */}
@@ -744,13 +751,177 @@ const CONTACT_ATTACHMENT_LABEL: Record<NonNullable<PersonFull["attachments"]>[nu
   non_profit: "Non-profit",
 };
 
-/* ─── Affiliation panel (Task #968) ──────────────────────────────────
+/* ─── Affiliation panel (Task #968 / #2071) ──────────────────────────
    The partner/business affiliations a Person represents, as deep links.
    Shared by both shapes: the contact shape always renders it (with the
    "Not affiliated yet" empty state), while the artist shape passes
    `hideWhenEmpty` so a pure performer isn't cluttered — but a dual-role
    person (band artist + MRP sales contact, etc.) still sees both roles
-   on their artist page. Reuses the same attachment links either way. */
+   on their artist page. Reuses the same attachment links either way.
+
+   Task #2071: each affiliation can now carry an editable *business
+   title* (CEO, CMO, A&R…), persisted as that affiliation's
+   `entity_contacts.role` / `organization_people.role`. This is a
+   separate axis from music "Creative credits" — it never touches
+   people.roles[] and so can't flip a pure business contact into artist
+   shape. The chosen title leads the line; the platform-role badge
+   ("LABEL STAFF") still anchors the context. */
+
+// Quiet per-row ghost-link Save (mirrors SellPanel's `SaveLink`): brand
+// blue + soft pill when dirty, inert otherwise. Keeps accent restraint —
+// no filled primary stacked next to a section-level Save.
+function SaveLink({
+  dirty,
+  onClick,
+  testId,
+}: {
+  dirty: boolean;
+  onClick: () => void;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!dirty}
+      className={
+        "h-8 px-2.5 rounded-md text-xs font-medium transition-colors " +
+        (dirty
+          ? "text-[color:var(--brand-blue)] hover:bg-[color:var(--brand-blue-soft)]"
+          : "text-slate-400 cursor-default")
+      }
+      data-testid={testId}
+    >
+      Save
+    </button>
+  );
+}
+
+// Per-entity contact-role save path, keyed by the attachment's entity
+// kind. label/press/maker/fulfillment all share the entity_contacts
+// upsert (`POST {base}/:id/people {personId, role}`); non-profit writes
+// organization_people through its own people endpoint. (Note the API
+// base for fulfillment is the hyphenated `/api/fulfillment-partners`,
+// distinct from the `/admin/fulfillment/:id` page href.)
+const AFFILIATION_SAVE_BASE: Record<NonNullable<PersonFull["attachments"]>[number]["entityKind"], string> = {
+  vendor: "/api/vendors",
+  manufacturer: "/api/manufacturers",
+  label: "/api/labels",
+  fulfillment_partner: "/api/fulfillment-partners",
+  non_profit: "/api/non-profits",
+};
+
+function AffiliationRow({
+  a,
+  personId,
+  canEdit,
+}: {
+  a: NonNullable<PersonFull["attachments"]>[number];
+  personId: string;
+  canEdit: boolean;
+}) {
+  const { toast } = useToast();
+  const initial = a.role ?? null;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<string | null>(initial);
+  useEffect(() => { setDraft(initial); }, [initial]);
+
+  const norm = (v: string | null) => (v ?? "").trim();
+  const dirty = norm(draft) !== norm(initial);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `${AFFILIATION_SAVE_BASE[a.entityKind]}/${a.entityId}/people`, {
+        personId,
+        // Send null (not "") to clear the title cleanly.
+        role: norm(draft) === "" ? null : draft,
+      });
+    },
+    onSuccess: () => {
+      // Re-fetch the person so attachments[].role reflects the saved
+      // title (and both list + detail caches stay in lock-step).
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/people", personId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/people", personId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({ title: "Title saved" });
+      setEditing(false);
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't save title", description: e?.message || "Try again.", variant: "destructive" }),
+  });
+
+  return (
+    <li className="px-1 py-2.5" data-testid={`row-overview-attachment-${a.entityId}`}>
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-slate-900 truncate" data-testid={`text-affiliation-role-${a.entityId}`}>
+            {a.role ? (
+              a.role
+            ) : (
+              <span className="font-normal text-slate-400" data-testid={`text-affiliation-no-title-${a.entityId}`}>
+                {canEdit ? "No business title yet" : "Contact"}
+              </span>
+            )}
+            <span className="font-normal text-slate-400"> at </span>
+            <Link
+              href={CONTACT_ATTACHMENT_HREF[a.entityKind](a.entityId)}
+              className="font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+              data-testid={`link-overview-attachment-${a.entityId}`}
+            >
+              {a.entityName}
+            </Link>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">{CONTACT_ATTACHMENT_LABEL[a.entityKind]}</p>
+        </div>
+        {a.gtRole && (
+          <span
+            className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand-purple)] bg-[color:var(--brand-purple)]/10 rounded-full px-2.5 py-1 flex-shrink-0"
+            data-testid={`badge-gtrole-${a.entityId}`}
+          >
+            {a.gtRole}
+          </span>
+        )}
+        {canEdit && !editing && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-[color:var(--brand-blue)]"
+            data-testid={`button-edit-affiliation-title-${a.entityId}`}
+          >
+            <Pencil className="h-3 w-3" />
+            {a.role ? "Edit title" : "Add title"}
+          </button>
+        )}
+      </div>
+
+      {canEdit && editing && (
+        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+          <BusinessTitlePicker
+            value={draft}
+            onChange={setDraft}
+            testIdPrefix={a.entityId}
+          />
+          <div className="mt-2 flex items-center justify-end gap-1">
+            <button
+              type="button"
+              onClick={() => { setDraft(initial); setEditing(false); }}
+              className="h-8 px-2.5 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-100"
+              data-testid={`button-cancel-affiliation-title-${a.entityId}`}
+            >
+              Cancel
+            </button>
+            <SaveLink
+              dirty={dirty && !save.isPending}
+              onClick={() => save.mutate()}
+              testId={`button-save-affiliation-title-${a.entityId}`}
+            />
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
 function AffiliationPanel({
   person,
   hideWhenEmpty = false,
@@ -759,46 +930,80 @@ function AffiliationPanel({
   hideWhenEmpty?: boolean;
 }) {
   const attachments = person.attachments ?? [];
+  // Per-affiliation title saves go through super-admin-only contact
+  // endpoints; non-super-admins see the titles read-only.
+  const { data: role } = useQuery<{ role?: string }>({ queryKey: ["/api/me/role"] });
+  const canEdit = role?.role === "super_admin";
   if (hideWhenEmpty && attachments.length === 0) return null;
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-overview-affiliation">
       <div>
-        <h2 className="text-sm font-bold text-slate-900">Affiliation</h2>
-        <p className="text-xs text-slate-500">Where this person fits on GoodTunes and the partner they represent.</p>
+        <h2 className="text-sm font-bold text-slate-900">Affiliation &amp; business title</h2>
+        <p className="text-xs text-slate-500">The partner this person represents and their job there (CEO, A&amp;R, Fulfillment…). Separate from any music credits below.</p>
       </div>
       {attachments.length === 0 ? (
         <p className="text-xs text-slate-500" data-testid="text-overview-no-attachments">Not affiliated with any partner yet.</p>
       ) : (
         <ul className="divide-y divide-slate-100 -mx-1">
           {attachments.map((a) => (
-            <li key={`${a.entityKind}-${a.entityId}`} className="flex items-center gap-3 px-1 py-2.5" data-testid={`row-overview-attachment-${a.entityId}`}>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-slate-900 truncate" data-testid={`text-affiliation-role-${a.entityId}`}>
-                  {a.role || a.gtRole || "Contact"}
-                  <span className="font-normal text-slate-400"> at </span>
-                  <Link
-                    href={CONTACT_ATTACHMENT_HREF[a.entityKind](a.entityId)}
-                    className="font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
-                    data-testid={`link-overview-attachment-${a.entityId}`}
-                  >
-                    {a.entityName}
-                  </Link>
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">{CONTACT_ATTACHMENT_LABEL[a.entityKind]}</p>
-              </div>
-              {a.gtRole && (
-                <span
-                  className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand-purple)] bg-[color:var(--brand-purple)]/10 rounded-full px-2.5 py-1 flex-shrink-0"
-                  data-testid={`badge-gtrole-${a.entityId}`}
-                >
-                  {a.gtRole}
-                </span>
-              )}
-            </li>
+            <AffiliationRow
+              key={`${a.entityKind}-${a.entityId}`}
+              a={a}
+              personId={person.id}
+              canEdit={canEdit}
+            />
           ))}
         </ul>
       )}
     </section>
+  );
+}
+
+/* ─── Permissions-tab scope note (Task #2071) ────────────────────────
+   The Permissions tab governs this Person AS AN ARTIST (the matrix +
+   "Invite to this artist" are all scoped to people.id). When the same
+   person is ALSO partner staff (Garry West = CEO of Compass Records AND
+   an artist), their label/press/vendor access is governed on that
+   partner's OWN page — the single source of truth. We make the artist
+   scope explicit and deep-link to each partner rather than duplicating
+   an editable matrix here. */
+function ArtistScopeNote({ person }: { person: PersonFull }) {
+  const attachments = person.attachments ?? [];
+  return (
+    <div
+      className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 mb-4"
+      data-testid="note-permissions-artist-scope"
+    >
+      <p className="text-sm text-slate-700">
+        These permissions and invites govern{" "}
+        <span className="font-semibold text-slate-900">{person.name}</span> as an{" "}
+        <span className="font-semibold text-slate-900">artist</span> — their own
+        catalog, releases, and profile.
+      </p>
+      {attachments.length > 0 && (
+        <div className="mt-2 text-xs text-slate-500" data-testid="note-permissions-partner-scopes">
+          <p>
+            {person.name} is also partner staff. Their access at the{" "}
+            {attachments.length === 1 ? "partner below" : "partners below"} is managed on
+            that partner's own page:
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {attachments.map((a) => (
+              <li key={`${a.entityKind}-${a.entityId}`} data-testid={`link-permissions-partner-scope-${a.entityId}`}>
+                <Link
+                  href={CONTACT_ATTACHMENT_HREF[a.entityKind](a.entityId)}
+                  className="hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+                >
+                  Manage access at{" "}
+                  <span className="font-semibold text-slate-700">{a.entityName}</span>
+                </Link>
+                <span className="text-slate-400"> · {CONTACT_ATTACHMENT_LABEL[a.entityKind]}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -962,13 +1167,23 @@ function RolesPanel({ person }: { person: PersonFull }) {
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid="panel-overview-roles">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-900">Creative credits</h3>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-slate-900">Music credits</h3>
+          {/* Task #2071 — call out that this is the music axis, distinct
+              from the business title set on each affiliation above. Only
+              for people who actually make music; tagging a credit here
+              flips the row to artist shape. */}
+          <p className="text-xs text-slate-500 mt-0.5">
+            Only for people who make music — separate from their business title. Leave empty for a pure business contact.
+          </p>
+        </div>
         <Button
           type="button"
           size="sm"
           onClick={() => save.mutate()}
           disabled={!dirty || save.isPending}
+          className="flex-shrink-0"
           data-testid="button-save-roles"
         >
           {save.isPending ? "Saving…" : "Save"}
@@ -978,7 +1193,7 @@ function RolesPanel({ person }: { person: PersonFull }) {
         testIdPrefix="person-overview"
         creativeValue={roles}
         onCreativeChange={setRoles}
-        creativeLabel="Hats they wear"
+        creativeLabel="Music hats they wear"
         creativeHint="Artist, producer, writer, performer…"
         derivedCreative={Array.isArray(person.derivedRoles) ? person.derivedRoles : []}
       />

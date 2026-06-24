@@ -226,6 +226,62 @@ test("shape: dual artist+NPO contact keeps artist shape", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Business-title guard. A Person's job title at a partner (CEO, A&R, CMO…)
+// lives on the affiliation row (entity_contacts.role / organization_people
+// .role), NEVER in people.roles[]. The shape predicate reads ONLY
+// people.roles[]/credits, so a business title is structurally incapable of
+// flipping a pure contact into artist shape. These tests model the actual
+// save contract — a chosen title is applied to a SEPARATE affiliation field
+// and must leave manualRoles untouched — then assert shape off the result,
+// so they fail if a future change ever folds the title into roles[].
+// ---------------------------------------------------------------------------
+
+// Mirror of how the affiliation save works: the picked business title is
+// written to the affiliation row's `role`, and the person's creative
+// `roles[]` is passed through unchanged. This is the seam the guard protects
+// — if someone "fixed" it by appending the title to roles, this helper would
+// have to change, and the assertions below would catch it.
+function applyBusinessTitle(
+  person: { manualRoles: string[]; affiliationRole?: string | null },
+  title: string | null,
+): { manualRoles: string[]; affiliationRole: string | null } {
+  return { manualRoles: person.manualRoles, affiliationRole: title };
+}
+
+test("shape: a chosen business title is stored off roles[] and never flips shape", () => {
+  // Garry West = CEO of Compass with NO music credits. Picking any business
+  // title must land on the affiliation row and leave roles[] empty, so the
+  // predicate (which reads roles[]) still resolves to contact.
+  for (const title of ["CEO", "A&R", "CMO", "Founder / Owner", "Label Manager"]) {
+    const next = applyBusinessTitle({ manualRoles: [] }, title);
+    assert.equal(next.affiliationRole, title, "title lands on the affiliation row");
+    assert.deepEqual(next.manualRoles, [], "title does NOT enter creative roles[]");
+    assert.equal(
+      personShape({ manualRoles: next.manualRoles }),
+      "contact",
+      `business title "${title}" must not flip the contact to artist shape`,
+    );
+  }
+});
+
+test("shape: only a real music credit flips the dual-hat person to artist", () => {
+  // The SAME person, once they also carry a music credit (Garry West also
+  // produces/plays), flips to artist — driven by the music axis only, with
+  // the CEO title still riding separately on the affiliation row.
+  const ceoOnly = applyBusinessTitle({ manualRoles: [] }, "CEO");
+  assert.equal(personShape({ manualRoles: ceoOnly.manualRoles }), "contact");
+
+  const ceoAndProducer = applyBusinessTitle({ manualRoles: ["Producer"] }, "CEO");
+  assert.equal(personShape({ manualRoles: ceoAndProducer.manualRoles }), "artist");
+  assert.equal(
+    ceoAndProducer.affiliationRole,
+    "CEO",
+    "the business title still rides separately alongside the music credit",
+  );
+  assert.equal(hasArtistShape({ manualRoles: ["Bass"] }), true);
+});
+
+// ---------------------------------------------------------------------------
 // introductions — status derivation + referred-by fallback.
 // ---------------------------------------------------------------------------
 

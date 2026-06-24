@@ -303,7 +303,8 @@ export function InviteToArtistPanel({ personId, personName }: Props) {
         </h3>
         {artistInvites.length === 0 ? (
           <p className="text-xs text-slate-500" data-testid="text-no-artist-invites">
-            No outstanding invites for {personName}.
+            No outstanding invites for {personName}. Send one above and it'll
+            appear here with resend (↻) and revoke controls on its row.
           </p>
         ) : (
           <ul className="divide-y divide-slate-100" data-testid="list-artist-invites">

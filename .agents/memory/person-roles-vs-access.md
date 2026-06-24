@@ -1,12 +1,35 @@
 ---
 name: Person creative-credit roles vs access grant
-description: Why people.roles[] (creative credits) is a separate axis from users.role (access grant), and how derived roles roll up.
+description: Why people.roles[] (creative credits) is a separate axis from users.role (access grant) and the per-affiliation business title, and how derived roles roll up.
 ---
 
-# Two role axes on a Person — keep them separate
+# THREE role axes on a Person — keep them separate
 
-The admin "add a person" / Person profile flow distinguishes **two unrelated
+The admin "add a person" / Person profile flow distinguishes **three unrelated
 things** that operators used to conflate. Do not collapse them back into one.
+
+There is a THIRD axis beyond access + creative credits: the **business title**
+a person holds at a partner (CEO / A&R / CMO / Fulfillment…). It is stored on
+the *affiliation row* — `entity_contacts.role` for label/press/maker/fulfillment,
+`organization_people.role` for non-profits — edited inline on the Person
+Overview via a single-select-plus-free-text picker, super_admin-only, through the
+same per-partner `POST {base}/:id/people {personId, role}` contact endpoints. It
+must NEVER be written into `people.roles[]`.
+
+**Why:** a person can be partner staff *and* an artist (e.g. a label CEO who
+also produces). Modeling the job title as a creative credit would flip their row
+to artist shape and pollute the music-only catalog vocabulary. The artist-shape
+predicate (`server/lib/personArtistShape.ts`) reads ONLY `people.roles[]` + real
+music credits, so a business title is structurally incapable of flipping shape —
+the guard holds by construction, not by a runtime check.
+
+**How to apply:** keep business titles on the affiliation row, music hats in
+`people.roles[]`, system access in `users.role` — three distinct fields, never
+cross-written. The Person "Permissions" tab governs the person AS AN ARTIST
+only; partner-scope access is managed on the partner's own page, so deep-link
+there rather than duplicating an editable permission matrix on the Person page.
+
+The other two axes:
 
 - **Access role** — single-select. Granting/inviting *system access*
   (admin / label / artist / ambassador) writes `users.role` (lives in the DB,
