@@ -4,7 +4,7 @@ This is the plain-English runbook for cutting GoodTunes iOS builds **without a M
 
 The pipeline itself lives in [`codemagic.yaml`](../codemagic.yaml) at the repo root. You don't have to read it — this doc covers everything you actually do. For the older Mac-in-Xcode way (the fallback if Codemagic is ever down), see [`native-builds.md`](./native-builds.md).
 
-> **Where Codemagic gets the code:** Codemagic builds from the GitHub mirror `github.com/billdenk/goodtunes-app` (branch `main`). Replit is the source of truth; GitHub is just a build mirror. That mirror now updates **automatically on every merge** to the project's main — `scripts/post-merge.sh` force-pushes the merged code to GitHub at the end of each merge, so a Codemagic build always picks up the latest. You don't push anything by hand. The sync now fetches GitHub's tip before pushing (so a diverged history can't balloon into a multi-GB pack that GitHub rejects with HTTP 500), uploads any new LFS objects so GitHub's `GH008` hook accepts the push, and — if it ever does fail — logs the **real git error** in the merge output instead of swallowing it. (If GitHub ever drifts behind anyway — e.g. the push token was revoked — the manual catch-up recipe lives in `.agents/memory/github-mirror-push.md`.)
+> **Where Codemagic gets the code:** Codemagic builds from the GitHub mirror `github.com/billdenk/goodtunes-app` (branch `main`). Replit is the source of truth; GitHub is just a build mirror. That mirror now updates **automatically on every merge** to the project's main — `scripts/post-merge.sh` force-pushes the merged code to GitHub at the end of each merge, so a Codemagic build always picks up the latest. You don't push anything by hand. The sync now fetches GitHub's tip before pushing (so a diverged history can't balloon into a multi-GB pack that GitHub rejects with HTTP 500), uploads any new LFS objects so GitHub's `GH008` hook accepts the push, and — if it ever does fail — logs the **real git error** in the merge output instead of swallowing it. (If GitHub ever drifts behind anyway — e.g. the push token was revoked — the manual catch-up recipe lives in `.agents/memory/github-mirror-push.md`.) The push authenticates with the manually-managed **`GITHUB_TOKEN`** secret, which expires and must be rotated on a schedule — see [*Rotating the GitHub mirror push token*](#rotating-the-github-mirror-push-token-do-this-before-it-expires) below (**current expiry: 2026-09-22**).
 
 ---
 
@@ -133,6 +133,53 @@ The Android workflow **auto-triggers on every push to `main`** (the `triggering:
 3. **Connect the Codemagic app to the GitHub mirror repo** so the push webhook reaches it (Codemagic → app settings → repository). Without this, the auto-trigger never fires.
 
 Once those are set, builds run on their own; you can also start one by hand anytime (**Start new build** → branch `main` → `Android → Play internal testing`). It **runs the same icon guards iOS gets** (source + built-binary — see *Publishing reliability* below). Full operator runbook: [`google-play-setup.md`](./google-play-setup.md).
+
+---
+
+## Rotating the GitHub mirror push token (do this before it expires)
+
+The automatic mirror push authenticates with a single secret — **`GITHUB_TOKEN`** (stored
+in Replit Secrets, read by `scripts/post-merge.sh` → `sync_github_build_mirror`). It is a
+**manually-managed fine-grained personal access token** named **"GoodTunes Push"** on Bill's
+GitHub account, scoped to the **`billdenk/goodtunes-app`** repo with **Contents: Read and
+write** (that's what lets the code + Git-LFS objects push to the mirror). GitHub caps
+fine-grained tokens at a finite expiry, so this token has to be rotated by hand on a schedule.
+
+**Why it matters:** when the token lapses, the post-merge mirror push fails *silently* — it's
+best-effort and only logs a WARNING, never fails the merge. Because the Android
+`android-internal` workflow auto-builds from this mirror on every push to `main`, a lapsed
+token means iOS quietly builds from stale code and Android internal-testing testers keep
+getting the old `.aab` with **no failed-build signal**. So rotate it *before* the expiry date,
+not after.
+
+**Current expiry: `2026-09-22` (≈90 days).** Rotated on 2026-06-24. Set a reminder ~1 week
+before this date.
+
+**How to rotate (Bill does the GitHub part — the agent can't):**
+1. Go to **https://github.com/settings/tokens?type=beta** (your account's *Developer settings*
+   → *Personal access tokens* → *Fine-grained tokens* — **not** a repo's settings, which has no
+   "Developer settings" entry).
+2. Click the **"GoodTunes Push"** token → **Regenerate token**.
+3. Set a new expiration (**90 days** is the standing default) and **leave the permissions
+   unchanged** (Contents: Read and write on `billdenk/goodtunes-app`).
+4. **Copy** the new `github_pat_…` value (GitHub shows it once) and save it as the
+   **`GITHUB_TOKEN`** secret in Replit (Secrets pane, or hand it to the agent's secret-request
+   prompt — never paste a token into chat, a doc, or a commit).
+5. **Verify** without pushing anything: an authenticated request to the mirror's
+   `git-receive-pack` advertisement returns HTTP 200 only if the token has push permission —
+   ```bash
+   AUTH=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
+   curl -sS -o /dev/null -w "%{http_code}\n" -H "Authorization: Basic $AUTH" \
+     -H "Accept: application/x-git-receive-pack-advertisement" \
+     "https://github.com/billdenk/goodtunes-app.git/info/refs?service=git-receive-pack"
+   # 200 = push works; 403 = wrong/insufficient permissions; 401 = bad token
+   ```
+   Read its real expiry from `github-authentication-token-expiration` on any authenticated
+   `api.github.com` response. The next real merge's `sync_github_build_mirror` step then
+   force-pushes with the new token and logs success (no WARNING).
+
+This refreshes only the credential — the sync mechanism itself (fetch-first, LFS upload, time
+budget) is unchanged; see [`.agents/memory/github-mirror-push.md`](../.agents/memory/github-mirror-push.md).
 
 ---
 

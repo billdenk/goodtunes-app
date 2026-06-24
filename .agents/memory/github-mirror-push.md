@@ -163,3 +163,23 @@ pushed commit via GitHub API: `AppIcon.appiconset` PNGs present, codemagic.yaml 
 steps present, guard scripts return HTTP 200. Histories diverge (GitHub tip is not in
 local history) but share a common ancestor, so it is a force-push of the delta, not a
 full-repo upload.
+
+## The token is a manually-managed PAT that EXPIRES (rotate on a schedule)
+
+`GITHUB_TOKEN` is a **fine-grained PAT** named **"GoodTunes Push"** on Bill's account, scoped
+to `billdenk/goodtunes-app` with **Contents: Read and write**. GitHub caps its expiry, so it
+must be rotated by hand. On lapse the post-merge push fails *silently* (best-effort WARNING
+only) → iOS builds stale + Android internal testers get the old `.aab` with no failed-build
+signal. **Operator rotation runbook + the current expiry date live in `docs/codemagic-builds.md`
+("Rotating the GitHub mirror push token") — that doc is the source of truth for the date; don't
+duplicate it here.** Bill regenerates it in GitHub (agent can't); the agent only updates the
+secret + verifies.
+
+**Verify a rotated token WITHOUT pushing** (isolated task env: don't force-push the task HEAD to
+mirror `main` — only the real post-merge sync should): hit the mirror's git smart-HTTP
+advertisements with the token. `git-upload-pack` 200 = fetch/read auth works; **`git-receive-pack`
+200 = push permission works** (403 = insufficient perms, 401 = bad token). Read real expiry from
+the `github-authentication-token-expiration` header on any authenticated `api.github.com`
+response. Note the bash tool's `$GITHUB_TOKEN` can lag a freshly-saved secret — an unchanged
+exact-second expiry after a "rotation" means the OLD token is still in the shell's env; re-check
+after the secret actually propagates.
