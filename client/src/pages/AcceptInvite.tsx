@@ -238,10 +238,10 @@ export default function AcceptInvite() {
           </a>
           <a
             href={`/api/auth/apple/start?invite=${encodeURIComponent(token!)}`}
-            className="flex items-center justify-center gap-2 rounded-lg border border-slate-900 bg-slate-900 hover:bg-black px-3 py-2.5 text-sm font-semibold text-white"
+            className="flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800"
             data-testid="link-accept-apple"
           >
-            <svg width="16" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <svg width="16" height="18" viewBox="0 0 24 24" fill="#0f0f0f">
               <path d="M17.05 12.04c-.03-3.02 2.47-4.49 2.58-4.56-1.41-2.06-3.6-2.34-4.38-2.37-1.86-.19-3.64 1.1-4.59 1.1-.96 0-2.42-1.07-3.98-1.04-2.05.03-3.95 1.19-5 3.02-2.13 3.7-.55 9.17 1.53 12.18 1.02 1.47 2.23 3.13 3.81 3.07 1.53-.06 2.11-.99 3.96-.99 1.85 0 2.37.99 3.99.96 1.65-.03 2.69-1.5 3.69-2.98 1.16-1.71 1.64-3.36 1.67-3.45-.04-.02-3.21-1.23-3.24-4.94zM14.13 3.4c.84-1.02 1.41-2.43 1.25-3.84-1.21.05-2.69.81-3.56 1.83-.78.9-1.47 2.34-1.29 3.72 1.36.1 2.74-.69 3.6-1.71z"/>
             </svg>
             <span>Continue with Apple</span>
