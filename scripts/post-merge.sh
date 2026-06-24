@@ -1752,11 +1752,17 @@ SQL
 migrate_albums_apple_footer_fields dev  "${DATABASE_URL:-}"
 migrate_albums_apple_footer_fields prod "${PROD_DATABASE_URL:-}"
 
-# Task #965 — clean per-release share slug (get.goodtunes.music/<slug>).
-# Nullable text + a UNIQUE index on non-null values so two albums can both
-# be null but no two share a slug. Pre-create on both DBs to keep the
-# publish dev->prod diff empty and so a freshly-cloned dev DB never 500s the
-# album select-all routes. Additive + idempotent; safe on every merge.
+# Task #965 / #1310 — clean per-release share slug (get.goodtunes.music/<slug>).
+# Ensure the nullable share_slug column exists on both DBs so a freshly-cloned
+# dev DB never 500s the album select-all routes and the publish dev->prod diff
+# stays empty. Uniqueness is PER-ARTIST now and is managed SOLELY by
+# migrate_task_1310_share_slugs below (composite albums_artist_share_slug_unique).
+# Do NOT recreate the old global albums_share_slug_unique index here: it has no
+# deleted_at filter, so a trashed release that kept its slug makes the index
+# uncreatable, AND a transient create here races the publish dev->prod diff —
+# a publish that introspects the dev DB mid-merge captures the global index and
+# emits the failing "CREATE UNIQUE INDEX albums_share_slug_unique" against prod.
+# Additive + idempotent; safe on every merge.
 migrate_albums_share_slug() {
   local label="$1" url="$2"
   if [ -z "$url" ]; then
@@ -1765,7 +1771,6 @@ migrate_albums_share_slug() {
   fi
   if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
 ALTER TABLE albums ADD COLUMN IF NOT EXISTS share_slug text;
-CREATE UNIQUE INDEX IF NOT EXISTS albums_share_slug_unique ON albums (share_slug) WHERE share_slug IS NOT NULL;
 SQL
   then
     echo "post-merge: albums.share_slug migration ok on $label"
@@ -5483,12 +5488,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS fulfillment_partners_domain_unique
   ON fulfillment_partners (domain)
   WHERE domain IS NOT NULL AND deleted_at IS NULL;
 
--- albums.share_slug — the prior partial index filtered share_slug IS NOT
--- NULL but NOT deleted_at, so a trashed release squatted its slug.
+-- albums.share_slug — the old global albums_share_slug_unique index had no
+-- deleted_at filter, so a trashed release squatted its slug. Uniqueness is now
+-- PER-ARTIST (composite albums_artist_share_slug_unique), created by
+-- migrate_task_1310_share_slugs below; here we only drop any legacy global
+-- index. Never recreate a global share_slug index: it can't build when a
+-- soft-deleted release shares a live slug, and a transient create races the
+-- publish dev->prod diff.
 DROP INDEX IF EXISTS albums_share_slug_unique;
-CREATE UNIQUE INDEX IF NOT EXISTS albums_share_slug_unique
-  ON albums (share_slug)
-  WHERE share_slug IS NOT NULL AND deleted_at IS NULL;
 COMMIT;
 SQL
   then
