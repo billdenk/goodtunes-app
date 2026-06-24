@@ -258,6 +258,28 @@ export function isLinkableEmail(email: string | null | undefined): boolean {
   return true;
 }
 
+// Task #2076 — the verified-email half of the OAuth email-collision
+// auto-link decision. The callback only auto-attaches a social login to an
+// existing same-email account when (a) this is the CUSTOMER shell, (b) the
+// provider returned an email it asserts is verified, and (c) that email is
+// not an Apple "Hide my email" relay mask (a relay is not a verifiable real
+// address — see isLinkableEmail). Paired with isUnclaimedCustomer at the
+// call site: auto-link requires BOTH a provider-verified email AND an
+// unclaimed target, so this predicate is the single source of the
+// verified-email gate and stays unit-testable in isolation.
+export function isProviderVerifiedEmailForLink(opts: {
+  kind: "admin" | "customer";
+  email: string | null | undefined;
+  emailVerified: boolean;
+}): boolean {
+  const { kind, email, emailVerified } = opts;
+  if (kind !== "customer") return false;
+  if (!email) return false;
+  if (emailVerified !== true) return false;
+  if (/@privaterelay\.appleid\.com$/i.test(email)) return false;
+  return true;
+}
+
 // No-lockout admin credential resolution: a linked admin can sign in
 // with EITHER users.password OR the canonical fan password. Every
 // explicit password write keeps both rows in sync via

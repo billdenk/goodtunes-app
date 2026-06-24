@@ -80,7 +80,7 @@ import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
 import { geoFromRequest, forwardToPostHog, isPostHogEnabled } from "./analytics";
 import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, fetchSpotifyTrackByUrl, searchTrackCandidates, resolveSpotifyAlbumUrl, resolveSpotifyAlbumUrlsForReleases, type SpotifyArtistCandidate } from "./lib/spotify";
 import { resolveStreamingLinksFromAppleCollectionId, resolveStreamingLinksForCollections, hasAnyResolvedLink, appleCollectionIdFromUrl, appleCountryFromUrl } from "./lib/streamingLinks";
-import { adminLoginPasswordOk, isLinkableEmail } from "./auth/identityLink";
+import { adminLoginPasswordOk, isLinkableEmail, isProviderVerifiedEmailForLink } from "./auth/identityLink";
 import { applyAppleFirstAuthName } from "./auth/appleName";
 import { getUserRole } from "./auth/roles";
 import { resolveInviterBranding } from "./inviteBranding";
@@ -554,6 +554,22 @@ async function syncPrimaryArtistLabel(album: {
     toLabelId: newLabelId,
     toLabelName: toLabel?.name ?? "the new label",
   };
+}
+
+// Test-only seam for the OAuth callback. `exchangeGoogleCode` /
+// `exchangeAppleCode` hit the real Google/Apple token endpoints and can't be
+// driven offline, so tests that need to exercise handleProviderCallback's
+// post-exchange branches (e.g. the email-collision auto-link gate) install a
+// stub here that returns a canned identity. Null in production — the real
+// exchange always runs. See server/auth/identityLink.db.test.ts.
+type OauthExchangeFn = (
+  provider: "google" | "apple",
+  code: string,
+  redirectUri: string,
+) => Promise<{ sub: string; email: string | null; emailVerified: boolean; picture?: string | null; name?: string | null }>;
+let __testOauthExchange: OauthExchangeFn | null = null;
+export function __setTestOauthExchange(fn: OauthExchangeFn | null): void {
+  __testOauthExchange = fn;
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -1579,7 +1595,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     let identity: { sub: string; email: string | null; emailVerified: boolean; picture?: string | null; name?: string | null };
     try {
-      identity = provider === "google"
+      identity = __testOauthExchange
+        ? await __testOauthExchange(provider, code, redirectUri)
+        : provider === "google"
         ? await exchangeGoogleCode(code, redirectUri)
         : await exchangeAppleCode(code, redirectUri);
     } catch (err: any) {
@@ -1770,9 +1788,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // already proved the address. Apple "Hide my email" relay masks are
     // NOT a verifiable real address, so we never stamp them. Customer
     // side only; admin verification is governed by the invite flow.
-    const isRelayEmail = !!identity.email && /@privaterelay\.appleid\.com$/i.test(identity.email);
-    const providerVerifiedEmail =
-      kind === "customer" && !!identity.email && identity.emailVerified === true && !isRelayEmail;
+    const providerVerifiedEmail = isProviderVerifiedEmailForLink({
+      kind,
+      email: identity.email,
+      emailVerified: identity.emailVerified === true,
+    });
 
     if (!userId && kind === "admin") {
       // Task #1037 — Unified identity P2: the canonical OAuth store is on
