@@ -571,6 +571,36 @@ function Router() {
     }
   }
 
+  // Task #2075 — a real press (is_maker manufacturer, role="manufacturer")
+  // lives entirely inside its scoped portal at /vendor. Bounce it off every
+  // operator /admin/* surface (mirrors the artist guard above). The ONE
+  // exception is its own manufacturer catalog editor
+  // (/admin/manufacturers/:ownId), which the press portal's Settings tab
+  // deep-links into. Auth paths stay open so a locked-out press can still
+  // sign in / reset a password. The server 403s these too (Task #2075
+  // guards) — this is just the UX half so a press never lands on a god-view
+  // page it can't read.
+  const isPressPartner = adminRole.data?.role === "manufacturer";
+  if (isPressPartner && location.startsWith("/admin")) {
+    const isAuthPath =
+      location.startsWith("/admin/login") ||
+      location.startsWith("/admin/logout") ||
+      location.startsWith("/admin/register") ||
+      location.startsWith("/admin/forgot-password") ||
+      location.startsWith("/admin/reset-password");
+    const ownCatalogPath = adminRole.data?.roleScopeId
+      ? `/admin/manufacturers/${adminRole.data.roleScopeId}`
+      : null;
+    const isOwnCatalog =
+      !!ownCatalogPath &&
+      (location === ownCatalogPath ||
+        location.startsWith(ownCatalogPath + "?") ||
+        location.startsWith(ownCatalogPath + "/"));
+    if (!isAuthPath && !isOwnCatalog) {
+      return <Redirect to="/vendor" />;
+    }
+  }
+
   // Label / manager / non_profit partner route guard. Each has a scoped
   // left-nav portal; inside /admin they keep only the shared, server-scoped
   // Reports page (plus NPO's GoodDeed pricing and the security/2FA page).

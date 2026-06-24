@@ -86,11 +86,15 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "services",  label: "GoodDeed Services", roles: ["vendor"] },
 
   // Press shell — `/vendor` routed via ManufacturerScopeRouter for
-  // is_maker manufacturers (PressPortal.tsx).
-  { id: "dashboard", label: "Dashboard", roles: ["press"] },
-  { id: "customers", label: "Customers", roles: ["press"] },
-  { id: "pipeline",  label: "Pipeline",  roles: ["press"] },
-  { id: "settings",  label: "Settings",  roles: ["press"] },
+  // is_maker manufacturers (PressPortal.tsx). Reports + GoodDeed pricing
+  // render INLINE in the portal (Task #2075) so a scoped press never has to
+  // jump into the operator /admin shell to read them.
+  { id: "dashboard", label: "Dashboard",        roles: ["press"] },
+  { id: "customers", label: "Customers",        roles: ["press"] },
+  { id: "pipeline",  label: "Pipeline",         roles: ["press"] },
+  { id: "reports",   label: "Reports",          roles: ["press"] },
+  { id: "pricing",   label: "GoodDeed pricing", roles: ["press"] },
+  { id: "settings",  label: "Settings",         roles: ["press"] },
 
   // GoodDeed Quickprinter shell — `/vendor` routed via VendorScopeRouter
   // for is_quickprinter vendors (PrinterPortal.tsx). Print Queue is the

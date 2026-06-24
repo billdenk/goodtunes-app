@@ -111,6 +111,36 @@ async function resolveScope(ctx: ReportContext): Promise<ScopeResolution> {
       label: mgr ? `Manager · ${mgr}` : "Manager",
     };
   }
+  if (eff.kind === "manufacturer") {
+    // Task #2075 — a press (manufacturer) has NO album column. Album ⇄
+    // press ownership is authoritative off pressing_order_requests: an
+    // album belongs to a press iff a non-cancelled pressing-order-request
+    // row carries package_snapshot.pressId = this press (the same source
+    // assertAlbumBelongsToPress + the press-portal credit rollups use).
+    // We DELIBERATELY do not authorize off people/labels.default_press_id
+    // — that's the customer's next-album default, not the press the
+    // in-flight album was actually assigned to.
+    const r = await db.execute<any>(sql`
+      SELECT DISTINCT por.album_id AS album_id
+      FROM pressing_order_requests por
+      JOIN albums a ON a.id = por.album_id AND a.deleted_at IS NULL
+      WHERE por.status <> 'cancelled'
+        AND por.package_snapshot ->> 'pressId' = ${eff.id}
+        AND por.album_id IS NOT NULL
+    `);
+    const albumIds = ((r as any).rows ?? []).map((row: any) => row.album_id as string);
+    const press = await db
+      .select({ name: sql<string>`${sql.identifier("name")}` })
+      .from(sql`manufacturers`)
+      .where(sql`id = ${eff.id}`)
+      .then((rows) => (rows[0] as any)?.name as string | undefined);
+    return {
+      albumIds,
+      referredArtistIds: [],
+      perUnitCents: 0,
+      label: press ? `Press · ${press}` : "Press",
+    };
+  }
   // kind === "artist" — narrow to albums where this person is primary
   // artist. Also resolve referral cohort (artists THIS person referred)
   // so the same scope drives both their own report and their referrals.

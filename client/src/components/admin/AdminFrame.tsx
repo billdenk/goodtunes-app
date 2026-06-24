@@ -21,6 +21,8 @@ import {
   ChevronRight,
   DollarSign,
   LayoutDashboard,
+  GitBranch,
+  Settings as Cog,
   Mail,
   ClipboardList,
   HeartHandshake,
@@ -663,7 +665,66 @@ export function AdminFrame({
                   testId="nav-reports"
                 />
               </>
-            ) : isPress || isNonProfit ? (
+            ) : isPress ? (
+              // Task #2075 — a press only ever reaches an /admin/* page on
+              // its own catalog editor (/admin/manufacturers/:ownId). Its
+              // Reports + GoodDeed pricing now live INLINE in the scoped
+              // press portal, so this rail links back to /vendor?tab=…
+              // instead of the operator /admin/reports +
+              // /admin/gooddeed-pricing pages (which the App.tsx press guard
+              // bounces). Keeps the catalog page's sidebar consistent with
+              // the portal's own left nav.
+              <>
+                <SidebarLink
+                  icon={LayoutDashboard}
+                  label="Dashboard"
+                  count={-1}
+                  active={false}
+                  onClick={() => navigate("/vendor")}
+                  testId="nav-partner-home"
+                />
+                <SidebarLink
+                  icon={Users}
+                  label="Customers"
+                  count={-1}
+                  active={false}
+                  onClick={() => navigate("/vendor?tab=customers")}
+                  testId="nav-press-customers"
+                />
+                <SidebarLink
+                  icon={GitBranch}
+                  label="Pipeline"
+                  count={-1}
+                  active={false}
+                  onClick={() => navigate("/vendor?tab=pipeline")}
+                  testId="nav-press-pipeline"
+                />
+                <SidebarLink
+                  icon={BarChart3}
+                  label="Reports"
+                  count={-1}
+                  active={false}
+                  onClick={() => navigate("/vendor?tab=reports")}
+                  testId="nav-reports"
+                />
+                <SidebarLink
+                  icon={Receipt}
+                  label="GoodDeed pricing"
+                  count={-1}
+                  active={false}
+                  onClick={() => navigate("/vendor?tab=pricing")}
+                  testId="nav-gooddeed-pricing"
+                />
+                <SidebarLink
+                  icon={Cog}
+                  label="Settings"
+                  count={-1}
+                  active={false}
+                  onClick={() => navigate("/vendor?tab=settings")}
+                  testId="nav-press-settings"
+                />
+              </>
+            ) : isNonProfit ? (
               <>
                 <SidebarLink
                   icon={LayoutDashboard}

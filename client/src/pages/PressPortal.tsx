@@ -24,7 +24,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
-import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap } from "lucide-react";
+import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -36,6 +36,8 @@ import { DashboardPanel } from "@/components/partner/dashboard-controls";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
+import { AdminReports } from "@/pages/AdminReports";
+import { AdminGoodDeedPricing } from "@/pages/AdminGoodDeedPricing";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
@@ -43,7 +45,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 
-type TabId = "dashboard" | "customers" | "pipeline" | "settings";
+type TabId = "dashboard" | "customers" | "pipeline" | "reports" | "pricing" | "settings";
+
+const PRESS_TAB_IDS: TabId[] = ["dashboard", "customers", "pipeline", "reports", "pricing", "settings"];
 
 interface MeRole { role: string; roleScopeId: string | null; }
 interface PressMe {
@@ -74,7 +78,21 @@ const STAGE_DEFS: { id: string; label: string }[] = [
 ];
 
 export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; isSuperAdminView: boolean }) {
-  const [tab, setTab] = useState<TabId>("dashboard");
+  // Task #2075 — AdminFrame's press rail (shown on the catalog editor) and
+  // any other deep link land here as `/vendor?tab=<id>`. Read it on mount so
+  // those links open the right tab, and keep it in sync if the URL changes.
+  const search = useSearch();
+  const tabFromUrl = new URLSearchParams(search).get("tab");
+  const [tab, setTab] = useState<TabId>(
+    tabFromUrl && (PRESS_TAB_IDS as string[]).includes(tabFromUrl)
+      ? (tabFromUrl as TabId)
+      : "dashboard",
+  );
+  useEffect(() => {
+    if (tabFromUrl && (PRESS_TAB_IDS as string[]).includes(tabFromUrl)) {
+      setTab(tabFromUrl as TabId);
+    }
+  }, [tabFromUrl]);
   const { data: me, isLoading } = useQuery<PressMe>({
     queryKey: [`/api/press/${pressId}/me`],
   });
@@ -92,6 +110,15 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   return (
     <OperatorShell
       testId="press-shell"
+      layout="leftnav"
+      navIcons={{
+        dashboard: LayoutDashboard,
+        customers: Users,
+        pipeline: GitBranch,
+        reports: FileBarChart,
+        pricing: CircleDollarSign,
+        settings: Cog,
+      }}
       roleLabel={isSuperAdminView ? "Press portal (super-admin view)" : "Press portal"}
       name={me?.name ?? "Your press"}
       logoUrl={me?.logoUrl ?? null}
@@ -114,6 +141,8 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       )}
       {tab === "customers" && <CustomersTab pressId={pressId} />}
       {tab === "pipeline" && <PipelineTab pressId={pressId} />}
+      {tab === "reports" && <AdminReports embedded />}
+      {tab === "pricing" && <AdminGoodDeedPricing embedded />}
       {tab === "settings" && <SettingsTab pressId={pressId} pressName={me?.name ?? ""} />}
     </OperatorShell>
   );

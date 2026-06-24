@@ -118,7 +118,7 @@ interface PartnerSearchResult {
   imageUrl: string | null;
 }
 
-export function AdminReports() {
+export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) {
   const { from, to, setFrom, setTo } = useDateRange();
   // Task #1456 — partner dashboards deep-link here scoped to a single
   // partner via `?asPartner=<id>&asPartnerKind=<kind>&asPartnerName=<name>`.
@@ -177,8 +177,7 @@ export function AdminReports() {
     return t && allowed.has(t) ? t : "sales";
   }, []);
 
-  return (
-    <AdminFrame active="reports">
+  const body = (
       <div className="space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -252,8 +251,10 @@ export function AdminReports() {
         </Tabs>
         </AdminErrorBoundary>
       </div>
-    </AdminFrame>
   );
+  // Task #2075 — the press portal renders this body inline (no operator
+  // /admin chrome). Everyone else still gets the full AdminFrame wrapper.
+  return embedded ? body : <AdminFrame active="reports">{body}</AdminFrame>;
 }
 
 function ReportTab({ value, testId, children }: { value: string; testId: string; children: React.ReactNode }) {

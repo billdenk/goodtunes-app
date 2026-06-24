@@ -679,6 +679,79 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.use("/api/admin/albums/:id", artistAlbumScopeGuard);
   app.use("/api/albums/:id", artistAlbumScopeGuard);
 
+  // Task #2075 — press (manufacturer) scope lockdown. A real press-role
+  // caller has isAdmin=true, so requireAdmin would otherwise wave them
+  // onto every operator surface: the global artist-PII roster, the label
+  // and gear (instrument) registries, the global press list, and OTHER
+  // presses' catalogs. These guards run BEFORE those handlers and 403 a
+  // press on anything outside its own scope. Operators (super_admin /
+  // admin), fans, and every other partner role pass through untouched —
+  // the exact precedent set by artistAlbumScopeGuard above.
+  const pressRoleInfo = async (req: Request) => {
+    try {
+      // Resolve the caller from the session OR a presented Bearer token. The
+      // admin SPA authenticates with a Bearer token (no session cookie), so a
+      // session-only check would let a press bypass every guard below simply
+      // by calling these endpoints with its token and no cookie.
+      const userId = await getUserIdFromRequest(req);
+      if (!userId) return null;
+      const { getUserRole } = await import("./auth/roles");
+      const info = await getUserRole(userId);
+      return info && info.role === "manufacturer" ? info : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Global operator registries a press must never read.
+  const pressGlobalDenyGuard = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    const info = await pressRoleInfo(req);
+    if (!info) return next();
+    return res.status(403).json({ message: "Not available to presses." });
+  };
+  app.use("/api/admin/people", pressGlobalDenyGuard);
+  app.use("/api/admin/labels", pressGlobalDenyGuard);
+  app.use("/api/admin/instruments", pressGlobalDenyGuard);
+
+  // The press registry: a press may read/write ONLY its own manufacturer
+  // record (and its catalog / pricing sub-routes). The global list, the
+  // create endpoint, and any OTHER press id are denied. `scrape` is a
+  // global operator tool keyed off a body url (not a per-press read), so
+  // it stays available to a press editing its own profile.
+  const PRESS_GLOBAL_MANUFACTURER_ACTIONS = new Set(["scrape"]);
+  const pressManufacturerScopeGuard = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    const info = await pressRoleInfo(req);
+    if (!info) return next();
+    if (!info.roleScopeId) {
+      return res.status(403).json({ message: "Press scope not configured." });
+    }
+    const m = req.originalUrl.match(
+      /^\/api\/(?:admin\/)?manufacturers(?:\/([^/?]+))?/,
+    );
+    const seg = m?.[1] ? decodeURIComponent(m[1]) : "";
+    if (!seg) {
+      // exact list (GET /api/manufacturers) or create (POST /api/admin/manufacturers)
+      return res
+        .status(403)
+        .json({ message: "Presses can't browse the global press registry." });
+    }
+    if (PRESS_GLOBAL_MANUFACTURER_ACTIONS.has(seg)) return next();
+    if (seg !== info.roleScopeId) {
+      return res.status(403).json({ message: "Not your press." });
+    }
+    return next();
+  };
+  app.use("/api/manufacturers", pressManufacturerScopeGuard);
+  app.use("/api/admin/manufacturers", pressManufacturerScopeGuard);
+
   // Task #78 — role-scoped post-login landing path. Reads the same
   // user_roles table /api/auth/roles uses, then maps role to the
   // partner shell the recipient should land on after 2FA. Used by

@@ -61,7 +61,7 @@ async function fetchCostStack(runQty: number): Promise<CostStack> {
   return r.json();
 }
 
-export function AdminGoodDeedPricing() {
+export function AdminGoodDeedPricing({ embedded = false }: { embedded?: boolean } = {}) {
   const { user, isLoading: authLoading } = useAuth();
 
   const { data: role } = useQuery<RoleInfo>({
@@ -83,13 +83,12 @@ export function AdminGoodDeedPricing() {
   });
 
   if (authLoading) {
-    return (
-      <AdminFrame active="gooddeed-pricing">
-        <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[color:var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
-        </div>
-      </AdminFrame>
+    const spinner = (
+      <div className="py-20 flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-[color:var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
+      </div>
     );
+    return embedded ? spinner : <AdminFrame active="gooddeed-pricing">{spinner}</AdminFrame>;
   }
   if (!user?.isAdmin) {
     return (
@@ -101,8 +100,7 @@ export function AdminGoodDeedPricing() {
 
   const isSuperAdmin = role?.role === "super_admin";
 
-  return (
-    <AdminFrame active="gooddeed-pricing">
+  const body = (
       <div className="space-y-5">
         <AdminPageHeader
           title="GoodDeed pricing"
@@ -156,8 +154,10 @@ export function AdminGoodDeedPricing() {
           </>
         )}
       </div>
-    </AdminFrame>
   );
+  // Task #2075 — rendered inline inside the scoped press portal (no
+  // operator /admin chrome); operators still get the full AdminFrame.
+  return embedded ? body : <AdminFrame active="gooddeed-pricing">{body}</AdminFrame>;
 }
 
 // --- Shared chrome ---------------------------------------------------------

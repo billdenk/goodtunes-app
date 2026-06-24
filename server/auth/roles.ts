@@ -456,7 +456,12 @@ export interface PartnerScope extends UserRoleInfo {
   // Reports surface from a manager's perspective. A manager has no album
   // column; the album cohort is derived from its roster in
   // server/reports/index.ts (resolveScope).
-  viewAs?: { kind: "label" | "artist" | "non_profit" | "manager"; id: string };
+  // Task #2075 — "manufacturer" (a press) added so super-admins can also
+  // view the Reports surface from a press's perspective, and so a real
+  // press-role caller is pinned to its own album cohort (derived from
+  // pressing_order_requests in server/reports/index.ts) rather than the
+  // null god-view.
+  viewAs?: { kind: "label" | "artist" | "non_profit" | "manager" | "manufacturer"; id: string };
 }
 
 let roleColumnsKnownToExist: boolean | null = null;
@@ -499,7 +504,7 @@ export async function resolveReportScope(req: Request): Promise<PartnerScope | n
     const asKind = String(req.query.asPartnerKind || "").trim();
     if (
       asPartner &&
-      (asKind === "label" || asKind === "artist" || asKind === "non_profit" || asKind === "manager")
+      (asKind === "label" || asKind === "artist" || asKind === "non_profit" || asKind === "manager" || asKind === "manufacturer")
     ) {
       return { ...scope, viewAs: { kind: asKind, id: asPartner } };
     }
@@ -529,13 +534,15 @@ export async function requireReportScope(req: Request, res: Response, next: Next
 // Non-profit impersonation returns null here because orgs don't own
 // albums; album-scoped reports should treat it as an empty cohort
 // (see `effectiveOrgId` + resolveScope in reports/index.ts).
-export function effectiveScopeFilter(scope: PartnerScope): { kind: "label" | "artist" | "manager"; id: string } | null {
+export function effectiveScopeFilter(scope: PartnerScope): { kind: "label" | "artist" | "manager" | "manufacturer"; id: string } | null {
   if (scope.viewAs) {
     const v = scope.viewAs;
     if (v.kind === "label") return { kind: "label", id: v.id };
     if (v.kind === "artist") return { kind: "artist", id: v.id };
     // Task #1425 — manager cohort is derived from its roster in resolveScope.
     if (v.kind === "manager") return { kind: "manager", id: v.id };
+    // Task #2075 — press cohort is derived from pressing_order_requests.
+    if (v.kind === "manufacturer") return { kind: "manufacturer", id: v.id };
     return null;
   }
   if (scope.role === "label" && scope.roleScopeId) return { kind: "label", id: scope.roleScopeId };
@@ -544,6 +551,10 @@ export function effectiveScopeFilter(scope: PartnerScope): { kind: "label" | "ar
   // everything" branch (that is the super_admin god-view). Pin them to
   // their own manager scope so the cohort derivation runs.
   if (scope.role === "manager" && scope.roleScopeId) return { kind: "manager", id: scope.roleScopeId };
+  // Task #2075 — a real press (manufacturer) caller must likewise NOT
+  // fall through to the god-view. Pin them to their own press scope so
+  // the pressing_order_requests cohort derivation runs.
+  if (scope.role === "manufacturer" && scope.roleScopeId) return { kind: "manufacturer", id: scope.roleScopeId };
   return null;
 }
 
