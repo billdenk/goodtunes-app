@@ -10,6 +10,10 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import os from "node:os";
+import fs from "node:fs";
+import path from "node:path";
 import {
   classifyProbe,
   parseRecordedExpiry,
@@ -153,6 +157,58 @@ test("certNotAfterProbe: garbage PEM → transient (never throws)", () => {
   process.env.SOME_CERT_PEM = "-----BEGIN CERTIFICATE-----\nnope\n-----END CERTIFICATE-----";
   try {
     assert.equal(certNotAfterProbe("SOME_CERT_PEM")().kind, "transient");
+  } finally {
+    delete process.env.SOME_CERT_PEM;
+  }
+});
+
+// Generate a throwaway self-signed cert with a controlled validity window so we
+// can prove the LIVE path reads notAfter and the days-remaining math + warn
+// window fire correctly — the same wiring the Apple Pay merchant cert source uses.
+function selfSignedPem(validDays: number): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cert-test-"));
+  const certPath = path.join(dir, "cert.pem");
+  const keyPath = path.join(dir, "key.pem");
+  try {
+    execFileSync(
+      "openssl",
+      [
+        "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+        "-keyout", keyPath, "-out", certPath,
+        "-days", String(validDays), "-subj", "/CN=cert-expiry-test",
+      ],
+      { stdio: "ignore" },
+    );
+    return fs.readFileSync(certPath, "utf8");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test("certNotAfterProbe: valid cert → expires with the cert's real notAfter", () => {
+  process.env.SOME_CERT_PEM = selfSignedPem(30);
+  try {
+    const r = certNotAfterProbe("SOME_CERT_PEM")();
+    assert.equal(r.kind, "expires");
+    const expiresAt = (r as any).expiresAt as Date;
+    assert.ok(expiresAt instanceof Date);
+    // openssl stamps notAfter ~30 days out; allow a day of slack for clock/rounding.
+    const daysOut = (expiresAt.getTime() - Date.now()) / DAY_MS;
+    assert.ok(daysOut > 28 && daysOut < 31, `expected ~30d out, got ${daysOut}`);
+  } finally {
+    delete process.env.SOME_CERT_PEM;
+  }
+});
+
+test("certNotAfterProbe → classifyProbe: a soon-to-expire cert pages on-call", () => {
+  process.env.SOME_CERT_PEM = selfSignedPem(10);
+  try {
+    const probe = certNotAfterProbe("SOME_CERT_PEM")();
+    assert.equal(probe.kind, "expires");
+    // 10d out sits inside the default 14d warn window → alert.
+    const d = classifyProbe(source, probe);
+    assert.equal(d.action, "alert");
+    assert.match((d as any).subject, /expires in \d+ day\(s\)/);
   } finally {
     delete process.env.SOME_CERT_PEM;
   }

@@ -29,6 +29,7 @@
 // thrown. The scheduler never blocks boot or a request, and no secret value is
 // ever logged or alerted — only its expiry date / status.
 
+import { X509Certificate } from "node:crypto";
 import { alertOps } from "./opsAlert";
 
 // `log` lives in server/index.ts, whose module top-level boots the server. Pull
@@ -118,15 +119,13 @@ export function operatorRecordedProbe(opts: {
 // Build a probe that reads an X.509 certificate's real notAfter out of a PEM in
 // an env var — the "read it live" path for anything that ships as a cert (e.g.
 // an Apple Pay merchant identity cert). Uses node's built-in X509Certificate so
-// there's no new dependency. Not wired to a source today because no cert is
-// stored in this environment, but it's the ready hook for when one is.
+// there's no new dependency. Wired to the apple-pay-merchant-cert source below;
+// it stays a quiet no-op until APPLE_PAY_MERCHANT_CERT_PEM is added as a secret.
 export function certNotAfterProbe(pemEnvVar: string): () => ExpiryProbe {
   return () => {
     const pem = (process.env[pemEnvVar] || "").trim();
     if (!pem) return { kind: "not-configured" };
     try {
-      // Lazy require so a runtime without the API still boots.
-      const { X509Certificate } = require("node:crypto");
       const cert = new X509Certificate(pem);
       const ms = Date.parse(cert.validTo);
       if (Number.isNaN(ms)) {
@@ -163,6 +162,23 @@ async function buildRegistry(): Promise<CredentialSource[]> {
   const stripeWebhookConfigured = (process.env.STRIPE_WEBHOOK_SECRET || "").trim().length > 0;
 
   return [
+    // LIVE — Apple Pay merchant identity certificate (X.509). Unlike the .p8
+    // keys above, a real cert carries its own machine-readable expiry (notAfter)
+    // baked into the PEM, so we read it live and never need an operator-recorded
+    // date. Apple issues these for ~25 months and they must be renewed before
+    // they lapse. The probe is a quiet no-op until APPLE_PAY_MERCHANT_CERT_PEM
+    // is added as a secret — no cert is stored in this environment today — so
+    // this source is safe to register unconditionally.
+    {
+      id: "apple-pay-merchant-cert",
+      label: "Apple Pay merchant identity certificate",
+      impact:
+        "Apple Pay payments stop working once the merchant identity certificate lapses — the Apple Pay express button in checkout fails to process.",
+      rotationRunbook:
+        "Apple Developer → Certificates, Identifiers & Profiles → Identifiers → your Merchant ID → create a new Apple Pay Merchant Identity Certificate, then update APPLE_PAY_MERCHANT_CERT_PEM with the new PEM.",
+      probe: certNotAfterProbe("APPLE_PAY_MERCHANT_CERT_PEM"),
+    },
+
     // RECORDED — Apple's .p8 sign-in key. The key has no machine-readable
     // expiry, but the client-secret JWT minted from it is capped at ~6 months
     // by Apple, so teams rotate the key on roughly that cadence. Operator
