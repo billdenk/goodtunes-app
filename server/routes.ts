@@ -28423,7 +28423,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
 
-    res.json({ displayName: customer.displayName ?? customer.email, email: customer.email });
+    // Task #2142 — surface whether this fan is already linked to an admin
+    // row (Andrew's case: a pre-existing fan invited as a partner). The
+    // dialog uses it to offer a real "sign in to admin" path instead of a
+    // dead-end. Best-effort — a lookup failure just omits the hint.
+    let linkedAdmin = false;
+    try {
+      const { getAdminIdForCustomer } = await import("./auth/identityLink");
+      linkedAdmin = !!(await getAdminIdForCustomer(customer.id));
+    } catch (e) {
+      console.warn("[access-request] linked-admin lookup failed", customer.id, e);
+    }
+
+    res.json({
+      displayName: customer.displayName ?? customer.email,
+      email: customer.email,
+      linkedAdmin,
+    });
   });
 
   // Promote an existing customer to an admin/partner role. Requires a

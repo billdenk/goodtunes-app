@@ -1215,6 +1215,30 @@ export function Login() {
             a persistent banner that keeps the password sign-in path AND
             offers a one-tap welcome-back link. No-auto-merge stays: linking
             the provider happens from the profile after they're in. */}
+        {/* Task #2142 — admin-shell variant of the OAuth collision banner.
+            A linked partner (e.g. Andrew) who taps Google/Apple bounces
+            back here with ?prompt=link because neither shell has a linked
+            OAuth identity yet (the takeover guard). On the fan shell the
+            banner below offers a welcome-back link; on the admin shell that
+            path doesn't apply — admins finish with password + 2FA — so show
+            a slate-themed banner that points them at the password form. */}
+        {isAdmin && mode === "login" && oauthLinkPrompt && (
+          <div
+            className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-4"
+            data-testid="banner-oauth-link-admin"
+          >
+            <p className="text-sm font-semibold text-slate-900">You already have an admin account</p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">
+              <strong className="text-slate-900">{oauthLinkPrompt.email}</strong> is registered for
+              GoodTunes Admin. Sign in with your password below to continue — you’ll be asked for a
+              verification code. You can link
+              {oauthLinkPrompt.provider
+                ? ` ${oauthLinkPrompt.provider[0].toUpperCase()}${oauthLinkPrompt.provider.slice(1)}`
+                : " that provider"}{" "}
+              from your profile once you’re in.
+            </p>
+          </div>
+        )}
         {!isAdmin && mode === "login" && oauthLinkPrompt && (
           <div
             className="mb-4 rounded-2xl p-4"

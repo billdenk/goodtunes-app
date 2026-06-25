@@ -20,7 +20,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getPreviewPass } from "@/lib/previewPass";
 import { canAccessAdminSecurity } from "@/lib/adminAccess";
-import { AccessNotAuthorizedDialog } from "@/components/AccessNotAuthorizedDialog";
+import { AccessNotAuthorizedDialog } from "@/components/admin/AccessNotAuthorizedDialog";
 import { Player } from "@/pages/Player";
 import { DesktopNowPlaying } from "@/components/ui/DesktopNowPlaying";
 import { useTabletShell } from "@/hooks/useDesktopShell";
@@ -460,13 +460,24 @@ function Router() {
   const onAdminShell =
     kind === "admin" ||
     (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"));
-  const showAccessGuard = onAdminShell && !isLoading && !user;
-  const accessRequest = useQuery<{ displayName: string; email: string } | null>({
+  // Task #2142 — never let the access-denied dialog cover the admin auth
+  // screens. A signed-in fan on the admin host still resolves user=null
+  // (host/kind mismatch), so without this exemption the dialog's own
+  // "Sign in to GoodTunes Admin" CTA (→ /admin/login) would just re-show
+  // the dialog. Keep sign-in / reset reachable.
+  const onAdminAuthPath =
+    location.startsWith("/admin/login") ||
+    location.startsWith("/admin/logout") ||
+    location.startsWith("/admin/register") ||
+    location.startsWith("/admin/forgot-password") ||
+    location.startsWith("/admin/reset-password");
+  const showAccessGuard = onAdminShell && !onAdminAuthPath && !isLoading && !user;
+  const accessRequest = useQuery<{ displayName: string; email: string; linkedAdmin?: boolean } | null>({
     queryKey: ["/api/admin/access-request"],
     queryFn: async () => {
       try {
         const r = await apiRequest("POST", "/api/admin/access-request");
-        return (await r.json()) as { displayName: string; email: string };
+        return (await r.json()) as { displayName: string; email: string; linkedAdmin?: boolean };
       } catch {
         return null;
       }
