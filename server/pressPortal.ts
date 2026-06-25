@@ -478,6 +478,9 @@ export function registerPressPortalRoutes(
       id: press.id,
       name: press.name,
       logoUrl: (press as any).logoUrl ?? null,
+      // Task #2191 — full-size primary nav logo for the press portal
+      // whitelabel header. Distinct from the square logoUrl (lists/credits).
+      navLogoUrl: (press as any).navLogoUrl ?? null,
       isMaker: (press as any).isMaker ?? true,
       // Task #2091 — the embedded Settings → Catalog editor surfaces the
       // press-specific import buttons (Hellbender / MRP) keyed off domain.
@@ -1502,6 +1505,8 @@ export function registerPressPortalRoutes(
   const profileSchema = z.object({
     name: z.string().min(1).max(200).optional(),
     logoUrl: z.string().nullable().optional(),
+    // Task #2191 — full-size primary nav logo for the press portal whitelabel.
+    navLogoUrl: z.string().nullable().optional(),
     websiteUrl: z.string().url().nullable().optional().or(z.literal("")),
     contactEmail: z.string().email().nullable().optional().or(z.literal("")),
     contactPhone: z.string().max(40).nullable().optional(),
@@ -1520,6 +1525,7 @@ export function registerPressPortalRoutes(
     const set: Record<string, any> = {};
     if (parsed.data.name !== undefined) set.name = parsed.data.name;
     if (parsed.data.logoUrl !== undefined) set.logoUrl = norm(parsed.data.logoUrl);
+    if (parsed.data.navLogoUrl !== undefined) set.navLogoUrl = norm(parsed.data.navLogoUrl);
     if (parsed.data.websiteUrl !== undefined) set.websiteUrl = norm(parsed.data.websiteUrl);
     if (parsed.data.contactEmail !== undefined) set.contactEmail = norm(parsed.data.contactEmail);
     if (parsed.data.contactPhone !== undefined) set.contactPhone = norm(parsed.data.contactPhone);

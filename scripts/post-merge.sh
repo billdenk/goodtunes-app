@@ -7951,4 +7951,28 @@ SQL
 migrate_admin_trusted_devices dev  "${DATABASE_URL:-}"
 migrate_admin_trusted_devices prod "${PROD_DATABASE_URL:-}"
 
+# Task #2191 — Press whitelabel nav logo. manufacturers gains nav_logo_url
+# (full-size/wide primary logo for the press portal rail header, distinct
+# from the square logo_url used in lists/credits). Additive only; idempotent.
+migrate_manufacturers_nav_logo_url() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping manufacturers nav_logo_url migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE IF EXISTS manufacturers
+  ADD COLUMN IF NOT EXISTS nav_logo_url text;
+COMMIT;
+SQL
+  then
+    echo "post-merge: manufacturers nav_logo_url migration ok on $label"
+  else
+    echo "post-merge: WARNING — manufacturers nav_logo_url migration failed on $label (continuing)"
+  fi
+}
+migrate_manufacturers_nav_logo_url dev  "${DATABASE_URL:-}"
+migrate_manufacturers_nav_logo_url prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror

@@ -46,6 +46,11 @@ export type OperatorShellProps<TabId extends string> = {
   /** Big H1 — entity name. Falls back to "Your dashboard" while loading. */
   name: string;
   logoUrl?: string | null;
+  /** Task #2191 — full-size/wide primary nav logo for the press portal
+   * whitelabel header. When provided (press-only opt-in), the h-14 rail
+   * header renders this image constrained to the existing band height
+   * instead of the small square icon + name text. Null = default layout. */
+  navLogoUrl?: string | null;
   /** Fallback glyph when there's no logo yet. */
   fallbackIcon: LucideIcon;
   /** People get circles; orgs/vendors get rounded squares. */
@@ -90,6 +95,7 @@ export function OperatorShell<TabId extends string>({
   roleLabel,
   name,
   logoUrl,
+  navLogoUrl,
   fallbackIcon: FallbackIcon,
   logoShape = "square",
   subtitle,
@@ -173,24 +179,38 @@ export function OperatorShell<TabId extends string>({
             Hidden on phones, which fall back to the horizontal tab bar. */}
         <aside className="w-[220px] flex-shrink-0 bg-white border-r border-slate-200 hidden md:flex md:flex-col">
           {/* Partner logo + name — top-left rail header, mirrors AdminFrame's
-              h-14 logo band. Small square/circle avatar + truncated name. */}
+              h-14 logo band. When a full-size navLogoUrl is set (press
+              whitelabel, Task #2191), render it height-constrained so the
+              h-14 band never grows; otherwise fall back to the small square
+              avatar + truncated name. */}
           <div className="h-14 flex-shrink-0 flex items-center gap-2.5 px-3 border-b border-slate-200 overflow-hidden">
-            <div
-              className={cn(
-                "w-7 h-7 flex-shrink-0 overflow-hidden flex items-center justify-center bg-slate-100 ring-1 ring-slate-200",
-                radius,
-              )}
-              data-testid="operator-shell-rail-logo"
-            >
-              {logoUrl ? (
-                <img src={logoUrl} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <FallbackIcon className="w-3.5 h-3.5 text-slate-400" />
-              )}
-            </div>
-            <span className="text-sm font-semibold text-slate-800 truncate" data-testid="text-operator-rail-name">
-              {name}
-            </span>
+            {navLogoUrl ? (
+              <img
+                src={navLogoUrl}
+                alt={name}
+                className="max-h-8 w-auto object-contain"
+                data-testid="operator-shell-rail-nav-logo"
+              />
+            ) : (
+              <>
+                <div
+                  className={cn(
+                    "w-7 h-7 flex-shrink-0 overflow-hidden flex items-center justify-center bg-slate-100 ring-1 ring-slate-200",
+                    radius,
+                  )}
+                  data-testid="operator-shell-rail-logo"
+                >
+                  {logoUrl ? (
+                    <img src={logoUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <FallbackIcon className="w-3.5 h-3.5 text-slate-400" />
+                  )}
+                </div>
+                <span className="text-sm font-semibold text-slate-800 truncate" data-testid="text-operator-rail-name">
+                  {name}
+                </span>
+              </>
+            )}
           </div>
 
           {/* Task #2085 — nav items mirror AdminFrame's SidebarLink class

@@ -68,6 +68,8 @@ interface PressMe {
   id: string;
   name: string;
   logoUrl: string | null;
+  // Task #2191 — full-size primary nav logo for the press portal whitelabel.
+  navLogoUrl?: string | null;
   isMaker: boolean;
   domain?: string | null;
   // Task #699 — false for Staff teammates. The portal hides/disables
@@ -151,6 +153,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       roleLabel={isSuperAdminView ? "Press portal (super-admin view)" : "Press portal"}
       name={me?.name ?? "Your press"}
       logoUrl={me?.logoUrl ?? null}
+      navLogoUrl={me?.navLogoUrl ?? null}
       fallbackIcon={Factory}
       tabs={tabs}
       activeTab={tab}
@@ -1467,6 +1470,11 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
   // Task #2117 — paste-a-URL alongside the upload so a press can set its
   // logo from an already-hosted image.
   const [logoUrlInput, setLogoUrlInput] = useState("");
+  // Task #2191 — full-size primary nav logo for the press portal whitelabel.
+  const [navLogoUrl, setNavLogoUrl] = useState<string | null>(null);
+  const [uploadingNavLogo, setUploadingNavLogo] = useState(false);
+  const [navLogoUrlInput, setNavLogoUrlInput] = useState("");
+  const navLogoFileRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   // Hydrate once when /me lands. Subsequent saves invalidate /me which
@@ -1481,6 +1489,7 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
     setLocation(me.location ?? "");
     setBio(me.bio ?? "");
     setLogoUrl(me.logoUrl ?? null);
+    setNavLogoUrl(me.navLogoUrl ?? null);
   }, [me?.id]);
 
   const save = useMutation({
@@ -1521,6 +1530,38 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
     setLogoUrlInput("");
   }
 
+  // Task #2191 — primary nav logo (full-size/wide) upload + paste-URL.
+  // Reuses the same signed-upload endpoint as the icon slot; the two slots
+  // simply write to different DB fields.
+  async function pickNavLogo(file: File) {
+    setUploadingNavLogo(true);
+    try {
+      const ext = (file.name.split(".").pop() || "png").toLowerCase();
+      const r = await apiRequest("POST", `/api/press/${pressId}/profile/logo-url`, { ext });
+      const { uploadUrl, publicUrl } = await r.json();
+      await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "image/png" }, body: file });
+      setNavLogoUrl(publicUrl);
+      save.mutate({ navLogoUrl: publicUrl });
+    } catch (e: any) {
+      toast({ title: "Primary logo upload failed", description: e?.message ?? "", variant: "destructive" });
+    } finally {
+      setUploadingNavLogo(false);
+      if (navLogoFileRef.current) navLogoFileRef.current.value = "";
+    }
+  }
+
+  function applyNavLogoUrl() {
+    const url = navLogoUrlInput.trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) {
+      toast({ title: "That doesn't look like a URL", description: "Paste a full image URL starting with http:// or https://", variant: "destructive" });
+      return;
+    }
+    setNavLogoUrl(url);
+    save.mutate({ navLogoUrl: url });
+    setNavLogoUrlInput("");
+  }
+
   if (isLoading) return <PanelLoading />;
   return (
     <div className="space-y-4">
@@ -1548,68 +1589,141 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
         </p>
       )}
       <div className="space-y-4 max-w-xl">
-        {/* Logo */}
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-50 ring-1 ring-slate-200 grid place-items-center">
-            {logoUrl
-              ? <img src={logoUrl} alt="" className="w-full h-full object-cover" data-testid="img-profile-logo" />
-              : <span className="text-xs text-slate-400">Logo</span>}
+        {/* Task #2191 — Primary logo (full-size/wide for the portal nav header).
+            Renders first so a press sets its whitelabel wordmark before the
+            square icon. Falls back to a wide preview area so it's clear this
+            is a wide-format slot, not a square one. */}
+        <div>
+          <label className="text-xs text-slate-500 uppercase tracking-wide">Primary logo</label>
+          <p className="text-xs text-slate-400 mt-0.5 mb-2">Full-size wordmark shown in the portal nav header. Wide images work best.</p>
+          <div className="flex items-start gap-4">
+            <div className="w-40 h-12 rounded-lg overflow-hidden bg-slate-50 ring-1 ring-slate-200 grid place-items-center flex-shrink-0">
+              {navLogoUrl
+                ? <img src={navLogoUrl} alt="" className="max-h-10 w-auto object-contain" data-testid="img-profile-nav-logo" />
+                : <span className="text-xs text-slate-400">Primary logo</span>}
+            </div>
+            <div className="flex flex-col gap-1">
+              {canEdit && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navLogoFileRef.current?.click()}
+                  disabled={uploadingNavLogo}
+                  className="h-9 bg-transparent text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 border-0 text-sm font-semibold"
+                  data-testid="button-upload-nav-logo"
+                >{uploadingNavLogo ? "Uploading…" : navLogoUrl ? "Replace primary logo" : "Upload primary logo"}</Button>
+              )}
+              {canEdit && navLogoUrl && (
+                <button
+                  type="button"
+                  onClick={() => { setNavLogoUrl(null); save.mutate({ navLogoUrl: null }); }}
+                  className="text-xs text-slate-500 hover:text-rose-600 text-left"
+                  data-testid="button-remove-nav-logo"
+                >Remove primary logo</button>
+              )}
+              <input
+                ref={navLogoFileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) pickNavLogo(f); }}
+                data-testid="input-nav-logo-file"
+              />
+            </div>
           </div>
-          <div className="flex flex-col gap-1">
-            {canEdit && (
+          {canEdit && (
+            <div className="flex items-center gap-2 max-w-md mt-2">
+              <Input
+                type="url"
+                inputMode="url"
+                value={navLogoUrlInput}
+                onChange={(e) => setNavLogoUrlInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyNavLogoUrl(); } }}
+                disabled={uploadingNavLogo || save.isPending}
+                placeholder="…or paste an image URL"
+                className="min-w-0 bg-white border-slate-200 text-slate-900"
+                data-testid="input-nav-logo-url"
+              />
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploadingLogo}
-                className="h-9 bg-transparent text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 border-0 text-sm font-semibold"
-                data-testid="button-upload-logo"
-              >{uploadingLogo ? "Uploading…" : logoUrl ? "Replace logo" : "Upload logo"}</Button>
-            )}
-            {canEdit && logoUrl && (
-              <button
-                type="button"
-                onClick={() => { setLogoUrl(null); save.mutate({ logoUrl: null }); }}
-                className="text-xs text-slate-500 hover:text-rose-600 text-left"
-                data-testid="button-remove-logo"
-              >Remove logo</button>
-            )}
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) pickLogo(f); }}
-              data-testid="input-logo-file"
-            />
-          </div>
+                onClick={applyNavLogoUrl}
+                disabled={uploadingNavLogo || save.isPending || !navLogoUrlInput.trim()}
+                className="h-9 shrink-0 bg-transparent text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 border-0 text-sm font-semibold"
+                data-testid="button-nav-logo-url-apply"
+              >Use URL</Button>
+            </div>
+          )}
         </div>
-        {/* Task #2117 — paste-a-URL fallback for the logo. */}
-        {canEdit && (
-          <div className="flex items-center gap-2 max-w-md">
-            <Input
-              type="url"
-              inputMode="url"
-              value={logoUrlInput}
-              onChange={(e) => setLogoUrlInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyLogoUrl(); } }}
-              disabled={uploadingLogo || save.isPending}
-              placeholder="…or paste an image URL"
-              className="min-w-0 bg-white border-slate-200 text-slate-900"
-              data-testid="input-logo-url"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={applyLogoUrl}
-              disabled={uploadingLogo || save.isPending || !logoUrlInput.trim()}
-              className="h-9 shrink-0 bg-transparent text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 border-0 text-sm font-semibold"
-              data-testid="button-logo-url-apply"
-            >Use URL</Button>
+
+        {/* Icon — square logo used in lists, credits, and the fallback rail header. */}
+        <div>
+          <label className="text-xs text-slate-500 uppercase tracking-wide">Icon</label>
+          <p className="text-xs text-slate-400 mt-0.5 mb-2">Square logo used in press lists, credits, and as the rail fallback when no primary logo is set.</p>
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-50 ring-1 ring-slate-200 grid place-items-center">
+              {logoUrl
+                ? <img src={logoUrl} alt="" className="w-full h-full object-cover" data-testid="img-profile-logo" />
+                : <span className="text-xs text-slate-400">Icon</span>}
+            </div>
+            <div className="flex flex-col gap-1">
+              {canEdit && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploadingLogo}
+                  className="h-9 bg-transparent text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 border-0 text-sm font-semibold"
+                  data-testid="button-upload-logo"
+                >{uploadingLogo ? "Uploading…" : logoUrl ? "Replace icon" : "Upload an icon"}</Button>
+              )}
+              {canEdit && logoUrl && (
+                <button
+                  type="button"
+                  onClick={() => { setLogoUrl(null); save.mutate({ logoUrl: null }); }}
+                  className="text-xs text-slate-500 hover:text-rose-600 text-left"
+                  data-testid="button-remove-logo"
+                >Remove icon</button>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) pickLogo(f); }}
+                data-testid="input-logo-file"
+              />
+            </div>
           </div>
-        )}
+          {/* Task #2117 — paste-a-URL fallback for the icon. */}
+          {canEdit && (
+            <div className="flex items-center gap-2 max-w-md mt-2">
+              <Input
+                type="url"
+                inputMode="url"
+                value={logoUrlInput}
+                onChange={(e) => setLogoUrlInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyLogoUrl(); } }}
+                disabled={uploadingLogo || save.isPending}
+                placeholder="…or paste an image URL"
+                className="min-w-0 bg-white border-slate-200 text-slate-900"
+                data-testid="input-logo-url"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={applyLogoUrl}
+                disabled={uploadingLogo || save.isPending || !logoUrlInput.trim()}
+                className="h-9 shrink-0 bg-transparent text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 border-0 text-sm font-semibold"
+                data-testid="button-logo-url-apply"
+              >Use URL</Button>
+            </div>
+          )}
+        </div>
 
         <div>
           <label className="text-xs text-slate-500 uppercase tracking-wide">Press name</label>

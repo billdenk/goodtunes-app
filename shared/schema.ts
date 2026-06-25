@@ -3936,6 +3936,11 @@ export const manufacturers = pgTable("manufacturers", {
   // (excludes soft-deleted rows, Task #1254), not a plain `.unique()`.
   domain: text("domain"),
   logoUrl: text("logo_url"),
+  // Task #2191 — full-size/wide primary nav logo for the press portal
+  // whitelabel header. Distinct from the square `logoUrl` (lists/credits).
+  // When set, the press portal's top-left rail shows this instead of the
+  // small square icon + name text. Null = fall back to today's layout.
+  navLogoUrl: text("nav_logo_url"),
   coverUrl: text("cover_url"),
   // Operator/press-editable override for the branded "vinyl" jacket art
   // shown in the catalog color-management VinylPreview. When null the
