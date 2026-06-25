@@ -9,6 +9,7 @@ import { apiRequest, setAuthToken, queryClient, apiErrorBody, apiErrorStatus } f
 import { track } from "@/lib/analytics";
 import { isInAppBrowser } from "@/lib/platform";
 import { FriendlyError } from "@/components/FriendlyError";
+import { PERSONAS, DEV_LOGIN_PERSONA_KEY, type EntityLite } from "@/lib/adminPersonas";
 import {
   Drawer,
   DrawerContent,
@@ -292,6 +293,72 @@ function WelcomeBackPill() {
   );
 }
 
+/**
+ * Dev-only role dropdown rendered on the admin login page.
+ *
+ * Mirrors the View As switcher persona list so Bill can quickly QA any
+ * partner persona without typing a password. Picking a role:
+ *   1. Stores the persona key in sessionStorage (gt:devLoginPersona).
+ *   2. Triggers a full-page redirect to /dev-login-bill (super_admin
+ *      session + hash-token).
+ *   3. The hash-token pickup useEffect in Login reads the stored key,
+ *      fetches the first entity for that persona (now authenticated),
+ *      and navigates directly to that entity's view.
+ *
+ * This component is only ever rendered when `import.meta.env.DEV` is
+ * true; the production bundle never includes it.
+ */
+function DevLoginDropdown() {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState<string | null>(null);
+
+  const handlePickPersona = (personaKey: string) => {
+    setLoading(personaKey);
+    try {
+      sessionStorage.setItem(DEV_LOGIN_PERSONA_KEY, personaKey);
+    } catch {}
+    window.location.href = "/dev-login-bill";
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 flex items-center justify-between gap-2"
+        data-testid="button-dev-admin-login"
+      >
+        <span>🛠 Dev admin login (preview only)</span>
+        <span className="text-slate-400 text-xs">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-1.5 flex flex-col gap-0.5">
+          {PERSONAS.map((persona) => {
+            const Icon = persona.icon;
+            const isActive = loading === persona.key;
+            return (
+              <button
+                key={persona.key}
+                type="button"
+                onClick={() => handlePickPersona(persona.key)}
+                disabled={loading !== null}
+                className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-white hover:shadow-sm transition-all text-left disabled:opacity-60"
+                data-testid={`button-dev-login-${persona.key}`}
+              >
+                <Icon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                <span className="flex-1">{persona.label}</span>
+                {isActive && (
+                  <span className="text-xs text-slate-400 animate-pulse">signing in…</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Login() {
   const kind = useAuthKind();
   const isAdmin = kind === "admin";
@@ -527,6 +594,49 @@ export function Login() {
           dest = stashed;
         }
       } catch {}
+      // Dev-login persona routing — if the operator picked a specific
+      // persona from the dropdown before triggering /dev-login-bill,
+      // we're now authenticated (token just set above) and can resolve
+      // the first entity of that persona and jump straight there. God
+      // View always lands on the admin dashboard. Other personas fetch
+      // their entity list (same endpoints the View As switcher uses),
+      // pick the first result, and navigate to that entity's detail
+      // page. Only fires in dev builds on admin hosts — the key is
+      // never set in production because the dropdown itself never
+      // renders (import.meta.env.DEV gate), but we guard here too so
+      // a manually-set key can't alter production routing.
+      const devPersonaKey =
+        import.meta.env.DEV && isAdmin && typeof sessionStorage !== "undefined"
+          ? sessionStorage.getItem(DEV_LOGIN_PERSONA_KEY)
+          : null;
+      if (devPersonaKey) {
+        try { sessionStorage.removeItem(DEV_LOGIN_PERSONA_KEY); } catch {}
+        const persona = PERSONAS.find((p) => p.key === devPersonaKey);
+        if (persona && persona.endpoint) {
+          // Async resolution — navigate once we have the entity id.
+          (async () => {
+            try {
+              const res = await apiRequest("GET", persona.endpoint!);
+              const entities: EntityLite[] = await res.json();
+              const filtered = persona.filter
+                ? entities.filter(persona.filter)
+                : entities;
+              const first = filtered[0];
+              if (first && persona.detailPath) {
+                dest = persona.detailPath(first.id);
+              }
+            } catch {
+              // Fall back to the admin dashboard on any error.
+            }
+            window.history.replaceState({}, "", dest);
+            queryClient.invalidateQueries();
+            navigate(dest);
+          })();
+          return;
+        }
+        // God View (no endpoint) or unknown key — just land on dashboard.
+        dest = "/admin/dashboard";
+      }
       window.history.replaceState({}, "", dest);
       queryClient.invalidateQueries();
       navigate(dest);
@@ -1442,26 +1552,20 @@ export function Login() {
                 >
                   {isPending ? "Signing in..." : "Sign In"}
                 </button>
-                {/* Preview-only escape hatch. On *.replit.dev the root
-                    page shows fan chrome, so Bill's admin password always
-                    comes back "Invalid." This button hits the existing
-                    GET /dev-login-bill route (full navigation so the
-                    server redirect to /admin/login#token=… runs and the
-                    hash-token pickup completes sign-in) and lands the
-                    operator in the admin shell as the super-admin — no
-                    password, no 2FA. It renders ONLY in the dev/preview
-                    build (import.meta.env.DEV); the production bundle ships
-                    without it, and even a hand-crafted request 404s
-                    because /dev-login-bill is gated on NODE_ENV. */}
+                {/* Preview-only role dropdown. On *.replit.dev the root
+                    page shows fan chrome so Bill's admin password always
+                    comes back "Invalid." This control replaces the old
+                    single-shot dev button with a dropdown that mirrors
+                    the View As switcher persona list — picking a role
+                    signs in as super_admin (via /dev-login-bill) and
+                    then auto-navigates to the first available entity for
+                    that persona. God View lands on the admin dashboard.
+                    Renders ONLY in the dev/preview build
+                    (import.meta.env.DEV); the production bundle ships
+                    without it, and /dev-login-bill returns 404 in
+                    production because it is gated on NODE_ENV. */}
                 {isAdmin && import.meta.env.DEV && (
-                  <button
-                    type="button"
-                    onClick={() => { window.location.href = "/dev-login-bill"; }}
-                    className={`${s.ghostBtn} rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-2.5 font-medium transition-colors hover:bg-slate-100`}
-                    data-testid="button-dev-admin-login"
-                  >
-                    🛠 Dev admin login (preview only)
-                  </button>
+                  <DevLoginDropdown />
                 )}
               </>
             )}

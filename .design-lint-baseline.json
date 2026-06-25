@@ -19892,6 +19892,26 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/Login.tsx",
+    "snippet": "className=\"rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 flex items-center justify-between gap-2\""
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/Login.tsx",
+    "snippet": "<span className=\"text-slate-400 text-xs\">{open ? \"▲\" : \"▼\"}</span>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/Login.tsx",
+    "snippet": "<Icon className=\"w-3.5 h-3.5 text-slate-400 flex-shrink-0\" />"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/Login.tsx",
+    "snippet": "<span className=\"text-xs text-slate-400 animate-pulse\">signing in…</span>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/Login.tsx",
     "snippet": "<p className={`${isAdmin ? \"text-slate-500\" : \"text-white/55\"} text-sm text-center mb-6`}>"
   },
   {

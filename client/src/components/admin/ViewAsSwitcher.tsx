@@ -5,14 +5,6 @@ import {
   Check,
   ChevronsUpDown,
   Plus,
-  Eye,
-  Tag,
-  Factory,
-  Hammer,
-  Store,
-  Truck,
-  User,
-  Heart,
 } from "lucide-react";
 import {
   Popover,
@@ -29,6 +21,12 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { Spinner } from "@/components/ui/Spinner";
+import {
+  PERSONAS,
+  type PersonaKey,
+  type EntityLite,
+  type Persona,
+} from "@/lib/adminPersonas";
 
 /**
  * Header "view as" switcher.
@@ -44,138 +42,10 @@ import { Spinner } from "@/components/ui/Spinner";
  * partner portals ship (artist upload portal, label dashboard, etc.)
  * each persona's `detailPath` can switch to the portal URL without
  * changing the switcher UI.
+ *
+ * The PERSONAS list and its types live in @/lib/adminPersonas so the
+ * dev-login role dropdown on the admin login page stays in lock-step.
  */
-
-interface EntityLite {
-  id: string;
-  name: string;
-  isMaker?: boolean;
-  isReseller?: boolean;
-}
-
-type PersonaKey =
-  | "god"
-  | "label"
-  | "press"
-  | "artist"
-  | "nonprofit"
-  | "maker"
-  | "reseller"
-  | "fulfillment";
-
-interface Persona {
-  key: PersonaKey;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  /** Endpoint that returns the list of entities. */
-  endpoint?: string;
-  /** Optional client-side filter (Maker vs Reseller share /api/vendors). */
-  filter?: (e: EntityLite) => boolean;
-  /** Where to land when an entity is picked. */
-  detailPath?: (id: string) => string;
-  /** Where to land for "+ New" (the list page hosts the add modal). */
-  listPath?: string;
-  /** Customers don't get a "+ New" — fans self-sign-up. */
-  allowCreate?: boolean;
-}
-
-// Order mirrors the left-nav importance order (Dashboard isn't a
-// persona, so God View takes the top slot).
-//
-// `detailPath` controls what "View as <persona> → <entity>" lands on:
-//   • Personas with a real partner portal (Label, Artist, Non-profit)
-//     route to that portal with the super-admin `?<scope>Id=` view-as
-//     query param the backend already honors (server/labelReports.ts,
-//     server/artistReports.ts, /api/non-profit/* in routes.ts). The
-//     result is *what that partner actually sees when logged in* — the
-//     useful version for both founder/agent collaboration and investor
-//     demos.
-//   • Personas without a portal yet (Press, Maker, Reseller,
-//     Fulfillment) fall back to the admin detail page so the switcher
-//     still saves clicks. Swap their `detailPath` to a portal URL once
-//     the portal ships — no other change needed here.
-const PERSONAS: Persona[] = [
-  {
-    key: "god",
-    label: "God View",
-    icon: Eye,
-  },
-  {
-    key: "label",
-    label: "Label",
-    icon: Tag,
-    endpoint: "/api/labels",
-    // Real portal: LabelDashboard reads ?labelId= when caller is super_admin.
-    detailPath: (id) => `/label?labelId=${encodeURIComponent(id)}`,
-    listPath: "/admin/labels",
-    allowCreate: true,
-  },
-  {
-    key: "press",
-    label: "Press",
-    icon: Factory,
-    endpoint: "/api/manufacturers",
-    // No portal yet — falls back to admin detail.
-    detailPath: (id) => `/admin/manufacturers/${id}`,
-    listPath: "/admin/manufacturers",
-    allowCreate: true,
-  },
-  {
-    key: "artist",
-    label: "Artist",
-    icon: User,
-    endpoint: "/api/people",
-    // Real portal: ArtistDashboard reads ?personId= when super_admin.
-    detailPath: (id) => `/artist?personId=${encodeURIComponent(id)}`,
-    listPath: "/admin/people",
-    allowCreate: true,
-  },
-  {
-    key: "nonprofit",
-    label: "Non-profit",
-    icon: Heart,
-    // Non-profits live in the `organizations` table (kind='non_profit')
-    // and are exposed through /api/non-profits. The chooser routes to
-    // the canonical admin detail page so opening from a detail URL
-    // round-trips back to the same page.
-    endpoint: "/api/non-profits",
-    detailPath: (id) => `/admin/non-profits/${id}`,
-    listPath: "/admin/non-profits",
-    allowCreate: true,
-  },
-  {
-    key: "maker",
-    label: "Maker",
-    icon: Hammer,
-    endpoint: "/api/vendors",
-    filter: (e) => !!e.isMaker,
-    // No portal yet.
-    detailPath: (id) => `/admin/makers/${id}`,
-    listPath: "/admin/makers",
-    allowCreate: true,
-  },
-  {
-    key: "reseller",
-    label: "Reseller",
-    icon: Store,
-    endpoint: "/api/vendors",
-    filter: (e) => !!e.isReseller,
-    // No portal yet.
-    detailPath: (id) => `/admin/vendors/${id}`,
-    listPath: "/admin/vendors",
-    allowCreate: true,
-  },
-  {
-    key: "fulfillment",
-    label: "Fulfillment",
-    icon: Truck,
-    endpoint: "/api/fulfillment-partners",
-    // No portal yet.
-    detailPath: (id) => `/admin/fulfillment-partners/${id}`,
-    listPath: "/admin/fulfillment-partners",
-    allowCreate: true,
-  },
-];
 
 // Inspect the current URL and figure out which persona + entity id the
 // operator is looking at, so the chooser can pre-select that row instead
