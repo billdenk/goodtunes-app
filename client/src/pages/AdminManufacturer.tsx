@@ -3822,6 +3822,7 @@ function SwatchChip({
     onError: (e: any) => toast({ title: "Couldn't delete swatch", description: e?.message, variant: "destructive" }),
   });
   const [cropToDisc, setCropToDisc] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const upload = useMutation({
     mutationFn: async (file: File) => {
       return await uploadSwatchImage(file, { cropToDisc });
@@ -3950,164 +3951,186 @@ function SwatchChip({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit swatch</DialogTitle>
-            <DialogDescription>Rename the color, pick a hex, or upload a photo for marbled / splatter / picture-disc stocks.</DialogDescription>
+            <DialogDescription>
+              Rename the color, input the hex code, or upload a photo for the vinyl swatch.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <label className="block">
-              <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Name</span>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className={INPUT}
-                data-testid={`input-swatch-name-${color.id}`}
-              />
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${imageUrl ? "text-slate-300" : "text-slate-500"}`}>Hex</span>
-                <div className={`flex items-center gap-2 ${imageUrl ? "opacity-50 pointer-events-none" : ""}`}>
+          <div className="space-y-4">
+            {/* Row 1: Name (wide) + Hex (narrow) side by side */}
+            <div className="flex gap-3 items-end">
+              <div className="flex-1 min-w-0">
+                <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Name</span>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className={INPUT}
+                  data-testid={`input-swatch-name-${color.id}`}
+                />
+              </div>
+              <div className="w-36 shrink-0">
+                <span className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${imageUrl ? "text-slate-300" : "text-slate-500"}`}>
+                  Hex
+                </span>
+                <div className={`flex items-center gap-1.5 ${imageUrl ? "opacity-50 pointer-events-none" : ""}`}>
                   <input
                     type="color"
                     value={hex}
                     disabled={!!imageUrl}
                     onChange={(e) => setHex(e.target.value)}
-                    className="h-9 w-12 rounded border border-slate-200 cursor-pointer disabled:cursor-not-allowed"
+                    className="h-9 w-9 shrink-0 rounded border border-slate-200 cursor-pointer disabled:cursor-not-allowed p-0.5"
                     data-testid={`input-swatch-hex-${color.id}`}
                   />
                   <input
                     value={hex}
                     disabled={!!imageUrl}
                     onChange={(e) => setHex(e.target.value)}
-                    className={INPUT}
+                    className={`${INPUT} font-mono`}
                   />
                 </div>
                 {imageUrl && (
-                  <span className="block text-xs text-slate-400 mt-1">Using a photo — clear it to set a hex.</span>
+                  <span className="block text-xs text-slate-400 mt-1">Photo overrides hex.</span>
                 )}
-              </label>
-              <label className="block min-w-0">
-                <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Photo</span>
-                <div className="flex items-center gap-3 min-w-0">
-                  {/* Round preview — matches the live catalog chip's
-                      circular swatch dot so admins can tell the photo
-                      will display as a disc, not a square with
-                      whitespace around it (task #667). */}
-                  <div
-                    className={`w-12 h-12 rounded-full overflow-hidden shrink-0 border ${
-                      imageUrl ? "border-slate-200" : "border-dashed border-slate-300 bg-slate-50"
-                    }`}
-                    style={
-                      imageUrl
-                        ? { backgroundImage: `url(${imageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
-                        : {}
-                    }
-                    data-testid={`preview-swatch-photo-${color.id}`}
-                  />
-                  <div className="flex-1 min-w-0 overflow-hidden">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) {
-                          setSelectedFileName(f.name);
-                          upload.mutate(f);
-                        }
-                      }}
-                      title={selectedFileName ?? undefined}
-                      className="text-xs block max-w-full"
-                      data-testid={`input-swatch-upload-${color.id}`}
-                    />
-                  </div>
-                  {imageUrl && (
+              </div>
+            </div>
+
+            {/* Row 2: Photo — round disc preview + Upload button + helper text + drag-and-drop */}
+            <div>
+              <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-2">Photo</span>
+              <div className="flex items-start gap-3">
+                {/* Round disc preview — drag-and-drop target; clicking also triggers the picker */}
+                <div
+                  className={`w-14 h-14 rounded-full overflow-hidden shrink-0 border cursor-pointer transition-opacity ${
+                    imageUrl ? "border-slate-200" : "border-dashed border-slate-300 bg-slate-50"
+                  } ${upload.isPending ? "opacity-60" : ""}`}
+                  style={
+                    imageUrl
+                      ? { backgroundImage: `url(${imageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+                      : {}
+                  }
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const f = e.dataTransfer.files?.[0];
+                    if (f) { setSelectedFileName(f.name); upload.mutate(f); }
+                  }}
+                  data-testid={`preview-swatch-photo-${color.id}`}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setImageUrl(null)}
-                      className="shrink-0 text-xs text-slate-500 hover:underline underline-offset-2"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={upload.isPending}
+                      className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                      data-testid={`button-swatch-upload-${color.id}`}
                     >
-                      Clear
+                      <Upload className="w-3.5 h-3.5" />
+                      {upload.isPending ? "Uploading…" : "Upload"}
                     </button>
-                  )}
+                    {imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setImageUrl(null)}
+                        className="text-xs text-slate-500 hover:underline underline-offset-2"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                    Drag an image onto the photo, or click upload.{" "}
+                    JPEG, PNG, WEBP, or HEIC — up to 5 MB.
+                  </p>
+                  {/* Compact "Crop to vinyl disc" toggle folded into the Photo row */}
+                  <label className="flex items-center gap-1.5 mt-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={cropToDisc}
+                      onChange={(e) => setCropToDisc(e.target.checked)}
+                      className="accent-[color:var(--brand-blue)]"
+                      data-testid={`toggle-crop-disc-${color.id}`}
+                    />
+                    <span className="text-xs text-slate-600 font-medium">Crop to vinyl disc</span>
+                  </label>
                 </div>
-              </label>
+                {/* Hidden file input — triggered programmatically */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) { setSelectedFileName(f.name); upload.mutate(f); e.target.value = ""; }
+                  }}
+                  data-testid={`input-swatch-upload-${color.id}`}
+                />
+              </div>
             </div>
-            {/* "Crop to vinyl disc" — opt-in disc-mask at upload time.
-                Vendor mockups (Hellbender on gray, MRP on black/checker)
-                ship the record dead-center on a studio backdrop; this
-                masks everything outside the detected disc to transparent
-                so the chip shows just the record + label. */}
-            <label className="flex items-start gap-2 text-xs text-slate-600">
-              <input
-                type="checkbox"
-                checked={cropToDisc}
-                onChange={(e) => setCropToDisc(e.target.checked)}
-                className="mt-0.5 accent-[color:var(--brand-blue)]"
-                data-testid={`toggle-crop-disc-${color.id}`}
-              />
-              <span>
-                <span className="font-medium text-slate-700">Crop to vinyl disc</span>
-                <span className="block text-xs text-slate-500 mt-0.5">
-                  Best for vendor mockups where the record sits on a studio backdrop — keeps the label and vinyl, drops the background.
-                </span>
-              </span>
-            </label>
+
+            {/* Row 3: Color applies to — segmented pill toggles */}
             {mirror && otherSize && (
-              <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3 space-y-2">
-                <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider">
+              <div>
+                <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-2">
                   Color applies to
                 </span>
-                <p className="text-xs text-slate-500">
-                  Offer this color on both disc sizes. Mirrors by name into the matching “{mirror.groupName}”
-                  group; pricing for each size stays separate.
-                </p>
-                <label className="flex items-center gap-2 text-xs text-slate-700">
-                  <input type="checkbox" checked disabled className="accent-[color:var(--brand-blue)]" />
-                  <span>{mirror.currentLabel ?? sizeLabel(mirror.currentSize)} (current)</span>
-                </label>
-                <label className="flex items-center gap-2 text-xs text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={mirroredOn}
-                    disabled={setMirror.isPending}
-                    onChange={(e) => setMirror.mutate(e.target.checked)}
-                    className="accent-[color:var(--brand-blue)]"
-                    data-testid={`toggle-color-applies-${otherSize}-${color.id}`}
-                  />
-                  <span>
-                    {sizeLabel(otherSize)}
-                    {setMirror.isPending ? " — saving…" : ""}
+                <div className="flex items-center gap-2">
+                  {/* Current size — always active, static pill */}
+                  <span className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-full bg-[color:var(--brand-blue)] text-white">
+                    <Eye className="w-3.5 h-3.5" />
+                    {mirror.currentLabel ?? sizeLabel(mirror.currentSize)}
                   </span>
-                </label>
+                  {/* Other size — click to toggle mirror on/off */}
+                  <button
+                    type="button"
+                    onClick={() => !setMirror.isPending && setMirror.mutate(!mirroredOn)}
+                    disabled={setMirror.isPending}
+                    className={`inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-full border transition-colors disabled:opacity-50 ${
+                      mirroredOn
+                        ? "bg-[color:var(--brand-blue)] text-white border-[color:var(--brand-blue)]"
+                        : "bg-white text-slate-500 border-slate-300 hover:border-[color:var(--brand-blue)] hover:text-[color:var(--brand-blue)]"
+                    }`}
+                    data-testid={`toggle-color-applies-${otherSize}-${color.id}`}
+                  >
+                    <EyeOff className={`w-3.5 h-3.5 ${mirroredOn ? "opacity-60" : ""}`} />
+                    {sizeLabel(otherSize)}
+                    {setMirror.isPending ? "…" : ""}
+                  </button>
+                </div>
               </div>
             )}
-            <div className="flex items-center justify-between pt-2">
+          </div>
+
+          {/* Footer: trash icon left, Cancel + Save right */}
+          <div className="flex items-center justify-between pt-3 mt-1 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              disabled={remove.isPending}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-md text-rose-500 hover:bg-rose-50 disabled:opacity-50 transition-colors"
+              data-testid={`button-delete-color-${color.id}`}
+              title="Delete swatch"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setConfirmDelete(true)}
-                disabled={remove.isPending}
-                className="text-xs text-rose-600 hover:underline underline-offset-2 disabled:opacity-50"
-                data-testid={`button-delete-color-${color.id}`}
+                onClick={() => setEditing(false)}
+                className="text-xs text-slate-500 hover:underline underline-offset-2"
               >
-                Delete swatch
+                Cancel
               </button>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditing(false)}
-                  className="text-xs text-slate-500 hover:underline underline-offset-2"
-                >
-                  Cancel
-                </button>
-                <Button
-                  type="button"
-                  onClick={() => save.mutate()}
-                  disabled={!name.trim() || save.isPending}
-                  className="h-8 px-3 text-xs"
-                  data-testid={`button-save-color-${color.id}`}
-                >
-                  {save.isPending ? "Saving…" : "Save"}
-                </Button>
-              </div>
+              <Button
+                type="button"
+                onClick={() => save.mutate()}
+                disabled={!name.trim() || save.isPending}
+                className="h-8 px-3 text-xs"
+                data-testid={`button-save-color-${color.id}`}
+              >
+                {save.isPending ? "Saving…" : "Save"}
+              </Button>
             </div>
           </div>
         </DialogContent>
