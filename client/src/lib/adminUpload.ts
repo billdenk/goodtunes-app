@@ -75,3 +75,79 @@ export async function uploadImageFile(file: File): Promise<string> {
   const { url } = await postAdminImage(file);
   return url;
 }
+
+// Task #2115 — print templates (PDF / packaged art / ZIP) are often large
+// and can't ride the image-only `/api/admin/upload` route. Stream them
+// straight to Object Storage with the signed-PUT flow (sign → PUT bytes →
+// finalize), mirroring the video upload path. Returns the hosted
+// `/objects/uploads/<id>` URL.
+const DOC_CONTENT_TYPES: Record<string, string> = {
+  pdf: "application/pdf",
+  zip: "application/zip",
+  ai: "application/postscript",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+};
+
+export const DOC_UPLOAD_ACCEPT = ".pdf,.zip,.ai,.png,.jpg,.jpeg,.tif,.tiff";
+
+export async function uploadAdminDoc(file: File): Promise<string> {
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error("Sign out and back in — your session token is missing.");
+  }
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const contentType = file.type || DOC_CONTENT_TYPES[ext];
+  if (!contentType || !Object.values(DOC_CONTENT_TYPES).includes(contentType)) {
+    throw new Error("Use a PDF, AI/EPS, ZIP, PNG, JPEG, or TIFF file.");
+  }
+
+  let signRes: Response;
+  try {
+    signRes = await fetch("/api/admin/upload-doc/sign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      credentials: "include",
+      body: JSON.stringify({ contentType }),
+    });
+  } catch (networkErr) {
+    throw new Error(friendlyUploadError(networkErr, { noun: "template" }));
+  }
+  if (!signRes.ok) {
+    const body = await signRes.json().catch(() => ({}) as { message?: string });
+    throw new Error(
+      friendlyUploadError(`${signRes.status}: ${body?.message ?? ""}`, { noun: "template" }),
+    );
+  }
+  const { uploadUrl, finalPath } = (await signRes.json()) as {
+    uploadUrl: string;
+    finalPath: string;
+  };
+
+  const putRes = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body: file,
+  });
+  if (!putRes.ok) {
+    throw new Error(friendlyUploadError(`${putRes.status}: upload failed`, { noun: "template" }));
+  }
+
+  const finRes = await fetch("/api/admin/upload-doc/finalize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    credentials: "include",
+    body: JSON.stringify({ finalPath }),
+  });
+  if (!finRes.ok) {
+    const body = await finRes.json().catch(() => ({}) as { message?: string });
+    throw new Error(
+      friendlyUploadError(`${finRes.status}: ${body?.message ?? ""}`, { noun: "template" }),
+    );
+  }
+  const { url } = (await finRes.json()) as { url: string };
+  return url;
+}

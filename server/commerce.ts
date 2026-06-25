@@ -1658,6 +1658,22 @@ export function registerCommerceRoutes(app: Express) {
       pressMode,
       demo: demoKind,
       skuPressCatalogs,
+      // Task #2115 — the press's uploaded print templates (Jacket / Center
+      // Labels / Inner Sleeve per product). Embedded here because this
+      // endpoint is already artist-readable (unlike the requirePressScope
+      // /catalog routes), so the album's Physical / Package area can offer
+      // artists the template downloads. Only file-bearing rows are useful
+      // to a downloader; spec-only rows (dims for the check) are dropped.
+      templates: (await storage.listPressTemplateSpecs(pressId))
+        .filter((t) => !!t.templateFileUrl)
+        .map((t) => ({
+          id: t.id,
+          format: t.format,
+          componentKey: t.componentKey,
+          variantKey: t.variantKey,
+          discCount: t.discCount,
+          templateFileUrl: t.templateFileUrl,
+        })),
     });
   });
   app.delete("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {

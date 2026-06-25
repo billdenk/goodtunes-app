@@ -94,6 +94,7 @@ import { VinylPreview } from "@/components/VinylPreview";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import { CertSaleWindowPanel } from "@/components/admin/CertSaleWindowPanel";
 import { ChangeFormatDialog } from "@/components/admin/ChangeFormatDialog";
+import { PressTemplateDownloads, type PressTemplate } from "@/components/admin/PressTemplateDownloads";
 import { adaptSkuToFormat, type SkuPicks } from "@/lib/skuFormatAdapt";
 import { Package } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -205,6 +206,9 @@ type InvitedPressResponse = {
   // exists. `press` stays null (keeps MRP cost-math fallback intact);
   // partner/artist-admin roles read this field for a read-only display.
   effectivePress?: { id: string; name: string; logoUrl?: string | null } | null;
+  // Task #2115 — the invited press's uploaded print templates, embedded
+  // here so the artist-readable Package tab can offer template downloads.
+  templates?: PressTemplate[];
 };
 
 // Mirrors `snapToCatalogQuantityTier` server-side. Walks an ordered
@@ -1482,6 +1486,23 @@ export function SellPanel({
           )}
           </div>
         </Card>
+
+        {/* Task #2115 — the invited press's uploaded print templates,
+            offered as artist downloads for every vinyl format actually
+            configured on this album. The component self-hides when the
+            press has no template on file for a given format. */}
+        {invitedPress?.templates && invitedPress.templates.length > 0 &&
+          [...configuredFormats, ...liveDrafts]
+            .filter((f) => isVinylFormat(f))
+            .map((f) => (
+              <PressTemplateDownloads
+                key={`templates-${f}`}
+                templates={invitedPress?.templates}
+                format={f}
+                pressName={invitedPress?.press?.name}
+                className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4"
+              />
+            ))}
 
         {/* Task #397 — the duplicate "Printed & Signed GoodDeed®"
             section that used to live here (AddonForm + vendor panel +

@@ -6,16 +6,20 @@ import {
   BadgeCheck,
   ChevronRight,
   Disc3,
+  Download,
   Eye,
   EyeOff,
   ExternalLink,
   Factory,
+  FileText,
+  MoreHorizontal,
   Pencil,
   Plus,
   RefreshCw,
   Tag,
   Trash2,
   Truck,
+  Upload,
   UserPlus,
   X,
   Zap,
@@ -43,6 +47,14 @@ import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { SaveLink, CardHeader, EditPencil } from "@/components/admin/EditCardChrome";
+import { IconButton } from "@/components/ui/IconButton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -3071,7 +3083,372 @@ function CatalogEditor({
             )}
           </div>
         )}
+        {isVinyl && <PressTemplateSpecsCard pressId={pressId} fmt={fmt} />}
       </div>
+    </div>
+  );
+}
+
+// Task #2115 — per press × product print-template editor. Each vinyl
+// product (12" Single LP / 12" Double LP / 7" Single) gets three component
+// slots (Jacket / Center labels / Inner sleeve), stored in the generic
+// catalog slot (variantKey="" discCount=0) of `press_template_specs`. The
+// uploaded file becomes (1) an artist download in the album Package/Physical
+// tab and (2) the completed-template-check baseline (preferred over the
+// measured-constant fallback, which stays intact). Optional artboard / page
+// / color fields refine that baseline. Additive only.
+type PressTemplateSpec = {
+  id: string;
+  format: AlbumFormat;
+  componentKey: "jacket" | "labels" | "inner_sleeve";
+  variantKey: string;
+  discCount: number;
+  artboardWInches: number | null;
+  artboardHInches: number | null;
+  expectedPages: number | null;
+  color: "process-4c" | "cmyk-or-pms" | null;
+  fontsRule: string | null;
+  templateFileUrl: string | null;
+};
+const TEMPLATE_COMPONENTS: {
+  key: PressTemplateSpec["componentKey"];
+  label: string;
+  hint: string;
+}[] = [
+  { key: "jacket", label: "Jacket", hint: "Outer sleeve / cover artwork" },
+  { key: "labels", label: "Center labels", hint: "On-disc label artwork" },
+  { key: "inner_sleeve", label: "Inner sleeve", hint: "Printed inner sleeve / bag" },
+];
+
+function PressTemplateSpecsCard({ pressId, fmt }: { pressId: string; fmt: AlbumFormat }) {
+  const { toast } = useToast();
+  const qk = ["/api/admin/manufacturers", pressId, "template-specs"];
+  const { data, isLoading } = useQuery<{ specs: PressTemplateSpec[] }>({ queryKey: qk });
+  const specsForFmt = (data?.specs ?? []).filter(
+    (s) => s.format === fmt && s.variantKey === "" && s.discCount === 0,
+  );
+  const byComponent = (key: PressTemplateSpec["componentKey"]) =>
+    specsForFmt.find((s) => s.componentKey === key) ?? null;
+
+  const save = useMutation({
+    mutationFn: async (body: Partial<PressTemplateSpec> & { componentKey: string }) => {
+      const res = await apiRequest("PUT", `/api/admin/manufacturers/${pressId}/template-specs`, {
+        format: fmt,
+        variantKey: "",
+        discCount: 0,
+        ...body,
+      });
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk }),
+    onError: (e: any) =>
+      toast({ title: e?.message || "Couldn't save template", variant: "destructive" }),
+  });
+  const remove = useMutation({
+    mutationFn: async (specId: string) => {
+      await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/template-specs/${specId}`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk }),
+    onError: (e: any) =>
+      toast({ title: e?.message || "Couldn't remove template", variant: "destructive" }),
+  });
+
+  return (
+    <div className="mt-6 pt-6 border-t border-slate-100">
+      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        Print templates
+      </span>
+      <p className="text-xs text-slate-400 mt-1 mb-3">
+        Upload the blank print templates artists design their artwork on for this product. Saved
+        templates become artist downloads on the album and feed the finished-file check.
+      </p>
+      <div className="space-y-2">
+        {TEMPLATE_COMPONENTS.map((c) => (
+          <TemplateComponentRow
+            key={c.key}
+            label={c.label}
+            hint={c.hint}
+            spec={byComponent(c.key)}
+            busy={save.isPending || remove.isPending || isLoading}
+            onSave={(body) => {
+              // The PUT is a full-row upsert: any field it doesn't receive
+              // is written as null. So always re-send the existing row's
+              // other fields and let `body` override only what changed —
+              // otherwise uploading a file wipes the saved check dims (and
+              // vice-versa).
+              const existing = byComponent(c.key);
+              save.mutate({
+                componentKey: c.key,
+                templateFileUrl: existing?.templateFileUrl ?? null,
+                artboardWInches: existing?.artboardWInches ?? null,
+                artboardHInches: existing?.artboardHInches ?? null,
+                expectedPages: existing?.expectedPages ?? null,
+                color: existing?.color ?? null,
+                fontsRule: existing?.fontsRule ?? null,
+                ...body,
+              });
+            }}
+            onRemove={(specId) => remove.mutate(specId)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TemplateComponentRow({
+  label,
+  hint,
+  spec,
+  busy,
+  onSave,
+  onRemove,
+}: {
+  label: string;
+  hint: string;
+  spec: PressTemplateSpec | null;
+  busy: boolean;
+  onSave: (body: Partial<PressTemplateSpec>) => void;
+  onRemove: (specId: string) => void;
+}) {
+  const { toast } = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [urlDraft, setUrlDraft] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+
+  // Optional check-dims. These refine the finished-file check baseline
+  // (preferred over the measured fallback when set; left blank = fallback).
+  const numOrEmpty = (n: number | null | undefined) => (n == null ? "" : String(n));
+  const [wDraft, setWDraft] = useState(numOrEmpty(spec?.artboardWInches));
+  const [hDraft, setHDraft] = useState(numOrEmpty(spec?.artboardHInches));
+  const [pagesDraft, setPagesDraft] = useState(numOrEmpty(spec?.expectedPages));
+  const [colorDraft, setColorDraft] = useState<string>(spec?.color ?? "");
+  useEffect(() => {
+    setWDraft(numOrEmpty(spec?.artboardWInches));
+    setHDraft(numOrEmpty(spec?.artboardHInches));
+    setPagesDraft(numOrEmpty(spec?.expectedPages));
+    setColorDraft(spec?.color ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec?.artboardWInches, spec?.artboardHInches, spec?.expectedPages, spec?.color]);
+
+  const dimsDirty =
+    wDraft !== numOrEmpty(spec?.artboardWInches) ||
+    hDraft !== numOrEmpty(spec?.artboardHInches) ||
+    pagesDraft !== numOrEmpty(spec?.expectedPages) ||
+    colorDraft !== (spec?.color ?? "");
+
+  const saveDims = () => {
+    const w = wDraft.trim() === "" ? null : Number(wDraft);
+    const h = hDraft.trim() === "" ? null : Number(hDraft);
+    const pages = pagesDraft.trim() === "" ? null : Number(pagesDraft);
+    if ((w != null && !Number.isFinite(w)) || (h != null && !Number.isFinite(h)) || (pages != null && !Number.isFinite(pages))) {
+      toast({ title: "Enter valid numbers for the check dimensions.", variant: "destructive" });
+      return;
+    }
+    onSave({
+      artboardWInches: w,
+      artboardHInches: h,
+      expectedPages: pages,
+      color: (colorDraft || null) as PressTemplateSpec["color"],
+    });
+  };
+
+  const handleUpload = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await uploadAdminDoc(file);
+      onSave({ templateFileUrl: url });
+    } catch (e: any) {
+      toast({ title: e?.message || "Upload failed", variant: "destructive" });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const commitUrl = () => {
+    const url = urlDraft.trim();
+    if (!url) return;
+    onSave({ templateFileUrl: url });
+    setUrlDraft("");
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-slate-800">{label}</div>
+          {spec?.templateFileUrl ? (
+            <a
+              href={spec.templateFileUrl}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-0.5 inline-flex items-center gap-1.5 text-xs text-[var(--brand-blue)] hover:underline underline-offset-2"
+              data-testid={`link-press-template-${spec.componentKey}`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              {spec.templateFileUrl.split("/").pop()}
+              <Download className="w-3.5 h-3.5" />
+            </a>
+          ) : (
+            <div className="mt-0.5 text-xs text-slate-400">{hint}</div>
+          )}
+        </div>
+        {spec?.templateFileUrl ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <IconButton
+                label={`${label} template actions`}
+                variant="ghost"
+                size="md"
+                disabled={busy || uploading}
+                className="text-slate-500 hover:text-slate-800"
+                data-testid={`button-template-menu-${spec.componentKey}`}
+              >
+                <MoreHorizontal />
+              </IconButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => fileRef.current?.click()}>
+                <Upload className="w-4 h-4 mr-2" />
+                Replace file
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-rose-600 focus:text-rose-600"
+                onSelect={() => setConfirmRemove(true)}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Remove
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
+      </div>
+
+      {!spec?.templateFileUrl && (
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input
+            value={urlDraft}
+            onChange={(e) => setUrlDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitUrl();
+            }}
+            placeholder="Paste a template URL…"
+            className={INPUT}
+            disabled={busy || uploading}
+            data-testid={`input-template-url-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          />
+          <div className="flex items-center gap-2 shrink-0">
+            <SaveLink
+              dirty={!!urlDraft.trim()}
+              busy={busy}
+              onClick={commitUrl}
+              testId={`button-save-template-url-${label.toLowerCase().replace(/\s+/g, "-")}`}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy || uploading}
+              onClick={() => fileRef.current?.click()}
+              data-testid={`button-upload-template-${label.toLowerCase().replace(/\s+/g, "-")}`}
+            >
+              <Upload className="w-3.5 h-3.5 mr-1.5" />
+              {uploading ? "Uploading…" : "Upload"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Finished-file check (optional)
+          </span>
+          <SaveLink
+            dirty={dimsDirty}
+            busy={busy}
+            onClick={saveDims}
+            testId={`button-save-template-dims-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <input
+            value={wDraft}
+            onChange={(e) => setWDraft(e.target.value)}
+            inputMode="decimal"
+            placeholder="W (in)"
+            className={INPUT}
+            disabled={busy}
+            data-testid={`input-template-w-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          />
+          <input
+            value={hDraft}
+            onChange={(e) => setHDraft(e.target.value)}
+            inputMode="decimal"
+            placeholder="H (in)"
+            className={INPUT}
+            disabled={busy}
+            data-testid={`input-template-h-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          />
+          <input
+            value={pagesDraft}
+            onChange={(e) => setPagesDraft(e.target.value)}
+            inputMode="numeric"
+            placeholder="Pages"
+            className={INPUT}
+            disabled={busy}
+            data-testid={`input-template-pages-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          />
+          <select
+            value={colorDraft}
+            onChange={(e) => setColorDraft(e.target.value)}
+            className={INPUT}
+            disabled={busy}
+            data-testid={`select-template-color-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          >
+            <option value="">Color…</option>
+            <option value="process-4c">Process 4C</option>
+            <option value="cmyk-or-pms">CMYK or PMS</option>
+          </select>
+        </div>
+      </div>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept={DOC_UPLOAD_ACCEPT}
+        className="hidden"
+        onChange={(e) => handleUpload(e.target.files?.[0])}
+      />
+
+      <AlertDialog open={confirmRemove} onOpenChange={setConfirmRemove}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove the {label} template?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Artists will no longer be able to download this {label.toLowerCase()} template, and the
+              finished-file check falls back to its measured defaults.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-rose-600 hover:bg-rose-700"
+              onClick={() => {
+                if (spec) onRemove(spec.id);
+                setConfirmRemove(false);
+              }}
+              data-testid="button-confirm-remove-template"
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

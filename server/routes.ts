@@ -3395,6 +3395,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ".webp": "image/webp",
         ".gif": "image/gif",
         ".avif": "image/avif",
+        // Task #2115 — press print templates land here too. PDFs serve
+        // inline; AI/EPS/ZIP fall through to octet-stream → browser
+        // download, which is the desired behavior for a template file.
+        ".pdf": "application/pdf",
+        ".zip": "application/zip",
       };
       let contentType = storedCt;
       if (!contentType || contentType === "application/octet-stream") {
@@ -4169,6 +4174,82 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     },
   );
+
+  // ─── Task #2115 — generic document upload (press print templates) ───
+  // Print templates are PDFs / packaged art (often >8MB), so the
+  // image-only `/api/admin/upload` route can't take them and a direct
+  // multipart POST would hit the deploy edge's ~32MB body cap. Mirror the
+  // video signed-PUT flow instead: mint a signed PUT URL the browser
+  // streams straight to GCS, then finalize to flip the object public +
+  // stamp a content type. Returns a `/objects/uploads/<id>` path. Gated to
+  // any admin/partner (same as the video/audio sign routes) — the actual
+  // press association is gated downstream by the template-specs PUT.
+  const DOC_MIME_TO_EXT: Record<string, string> = {
+    "application/pdf": ".pdf",
+    "application/zip": ".zip",
+    "application/postscript": ".ai",
+    "application/illustrator": ".ai",
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/tiff": ".tiff",
+  };
+  const DOC_MIME_BY_EXT: Record<string, string> = {
+    ".pdf": "application/pdf",
+    ".zip": "application/zip",
+    ".ai": "application/postscript",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".tiff": "image/tiff",
+  };
+  app.post("/api/admin/upload-doc/sign", requireAdminBearer, async (req, res) => {
+    try {
+      const contentType = String(req.body?.contentType || "");
+      if (!(contentType in DOC_MIME_TO_EXT)) {
+        return res
+          .status(400)
+          .json({ message: "Only PDF, AI/EPS, ZIP, PNG, JPEG, or TIFF files are allowed" });
+      }
+      const id = `${randomUUID()}${DOC_MIME_TO_EXT[contentType]}`;
+      const { bucketName, objectName } = uploadDestination(id);
+      const uploadUrl = await signGcsUrl(bucketName, objectName, "PUT", 900);
+      return res.json({
+        uploadUrl,
+        finalPath: `/objects/uploads/${id}`,
+        contentType,
+      });
+    } catch (err) {
+      console.error("Doc sign failed", err);
+      return res.status(500).json({ message: "Could not start upload" });
+    }
+  });
+  app.post("/api/admin/upload-doc/finalize", requireAdminBearer, async (req, res) => {
+    try {
+      const finalPath = String(req.body?.finalPath || "");
+      if (!/^\/objects\/uploads\/[a-zA-Z0-9._-]+$/.test(finalPath)) {
+        return res.status(400).json({ message: "Invalid upload path" });
+      }
+      const file = await objectStorage.getObjectEntityFile(finalPath);
+      const extMatch = finalPath.toLowerCase().match(/\.([a-z0-9]+)$/);
+      const ext = extMatch ? `.${extMatch[1]}` : "";
+      const desiredCt = DOC_MIME_BY_EXT[ext];
+      if (desiredCt) {
+        try {
+          await file.setMetadata({ contentType: desiredCt });
+        } catch (e) {
+          console.warn(`[upload-doc/finalize] setMetadata failed for ${finalPath}`, e);
+        }
+      }
+      await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
+      return res.json({ url: finalPath });
+    } catch (err) {
+      if (err instanceof ObjectNotFoundError) {
+        return res.status(404).json({ message: "Upload not found" });
+      }
+      console.error("Doc finalize failed", err);
+      return res.status(500).json({ message: "Could not finalize upload" });
+    }
+  });
 
   // Ingest a video from a remote URL (Dropbox, S3, plain HTTPS, etc).
   // Streams the bytes server-side into Object Storage so the admin doesn't
@@ -28991,6 +29072,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return true;
   }
 
+  // Task #2115 — catalog Specs (template uploads) are managed from the
+  // press Catalog panel, which a press-scoped manufacturer admin can reach
+  // (mirrors commerce.ts:requirePressScope on every other catalog route).
+  // So the template-specs read/write/delete must admit a manufacturer
+  // membership for THIS press, not just super_admin/admin. Operational
+  // routing/pricing parity with the rest of the catalog.
+  async function requirePressManager(
+    req: Request,
+    res: Response,
+    pressId: string,
+  ): Promise<boolean> {
+    const info = await getUserRole(req.session.userId!);
+    if (!info) {
+      res.status(403).json({ message: "Forbidden" });
+      return false;
+    }
+    if (info.role === "super_admin" || info.role === "admin") return true;
+    const { findMembershipForScope } = await import("./auth/roles");
+    if (await findMembershipForScope(req.session.userId!, "manufacturer", pressId)) {
+      return true;
+    }
+    res.status(403).json({ message: "Forbidden" });
+    return false;
+  }
+
   // Re-tag the presence of every stored (file-bearing) component against
   // the current required-slot set and roll up the verdict. Stored
   // components always carry a file, so each is either "present" (matches a
@@ -29244,11 +29350,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     expectedPages: z.number().int().min(1).max(64).nullable().optional(),
     color: z.enum(["process-4c", "cmyk-or-pms"]).nullable().optional(),
     fontsRule: z.string().trim().max(200).nullable().optional(),
-    templateFileUrl: z.string().trim().url().max(2000).nullable().optional(),
+    // Accept either a pasted absolute URL (http/https) OR a relative
+    // object path (e.g. `/objects/uploads/<id>`) returned by the
+    // upload-doc finalize flow — `z.string().url()` would reject the
+    // latter, silently breaking the Upload button.
+    templateFileUrl: z
+      .string()
+      .trim()
+      .max(2000)
+      .refine((s) => /^https?:\/\//i.test(s) || s.startsWith("/"), {
+        message: "Must be an absolute URL or an /objects path",
+      })
+      .nullable()
+      .optional(),
   });
 
   app.get("/api/admin/manufacturers/:id/template-specs", requireAdminBearer, async (req, res) => {
-    if (!(await requireOperator(req, res))) return;
+    if (!(await requirePressManager(req, res, req.params.id))) return;
     const press = await storage.getManufacturerById(req.params.id);
     if (!press) return res.status(404).json({ message: "Press not found" });
     const format = typeof req.query.format === "string" ? req.query.format : undefined;
@@ -29256,7 +29374,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.put("/api/admin/manufacturers/:id/template-specs", requireAdminBearer, async (req, res) => {
-    if (!(await requireOperator(req, res))) return;
+    if (!(await requirePressManager(req, res, req.params.id))) return;
     const press = await storage.getManufacturerById(req.params.id);
     if (!press) return res.status(404).json({ message: "Press not found" });
     const body = templateSpecBodySchema.safeParse(req.body);
@@ -29288,7 +29406,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "/api/admin/manufacturers/:id/template-specs/:specId",
     requireAdminBearer,
     async (req, res) => {
-      if (!(await requireOperator(req, res))) return;
+      if (!(await requirePressManager(req, res, req.params.id))) return;
       await storage.deletePressTemplateSpec(req.params.id, req.params.specId);
       res.json({ ok: true });
     },

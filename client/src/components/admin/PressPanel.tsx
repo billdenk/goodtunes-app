@@ -26,10 +26,12 @@ import { useToast } from "@/hooks/use-toast";
 import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, matchInvitedPressToVendor, defaultPreflightVendor, type VendorId } from "@shared/vendorSpecs";
 import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
 import { CompletedTemplatePanel } from "@/components/admin/CompletedTemplatePanel";
+import { PressTemplateDownloads, type PressTemplate } from "@/components/admin/PressTemplateDownloads";
 import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
 import { VinylOrderPanel } from "@/components/admin/VinylOrderPanel";
 import type { VinylFormat } from "@shared/vinylFormatRules";
-import type { AlbumPhysicalFormat } from "@shared/schema";
+import { PHYSICAL_FORMAT_TO_ALBUM_FORMAT } from "@shared/schema";
+import type { AlbumPhysicalFormat, AlbumFormat } from "@shared/schema";
 
 export type PressPanelSong = {
   id: string;
@@ -354,6 +356,9 @@ export function PressPanel({
     press: { name: string | null } | null;
     // Task #1837 — effective plant from saved SKUs when no invited-by-press stamp.
     effectivePress?: { id: string; name: string } | null;
+    // Task #2115 — the invited press's uploaded print templates, offered
+    // here as operator-facing downloads in the Physical tab.
+    templates?: PressTemplate[];
   }>({
     queryKey: ["/api/admin/albums", albumId, "invited-press"],
   });
@@ -802,6 +807,24 @@ export function PressPanel({
 
         {/* ── Completed-template confirmation (Task #2109) ───────────── */}
         <CompletedTemplatePanel albumId={albumId} vendor={vendorId} />
+
+        {/* ── Press print templates (Task #2115) ─────────────────────── */}
+        {(() => {
+          const albumFormat: AlbumFormat | null = physicalFormat
+            ? PHYSICAL_FORMAT_TO_ALBUM_FORMAT[
+                physicalFormat as keyof typeof PHYSICAL_FORMAT_TO_ALBUM_FORMAT
+              ] ?? null
+            : null;
+          if (!albumFormat) return null;
+          return (
+            <PressTemplateDownloads
+              templates={invitedPress?.templates}
+              format={albumFormat}
+              pressName={invitedPress?.press?.name}
+              className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+            />
+          );
+        })()}
       </div>
     </div>
   );
