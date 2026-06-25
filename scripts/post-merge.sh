@@ -7919,4 +7919,36 @@ SQL
 migrate_press_format_hidden_at dev  "${DATABASE_URL:-}"
 migrate_press_format_hidden_at prod "${PROD_DATABASE_URL:-}"
 
+# Task #2172 — "Remember this device for 30 days" (admin 2FA trusted devices).
+# shared/schema.ts declares admin_trusted_devices; hand-apply the canonical
+# CREATE TABLE on BOTH dev and prod so the schema-drift guard stays green on
+# freshly-cloned dev and the publish dev→prod diff stays empty. Idempotent.
+migrate_admin_trusted_devices() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping admin_trusted_devices migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS admin_trusted_devices (
+  id          varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  text    NOT NULL UNIQUE,
+  expires_at  timestamp NOT NULL,
+  created_at  timestamp DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS admin_trusted_devices_user_idx ON admin_trusted_devices (user_id);
+CREATE INDEX IF NOT EXISTS admin_trusted_devices_expires_idx ON admin_trusted_devices (expires_at);
+COMMIT;
+SQL
+  then
+    echo "post-merge: admin_trusted_devices migration ok on $label"
+  else
+    echo "post-merge: WARNING — admin_trusted_devices migration failed on $label (continuing)"
+  fi
+}
+migrate_admin_trusted_devices dev  "${DATABASE_URL:-}"
+migrate_admin_trusted_devices prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror

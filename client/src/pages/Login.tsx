@@ -330,6 +330,8 @@ export function Login() {
   const [totpAlsoEnrolled, setTotpAlsoEnrolled] = useState(false);
   const [totpError, setTotpError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Task #2172 — "Remember this device for 30 days" checkbox (admin only).
+  const [rememberDevice, setRememberDevice] = useState(false);
 
   const { login, register, isLoginPending, isRegisterPending, loginError, registerError } = useAuth();
   const [, navigate] = useLocation();
@@ -862,6 +864,7 @@ export function Login() {
       const body: any = {};
       if (useRecovery) body.recovery = recoveryCode.trim();
       else body.code = totpCode.trim();
+      if (rememberDevice) body.rememberDevice = true;
       const res = await apiRequest("POST", "/api/auth/totp/verify", body);
       const j = await res.json();
       if (j.token) setAuthToken(j.token);
@@ -884,7 +887,7 @@ export function Login() {
   const submitEmailOtp = async () => {
     setSubmitting(true); setEmailOtpError(null);
     try {
-      const res = await apiRequest("POST", "/api/auth/email-otp/verify", { code: emailCode.trim() });
+      const res = await apiRequest("POST", "/api/auth/email-otp/verify", { code: emailCode.trim(), rememberDevice: rememberDevice || undefined });
       const j = await res.json();
       if (j.token) setAuthToken(j.token);
       // Seed the signed-in user before navigating so the protected admin
@@ -1028,6 +1031,16 @@ export function Login() {
             data-testid="input-email-otp"
           />
           {emailOtpError && <p className={s.totpErr}>{emailOtpError}</p>}
+          <label className="flex items-center gap-2 mb-4 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={rememberDevice}
+              onChange={(e) => setRememberDevice(e.target.checked)}
+              className="w-4 h-4 rounded accent-slate-700"
+              data-testid="checkbox-remember-device-email"
+            />
+            <span className="text-sm text-slate-500">Remember this device for 30 days</span>
+          </label>
           <button
             type="button"
             onClick={submitEmailOtp}
@@ -1098,6 +1111,16 @@ export function Login() {
             />
           )}
           {totpError && <p className={s.totpErr}>{totpError}</p>}
+          <label className="flex items-center gap-2 mb-4 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={rememberDevice}
+              onChange={(e) => setRememberDevice(e.target.checked)}
+              className="w-4 h-4 rounded accent-slate-700"
+              data-testid="checkbox-remember-device-totp"
+            />
+            <span className="text-sm text-slate-500">Remember this device for 30 days</span>
+          </label>
           <button
             type="button"
             onClick={submitTotp}

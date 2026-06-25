@@ -3318,6 +3318,22 @@ export const adminPasswordResetTokens = pgTable("admin_password_reset_tokens", {
 });
 export type AdminPasswordResetToken = typeof adminPasswordResetTokens.$inferSelect;
 
+// Task #2172 — "Remember this device for 30 days" trusted-device store.
+// Mirrors the adminPasswordResetTokens shape. Only a SHA-256 hash of the
+// raw cookie value is stored — the raw token lives only in the browser
+// httpOnly cookie and is never persisted. One row per trusted browser
+// session; a user can accumulate many rows (one per device). Rows expire
+// after 30 days. Revoking the admin drops all rows for that user via the
+// CASCADE delete on userId.
+export const adminTrustedDevices = pgTable("admin_trusted_devices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type AdminTrustedDevice = typeof adminTrustedDevices.$inferSelect;
+
 // Task #271 — Customer "Forgot password?" reset tokens. Mirror of the
 // admin table, pointed at customer_users. Same single-use + SHA-256-hash
 // + 30-minute TTL contract. OAuth-only fans (no password row) are

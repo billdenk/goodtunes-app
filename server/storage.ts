@@ -50,6 +50,8 @@ import {
   type AdminEmailOtp,
   adminPasswordResetTokens,
   type AdminPasswordResetToken,
+  adminTrustedDevices,
+  type AdminTrustedDevice,
   customerPasswordResetTokens,
   type CustomerPasswordResetToken,
   albums,
@@ -4621,6 +4623,30 @@ export class DbStorage implements IStorage {
           sql`${adminPasswordResetTokens.consumedAt} IS NULL`,
         ),
       );
+  }
+
+  // ---- Admin trusted devices (Task #2172) -------------------------
+  // Only the SHA-256 hash of the raw cookie token is stored. The raw
+  // token lives exclusively in the browser httpOnly cookie. One row per
+  // trusted browser; rows expire after 30 days.
+  async createAdminTrustedDevice(userId: string, tokenHash: string, expiresAt: Date): Promise<AdminTrustedDevice> {
+    const [row] = await db
+      .insert(adminTrustedDevices)
+      .values({ userId, tokenHash, expiresAt })
+      .returning();
+    return row;
+  }
+  async getAdminTrustedDevice(tokenHash: string): Promise<AdminTrustedDevice | undefined> {
+    const [row] = await db
+      .select()
+      .from(adminTrustedDevices)
+      .where(eq(adminTrustedDevices.tokenHash, tokenHash));
+    if (!row) return undefined;
+    if (row.expiresAt.getTime() < Date.now()) return undefined;
+    return row;
+  }
+  async deleteAdminTrustedDevicesForUser(userId: string): Promise<void> {
+    await db.delete(adminTrustedDevices).where(eq(adminTrustedDevices.userId, userId));
   }
 
   // ---- Customer password reset (Task #271) ------------------------

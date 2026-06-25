@@ -1168,6 +1168,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await storage.createAuthToken(token, user.id, "admin");
         return res.json({ ...shapeAdmin(user), token, kind: "admin", devBypass: true });
       }
+      // Task #2172 — "Remember this device" trusted-device bypass. After
+      // the password check passes (above), look for a valid httpOnly
+      // gt_trusted_device cookie. If its SHA-256 hash matches a live DB
+      // row bound to this user, skip 2FA entirely and issue a session +
+      // bearer token — same shape as the verify endpoints return.
+      const rawDeviceToken = (() => {
+        const header = req.headers.cookie;
+        if (!header) return undefined;
+        const pair = header.split(";").map((c) => c.trim()).find((c) => c.startsWith("gt_trusted_device="));
+        return pair ? decodeURIComponent(pair.slice("gt_trusted_device=".length)) : undefined;
+      })();
+      if (rawDeviceToken) {
+        const deviceHash = createHash("sha256").update(rawDeviceToken).digest("hex");
+        const trusted = await storage.getAdminTrustedDevice(deviceHash);
+        if (trusted && trusted.userId === user.id) {
+          req.session.userId = user.id;
+          req.session.kind = "admin";
+          const token = generateToken();
+          await storage.createAuthToken(token, user.id, "admin");
+          const u = await storage.getUser(user.id);
+          const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
+          const landingPath = await landingPathForUser(user.id);
+          return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath, kind: "admin" });
+        }
+      }
       req.session.pendingTotpUserId = user.id;
       const totp = await storage.getAdminTotp(user.id);
       // Task #57 — second-factor router. `factorPref` is the admin's
@@ -2698,6 +2723,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     req.session.userId = userId;
     req.session.kind = "admin";
     req.session.pendingTotpUserId = undefined;
+    // Task #2172 — mint a trusted-device cookie when the admin checked
+    // "Remember this device for 30 days". Only the SHA-256 hash is stored
+    // in the DB; the raw token lives in the httpOnly cookie only.
+    if (req.body?.rememberDevice) {
+      const deviceToken = randomBytes(32).toString("hex");
+      const deviceHash = createHash("sha256").update(deviceToken).digest("hex");
+      const deviceExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      await storage.createAdminTrustedDevice(userId, deviceHash, deviceExpiry);
+      res.cookie("gt_trusted_device", deviceToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        path: "/",
+      });
+    }
     const u = await storage.getUser(userId);
     const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
     // Task #78 — return a role-scoped landing path so the login UI can
@@ -2791,6 +2832,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     req.session.userId = userId;
     req.session.kind = "admin";
     req.session.pendingTotpUserId = undefined;
+    // Task #2172 — mint a trusted-device cookie when the admin checked
+    // "Remember this device for 30 days". Only the SHA-256 hash is stored
+    // in the DB; the raw token lives in the httpOnly cookie only.
+    if (req.body?.rememberDevice) {
+      const deviceToken = randomBytes(32).toString("hex");
+      const deviceHash = createHash("sha256").update(deviceToken).digest("hex");
+      const deviceExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      await storage.createAdminTrustedDevice(userId, deviceHash, deviceExpiry);
+      res.cookie("gt_trusted_device", deviceToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        path: "/",
+      });
+    }
     const u = await storage.getUser(userId);
     const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
     const landingPath = await landingPathForUser(userId);
@@ -3269,6 +3326,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // removed that hat; a role the account doesn't hold is a no-op.
     await removeMembership(targetId, "super_admin" as any, null);
     await removeMembership(targetId, "admin" as any, null);
+    // Task #2172 — drop all trusted-device records for this user so a
+    // remembered browser can't keep skipping 2FA after access is revoked.
+    await storage.deleteAdminTrustedDevicesForUser(targetId);
     return res.json({ ok: true });
   });
 

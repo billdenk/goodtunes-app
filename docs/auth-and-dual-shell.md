@@ -297,6 +297,20 @@ Resend is the only transport. Three rules keep our sending-domain reputation gre
 
 When you build a new mail flow, do not handle `!result.ok` with a one-off `console.warn` in the calling route — the central logger already covers it. Just call the template, await it, and (if appropriate) keep a non-prod dev-link console fallback so local development still works when Resend is unreachable.
 
+## Remember this device (trusted devices, Task #2172)
+
+Admins can opt into skipping 2FA for 30 days on a given browser by checking **"Remember this device for 30 days"** on the email-OTP or TOTP verify screen.
+
+**How it works.** On a successful 2FA verify with the box checked, the server mints a 32-byte random token, stores only its SHA-256 hash in the `admin_trusted_devices` table alongside the admin's `userId` and a 30-day expiry, and sets the raw token as a `gt_trusted_device` cookie (`httpOnly: true, secure: true, sameSite: "none", path: "/"`, `maxAge` 30 days). The raw token is never persisted — only the hash lives in the DB.
+
+**Bypass on next sign-in.** In the password leg of `/api/login`, after the password check succeeds and before the 2FA step is initiated, the server reads the `gt_trusted_device` cookie from the request headers (parsed from `req.headers.cookie`), hashes it with SHA-256, and looks it up in `admin_trusted_devices`. If a live (unexpired), user-matching row is found, the server issues a session + bearer token immediately — skipping 2FA — returning the same response shape the verify endpoints return (including `landingPath`). An absent, expired, or wrong-user cookie falls through to the normal 2FA flow. The existing dev-only bypass (`NODE_ENV !== "production"`) is unchanged and fires before the trusted-device check.
+
+**Trust is per-browser and per-user.** A cookie minted for one admin never satisfies the bypass for another (the DB row carries `userId` and the route checks it explicitly). A different browser, a cleared cookie, or incognito mode always sees the normal 2FA prompt. After 30 days the row is expired client-side (the cookie's `maxAge`) and server-side (the `expiresAt` guard in `getAdminTrustedDevice`).
+
+**Revoke drops trust.** The `/api/admin/admins/revoke` route calls `storage.deleteAdminTrustedDevicesForUser(targetId)` after removing the admin's hat, so a remembered browser can't keep skipping 2FA once the account is revoked. The `users → admin_trusted_devices` FK has `ON DELETE CASCADE`, so a full row deletion also cleans up automatically.
+
+**Schema.** `admin_trusted_devices` mirrors the `admin_password_reset_tokens` shape — an idempotent `CREATE TABLE IF NOT EXISTS` (plus two indexes) is applied to both dev and prod in `scripts/post-merge.sh`; the table is also declared in `shared/schema.ts` so the schema-drift guard stays green.
+
 ## Customer signup verification email (Task #259)
 
 New fans hit `POST /api/email-verifications/start` from the `my.goodtunes.music` login page; the handler hashes a 6-digit code, stores it on `email_verifications`, and — when `RESEND_API_KEY` is set — sends the branded `sendCustomerSignupCodeEmail` (fan copy, 15-minute TTL) via the same Resend transport as admin OTP. On a successful real send the response omits `devCode` and the code is **never** console-logged (would defeat the gate). If Resend rejects the send, the user gets a generic 500 "Couldn't send a code right now — please try again" and the underlying reason is logged server-side only — we never leak whether the address exists or whether mail is misconfigured. With no `RESEND_API_KEY` (local dev), behavior is unchanged: code logs to the workflow console and is echoed back as `devCode` so signup keeps working without an inbox.
