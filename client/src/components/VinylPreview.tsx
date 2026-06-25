@@ -28,11 +28,20 @@ export function VinylPreview({
   size = "md",
   jacketOverlay,
   format,
+  placeholderLogoUrl,
 }: {
   artworkUrl: string | null | undefined;
   color: VinylColorOption;
   jacketUpgrade: JacketUpgrade;
   size?: "sm" | "md" | "lg" | "xl" | "2xl";
+  // Task #2117 — when an album has no artwork yet, operator/press
+  // surfaces (SellPanel, press catalog preview) can pass the press's
+  // logo to render a *branded placeholder* in the jacket instead of a
+  // plain gray gradient. Real album art always wins (this only shows
+  // when `artworkUrl` is empty). Optional/undefined keeps the plain
+  // gradient for fan-facing call sites, so a press logo never leaks
+  // onto a fan album cover.
+  placeholderLogoUrl?: string | null;
   // Task #393 — optional ReactNode rendered absolutely-positioned
   // INSIDE the jacket div, so a hover-pencil from the SellPanel format
   // card can sit on the jacket itself (top-right) without overlapping
@@ -78,6 +87,16 @@ export function VinylPreview({
               className="w-full h-full object-cover"
               draggable={false}
             />
+          ) : placeholderLogoUrl ? (
+            <div className="w-full h-full bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center p-[18%]">
+              <img
+                src={placeholderLogoUrl}
+                alt=""
+                className="max-w-full max-h-full object-contain opacity-80"
+                draggable={false}
+                data-testid="img-press-logo-placeholder"
+              />
+            </div>
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-slate-300 to-slate-400" />
           )}
@@ -225,6 +244,16 @@ export function VinylPreview({
               className="w-full h-full object-cover"
               draggable={false}
             />
+          ) : placeholderLogoUrl ? (
+            <div className="w-full h-full bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center p-[16%]">
+              <img
+                src={placeholderLogoUrl}
+                alt=""
+                className="max-w-full max-h-full object-contain opacity-80"
+                draggable={false}
+                data-testid="img-press-logo-placeholder"
+              />
+            </div>
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-slate-300 to-slate-400" />
           )}

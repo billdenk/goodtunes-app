@@ -68,6 +68,41 @@ export function PressLogoEditorDialog({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Task #2117 — paste-a-URL alongside the existing upload, so a logo
+  // can be set from an already-hosted image without downloading it first.
+  const [urlInput, setUrlInput] = useState("");
+
+  const setFromUrl = useMutation({
+    mutationFn: async (url: string) => {
+      await apiRequest("PUT", apiPath, { logoUrl: url });
+      return url;
+    },
+    onSuccess: () => {
+      onInvalidate();
+      setUrlInput("");
+      toast({ title: "Logo updated" });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't update the logo",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      }),
+  });
+
+  const applyUrl = () => {
+    const url = urlInput.trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) {
+      toast({
+        title: "That doesn't look like a URL",
+        description: "Paste a full image URL starting with http:// or https://",
+        variant: "destructive",
+      });
+      return;
+    }
+    setFromUrl.mutate(url);
+  };
 
   const upload = useMutation({
     mutationFn: async (file: File) => {
@@ -120,13 +155,13 @@ export function PressLogoEditorDialog({
     upload.mutate(file);
   };
 
-  const busy = upload.isPending || removeLogo.isPending;
+  const busy = upload.isPending || removeLogo.isPending || setFromUrl.isPending;
   const shownUrl = previewUrl || logoUrl;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !busy && onOpenChange(v)}>
       <DialogContent
-        className="max-w-3xl bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-5"
+        className="max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl border-slate-200 shadow-xl p-5 sm:p-6 gap-5"
         data-testid={`dialog-edit-${testIdPrefix}-logo`}
       >
         <DialogHeader className="flex-row items-center justify-between space-y-0">
@@ -160,7 +195,11 @@ export function PressLogoEditorDialog({
                 <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
                   <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
                   <span className="text-xs text-slate-700 font-semibold">
-                    {upload.isPending ? "Uploading…" : "Removing…"}
+                    {upload.isPending
+                      ? "Uploading…"
+                      : setFromUrl.isPending
+                        ? "Updating…"
+                        : "Removing…"}
                   </span>
                 </div>
               )}
@@ -234,7 +273,36 @@ export function PressLogoEditorDialog({
               }}
               data-testid={`input-${testIdPrefix}-logo-file`}
             />
-            <p className="mt-4 text-xs text-slate-500 leading-relaxed">{hint}</p>
+            {/* Task #2117 — paste-a-URL row, mirroring the paste-or-upload
+                pattern used elsewhere in admin. */}
+            <div className="mt-4 flex items-center gap-2">
+              <input
+                type="url"
+                inputMode="url"
+                placeholder="…or paste an image URL"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    applyUrl();
+                  }
+                }}
+                disabled={busy}
+                className="flex-1 min-w-0 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-[color:var(--brand-blue)] disabled:opacity-60"
+                data-testid={`input-${testIdPrefix}-logo-url`}
+              />
+              <Button
+                type="button"
+                onClick={applyUrl}
+                disabled={busy || !urlInput.trim()}
+                className="h-9 px-3 text-xs shrink-0"
+                data-testid={`button-${testIdPrefix}-logo-url-apply`}
+              >
+                Use URL
+              </Button>
+            </div>
+            <p className="mt-3 text-xs text-slate-500 leading-relaxed">{hint}</p>
           </div>
         </div>
       </DialogContent>

@@ -1743,9 +1743,20 @@ function PrinterAndPressPanel({
                 aria-pressed={false}
                 data-testid={`printer-${c.id}`}
                 onClick={() => onSelectId(c.id)}
-                className="rounded-full px-2 py-0.5 text-xs font-semibold border bg-white text-slate-700 border-slate-200 hover:border-slate-300 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-full pl-1 pr-2 py-0.5 text-xs font-semibold border bg-white text-slate-700 border-slate-200 hover:border-slate-300 transition-colors"
                 title={c.label}
               >
+                {/* Task #2117 — logo + name per quote. Press logos sit in
+                    a rounded-rect tile (circles are reserved for
+                    people/bands); falls back to a neutral tile when a
+                    press has no logo set. */}
+                {c.press?.logoUrl ? (
+                  <span className="w-4 h-4 rounded-[3px] overflow-hidden bg-white border border-slate-200 flex-shrink-0">
+                    <img src={c.press.logoUrl} alt="" className="w-full h-full object-cover" />
+                  </span>
+                ) : (
+                  <span className="w-4 h-4 rounded-[3px] bg-slate-200 border border-slate-200 flex-shrink-0" />
+                )}
                 {c.label}
               </button>
             ))}
@@ -5730,6 +5741,12 @@ function SkuRow({
                   jacketUpgrade={jacketUpgrade}
                   format={format}
                   size="2xl"
+                  /* Task #2117 — when the album has no artwork yet, brand
+                     the operator/press jacket mockup with the quoting
+                     press's logo instead of a plain gray gradient. Real
+                     art always wins (VinylPreview only uses this when
+                     artworkUrl is empty). */
+                  placeholderLogoUrl={(invitedPressItself ?? comparisonAnchorPress)?.logoUrl ?? null}
                   jacketOverlay={(onEditArtwork || canChangeFormat) ? (
                     <>
                       <span

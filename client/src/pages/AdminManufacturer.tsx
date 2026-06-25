@@ -399,12 +399,12 @@ export function AdminManufacturer() {
         </div>
 
         {/* HEADER — logo tile + domain eyebrow + name + Visit link */}
-        <div className="flex items-start gap-5">
+        <div className="flex items-start gap-4 sm:gap-5">
           <button
             type="button"
             onClick={() => setLogoEditorOpen(true)}
             className={[
-              "group relative w-24 h-24 rounded-xl overflow-hidden shadow-sm flex-shrink-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2",
+              "group relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden shadow-sm flex-shrink-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2",
               m.logoUrl ? "" : "bg-white ring-1 ring-slate-200",
             ].join(" ")}
             aria-label="Edit press logo"
@@ -663,6 +663,7 @@ export function AdminManufacturer() {
               pressId={id}
               pressDomain={m?.domain ?? null}
               placeholderUrl={m?.vinylPlaceholderUrl ?? null}
+              pressLogoUrl={m?.logoUrl ?? null}
             />
           </>
         )}
@@ -2200,10 +2201,12 @@ export function PressCatalogPanel({
   pressId,
   pressDomain,
   placeholderUrl = null,
+  pressLogoUrl = null,
 }: {
   pressId: string;
   pressDomain: string | null;
   placeholderUrl?: string | null;
+  pressLogoUrl?: string | null;
 }) {
   // Role gate — server is authoritative; we hide the panel for admins
   // who would just see a 403 either way.
@@ -2346,6 +2349,7 @@ export function PressCatalogPanel({
               pressId={pressId}
               pressDomain={pressDomain}
               placeholderUrl={placeholderUrl}
+              pressLogoUrl={pressLogoUrl ?? null}
               catalog={data}
               activeFormat={activeFormat}
               setActiveFormat={setActiveFormat}
@@ -2411,6 +2415,7 @@ function CatalogEditor({
   pressId,
   pressDomain,
   placeholderUrl,
+  pressLogoUrl,
   catalog,
   activeFormat,
   setActiveFormat,
@@ -2422,6 +2427,7 @@ function CatalogEditor({
   pressId: string;
   pressDomain: string | null;
   placeholderUrl: string | null;
+  pressLogoUrl?: string | null;
   catalog: Catalog;
   activeFormat: AlbumFormat;
   setActiveFormat: (f: AlbumFormat) => void;
@@ -2863,11 +2869,19 @@ function CatalogEditor({
           {/* Live preview — the press's placeholder art on the chosen disc. */}
           <div className="flex flex-col items-center gap-1.5 md:pl-2">
             <VinylPreview
-              artworkUrl={placeholderArt}
+              /* Task #2117 — the operator/press-uploaded logo
+                 (manufacturers.logoUrl) is the source of truth for the
+                 branded jacket placeholder, so it WINS over the bundled
+                 domain-keyed art. When a logo is set we hand it to
+                 placeholderLogoUrl (centered + contained, the branded-
+                 placeholder treatment); only presses with no uploaded
+                 logo fall back to the bundled full-jacket domain art. */
+              artworkUrl={pressLogoUrl ? null : placeholderArt}
               color={previewColor}
               jacketUpgrade={DEFAULT_JACKET_UPGRADE}
               format={fmt}
               size="2xl"
+              placeholderLogoUrl={pressLogoUrl ?? null}
             />
             <span className="text-xs text-slate-400" data-testid={`text-preview-color-${fmt}`}>
               {selectedSwatch ? selectedSwatch.name : "No color selected"}

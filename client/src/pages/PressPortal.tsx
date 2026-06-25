@@ -1331,6 +1331,9 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
   const [bio, setBio] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  // Task #2117 — paste-a-URL alongside the upload so a press can set its
+  // logo from an already-hosted image.
+  const [logoUrlInput, setLogoUrlInput] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   // Hydrate once when /me lands. Subsequent saves invalidate /me which
@@ -1371,6 +1374,18 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
       setUploadingLogo(false);
       if (fileRef.current) fileRef.current.value = "";
     }
+  }
+
+  function applyLogoUrl() {
+    const url = logoUrlInput.trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) {
+      toast({ title: "That doesn't look like a URL", description: "Paste a full image URL starting with http:// or https://", variant: "destructive" });
+      return;
+    }
+    setLogoUrl(url);
+    save.mutate({ logoUrl: url });
+    setLogoUrlInput("");
   }
 
   if (isLoading) return <PanelLoading />;
@@ -1421,6 +1436,31 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
             />
           </div>
         </div>
+        {/* Task #2117 — paste-a-URL fallback for the logo. */}
+        {canEdit && (
+          <div className="flex items-center gap-2 max-w-md">
+            <Input
+              type="url"
+              inputMode="url"
+              value={logoUrlInput}
+              onChange={(e) => setLogoUrlInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyLogoUrl(); } }}
+              disabled={uploadingLogo || save.isPending}
+              placeholder="…or paste an image URL"
+              className="min-w-0 bg-white border-slate-200 text-slate-900"
+              data-testid="input-logo-url"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={applyLogoUrl}
+              disabled={uploadingLogo || save.isPending || !logoUrlInput.trim()}
+              className="h-9 shrink-0 bg-transparent text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 border-0 text-sm font-semibold"
+              data-testid="button-logo-url-apply"
+            >Use URL</Button>
+          </div>
+        )}
 
         <div>
           <label className="text-xs text-slate-500 uppercase tracking-wide">Press name</label>
