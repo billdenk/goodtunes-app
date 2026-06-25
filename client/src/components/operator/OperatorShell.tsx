@@ -160,18 +160,39 @@ export function OperatorShell<TabId extends string>({
 
   if (layout === "leftnav") {
     return (
+      // h-screen + overflow-hidden on the outer shell means only the main
+      // content column scrolls; the left rail stays fixed in place — matching
+      // AdminFrame's h-screen layout so the nav never scrolls away.
       <div
-        className="min-h-screen flex bg-slate-50 text-slate-900"
+        className="h-screen overflow-hidden flex bg-slate-50 text-slate-900"
         data-testid={testId ?? "operator-shell"}
       >
-        {/* Left rail — mirrors AdminFrame: 220px white column, logo on a
-            border-b header band, vertical nav, account menu pinned to the
-            foot. Hidden on phones, which fall back to the horizontal tab
-            bar under the header below. */}
+        {/* Left rail — 220px white column. Partner logo + name in the top
+            header band (replacing the GoodTunes logo). Vertical nav in the
+            middle. "Powered by GoodTunes" pinned to the foot.
+            Hidden on phones, which fall back to the horizontal tab bar. */}
         <aside className="w-[220px] flex-shrink-0 bg-white border-r border-slate-200 hidden md:flex md:flex-col">
-          <div className="h-14 flex-shrink-0 flex items-center px-4 border-b border-slate-200">
-            <img src={gtLogo} alt="GoodTunes" className="h-8 w-auto" />
+          {/* Partner logo + name — top-left rail header, mirrors AdminFrame's
+              h-14 logo band. Small square/circle avatar + truncated name. */}
+          <div className="h-14 flex-shrink-0 flex items-center gap-2.5 px-3 border-b border-slate-200 overflow-hidden">
+            <div
+              className={cn(
+                "w-7 h-7 flex-shrink-0 overflow-hidden flex items-center justify-center bg-slate-100 ring-1 ring-slate-200",
+                radius,
+              )}
+              data-testid="operator-shell-rail-logo"
+            >
+              {logoUrl ? (
+                <img src={logoUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <FallbackIcon className="w-3.5 h-3.5 text-slate-400" />
+              )}
+            </div>
+            <span className="text-sm font-semibold text-slate-800 truncate" data-testid="text-operator-rail-name">
+              {name}
+            </span>
           </div>
+
           {/* Task #2085 — nav items mirror AdminFrame's SidebarLink class
               treatment (px-3 py-2, text-sm, brand-blue active, slate-700
               hover:bg-slate-100) so a partner sees the same nav styling
@@ -228,38 +249,72 @@ export function OperatorShell<TabId extends string>({
               </>
             )}
           </nav>
-          <div className="flex-shrink-0 border-t border-slate-200 px-2 py-2">
-            <AdminUserMenu />
+
+          {/* "Powered by GoodTunes" — bottom of rail. GoodTunes logo moves
+              here so the partner's own logo claims the top-left position. */}
+          <div className="flex-shrink-0 border-t border-slate-200 px-4 py-3">
+            <p className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-1.5">
+              Powered by
+            </p>
+            <img src={gtLogo} alt="GoodTunes" className="h-5 w-auto opacity-50" />
           </div>
         </aside>
 
-        <div className="flex-1 min-w-0 flex flex-col">
-          <header className="border-b border-slate-200 bg-white">
-            <div className={cn(maxW, "mx-auto px-4 sm:px-6 py-6")}>
-              <div className={cn("flex items-center gap-4", (headerExtras || headerActions) && "mb-6")}>
-                {identity}
-                {/* Account menu lives in the rail on desktop; surface it in
-                    the header on phones where the rail is hidden. */}
-                <div className="shrink-0 self-start md:hidden" data-testid="operator-shell-account">
-                  <AdminUserMenu />
-                </div>
-              </div>
-
-              {headerExtras}
-
-              {headerActions && (
-                <div className="flex flex-wrap items-center gap-2">{headerActions}</div>
-              )}
+        {/* Main column — flex-col + overflow-hidden so only the inner
+            content div scrolls (the sticky top strip stays visible). */}
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          {/* Top header strip — h-14, matches AdminFrame's sticky top bar.
+              Profile menu pinned top-right (desktop + mobile). */}
+          <div
+            className="h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center px-4 sm:px-6"
+            data-testid="operator-shell-topbar"
+          >
+            {/* Mobile: show the entity name since the rail is hidden. */}
+            <span className="md:hidden text-sm font-semibold text-slate-800 truncate flex-1 mr-3" aria-hidden="true">
+              {name}
+            </span>
+            <div className="ml-auto flex items-center gap-3" data-testid="operator-shell-account">
+              <AdminUserMenu />
             </div>
-          </header>
+          </div>
 
           {/* Phone fallback navigation — the rail is hidden < md. */}
           <div className="md:hidden">
             <DashboardTabs tabs={tabs} value={activeTab} onChange={onTabChange} />
           </div>
 
-          <div className={cn(maxW, "mx-auto w-full px-4 sm:px-6 mt-6 pb-20", spaceContent && "space-y-6")}>
-            {children}
+          {/* Page header — regular-admin-style: title + optional subtitle,
+              no oversized logo/eyebrow identity block (that now lives in
+              the rail). Consistent with how admin pages render their headings. */}
+          <div className="flex-shrink-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-5">
+            <div className={cn(maxW, "mx-auto")}>
+              <div className="flex items-start gap-4">
+                <div className="min-w-0 flex-1">
+                  <p className="text-slate-500 text-xs uppercase tracking-wider font-semibold" data-testid="text-operator-role">
+                    {roleLabel}
+                  </p>
+                  <h1 className="text-xl font-bold text-slate-900 truncate" data-testid="text-operator-name">
+                    {name}
+                  </h1>
+                  {subtitle && (
+                    <div className="text-slate-500 text-sm mt-0.5" data-testid="text-operator-subtitle">
+                      {subtitle}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {headerExtras && <div className="mt-4">{headerExtras}</div>}
+              {headerActions && (
+                <div className="flex flex-wrap items-center gap-2 mt-4">{headerActions}</div>
+              )}
+            </div>
+          </div>
+
+          {/* Scrollable content area. */}
+          <div className="flex-1 overflow-y-auto">
+            <div className={cn(maxW, "mx-auto w-full px-4 sm:px-6 mt-6 pb-20", spaceContent && "space-y-6")}>
+              {children}
+            </div>
           </div>
         </div>
       </div>
