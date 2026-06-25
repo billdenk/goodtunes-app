@@ -97,7 +97,7 @@ isValidation = true
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "TSX_TSCONFIG_PATH=tsconfig.test.json npx tsx --test $(find client shared server -name '*.test.ts' -not -path '*/node_modules/*')"
+args = "TSX_TSCONFIG_PATH=tsconfig.test.json npx tsx --test --test-force-exit $(find client shared server -name '*.test.ts' -not -path '*/node_modules/*')"
 
 [[workflows.workflow]]
 name = "schema-drift-smoke"

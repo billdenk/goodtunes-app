@@ -20,6 +20,18 @@ process alive for ~1000s. Symptom: every subtest prints `ok`, but there is **no
 **Why:** `tsx --test` buffers TAP and only flushes on clean process exit; one
 lingering timer blocks exit.
 
+**Durable fix (load-bearing):** the `test` validation command now runs with
+Node's `--test-force-exit` (in `.replit`, right after `--test` so tsx forwards
+it). The runner exits deterministically once every test finishes REPORTING,
+regardless of leftover handles (toast setTimeout, analytics setInterval, pg
+pools, server `*.db.test.ts` booting `server/index.ts` + binding :5000). So the
+suite no longer stalls ~1000s / dies as a "generic infrastructure error". The
+per-test timer/global cleanup here + in jsdomHarness stays for cross-file
+isolation hygiene but is NO LONGER what keeps the process exiting — don't drop
+the flag thinking the cleanup covers it (server tests were never harness-covered
+at all). Change the command via the validation tooling (setValidationCommand) so
+`.replit` + the registry stay in sync; don't hand-edit one.
+
 **How to apply:** in any client test that renders a component which toasts,
 capture+clear `setTimeout` yourself (mirror the harness's setInterval trick):
 wrap `globalThis.setTimeout` to record ids in a Set right after `installTestDom`,

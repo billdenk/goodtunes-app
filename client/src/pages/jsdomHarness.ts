@@ -27,6 +27,20 @@
 // stray timer) is captured and cleared on teardown — a live timer would hang
 // the shared, buffered `tsx --test` run forever.
 //
+// BREADCRUMB — what actually guarantees the run exits:
+// The `test` validation command runs with Node's `--test-force-exit` flag
+// (see `.replit`), so the runner exits deterministically once every test has
+// finished REPORTING, regardless of any handle left open (a stray timer, a
+// pg pool, a server bound to :5000 by a `server/*.db.test.ts` booting
+// `server/index.ts`, …). THAT force-exit — not the per-test handle cleanup
+// below — is what keeps the buffered TAP run from stalling ~1000s and dying
+// on the harness timeout (surfaced upstream as a "generic infrastructure
+// error"). The timer/global cleanup here stays for cross-file isolation
+// hygiene ("passes alone, fails in the suite"), but it is NO LONGER
+// load-bearing for process exit. Don't drop `--test-force-exit` thinking the
+// cleanup covers it — server tests booting `server/index.ts` were never
+// covered by this harness at all.
+//
 // What it does NOT do: register the asset/`import.meta.env` ESM loader (call
 // `register("./assetStubLoader.mjs", import.meta.url)` — or your module's own
 // loader — yourself, BEFORE calling this, since it must run before the
