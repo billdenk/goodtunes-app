@@ -987,10 +987,15 @@ export function registerPressPortalRoutes(
     // Albums tab until the operator approves (which creates the homing
     // pressing_order_request); the invite's preFlightedAlbumId lands the
     // artist straight on the editor once they accept post-approval.
+    // Task #2146 — seed the draft from this press's default jacket image
+    // (manufacturers.vinyl_placeholder_url) so a press-started album begins
+    // with the press's branded art; falls back to the generic placeholder
+    // when the press hasn't set one. The artist/operator can swap it later.
+    const seedPress = await storage.getManufacturerById(pressId);
     const draft = await storage.createAlbum({
       title: (title && title.trim()) || `${name} — untitled album`,
       artist: name,
-      artwork: "/album-placeholder.svg",
+      artwork: seedPress?.vinylPlaceholderUrl || "/album-placeholder.svg",
       type: "LP",
       isGoodTunesRelease: true,
       isPrepping: true,

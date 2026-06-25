@@ -3265,7 +3265,13 @@ function CatalogEditor({
               </div>
             )}
           </div>
-          {/* Live preview — the press's placeholder art on the chosen disc. */}
+          {/* Live preview — the press's placeholder art on the chosen disc.
+              The square jacket itself is the edit affordance: hovering
+              reveals a dimming scrim + pencil chip (the same pattern as the
+              album-art editor on the album page), and clicking opens the
+              shared upload dialog. Keyboard-focusable so it also works for
+              touch + a11y. Press-level art is editable by operators and this
+              press's own admins, and applies across every format's preview. */}
           <div className="flex flex-col items-start gap-1.5 md:pl-2">
             <VinylPreview
               /* Task #2117 — the operator/press-uploaded logo
@@ -3281,21 +3287,26 @@ function CatalogEditor({
               format={fmt}
               size="2xl"
               placeholderLogoUrl={pressLogoUrl ?? null}
+              jacketOverlay={
+                <button
+                  type="button"
+                  onClick={() => setPlaceholderEditorOpen(true)}
+                  className="group/edit absolute inset-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--brand-blue)]"
+                  aria-label={placeholderUrl ? "Change jacket image" : "Add jacket image"}
+                  data-testid={`button-edit-placeholder-art-${fmt}`}
+                >
+                  <span className="absolute inset-0 bg-black/0 group-hover/edit:bg-black/40 group-focus-visible/edit:bg-black/40 transition-colors" />
+                  <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/edit:opacity-100 group-focus-visible/edit:opacity-100 transition-opacity">
+                    <span className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                      <Pencil className="w-4 h-4" />
+                    </span>
+                  </span>
+                </button>
+              }
             />
             <span className="text-xs text-slate-400" data-testid={`text-preview-color-${fmt}`}>
               {ALBUM_FORMAT_LABEL[fmt]} w/ full-color Inner Sleeve
             </span>
-            {/* Press-level placeholder art is editable by operators and this
-                press's own admins — applies across every format's preview. */}
-            <button
-              type="button"
-              onClick={() => setPlaceholderEditorOpen(true)}
-              className="mt-0.5 inline-flex items-center gap-1 text-xs text-slate-500 hover:text-[color:var(--brand-blue)] transition-colors"
-              data-testid={`button-edit-placeholder-art-${fmt}`}
-            >
-              <Pencil className="w-3 h-3" />
-              {placeholderUrl ? "Change jacket image" : "Add jacket image"}
-            </button>
           </div>
         </div>
       )}

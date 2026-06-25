@@ -7681,10 +7681,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (actorRole !== "super_admin" && actorRole !== "admin") {
           return res.status(403).json({ message: "Only an operator can home an album to a press." });
         }
-        if (!(await storage.getManufacturerById(rawPressId))) {
+        const press = await storage.getManufacturerById(rawPressId);
+        if (!press) {
           return res.status(400).json({ message: "Unknown pressId" });
         }
         await homeAlbumToPress(album.id, rawPressId, req.session.userId!);
+        // Task #2146 — a new album homed to a press starts from that press's
+        // default jacket image (manufacturers.vinyl_placeholder_url) when the
+        // caller used the generic placeholder, so press-created albums begin
+        // with the press's branded art instead of the gray SVG. The operator
+        // can still swap it per-album from the album-art editor afterwards.
+        if (press.vinylPlaceholderUrl && String(artwork) === "/album-placeholder.svg") {
+          const seeded = await storage.updateAlbum(album.id, {
+            artwork: press.vinylPlaceholderUrl,
+          });
+          if (seeded) album.artwork = seeded.artwork;
+        }
       }
       return res.status(201).json(artistLabelConflict ? { ...album, artistLabelConflict } : album);
     } catch (err: any) {

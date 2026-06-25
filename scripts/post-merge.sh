@@ -6897,6 +6897,20 @@ sync_github_build_mirror() {
   # timeout (see .agents/memory/github-mirror-push.md "Time-budget coupling").
   local MIRROR_BUDGET=150
   local mirror_deadline=$((SECONDS + MIRROR_BUDGET))
+  # ABSOLUTE wall-clock cap (load-bearing): SECONDS ≈ total elapsed script time
+  # (post-merge.sh is the top-level bash process) and the platform hard-kills the
+  # WHOLE script at its configured timeout. As the dual-DB migration suite above
+  # grows it eats more of that budget, so a fixed MIRROR_BUDGET measured from "now"
+  # can push total runtime past the platform timeout and fail the ENTIRE post-merge
+  # (observed: migrations ~165s + 150s budget = ~315s > 300s -> killed mid-push).
+  # Clamp the deadline to PLATFORM_TIMEOUT minus a safety margin so the mirror
+  # ALWAYS self-skips (WARN + return 0) before the kill, degrading to "Codemagic
+  # catches up next merge" instead of failing the merge.
+  local PLATFORM_TIMEOUT=300 MIRROR_SAFETY_MARGIN=25
+  local mirror_hard_cap=$((PLATFORM_TIMEOUT - MIRROR_SAFETY_MARGIN))
+  if [ "$mirror_deadline" -gt "$mirror_hard_cap" ]; then
+    mirror_deadline=$mirror_hard_cap
+  fi
   local have_remote=0 remain
 
   # STEP 1 — Fetch the remote tip FIRST. Without a common base git can't tell
