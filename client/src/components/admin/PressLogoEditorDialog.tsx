@@ -29,10 +29,18 @@ export interface PressLogoEditorDialogProps {
   onOpenChange: (v: boolean) => void;
   /** Display name used in the dialog copy + alt text. */
   name: string;
-  /** Current logoUrl on the entity (null if unset). */
+  /** Current image URL on the entity (null if unset). */
   logoUrl: string | null;
-  /** PUT endpoint that accepts `{ logoUrl }`, e.g. `/api/admin/manufacturers/123`. */
+  /** PUT endpoint that accepts `{ [fieldName] }`, e.g. `/api/admin/manufacturers/123`. */
   apiPath: string;
+  /**
+   * The entity field the PUT writes the uploaded URL to. Defaults to
+   * `logoUrl` (the profile logo). Pass e.g. `vinylPlaceholderUrl` to reuse
+   * this dialog for a different image slot on the same entity.
+   */
+  fieldName?: string;
+  /** Heading shown at the top of the dialog. Defaults to "Logo". */
+  title?: string;
   /** Called after a successful upload or remove so the page can refetch. */
   onInvalidate: () => void;
   /** Icon shown when there's no logo. Defaults to Factory (presses). */
@@ -49,6 +57,8 @@ export function PressLogoEditorDialog({
   name,
   logoUrl,
   apiPath,
+  fieldName = "logoUrl",
+  title = "Logo",
   onInvalidate,
   FallbackIcon = Factory,
   testIdPrefix = "press",
@@ -63,7 +73,7 @@ export function PressLogoEditorDialog({
     mutationFn: async (file: File) => {
       setPreviewUrl(URL.createObjectURL(file));
       const url = await uploadImageFile(file);
-      await apiRequest("PUT", apiPath, { logoUrl: url });
+      await apiRequest("PUT", apiPath, { [fieldName]: url });
       return url;
     },
     onSuccess: () => {
@@ -83,7 +93,7 @@ export function PressLogoEditorDialog({
 
   const removeLogo = useMutation({
     mutationFn: async () => {
-      await apiRequest("PUT", apiPath, { logoUrl: null });
+      await apiRequest("PUT", apiPath, { [fieldName]: null });
     },
     onSuccess: () => {
       onInvalidate();
@@ -120,9 +130,9 @@ export function PressLogoEditorDialog({
         data-testid={`dialog-edit-${testIdPrefix}-logo`}
       >
         <DialogHeader className="flex-row items-center justify-between space-y-0">
-          <DialogTitle className="text-slate-900 text-sm font-bold">Logo</DialogTitle>
+          <DialogTitle className="text-slate-900 text-sm font-bold">{title}</DialogTitle>
           <DialogDescription className="sr-only">
-            Replace the logo for {name}.
+            Replace the {title.toLowerCase()} for {name}.
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

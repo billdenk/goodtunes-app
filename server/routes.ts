@@ -17942,6 +17942,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.domain !== undefined) u.domain = normDomain(b.domain);
     if (b.logoUrl !== undefined) u.logoUrl = strOrNull(b.logoUrl);
     if (b.coverUrl !== undefined) u.coverUrl = strOrNull(b.coverUrl);
+    // Operator/press-editable override for the catalog VinylPreview jacket
+    // art. Null clears it back to the hard-coded per-domain placeholder.
+    if (b.vinylPlaceholderUrl !== undefined) u.vinylPlaceholderUrl = strOrNull(b.vinylPlaceholderUrl);
     if (b.bio !== undefined) u.bio = strOrNull(b.bio);
     // Task #625 — short operational note (quote conditions, overrun
     // tolerance, pricing rules). Free text; no validation beyond

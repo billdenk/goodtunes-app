@@ -3920,6 +3920,13 @@ export const manufacturers = pgTable("manufacturers", {
   domain: text("domain"),
   logoUrl: text("logo_url"),
   coverUrl: text("cover_url"),
+  // Operator/press-editable override for the branded "vinyl" jacket art
+  // shown in the catalog color-management VinylPreview. When null the
+  // admin page falls back to the hard-coded per-domain placeholder asset
+  // (PRESS_PLACEHOLDER_BY_DOMAIN). Distinct from `logoUrl` (the corporate
+  // brand logo) so swapping the preview art doesn't touch the press's
+  // profile logo and vice-versa.
+  vinylPlaceholderUrl: text("vinyl_placeholder_url"),
   bio: text("bio"),
   location: text("location"),
   // Task #489 — structured snapshot of the Places-picked Location.

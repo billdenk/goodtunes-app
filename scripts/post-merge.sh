@@ -1897,6 +1897,28 @@ SQL
 migrate_album_skus_press_identity dev  "${DATABASE_URL:-}"
 migrate_album_skus_press_identity prod "${PROD_DATABASE_URL:-}"
 
+# Operator/press-editable override for the catalog VinylPreview jacket art
+# (manufacturers.vinyl_placeholder_url). Additive nullable column; pre-create
+# on both DBs so the schema-drift guard passes and the publish dev->prod diff
+# stays empty. Idempotent; safe on every merge.
+migrate_manufacturers_vinyl_placeholder() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping manufacturers.vinyl_placeholder_url migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS vinyl_placeholder_url text;
+SQL
+  then
+    echo "post-merge: manufacturers.vinyl_placeholder_url migration ok on $label"
+  else
+    echo "post-merge: WARNING — manufacturers.vinyl_placeholder_url migration failed on $label (continuing)"
+  fi
+}
+migrate_manufacturers_vinyl_placeholder dev  "${DATABASE_URL:-}"
+migrate_manufacturers_vinyl_placeholder prod "${PROD_DATABASE_URL:-}"
+
 # Task #683 — Reconcile dev press roster with prod so a publish dev->prod
 # diff is a no-op over the manufacturers + press_* tables. The founding seed
 # only mints Memphis + Hellbender (fresh ids per clone); the real Physical

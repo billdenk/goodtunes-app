@@ -27,7 +27,7 @@ import {
 import { VinylPreview } from "@/components/VinylPreview";
 import { resolveVinylColor, DEFAULT_JACKET_UPGRADE, type VinylColorOption } from "@shared/pressing";
 import hellbenderPlaceholder from "@assets/Hellbender_1782351633843.svg";
-import memphisPlaceholder from "@assets/Memphis_Record_Pressing_1782351685946.svg";
+import memphisPlaceholder from "@assets/Memphis_Record_Pressing_1782406023011.svg";
 import virylPlaceholder from "@assets/Viryl_1782351633843.svg";
 import pmpPlaceholder from "@assets/Pressing_Music_Business_1782351633843.svg";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -659,7 +659,11 @@ export function AdminManufacturer() {
                 )}
               </div>
             )}
-            <PressCatalogPanel pressId={id} pressDomain={m?.domain ?? null} />
+            <PressCatalogPanel
+              pressId={id}
+              pressDomain={m?.domain ?? null}
+              placeholderUrl={m?.vinylPlaceholderUrl ?? null}
+            />
           </>
         )}
         {tab === "analytics" && (
@@ -2192,7 +2196,15 @@ function HellbenderPricingSyncButton({
   );
 }
 
-export function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; pressDomain: string | null }) {
+export function PressCatalogPanel({
+  pressId,
+  pressDomain,
+  placeholderUrl = null,
+}: {
+  pressId: string;
+  pressDomain: string | null;
+  placeholderUrl?: string | null;
+}) {
   // Role gate — server is authoritative; we hide the panel for admins
   // who would just see a 403 either way.
   const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
@@ -2333,6 +2345,7 @@ export function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; p
             <CatalogEditor
               pressId={pressId}
               pressDomain={pressDomain}
+              placeholderUrl={placeholderUrl}
               catalog={data}
               activeFormat={activeFormat}
               setActiveFormat={setActiveFormat}
@@ -2397,6 +2410,7 @@ function AddFormatPicker({
 function CatalogEditor({
   pressId,
   pressDomain,
+  placeholderUrl,
   catalog,
   activeFormat,
   setActiveFormat,
@@ -2407,6 +2421,7 @@ function CatalogEditor({
 }: {
   pressId: string;
   pressDomain: string | null;
+  placeholderUrl: string | null;
   catalog: Catalog;
   activeFormat: AlbumFormat;
   setActiveFormat: (f: AlbumFormat) => void;
@@ -2515,7 +2530,11 @@ function CatalogEditor({
         thumbnailUrl: selectedSwatch.swatchImageUrl ?? null,
       }
     : resolveVinylColor(null);
-  const placeholderArt = pressPlaceholderArt(pressDomain);
+  // Operator/press-uploaded override wins; otherwise fall back to the
+  // hard-coded per-domain placeholder asset (VinylPreview supplies its own
+  // generic gray jacket when both are null).
+  const placeholderArt = placeholderUrl || pressPlaceholderArt(pressDomain);
+  const [placeholderEditorOpen, setPlaceholderEditorOpen] = useState(false);
 
   // ── Pricing combo
   const selectedPriceTier = priceTiers.find((t) => t.id === selectedPriceTierId) ?? null;
@@ -2853,9 +2872,36 @@ function CatalogEditor({
             <span className="text-xs text-slate-400" data-testid={`text-preview-color-${fmt}`}>
               {selectedSwatch ? selectedSwatch.name : "No color selected"}
             </span>
+            {/* Press-level placeholder art is editable by operators and this
+                press's own admins — applies across every format's preview. */}
+            <button
+              type="button"
+              onClick={() => setPlaceholderEditorOpen(true)}
+              className="mt-0.5 inline-flex items-center gap-1 text-xs text-slate-500 hover:text-[color:var(--brand-blue)] transition-colors"
+              data-testid={`button-edit-placeholder-art-${fmt}`}
+            >
+              <Pencil className="w-3 h-3" />
+              {placeholderUrl ? "Change jacket image" : "Add jacket image"}
+            </button>
           </div>
         </div>
       )}
+      <PressLogoEditorDialog
+        name="this press"
+        title="Jacket placeholder image"
+        logoUrl={placeholderUrl}
+        apiPath={`/api/admin/manufacturers/${pressId}`}
+        fieldName="vinylPlaceholderUrl"
+        open={placeholderEditorOpen}
+        onOpenChange={setPlaceholderEditorOpen}
+        onInvalidate={() => {
+          void invalidateAdminEntity(queryClient, "manufacturer", pressId);
+          onChanged();
+        }}
+        FallbackIcon={Factory}
+        testIdPrefix="placeholder"
+        hint="Shown as the branded jacket in this catalog's color preview. A square image works best; clear it to fall back to the default press artwork."
+      />
 
       {/* PRICING */}
       <div className="space-y-3 border-t border-slate-100 pt-4" data-testid={`pricing-${fmt}`}>
