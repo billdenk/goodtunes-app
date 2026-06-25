@@ -4548,6 +4548,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             }
           } catch { /* leave null; client probe may have already filled it */ }
         }
+        // Task #2131 — measure leading silence on the original file
+        // while it's still on disk. Best-effort: a failed measurement
+        // is non-fatal and leaves the column null (the backfill sweep
+        // will catch it later). Measure on tmpIn (pre-transcode) so
+        // the probe reflects the source the operator uploaded.
+        const leadingSilenceSecs = await measureLeadingSilence(tmpIn).catch(() => null);
         return res.json({
           url,
           sourceUrl,
@@ -4556,6 +4562,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           duration,
           servedSpecs,
           sourceSpecs,
+          leadingSilenceSecs,
         });
       } catch (err: any) {
         console.error("Audio upload failed", err);
@@ -4679,6 +4686,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             }
           } catch { /* leave null; client probe may have already filled it */ }
         }
+        // Task #2131 — measure leading silence while the source is still
+        // on disk (tmpIn = the file the operator uploaded, before any
+        // transcode). Best-effort; a null result is caught by the
+        // boot-time backfill sweep later.
+        const leadingSilenceSecs = await measureLeadingSilence(tmpIn).catch(() => null);
         return res.json({
           url,
           sourceUrl,
@@ -4687,6 +4699,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           duration,
           servedSpecs,
           sourceSpecs,
+          leadingSilenceSecs,
         });
       } catch (err: any) {
         if (err instanceof ObjectNotFoundError) {
@@ -5061,6 +5074,66 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.log(`[audio-specs-backfill] Done. ${fixed} updated, ${failed} failed.`);
     } catch (err) {
       console.error("[audio-specs-backfill] sweep aborted:", err);
+    }
+  })();
+
+  // Task #2131 — One-shot post-boot leading-silence backfill. For every
+  // song with an audioUrl but a null leading_silence_secs column, downloads
+  // the master (served file, not source — shorter + browser-friendly),
+  // runs measureLeadingSilence, and persists the result. Songs uploaded
+  // AFTER this feature landed already have the column filled (the upload
+  // endpoints call measureLeadingSilence inline); this sweep only catches
+  // the historical backlog.
+  //
+  // A null result from the measure function (e.g. unsupported container or
+  // ffmpeg timeout) is written as 0 rather than left null so the row leaves
+  // the backfill queue and doesn't get re-probed on every boot.
+  //
+  // Same gate as the other legacy sweeps (RUN_LEGACY_BACKFILLS=1) so the
+  // production boot stays fast by default — enable once, let it run, disable.
+  if (process.env.RUN_LEGACY_BACKFILLS === "1") void (async () => {
+    try {
+      const rows = await db.execute(sql`
+        SELECT id, audio_url, title
+        FROM songs
+        WHERE audio_url IS NOT NULL AND leading_silence_secs IS NULL
+        ORDER BY id
+      `);
+      const list = rows.rows as Array<{ id: string; audio_url: string; title: string }>;
+      if (!list.length) return;
+      console.log(`[silence-backfill] Found ${list.length} song(s) without leading-silence measurement — sweeping.`);
+      let done = 0, skipped = 0;
+      for (const row of list) {
+        const label = `"${row.title}" (${row.id})`;
+        const os   = await import("node:os");
+        const path = await import("node:path");
+        const { Readable } = await import("stream");
+        const { pipeline } = await import("node:stream/promises");
+        const ext  = (row.audio_url.match(/\.(\w+)(?:[?#]|$)/) ?? [])[1] ?? "flac";
+        const tmp  = path.join(os.tmpdir(), `${randomUUID()}.${ext}`);
+        try {
+          const dlRes = await fetch(row.audio_url, { redirect: "follow" });
+          if (!dlRes.ok || !dlRes.body) throw new Error(`HTTP ${dlRes.status}`);
+          await pipeline(Readable.fromWeb(dlRes.body as any), fs.createWriteStream(tmp));
+          const secs = await measureLeadingSilence(tmp).catch(() => null);
+          const writeVal = secs ?? 0;
+          await db.execute(sql`
+            UPDATE songs SET leading_silence_secs = ${writeVal} WHERE id = ${row.id}
+          `);
+          if ((secs ?? 0) > 0.5) {
+            console.log(`[silence-backfill] ⚠ ${label} — ${secs!.toFixed(2)} s leading silence`);
+          }
+          done++;
+        } catch (err: any) {
+          console.warn(`[silence-backfill] ✗ ${label} — ${err?.message || err}`);
+          skipped++;
+        } finally {
+          await fsp.unlink(tmp).catch(() => {});
+        }
+      }
+      console.log(`[silence-backfill] Done. ${done} measured, ${skipped} skipped.`);
+    } catch (err) {
+      console.error("[silence-backfill] sweep aborted:", err);
     }
   })();
 
@@ -8634,7 +8707,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/admin/songs", requireAdmin, async (req, res) => {
-    const { albumId, title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, servedSpecs, sourceSpecs, streamOnly, spotifyTrackUrl, appleMusicTrackUrl } = req.body ?? {};
+    const { albumId, title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, servedSpecs, sourceSpecs, streamOnly, spotifyTrackUrl, appleMusicTrackUrl, leadingSilenceSecs } = req.body ?? {};
     if (!albumId || !title || trackNumber == null) {
       return res.status(400).json({ message: "albumId, title, trackNumber are required" });
     }
@@ -8706,6 +8779,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       streamOnly: !!streamOnly,
       spotifyTrackUrl: spotifyTrackUrl ? String(spotifyTrackUrl).trim() : null,
       appleMusicTrackUrl: appleMusicTrackUrl ? String(appleMusicTrackUrl).trim() : null,
+      // Task #2131 — leading-silence measurement forwarded from the
+      // upload pipeline. Null when the caller didn't probe it (legacy
+      // imports, paste-URL) — the boot-time backfill sweep fills those.
+      leadingSilenceSecs: leadingSilenceSecs != null ? Number(leadingSilenceSecs) : null,
     } as any);
     // Kick off Mux ingest the moment the master lands in object storage —
     // fire-and-forget; the admin UI polls muxStatus. Stream-only tracks
@@ -8742,7 +8819,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         message: "Your edit was sent to GoodTunes for review.",
       });
     }
-    const { title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, syncedLyrics, instrumental, isExplicit, previewStartMs, previewEndMs, servedSpecs, sourceSpecs, streamOnly, spotifyTrackUrl, appleMusicTrackUrl } = req.body ?? {};
+    const { title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, syncedLyrics, instrumental, isExplicit, previewStartMs, previewEndMs, servedSpecs, sourceSpecs, streamOnly, spotifyTrackUrl, appleMusicTrackUrl, leadingSilenceSecs } = req.body ?? {};
     // Task #79 — body-shape gating: the outer middleware enforces
     // edit_metadata + lock for ANY song PUT, but writes that touch the
     // master file additionally require upload_masters. This keeps a
@@ -8811,6 +8888,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // file actually on disk.
     void servedSpecs;
     void sourceSpecs;
+    // Task #2131 — persist the silence measurement forwarded from the
+    // upload pipeline. The trim endpoint writes its own re-measured
+    // value directly; the backfill sweep writes for legacy rows. Trust
+    // the caller (value was produced by ffprobe on disk).
+    if (leadingSilenceSecs !== undefined) {
+      updates.leadingSilenceSecs = leadingSilenceSecs != null ? Number(leadingSilenceSecs) : null;
+    }
     if (instrumental !== undefined) updates.instrumental = Boolean(instrumental);
     if (isExplicit !== undefined) updates.isExplicit = Boolean(isExplicit);
     // Inverted preview gate. Default is "previewable" — admin only flips
@@ -9082,6 +9166,117 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         succeeded: results.filter((r) => r.ok).length,
         results,
       });
+    },
+  );
+
+  // Task #2131 — One-click trim of leading silence from an audio master.
+  //
+  // Downloads the source file (audioSourceUrl when the master was previously
+  // transcoded from a WAV/AIFF, audioUrl otherwise), clips the silence with
+  // `ffmpeg -ss <secs> -c copy`, re-transcodes to browser-friendly FLAC,
+  // re-uploads both the served file and the trimmed source, re-probes specs,
+  // re-measures leading silence, and fires a fresh Mux ingest. The trimmed
+  // WAV becomes the new audioSourceUrl so the operator can always download
+  // the clean-cut original.
+  //
+  // Why -c copy?  For audio, ffmpeg's stream-copy is sample-accurate (audio
+  // has no keyframe alignment issue unlike video), so the cut is exact to
+  // within 1 sample. Accurate enough for silence removal.
+  app.post(
+    "/api/admin/songs/:id/trim-leading-silence",
+    requireAdminBearer,
+    async (req, res) => {
+      const song = await storage.getSong(req.params.id);
+      if (!song) return res.status(404).json({ message: "Song not found" });
+      if (!song.audioUrl) return res.status(400).json({ message: "Song has no audio master" });
+      const secs = (song as any).leadingSilenceSecs as number | null;
+      if (!secs || secs < 0.1) {
+        return res.status(400).json({ message: "No significant leading silence detected" });
+      }
+
+      const os = await import("node:os");
+      const path = await import("node:path");
+      const { Readable } = await import("stream");
+      const { pipeline } = await import("node:stream/promises");
+
+      // The file we clip is the WAV/AIFF source (when a separate source
+      // exists) or the served FLAC/MP3 otherwise. We always preserve the
+      // trimmed source as the new audioSourceUrl for archival.
+      const srcUrl: string = (song as any).audioSourceUrl ?? song.audioUrl;
+      const srcExt = (srcUrl.match(/\.(\w+)(?:[?#]|$)/) ?? [])[1] ?? "flac";
+      const tmpSrc      = path.join(os.tmpdir(), `${randomUUID()}.${srcExt}`);
+      const tmpTrimmed  = path.join(os.tmpdir(), `${randomUUID()}.${srcExt}`);
+      let tmpTranscoded: string | null = null;
+
+      try {
+        // 1. Download the source file.
+        const dlRes = await fetch(srcUrl, { redirect: "follow" });
+        if (!dlRes.ok || !dlRes.body) {
+          throw new Error(`Source download failed: HTTP ${dlRes.status}`);
+        }
+        await pipeline(Readable.fromWeb(dlRes.body as any), fs.createWriteStream(tmpSrc));
+
+        // 2. Trim the silence. -ss before -i is a fast seek; -c copy
+        //    is sample-accurate for audio streams.
+        await runAudioToolWithStallGuard(
+          "ffmpeg",
+          ["-y", "-ss", String(secs), "-i", tmpSrc, "-c", "copy", tmpTrimmed],
+          { stallMs: AUDIO_PROBE_STALL_MS * 4, label: "Trimming leading silence" },
+        );
+
+        // 3. Re-transcode the trimmed file to browser-friendly FLAC/MP3.
+        const conv = await transcodeAudioToWebFriendly(tmpTrimmed, `.${srcExt}`);
+        if (conv.action === "transcode" && conv.outputPath !== tmpTrimmed) {
+          tmpTranscoded = conv.outputPath;
+        }
+
+        // 4. Upload the trimmed+transcoded served file.
+        const newAudioUrl = await uploadFileToObjectStorage(conv.outputPath, conv.mime);
+
+        // 5. Upload the trimmed source as the new archival original.
+        const srcMime = srcExt === "wav" ? "audio/wav"
+          : srcExt === "aiff" || srcExt === "aif" ? "audio/aiff"
+          : `audio/${srcExt}`;
+        const newSourceUrl = await uploadFileToObjectStorage(tmpTrimmed, srcMime);
+
+        // 6. Re-probe specs + re-measure silence on the served file.
+        const servedSpecs  = await probeAudioSpecs(conv.outputPath);
+        const sourceSpecs  = conv.action === "transcode" ? await probeAudioSpecs(tmpTrimmed) : null;
+        const newDuration  = servedSpecs.duration ?? null;
+        const newLeadingS  = await measureLeadingSilence(conv.outputPath).catch(() => null);
+
+        // 7. Persist the new URLs + specs + cleared silence measurement.
+        const updates: Record<string, any> = {
+          audioUrl:           newAudioUrl,
+          audioSourceUrl:     newSourceUrl,
+          leadingSilenceSecs: newLeadingS ?? 0,
+          ...(newDuration ? { duration: newDuration } : {}),
+          ...(servedSpecs ? { servedSpecs } : {}),
+          ...(sourceSpecs ? { sourceSpecs } : {}),
+        };
+        await storage.updateSong(song.id, updates as any);
+
+        // 8. Re-ingest to Mux so the fan stream gets the trimmed master.
+        void maybeIngestToMux(song.id, newAudioUrl, { freshUpload: true });
+
+        return res.json({
+          id:               song.id,
+          trimmedSecs:      secs,
+          newDuration,
+          leadingSilenceSecs: newLeadingS,
+          newAudioUrl,
+          newSourceUrl,
+          oldAudioUrl:     song.audioUrl,
+          oldSourceUrl:    (song as any).audioSourceUrl ?? null,
+        });
+      } catch (err: any) {
+        console.error("[trim-leading-silence] song:", song.id, err);
+        return res.status(500).json({ message: err?.message || "Trim failed" });
+      } finally {
+        for (const p of [tmpSrc, tmpTrimmed, tmpTranscoded]) {
+          if (p) await fsp.unlink(p).catch(() => {});
+        }
+      }
     },
   );
 
@@ -9769,6 +9964,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (Number.isFinite(dur) && dur > 0) out.duration = Math.round(dur);
     } catch { /* leave probed fields null */ }
     return out;
+  }
+
+  // Task #2131 — Measure the duration of silence at the very start of
+  // a local audio file using ffmpeg's silencedetect filter. Returns
+  // leading silence in seconds (0 = starts clean). Limits the probe
+  // to the first 30 s of the file so most runs complete in < 2 s.
+  // Threshold: -50 dBFS for ≥ 0.1 s (matches typical major-label QC).
+  // Callers that want non-fatal use should wrap with .catch(() => null).
+  async function measureLeadingSilence(filePath: string): Promise<number> {
+    try {
+      const { stderr } = await runAudioToolWithStallGuard(
+        "ffmpeg",
+        [
+          "-t", "30",
+          "-i", filePath,
+          "-af", "silencedetect=noise=-50dB:d=0.1",
+          "-f", "null", "-",
+        ],
+        { stallMs: AUDIO_PROBE_STALL_MS, label: "Detecting leading silence" },
+      );
+      // silencedetect writes to stderr in the format:
+      //   [silencedetect @ 0x...] silence_start: 0.0
+      //   [silencedetect @ 0x...] silence_end: 3.248 | silence_duration: 3.248
+      const startMatch = stderr.match(/silence_start:\s*([\d.]+)/);
+      if (!startMatch) return 0;
+      const silenceStart = parseFloat(startMatch[1]);
+      // Only count silence that truly begins at the start of the file.
+      if (silenceStart > 0.05) return 0;
+      const endMatch = stderr.match(/silence_end:\s*([\d.]+)/);
+      if (!endMatch) return 0;
+      const silenceEnd = parseFloat(endMatch[1]);
+      return Number.isFinite(silenceEnd) ? silenceEnd : 0;
+    } catch {
+      return 0;
+    }
   }
 
   // Task #331 — Probe a served/stored audio URL authoritatively.

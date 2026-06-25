@@ -877,6 +877,12 @@ export const songs = pgTable("songs", {
   // (`albums.spotifyUrl` / `albums.appleMusicUrl`).
   spotifyTrackUrl: text("spotify_track_url"),
   appleMusicTrackUrl: text("apple_music_track_url"),
+  // Leading-silence guard (Task #2131). Seconds of silence at the very
+  // start of the master, measured by ffmpeg silencedetect during upload
+  // or the backfill sweep. Null = not yet measured. 0 = starts clean.
+  // Values above ~0.5 s are flagged amber in the admin track editor and
+  // can be removed with the one-click "Trim leading silence" action.
+  leadingSilenceSecs: doublePrecision("leading_silence_secs"),
   legacyGogoodsId: text("legacy_gogoods_id"),
   ...softDeleteCols,
 }, (t) => ({

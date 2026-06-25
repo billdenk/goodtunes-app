@@ -7832,4 +7832,30 @@ SQL
 seed_task_2109_mrp_template_specs dev  "${DATABASE_URL:-}"
 seed_task_2109_mrp_template_specs prod "${PROD_DATABASE_URL:-}"
 
+# Task #2131 — Leading-silence guard. songs gains a leading_silence_secs
+# column (double precision, nullable) written by the upload pipeline and
+# the boot-time backfill sweep. Hand-apply the additive ALTER TABLE on
+# BOTH dev and prod so the schema-drift guard stays green on freshly-cloned
+# dev and the publish dev→prod diff stays empty. Idempotent (IF NOT EXISTS).
+migrate_leading_silence_col() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping leading_silence_col migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE IF EXISTS songs
+  ADD COLUMN IF NOT EXISTS leading_silence_secs double precision;
+COMMIT;
+SQL
+  then
+    echo "post-merge: leading_silence_col migration ok on $label"
+  else
+    echo "post-merge: WARNING — leading_silence_col migration failed on $label (continuing)"
+  fi
+}
+migrate_leading_silence_col dev  "${DATABASE_URL:-}"
+migrate_leading_silence_col prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror

@@ -305,6 +305,11 @@ interface SongLite {
   // touches the Vinyl-order view (we then seed from trackNumber).
   vinylSide?: "A" | "B" | "C" | "D" | null;
   vinylOrder?: number | null;
+  // Task #2131 — leading-silence detection. Seconds of dead air at the
+  // very start of the master, measured by ffmpeg silencedetect during
+  // upload or the backfill sweep. Null = not yet measured. 0 = clean.
+  // Values above ~0.5 s show an amber warning + one-click trim button.
+  leadingSilenceSecs?: number | null;
 }
 
 // iOS-Safari-only WebKit AirPlay picker, narrowed so the admin dock can
@@ -4911,6 +4916,10 @@ function AddTrackForm({
   // on the backfill sweep.
   const [pendingServedSpecs, setPendingServedSpecs] = useState<AudioSpecsPayload | null>(null);
   const [pendingSourceSpecs, setPendingSourceSpecs] = useState<AudioSpecsPayload | null>(null);
+  // Task #2131 — leading silence measurement forwarded from the upload
+  // pipeline alongside the URL + specs, so the new row lands with the
+  // measurement already in the DB rather than waiting for the backfill.
+  const [pendingLeadingSilenceSecs, setPendingLeadingSilenceSecs] = useState<number | null>(null);
   const [audioFilename, setAudioFilename] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -4993,6 +5002,7 @@ function AddTrackForm({
       // them in the POST body alongside the URLs.
       setPendingServedSpecs(result.servedSpecs ?? null);
       setPendingSourceSpecs(result.sourceSpecs ?? null);
+      setPendingLeadingSilenceSecs(result.leadingSilenceSecs ?? null);
       // Server-side duration is canonical (works on 24-bit WAV / AIFF
       // which the browser <audio> probe can't decode). Apply it
       // whenever the duration field is still empty or still showing
@@ -5120,6 +5130,7 @@ function AddTrackForm({
       audioSourceUrl: string | null;
       servedSpecs: AudioSpecsPayload | null;
       sourceSpecs: AudioSpecsPayload | null;
+      leadingSilenceSecs?: number | null;
       streamOnly: boolean;
       spotifyTrackUrl: string | null;
       appleMusicTrackUrl: string | null;
@@ -5136,6 +5147,8 @@ function AddTrackForm({
         // with null spec columns until the backfill sweep catches up.
         ...(input.servedSpecs ? { servedSpecs: input.servedSpecs } : {}),
         ...(input.sourceSpecs ? { sourceSpecs: input.sourceSpecs } : {}),
+        // Task #2131 — forward the silence measurement from upload.
+        ...(input.leadingSilenceSecs != null ? { leadingSilenceSecs: input.leadingSilenceSecs } : {}),
         // Task #734 — stream-elsewhere fields. When on, no master ships;
         // the per-track links carry the fan handoff.
         ...(input.streamOnly
@@ -5162,6 +5175,7 @@ function AddTrackForm({
       setAudioSourceUrl(null);
       setPendingServedSpecs(null);
       setPendingSourceSpecs(null);
+      setPendingLeadingSilenceSecs(null);
       setAudioFilename(null);
       // Task #734 — clear the stream-only fields too so the next row
       // starts clean. Keep the `streamOnly` toggle ON so Bill can rip
@@ -5268,6 +5282,7 @@ function AddTrackForm({
       audioSourceUrl,
       servedSpecs: pendingServedSpecs,
       sourceSpecs: pendingSourceSpecs,
+      leadingSilenceSecs: pendingLeadingSilenceSecs,
       streamOnly: false,
       spotifyTrackUrl: null,
       appleMusicTrackUrl: null,
@@ -13468,6 +13483,7 @@ function AudioEditor({
       // we explicitly null it rather than leaving undefined.
       setPendingServedSpecs(result.servedSpecs ?? null);
       setPendingSourceSpecs(result.sourceSpecs ?? null);
+      setPendingLeadingSilenceSecs(result.leadingSilenceSecs ?? null);
       // Backfill duration when the row is still on the schema default
       // (180s = 3:00) or 0, and the server's music-metadata probe
       // returned a real value. Critical for 24-bit WAV / AIFF where
@@ -13498,6 +13514,35 @@ function AudioEditor({
     }
   };
 
+  // Task #2131 — stash the leading-silence measurement forwarded from
+  // the upload pipeline so the autosave can ship it alongside the URL.
+  // Mirrors the `pendingServedSpecs` pattern: undefined = leave DB alone
+  // (URL paste / Clear path); a number (or null) = write to DB.
+  const [pendingLeadingSilenceSecs, setPendingLeadingSilenceSecs] = useState<
+    number | null | undefined
+  >(undefined);
+
+  // Task #2131 — one-click trim. Fires a POST to the server which
+  // downloads the master, clips the silence, re-uploads, re-ingests Mux,
+  // and calls back onSaved() so the track row refreshes automatically.
+  const trimSilenceMut = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", `/api/admin/songs/${song.id}/trim-leading-silence`),
+    onSuccess: async () => {
+      await onSaved();
+      toast({
+        title: "Leading silence trimmed",
+        description: `${(song.leadingSilenceSecs ?? 0).toFixed(2)} s removed. Master re-ingesting to Mux.`,
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Trim failed",
+        description: e?.message || "Could not remove the leading silence.",
+        variant: "destructive",
+      }),
+  });
+
   // Silent autosave — Bill: if Preview + Instrumental save themselves,
   // why does the master file need a Save button? Removed the footer
   // CTA; the URL field, file picker, drag-drop, and Clear all flow
@@ -13519,12 +13564,16 @@ function AudioEditor({
         // means "persist these values."
         ...(pendingServedSpecs !== undefined ? { servedSpecs: pendingServedSpecs } : {}),
         ...(pendingSourceSpecs !== undefined ? { sourceSpecs: pendingSourceSpecs } : {}),
+        // Task #2131 — ship the silence measurement in lock-step with
+        // the URL so the column updates without waiting for the sweep.
+        ...(pendingLeadingSilenceSecs !== undefined ? { leadingSilenceSecs: pendingLeadingSilenceSecs } : {}),
       }),
     onSuccess: async () => {
       // Specs landed in the DB; reset the pending bag so a follow-up
       // edit (e.g. just clearing the URL) doesn't re-send stale specs.
       setPendingServedSpecs(undefined);
       setPendingSourceSpecs(undefined);
+      setPendingLeadingSilenceSecs(undefined);
       await onSaved();
     },
     onError: (e: any) =>
@@ -13679,6 +13728,7 @@ function AudioEditor({
                   setDraftSourceUrl(null);
                   setPendingServedSpecs(undefined);
                   setPendingSourceSpecs(undefined);
+                  setPendingLeadingSilenceSecs(undefined);
                   setLocalError(null);
                 }}
                 disabled={uploading || saveMut.isPending}
@@ -13749,6 +13799,7 @@ function AudioEditor({
                       // clear in lock-step with the URL).
                       setPendingServedSpecs(null);
                       setPendingSourceSpecs(null);
+                      setPendingLeadingSilenceSecs(null);
                       setLocalError(null);
                     }}
                     className="w-full flex items-center gap-2 px-2.5 h-8 rounded-md text-[12.5px] text-rose-600 hover:bg-rose-50"
@@ -13766,6 +13817,31 @@ function AudioEditor({
                 readout sits with the file it describes. Renders empty
                 for a legacy row with no probed specs yet. */}
             <MasterSpecLine song={song} />
+
+            {/* Task #2131 — amber leading-silence warning. Shows when
+                the probed value is >0.5 s. "Trim" fires a server-side
+                clip + re-ingest that resolves in ~10–30 s for most
+                tracks; button disabled while the mutation is pending. */}
+            {(song.leadingSilenceSecs ?? 0) > 0.5 && (
+              <div
+                className="flex items-center justify-between gap-2 rounded-md bg-amber-50 px-2.5 py-1.5 ring-1 ring-amber-200"
+                data-testid={`banner-leading-silence-${song.id}`}
+              >
+                <span className="flex items-center gap-1.5 text-xs text-amber-700">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                  {song.leadingSilenceSecs!.toFixed(2)} s of leading silence detected
+                </span>
+                <button
+                  type="button"
+                  disabled={trimSilenceMut.isPending}
+                  onClick={() => trimSilenceMut.mutate()}
+                  className="text-xs font-medium text-amber-800 bg-amber-100 hover:bg-amber-200 rounded px-2 py-0.5 disabled:opacity-50"
+                  data-testid={`button-trim-silence-${song.id}`}
+                >
+                  {trimSilenceMut.isPending ? "Trimming…" : "Trim leading silence"}
+                </button>
+              </div>
+            )}
 
             {uploading && (
               <p className="text-[11px] text-slate-400">Uploading…</p>
@@ -14287,6 +14363,12 @@ async function uploadAudioFile(
   // channels, and file size without re-probing on read.
   servedSpecs?: AudioSpecsPayload | null;
   sourceSpecs?: AudioSpecsPayload | null;
+  // Task #2131 — leading-silence measurement from ffmpeg silencedetect
+  // run on the original upload. Null when the probe couldn't run (e.g.
+  // a timeout or an unsupported container). The backfill sweep catches
+  // these later. Forward to POST/PUT /api/admin/songs so the column
+  // stays in sync without waiting for a separate backfill pass.
+  leadingSilenceSecs?: number | null;
 }> {
   const token = getAuthToken();
   if (!token) {
@@ -14352,6 +14434,7 @@ async function uploadAudioFile(
     duration?: number | null;
     servedSpecs?: AudioSpecsPayload | null;
     sourceSpecs?: AudioSpecsPayload | null;
+    leadingSilenceSecs?: number | null;
   };
   return body;
 }
