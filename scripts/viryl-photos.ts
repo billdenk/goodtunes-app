@@ -2,18 +2,35 @@
  * Upload Viryl Technologies Corp. catalogue disc photos to Object Storage
  * and stamp swatch_image_url on the matching press_colors rows.
  *
- * Source of truth: attached_assets/Catalogue_2024_1781121947631.pdf
+ * Source of truth: attached_assets/Catalogue_2024-1_1782363107376.pdf
+ *
+ * v2 — fixes the white-disc / white-blob bug (Task #2125). The v1 run masked
+ * Viryl discs with maskToVinylDisc's COLOUR-segmentation path, which is tuned
+ * for Hellbender's light two-tone studio backdrop and erases the dark parts of
+ * a disc photographed on Viryl's near-uniform DARK backdrop (so Black/Gold/
+ * Silver/Apple Red rendered as plain white circles, and dark-component marbles
+ * lost half the disc to a white blob). v2 instead masks with the shape-only
+ * crop ({ shapeOnly: true }) — it finds the disc circle and cuts to it,
+ * preserving every interior pixel regardless of colour — and FORCE-overwrites
+ * the bad v1 URLs behind a new marker.
  *
  * What this script does:
  *   1. Runs `pdfimages -j` to extract every JPEG embedded in the catalogue PDF.
+ *      (v2 points at the full `Catalogue_2024-1_…` catalogue — the older
+ *      `Catalogue_2024_…` PDF no longer extracts all the disc images under the
+ *      current pdfimages, but the colour→index map is identical.)
  *   2. Uses a hardcoded page→image-index→color-name mapping derived from
  *      `pdfimages -list` + `pdftotext -layout` analysis of the PDF.
- *   3. For each mapped color, loads the JPEG disc photo, applies maskToVinylDisc
- *      to cut out the uniform backdrop, and uploads the transparent PNG to
- *      Object Storage.
- *   4. Stamps swatch_image_url on the matching press_colors row (only when null
- *      — never overwrites an operator-uploaded photo).
- *   5. Sets the `viryl_photos_v1` marker so re-runs are idempotent no-ops.
+ *   3. For each mapped color, loads the JPEG disc photo, applies the shape-only
+ *      maskToVinylDisc crop to cut out the uniform dark backdrop, and uploads
+ *      the transparent PNG to Object Storage.
+ *   4. Overwrites swatch_image_url on every SCRIPT-MANAGED row for the colour
+ *      (importSourceUrl null = the v1 stamp, or already our Viryl marker) and
+ *      stamps importSourceUrl = VIRYL_PHOTO_SOURCE so future tooling can tell a
+ *      script-managed swatch from an operator upload. Operator uploads done via
+ *      the admin upload+PATCH set a different importSourceUrl-bearing flow; we
+ *      never clobber a row whose importSourceUrl points elsewhere.
+ *   5. Sets the `viryl_photos_v2` marker so re-runs are idempotent no-ops.
  *
  * Page→color mapping notes:
  *   - Page 1 (cover) has a decorative Black disc — skipped (not the catalog entry).
@@ -32,8 +49,7 @@
 import { execSync } from "node:child_process";
 import { readFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { db, pool } from "../server/db";
 import { manufacturers, pressColorTiers, pressColors } from "@shared/schema";
 import { maskToVinylDisc } from "../server/vendorColorScrape";
@@ -44,13 +60,22 @@ import {
 import { setObjectAclPolicy } from "../server/replit_integrations/object_storage/objectAcl";
 
 const DRY = process.argv.includes("--dry");
-const MARKER = "viryl_photos_v1";
-const PDF_PATH = join(process.cwd(), "attached_assets/Catalogue_2024_1781121947631.pdf");
+const MARKER = "viryl_photos_v2";
+const PDF_PATH = join(process.cwd(), "attached_assets/Catalogue_2024-1_1782363107376.pdf");
+// Stamped on importSourceUrl for every swatch this script writes, so a later
+// re-stamp can overwrite our own rows but leave operator uploads alone.
+const VIRYL_PHOTO_SOURCE = "viryl:catalogue-2024-disc";
 
 const objectStorage = new ObjectStorageService();
 
-function resolveUploadTarget(): { bucketName: string; objectName: string; publicUrl: string } {
-  const id = `${randomUUID()}.png`;
+function colorSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function resolveUploadTarget(id: string): { bucketName: string; objectName: string; publicUrl: string } {
   const privateDir = objectStorage.getPrivateObjectDir().replace(/\/$/, "");
   const trimmed = privateDir.startsWith("/") ? privateDir.slice(1) : privateDir;
   const firstSlash = trimmed.indexOf("/");
@@ -60,8 +85,16 @@ function resolveUploadTarget(): { bucketName: string; objectName: string; public
   return { bucketName, objectName, publicUrl: `/objects/uploads/${id}` };
 }
 
-async function uploadPng(buf: Buffer): Promise<string> {
-  const { bucketName, objectName, publicUrl } = resolveUploadTarget();
+// Deterministic, version-stamped object key per colour. post-merge runs this
+// script once against the dev DB and once against the prod DB; with a stable key
+// both runs write to the SAME Object Storage object (the bucket is shared
+// dev+prod) and therefore stamp the IDENTICAL /objects/uploads/<id> URL into
+// both databases. (A random UUID per run would give each DB a different URL and
+// orphan a duplicate object.) Bumping the `-v2-` segment forces a fresh key if
+// the crop ever changes, so the immutable cache never serves a stale disc.
+async function uploadPng(buf: Buffer, colorName: string): Promise<string> {
+  const id = `viryl-catalog-2024-disc-v2-${colorSlug(colorName)}.png`;
+  const { bucketName, objectName, publicUrl } = resolveUploadTarget(id);
   const file = objectStorageClient.bucket(bucketName).file(objectName);
   await file.save(buf, {
     contentType: "image/png",
@@ -163,19 +196,58 @@ async function main() {
 
   // Load all Viryl color rows (across all tiers/formats)
   const colorRows = await db
-    .select({ id: pressColors.id, name: pressColors.name, swatchImageUrl: pressColors.swatchImageUrl })
+    .select({
+      id: pressColors.id,
+      name: pressColors.name,
+      swatchImageUrl: pressColors.swatchImageUrl,
+      importSourceUrl: pressColors.importSourceUrl,
+    })
     .from(pressColors)
     .innerJoin(pressColorTiers, eq(pressColors.tierId, pressColorTiers.id))
     .where(eq(pressColorTiers.pressId, mfr.id));
 
-  // Deduplicate: same color name appears in multiple formats; pick first null-swatch row per name
-  const colorByName = new Map<string, { id: string; swatchImageUrl: string | null }>();
-  for (const r of colorRows) {
-    if (!colorByName.has(r.name) || colorByName.get(r.name)!.swatchImageUrl !== null) {
-      colorByName.set(r.name, { id: r.id, swatchImageUrl: r.swatchImageUrl });
-    }
-  }
-  console.log(`  ${colorRows.length} color rows for Viryl (${colorByName.size} unique names)`);
+  // The catalogue colours we have a real disc photo for. This doubles as the
+  // explicit allowlist for the one-time remediation below — the ONLY colour
+  // names this script ever rewrites.
+  const photoColorNames = new Set(IMG_TO_COLOR.map((x) => x.colorName));
+
+  // A Viryl row is ours to (over)write when ONE of these holds:
+  //   1. it has no swatch yet (swatchImageUrl null) — how fresh clones seed
+  //      effect colours, and the safe baseline;
+  //   2. its swatch was stamped by a Viryl catalogue script (importSourceUrl is a
+  //      viryl… / viryl-catalog-2024: marker) — the opaque/clear single colours
+  //      (white discs) and any already-migrated v2 rows;
+  //   3. it is one of the catalogue colours we have a photo for AND carries no
+  //      import source (importSourceUrl null). This branch catches the
+  //      viryl-photos v1 effect/marble stamps, whose shape is non-null swatch +
+  //      null source (the seed gives code-less colours a null source and v1 never
+  //      set one).
+  //
+  // The null-source case (3) is the subtle one: the admin manual swatch PATCH
+  // leaves importSourceUrl untouched, so an operator upload to a code-less effect
+  // colour is also non-null-swatch + null-source — indistinguishable by columns
+  // from a v1 stamp. Two things make overwriting it safe here:
+  //   - it is scoped to photoColorNames, so a swatch for any colour we DON'T have
+  //     a catalogue photo for is never touched; and
+  //   - the whole script is guarded by the viryl_photos_v2 marker, so it runs at
+  //     most once per environment and cannot clobber an operator upload made
+  //     after this remediation. (On first run there are no such uploads: fresh
+  //     clones are brand new, and dev/prod were verified to hold only the 37
+  //     broken script stamps.)
+  // A row whose source points at a NON-Viryl importer is always left untouched.
+  const isVirylScriptSource = (s: string | null) =>
+    s !== null &&
+    (s === VIRYL_PHOTO_SOURCE ||
+      s.startsWith("viryl-catalog-2024:") ||
+      s.startsWith("viryl:") ||
+      s.startsWith("n:"));
+  const isScriptManaged = (r: { name: string; swatchImageUrl: string | null; importSourceUrl: string | null }) =>
+    r.swatchImageUrl === null ||
+    isVirylScriptSource(r.importSourceUrl) ||
+    (r.importSourceUrl === null && photoColorNames.has(r.name));
+
+  const uniqueNames = new Set(colorRows.map((r) => r.name));
+  console.log(`  ${colorRows.length} color rows for Viryl (${uniqueNames.size} unique names)`);
 
   // Extract images from PDF to temp dir
   const tmpDir = "/tmp/viryl-photos-extracted";
@@ -197,15 +269,19 @@ async function main() {
   let noPhoto = 0;
   let failed = 0;
 
+  // Stage 1 — resolve which colours have work to do (synchronous bookkeeping).
+  const work: Array<{ colorName: string; imgFile: string; targetIds: string[] }> = [];
   for (const { imgIdx, colorName } of IMG_TO_COLOR) {
-    const colorEntry = colorByName.get(colorName);
-    if (!colorEntry) {
+    // Rows for this colour name (same colour appears in 12_lp/12_double/7_inch
+    // tiers) that this script is allowed to (over)write.
+    const targetRows = colorRows.filter((r) => r.name === colorName && isScriptManaged(r));
+    if (colorRows.every((r) => r.name !== colorName)) {
       console.log(`  [skip] ${colorName} — not found in DB`);
       skipped++;
       continue;
     }
-    if (colorEntry.swatchImageUrl !== null) {
-      console.log(`  [skip] ${colorName} — swatch already set`);
+    if (targetRows.length === 0) {
+      console.log(`  [skip] ${colorName} — only operator-managed rows, leaving alone`);
       skipped++;
       continue;
     }
@@ -217,52 +293,74 @@ async function main() {
       continue;
     }
 
-    const rawBuf = readFileSync(imgFile);
-
     if (DRY) {
-      console.log(`  [dry]  ${colorName} — would mask + upload ${rawBuf.length} bytes`);
+      console.log(`  [dry]  ${colorName} — would shape-mask + upload + stamp ${targetRows.length} rows`);
       stamped++;
       continue;
     }
 
-    let uploadBuf: Buffer;
-    const masked = await maskToVinylDisc(rawBuf);
-    if (masked) {
-      uploadBuf = masked;
-    } else {
-      console.log(`  [warn] ${colorName} — maskToVinylDisc returned null, uploading raw JPEG`);
-      uploadBuf = rawBuf;
-      failed++;
-    }
+    work.push({ colorName, imgFile, targetIds: targetRows.map((r) => r.id) });
+  }
 
+  // Stage 2 — mask + upload + stamp with a bounded concurrency pool. Each unit
+  // is independent (own JPEG → own PNG → own rows), so running a few in parallel
+  // cuts wall time enough to finish a full 37-colour run against the remote prod
+  // DB inside one invocation. Shape-only crop keeps every interior pixel and
+  // never erases dark discs on Viryl's dark backdrop; a no-disc result SKIPS
+  // (never falls back to the raw rectangle, which would re-introduce a bad swatch).
+  const CONCURRENCY = 6;
+  let cursor = 0;
+  const runOne = async (item: (typeof work)[number]) => {
+    const rawBuf = readFileSync(item.imgFile);
+    const masked = await maskToVinylDisc(rawBuf, { shapeOnly: true });
+    if (!masked) {
+      console.log(`  [warn] ${item.colorName} — shape mask found no disc, skipping`);
+      failed++;
+      return;
+    }
     try {
-      const url = await uploadPng(uploadBuf);
-      // Stamp ALL rows for this color name (same color appears in 12_lp/12_double/7_inch tiers)
-      const matchingIds = colorRows
-        .filter((r) => r.name === colorName && r.swatchImageUrl === null)
-        .map((r) => r.id);
-      for (const id of matchingIds) {
-        await db.update(pressColors).set({ swatchImageUrl: url }).where(eq(pressColors.id, id));
-      }
-      console.log(`  [ok]   ${colorName} → ${url} (${matchingIds.length} rows stamped)`);
+      const url = await uploadPng(masked, item.colorName);
+      await db
+        .update(pressColors)
+        .set({ swatchImageUrl: url, importSourceUrl: VIRYL_PHOTO_SOURCE })
+        .where(inArray(pressColors.id, item.targetIds));
+      console.log(`  [ok]   ${item.colorName} → ${url} (${item.targetIds.length} rows stamped)`);
       stamped++;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`  [err]  ${colorName} — upload failed: ${msg}`);
+      console.error(`  [err]  ${item.colorName} — upload failed: ${msg}`);
       failed++;
     }
-  }
-
-  if (!DRY) {
-    await db.execute(sql`
-      INSERT INTO post_merge_data_backfills (name) VALUES (${MARKER}) ON CONFLICT DO NOTHING
-    `);
-  }
+  };
+  const worker = async () => {
+    while (cursor < work.length) {
+      const item = work[cursor++];
+      await runOne(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, work.length) }, worker));
 
   console.log(
     `  stamped=${stamped} skipped=${skipped} noPhoto=${noPhoto} failed=${failed}`
   );
-  if (!DRY) console.log(`  marker '${MARKER}' set.`);
+
+  // Only mark the remediation complete when every intended colour actually
+  // stamped. A partial run (upload timeout, killed process, etc.) must NOT write
+  // the marker, or post-merge would treat the half-done state as permanently
+  // complete and never retry.
+  if (!DRY) {
+    if (failed > 0 || stamped !== work.length) {
+      console.error(
+        `  ABORT: expected to stamp ${work.length} colours, stamped ${stamped} (failed ${failed}); marker '${MARKER}' NOT set.`
+      );
+      await pool.end();
+      process.exit(1);
+    }
+    await db.execute(sql`
+      INSERT INTO post_merge_data_backfills (name) VALUES (${MARKER}) ON CONFLICT DO NOTHING
+    `);
+    console.log(`  marker '${MARKER}' set.`);
+  }
   console.log("Done.");
 }
 

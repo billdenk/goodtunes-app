@@ -7266,9 +7266,12 @@ patch_viryl_pricing() {
 patch_viryl_pricing dev  "${DATABASE_URL:-}"
 patch_viryl_pricing prod "${PROD_DATABASE_URL:-}"
 
-# viryl-photos: extracts disc photos from the 2024 catalogue PDF, applies
-# disc masking, uploads to Object Storage, stamps swatch_image_url.
-# Marker-guarded (viryl_photos_v1). Requires attached_assets/Catalogue_2024_*.pdf.
+# viryl-photos: extracts disc photos from the 2024 catalogue PDF, applies the
+# SHAPE-ONLY disc crop (task #2125 — the v1 colour-segmentation mask erased dark
+# discs on Viryl's dark backdrop, leaving white discs/blobs), uploads to Object
+# Storage, and FORCE-overwrites swatch_image_url on every script-managed Viryl
+# colour row (never operator uploads). Self-marker-guarded inside the script
+# (viryl_photos_v2). Requires attached_assets/Catalogue_2024-1_*.pdf.
 run_viryl_photos() {
   local label="$1" url="$2"
   if [ -z "$url" ]; then

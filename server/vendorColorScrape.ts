@@ -24,7 +24,18 @@ export type MrpParsedTile = {
 // buffer on success, or null when we can't confidently find a disc (low
 // foreground coverage, wrong aspect, or foreground doesn't fill the
 // inscribed circle) — the caller falls back to the original upload.
-export async function maskToVinylDisc(buf: Buffer): Promise<Buffer | null> {
+//
+// `opts.shapeOnly` skips the colour-segmentation pass entirely and crops
+// the disc purely by its circular SHAPE (detectDiscByEdges), keeping every
+// interior pixel regardless of colour. This is for catalogue photos shot on
+// a DARK, near-uniform backdrop (Viryl): the colour segmenter classifies
+// the dark/dark-marbled parts of the disc as background and erases them,
+// leaving a white circle or a white blob. The shape crop never erases the
+// interior, so black reads black and marbled discs keep their full marble.
+export async function maskToVinylDisc(
+  buf: Buffer,
+  opts?: { shapeOnly?: boolean },
+): Promise<Buffer | null> {
   const { loadImage, createCanvas, ImageData } = await import("@napi-rs/canvas");
   let img;
   try {
@@ -74,6 +85,19 @@ export async function maskToVinylDisc(buf: Buffer): Promise<Buffer | null> {
     octx.putImageData(new ImageData(od, outW, outH), 0, 0);
     return await out.encode("png");
   };
+
+  // Shape-only path (Viryl dark-backdrop catalogue photos): detect the disc
+  // by its circular edge/groove shape and crop to it, preserving every
+  // interior pixel. No colour segmentation, so dark/marbled discs survive.
+  // detectCenteredDisc handles Viryl's "disc nearly fills the frame, dead
+  // centre, dark backdrop" layout (its rim sits at ~0.51·minDim — past
+  // detectDiscByEdges' 0.49 ceiling); detectDiscByEdges is kept as a
+  // secondary fallback for any odd framing.
+  if (opts?.shapeOnly) {
+    const circle = detectCenteredDisc(px, w, h) ?? detectDiscByEdges(px, w, h);
+    if (circle) return await cropDisc(circle.cx, circle.cy, circle.r);
+    return null;
+  }
 
   // Classify every pixel as background or foreground. The naive
   // "match any sampled edge color" test breaks on Hellbender mockups,
@@ -398,6 +422,98 @@ function detectDiscByEdges(
   // lifestyle photo (off-centre, occluded record) tops out ~0.52, so 0.62
   // cleanly separates discs from photos that merely have some round edges.
   if (bestCov < 0.62) return null;
+  return { cx: bestCx, cy: bestCy, r: bestR };
+}
+
+// Detect a centered vinyl disc that NEARLY FILLS the frame on a dark,
+// near-uniform backdrop — Viryl's catalogue layout. detectDiscByEdges is
+// tuned for Hellbender (disc ~0.3–0.49·minDim, light two-tone backdrop) and
+// its centre-voting prior + 0.49 radius ceiling reject Viryl's bigger,
+// edge-touching discs (rim sits at ~0.51·minDim). Here the disc is always
+// dead-centre, so we skip Hough voting: start at the image centre and pick
+// the OUTERMOST radius (up to 0.52·minDim) whose circumference is well
+// covered by edges (the rim; grooves sit further in), then refine centre +
+// radius locally. Returns the disc circle or null when no centred rim is
+// found (so a non-disc photo still bails to the colour path / original).
+function detectCenteredDisc(
+  px: Uint8ClampedArray,
+  w: number,
+  h: number,
+): { cx: number; cy: number; r: number } | null {
+  const n = w * h;
+  const minDim = Math.min(w, h);
+
+  // Grayscale + Sobel gradient magnitude.
+  const gray = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const j = i * 4;
+    gray[i] = 0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2];
+  }
+  const mag = new Float32Array(n);
+  let sum = 0;
+  let cnt = 0;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const tl = gray[i - w - 1], t = gray[i - w], tr = gray[i - w + 1];
+      const l = gray[i - 1], r = gray[i + 1];
+      const bl = gray[i + w - 1], b = gray[i + w], br = gray[i + w + 1];
+      const gx = tr + 2 * r + br - (tl + 2 * l + bl);
+      const gy = bl + 2 * b + br - (tl + 2 * t + tr);
+      mag[i] = Math.hypot(gx, gy);
+      sum += mag[i];
+      cnt++;
+    }
+  }
+  const edgeTh = Math.min(255, Math.max(20, (sum / cnt) * 1.6));
+
+  // Vinyl fills most of the (near-square) frame; rim can touch the edges.
+  const rMin = Math.floor(0.34 * minDim);
+  const rMax = Math.floor(0.52 * minDim);
+
+  // Fraction of a circle's circumference that has an edge within a thin band.
+  const coverage = (cx: number, cy: number, r: number): number => {
+    const band = Math.max(2, Math.round(r * 0.03));
+    const N = 180;
+    let hits = 0;
+    for (let a = 0; a < N; a++) {
+      const ang = (a * 2 * Math.PI) / N;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      for (let dr = -band; dr <= band; dr++) {
+        const rr = r + dr;
+        const xx = Math.round(cx + rr * ca);
+        const yy = Math.round(cy + rr * sa);
+        if (xx < 1 || yy < 1 || xx >= w - 1 || yy >= h - 1) continue;
+        if (mag[yy * w + xx] > edgeTh) { hits++; break; }
+      }
+    }
+    return hits / N;
+  };
+
+  const COV_TH = 0.55;
+  let cx = w / 2;
+  let cy = h / 2;
+  let r0 = -1;
+  for (let r = rMax; r >= rMin; r--) {
+    if (coverage(cx, cy, r) >= COV_TH) { r0 = r; break; }
+  }
+  if (r0 < 0) return null;
+
+  // Refine centre + radius locally to maximise rim coverage.
+  let bestCov = coverage(cx, cy, r0);
+  let bestR = r0;
+  let bestCx = cx;
+  let bestCy = cy;
+  for (let oy = -10; oy <= 10; oy += 2) {
+    for (let ox = -10; ox <= 10; ox += 2) {
+      for (let r = r0 - 6; r <= r0 + 8; r++) {
+        if (r < rMin || r > rMax) continue;
+        const cov = coverage(cx + ox, cy + oy, r);
+        if (cov > bestCov) { bestCov = cov; bestR = r; bestCx = cx + ox; bestCy = cy + oy; }
+      }
+    }
+  }
+  if (bestCov < COV_TH) return null;
   return { cx: bestCx, cy: bestCy, r: bestR };
 }
 
