@@ -2338,6 +2338,31 @@ SQL
 migrate_people_contact_phone dev  "${DATABASE_URL:-}"
 migrate_people_contact_phone prod "${PROD_DATABASE_URL:-}"
 
+# Task #2126 — people.earns_referral_payout. Operator on/off switch for
+# whether a referring artist earns the $1/unit referral credit. Default
+# TRUE so every existing referrer keeps earning (no regression). Additive
+# + idempotent on both DBs so the publish dev→prod diff stays empty and a
+# fresh-clone dev never 500s the admin Person → Permissions panel on its
+# first read.
+migrate_people_earns_referral_payout() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping people.earns_referral_payout migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE people
+  ADD COLUMN IF NOT EXISTS earns_referral_payout boolean NOT NULL DEFAULT true;
+SQL
+  then
+    echo "post-merge: people.earns_referral_payout migration ok on $label"
+  else
+    echo "post-merge: WARNING — people.earns_referral_payout migration failed on $label (continuing)"
+  fi
+}
+migrate_people_earns_referral_payout dev  "${DATABASE_URL:-}"
+migrate_people_earns_referral_payout prod "${PROD_DATABASE_URL:-}"
+
 # Task #363 — press turnaround is now an inclusive week range (min/max)
 # instead of a raw day count. Additive ALTERs on both DBs so the
 # publish dev→prod diff stays empty and a fresh-clone dev never 500s

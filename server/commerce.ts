@@ -4006,7 +4006,18 @@ export async function materializeOrderFromSession(
                  WHERE id = ${arRow.id}
               `);
             }
-            if (!swapKeepsInvitee) {
+            // Task #2126 — operator on/off switch on the REFERRER's people
+            // row. When `earns_referral_payout` is false, the referring
+            // artist still keeps the invite relationship (and the frozen
+            // artist_referrals row above) but no credit is minted. NULL /
+            // legacy rows default to TRUE so existing referrers keep
+            // earning with no regression.
+            const payoutRow = await db.execute<{ earns: boolean | null }>(sql`
+              SELECT earns_referral_payout AS earns
+              FROM people WHERE id = ${row.referred_by_person_id} LIMIT 1
+            `);
+            const referrerEarns = ((payoutRow as any).rows?.[0]?.earns ?? true) !== false;
+            if (!swapKeepsInvitee && referrerEarns) {
               const amountCents = basePerUnit * safeUnits;
               await db.execute(sql`
                 INSERT INTO referral_credits (order_id, referred_artist_id, referrer_kind, referrer_person_id, amount_cents, currency, status, units)

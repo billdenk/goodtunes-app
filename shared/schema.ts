@@ -1105,6 +1105,14 @@ export const people = pgTable("people", {
   referredByPersonId: varchar("referred_by_person_id"),
   referredByOrgId: varchar("referred_by_org_id"),
   referrerPerUnitCents: integer("referrer_per_unit_cents").notNull().default(100),
+  // Task #2126 — operator on/off switch for whether a referring ARTIST
+  // earns the $1/unit referral credit. Lives on the REFERRER's people row
+  // (the person who did the inviting): when false, their invitees can
+  // still be invited/credited to them for reporting, but no
+  // `referral_credits` row is minted on a paid sale. Defaults true so
+  // every existing referrer keeps earning with no regression. Only gates
+  // the artist→artist branch; NPO + press attribution are unaffected.
+  earnsReferralPayout: boolean("earns_referral_payout").notNull().default(true),
   // Task #199 — invited-by press. When a manufacturer admin invites
   // this artist, we stamp the manufacturer id here so their Sell-panel
   // Presses surface defaults to that press (soft lock — artist can

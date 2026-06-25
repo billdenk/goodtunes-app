@@ -15026,6 +15026,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // round-trip. Both are admin-curation flags, not sensitive.
     canInviteAmbassadors: !!p.canInviteAmbassadors,
     referredByOrgId: p.referredByOrgId ?? null,
+    // Task #2126 — operator on/off switch for whether THIS person, when
+    // they refer another artist, earns the $1/unit referral credit. The
+    // admin Person → Permissions panel renders a toggle off this value;
+    // defaults true (legacy rows carry NULL→treat as on).
+    earnsReferralPayout: p.earnsReferralPayout ?? true,
     // Task #736 — stored press mode (Dedicated vs All Presses). The
     // admin Person page reads through this projection, so the
     // InvitedByPressPanel toggle needs the saved value to highlight the
@@ -26671,6 +26676,66 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await db.execute(sql`UPDATE people SET can_invite_ambassadors = ${enabled} WHERE id = ${personId}`);
     res.json({ id: personId, canInviteAmbassadors: enabled });
   });
+
+  // Task #2126 — PATCH /api/admin/people/:id/earns-referral-payout.
+  // Operator on/off switch for whether THIS person, when they refer
+  // another artist, earns the $1/unit referral credit. Defaults true so
+  // existing referrers keep earning; OFF means their invitees can still
+  // be invited (and tracked for reporting) but no `referral_credits` row
+  // is minted on a paid sale. Operator-only: requireAdmin admits partner
+  // accounts (their roles report isAdmin too), so gate explicitly on the
+  // platform-operator roles — this is a payout-policy lever, not a
+  // partner-self-service verb.
+  app.patch(
+    "/api/admin/people/:id/earns-referral-payout",
+    requireAdmin,
+    requireRole("super_admin", "admin"),
+    async (req, res) => {
+      const personId = String(req.params.id);
+      const enabled = !!req.body?.enabled;
+      const p = await db.execute<{ id: string }>(sql`
+        SELECT id FROM people WHERE id = ${personId} LIMIT 1
+      `);
+      if (!((p as any).rows ?? [])[0]) return res.status(404).json({ message: "Person not found" });
+      await db.execute(sql`UPDATE people SET earns_referral_payout = ${enabled} WHERE id = ${personId}`);
+      res.json({ id: personId, earnsReferralPayout: enabled });
+    },
+  );
+
+  // Task #2126 — PATCH /api/admin/people/:id/referred-by-org. Assigns the
+  // person's non-profit referral link inline from the admin Person →
+  // Permissions panel (so the operator can promote them to an ambassador
+  // inviter without bouncing to a separate page). Only sets the link when
+  // one doesn't already exist — re-pointing an existing NPO referral is a
+  // separate, deliberate action and out of scope here. The NPO row itself
+  // is created (if new) via the existing POST /api/non-profits before this
+  // call. Operator-only for the same reason as the payout toggle.
+  app.patch(
+    "/api/admin/people/:id/referred-by-org",
+    requireAdmin,
+    requireRole("super_admin", "admin"),
+    async (req, res) => {
+      const personId = String(req.params.id);
+      const orgId = String(req.body?.organizationId || "").trim();
+      if (!orgId) return res.status(400).json({ message: "organizationId is required" });
+      const p = await db.execute<{ id: string; org: string | null }>(sql`
+        SELECT id, referred_by_org_id AS org FROM people WHERE id = ${personId} LIMIT 1
+      `);
+      const row = ((p as any).rows ?? [])[0];
+      if (!row) return res.status(404).json({ message: "Person not found" });
+      if (row.org) {
+        return res.status(409).json({ message: "This person is already linked to a non-profit." });
+      }
+      const org = await db.execute<{ id: string }>(sql`
+        SELECT id FROM organizations WHERE id = ${orgId} AND kind = 'non_profit' LIMIT 1
+      `);
+      if (!((org as any).rows ?? [])[0]) {
+        return res.status(404).json({ message: "Non-profit not found" });
+      }
+      await db.execute(sql`UPDATE people SET referred_by_org_id = ${orgId} WHERE id = ${personId}`);
+      res.json({ id: personId, referredByOrgId: orgId });
+    },
+  );
 
   // Task #665 — unified partner-contact endpoint. Replaces the older
   // Task #421 /grant-admin-role + separate "attach-as-contact" round-

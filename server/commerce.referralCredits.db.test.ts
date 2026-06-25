@@ -99,16 +99,20 @@ async function seedPerson(opts: {
   referredByPersonId?: string | null;
   referredByOrgId?: string | null;
   referrerPerUnitCents?: number | null;
+  // Task #2126 — operator on/off switch for whether this person, as a
+  // referrer, earns the $1/unit credit. Defaults true at the column level.
+  earnsReferralPayout?: boolean;
 } = {}): Promise<string> {
   const id = randomUUID();
   await exec(sql`
-    INSERT INTO people (id, name, referred_by_person_id, referred_by_org_id, referrer_per_unit_cents)
+    INSERT INTO people (id, name, referred_by_person_id, referred_by_org_id, referrer_per_unit_cents, earns_referral_payout)
     VALUES (
       ${id},
       ${"t1137 person " + id.slice(0, 8)},
       ${opts.referredByPersonId ?? null},
       ${opts.referredByOrgId ?? null},
-      ${opts.referrerPerUnitCents ?? 100}
+      ${opts.referrerPerUnitCents ?? 100},
+      ${opts.earnsReferralPayout ?? true}
     )
   `);
   created.people.add(id);
@@ -328,6 +332,55 @@ test("skips the artist credit when the swap is invitee_keeps_full", async () => 
   `));
   assert.equal(ar.length, 1, "the artist_referrals row must still be present");
   assert.notEqual(ar[0].frozen_at, null, "first paid sale must freeze the swap even when no credit is minted");
+});
+
+test("skips the artist credit when the referrer's earns_referral_payout is OFF (Task #2126)", async () => {
+  const customerId = await seedCustomer();
+  const albumId = await seedAlbum();
+
+  const FORMAT = "lp";
+  // Referrer has the payout switch OFF — they can still invite, but no
+  // referral_credits row should be minted on their invitee's paid sale.
+  const referrerPersonId = await seedPerson({ earnsReferralPayout: false });
+  const inviteePersonId = await seedPerson({
+    referredByPersonId: referrerPersonId,
+    referrerPerUnitCents: 100,
+  });
+  await seedArtistReferral({
+    referrerPersonId,
+    inviteePersonId,
+    albumId: null,
+    swapState: "referrer_keeps_full",
+  });
+  await seedVinylSku({ albumId, format: FORMAT, priceCents: 3000 });
+
+  const order = await drivePaidCheckout({
+    customerId,
+    albumId,
+    artistPersonId: inviteePersonId,
+    format: FORMAT,
+    unitPriceCents: 3000,
+    quantity: 2,
+  });
+
+  assert.equal(order.status, "paid", "the fixture session is PAID so the order must materialize as paid");
+
+  const credits = rows(await exec(sql`
+    SELECT id FROM referral_credits WHERE order_id = ${order.id} AND referrer_kind = 'artist'
+  `));
+  assert.equal(
+    credits.length,
+    0,
+    "a referrer with earns_referral_payout=OFF must NOT mint an artist referral credit",
+  );
+
+  // The relationship is still frozen so the report/attribution survives.
+  const ar = rows(await exec(sql`
+    SELECT frozen_at FROM artist_referrals
+      WHERE referrer_person_id = ${referrerPersonId} AND invitee_person_id = ${inviteePersonId}
+  `));
+  assert.equal(ar.length, 1, "the artist_referrals row must still be present");
+  assert.notEqual(ar[0].frozen_at, null, "first paid sale must still freeze the swap even when payout is off");
 });
 
 test("mints one non_profit credit per album NPO beneficiary", async () => {

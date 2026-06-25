@@ -63,19 +63,156 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // Task #350 — Per-person ambassador toggle. Lives at the bottom of the
 // Permissions tab so it sits next to the other partner verbs. Disabled
 // (with a hint) when the person has no NPO; the server enforces the
 // same rule defensively.
-function AmbassadorToggle({ personId, canInviteAmbassadors, referredByOrgId }: {
+//
+// Task #2126 — the card now also lets the operator (a) ASSIGN a non-profit
+// inline (pick an existing NPO or mint a new one) when the person has none,
+// so the dead-end disabled checkbox becomes checkable without a reload, and
+// (b) toggle whether this person — when they refer another artist — earns
+// the $1/unit referral credit (on by default; OFF still lets them invite,
+// it just doesn't mint a credit).
+type NonProfitLite = { id: string; name: string; logoUrl: string | null };
+
+// Inline NPO picker dialog: choose an existing non-profit or create a new
+// one, then link it to this person via PATCH …/referred-by-org.
+function AssignNonProfitDialog({
+  personId,
+  open,
+  onOpenChange,
+}: {
+  personId: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const [mode, setMode] = useState<"existing" | "new">("existing");
+  const [selectedOrgId, setSelectedOrgId] = useState("");
+  const [newName, setNewName] = useState("");
+  const npos = useQuery<NonProfitLite[]>({ queryKey: ["/api/non-profits"], enabled: open });
+
+  const assign = useMutation({
+    mutationFn: async () => {
+      let orgId = selectedOrgId;
+      if (mode === "new") {
+        const name = newName.trim();
+        if (!name) throw new Error("Enter a non-profit name");
+        const created = await apiRequest("POST", "/api/non-profits", { name });
+        const body = (await created.json()) as { id: string };
+        orgId = body.id;
+      }
+      if (!orgId) throw new Error("Pick a non-profit");
+      await apiRequest("PATCH", `/api/admin/people/${personId}/referred-by-org`, { organizationId: orgId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/people", personId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/non-profits"] });
+      toast({ title: "Non-profit assigned" });
+      setNewName("");
+      setSelectedOrgId("");
+      onOpenChange(false);
+    },
+    onError: (e: Error) => {
+      toast({ title: "Couldn't assign", description: e.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !assign.isPending && onOpenChange(v)}>
+      <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4" data-testid="dialog-assign-npo">
+        <DialogHeader className="text-left space-y-1">
+          <DialogTitle className="text-lg font-semibold text-slate-900">Assign a non-profit</DialogTitle>
+          <DialogDescription className="text-[13px] font-normal text-slate-500">
+            Link this person to a non-profit so they can be promoted to an ambassador inviter.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant={mode === "existing" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setMode("existing")}
+            data-testid="button-npo-mode-existing"
+          >
+            Existing
+          </Button>
+          <Button
+            type="button"
+            variant={mode === "new" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setMode("new")}
+            data-testid="button-npo-mode-new"
+          >
+            Create new
+          </Button>
+        </div>
+        {mode === "existing" ? (
+          <Select value={selectedOrgId} onValueChange={setSelectedOrgId}>
+            <SelectTrigger className="h-9" data-testid="select-assign-npo">
+              <SelectValue placeholder={npos.isLoading ? "Loading…" : "Choose a non-profit"} />
+            </SelectTrigger>
+            <SelectContent>
+              {(npos.data ?? []).map((n) => (
+                <SelectItem key={n.id} value={n.id} data-testid={`option-assign-npo-${n.id}`}>
+                  {n.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Non-profit name"
+            data-testid="input-new-npo-name"
+          />
+        )}
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={assign.isPending} data-testid="button-cancel-assign-npo">
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => assign.mutate()}
+            disabled={assign.isPending || (mode === "existing" ? !selectedOrgId : !newName.trim())}
+            data-testid="button-confirm-assign-npo"
+          >
+            {assign.isPending ? "Assigning…" : "Assign"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AmbassadorToggle({ personId, canInviteAmbassadors, referredByOrgId, earnsReferralPayout }: {
   personId: string;
   canInviteAmbassadors: boolean;
   referredByOrgId: string | null;
+  earnsReferralPayout: boolean;
 }) {
   const { toast } = useToast();
   const [enabled, setEnabled] = useState(canInviteAmbassadors);
-  const disabled = !referredByOrgId;
+  const [earns, setEarns] = useState(earnsReferralPayout);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const hasNpo = !!referredByOrgId;
+
+  // Keep local state honest after the person query refetches (e.g. the
+  // NPO link landing flips `referredByOrgId` and re-enables the checkbox).
+  useEffect(() => { setEnabled(canInviteAmbassadors); }, [canInviteAmbassadors]);
+  useEffect(() => { setEarns(earnsReferralPayout); }, [earnsReferralPayout]);
+
   const m = useMutation({
     mutationFn: async (next: boolean) => {
       await apiRequest("PATCH", `/api/admin/people/${personId}/can-invite-ambassadors`, { enabled: next });
@@ -90,27 +227,77 @@ function AmbassadorToggle({ personId, canInviteAmbassadors, referredByOrgId }: {
       toast({ title: "Couldn't update", description: e.message, variant: "destructive" });
     },
   });
+
+  const payout = useMutation({
+    mutationFn: async (next: boolean) => {
+      await apiRequest("PATCH", `/api/admin/people/${personId}/earns-referral-payout`, { enabled: next });
+      return next;
+    },
+    onSuccess: (next) => {
+      setEarns(next);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/people", personId] });
+      toast({ title: next ? "Referral payout on" : "Referral payout off" });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Couldn't update", description: e.message, variant: "destructive" });
+    },
+  });
+
   return (
-    <Card className="p-5 mt-4">
+    <Card className="p-5 mt-4 space-y-5">
       <div className="flex items-start gap-3">
         <input
           type="checkbox"
           id={`amb-toggle-${personId}`}
           checked={enabled}
-          disabled={disabled || m.isPending}
+          disabled={!hasNpo || m.isPending}
           onChange={(e) => m.mutate(e.target.checked)}
           className="mt-1 w-4 h-4 accent-[var(--brand-blue)]"
           data-testid="toggle-can-invite-ambassadors"
         />
-        <label htmlFor={`amb-toggle-${personId}`} className="block">
-          <span className="font-semibold text-slate-900 block">Can invite ambassadors</span>
+        <div className="block">
+          <label htmlFor={`amb-toggle-${personId}`} className="block">
+            <span className="font-semibold text-slate-900 block">Can invite ambassadors</span>
+            <span className="text-xs text-slate-500 block mt-1">
+              {hasNpo
+                ? "When ON, the non-profit can attribute invites to this person. Their referred artists' credits flow to them, with the NPO still seeing the roll-up."
+                : "Link this person to a non-profit first — then you can promote them to an ambassador inviter."}
+            </span>
+          </label>
+          {!hasNpo && (
+            <button
+              type="button"
+              onClick={() => setAssignOpen(true)}
+              className="mt-2 text-sm font-medium text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
+              data-testid="button-assign-npo"
+            >
+              + Assign non-profit
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-start gap-3 border-t border-slate-100 pt-5">
+        <input
+          type="checkbox"
+          id={`payout-toggle-${personId}`}
+          checked={earns}
+          disabled={payout.isPending}
+          onChange={(e) => payout.mutate(e.target.checked)}
+          className="mt-1 w-4 h-4 accent-[var(--brand-blue)]"
+          data-testid="toggle-earns-referral-payout"
+        />
+        <label htmlFor={`payout-toggle-${personId}`} className="block">
+          <span className="font-semibold text-slate-900 block">Earns referral payout</span>
           <span className="text-xs text-slate-500 block mt-1">
-            {disabled
-              ? "Person must be linked to a non-profit (referred_by_org) before they can be promoted."
-              : "When ON, the non-profit can attribute invites to this person. Their referred artists' credits flow to them, with the NPO still seeing the roll-up."}
+            {earns
+              ? "When ON, this person earns the $1/unit referral credit on every paid sale by an artist they referred."
+              : "When OFF, this person can still invite artists, but no referral credit is minted on their referrals' sales."}
           </span>
         </label>
       </div>
+
+      <AssignNonProfitDialog personId={personId} open={assignOpen} onOpenChange={setAssignOpen} />
     </Card>
   );
 }
@@ -205,6 +392,13 @@ interface PersonFull {
     status: "signed" | "invited" | "expired" | "declined";
     at: string | null;
   }>;
+  // Task #350 / #2126 — ambassador inviter flag + the NPO this person is
+  // referred by (gates the ambassador toggle); `earnsReferralPayout` is
+  // the operator on/off switch for whether this person, as a referrer,
+  // earns the $1/unit referral credit (defaults true).
+  canInviteAmbassadors?: boolean;
+  referredByOrgId?: string | null;
+  earnsReferralPayout?: boolean;
 }
 
 interface LabelLite {
@@ -640,7 +834,12 @@ export function AdminPerson() {
                 can attribute invites to this person and the new
                 artist's referral credits flow to the ambassador (with
                 the NPO still seeing them in their roll-up). */}
-            <AmbassadorToggle personId={person.id} canInviteAmbassadors={(person as any).canInviteAmbassadors ?? false} referredByOrgId={(person as any).referredByOrgId ?? null} />
+            <AmbassadorToggle
+              personId={person.id}
+              canInviteAmbassadors={person.canInviteAmbassadors ?? false}
+              referredByOrgId={person.referredByOrgId ?? null}
+              earnsReferralPayout={person.earnsReferralPayout ?? true}
+            />
           </>
         )}
       </div>
