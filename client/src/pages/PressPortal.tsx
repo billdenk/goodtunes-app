@@ -21,7 +21,7 @@
 //                 Catalog deep-links into the existing manufacturer
 //                 catalog editor under /admin/manufacturers/:id.
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
 import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign } from "lucide-react";
@@ -32,8 +32,18 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { DashboardPanel } from "@/components/partner/dashboard-controls";
-import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
+import { DashboardPanel, RangePicker } from "@/components/partner/dashboard-controls";
+import {
+  PartnerDashboard,
+  type DashboardPayload,
+  type DashboardKpi,
+  type PartnerRangePreset,
+  RANGE_PRESETS,
+  formatValue,
+  TrendChart,
+  ActivityList,
+} from "@/components/partner/PartnerDashboard";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
 import { AdminReports } from "@/pages/AdminReports";
@@ -136,16 +146,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       onTabChange={setTab}
     >
       {tab === "dashboard" && (
-        <div className="space-y-4">
-          <DashboardSummary pressId={pressId} />
-          <PartnerDashboard
-            scope="vendor"
-            title="Jobs & turn-time"
-            subtitle="The same operational dashboard the legacy vendor shell shows."
-            scopeIdQs={isSuperAdminView ? pressId : null}
-            scopeKindQs={isSuperAdminView ? "manufacturer" : null}
-          />
-        </div>
+        <PressDashboardTab pressId={pressId} isSuperAdminView={isSuperAdminView} />
       )}
       {tab === "customers" && <CustomersTab pressId={pressId} />}
       {tab === "pipeline" && <PipelineTab pressId={pressId} />}
@@ -366,43 +367,156 @@ interface PressSummary {
   byStage: Record<string, number>;
 }
 
-function DashboardSummary({ pressId }: { pressId: string }) {
-  const { data, isLoading } = useQuery<PressSummary>({
+const PRESS_STAGE_ORDER = ["design","sunrise_set","selling","masters_triggered","locked","in_production","shipped"] as const;
+
+function PressDashboardTab({
+  pressId,
+  isSuperAdminView,
+}: {
+  pressId: string;
+  isSuperAdminView: boolean;
+}) {
+  const [preset, setPreset] = useState<PartnerRangePreset>("30d");
+
+  const qs = useMemo(() => {
+    const u = new URLSearchParams({ range: preset });
+    if (isSuperAdminView) {
+      u.set("scopeId", pressId);
+      u.set("scopeKind", "manufacturer");
+    }
+    return u.toString();
+  }, [preset, pressId, isSuperAdminView]);
+
+  const { data: summary, isLoading: summaryLoading } = useQuery<PressSummary>({
     queryKey: [`/api/press/${pressId}/summary`],
   });
-  if (isLoading) return <PanelLoading />;
-  if (!data) return null;
-  const kpis: Array<{ label: string; value: number; testId: string }> = [
-    { label: "Customers", value: data.customerCount, testId: "kpi-customers" },
-    { label: "Invites pending", value: data.pendingInvites, testId: "kpi-pending-invites" },
-    { label: "Albums in pipeline", value: data.totalAlbums, testId: "kpi-total-albums" },
-    { label: "Units · last 30 days", value: data.unitsLast30d, testId: "kpi-units-30d" },
-    { label: "Units · next 90 days", value: data.unitsNext90d, testId: "kpi-units-90d" },
-  ];
-  const stageOrder = ["design","sunrise_set","selling","masters_triggered","locked","in_production","shipped"] as const;
+
+  const { data: dash, isLoading: dashLoading } = useQuery<DashboardPayload>({
+    queryKey: [`/api/partner/vendor/dashboard?${qs}`],
+  });
+
+  const isLoading = summaryLoading || dashLoading;
+
+  const pressKpis: DashboardKpi[] = summary
+    ? [
+        { id: "customers", label: "Customers", value: summary.customerCount, format: "number" },
+        { id: "invites", label: "Invites pending", value: summary.pendingInvites, format: "number" },
+        { id: "pipeline", label: "Albums in pipeline", value: summary.totalAlbums, format: "number" },
+        { id: "units-30d", label: "Units · last 30d", value: summary.unitsLast30d, format: "number" },
+        { id: "units-90d", label: "Units · next 90d", value: summary.unitsNext90d, format: "number" },
+      ]
+    : [];
+
+  const allKpis: DashboardKpi[] = [...pressKpis, ...(dash?.kpis ?? [])];
+
   return (
-    <div className="space-y-4">
-      <DashboardPanel padding="md">
-        <h2 className="text-lg font-semibold mb-3">Press at a glance</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {kpis.map((k) => (
-            <div key={k.testId} className="rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3" data-testid={k.testId}>
-              <div className="text-2xl font-bold">{k.value}</div>
-              <div className="text-slate-500 text-xs mt-1">{k.label}</div>
-            </div>
-          ))}
+    <div className="space-y-5" data-testid="press-dashboard">
+      <AdminPageHeader
+        title="Dashboard"
+        subtitle="Press at a glance and operational activity."
+        testId="heading-press-dashboard"
+        actions={
+          <RangePicker
+            presets={RANGE_PRESETS}
+            value={preset}
+            onChange={setPreset}
+            testId="range-picker-press"
+          />
+        }
+      />
+
+      {/* Unified KPI row */}
+      <section
+        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"
+        data-testid="kpi-grid-press"
+      >
+        {isLoading && allKpis.length === 0
+          ? Array.from({ length: 5 }).map((_, i) => (
+              <DashboardPanel key={i} className="h-[96px] animate-pulse" />
+            ))
+          : allKpis.map((k) => (
+              <DashboardPanel
+                key={k.id}
+                data-testid={`kpi-press-${k.id}`}
+                className="transition-colors duration-200 hover:ring-slate-300 hover:bg-slate-50"
+              >
+                <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
+                  {k.label}
+                </p>
+                <p
+                  className={`mt-1 text-2xl sm:text-[28px] font-bold tabular-nums ${k.comingSoon ? "text-slate-400" : ""}`}
+                  data-testid={`kpi-press-${k.id}-value`}
+                >
+                  {formatValue(k.value, k.format)}
+                </p>
+                <div className="mt-1 flex items-center gap-2 text-[11px]">
+                  {!k.comingSoon && k.prior != null ? (
+                    <>
+                      <span className="text-slate-500">vs prior</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full font-semibold ${
+                          (k.value ?? 0) >= k.prior
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-rose-50 text-rose-700"
+                        }`}
+                        data-testid={`kpi-press-${k.id}-delta`}
+                      >
+                        {k.prior === 0
+                          ? (k.value ?? 0) > 0 ? "+∞" : "—"
+                          : `${((k.value ?? 0) - k.prior) / k.prior >= 0 ? "+" : ""}${(
+                              (((k.value ?? 0) - k.prior) / k.prior) * 100
+                            ).toFixed(1)}%`}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-slate-400">vs prior: —</span>
+                  )}
+                  {k.note && !k.comingSoon && (
+                    <span className="text-slate-400 truncate">{k.note}</span>
+                  )}
+                </div>
+              </DashboardPanel>
+            ))}
+      </section>
+
+      {/* Albums by stage — compact pill strip */}
+      {summary && (
+        <DashboardPanel padding="md" data-testid="dashboard-by-stage">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3">Albums by stage</h3>
+          <div className="flex flex-wrap gap-2">
+            {PRESS_STAGE_ORDER.map((s) => (
+              <div
+                key={s}
+                className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-[12px]"
+                data-testid={`stage-count-${s}`}
+              >
+                <span className="font-bold text-slate-900">{summary.byStage[s] ?? 0}</span>
+                <span className="text-slate-500">{STAGE_LABEL[s]}</span>
+              </div>
+            ))}
+          </div>
+        </DashboardPanel>
+      )}
+
+      {/* Trend chart */}
+      <DashboardPanel data-testid="trend-press">
+        <div className="flex items-baseline justify-between mb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-700">Trend</h3>
+            <p className="text-[11px] text-slate-400">Daily activity over the selected window</p>
+          </div>
         </div>
+        <TrendChart
+          series={dash?.series ?? []}
+          metrics={dash?.chartMetrics ?? []}
+          loading={dashLoading}
+        />
       </DashboardPanel>
-      <DashboardPanel padding="md">
-        <h3 className="text-base font-semibold mb-3">By stage</h3>
-        <div className="flex flex-wrap gap-2" data-testid="dashboard-by-stage">
-          {stageOrder.map((s) => (
-            <div key={s} className="rounded-lg bg-slate-50 ring-1 ring-slate-200 px-3 py-2 text-sm" data-testid={`stage-count-${s}`}>
-              <span className="font-semibold mr-2">{data.byStage[s] ?? 0}</span>
-              <span className="text-slate-500">{STAGE_LABEL[s]}</span>
-            </div>
-          ))}
-        </div>
+
+      {/* Recent activity */}
+      <DashboardPanel data-testid="activity-press">
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">Recent activity</h3>
+        <ActivityList items={dash?.activity ?? []} loading={dashLoading} />
       </DashboardPanel>
     </div>
   );

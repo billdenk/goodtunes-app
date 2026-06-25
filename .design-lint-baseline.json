@@ -20742,6 +20742,31 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<p className=\"text-[11px] uppercase tracking-wider text-slate-500 font-semibold\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "className={`mt-1 text-2xl sm:text-[28px] font-bold tabular-nums ${k.comingSoon ? \"text-slate-400\" : \"\"}`}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<div className=\"mt-1 flex items-center gap-2 text-[11px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "className=\"flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-[12px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<p className=\"text-[11px] text-slate-400\">Daily activity over the selected window</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
     "snippet": "<span className=\"block text-[11px] uppercase tracking-wide text-slate-400\">{c.source}</span>"
   },
   {

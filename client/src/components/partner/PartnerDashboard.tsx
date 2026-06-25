@@ -20,7 +20,7 @@ import { BRAND, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 export type PartnerScopeKind = "label" | "npo" | "vendor" | "artist";
 export type PartnerRangePreset = "today" | "7d" | "30d" | "90d" | "all";
 
-const RANGE_PRESETS: ReadonlyArray<RangePreset<PartnerRangePreset>> = [
+export const RANGE_PRESETS: ReadonlyArray<RangePreset<PartnerRangePreset>> = [
   { id: "today", label: "Today" },
   { id: "7d", label: "7d" },
   { id: "30d", label: "30d" },
@@ -28,11 +28,11 @@ const RANGE_PRESETS: ReadonlyArray<RangePreset<PartnerRangePreset>> = [
   { id: "all", label: "All" },
 ];
 
-type KpiFormat = "currency" | "number" | "percent" | "duration";
+export type KpiFormat = "currency" | "number" | "percent" | "duration";
 
 type KpiBreakdownRow = { label: string; value: number; format: KpiFormat };
 
-type DashboardKpi = {
+export type DashboardKpi = {
   id: string;
   label: string;
   value: number | null;
@@ -43,9 +43,9 @@ type DashboardKpi = {
   breakdown?: KpiBreakdownRow[];
 };
 
-type ChartMetric = { id: string; label: string; format: KpiFormat };
+export type ChartMetric = { id: string; label: string; format: KpiFormat };
 
-type ActivityItem = {
+export type ActivityItem = {
   kind: string;
   ts: string;
   title: string;
@@ -53,7 +53,7 @@ type ActivityItem = {
   href?: string;
 };
 
-type DashboardPayload = {
+export type DashboardPayload = {
   scope: { kind: PartnerScopeKind; id: string; name: string; logoUrl: string | null };
   range: { preset: PartnerRangePreset; from: string; to: string };
   prior: { from: string; to: string } | null;
@@ -63,7 +63,7 @@ type DashboardPayload = {
   activity: ActivityItem[];
 };
 
-function formatValue(value: number | null, format: KpiFormat): string {
+export function formatValue(value: number | null, format: KpiFormat): string {
   if (value === null || value === undefined) return "—";
   switch (format) {
     case "currency":
@@ -174,7 +174,7 @@ export function PartnerDashboard({
 
 // ─── KPI tiles ──────────────────────────────────────────────────────
 
-function KpiGrid({ kpis, loading, scope }: { kpis: DashboardKpi[]; loading: boolean; scope: PartnerScopeKind }) {
+export function KpiGrid({ kpis, loading, scope }: { kpis: DashboardKpi[]; loading: boolean; scope: PartnerScopeKind }) {
   if (loading && kpis.length === 0) {
     return (
       <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" data-testid={`kpi-grid-${scope}`}>
@@ -256,7 +256,7 @@ function KpiTile({ k, scope }: { k: DashboardKpi; scope: PartnerScopeKind }) {
 
 // ─── Trend chart ────────────────────────────────────────────────────
 
-function TrendChart({
+export function TrendChart({
   series,
   metrics,
   loading,
@@ -303,7 +303,7 @@ function TrendChart({
 
 // ─── Activity feed ──────────────────────────────────────────────────
 
-function ActivityList({ items, loading }: { items: ActivityItem[]; loading: boolean }) {
+export function ActivityList({ items, loading }: { items: ActivityItem[]; loading: boolean }) {
   if (loading) {
     return (
       <ul className="space-y-2">
