@@ -7,18 +7,24 @@
 // could still read the operator-only registries the nav never links to. The new
 // `denyReportingPartnerRegistry` guard closes that, and this test pins it in.
 //
-// A label / manager / non_profit account must get:
-//   - 403 on the global press registry GET /api/manufacturers
-//   - 403 on a press detail GET /api/manufacturers/:id
-//   - 403 on a press catalog GET /api/admin/manufacturers/:id/catalog
-//   - 403 on the gear registry GET /api/admin/instruments/:id/usage
-//   - 403 on the label registry GET /api/admin/labels/:id/invited-press
+// A label / manager / non_profit account must get 403 on every operator-only
+// global registry it has no portal for: the press/manufacturer registry + its
+// catalogs, the gear (instruments) registry, the label registry, the manager
+// registry, the organization/NPO registry, the fulfillment-partner registry
+// (both /api/admin/fulfillment-partners and /api/fulfillment-partners), the
+// global press-format index, the partner-notification config, the vendor
+// (Maker/Reseller) registry list + detail, the global omnibox search, the fan
+// customer registry (list/geo/per-customer detail) + editorial playlists, and
+// the operator transactional/ops registries (fan orders, pressing orders, the
+// wholesale RFQ queue, the admin event log, and payout accounts/stuck).
 //
 // And, to prove the deny is NOT over-broad, it must STILL get:
 //   - 200 on GET /api/admin/people (the AddPeopleMenu roster builder embedded in
 //     the label + NPO portals legitimately reads/creates global People rows;
-//     denying it would break a working portal feature, so People is
-//     deliberately excluded from the registry deny set).
+//     denying it would break a working portal feature).
+//   - a NON-deny response on GET /api/admin/vendors/:id/gooddeed-services — the
+//     one vendor read that backs the NPO-reachable /admin/gooddeed-pricing page,
+//     which must fall through to requireAdmin rather than hit the registry deny.
 //
 // The boundary is exercised under BOTH auth modes: a Bearer token (the admin
 // SPA's real path) AND a session cookie. The deny guard resolves the caller via
@@ -191,7 +197,51 @@ const DENIED_REGISTRY_PATHS = [
   `/api/admin/manufacturers/${DUMMY_ID}/catalog`,
   `/api/admin/instruments/${DUMMY_ID}/usage`,
   `/api/admin/labels/${DUMMY_ID}/invited-press`,
+  "/api/admin/managers",
+  "/api/admin/organizations",
+  "/api/admin/fulfillment-partners",
+  `/api/admin/fulfillment-partners/${DUMMY_ID}`,
+  "/api/fulfillment-partners",
+  `/api/fulfillment-partners/${DUMMY_ID}`,
+  "/api/admin/press-formats",
+  `/api/admin/partner-notifications/manufacturer/${DUMMY_ID}/recipients`,
+  // The vendor (Maker/Reseller) registry: list + detail are denied to all three
+  // reporting roles. Only the GET .../:id/gooddeed-services read is carved out
+  // (exercised separately below).
+  "/api/admin/vendors",
+  `/api/admin/vendors/${DUMMY_ID}`,
+  // Global omnibox + fan customer registry + editorial playlists. Search returns
+  // people/vendors/labels/customers-with-email/etc in one call; customers is the
+  // fan PII registry (list, geo map, per-customer detail). The artist-only scoped
+  // customer branch is unaffected (deny covers only label/manager/non_profit).
+  "/api/admin/search?q=t2086_no_such",
+  "/api/admin/customers",
+  "/api/admin/customers/geo",
+  `/api/admin/customers/${DUMMY_ID}`,
+  `/api/admin/playlists/${DUMMY_ID}`,
+  // Operator-only transactional + ops registries. The /api/admin/orders and
+  // /api/admin/payouts handlers live in commerce.ts / payouts.ts, which
+  // registerRoutes mounts AFTER the deny block — so the prefix mount still wins.
+  "/api/admin/orders",
+  "/api/admin/pressing-orders",
+  "/api/admin/rfqs",
+  `/api/admin/rfqs/${DUMMY_ID}`,
+  "/api/admin/events/recent",
+  "/api/admin/payouts/accounts",
+  "/api/admin/payouts/stuck",
 ];
+
+// The exact body the deny guard emits, so the vendors carve-out test can prove a
+// response came from the deny (vs. a legitimate downstream 403/404).
+const DENY_MESSAGE = "Out of scope for this partner account.";
+// The one vendor sub-path the deny guard must NOT block: the GoodDeed-services
+// read that backs the NPO-reachable /admin/gooddeed-pricing page.
+const VENDOR_GOODDEED_PATH = `/api/admin/vendors/${DUMMY_ID}/gooddeed-services`;
+// The carve-out is EXACT — only `/:id/gooddeed-services` (optionally a trailing
+// slash) falls through to requireAdmin. A nested sub-path must NOT; it falls back
+// to the registry deny. Pinning this stops a future regex loosening from silently
+// re-opening a vendor sub-route under the carve-out.
+const VENDOR_GOODDEED_SUBPATH = `/api/admin/vendors/${DUMMY_ID}/gooddeed-services/extra`;
 
 // ─── Bearer-token path (the admin SPA's real auth) ────────────────────
 
@@ -225,6 +275,42 @@ for (const role of PARTNER_ROLES) {
   });
 }
 
+// ─── The vendors carve-out: the GoodDeed-services read stays reachable ──
+
+for (const role of PARTNER_ROLES) {
+  test(`BEARER: ${role} keeps the vendor GoodDeed-services read (not the registry)`, async () => {
+    // The vendor list + detail are already covered by DENIED_REGISTRY_PATHS
+    // above. Here we prove the carve-out: the single GET .../:id/gooddeed-services
+    // read backs the NPO gooddeed-pricing page and must fall THROUGH the deny
+    // guard to requireAdmin. With a nonexistent vendor id the handler answers
+    // 404 ("Vendor not found") — never the deny guard's 403 body. Asserting on
+    // the body (not just the status) is what proves the deny guard didn't fire.
+    const res = await getWithToken(VENDOR_GOODDEED_PATH, tokenByRole[role]);
+    assert.notEqual(
+      res.json?.message,
+      DENY_MESSAGE,
+      `${role} GoodDeed-services read must not be short-circuited by the registry deny`,
+    );
+  });
+}
+
+// ─── The carve-out is exact: a NESTED gooddeed-services sub-path is denied ──
+
+for (const role of PARTNER_ROLES) {
+  test(`BEARER: ${role} is denied a NESTED vendor gooddeed-services sub-path`, async () => {
+    // Only `/:id/gooddeed-services` itself is carved out. A deeper sub-path must
+    // hit the registry deny (asserting the body proves it was the deny, not a
+    // downstream 404), locking the tightened exact-match regex.
+    const res = await getWithToken(VENDOR_GOODDEED_SUBPATH, tokenByRole[role]);
+    assert.equal(res.status, 403, `${role} must be denied ${VENDOR_GOODDEED_SUBPATH}`);
+    assert.equal(
+      res.json?.message,
+      DENY_MESSAGE,
+      `${role} nested gooddeed-services sub-path must hit the registry deny, not fall through`,
+    );
+  });
+}
+
 // ─── Session-cookie path (a session-only guard would be a real bypass) ─
 
 test("SESSION: the registry deny holds for a session-authenticated label", async () => {
@@ -236,6 +322,20 @@ test("SESSION: the registry deny holds for a session-authenticated label", async
   // People still open over a session cookie too.
   const people = await client.get("/api/admin/people?q=t2086_no_such_person");
   assert.equal(people.status, 200, "session label keeps the People roster builder");
+  // …and the vendor GoodDeed-services carve-out still falls through.
+  const gd = await client.get(VENDOR_GOODDEED_PATH);
+  assert.notEqual(
+    gd.json?.message,
+    DENY_MESSAGE,
+    "session label keeps the vendor GoodDeed-services read",
+  );
+  // …but the exact carve-out doesn't leak to a nested sub-path over a session.
+  const gdSub = await client.get(VENDOR_GOODDEED_SUBPATH);
+  assert.equal(
+    gdSub.status,
+    403,
+    "session label is denied a nested vendor gooddeed-services sub-path",
+  );
 });
 
 after(async () => {

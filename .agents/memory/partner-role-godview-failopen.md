@@ -35,8 +35,56 @@ and are the real exposure.
    manufacturer/vendor/fulfillment intentionally KEEP the operator-grade detail
    read, so don't fold the two sets together.
 
+4. **Global operator registries** — `label`/`manager`/`non_profit` are denied a
+   BROAD set of operator-only registries by `denyReportingPartnerRegistry`
+   (server/routes.ts, session-OR-bearer): press registry + wholesale catalogs
+   (`/api/manufacturers`, `/api/admin/manufacturers`), gear (`/api/admin/instruments`),
+   label (`/api/admin/labels`), manager (`/api/admin/managers`), organization/NPO
+   (`/api/admin/organizations`), fulfillment (`/api/admin/fulfillment-partners` +
+   `/api/fulfillment-partners`), press-formats (`/api/admin/press-formats`),
+   partner-notifications (`/api/admin/partner-notifications`), the vendor
+   (Maker/Reseller) registry (`/api/admin/vendors`), the global omnibox search
+   (`/api/admin/search`), the fan customer registry + PII (`/api/admin/customers`
+   list/geo/detail), editorial playlists (`/api/admin/playlists`), and the
+   operator-only transactional/ops registries: fan orders w/ PII
+   (`/api/admin/orders`), pressing orders (`/api/admin/pressing-orders`), the
+   wholesale RFQ queue (`/api/admin/rfqs`), the admin event/audit log
+   (`/api/admin/events`), and payout accounts/stuck (`/api/admin/payouts`). NOTE
+   the `/api/admin/orders` + `/api/admin/payouts` handlers live in
+   `commerce.ts` / `payouts.ts` and are registered AFTER the deny block, so the
+   `app.use(prefix, deny)` mount still wins (registration order matters). The
+   `/api/admin/customers` artist-only scoped branch is untouched (deny covers only
+   label/manager/non_profit). AdminFrame fires orders/customers badge queries
+   (enabled:isAdmin) for these roles too, but it trims their nav so the badges
+   never render — the 403s are harmless background (and correct: the client
+   shouldn't get that data). The guard is now a FACTORY
+   taking the denied-role set and **fails CLOSED** (a resolved userId whose role
+   lookup throws is 403'd, not let through; anon/no-userId still falls to
+   `requireAdmin`'s 401). Pinned by `server/labelManagerNpoIsolation.db.test.ts`
+   (Bearer + session).
+
+   **NON-OBVIOUS CARVE-OUTS — these must fall THROUGH the deny, not be blocked:**
+   - `/api/admin/people` (+ `/api/admin/invites` + `/api/admin/partner-contacts`):
+     the `AddPeopleMenu` roster builder (embedded in the label + NPO portals via
+     `OrganizationPeople`) legitimately GET-searches / POST-creates / GET-reads
+     global People rows and forwards the invite flow into those endpoints
+     server-side, so a blanket deny breaks a real portal feature.
+   - `GET /api/admin/vendors/:id/gooddeed-services` ONLY: the vendor mount is
+     path-aware — that single GET backs the NPO-reachable GoodDeed pricing page
+     (`/admin/gooddeed-pricing`), so it falls through to `requireAdmin`; the vendor
+     list, detail, and every vendor write stay denied. The carve-out regex is an
+     EXACT `^/[^/]+/gooddeed-services/?$` match (GET-only; PUT writes stay denied) —
+     a nested sub-path falls back to the registry deny (pinned by a test).
+
+   The "portals only call their scoped /api/{label,manager,non-profit}/* endpoints"
+   assumption is FALSE — verify actual client calls before denying any shared admin
+   prefix.
+
 **How to apply:** when adding ANY new admin-side role (publisher was the example —
 it has only the self-scoped GET /api/publisher/statement), fail it closed in
 `NO_ALBUM_LIST_ROLES`, `requireReportScope`, AND (if it should not see hidden album
 detail) `PORTAL_SCOPED_NON_OPERATOR_ROLES`, and add a client `/admin/*` route guard
 in client/src/App.tsx (mirror the `isArtistPartner` / `isPublisherPartner` blocks).
+For a scoped reporting role, also decide which global registries to deny via
+`denyReportingPartnerRegistry` — but confirm the portal's real fetches first
+(People/invites/partner-contacts are shared by design; see point 4).

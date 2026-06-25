@@ -796,52 +796,123 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // /api/{label,manager,non-profit}/* + /api/partner/reports/* data, plus a few
   // shared admin endpoints their portals genuinely reuse (the global People
   // search/create that backs the AddPeopleMenu roster builder, the invite +
-  // partner-contact flows). But the operator's OTHER global registries — the
-  // press/manufacturer registry and its wholesale catalogs, the gear
-  // (instruments) registry, and the label registry — are NOT part of their
-  // portal and must reject them server-side even on a hand-rolled request that
-  // never loaded the (nav-hidden) operator page. (manufacturer is denied by the
-  // press guards above/below; vendor/fulfillment by denyScopedVendorFulfillment;
-  // publisher is already 403'd by requireAdmin.)
+  // partner-contact flows). But the operator's OTHER global registries are NOT
+  // part of their portal and must reject them server-side even on a hand-rolled
+  // request that never loaded the (nav-hidden) operator page: the
+  // press/manufacturer registry + its wholesale catalogs, the gear (instruments)
+  // registry, the label registry, the manager registry, the organization/NPO
+  // registry, the fulfillment-partner registry, the global press-format index,
+  // the operator partner-notification config, the global admin search omnibox
+  // (/api/admin/search — one call returns people, vendors, labels, nonprofits,
+  // albums, gear, customers WITH EMAIL, manufacturers, fulfillment, songs,
+  // playlists, fan orders + pressing orders), the global customer registry +
+  // its per-customer PII/actions (/api/admin/customers — list, geo map, detail,
+  // merge, grant/revoke, sign-in links), the editorial playlist registry
+  // (/api/admin/playlists), and the operator-only transactional + ops registries
+  // (/api/admin/orders fan orders w/ PII, /api/admin/pressing-orders,
+  // /api/admin/rfqs wholesale queue, /api/admin/events audit log,
+  // /api/admin/payouts ops). (publisher is already 403'd by requireAdmin since it
+  // is not an admin role; press scopes itself via the guards above/below;
+  // vendor/fulfillment via denyScopedVendorFulfillment.)
   //
-  // People is DELIBERATELY excluded from this set: the AddPeopleMenu roster
-  // builder embedded in the label + NPO portals reads/creates global People
-  // rows (GET/POST /api/admin/people, GET /api/admin/people/:id, PATCH
-  // .../can-invite-ambassadors), so denying it would break a working portal
-  // feature. Same for /api/admin/invites + /api/admin/partner-contacts, which
-  // the label-portal invite flow forwards into server-side.
-  const REPORTING_PARTNER_PORTAL_ROLES = new Set([
-    "label",
-    "manager",
-    "non_profit",
-  ]);
-  const denyReportingPartnerRegistry = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ) => {
-    try {
-      const userId = await getUserIdFromRequest(req);
+  // DELIBERATE carve-outs (verified against the actual portal fetches — do NOT
+  // fold these into the deny set):
+  //   * /api/admin/people (+ /api/admin/invites, /api/admin/partner-contacts) —
+  //     the AddPeopleMenu roster builder embedded in the label + NPO portals
+  //     reads/creates global People rows and forwards the invite flow into these
+  //     endpoints server-side. Denying them breaks a working portal feature.
+  //   * /api/admin/vendors — the vendor (Maker/Reseller) registry is denied to
+  //     all three reporting roles EXCEPT the GET .../:id/gooddeed-services
+  //     read, which backs the shared GoodDeed pricing page
+  //     (/admin/gooddeed-pricing) that NPO partners are allowed to open. The
+  //     vendor list + detail + every write stay denied.
+  const REPORTING_PARTNER_PORTAL_ROLES = ["label", "manager", "non_profit"] as const;
+  const denyReportingPartnerRegistry =
+    (deniedRoles: readonly string[]) =>
+    async (req: Request, res: Response, next: NextFunction) => {
+      let userId: string | undefined;
+      try {
+        userId = (await getUserIdFromRequest(req)) ?? undefined;
+      } catch {
+        userId = undefined;
+      }
+      // Anonymous / unresolved caller: let the underlying requireAdmin 401 it.
       if (!userId) return next();
-      const { getUserRole } = await import("./auth/roles");
-      const role = (await getUserRole(userId))?.role;
-      if (role && REPORTING_PARTNER_PORTAL_ROLES.has(role)) {
+      const denied = new Set(deniedRoles);
+      try {
+        const { getUserRole } = await import("./auth/roles");
+        const role = (await getUserRole(userId))?.role;
+        if (role && denied.has(role)) {
+          return res
+            .status(403)
+            .json({ message: "Out of scope for this partner account." });
+        }
+        return next();
+      } catch {
+        // Authenticated caller, but the role lookup failed. The underlying route
+        // is only requireAdmin, which ADMITS these is_admin reporting partners —
+        // so falling through would reopen the god-view registry on a transient
+        // blip. Fail CLOSED: an operator simply retries; the registry never opens
+        // on a lookup error.
         return res
           .status(403)
           .json({ message: "Out of scope for this partner account." });
       }
-    } catch {
-      // Resolver error: fall through. The underlying route still enforces
-      // requireAdmin (this guard only ADDS a deny for the three reporting
-      // partners), so a transient lookup failure cannot open the registry to
-      // anyone who wasn't already an operator. Mirrors the press guards above.
+    };
+  const denyAllReportingPartners = denyReportingPartnerRegistry(
+    REPORTING_PARTNER_PORTAL_ROLES,
+  );
+  app.use("/api/admin/labels", denyAllReportingPartners);
+  app.use("/api/admin/instruments", denyAllReportingPartners);
+  app.use("/api/manufacturers", denyAllReportingPartners);
+  app.use("/api/admin/manufacturers", denyAllReportingPartners);
+  app.use("/api/admin/managers", denyAllReportingPartners);
+  app.use("/api/admin/organizations", denyAllReportingPartners);
+  app.use("/api/admin/fulfillment-partners", denyAllReportingPartners);
+  app.use("/api/fulfillment-partners", denyAllReportingPartners);
+  app.use("/api/admin/press-formats", denyAllReportingPartners);
+  app.use("/api/admin/partner-notifications", denyAllReportingPartners);
+  // The global admin search omnibox + the customer registry (PII) + editorial
+  // playlists are operator-only god-view surfaces too. The partner dashboards
+  // (LabelDashboard/ManagerDashboard/NonProfitDashboard) never render the admin
+  // chrome (AdminFrame / AdminSearchBar / CustomerMap) that calls these, and the
+  // scoped /admin/reports page does not call them either, so denying all three
+  // is safe. NOTE: /api/admin/customers has an `artist`-only scoped branch —
+  // denyAllReportingPartners covers only label/manager/non_profit, so artist's
+  // scoped buyer access is untouched.
+  app.use("/api/admin/search", denyAllReportingPartners);
+  app.use("/api/admin/customers", denyAllReportingPartners);
+  app.use("/api/admin/playlists", denyAllReportingPartners);
+  // Operator-only global transactional + ops registries: every fan order (PII),
+  // every pressing order, the wholesale RFQ queue, the global admin event/audit
+  // log, and the payout-account / stuck-payout ops list. None are wired into the
+  // partner dashboards or the scoped /admin/reports + /admin/gooddeed-pricing
+  // pages (the only operator pages these roles can load — AdminFrame trims their
+  // nav so the order/customer badges never render). The /api/admin/orders +
+  // /api/admin/payouts handlers live in commerce.ts / payouts.ts, which
+  // registerRoutes mounts AFTER this block, so the prefix deny still intercepts
+  // them. (/api/events — the fan analytics ingest — is a different, non-admin
+  // path and is intentionally untouched.)
+  app.use("/api/admin/orders", denyAllReportingPartners);
+  app.use("/api/admin/pressing-orders", denyAllReportingPartners);
+  app.use("/api/admin/rfqs", denyAllReportingPartners);
+  app.use("/api/admin/events", denyAllReportingPartners);
+  app.use("/api/admin/payouts", denyAllReportingPartners);
+  // vendors: deny the registry to all three reporting roles, but let the single
+  // GET .../:id/gooddeed-services read fall through (see carve-out note above).
+  const denyVendorsRegistry = denyReportingPartnerRegistry(
+    REPORTING_PARTNER_PORTAL_ROLES,
+  );
+  app.use("/api/admin/vendors", (req, res, next) => {
+    // req.path is relative to the mount, e.g. "/<vendorId>/gooddeed-services".
+    if (
+      req.method === "GET" &&
+      /^\/[^/]+\/gooddeed-services\/?$/.test(req.path)
+    ) {
+      return next();
     }
-    return next();
-  };
-  app.use("/api/admin/labels", denyReportingPartnerRegistry);
-  app.use("/api/admin/instruments", denyReportingPartnerRegistry);
-  app.use("/api/manufacturers", denyReportingPartnerRegistry);
-  app.use("/api/admin/manufacturers", denyReportingPartnerRegistry);
+    return denyVendorsRegistry(req, res, next);
+  });
 
   // The press registry: a press may read/write ONLY its own manufacturer
   // record (and its catalog / pricing sub-routes). The global list, the
