@@ -16,13 +16,13 @@ There are three "buttons" (workflows) in Codemagic:
 |---|---|---|
 | **iOS → TestFlight** | Builds the app on a cloud Mac, signs it, bumps the build number, and uploads it to **TestFlight** so testers can install it. Does **not** send anything to Apple review. | Day-to-day, whenever you want a fresh test build. |
 | **iOS → App Store (submit for review)** | Same build, but it also **submits the build to Apple for public App Store review**. This is the "push the button" one. | Only when a build is ready to go live to everyone. |
-| **Android → Play internal testing** | Builds a signed Android `.aab` and uploads it to Play internal testing. **Automatic** — auto-runs on every push to `main` once the Android credentials + repo connection are set in Codemagic. | Every merge (auto). |
+| **Android → Play internal testing** | Builds a signed Android `.aab` and uploads it to Play internal testing. **Automatic, but only when the native shell changed** — a `when.changeset` filter skips the build for web/content/server/docs merges (they reach devices on republish). Requires the Android credentials + repo connection in Codemagic. | Native-shell merges (auto); force a build by hand anytime. |
 
 Each one:
 - Rebuilds the web app, packages it into the native shell, signs it with our Apple key, and **auto-increments the build number** so Apple never rejects a duplicate.
 - Runs entirely on Codemagic's cloud Macs. Your Mac is only a backup.
 
-Nothing reaches **Apple review** by accident: the two iOS workflows only run when **you** start them, and the App Store submit is a separate button from the TestFlight one, so you stay in control of what goes to public review. Android is the deliberate exception — it auto-builds on every merge and uploads **only to the Play internal testing track** (never the public Play production track), so testers always have the latest.
+Nothing reaches **Apple review** by accident: the two iOS workflows only run when **you** start them, and the App Store submit is a separate button from the TestFlight one, so you stay in control of what goes to public review. Android is the deliberate exception — it auto-builds (when the native shell changes — see [*Android builds*](#android-builds-automatic--only-when-the-native-shell-changes) below) and uploads **only to the Play internal testing track** (never the public Play production track), so testers always have the latest shell.
 
 ---
 
@@ -124,15 +124,19 @@ When a TestFlight build looks good and you're ready to go live:
 
 ---
 
-## Android builds (automatic)
+## Android builds (automatic — only when the native shell changes)
 
-The Android workflow **auto-triggers on every push to `main`** (the `triggering:` block in `codemagic.yaml`) and uploads to the Play **internal testing** track only — never the public production track. The chain is merge → `scripts/post-merge.sh` force-pushes the GitHub mirror → GitHub webhook → Codemagic builds. It needs three things in place, all one-time:
+The Android workflow auto-triggers on pushes to `main` (the `triggering:` block in `codemagic.yaml`) and uploads to the Play **internal testing** track only — never the public production track. The chain is merge → `scripts/post-merge.sh` force-pushes the GitHub mirror → GitHub webhook → Codemagic. It needs three things in place, all one-time:
 
 1. In Codemagic, upload the GoodTunes **upload keystore** under **Code signing identities → Android keystores**, with reference name **`goodtunes_keystore`**.
 2. Create a Play **service-account JSON** (Google Play Console → Setup → API access), and add it to a Codemagic env-var group named **`google_play`** as **`GCLOUD_SERVICE_ACCOUNT_CREDENTIALS`**.
 3. **Connect the Codemagic app to the GitHub mirror repo** so the push webhook reaches it (Codemagic → app settings → repository). Without this, the auto-trigger never fires.
 
-Once those are set, builds run on their own; you can also start one by hand anytime (**Start new build** → branch `main` → `Android → Play internal testing`). It **runs the same icon guards iOS gets** (source + built-binary — see *Publishing reliability* below). Full operator runbook: [`google-play-setup.md`](./google-play-setup.md).
+**It only builds when the native shell actually changed.** The apps are thin Capacitor shells that load the live site (`server.url = https://my.goodtunes.music`), so web, server, content, copy, pricing, and docs merges reach devices the moment the web app is republished — no new `.aab` is needed. To stop paying ~$0.50 per no-op Linux build, the workflow carries a `when.changeset` filter that **skips the build unless the merge touched a native-shell path**: the `android/` project (Gradle/Kotlin, manifest, launcher + splash icons, Capacitor sync artifacts), `capacitor.config.ts`, `package.json`, or `package-lock.json` (the last two catch added/updated Capacitor plugins). `codemagic.yaml` itself is always in the changeset, so editing the build config always builds. (iOS workflows are untouched — still manual, still on the free Mac minutes.)
+
+**Why this is safe under the force-pushed mirror, and how it fails:** Codemagic computes the changeset against the **last successful build's commit** (not the webhook's before-SHA). Project `main` is append-only, so the mirror's defensive `git push --force` still presents a fast-forward and the diff is clean. When Codemagic *can't* anchor a clean base — the first build right after this filter lands, or a genuinely unreachable base — it **fails open and builds anyway**. That's the intended bias: a wasted ~$0.50 build beats silently shipping testers a stale native shell. The manual button (below) is the backstop for the rare wrong-skip.
+
+Once those are set, builds run on their own when the shell changes; you can also **force a build by hand anytime** (**Start new build** → branch `main` → `Android → Play internal testing`) — manual builds ignore the `when.changeset` filter and always run. It **runs the same icon guards iOS gets** (source + built-binary — see *Publishing reliability* below). Full operator runbook: [`google-play-setup.md`](./google-play-setup.md).
 
 ---
 

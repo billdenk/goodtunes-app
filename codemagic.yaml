@@ -7,13 +7,16 @@
 # Three workflows:
 #   ios-testflight      — day-to-day: build + sign + ship to TestFlight (auto build number).
 #   ios-appstore-submit — the "push the button" workflow: build + ship + SUBMIT to Apple review.
-#   android-internal    — AUTOMATIC: every push to `main` builds a signed .aab → Play internal testing.
+#   android-internal    — AUTOMATIC (native-shell changes only): a push to `main` builds a signed .aab → Play internal testing.
 #
 # The two iOS workflows are MANUAL by design — they only run when started from
 # the Codemagic UI/API, so nothing reaches Apple review without a deliberate
-# click. android-internal AUTO-TRIGGERS on every push to `main`, uploading to
-# the Play *internal testing* track only (low-stakes — never the public Play
-# production track), so new code reaches internal testers with no button.
+# click. android-internal AUTO-TRIGGERS on pushes to `main` BUT only actually
+# builds when the merge changed the native shell (see the `when.changeset` block
+# on that workflow) — web/server/content/docs merges reach devices via the live
+# site on republish, so a fresh .aab is only needed when the shell changes. It
+# uploads to the Play *internal testing* track only (low-stakes — never the public
+# Play production track). Manual "Start new build" always runs (ignores `when`).
 # For that webhook to fire, the Codemagic app must be connected to the GitHub
 # build mirror repo (post-merge.sh force-pushes `main` there). See
 # docs/google-play-setup.md.
@@ -336,13 +339,15 @@ workflows:
     # release, and cancel_previous_submissions (so a double-click doesn't error).
 
   # ---------------------------------------------------------------------------
-  # Android → Play internal testing. AUTOMATIC — auto-builds on every push to
-  # `main` and uploads a signed .aab to the Play *internal testing* track (never
-  # the public production track). Credentials (`google_play` service account +
-  # `goodtunes_keystore` upload key) are already set in Codemagic.
+  # Android → Play internal testing. AUTOMATIC, but only when the NATIVE SHELL
+  # changed (the `when.changeset` filter below) — web/server/content/docs merges
+  # reach devices via the live site on republish, so they skip the ~$0.50 no-op
+  # build. When the shell changes it uploads a signed .aab to the Play *internal
+  # testing* track (never the public production track). Credentials (`google_play`
+  # service account + `goodtunes_keystore` upload key) are already set in Codemagic.
   # ---------------------------------------------------------------------------
   android-internal:
-    name: Android → Play internal testing (auto on push to main)
+    name: Android → Play internal testing (auto on native-shell change)
     instance_type: linux_x2
     max_build_duration: 60
     environment:
@@ -351,11 +356,12 @@ workflows:
       android_signing:
         - goodtunes_keystore # keystore reference uploaded in Codemagic
       node: 20
-    # AUTO-TRIGGER: every push to `main` (the GitHub build mirror that
-    # post-merge.sh force-pushes to) builds + uploads to the internal track.
-    # Requires the Codemagic app to be connected to that repo so GitHub's
-    # webhook reaches Codemagic. cancel_previous_builds keeps a burst of merges
-    # from stacking redundant builds.
+    # AUTO-TRIGGER (CONDITIONAL — native shell only): every push to `main` (the
+    # GitHub build mirror that post-merge.sh force-pushes to) reaches Codemagic,
+    # but the build now RUNS only when the merge changed the native shell (see the
+    # `when.changeset` block below). Requires the Codemagic app to be connected to
+    # that repo so GitHub's webhook reaches Codemagic. cancel_previous_builds keeps
+    # a burst of merges from stacking redundant builds.
     triggering:
       events:
         - push
@@ -364,6 +370,29 @@ workflows:
           include: true
           source: true
       cancel_previous_builds: true
+    # WHY CONDITIONAL: the apps are thin Capacitor shells that load the live site
+    # (server.url = https://my.goodtunes.music), so web/server/content/docs merges
+    # reach iOS + Android the moment the web app is republished — no new .aab is
+    # needed. A fresh Android build only matters when the NATIVE SHELL itself
+    # changes. On the pay-as-you-go plan each no-op Linux build costs ~$0.50, so we
+    # skip those. HOW IT STAYS SAFE under the force-pushed mirror: Codemagic
+    # computes the changeset against the LAST SUCCESSFUL build's commit (not the
+    # webhook's before-SHA), and project `main` is append-only, so the mirror's
+    # defensive `git push --force HEAD:refs/heads/main` still presents a
+    # fast-forward and the diff is clean. It fails OPEN (builds anyway) on the
+    # first build after this lands and whenever the base commit is unreachable —
+    # the intended bias (a wasted ~$0.50 beats shipping testers a stale shell).
+    # Manual "Start new build" ALWAYS runs: when-conditions apply only to webhook
+    # (automatic) builds. iOS workflows are untouched.
+    when:
+      changeset:
+        includes:
+          - 'android/'            # native project: Gradle/Kotlin, manifest, launcher + splash res, committed capacitor sync artifacts
+          - 'capacitor.config.ts' # Capacitor config: server.url, registered plugins, native behavior
+          - 'package.json'        # dependency set — catches an added/updated Capacitor plugin
+          - 'package-lock.json'   # locked deps — a plugin add/bump always lands here
+          # NOTE: `codemagic.yaml` is ALWAYS in the changeset by default (Codemagic
+          # built-in), so changing this build config also forces a build.
     scripts:
       - name: Guard against firewall-poisoned lockfile URLs
         script: |

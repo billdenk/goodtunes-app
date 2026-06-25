@@ -36,13 +36,19 @@ the operator/console work below.
 > **Where Codemagic gets the code, and when it builds:** the GitHub mirror
 > `github.com/billdenk/goodtunes-app` (branch `main`), which updates
 > automatically on every merge. You don't push anything by hand. The
-> `android-internal` workflow **auto-triggers on every push to `main`** (the
-> `triggering:` block in `codemagic.yaml`), so merge → mirror push → Codemagic
-> build → upload to Play internal happens with **no button**. For that webhook to
-> fire, the Codemagic app must be **connected to the mirror repo** (one-time, in
-> Codemagic → app settings → repository). The two iOS workflows stay manual on
-> purpose. (Same mirror as the iOS flow — see
-> [`codemagic-builds.md`](./codemagic-builds.md).)
+> `android-internal` workflow auto-triggers on pushes to `main` (the
+> `triggering:` block in `codemagic.yaml`), **but only actually builds when the
+> merge changed the native shell** — the `android/` project, `capacitor.config.ts`,
+> or the dependency files `package.json` / `package-lock.json` (a `when.changeset`
+> filter). The apps are thin Capacitor shells that load the live site, so
+> web/content/server merges reach devices on republish with no new build, and
+> Codemagic skips the ~$0.50 no-op. Native-shell merges build → upload to Play
+> internal with **no button**. You can still **force a build by hand anytime**
+> (Start new build → `Android → Play internal testing`); manual builds ignore the
+> filter. Ambiguous cases bias toward building. For the webhook to fire, the
+> Codemagic app must be **connected to the mirror repo** (one-time, in Codemagic →
+> app settings → repository). The two iOS workflows stay manual on purpose. (Same
+> mirror as the iOS flow — see [`codemagic-builds.md`](./codemagic-builds.md).)
 
 ---
 
@@ -278,11 +284,14 @@ Once **both** credentials (`goodtunes_keystore` + the `google_play` group) are i
 Codemagic, the Play app + internal track exist, and the Codemagic app is
 **connected to the GitHub mirror repo** (so its push webhook reaches Codemagic):
 
-- **Automatic — the normal path.** Every push to `main` (i.e. every merge, once
-  `scripts/post-merge.sh` force-pushes the mirror) auto-starts the
-  `android-internal` workflow. No button: it builds + signs + uploads a fresh
-  `.aab` to the Play **internal** track, `versionCode` auto-incremented past
-  whatever Play already has.
+- **Automatic — the normal path.** Every merge force-pushes the mirror (via
+  `scripts/post-merge.sh`) and reaches the `android-internal` workflow, but it
+  **only actually builds when the merge changed the native shell** (`android/`,
+  `capacitor.config.ts`, or `package.json`/`package-lock.json` — a `when.changeset`
+  filter). Web/content/server merges skip the ~$0.50 no-op build because they
+  reach devices via the live site on republish. When the shell does change, no
+  button: it builds + signs + uploads a fresh `.aab` to the Play **internal**
+  track, `versionCode` auto-incremented past whatever Play already has.
 - **Manual — to verify wiring or build on demand.** You can still start one by
   hand: Codemagic → open the GoodTunes app → **Start new build** → branch `main`
   + the **`Android → Play internal testing`** (`android-internal`) workflow →
