@@ -582,15 +582,17 @@ function Router() {
     }
   }
 
-  // Task #2075 — a real press (is_maker manufacturer, role="manufacturer")
-  // lives entirely inside its scoped portal at /vendor. Bounce it off every
-  // operator /admin/* surface (mirrors the artist guard above). The ONE
-  // exception is its own manufacturer catalog editor
-  // (/admin/manufacturers/:ownId), which the press portal's Settings tab
-  // deep-links into. Auth paths stay open so a locked-out press can still
-  // sign in / reset a password. The server 403s these too (Task #2075
-  // guards) — this is just the UX half so a press never lands on a god-view
-  // page it can't read.
+  // Task #2075 / #2091 — a real press (is_maker manufacturer,
+  // role="manufacturer") lives entirely inside its scoped portal at /vendor.
+  // Bounce it off every operator /admin/* surface (mirrors the artist guard
+  // above). The own-catalog editor used to be whitelisted as an exception
+  // (it rendered in operator chrome), but as of Task #2091 the catalog is
+  // editable INLINE in the portal's Settings → Catalog sub-view, so we
+  // redirect any lingering deep link to /admin/manufacturers/:ownId straight
+  // there instead of leaking the operator page. Auth paths stay open so a
+  // locked-out press can still sign in / reset a password. The server 403s
+  // these too — this is just the UX half so a press never lands on a
+  // god-view page it can't read.
   const isPressPartner = adminRole.data?.role === "manufacturer";
   if (isPressPartner && location.startsWith("/admin")) {
     const isAuthPath =
@@ -607,7 +609,10 @@ function Router() {
       (location === ownCatalogPath ||
         location.startsWith(ownCatalogPath + "?") ||
         location.startsWith(ownCatalogPath + "/"));
-    if (!isAuthPath && !isOwnCatalog) {
+    if (isOwnCatalog) {
+      return <Redirect to="/vendor?tab=settings&settings=catalog" />;
+    }
+    if (!isAuthPath) {
       return <Redirect to="/vendor" />;
     }
   }

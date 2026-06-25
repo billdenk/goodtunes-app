@@ -2148,7 +2148,7 @@ function HellbenderPricingSyncButton({
   );
 }
 
-function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; pressDomain: string | null }) {
+export function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; pressDomain: string | null }) {
   // Role gate — server is authoritative; we hide the panel for admins
   // who would just see a 403 either way.
   const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({

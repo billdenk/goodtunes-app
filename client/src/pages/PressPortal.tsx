@@ -38,6 +38,7 @@ import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
 import { AdminReports } from "@/pages/AdminReports";
 import { AdminGoodDeedPricing } from "@/pages/AdminGoodDeedPricing";
+import { PressCatalogPanel } from "@/pages/AdminManufacturer";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
@@ -55,6 +56,7 @@ interface PressMe {
   name: string;
   logoUrl: string | null;
   isMaker: boolean;
+  domain?: string | null;
   // Task #699 — false for Staff teammates. The portal hides/disables
   // every editing control when this is false; the server still 403s.
   canEdit?: boolean;
@@ -1208,14 +1210,35 @@ function InvoiceDialog({ open, onOpenChange, pressId, albumId }: { open: boolean
 
 // ─── Settings tab ─────────────────────────────────────────────────
 
+type SettingsSub = "profile" | "staff" | "catalog" | "payouts" | "notifications";
+const SETTINGS_SUB_IDS: SettingsSub[] = ["profile", "staff", "catalog", "payouts", "notifications"];
+
 function SettingsTab({ pressId, pressName }: { pressId: string; pressName: string }) {
-  const [sub, setSub] = useState<"profile" | "staff" | "catalog" | "payouts" | "notifications">("profile");
+  // Task #2091 — the App.tsx press guard (and any legacy deep link to the
+  // operator catalog editor) lands here as `?tab=settings&settings=<sub>`,
+  // so read the sub-view from the URL on mount. Keeps the catalog editable
+  // fully inside the portal shell — no jump to /admin/manufacturers/:id.
+  const search = useSearch();
+  const subFromUrl = new URLSearchParams(search).get("settings");
+  const [sub, setSub] = useState<SettingsSub>(
+    subFromUrl && (SETTINGS_SUB_IDS as string[]).includes(subFromUrl)
+      ? (subFromUrl as SettingsSub)
+      : "profile",
+  );
+  useEffect(() => {
+    if (subFromUrl && (SETTINGS_SUB_IDS as string[]).includes(subFromUrl)) {
+      setSub(subFromUrl as SettingsSub);
+    }
+  }, [subFromUrl]);
   // Task #2039 — the Partner-permissions toggles are GoodTunes-internal gates
   // only a super-admin can move (from /admin/manufacturers/:id). Press
   // owners/admins/staff can never change them, so don't show partners a
   // read-only panel. Same signal the panel itself derives from /api/me/role.
   const { data: role } = useQuery<{ role?: string }>({ queryKey: ["/api/me/role"] });
   const isSuperAdmin = role?.role === "super_admin";
+  // Cached from the portal header fetch — used for the catalog editor's
+  // press-specific import buttons (Hellbender / MRP), keyed off domain.
+  const { data: me } = useQuery<PressMe>({ queryKey: [`/api/press/${pressId}/me`] });
   const subTabs = [
     { id: "profile" as const, label: "Profile" },
     { id: "staff" as const, label: "Staff" },
@@ -1253,14 +1276,14 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
         </div>
       )}
       {sub === "catalog" && (
-        <DashboardPanel padding="md">
-          <p className="text-sm text-slate-700">Edit your formats, color tiers, and per-quantity ladders — including the new <strong>masters-prep cost</strong> per tier.</p>
-          <Link
-            href={`/admin/manufacturers/${pressId}?tab=catalog`}
-            className="mt-3 inline-flex items-center gap-1 h-9 px-4 rounded-full bg-slate-100 text-slate-900 text-sm font-semibold hover:bg-slate-200"
-            data-testid="link-catalog-editor"
-          >Open catalog editor <ExternalLink className="w-3 h-3" /></Link>
-        </DashboardPanel>
+        // Task #2091 — the own-catalog editor renders inline (mirroring the
+        // embedded Reports + GoodDeed pricing tabs) so the press never leaves
+        // its portal shell. PressCatalogPanel self-fetches + role-gates; its
+        // CRUD endpoints accept this press's scoped membership server-side.
+        <div className="space-y-3" data-testid="press-catalog-embedded">
+          <p className="text-sm text-slate-700">Edit your formats, color tiers, and per-quantity ladders — including the new <strong>masters-prep cost</strong> per tier. Artists you invite see the resulting picker on their album's Sell panel.</p>
+          <PressCatalogPanel pressId={pressId} pressDomain={me?.domain ?? null} />
+        </div>
       )}
       {sub === "payouts" && <PayoutsSubTab pressId={pressId} />}
       {sub === "notifications" && <NotificationsSubTab pressId={pressId} />}

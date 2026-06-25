@@ -479,6 +479,9 @@ export function registerPressPortalRoutes(
       name: press.name,
       logoUrl: (press as any).logoUrl ?? null,
       isMaker: (press as any).isMaker ?? true,
+      // Task #2091 — the embedded Settings → Catalog editor surfaces the
+      // press-specific import buttons (Hellbender / MRP) keyed off domain.
+      domain: (press as any).domain ?? null,
       // Task #699 — false for Staff teammates; the portal hides/disables
       // every editing control when this is false.
       canEdit,
