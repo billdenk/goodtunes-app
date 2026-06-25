@@ -24,7 +24,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
-import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign } from "lucide-react";
+import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign, BookOpen } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -57,9 +57,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 
-type TabId = "dashboard" | "customers" | "pipeline" | "reports" | "pricing" | "settings";
+// pipeline + reports stay in the union so direct ?tab= URLs still render
+// their content (they're just hidden from the nav per Task #2188).
+type TabId = "dashboard" | "customers" | "catalog" | "pipeline" | "reports" | "pricing" | "settings";
 
-const PRESS_TAB_IDS: TabId[] = ["dashboard", "customers", "pipeline", "reports", "pricing", "settings"];
+const PRESS_TAB_IDS: TabId[] = ["dashboard", "customers", "catalog", "pipeline", "reports", "pricing", "settings"];
 
 interface MeRole { role: string; roleScopeId: string | null; }
 interface PressMe {
@@ -99,18 +101,23 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   // Task #2075 — AdminFrame's press rail (shown on the catalog editor) and
   // any other deep link land here as `/vendor?tab=<id>`. Read it on mount so
   // those links open the right tab, and keep it in sync if the URL changes.
+  // Task #2188 — Legacy `?tab=settings&settings=catalog` redirects to the
+  // new top-level catalog tab so old links degrade gracefully.
   const search = useSearch();
-  const tabFromUrl = new URLSearchParams(search).get("tab");
-  const [tab, setTab] = useState<TabId>(
-    tabFromUrl && (PRESS_TAB_IDS as string[]).includes(tabFromUrl)
-      ? (tabFromUrl as TabId)
-      : "dashboard",
-  );
+  const params = new URLSearchParams(search);
+  const tabFromUrl = params.get("tab");
+  const settingsSubFromUrl = params.get("settings");
+
+  const resolveTab = (t: string | null, sub: string | null): TabId => {
+    if (t === "settings" && sub === "catalog") return "catalog";
+    if (t && (PRESS_TAB_IDS as string[]).includes(t)) return t as TabId;
+    return "dashboard";
+  };
+
+  const [tab, setTab] = useState<TabId>(() => resolveTab(tabFromUrl, settingsSubFromUrl));
   useEffect(() => {
-    if (tabFromUrl && (PRESS_TAB_IDS as string[]).includes(tabFromUrl)) {
-      setTab(tabFromUrl as TabId);
-    }
-  }, [tabFromUrl]);
+    setTab(resolveTab(tabFromUrl, settingsSubFromUrl));
+  }, [tabFromUrl, settingsSubFromUrl]);
   const { data: me, isLoading } = useQuery<PressMe>({
     queryKey: [`/api/press/${pressId}/me`],
   });
@@ -125,6 +132,9 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
 
   const tabs = modulesForRole("press") as ReadonlyArray<{ id: TabId; label: string }>;
 
+  // Cached for the catalog tab (pressDomain drives Hellbender/MRP import buttons).
+  const pressDomain = me?.domain ?? null;
+
   return (
     <OperatorShell
       testId="press-shell"
@@ -132,6 +142,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       navIcons={{
         dashboard: LayoutDashboard,
         customers: Users,
+        catalog: BookOpen,
         pipeline: GitBranch,
         reports: FileBarChart,
         pricing: CircleDollarSign,
@@ -149,6 +160,16 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
         <PressDashboardTab pressId={pressId} isSuperAdminView={isSuperAdminView} />
       )}
       {tab === "customers" && <CustomersTab pressId={pressId} />}
+      {tab === "catalog" && (
+        <div className="space-y-4" data-testid="press-catalog-tab">
+          <AdminPageHeader
+            title="Catalog"
+            subtitle="Edit your formats, color tiers, and per-quantity ladders — including the masters-prep cost per tier. Artists you invite see the resulting picker on their album's Sell panel."
+            testId="heading-press-catalog"
+          />
+          <PressCatalogPanel pressId={pressId} pressDomain={pressDomain} />
+        </div>
+      )}
       {tab === "pipeline" && <PipelineTab pressId={pressId} />}
       {tab === "reports" && <AdminReports embedded />}
       {tab === "pricing" && <AdminGoodDeedPricing embedded />}
@@ -364,6 +385,10 @@ interface PressSummary {
   totalAlbums: number;
   unitsLast30d: number;
   unitsNext90d: number;
+  // Task #2188 — revenue KPIs surfaced on Dashboard so presses see sales
+  // without needing to open the Reports tab.
+  revenueLast30dCents: number;
+  revenueLifetimeCents: number;
   byStage: Record<string, number>;
 }
 
@@ -399,11 +424,11 @@ function PressDashboardTab({
 
   const pressKpis: DashboardKpi[] = summary
     ? [
-        { id: "customers", label: "Customers", value: summary.customerCount, format: "number" },
-        { id: "invites", label: "Invites pending", value: summary.pendingInvites, format: "number" },
-        { id: "pipeline", label: "Albums in pipeline", value: summary.totalAlbums, format: "number" },
+        { id: "revenue-30d", label: "Sales · last 30d", value: summary.revenueLast30dCents, format: "currency" },
+        { id: "revenue-lifetime", label: "Sales · lifetime", value: summary.revenueLifetimeCents, format: "currency" },
         { id: "units-30d", label: "Units · last 30d", value: summary.unitsLast30d, format: "number" },
-        { id: "units-90d", label: "Units · next 90d", value: summary.unitsNext90d, format: "number" },
+        { id: "customers", label: "Customers", value: summary.customerCount, format: "number" },
+        { id: "pipeline", label: "Albums in pipeline", value: summary.totalAlbums, format: "number" },
       ]
     : [];
 
@@ -1330,14 +1355,15 @@ function InvoiceDialog({ open, onOpenChange, pressId, albumId }: { open: boolean
 
 // ─── Settings tab ─────────────────────────────────────────────────
 
-type SettingsSub = "profile" | "staff" | "catalog" | "payouts" | "notifications";
-const SETTINGS_SUB_IDS: SettingsSub[] = ["profile", "staff", "catalog", "payouts", "notifications"];
+// Task #2188 — Catalog is now a top-level tab; removed from Settings.
+type SettingsSub = "profile" | "staff" | "payouts" | "notifications";
+const SETTINGS_SUB_IDS: SettingsSub[] = ["profile", "staff", "payouts", "notifications"];
 
 function SettingsTab({ pressId, pressName }: { pressId: string; pressName: string }) {
-  // Task #2091 — the App.tsx press guard (and any legacy deep link to the
-  // operator catalog editor) lands here as `?tab=settings&settings=<sub>`,
-  // so read the sub-view from the URL on mount. Keeps the catalog editable
-  // fully inside the portal shell — no jump to /admin/manufacturers/:id.
+  // Settings sub-tabs: Profile / Staff / Payouts / Notifications.
+  // Catalog was moved to a top-level nav tab (Task #2188).
+  // ?tab=settings&settings=catalog is redirected in PressPortal to the
+  // new catalog tab, so this component will never receive "catalog" as sub.
   const search = useSearch();
   const subFromUrl = new URLSearchParams(search).get("settings");
   const [sub, setSub] = useState<SettingsSub>(
@@ -1356,13 +1382,9 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
   // read-only panel. Same signal the panel itself derives from /api/me/role.
   const { data: role } = useQuery<{ role?: string }>({ queryKey: ["/api/me/role"] });
   const isSuperAdmin = role?.role === "super_admin";
-  // Cached from the portal header fetch — used for the catalog editor's
-  // press-specific import buttons (Hellbender / MRP), keyed off domain.
-  const { data: me } = useQuery<PressMe>({ queryKey: [`/api/press/${pressId}/me`] });
   const subTabs = [
     { id: "profile" as const, label: "Profile" },
     { id: "staff" as const, label: "Staff" },
-    { id: "catalog" as const, label: "Catalog" },
     { id: "payouts" as const, label: "Payouts" },
     { id: "notifications" as const, label: "Notifications" },
   ];
@@ -1393,16 +1415,6 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
               <PartnerPermissionsPanel scopeKind="manufacturer" scopeId={pressId} scopeName={pressName} />
             </DashboardPanel>
           )}
-        </div>
-      )}
-      {sub === "catalog" && (
-        // Task #2091 — the own-catalog editor renders inline (mirroring the
-        // embedded Reports + GoodDeed pricing tabs) so the press never leaves
-        // its portal shell. PressCatalogPanel self-fetches + role-gates; its
-        // CRUD endpoints accept this press's scoped membership server-side.
-        <div className="space-y-3" data-testid="press-catalog-embedded">
-          <p className="text-sm text-slate-700">Edit your formats, color tiers, and per-quantity ladders — including the new <strong>masters-prep cost</strong> per tier. Artists you invite see the resulting picker on their album's Sell panel.</p>
-          <PressCatalogPanel pressId={pressId} pressDomain={me?.domain ?? null} />
         </div>
       )}
       {sub === "payouts" && <PayoutsSubTab pressId={pressId} />}

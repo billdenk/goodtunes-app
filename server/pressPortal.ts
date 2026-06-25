@@ -615,6 +615,8 @@ export function registerPressPortalRoutes(
   });
 
   // GET /api/press/:id/summary — Dashboard metrics card.
+  // Task #2188 — added revenueLast30dCents + revenueLifetimeCents so the
+  // Dashboard can surface a Sales presence without requiring Reports.
   app.get("/api/press/:id/summary", requireAdmin, requirePressScope, async (req, res) => {
     const pressId = String(req.params.id);
     const counts = await db.execute<any>(sqlPressSummaryCounts(pressId));
@@ -625,12 +627,37 @@ export function registerPressPortalRoutes(
       const s = deriveStage(a);
       byStage[s] = (byStage[s] ?? 0) + 1;
     }
+    // Revenue: sum of (unit_price_cents × quantity) on paid format rows for
+    // orders against albums homed to this press. Uses the same POR join as
+    // the pipeline query to stay consistent with what the press "owns".
+    const revRow = await db.execute<any>(sql`
+      WITH press_albums AS (
+        SELECT DISTINCT a.id
+        FROM pressing_order_requests por
+        JOIN albums a ON a.id = por.album_id AND a.deleted_at IS NULL
+        WHERE por.status <> 'cancelled'
+          AND por.package_snapshot ->> 'pressId' = ${pressId}
+      )
+      SELECT
+        COALESCE(SUM(CASE WHEN o.created_at > NOW() - INTERVAL '30 days'
+                          THEN oi.unit_price_cents * oi.quantity ELSE 0 END), 0)::bigint AS rev_30d,
+        COALESCE(SUM(oi.unit_price_cents * oi.quantity), 0)::bigint AS rev_lifetime
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      WHERE oi.kind = 'format'
+        AND o.album_id IN (SELECT id FROM press_albums)
+        AND o.status IN ('paid', 'shipped')
+        AND o.refunded_at IS NULL
+    `).catch(() => ({ rows: [] }) as any);
+    const revR = ((revRow as any).rows ?? [])[0] ?? {};
     res.json({
       customerCount: row.customer_count ?? 0,
       pendingInvites: row.pending_invites ?? 0,
       totalAlbums: row.total_albums ?? 0,
       unitsLast30d: row.units_30d ?? 0,
       unitsNext90d: row.units_next_90d ?? 0,
+      revenueLast30dCents: Number(revR.rev_30d ?? 0),
+      revenueLifetimeCents: Number(revR.rev_lifetime ?? 0),
       byStage,
     });
   });
