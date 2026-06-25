@@ -1654,7 +1654,16 @@ export function registerCommerceRoutes(app: Express) {
       // Task #218 — full press catalog for the SellPanel's Add Physical
       // picker. Empty `formats` array means the press hasn't built
       // their catalog yet; SellPanel falls back to a no-physical menu.
-      catalog: await getPressCatalog(pressId),
+      catalog: (() => {
+        // Task #2168 — filter hidden formats from the artist-facing picker.
+        // The operator's catalog editor still receives them via the
+        // /catalog admin route; this is the artist/label SellPanel path.
+        const raw = getPressCatalog(pressId);
+        return raw.then((c) => ({
+          ...c,
+          formats: c.formats.filter((f) => !f.hidden),
+        }));
+      })(),
       pressMode,
       demo: demoKind,
       skuPressCatalogs,

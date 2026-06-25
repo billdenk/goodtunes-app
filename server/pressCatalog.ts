@@ -116,6 +116,9 @@ export type CatalogFormat = {
   // Task #1998 — the jacket that is the default for this specific format
   // (i.e. the first applicable jacket with isDefault, else first applicable).
   defaultJacketId: string | null;
+  // Task #2168 — non-destructive hide: format is still in the DB (color
+  // groups + ladder intact) but excluded from the artist-facing picker.
+  hidden: boolean;
 };
 export type CatalogJacket = {
   id: string;
@@ -252,6 +255,7 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
       position: f.position,
       tiers: tiersByFormat.get(f.format) ?? [],
       defaultJacketId: getFormatDefaultJacketId(jRows, f.format),
+      hidden: f.hiddenAt !== null,
     })),
     jackets: jRows.map((j) => ({
       id: j.id,
@@ -2223,7 +2227,20 @@ export function registerPressCatalogRoutes(
     const pressId = String(req.params.id);
     const format = String(req.params.format);
     if (!ALBUM_FORMATS.includes(format as AlbumFormat)) return res.status(400).json({ message: "Unknown format" });
-    const enabled = !!(req.body && req.body.enabled);
+    const body = req.body ?? {};
+
+    // Task #2168 — hide/unhide is a non-destructive toggle that keeps all
+    // color groups and pricing intact; only the artist-facing picker is
+    // gated. The existing enabled:false path is the hard destructive delete.
+    if (typeof body.hidden === "boolean") {
+      await db
+        .update(pressFormats)
+        .set({ hiddenAt: body.hidden ? new Date() : null })
+        .where(and(eq(pressFormats.pressId, pressId), eq(pressFormats.format, format)));
+      return res.json(await getPressCatalog(pressId));
+    }
+
+    const enabled = !!body.enabled;
     if (enabled) {
       await db.insert(pressFormats).values({ pressId, format }).onConflictDoNothing();
     } else {

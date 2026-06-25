@@ -7894,4 +7894,29 @@ SQL
 migrate_leading_silence_col dev  "${DATABASE_URL:-}"
 migrate_leading_silence_col prod "${PROD_DATABASE_URL:-}"
 
+# Press format hide/unhide — press_formats gains a nullable hidden_at
+# timestamp so operators can take a format off the artist-facing picker
+# without permanently destroying its color groups and price ladders.
+# NULL = visible (default); non-null = hidden. Idempotent (IF NOT EXISTS).
+migrate_press_format_hidden_at() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press_format_hidden_at migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE IF EXISTS press_formats
+  ADD COLUMN IF NOT EXISTS hidden_at timestamp;
+COMMIT;
+SQL
+  then
+    echo "post-merge: press_format_hidden_at migration ok on $label"
+  else
+    echo "post-merge: WARNING — press_format_hidden_at migration failed on $label (continuing)"
+  fi
+}
+migrate_press_format_hidden_at dev  "${DATABASE_URL:-}"
+migrate_press_format_hidden_at prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror

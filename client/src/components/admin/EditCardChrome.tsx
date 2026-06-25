@@ -4,6 +4,7 @@
 // (AdminManufacturer) renders the exact same read-only-by-default,
 // pencil-to-edit, discard-confirm, quiet-SaveLink pattern. One source
 // of truth keeps the two pricing surfaces visually identical.
+import type { ReactNode } from "react";
 import { Pencil } from "lucide-react";
 
 // Quiet ghost Save — at rest dimmed slate; brand-blue + soft pill once
@@ -83,7 +84,7 @@ export function CardHeader({
   rightSlot,
   titleClassName = "text-base font-semibold text-slate-900",
 }: {
-  title: string;
+  title: ReactNode;
   subtitle?: string;
   icon?: React.ReactNode;
   editing: boolean;

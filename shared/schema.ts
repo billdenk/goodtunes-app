@@ -2353,6 +2353,7 @@ export const pressFormats = pgTable(
     pressId: varchar("press_id").notNull(),
     format: text("format").notNull(),
     position: integer("position").notNull().default(0),
+    hiddenAt: timestamp("hidden_at"),
   },
   (t) => ({
     pressFormatUniq: unique("press_formats_press_format_uniq").on(t.pressId, t.format),

@@ -2476,6 +2476,18 @@ export function PressCatalogPanel({
     onSuccess: invalidate,
   });
 
+  const hideFormat = useMutation({
+    mutationFn: async (args: { format: AlbumFormat; hidden: boolean }) => {
+      const r = await apiRequest(
+        "PUT",
+        `/api/admin/manufacturers/${pressId}/catalog/formats/${args.format}`,
+        { hidden: args.hidden },
+      );
+      return r.json();
+    },
+    onSuccess: invalidate,
+  });
+
   // Hooks must run unconditionally — declare state before any early
   // return so a role flip from undefined → unauthorized doesn't trip
   // React's "rendered fewer hooks" guard.
@@ -2563,6 +2575,9 @@ export function PressCatalogPanel({
               onChanged={invalidate}
               onRemoveFormat={() => toggleFormat.mutate({ format: activeFormat, enabled: false })}
               removeBusy={toggleFormat.isPending}
+              isFormatHidden={!!(data?.formats.find((f) => f.format === activeFormat)?.hidden)}
+              onHideFormat={(hidden) => hideFormat.mutate({ format: activeFormat, hidden })}
+              hideBusy={hideFormat.isPending}
             />
           )}
         </div>
@@ -2814,6 +2829,9 @@ function CatalogEditor({
   onChanged,
   onRemoveFormat,
   removeBusy,
+  isFormatHidden,
+  onHideFormat,
+  hideBusy,
 }: {
   pressId: string;
   pressDomain: string | null;
@@ -2826,6 +2844,9 @@ function CatalogEditor({
   onChanged: () => void;
   onRemoveFormat: () => void;
   removeBusy: boolean;
+  isFormatHidden: boolean;
+  onHideFormat: (hidden: boolean) => void;
+  hideBusy: boolean;
 }) {
   const { toast } = useToast();
   const fmt = activeFormat;
@@ -3114,16 +3135,81 @@ function CatalogEditor({
     setEditing(false);
   };
 
-  const removeFormatLink = editing ? (
-    <button
-      type="button"
-      onClick={onRemoveFormat}
-      disabled={removeBusy}
-      className="text-xs text-rose-600 hover:underline underline-offset-2 disabled:opacity-50 px-1"
-      data-testid={`toggle-format-${fmt}`}
-    >
-      Remove format
-    </button>
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const formatMenuSlot = editing ? (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <IconButton
+            label="Format options"
+            variant="ghost"
+            size="md"
+            disabled={removeBusy || hideBusy}
+            className="text-slate-400 hover:text-slate-700"
+            data-testid={`menu-format-options-${fmt}`}
+          >
+            <MoreHorizontal />
+          </IconButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuItem
+            className="gap-2 text-rose-600 focus:text-rose-600"
+            onSelect={() => setShowDeleteConfirm(true)}
+            data-testid={`menu-item-delete-format-${fmt}`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete format
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="gap-2"
+            onSelect={() => onHideFormat(!isFormatHidden)}
+            disabled={hideBusy}
+            data-testid={`menu-item-hide-format-${fmt}`}
+          >
+            {isFormatHidden ? (
+              <>
+                <Eye className="w-3.5 h-3.5" />
+                Unhide format
+              </>
+            ) : (
+              <>
+                <EyeOff className="w-3.5 h-3.5" />
+                Hide format
+              </>
+            )}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this format?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the format and all of its saved color groups and swatch
+              images. This cannot be undone.
+              <br /><br />
+              If you just want to take it off the menu temporarily, cancel and use{" "}
+              <strong>Hide format</strong> instead — that keeps everything intact and lets you
+              restore it later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid={`button-cancel-delete-format-${fmt}`}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              onClick={onRemoveFormat}
+              disabled={removeBusy}
+              data-testid={`button-confirm-delete-format-${fmt}`}
+            >
+              {removeBusy ? "Deleting…" : "Delete format"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   ) : null;
 
   const canManagePriceGroups = isMirror || !isVinyl;
@@ -3169,14 +3255,27 @@ function CatalogEditor({
   return (
     <div className="space-y-5" data-testid={`catalog-format-${fmt}`}>
       <CardHeader
-        title="Color Options"
+        title={
+          <span className="flex items-center gap-2">
+            Color Options
+            {isFormatHidden && (
+              <span
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wide bg-slate-100 text-slate-500 ring-1 ring-slate-200"
+                data-testid={`badge-format-hidden-${fmt}`}
+              >
+                <EyeOff className="w-3 h-3" />
+                Hidden
+              </span>
+            )}
+          </span>
+        }
         editing={editing}
         dirty={anyDirty}
         onEnterEdit={() => setEditing(true)}
         onCancelEdit={exitEdit}
         testId={`catalog-${fmt}`}
         titleClassName="text-sm font-semibold text-slate-900"
-        rightSlot={removeFormatLink}
+        rightSlot={formatMenuSlot}
       />
 
       {/* COLOR OPTIONS — vinyl only */}
