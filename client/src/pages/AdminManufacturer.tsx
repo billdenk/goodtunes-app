@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatUsdCents } from "@shared/money";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -6,6 +6,8 @@ import {
   BadgeCheck,
   ChevronRight,
   Disc3,
+  Eye,
+  EyeOff,
   ExternalLink,
   Factory,
   Pencil,
@@ -18,6 +20,12 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { VinylPreview } from "@/components/VinylPreview";
+import { resolveVinylColor, DEFAULT_JACKET_UPGRADE, type VinylColorOption } from "@shared/pressing";
+import hellbenderPlaceholder from "@assets/Hellbender_1782351633843.svg";
+import memphisPlaceholder from "@assets/Memphis_Record_Pressing_1782351685946.svg";
+import virylPlaceholder from "@assets/Viryl_1782351633843.svg";
+import pmpPlaceholder from "@assets/Pressing_Music_Business_1782351633843.svg";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { postAdminImage } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
@@ -34,7 +42,7 @@ import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
-import { SaveLink, CardHeader } from "@/components/admin/EditCardChrome";
+import { SaveLink, CardHeader, EditPencil } from "@/components/admin/EditCardChrome";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -1091,8 +1099,8 @@ type CatalogTier = {
   id: string;
   name: string;
   position: number;
-  priceLadder: { qty: number; unitCents: number }[];
-  laddersByJacket: Record<string, { qty: number; unitCents: number }[]>;
+  priceLadder: { qty: number; unitCents: number; confirmed?: boolean }[];
+  laddersByJacket: Record<string, { qty: number; unitCents: number; confirmed?: boolean }[]>;
   colors: CatalogColor[];
 };
 type CatalogFormat = {
@@ -1246,16 +1254,13 @@ function ReferralsPanel({ pressId }: { pressId: string }) {
 // "+ Add quantity" extras, so each press's *offered* quantities still
 // derive from its confirmed rungs.
 //
-// Quantity hygiene rules baked in here:
-//   • 750 is offered by NOBODY → it's not a default and no seed prices
-//     it, so it never renders.
-//   • 50 is offered only by Hellbender → it's not a default either, so
-//     it only appears for Hellbender (whose seeded ladder carries
-//     confirmed 50 rungs and pulls it in via the saved-rung union). MRP,
-//     PMP, and every other press have no 50 rung, so 50 stays hidden.
-// 3000 is kept here per Bill (rarely offered, but not removed in this
-// task — flagged separately).
-const DEFAULT_QTY_COLUMNS = [100, 300, 500, 1000, 2000, 3000];
+// Task #2114 — canonical run-quantity columns per Bill's redesign:
+// 50 / 100 / 200 / 300 / 500 / 1000 / 2000 / 3000. The real column list
+// (see `columns` below) is still this set ∪ every saved rung ∪ any
+// "+ Add quantity" extras, so a press that priced an off-grid run keeps
+// it. Whether a press actually OFFERS each column is the per-cell eye
+// toggle (offered = a saved rung exists; not-offered = no rung).
+const DEFAULT_QTY_COLUMNS = [50, 100, 200, 300, 500, 1000, 2000, 3000];
 
 async function uploadSwatchImage(
   file: File,
@@ -1621,6 +1626,40 @@ function HellbenderImportButton({
 // without hand-uploading every swatch. Server-side fetch is SSRF-
 // guarded; commit runs the disc-mask pipeline + Object Storage upload.
 const MRP_DOMAIN_CLIENT = "memphisrecordpressing.com";
+
+// Task #2114 — per-press album-cover placeholder used as the live
+// preview jacket art in the Catalog editor's Color Options. Keyed by
+// the press's primary domain; falls back to null (VinylPreview's own
+// gray jacket) for presses without a supplied placeholder.
+const PRESS_PLACEHOLDER_BY_DOMAIN: Record<string, string> = {
+  "hellbendervinyl.com": hellbenderPlaceholder,
+  "memphisrecordpressing.com": memphisPlaceholder,
+  "viryl.ca": virylPlaceholder,
+  "physicalmusicproducts.com": pmpPlaceholder,
+};
+function pressPlaceholderArt(domain: string | null): string | null {
+  if (!domain) return null;
+  return PRESS_PLACEHOLDER_BY_DOMAIN[domain.toLowerCase().replace(/^www\./, "")] ?? null;
+}
+
+// Task #2114 — vinyl formats carry the Color Options section; CD and
+// cassette do not (their print/sticker customization is a future add).
+const VINYL_FORMATS: AlbumFormat[] = ["7_inch", "12_lp", "12_double"];
+function isVinylFormat(f: AlbumFormat): boolean {
+  return VINYL_FORMATS.includes(f);
+}
+// Disc size of a format (12" LP and 12" Double LP are both "12"; 7" is "7").
+// Each vinyl format owns its OWN swatch set — we do NOT read 12" Double LP
+// through 12" LP (see Task #2114 note in CatalogEditor). canonicalSwatchFormat
+// is used ONLY by the additive per-swatch "Color applies to" toggle to pick the
+// OTHER disc size's representative format when copying a color by name.
+type DiscSize = "12" | "7";
+function discSizeOf(f: AlbumFormat): DiscSize {
+  return f === "7_inch" ? "7" : "12";
+}
+function canonicalSwatchFormat(size: DiscSize): AlbumFormat {
+  return size === "7" ? "7_inch" : "12_lp";
+}
 type MrpPreviewItem = {
   code: string;
   prefix: string;
@@ -2178,14 +2217,29 @@ export function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; p
     onSuccess: invalidate,
   });
 
-  // Hooks must run unconditionally — declare the MRP dialog state
-  // before any early return so a role flip from undefined → unauthorized
-  // doesn't trip React's "rendered fewer hooks" guard.
+  // Hooks must run unconditionally — declare state before any early
+  // return so a role flip from undefined → unauthorized doesn't trip
+  // React's "rendered fewer hooks" guard.
   const [mrpImportOpen, setMrpImportOpen] = useState(false);
+  // Task #2114 — the redesigned editor edits ONE format at a time. The
+  // Format selector up top (mirrored by the Pricing "Product" control)
+  // drives both Color Options and Pricing below.
+  const [activeFormat, setActiveFormat] = useState<AlbumFormat | null>(null);
+  useEffect(() => {
+    const offeredList = (data?.formats ?? []).map((f) => f.format);
+    if (offeredList.length === 0) {
+      if (activeFormat !== null) setActiveFormat(null);
+      return;
+    }
+    if (!activeFormat || !offeredList.includes(activeFormat)) {
+      setActiveFormat(ALBUM_FORMATS.find((f) => offeredList.includes(f)) ?? offeredList[0]);
+    }
+  }, [data, activeFormat]);
 
   if (roleInfo && !canEdit) return null;
 
   const offered = new Set((data?.formats ?? []).map((f) => f.format));
+  const offeredFormats = ALBUM_FORMATS.filter((f) => offered.has(f));
   const isMrp = pressDomain === MRP_DOMAIN_CLIENT;
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-press-catalog">
@@ -2193,10 +2247,10 @@ export function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; p
         <div className="flex-1">
           <h2 className="text-[15px] font-semibold text-slate-900">Catalog</h2>
           <p className="text-[13px] text-slate-500 mt-1">
-            Pick the formats this press runs. Under each format, set up the color tiers (Black /
-            Standard / Splatter…) with their swatches, and the jackets this press offers. The price
-            ladder lives on the (tier × jacket) combo — one row per run quantity. Artists invited by
-            this press see the resulting picker on their album's Sell panel.
+            Set this press up the way you think about it: pick a format, list the colors you offer for
+            it (grouped by finish — Black / Color / Splatter…), then price each color group by run
+            quantity. Artists invited by this press see the resulting picker on their album's Sell
+            panel.
           </p>
         </div>
         {pressDomain === "hellbendervinyl.com" && (
@@ -2228,58 +2282,60 @@ export function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; p
       )}
       {isLoading || !data ? (
         <div className="text-slate-500 text-sm py-4">Loading…</div>
+      ) : offered.size === 0 ? (
+        <div className="rounded-md border border-dashed border-slate-200 bg-slate-50/60 p-6 text-center">
+          <p className="text-sm text-slate-500 mb-3">
+            No formats yet. Pick one this press runs to start its catalog.
+          </p>
+          <AddFormatPicker
+            offered={offered}
+            onPick={(fmt) => {
+              setActiveFormat(fmt);
+              toggleFormat.mutate({ format: fmt, enabled: true });
+            }}
+            disabled={toggleFormat.isPending}
+          />
+        </div>
       ) : (
-        <div className="space-y-4">
-          {/* Only the formats this press actually runs render as cards.
-              A brand-new press starts with zero cards and a single
-              "+ Add format" select; toggling a format off from its
-              card removes the card and adds the format back to the
-              picker. */}
-          {ALBUM_FORMATS.filter((f) => offered.has(f)).map((fmt) => {
-            const fmtRow = data.formats.find((f) => f.format === fmt) ?? null;
-            return (
-              <div
-                key={fmt}
-                className="rounded-md border border-slate-200 p-3"
-                data-testid={`catalog-format-${fmt}`}
-              >
-                {fmtRow && (
-                  <CatalogFormatBody
-                    pressId={pressId}
-                    fmt={fmt}
-                    formatLabel={ALBUM_FORMAT_LABEL[fmt]}
-                    tiers={fmtRow.tiers}
-                    jackets={data.jackets}
-                    allFormats={Array.from(offered) as AlbumFormat[]}
-                    defaultJacketId={fmtRow.defaultJacketId ?? data.defaultJacketId}
-                    onChanged={invalidate}
-                    onRemoveFormat={() => toggleFormat.mutate({ format: fmt, enabled: false })}
-                    removeBusy={toggleFormat.isPending}
-                  />
-                )}
-              </div>
-            );
-          })}
-          {offered.size === 0 && (
-            <div className="rounded-md border border-dashed border-slate-200 bg-slate-50/60 p-6 text-center">
-              <p className="text-sm text-slate-500 mb-3">
-                No formats yet. Pick one this press runs to start its catalog.
-              </p>
+        <div className="space-y-5">
+          {/* FORMAT — pick the one format to edit; add more inline. */}
+          <div className="flex flex-wrap items-center gap-3" data-testid="catalog-format-selector">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Format</span>
+            <select
+              value={activeFormat ?? ""}
+              onChange={(e) => setActiveFormat((e.target.value || null) as AlbumFormat | null)}
+              className={INPUT + " w-auto min-w-[14rem]"}
+              data-testid="select-active-format"
+            >
+              {offeredFormats.map((f) => (
+                <option key={f} value={f}>
+                  {ALBUM_FORMAT_LABEL[f]}
+                </option>
+              ))}
+            </select>
+            {offered.size < ALBUM_FORMATS.length && (
               <AddFormatPicker
                 offered={offered}
-                onPick={(fmt) => toggleFormat.mutate({ format: fmt, enabled: true })}
+                onPick={(fmt) => {
+                  setActiveFormat(fmt);
+                  toggleFormat.mutate({ format: fmt, enabled: true });
+                }}
                 disabled={toggleFormat.isPending}
               />
-            </div>
-          )}
-          {offered.size > 0 && offered.size < ALBUM_FORMATS.length && (
-            <div className="pt-1">
-              <AddFormatPicker
-                offered={offered}
-                onPick={(fmt) => toggleFormat.mutate({ format: fmt, enabled: true })}
-                disabled={toggleFormat.isPending}
-              />
-            </div>
+            )}
+          </div>
+          {activeFormat && (
+            <CatalogEditor
+              pressId={pressId}
+              pressDomain={pressDomain}
+              catalog={data}
+              activeFormat={activeFormat}
+              setActiveFormat={setActiveFormat}
+              offeredFormats={offeredFormats}
+              onChanged={invalidate}
+              onRemoveFormat={() => toggleFormat.mutate({ format: activeFormat, enabled: false })}
+              removeBusy={toggleFormat.isPending}
+            />
           )}
         </div>
       )}
@@ -2294,324 +2350,328 @@ function AddFormatPicker({
 }: {
   offered: Set<string>;
   onPick: (fmt: AlbumFormat) => void;
-  disabled: boolean;
+  disabled?: boolean;
 }) {
   const available = ALBUM_FORMATS.filter((f) => !offered.has(f));
+  const [open, setOpen] = useState(false);
   if (available.length === 0) return null;
   return (
-    <select
-      value=""
-      disabled={disabled}
-      onChange={(e) => {
-        const v = e.target.value as AlbumFormat;
-        if (v) onPick(v);
-      }}
-      className={INPUT + " w-auto min-w-[12rem] inline-block"}
-      data-testid="select-add-format"
-    >
-      <option value="">+ Add format…</option>
-      {available.map((f) => (
-        <option key={f} value={f}>
-          {ALBUM_FORMAT_LABEL[f]}
-        </option>
-      ))}
-    </select>
+    <div className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        className="inline-flex items-center gap-1 h-8 px-3 rounded-md border border-dashed border-slate-300 text-xs text-slate-600 hover:border-[color:var(--brand-blue)] hover:text-[color:var(--brand-blue)] transition-colors disabled:opacity-50"
+        data-testid="button-add-format"
+      >
+        <Plus className="w-3.5 h-3.5" />
+        Add format
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 min-w-[12rem] rounded-md border border-slate-200 bg-white shadow-lg py-1">
+          {available.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => {
+                onPick(f);
+                setOpen(false);
+              }}
+              className="block w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+              data-testid={`option-add-format-${f}`}
+            >
+              {ALBUM_FORMAT_LABEL[f]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
-function CatalogFormatBody({
+function CatalogEditor({
   pressId,
-  fmt,
-  formatLabel,
-  tiers,
-  jackets,
-  allFormats,
-  defaultJacketId,
+  pressDomain,
+  catalog,
+  activeFormat,
+  setActiveFormat,
+  offeredFormats,
   onChanged,
   onRemoveFormat,
   removeBusy,
 }: {
   pressId: string;
-  fmt: AlbumFormat;
-  formatLabel: string;
-  tiers: CatalogTier[];
-  jackets: CatalogJacket[];
-  // Task #1998 — all formats this press has configured, for "Available for" picker.
-  allFormats: AlbumFormat[];
-  defaultJacketId: string | null;
+  pressDomain: string | null;
+  catalog: Catalog;
+  activeFormat: AlbumFormat;
+  setActiveFormat: (f: AlbumFormat) => void;
+  offeredFormats: AlbumFormat[];
   onChanged: () => void;
   onRemoveFormat: () => void;
   removeBusy: boolean;
 }) {
-  // Task #1998 — filter to jackets that apply to this format (null = all).
-  const applicableJackets = jackets.filter(
-    (j) => !j.applicableFormats || j.applicableFormats.includes(fmt),
-  );
   const { toast } = useToast();
-  // Read-only by default; the pencil in the format header flips the
-  // whole card (tier · jacket · swatches · ladder) into edit mode,
-  // mirroring the pencil-to-edit cards on AdminPlatformPricing.
-  const [editing, setEditing] = useState(false);
-  const [selectedTierId, setSelectedTierId] = useState<string | null>(tiers[0]?.id ?? null);
-  // A tier id we just created via "+ Add tier" but haven't seen in the
-  // refetched `tiers` prop yet. While set, the validation effect
-  // below MUST NOT reset `selectedTierId` away from it — otherwise the
-  // user gets bounced back to the first tier instead of landing in
-  // the new empty one (regression flagged in code review).
-  const pendingTierIdRef = useRef<string | null>(null);
-  const [selectedJacketId, setSelectedJacketId] = useState<string | null>(defaultJacketId);
-  const [addingTier, setAddingTier] = useState(false);
-  const [newTierName, setNewTierName] = useState("");
-  const [addingJacket, setAddingJacket] = useState(false);
-  const [newJacketName, setNewJacketName] = useState("");
+  const fmt = activeFormat;
+  const isVinyl = isVinylFormat(fmt);
+  const discSize = discSizeOf(fmt);
+  // Task #2114 — each vinyl format manages its OWN colors. 12" Double LP
+  // historically carries its own distinct press_colors rows (and the fan
+  // SellPanel resolves a double-LP album's colors from those rows, not
+  // 12" LP's), so we must NOT read-through to 12" LP here or existing
+  // double-LP swatches would vanish from the editor and diverge from what
+  // fans see. Cross-disc-size convenience now lives only in the per-swatch
+  // "Color applies to" toggle (additive copy by name), never a hard mirror.
+  const swatchFmt = fmt;
+  const isMirror = false;
 
-  // Drafts for the ladder. Key is `${tierId}:${jacketId}` so switching
-  // tier/jacket inside the format card preserves what the user typed
-  // for the previous combo without writing it. Value is qty→dollarStr.
+  const fmtRow = catalog.formats.find((f) => f.format === fmt) ?? null;
+  const swatchFmtRow = catalog.formats.find((f) => f.format === swatchFmt) ?? null;
+  const priceTiers = fmtRow?.tiers ?? [];
+  const swatchTiers = swatchFmtRow?.tiers ?? [];
+  const defaultJacketId = fmtRow?.defaultJacketId ?? catalog.defaultJacketId;
+
+  const [editing, setEditing] = useState(false);
+  const [selectedPriceTierId, setSelectedPriceTierId] = useState<string | null>(priceTiers[0]?.id ?? null);
+  const [selectedSwatchTierId, setSelectedSwatchTierId] = useState<string | null>(swatchTiers[0]?.id ?? null);
+  const pendingPriceTierIdRef = useRef<string | null>(null);
+  const [selectedSwatchId, setSelectedSwatchId] = useState<string | null>(null);
+  const [addingGroup, setAddingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+
+  // Pricing drafts. Key = `${format}:${tierId}` (jacket is always the
+  // format's resolved default — the jacket axis is no longer exposed).
   const [drafts, setDrafts] = useState<Record<string, Record<number, string>>>({});
-  // Per-format union of quantity columns. Always includes the defaults
-  // plus any rung any combo has saved + anything the user just added.
+  // Task #2114 — "offered" set per combo. A quantity is OFFERED when a
+  // saved rung exists (or the operator toggled the eye on); offered +
+  // price = confirmed, offered + blank = TBD/Quote, not-offered = no
+  // rung at all (renders "—", and the album Sell panel skips it).
+  const [offeredDrafts, setOfferedDrafts] = useState<Record<string, Set<number>>>({});
   const [extraQuantities, setExtraQuantities] = useState<number[]>([]);
 
-  // Keep selectedTierId valid as tiers come and go.
-  // The pendingTierIdRef guard prevents the post-create refetch race:
-  // after `+ Add tier` resolves we set selectedTierId to the new id
-  // BEFORE the catalog query refetches, so this effect would otherwise
-  // see an unknown id and bounce us back to tiers[0].
+  // Keep the selected price group valid as products/groups change.
   useEffect(() => {
-    if (tiers.length === 0) {
-      if (selectedTierId !== null) setSelectedTierId(null);
-      pendingTierIdRef.current = null;
+    if (priceTiers.length === 0) {
+      if (selectedPriceTierId !== null) setSelectedPriceTierId(null);
+      pendingPriceTierIdRef.current = null;
       return;
     }
-    if (pendingTierIdRef.current) {
-      if (tiers.some((t) => t.id === pendingTierIdRef.current)) {
-        pendingTierIdRef.current = null;
+    if (pendingPriceTierIdRef.current) {
+      if (priceTiers.some((t) => t.id === pendingPriceTierIdRef.current)) {
+        pendingPriceTierIdRef.current = null;
       } else {
         return;
       }
     }
-    if (!tiers.some((t) => t.id === selectedTierId)) {
-      setSelectedTierId(tiers[0].id);
+    if (!priceTiers.some((t) => t.id === selectedPriceTierId)) {
+      setSelectedPriceTierId(priceTiers[0].id);
     }
-  }, [tiers, selectedTierId]);
-  // Task #1998 — validate selectedJacketId against the format-filtered list.
+  }, [priceTiers, selectedPriceTierId]);
   useEffect(() => {
-    if (applicableJackets.length === 0) {
-      if (selectedJacketId !== null) setSelectedJacketId(null);
+    if (swatchTiers.length === 0) {
+      if (selectedSwatchTierId !== null) setSelectedSwatchTierId(null);
       return;
     }
-    if (!applicableJackets.some((j) => j.id === selectedJacketId)) {
-      setSelectedJacketId(defaultJacketId ?? applicableJackets[0].id);
+    if (!swatchTiers.some((t) => t.id === selectedSwatchTierId)) {
+      setSelectedSwatchTierId(swatchTiers[0].id);
     }
-  }, [applicableJackets, selectedJacketId, defaultJacketId]);
+  }, [swatchTiers, selectedSwatchTierId]);
 
-  const selectedTier = tiers.find((t) => t.id === selectedTierId) ?? null;
-  // selectedJacket reads from full list so applicableFormats is accessible.
-  const selectedJacket = jackets.find((j) => j.id === selectedJacketId) ?? null;
-  const comboKey = selectedTier && selectedJacket ? `${selectedTier.id}:${selectedJacket.id}` : null;
-  const savedLadder = comboKey && selectedTier ? selectedTier.laddersByJacket[selectedJacket!.id] ?? [] : [];
+  // Color Options operate on THIS format's own tiers (swatchFmt === fmt for
+  // every vinyl format). The color group IS the pricing group (same format),
+  // so the two selections stay in lockstep. `isMirror` is permanently false
+  // here — the read-through mirror was removed (Task #2114) so 12" Double LP
+  // keeps its own swatches; the branches are kept only to localize the change.
+  const colorTiers = swatchTiers;
+  const colorGroupId = isMirror ? selectedSwatchTierId : selectedPriceTierId;
+  const setColorGroupId = isMirror ? setSelectedSwatchTierId : setSelectedPriceTierId;
+  const selectedColorTier = colorTiers.find((t) => t.id === colorGroupId) ?? null;
 
-  // Column list = defaults ∪ every saved rung in any combo ∪ user extras.
-  const columns = (() => {
+  // Keep the previewed swatch valid for the selected color group.
+  const colorIds = (selectedColorTier?.colors ?? []).map((c) => c.id).join(",");
+  useEffect(() => {
+    const colors = selectedColorTier?.colors ?? [];
+    if (colors.length === 0) {
+      if (selectedSwatchId !== null) setSelectedSwatchId(null);
+      return;
+    }
+    if (!colors.some((c) => c.id === selectedSwatchId)) {
+      setSelectedSwatchId(colors[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colorIds]);
+
+  const selectedSwatch = (selectedColorTier?.colors ?? []).find((c) => c.id === selectedSwatchId) ?? null;
+  const previewColor: VinylColorOption = selectedSwatch
+    ? {
+        id: selectedSwatch.id,
+        name: selectedSwatch.name,
+        tier: "opaque",
+        swatch: selectedSwatch.swatchHex ?? "#888888",
+        thumbnailUrl: selectedSwatch.swatchImageUrl ?? null,
+      }
+    : resolveVinylColor(null);
+  const placeholderArt = pressPlaceholderArt(pressDomain);
+
+  // ── Pricing combo
+  const selectedPriceTier = priceTiers.find((t) => t.id === selectedPriceTierId) ?? null;
+  const comboKey = selectedPriceTier ? `${fmt}:${selectedPriceTier.id}` : null;
+  const ladderForTier = (
+    tier: CatalogTier | null,
+    fRow: CatalogFormat | null,
+  ): { qty: number; unitCents: number; confirmed?: boolean }[] => {
+    if (!tier) return [];
+    const jId = fRow?.defaultJacketId ?? catalog.defaultJacketId;
+    if (jId && tier.laddersByJacket[jId]) return tier.laddersByJacket[jId];
+    return tier.priceLadder ?? [];
+  };
+  const savedLadder = ladderForTier(selectedPriceTier, fmtRow);
+
+  const columns = useMemo(() => {
     const set = new Set<number>(DEFAULT_QTY_COLUMNS);
-    for (const t of tiers) {
-      for (const j of Object.keys(t.laddersByJacket)) {
-        for (const r of t.laddersByJacket[j]) set.add(r.qty);
+    for (const f of catalog.formats) {
+      for (const t of f.tiers) {
+        for (const r of t.priceLadder ?? []) set.add(r.qty);
+        for (const j of Object.keys(t.laddersByJacket)) for (const r of t.laddersByJacket[j]) set.add(r.qty);
       }
     }
     for (const q of extraQuantities) set.add(q);
     return Array.from(set).sort((a, b) => a - b);
-  })();
+  }, [catalog, extraQuantities]);
 
-  // Resolve cell value: draft override first, then saved ladder, else "".
-  // Task #624 — a rung saved as `confirmed:false` (a TBD placeholder)
-  // intentionally renders as a blank input so the admin can either
-  // type the real price (promotes it to confirmed) or leave it as TBD.
-  const cellValue = (qty: number): string => {
-    if (!comboKey) return "";
-    const d = drafts[comboKey];
-    if (d && Object.prototype.hasOwnProperty.call(d, qty)) return d[qty];
-    const saved = savedLadder.find((r) => r.qty === qty);
-    if (!saved) return "";
-    if (saved.confirmed === false) return "";
-    return formatDollars(saved.unitCents);
-  };
-  const setCellValue = (qty: number, v: string) => {
-    if (!comboKey) return;
-    setDrafts((prev) => ({ ...prev, [comboKey]: { ...(prev[comboKey] ?? {}), [qty]: v } }));
-    // Typing a value implicitly clears the explicit-TBD flag for this
-    // cell — Save will land it as confirmed:true.
-    if (v.trim().length > 0) {
-      setUnconfirmedDrafts((prev) => {
-        const s = prev[comboKey!];
-        if (!s || !s.has(qty)) return prev;
-        const next = new Set(s);
-        next.delete(qty);
-        return { ...prev, [comboKey!]: next };
-      });
-    }
-  };
-
-  // Task #624 — explicit TBD state per cell. Initialised from the
-  // saved ladder's `confirmed:false` rungs whenever the combo
-  // (tier+jacket) changes; admin toggles via the per-cell TBD button.
-  const [unconfirmedDrafts, setUnconfirmedDrafts] = useState<Record<string, Set<number>>>({});
-  const savedUnconfirmedKey = comboKey
-    ? savedLadder.filter((r) => r.confirmed === false).map((r) => r.qty).sort((a, b) => a - b).join(",")
+  // Seed the offered set for a combo from its saved rungs.
+  const savedRungKey = comboKey
+    ? savedLadder
+        .map((r) => `${r.qty}:${r.confirmed === false ? "q" : "p"}`)
+        .sort()
+        .join(",")
     : "";
   useEffect(() => {
     if (!comboKey) return;
-    const seed = new Set<number>();
-    for (const r of savedLadder) if (r.confirmed === false) seed.add(r.qty);
-    setUnconfirmedDrafts((prev) => ({ ...prev, [comboKey]: seed }));
+    setOfferedDrafts((prev) => ({ ...prev, [comboKey]: new Set(savedLadder.map((r) => r.qty)) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [comboKey, savedUnconfirmedKey]);
-  const isUnconfirmedDraft = (qty: number): boolean => {
+  }, [comboKey, savedRungKey]);
+
+  const offeredFor = (q: number): boolean => {
     if (!comboKey) return false;
-    return unconfirmedDrafts[comboKey]?.has(qty) ?? false;
+    const s = offeredDrafts[comboKey];
+    if (s) return s.has(q);
+    return savedLadder.some((r) => r.qty === q);
   };
-  const toggleUnconfirmed = (qty: number) => {
+  const toggleOffered = (q: number) => {
     if (!comboKey) return;
-    setUnconfirmedDrafts((prev) => {
-      const cur = prev[comboKey] ?? new Set<number>();
+    setOfferedDrafts((prev) => {
+      const cur = prev[comboKey] ?? new Set<number>(savedLadder.map((r) => r.qty));
       const next = new Set(cur);
-      if (next.has(qty)) {
-        next.delete(qty);
-      } else {
-        next.add(qty);
-      }
+      if (next.has(q)) next.delete(q);
+      else next.add(q);
       return { ...prev, [comboKey]: next };
     });
-    // Marking TBD clears any drafted dollar value for this cell.
-    setDrafts((prev) => ({ ...prev, [comboKey]: { ...(prev[comboKey] ?? {}), [qty]: "" } }));
+  };
+  const cellValue = (q: number): string => {
+    if (!comboKey) return "";
+    const d = drafts[comboKey];
+    if (d && Object.prototype.hasOwnProperty.call(d, q)) return d[q];
+    const saved = savedLadder.find((r) => r.qty === q);
+    if (!saved || saved.confirmed === false) return "";
+    return formatDollars(saved.unitCents);
+  };
+  const setCellValue = (q: number, v: string) => {
+    if (!comboKey) return;
+    setDrafts((prev) => ({ ...prev, [comboKey]: { ...(prev[comboKey] ?? {}), [q]: v } }));
   };
 
-  // Compares one combo's local drafts (typed prices + explicit
-  // awaiting-quote toggles) against its saved ladder.
-  const isComboDirty = (
+  // Build the ladder we'd persist for a given combo's local state.
+  const buildLadder = (
     cKey: string,
-    ladder: { qty: number; unitCents: number; confirmed?: boolean }[],
-  ) => {
-    const d = drafts[cKey];
-    if (d) {
-      for (const q of Object.keys(d)) {
-        const qty = Number(q);
-        const saved = ladder.find((r) => r.qty === qty);
-        const savedStr = saved && saved.confirmed !== false ? formatDollars(saved.unitCents) : "";
-        if ((d[qty] ?? "") !== savedStr) return true;
+    saved: { qty: number; unitCents: number; confirmed?: boolean }[],
+  ): { ladder: { qty: number; unitCents: number; confirmed: boolean }[]; error: string | null } => {
+    const off = offeredDrafts[cKey] ?? new Set<number>(saved.map((r) => r.qty));
+    const dr = drafts[cKey] ?? {};
+    const out: { qty: number; unitCents: number; confirmed: boolean }[] = [];
+    for (const q of columns) {
+      if (!off.has(q)) continue;
+      let raw: string;
+      if (Object.prototype.hasOwnProperty.call(dr, q)) raw = dr[q];
+      else {
+        const s = saved.find((r) => r.qty === q);
+        raw = s && s.confirmed !== false ? formatDollars(s.unitCents) : "";
       }
+      const v = (raw ?? "").trim();
+      if (!v) {
+        out.push({ qty: q, unitCents: 0, confirmed: false });
+        continue;
+      }
+      const cents = parseDollars(v);
+      if (cents === null) return { ladder: out, error: `"${v}" at qty ${q} isn't a valid dollar amount` };
+      out.push({ qty: q, unitCents: cents, confirmed: true });
     }
-    const tbdNow = unconfirmedDrafts[cKey] ?? new Set<number>();
-    const tbdSaved = new Set<number>(ladder.filter((r) => r.confirmed === false).map((r) => r.qty));
-    if (tbdNow.size !== tbdSaved.size) return true;
-    for (const q of Array.from(tbdNow)) if (!tbdSaved.has(q)) return true;
-    return false;
+    return { ladder: out, error: null };
   };
-
-  // Save acts on the visible combo, so SaveLink reflects only this combo.
-  const dirty = comboKey ? isComboDirty(comboKey, savedLadder) : false;
-
-  // Discard-confirm must cover edits made in OTHER tier/jacket combos
-  // before the operator switched away — otherwise exiting edit (which
-  // wipes every draft) could silently drop them. We only inspect combos
-  // the operator actually touched (those carry a drafts/unconfirmed
-  // entry); the current combo's seed always matches saved, so an
-  // untouched session reads clean.
+  const normalize = (l: { qty: number; unitCents: number; confirmed?: boolean }[]): string =>
+    l
+      .slice()
+      .sort((a, b) => a.qty - b.qty)
+      .map((r) => `${r.qty}:${r.confirmed === false ? "Q" : r.unitCents}`)
+      .join("|");
+  const comboIsDirty = (cKey: string): boolean => {
+    const [f, tierId] = cKey.split(":");
+    const fRow = catalog.formats.find((x) => x.format === f) ?? null;
+    const tier = fRow?.tiers.find((t) => t.id === tierId) ?? null;
+    if (!tier) return false;
+    const saved = ladderForTier(tier, fRow);
+    const { ladder } = buildLadder(cKey, saved);
+    return normalize(ladder) !== normalize(saved);
+  };
+  const dirty = comboKey ? comboIsDirty(comboKey) : false;
   const anyDirty = (() => {
-    const keys = Array.from(
-      new Set<string>([...Object.keys(drafts), ...Object.keys(unconfirmedDrafts)]),
-    );
-    return keys.some((k) => {
-      const [tierId, jacketId] = k.split(":");
-      const tier = tiers.find((t) => t.id === tierId);
-      if (!tier) return false;
-      const ladder = tier.laddersByJacket[jacketId] ?? [];
-      return isComboDirty(k, ladder);
-    });
+    const keys = Array.from(new Set<string>([...Object.keys(drafts), ...Object.keys(offeredDrafts)]));
+    return keys.some((k) => comboIsDirty(k));
   })();
 
-  // ─ Mutations
+  // ── Mutations
   const addTier = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (name: string) => {
       const r = await apiRequest(
         "POST",
         `/api/admin/manufacturers/${pressId}/catalog/formats/${fmt}/tiers`,
-        { name: newTierName.trim() },
+        { name: name.trim() },
       );
       return r.json() as Promise<{ id: string }>;
     },
     onSuccess: (row) => {
-      setNewTierName("");
-      setAddingTier(false);
-      pendingTierIdRef.current = row.id;
-      setSelectedTierId(row.id);
+      setNewGroupName("");
+      setAddingGroup(false);
+      pendingPriceTierIdRef.current = row.id;
+      setSelectedPriceTierId(row.id);
+      if (!isMirror) setSelectedSwatchTierId(row.id);
       onChanged();
     },
-    onError: (e: any) => toast({ title: "Couldn't add tier", description: e?.message, variant: "destructive" }),
+    onError: (e: any) =>
+      toast({ title: "Couldn't add color group", description: e?.message, variant: "destructive" }),
   });
   const deleteTier = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/tiers/${id}`);
     },
     onSuccess: onChanged,
-    onError: (e: any) => toast({ title: "Couldn't delete tier", description: e?.message, variant: "destructive" }),
-  });
-  const addJacket = useMutation({
-    mutationFn: async () => {
-      const r = await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/jackets`, {
-        name: newJacketName.trim(),
-      });
-      return r.json() as Promise<{ id: string }>;
-    },
-    onSuccess: (row) => {
-      setNewJacketName("");
-      setAddingJacket(false);
-      setSelectedJacketId(row.id);
-      onChanged();
-    },
-    onError: (e: any) => toast({ title: "Couldn't add jacket", description: e?.message, variant: "destructive" }),
-  });
-  const updateJacket = useMutation({
-    mutationFn: async (args: { id: string; patch: { name?: string; isDefault?: boolean; applicableFormats?: string[] | null } }) => {
-      const r = await apiRequest("PATCH", `/api/admin/manufacturers/${pressId}/catalog/jackets/${args.id}`, args.patch);
-      return r.json();
-    },
-    onSuccess: onChanged,
-    onError: (e: any) => toast({ title: "Couldn't save jacket", description: e?.message, variant: "destructive" }),
-  });
-  const deleteJacket = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/jackets/${id}`);
-    },
-    onSuccess: onChanged,
-    onError: (e: any) => toast({ title: "Couldn't delete jacket", description: e?.message, variant: "destructive" }),
+    onError: (e: any) =>
+      toast({ title: "Couldn't delete color group", description: e?.message, variant: "destructive" }),
   });
   const saveLadder = useMutation({
     mutationFn: async () => {
-      if (!selectedTier || !selectedJacket) throw new Error("Pick a tier and jacket first.");
-      // Build ladder from every column that has a parseable dollar
-      // value. Task #624 — any rung the admin actually types lands as
-      // confirmed:true, promoting a seeded `confirmed:false`
-      // placeholder out of the yellow "TBD — awaiting quote" state.
-      const ladder: { qty: number; unitCents: number; confirmed: boolean }[] = [];
-      for (const q of columns) {
-        // Explicit TBD wins: persist a `confirmed:false` placeholder
-        // even with no dollar value so the cell keeps rendering
-        // yellow on next load.
-        if (isUnconfirmedDraft(q)) {
-          ladder.push({ qty: q, unitCents: 0, confirmed: false });
-          continue;
-        }
-        const v = cellValue(q).trim();
-        if (!v) continue;
-        const cents = parseDollars(v);
-        if (cents === null) throw new Error(`"${v}" at qty ${q} isn't a valid dollar amount`);
-        ladder.push({ qty: q, unitCents: cents, confirmed: true });
+      if (!selectedPriceTier || !comboKey) throw new Error("Pick a color group first.");
+      let jacketId = defaultJacketId;
+      if (!jacketId) {
+        const jr = await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/jackets`, {
+          name: "Standard",
+        });
+        jacketId = ((await jr.json()) as { id: string }).id;
       }
+      const { ladder, error } = buildLadder(comboKey, savedLadder);
+      if (error) throw new Error(error);
       const r = await apiRequest(
         "PUT",
-        `/api/admin/manufacturers/${pressId}/catalog/tiers/${selectedTier.id}/jackets/${selectedJacket.id}/ladder`,
+        `/api/admin/manufacturers/${pressId}/catalog/tiers/${selectedPriceTier.id}/jackets/${jacketId}/ladder`,
         { priceLadder: ladder },
       );
       return r.json();
@@ -2621,524 +2681,397 @@ function CatalogFormatBody({
       toast({ title: "Pricing saved" });
       onChanged();
     },
-    onError: (e: any) => toast({ title: "Couldn't save pricing", description: e?.message, variant: "destructive" }),
+    onError: (e: any) =>
+      toast({ title: "Couldn't save pricing", description: e?.message, variant: "destructive" }),
   });
 
-  // Discard ALL local drafts (typed prices + explicit awaiting-quote
-  // toggles across every combo, not just the visible one) and any
-  // in-flight add-tier / add-jacket inputs, then drop back to read-only.
-  // The current combo is re-seeded so its quote chips still reflect saved.
   const exitEdit = () => {
     setDrafts({});
-    const seed = new Set<number>();
-    for (const r of savedLadder) if (r.confirmed === false) seed.add(r.qty);
-    setUnconfirmedDrafts(comboKey ? { [comboKey]: seed } : {});
-    setAddingTier(false);
-    setNewTierName("");
-    setAddingJacket(false);
-    setNewJacketName("");
+    setOfferedDrafts({});
+    setAddingGroup(false);
+    setNewGroupName("");
     setEditing(false);
   };
 
-  const header = (
-    <CardHeader
-      title={formatLabel}
-      editing={editing}
-      dirty={anyDirty}
-      onEnterEdit={() => setEditing(true)}
-      onCancelEdit={exitEdit}
-      testId={`catalog-format-${fmt}`}
-      titleClassName="text-sm font-semibold text-slate-900"
-      rightSlot={
-        editing ? (
-          <button
-            type="button"
-            onClick={onRemoveFormat}
-            disabled={removeBusy}
-            className="text-xs text-rose-600 hover:underline underline-offset-2 disabled:opacity-50 px-1"
-            data-testid={`toggle-format-${fmt}`}
-          >
-            Remove format
-          </button>
-        ) : null
-      }
-    />
+  const removeFormatLink = editing ? (
+    <button
+      type="button"
+      onClick={onRemoveFormat}
+      disabled={removeBusy}
+      className="text-xs text-rose-600 hover:underline underline-offset-2 disabled:opacity-50 px-1"
+      data-testid={`toggle-format-${fmt}`}
+    >
+      Remove format
+    </button>
+  ) : null;
+
+  const canManagePriceGroups = isMirror || !isVinyl;
+  const groupAdder = (
+    <div className="flex items-center gap-1.5">
+      <input
+        value={newGroupName}
+        onChange={(e) => setNewGroupName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && newGroupName.trim()) addTier.mutate(newGroupName);
+          if (e.key === "Escape") {
+            setAddingGroup(false);
+            setNewGroupName("");
+          }
+        }}
+        autoFocus
+        placeholder={isVinyl ? "Group name (e.g. Splatter)" : "Tier name"}
+        className={INPUT + " h-8 w-48"}
+        data-testid={`input-new-group-${fmt}`}
+      />
+      <button
+        type="button"
+        onClick={() => newGroupName.trim() && addTier.mutate(newGroupName)}
+        disabled={!newGroupName.trim() || addTier.isPending}
+        className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 disabled:opacity-50"
+        data-testid={`button-confirm-add-group-${fmt}`}
+      >
+        {addTier.isPending ? "Adding…" : "Add"}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setAddingGroup(false);
+          setNewGroupName("");
+        }}
+        className="text-xs text-slate-500 hover:underline underline-offset-2"
+      >
+        Cancel
+      </button>
+    </div>
   );
 
-  if (tiers.length === 0 && !addingTier) {
-    return (
-      <div className="space-y-3">
-        {header}
-        <div className="text-xs text-slate-500">No tiers yet for this format.</div>
-        {editing && (
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-8 px-2 text-xs"
-            onClick={() => setAddingTier(true)}
-            data-testid={`button-add-first-tier-${fmt}`}
-          >
-            <Plus className="w-3.5 h-3.5 mr-1" />
-            Add tier
-          </Button>
-        )}
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      {header}
-      {/* Tier dropdown row */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tier</span>
-        {editing ? (
-          <select
-            value={selectedTierId ?? ""}
-            onChange={(e) => setSelectedTierId(e.target.value || null)}
-            className={INPUT + " w-auto min-w-[14rem]"}
-            data-testid={`select-tier-${fmt}`}
-          >
-            {tiers.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {tiers.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setSelectedTierId(t.id)}
-                aria-pressed={t.id === selectedTierId}
-                className={[
-                  "px-2.5 h-7 rounded-full text-xs font-medium transition-colors",
-                  t.id === selectedTierId
-                    ? "bg-[color:var(--brand-blue-soft)] text-[color:var(--brand-blue)]"
-                    : "text-slate-600 hover:bg-slate-100",
-                ].join(" ")}
-                data-testid={`pill-tier-${t.id}`}
-              >
-                {t.name}
-              </button>
-            ))}
-          </div>
-        )}
-        {editing && selectedTier && (
-          <DeleteTierButton
-            tier={selectedTier}
-            onConfirm={() => deleteTier.mutate(selectedTier.id)}
-            disabled={deleteTier.isPending}
-          />
-        )}
-        {editing &&
-          (!addingTier ? (
-            <button
-              type="button"
-              onClick={() => setAddingTier(true)}
-              className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2"
-              data-testid={`button-add-tier-${fmt}`}
-            >
-              + Add tier
-            </button>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <input
-                value={newTierName}
-                onChange={(e) => setNewTierName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && newTierName.trim()) addTier.mutate();
-                  if (e.key === "Escape") {
-                    setAddingTier(false);
-                    setNewTierName("");
-                  }
-                }}
-                autoFocus
-                placeholder="Tier name"
-                className={INPUT + " h-8 w-44"}
-                data-testid={`input-new-tier-${fmt}`}
-              />
-              <button
-                type="button"
-                onClick={() => newTierName.trim() && addTier.mutate()}
-                disabled={!newTierName.trim() || addTier.isPending}
-                className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 disabled:opacity-50"
-                data-testid={`button-confirm-add-tier-${fmt}`}
-              >
-                {addTier.isPending ? "Adding…" : "Add"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAddingTier(false);
-                  setNewTierName("");
-                }}
-                className="text-xs text-slate-500 hover:underline underline-offset-2"
-              >
-                Cancel
-              </button>
-            </div>
-          ))}
-      </div>
+    <div className="space-y-5" data-testid={`catalog-format-${fmt}`}>
+      <CardHeader
+        title="Color options & pricing"
+        editing={editing}
+        dirty={anyDirty}
+        onEnterEdit={() => setEditing(true)}
+        onCancelEdit={exitEdit}
+        testId={`catalog-${fmt}`}
+        titleClassName="text-sm font-semibold text-slate-900"
+        rightSlot={removeFormatLink}
+      />
 
-      {/* Swatch chips for the selected tier */}
-      {selectedTier && selectedTier.colors.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {selectedTier.colors.map((c) => (
-            <SwatchChip
-              key={c.id}
-              pressId={pressId}
-              color={c}
-              onChanged={onChanged}
-              editable={editing}
+      {/* COLOR OPTIONS — vinyl only */}
+      {isVinyl && (
+        <div
+          className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start"
+          data-testid={`color-options-${fmt}`}
+        >
+          <div className="space-y-3 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Color options</span>
+              {isMirror && (
+                <span className="text-xs text-slate-400">Shares the 12&quot; LP color set — edit under 12&quot; LP.</span>
+              )}
+            </div>
+            {colorTiers.length === 0 ? (
+              <div className="text-xs text-slate-500">
+                No color groups yet{isMirror ? " — add them under 12\" LP." : "."}
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={colorGroupId ?? ""}
+                  onChange={(e) => setColorGroupId(e.target.value || null)}
+                  className={INPUT + " w-auto min-w-[12rem]"}
+                  data-testid={`select-color-group-${fmt}`}
+                >
+                  {colorTiers.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+                {editing && !isMirror && selectedColorTier && (
+                  <DeleteTierButton
+                    tier={selectedColorTier}
+                    onConfirm={() => deleteTier.mutate(selectedColorTier.id)}
+                    disabled={deleteTier.isPending}
+                  />
+                )}
+                {editing && !isMirror &&
+                  (!addingGroup ? (
+                    <button
+                      type="button"
+                      onClick={() => setAddingGroup(true)}
+                      className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+                      data-testid={`button-add-color-group-${fmt}`}
+                    >
+                      + Add color group
+                    </button>
+                  ) : (
+                    groupAdder
+                  ))}
+              </div>
+            )}
+            {/* Swatch chips for the selected color group */}
+            {selectedColorTier && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {selectedColorTier.colors.map((c) => (
+                  <SwatchChip
+                    key={c.id}
+                    pressId={pressId}
+                    color={c}
+                    onChanged={onChanged}
+                    editable={editing && !isMirror}
+                    onPreview={() => setSelectedSwatchId(c.id)}
+                    selected={c.id === selectedSwatchId}
+                    mirror={
+                      editing && !isMirror
+                        ? { catalog, groupName: selectedColorTier.name, currentSize: discSize, currentLabel: ALBUM_FORMAT_LABEL[fmt] }
+                        : undefined
+                    }
+                  />
+                ))}
+                {editing && !isMirror && (
+                  <AddSwatchChip pressId={pressId} tierId={selectedColorTier.id} onChanged={onChanged} />
+                )}
+              </div>
+            )}
+          </div>
+          {/* Live preview — the press's placeholder art on the chosen disc. */}
+          <div className="flex flex-col items-center gap-1.5 md:pl-2">
+            <VinylPreview
+              artworkUrl={placeholderArt}
+              color={previewColor}
+              jacketUpgrade={DEFAULT_JACKET_UPGRADE}
+              format={fmt}
+              size="2xl"
             />
-          ))}
-          {editing && (
-            <AddSwatchChip pressId={pressId} tierId={selectedTier.id} onChanged={onChanged} />
+            <span className="text-xs text-slate-400" data-testid={`text-preview-color-${fmt}`}>
+              {selectedSwatch ? selectedSwatch.name : "No color selected"}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* PRICING */}
+      <div className="space-y-3 border-t border-slate-100 pt-4" data-testid={`pricing-${fmt}`}>
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Pricing</span>
+          {editing && selectedPriceTier && (
+            <SaveLink
+              dirty={dirty}
+              busy={saveLadder.isPending}
+              onClick={() => saveLadder.mutate()}
+              testId={`button-save-ladder-${selectedPriceTier.id}`}
+            />
           )}
         </div>
-      )}
-      {selectedTier && selectedTier.colors.length === 0 && editing && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <AddSwatchChip pressId={pressId} tierId={selectedTier.id} onChanged={onChanged} />
-        </div>
-      )}
-
-      {/* Jacket dropdown row — Task #1998: filtered to applicable jackets */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Jacket</span>
-        {editing ? (
-          <select
-            value={selectedJacketId ?? ""}
-            onChange={(e) => setSelectedJacketId(e.target.value || null)}
-            className={INPUT + " w-auto min-w-[16rem]"}
-            disabled={applicableJackets.length === 0}
-            data-testid={`select-jacket-${fmt}`}
-          >
-            {applicableJackets.length === 0 && <option value="">— No jackets —</option>}
-            {applicableJackets.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.name}
-                {j.isDefault ? " (default)" : ""}
-              </option>
-            ))}
-          </select>
-        ) : applicableJackets.length === 0 ? (
-          <span className="text-xs text-slate-400">— No jackets —</span>
-        ) : (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {applicableJackets.map((j) => (
-              <button
-                key={j.id}
-                type="button"
-                onClick={() => setSelectedJacketId(j.id)}
-                aria-pressed={j.id === selectedJacketId}
-                className={[
-                  "px-2.5 h-7 rounded-full text-xs font-medium transition-colors",
-                  j.id === selectedJacketId
-                    ? "bg-[color:var(--brand-blue-soft)] text-[color:var(--brand-blue)]"
-                    : "text-slate-600 hover:bg-slate-100",
-                ].join(" ")}
-                data-testid={`pill-jacket-${j.id}`}
-              >
-                {j.name}
-                {j.isDefault ? " (default)" : ""}
-              </button>
-            ))}
-          </div>
-        )}
-        {editing && selectedJacket && !selectedJacket.isDefault && (
-          <button
-            type="button"
-            onClick={() => updateJacket.mutate({ id: selectedJacket.id, patch: { isDefault: true } })}
-            className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2"
-            data-testid={`button-set-default-jacket-${selectedJacket.id}`}
-          >
-            Set as default
-          </button>
-        )}
-        {editing && selectedJacket && applicableJackets.length > 1 && (
-          <DeleteJacketButton
-            jacket={selectedJacket}
-            onConfirm={() => deleteJacket.mutate(selectedJacket.id)}
-            disabled={deleteJacket.isPending}
-          />
-        )}
-        {editing &&
-          (!addingJacket ? (
-            <button
-              type="button"
-              onClick={() => setAddingJacket(true)}
-              className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2"
-              data-testid={`button-add-jacket-${fmt}`}
-            >
-              + Add jacket
-            </button>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <input
-                value={newJacketName}
-                onChange={(e) => setNewJacketName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && newJacketName.trim()) addJacket.mutate();
-                  if (e.key === "Escape") {
-                    setAddingJacket(false);
-                    setNewJacketName("");
-                  }
-                }}
-                autoFocus
-                placeholder="Jacket name (e.g. Gatefold)"
-                className={INPUT + " h-8 w-56"}
-                data-testid={`input-new-jacket-${fmt}`}
-              />
-              <button
-                type="button"
-                onClick={() => newJacketName.trim() && addJacket.mutate()}
-                disabled={!newJacketName.trim() || addJacket.isPending}
-                className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 disabled:opacity-50"
-                data-testid={`button-confirm-add-jacket-${fmt}`}
-              >
-                {addJacket.isPending ? "Adding…" : "Add"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAddingJacket(false);
-                  setNewJacketName("");
-                }}
-                className="text-xs text-slate-500 hover:underline underline-offset-2"
-              >
-                Cancel
-              </button>
-            </div>
-          ))}
-      </div>
-
-      {/* Task #1998 — "Available for" format scope row (edit mode only).
-          Shows which of this press's formats the selected jacket applies to.
-          Toggling a format updates applicable_formats on the jacket row so
-          other format panels immediately hide/show it accordingly. */}
-      {editing && selectedJacket && allFormats.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2 pt-0.5">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 shrink-0">
-            Available for
-          </span>
-          {allFormats.map((f) => {
-            const checked =
-              !selectedJacket.applicableFormats || selectedJacket.applicableFormats.includes(f);
-            // Prevent unchecking the only remaining applicable format.
-            const checkedCount = selectedJacket.applicableFormats
-              ? selectedJacket.applicableFormats.length
-              : allFormats.length;
-            const isLast = checked && checkedCount === 1;
-            return (
+        {/* Product segmented — mirrors the top Format selector. */}
+        {offeredFormats.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1.5" data-testid={`pricing-product-${fmt}`}>
+            {offeredFormats.map((f) => (
               <button
                 key={f}
                 type="button"
-                disabled={isLast || updateJacket.isPending}
-                onClick={() => {
-                  const curFormats: string[] =
-                    selectedJacket.applicableFormats ?? allFormats;
-                  let next: string[] | null;
-                  if (checked) {
-                    const filtered = curFormats.filter((x) => x !== f);
-                    next = filtered.length === allFormats.length ? null : filtered;
-                  } else {
-                    const added = [...curFormats, f];
-                    next = added.length === allFormats.length ? null : added;
-                  }
-                  updateJacket.mutate({ id: selectedJacket.id, patch: { applicableFormats: next } });
-                }}
+                onClick={() => setActiveFormat(f)}
+                aria-pressed={f === fmt}
                 className={[
-                  "px-2 h-6 rounded text-xs font-medium transition-colors border",
-                  checked
-                    ? "bg-[color:var(--brand-blue-soft)] text-[color:var(--brand-blue)] border-[color:var(--brand-blue-soft)]"
-                    : "text-slate-400 border-slate-200 hover:border-slate-300",
-                  isLast ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+                  "px-2.5 h-7 rounded-full text-xs font-medium transition-colors",
+                  f === fmt
+                    ? "bg-[color:var(--brand-blue-soft)] text-[color:var(--brand-blue)]"
+                    : "text-slate-600 hover:bg-slate-100",
                 ].join(" ")}
-                data-testid={`toggle-jacket-format-${selectedJacket.id}-${f}`}
+                data-testid={`pill-product-${f}`}
               >
                 {ALBUM_FORMAT_LABEL[f]}
               </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Quantity ladder table */}
-      {selectedTier && selectedJacket && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Price per unit (USD) — {selectedTier.name} · {selectedJacket.name}
-            </span>
-            {editing && (
-              <SaveLink
-                dirty={dirty}
-                busy={saveLadder.isPending}
-                onClick={() => saveLadder.mutate()}
-                testId={`button-save-ladder-${selectedTier.id}-${selectedJacket.id}`}
+            ))}
+          </div>
+        )}
+        {/* Pricing color group — for 12" Double LP / non-vinyl this is
+            where groups are added/removed; canonical vinyl sizes manage
+            groups up in Color Options. */}
+        {priceTiers.length === 0 ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">No price groups yet for this product.</span>
+            {editing && canManagePriceGroups &&
+              (!addingGroup ? (
+                <button
+                  type="button"
+                  onClick={() => setAddingGroup(true)}
+                  className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+                  data-testid={`button-add-price-group-${fmt}`}
+                >
+                  + Add group
+                </button>
+              ) : (
+                groupAdder
+              ))}
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            {isVinyl && (
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Color group</span>
+            )}
+            <select
+              value={selectedPriceTierId ?? ""}
+              onChange={(e) => setSelectedPriceTierId(e.target.value || null)}
+              className={INPUT + " w-auto min-w-[12rem]"}
+              data-testid={`select-price-group-${fmt}`}
+            >
+              {priceTiers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            {editing && canManagePriceGroups && selectedPriceTier && (
+              <DeleteTierButton
+                tier={selectedPriceTier}
+                onConfirm={() => deleteTier.mutate(selectedPriceTier.id)}
+                disabled={deleteTier.isPending}
               />
             )}
+            {editing && canManagePriceGroups &&
+              (!addingGroup ? (
+                <button
+                  type="button"
+                  onClick={() => setAddingGroup(true)}
+                  className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+                  data-testid={`button-add-price-group-${fmt}`}
+                >
+                  + Add group
+                </button>
+              ) : (
+                groupAdder
+              ))}
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-xs border-separate border-spacing-0">
-              <thead>
-                <tr>
-                  {columns.map((q) => (
-                    <th
-                      key={q}
-                      className="px-2 py-1 text-slate-500 font-semibold text-center border-b border-slate-200"
-                    >
-                      {q}
-                    </th>
-                  ))}
-                  {editing && (
-                    <th className="px-2 py-1 border-b border-slate-200 text-left">
-                      <AddQuantityButton
-                        existing={columns}
-                        onAdd={(q) => setExtraQuantities((prev) => [...prev, q])}
-                        fmt={fmt}
-                      />
-                    </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  {columns.map((q) => {
-                    // Task #624 — a cell is "unconfirmed / awaiting-quote"
-                    // when:
-                    //   1) admin explicitly toggled it (draft), OR
-                    //   2) the saved rung has `confirmed:false`
-                    //      (e.g. a seeded Black placeholder), OR
-                    //   3) it's a default-qty column the press hasn't
-                    //      priced yet but neighbours are priced —
-                    //      surfaces the gap so it gets quoted.
-                    const saved = savedLadder.find((r) => r.qty === q);
-                    const explicitTbd = isUnconfirmedDraft(q);
-                    const savedTbd = saved !== undefined && saved.confirmed === false;
-                    const draftedValue = (drafts[comboKey ?? ""] ?? {})[q];
-                    const hasAnyValueOrDraft =
-                      (draftedValue !== undefined && draftedValue.trim() !== "") ||
-                      (saved !== undefined && saved.confirmed !== false);
-                    const tierHasAnyConfirmed = savedLadder.some((r) => r.confirmed !== false) ||
-                      Object.values(drafts[comboKey ?? ""] ?? {}).some((s) => s && s.trim() !== "");
-                    const gapInDefaults =
-                      DEFAULT_QTY_COLUMNS.includes(q) &&
-                      !hasAnyValueOrDraft &&
-                      tierHasAnyConfirmed;
-                    const isUnconfirmed = explicitTbd || (savedTbd && !draftedValue) || gapInDefaults;
-                    const hasPrice = saved !== undefined && saved.confirmed !== false;
+        )}
+        {selectedPriceTier && (
+          <div className="space-y-2">
+            <span className="text-xs text-slate-500">
+              Price per unit (USD){isVinyl ? ` — ${selectedPriceTier.name}` : ""}
+            </span>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs border-separate border-spacing-0">
+                <thead>
+                  <tr>
+                    {columns.map((q) => (
+                      <th
+                        key={q}
+                        className="px-2 py-1 text-slate-500 font-semibold text-center border-b border-slate-200"
+                      >
+                        {q}
+                      </th>
+                    ))}
+                    {editing && (
+                      <th className="px-2 py-1 border-b border-slate-200 text-left">
+                        <AddQuantityButton
+                          existing={columns}
+                          onAdd={(q) => setExtraQuantities((prev) => [...prev, q])}
+                          fmt={fmt}
+                        />
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    {columns.map((q) => {
+                      const offeredQ = offeredFor(q);
+                      const saved = savedLadder.find((r) => r.qty === q);
+                      const hasPrice = saved !== undefined && saved.confirmed !== false;
 
-                    // ── Read-only: plain price, a quiet "Quote" pill for
-                    // awaiting-quote rungs, and a muted dash for unpriced
-                    // runs this combo simply doesn't sell.
-                    if (!editing) {
+                      if (!editing) {
+                        return (
+                          <td key={q} className="px-2 py-1.5 text-center align-middle">
+                            {!offeredQ ? (
+                              <span className="text-slate-300" aria-label={`Quantity ${q} — not offered`}>
+                                —
+                              </span>
+                            ) : hasPrice ? (
+                              <span
+                                className="text-xs font-medium text-slate-900 tabular-nums"
+                                data-testid={`cell-ladder-price-${selectedPriceTier.id}-${q}`}
+                              >
+                                ${formatDollars(saved!.unitCents)}
+                              </span>
+                            ) : (
+                              <span
+                                className="inline-flex items-center justify-center h-6 px-2 rounded-full bg-slate-100 text-slate-500 text-xs font-medium"
+                                title="Awaiting quote"
+                                data-testid={`cell-ladder-quote-${selectedPriceTier.id}-${q}`}
+                              >
+                                Quote
+                              </span>
+                            )}
+                          </td>
+                        );
+                      }
+
                       return (
-                        <td key={q} className="px-2 py-1.5 text-center align-middle">
-                          {isUnconfirmed ? (
-                            <span
-                              className="inline-flex items-center justify-center h-6 px-2 rounded-full bg-slate-100 text-slate-500 text-xs font-medium"
-                              title="Awaiting quote"
-                              data-testid={`cell-ladder-quote-${selectedTier.id}-${selectedJacket.id}-${q}`}
+                        <td key={q} className="px-1 py-1.5 align-middle">
+                          <div className="flex items-center gap-1">
+                            <div className="relative">
+                              {offeredQ && (
+                                <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                                  $
+                                </span>
+                              )}
+                              <input
+                                value={offeredQ ? cellValue(q) : ""}
+                                onChange={(e) => setCellValue(q, e.target.value)}
+                                disabled={!offeredQ}
+                                placeholder={offeredQ ? "Quote" : "—"}
+                                inputMode="decimal"
+                                className={[
+                                  "w-20 h-8 pr-2 rounded-md border text-xs tabular-nums text-right focus:outline-none focus:border-[color:var(--brand-blue)]",
+                                  offeredQ
+                                    ? "pl-6 border-slate-200 bg-white"
+                                    : "pl-2 border-slate-100 bg-slate-50 text-slate-300 placeholder:text-slate-300",
+                                ].join(" ")}
+                                data-testid={`input-ladder-cell-${selectedPriceTier.id}-${q}`}
+                                aria-label={offeredQ ? `Quantity ${q}` : `Quantity ${q} — not offered`}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => toggleOffered(q)}
+                              aria-pressed={offeredQ}
+                              className={[
+                                "h-8 w-8 inline-flex items-center justify-center rounded-md border transition-colors shrink-0",
+                                offeredQ
+                                  ? "border-[color:var(--brand-blue)] text-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)]"
+                                  : "border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300",
+                              ].join(" ")}
+                              title={
+                                offeredQ
+                                  ? "Offered at this quantity — click to stop offering"
+                                  : "Not offered — click to offer this quantity"
+                              }
+                              data-testid={`button-toggle-offered-${selectedPriceTier.id}-${q}`}
                             >
-                              Quote
-                            </span>
-                          ) : hasPrice ? (
-                            <span
-                              className="text-xs font-medium text-slate-900 tabular-nums"
-                              data-testid={`cell-ladder-price-${selectedTier.id}-${selectedJacket.id}-${q}`}
-                            >
-                              ${formatDollars(saved!.unitCents)}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300" aria-label={`Quantity ${q} — not priced`}>
-                              —
-                            </span>
-                          )}
+                              {offeredQ ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                              <span className="sr-only">{offeredQ ? "Offered" : "Not offered"}</span>
+                            </button>
+                          </div>
                         </td>
                       );
-                    }
-
-                    // ── Edit: the input stays visible so a seeded-TBD
-                    // rung can be promoted by simply typing; the quote
-                    // state is a single inline tag toggle sitting beside
-                    // the field, not the old amber block stacked under it.
-                    const willPersistTbd =
-                      explicitTbd || (savedTbd && (draftedValue ?? "").trim() === "");
-                    return (
-                    <td key={q} className="px-1 py-1.5 align-middle">
-                      <div className="flex items-center gap-1">
-                        {/* relative wrapper scopes to ONLY the input so
-                            `top-1/2` centers `$` against the field. */}
-                        <div className="relative">
-                          {!willPersistTbd && (
-                            <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">
-                              $
-                            </span>
-                          )}
-                          <input
-                            value={cellValue(q)}
-                            onChange={(e) => setCellValue(q, e.target.value)}
-                            placeholder={willPersistTbd ? "Quote" : ""}
-                            inputMode="decimal"
-                            className={[
-                              "w-20 h-8 pr-2 rounded-md border text-xs tabular-nums text-right focus:outline-none focus:border-[color:var(--brand-blue)]",
-                              willPersistTbd
-                                ? "pl-2 border-slate-200 bg-slate-50 placeholder:text-slate-400"
-                                : "pl-6 border-slate-200 bg-white",
-                            ].join(" ")}
-                            data-testid={`input-ladder-cell-${selectedTier.id}-${selectedJacket.id}-${q}`}
-                            aria-label={
-                              willPersistTbd
-                                ? `Quantity ${q} — awaiting quote`
-                                : `Quantity ${q}`
-                            }
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => toggleUnconfirmed(q)}
-                          aria-pressed={willPersistTbd}
-                          className={[
-                            "h-8 w-8 inline-flex items-center justify-center rounded-md border transition-colors shrink-0",
-                            willPersistTbd
-                              ? "border-[color:var(--brand-blue)] text-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)]"
-                              : "border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300",
-                          ].join(" ")}
-                          title={
-                            willPersistTbd
-                              ? "Awaiting quote — click to enter a price instead"
-                              : "Mark this rung as awaiting quote"
-                          }
-                          data-testid={`button-toggle-tbd-${selectedTier.id}-${selectedJacket.id}-${q}`}
-                        >
-                          <Tag className="w-3.5 h-3.5" />
-                          <span className="sr-only">
-                            {willPersistTbd ? "Clear awaiting-quote" : "Mark as awaiting quote"}
-                          </span>
-                        </button>
-                      </div>
-                    </td>
-                    );
-                  })}
-                  {editing && <td className="px-2 py-1.5" />}
-                </tr>
-              </tbody>
-            </table>
+                    })}
+                    {editing && <td className="px-2 py-1.5" />}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            {editing && (
+              <p className="text-xs text-slate-400">
+                Toggle the eye to set which run quantities this {isVinyl ? "color group" : "product"} is offered
+                at. Offered with a price shows the price; offered with no price shows a “Quote” chip; not
+                offered is hidden from the artist's Sell panel.
+              </p>
+            )}
           </div>
-          {editing && (
-            <p className="text-xs text-slate-400">
-              Leave a cell blank if this combo doesn't price that run. On the album's Sell panel an
-              artist's typed quantity snaps up to the next non-blank rung; above the top rung the
-              picker prompts for a custom quote.
-            </p>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -3303,14 +3236,25 @@ function SwatchChip({
   color,
   onChanged,
   editable = true,
+  onPreview,
+  selected = false,
+  mirror,
 }: {
   pressId: string;
   color: CatalogColor;
   onChanged: () => void;
   editable?: boolean;
+  onPreview?: () => void;
+  selected?: boolean;
+  // Task #2114 — when set, the editor shows a "Color applies to" toggle
+  // that ADDITIVELY copies this swatch by NAME into the OTHER disc size's
+  // same-named color group (12" ↔ 7"). It is convenience only — each
+  // format still owns its own color rows; nothing is read-through.
+  mirror?: { catalog: Catalog; groupName: string; currentSize: DiscSize; currentLabel?: string };
 }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [name, setName] = useState(color.name);
   const [hex, setHex] = useState(color.swatchHex ?? "#000000");
   const [imageUrl, setImageUrl] = useState<string | null>(color.swatchImageUrl);
@@ -3341,9 +3285,11 @@ function SwatchChip({
       await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/colors/${color.id}`);
     },
     onSuccess: () => {
+      setConfirmDelete(false);
       setEditing(false);
       onChanged();
     },
+    onError: (e: any) => toast({ title: "Couldn't delete swatch", description: e?.message, variant: "destructive" }),
   });
   const [cropToDisc, setCropToDisc] = useState(false);
   const upload = useMutation({
@@ -3365,14 +3311,54 @@ function SwatchChip({
     onError: (e: any) => toast({ title: "Upload failed", description: e?.message, variant: "destructive" }),
   });
 
+  // ── Task #2114: cross-disc-size mirror ("Color applies to") ──
+  const normName = (s: string) => s.trim().toLowerCase();
+  const otherSize: DiscSize | null = mirror ? (mirror.currentSize === "12" ? "7" : "12") : null;
+  const otherFmt = otherSize ? canonicalSwatchFormat(otherSize) : null;
+  const otherTier =
+    mirror && otherFmt
+      ? (mirror.catalog.formats.find((f) => f.format === otherFmt)?.tiers ?? []).find(
+          (t) => normName(t.name) === normName(mirror.groupName),
+        ) ?? null
+      : null;
+  const mirroredColor = otherTier?.colors.find((c) => normName(c.name) === normName(color.name)) ?? null;
+  const mirroredOn = !!mirroredColor;
+  const setMirror = useMutation({
+    mutationFn: async (on: boolean) => {
+      if (!mirror || !otherFmt) return;
+      if (on) {
+        let tierId = otherTier?.id;
+        if (!tierId) {
+          const tr = await apiRequest(
+            "POST",
+            `/api/admin/manufacturers/${pressId}/catalog/formats/${otherFmt}/tiers`,
+            { name: mirror.groupName },
+          );
+          tierId = ((await tr.json()) as { id: string }).id;
+        }
+        await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/tiers/${tierId}/colors`, {
+          name: color.name,
+          swatchHex: color.swatchImageUrl ? null : color.swatchHex,
+          swatchImageUrl: color.swatchImageUrl,
+        });
+      } else if (mirroredColor) {
+        await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/colors/${mirroredColor.id}`);
+      }
+    },
+    onSuccess: onChanged,
+    onError: (e: any) =>
+      toast({ title: "Couldn't update where this color applies", description: e?.message, variant: "destructive" }),
+  });
+  const sizeLabel = (s: DiscSize) => (s === "12" ? '12" LP' : '7" Single');
+
   // Read-only chip — a static badge with no Dialog, so the catalog reads
-  // calmly until the operator clicks the card's pencil to edit.
+  // calmly until the operator clicks the card's pencil to edit. When the
+  // editor passes onPreview, the chip is still clickable so it can drive
+  // the live preview without entering edit mode.
   if (!editable) {
-    return (
-      <span
-        className="inline-flex items-center gap-1.5 h-7 pl-1 pr-2.5 rounded-full border border-slate-200 bg-white text-xs text-slate-700"
-        data-testid={`chip-color-${color.id}`}
-      >
+    const ringCls = selected ? "border-[color:var(--brand-blue)] ring-1 ring-[color:var(--brand-blue)]" : "border-slate-200";
+    const inner = (
+      <>
         <span
           className="w-4 h-4 rounded-full border border-slate-200 shrink-0 overflow-hidden"
           style={
@@ -3382,16 +3368,42 @@ function SwatchChip({
           }
         />
         <span className="truncate max-w-[10rem]">{color.name}</span>
+      </>
+    );
+    if (onPreview) {
+      return (
+        <button
+          type="button"
+          onClick={onPreview}
+          aria-pressed={selected}
+          className={`inline-flex items-center gap-1.5 h-7 pl-1 pr-2.5 rounded-full border bg-white text-xs text-slate-700 hover:border-[color:var(--brand-blue)] transition-colors ${ringCls}`}
+          data-testid={`chip-color-${color.id}`}
+        >
+          {inner}
+        </button>
+      );
+    }
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 h-7 pl-1 pr-2.5 rounded-full border border-slate-200 bg-white text-xs text-slate-700"
+        data-testid={`chip-color-${color.id}`}
+      >
+        {inner}
       </span>
     );
   }
 
+  const ringCls = selected ? "border-[color:var(--brand-blue)] ring-1 ring-[color:var(--brand-blue)]" : "border-slate-200";
   return (
     <>
       <button
         type="button"
-        onClick={() => setEditing(true)}
-        className="inline-flex items-center gap-1.5 h-7 pl-1 pr-2.5 rounded-full border border-slate-200 bg-white text-xs text-slate-700 hover:border-[color:var(--brand-blue)] transition-colors"
+        onClick={() => {
+          onPreview?.();
+          setEditing(true);
+        }}
+        aria-pressed={selected}
+        className={`inline-flex items-center gap-1.5 h-7 pl-1 pr-2.5 rounded-full border bg-white text-xs text-slate-700 hover:border-[color:var(--brand-blue)] transition-colors ${ringCls}`}
         data-testid={`chip-color-${color.id}`}
       >
         <span
@@ -3422,27 +3434,26 @@ function SwatchChip({
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Hex</span>
-                <div className="flex items-center gap-2">
+                <span className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${imageUrl ? "text-slate-300" : "text-slate-500"}`}>Hex</span>
+                <div className={`flex items-center gap-2 ${imageUrl ? "opacity-50 pointer-events-none" : ""}`}>
                   <input
                     type="color"
                     value={hex}
-                    onChange={(e) => {
-                      setHex(e.target.value);
-                      setImageUrl(null);
-                    }}
-                    className="h-9 w-12 rounded border border-slate-200 cursor-pointer"
+                    disabled={!!imageUrl}
+                    onChange={(e) => setHex(e.target.value)}
+                    className="h-9 w-12 rounded border border-slate-200 cursor-pointer disabled:cursor-not-allowed"
                     data-testid={`input-swatch-hex-${color.id}`}
                   />
                   <input
                     value={hex}
-                    onChange={(e) => {
-                      setHex(e.target.value);
-                      setImageUrl(null);
-                    }}
+                    disabled={!!imageUrl}
+                    onChange={(e) => setHex(e.target.value)}
                     className={INPUT}
                   />
                 </div>
+                {imageUrl && (
+                  <span className="block text-xs text-slate-400 mt-1">Using a photo — clear it to set a hex.</span>
+                )}
               </label>
               <label className="block min-w-0">
                 <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Photo</span>
@@ -3510,10 +3521,39 @@ function SwatchChip({
                 </span>
               </span>
             </label>
+            {mirror && otherSize && (
+              <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3 space-y-2">
+                <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                  Color applies to
+                </span>
+                <p className="text-xs text-slate-500">
+                  Offer this color on both disc sizes. Mirrors by name into the matching “{mirror.groupName}”
+                  group; pricing for each size stays separate.
+                </p>
+                <label className="flex items-center gap-2 text-xs text-slate-700">
+                  <input type="checkbox" checked disabled className="accent-[color:var(--brand-blue)]" />
+                  <span>{mirror.currentLabel ?? sizeLabel(mirror.currentSize)} (current)</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={mirroredOn}
+                    disabled={setMirror.isPending}
+                    onChange={(e) => setMirror.mutate(e.target.checked)}
+                    className="accent-[color:var(--brand-blue)]"
+                    data-testid={`toggle-color-applies-${otherSize}-${color.id}`}
+                  />
+                  <span>
+                    {sizeLabel(otherSize)}
+                    {setMirror.isPending ? " — saving…" : ""}
+                  </span>
+                </label>
+              </div>
+            )}
             <div className="flex items-center justify-between pt-2">
               <button
                 type="button"
-                onClick={() => remove.mutate()}
+                onClick={() => setConfirmDelete(true)}
                 disabled={remove.isPending}
                 className="text-xs text-rose-600 hover:underline underline-offset-2 disabled:opacity-50"
                 data-testid={`button-delete-color-${color.id}`}
@@ -3542,6 +3582,30 @@ function SwatchChip({
           </div>
         </DialogContent>
       </Dialog>
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{color.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the color from this group. Pricing for the group is unaffected. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid={`button-cancel-delete-color-${color.id}`}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                remove.mutate();
+              }}
+              disabled={remove.isPending}
+              className="bg-rose-600 hover:bg-rose-700"
+              data-testid={`button-confirm-delete-color-${color.id}`}
+            >
+              {remove.isPending ? "Deleting…" : "Delete swatch"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
