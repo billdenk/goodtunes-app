@@ -16642,17 +16642,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[11px] font-semibold uppercase tracking-wider\" data-testid=\"text-press-domain\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "className=\"text-slate-900 text-[26px] font-bold tracking-tight mt-0.5 truncate\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "<div className=\"flex items-center gap-3 text-slate-500 text-[12.5px] mt-1\">"
+    "snippet": "className=\"text-slate-900 text-[26px] font-bold tracking-tight truncate\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17872,12 +17862,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendor.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[11px] font-semibold uppercase tracking-wider\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminVendor.tsx",
-    "snippet": "className=\"text-slate-900 text-[26px] font-bold tracking-tight mt-0.5\""
+    "snippet": "className=\"text-slate-900 text-[26px] font-bold tracking-tight\""
   },
   {
     "rule": "hardcoded-font-size",

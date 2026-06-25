@@ -409,10 +409,10 @@ export function AdminLabel() {
                   href={label.websiteUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 hover:text-[var(--brand-blue)]"
+                  className="inline-flex items-center gap-1 text-[var(--brand-blue)] hover:underline underline-offset-2"
                   data-testid="link-label-website"
                 >
-                  Visit
+                  {label.websiteUrl.replace(/^https?:\/\//, "")}
                   <ExternalLink className="w-3 h-3" />
                 </a>
               )}

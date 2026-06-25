@@ -440,13 +440,8 @@ export function AdminManufacturer() {
             testIdPrefix="press"
           />
           <div className="flex-1 min-w-0">
-            {m.domain && (
-              <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider" data-testid="text-press-domain">
-                {m.domain}
-              </div>
-            )}
             <h1
-              className="text-slate-900 text-[26px] font-bold tracking-tight mt-0.5 truncate"
+              className="text-slate-900 text-[26px] font-bold tracking-tight truncate"
               data-testid="heading-manufacturer-name"
             >
               {m.name}
@@ -454,19 +449,17 @@ export function AdminManufacturer() {
             <div className="mt-1.5">
               <NotificationsBadge partnerKind="manufacturer" partnerId={m.id} onActivate={() => setTab("overview")} />
             </div>
-            {m.websiteUrl && (
-              <div className="flex items-center gap-3 text-slate-500 text-[12.5px] mt-1">
-                <a
-                  href={m.websiteUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 hover:text-[var(--brand-blue)]"
-                  data-testid="link-press-website"
-                >
-                  Visit
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
+            {(m.websiteUrl || m.domain) && (
+              <a
+                href={m.websiteUrl || `https://${m.domain}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-flex items-center gap-1 text-xs text-[var(--brand-blue)] hover:underline underline-offset-2"
+                data-testid="link-press-website"
+              >
+                {(m.domain || m.websiteUrl).replace(/^https?:\/\//, "")}
+                <ExternalLink className="w-3 h-3" />
+              </a>
             )}
           </div>
         </div>

@@ -444,11 +444,8 @@ export function AdminVendor() {
             onOpenChange={setLogoEditorOpen}
           />
           <div className="flex-1 min-w-0">
-            <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
-              {vendor.domain}
-            </div>
             <h1
-              className="text-slate-900 text-[26px] font-bold tracking-tight mt-0.5"
+              className="text-slate-900 text-[26px] font-bold tracking-tight"
               data-testid="heading-vendor-name"
             >
               {vendor.name}
@@ -468,15 +465,15 @@ export function AdminVendor() {
                   {vendor.location}
                 </span>
               )}
-              {vendor.homeUrl && (
+              {(vendor.homeUrl || vendor.domain) && (
                 <a
-                  href={vendor.homeUrl}
+                  href={vendor.homeUrl || `https://${vendor.domain}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 hover:text-[var(--brand-blue)]"
+                  className="inline-flex items-center gap-1 text-[var(--brand-blue)] hover:underline underline-offset-2"
                   data-testid="link-vendor-home"
                 >
-                  Visit
+                  {(vendor.domain || vendor.homeUrl).replace(/^https?:\/\//, "")}
                   <ExternalLink className="w-3 h-3" />
                 </a>
               )}
