@@ -1900,6 +1900,316 @@ function MrpImportDialog({
   );
 }
 
+// Task #2116 — Catalog CSV: Upload & Export. One pair of header buttons:
+// Export downloads the entire catalog as an editable CSV; Upload parses an
+// edited CSV, validates every row, shows an added / updated / removed
+// preview, then applies it transactionally on confirm. Round-trips
+// cleanly — re-uploading an unchanged export reports no changes.
+type CatalogCsvPlan = {
+  errors: { rowNum: number; message: string }[];
+  colorGroups: { added: string[]; removed: string[] };
+  swatches: {
+    added: { group: string; name: string }[];
+    updated: { group: string; name: string }[];
+    removed: { group: string; name: string }[];
+  };
+  prices: {
+    added: { group: string; qty: number }[];
+    updated: { group: string; qty: number }[];
+    removed: { group: string; qty: number }[];
+  };
+  specs: {
+    added: { key: string }[];
+    updated: { key: string }[];
+    removed: { key: string }[];
+  };
+  hasChanges: boolean;
+};
+
+function CatalogCsvPlanSection({
+  title,
+  added = [],
+  updated = [],
+  removed = [],
+}: {
+  title: string;
+  added?: string[];
+  updated?: string[];
+  removed?: string[];
+}) {
+  if (added.length === 0 && updated.length === 0 && removed.length === 0) return null;
+  const Row = ({ label, items, cls }: { label: string; items: string[]; cls: string }) =>
+    items.length === 0 ? null : (
+      <div className="text-xs leading-relaxed">
+        <span className={"font-semibold " + cls}>
+          {label} ({items.length}):
+        </span>{" "}
+        <span className="text-slate-600">
+          {items.slice(0, 30).join(", ")}
+          {items.length > 30 ? `, …+${items.length - 30}` : ""}
+        </span>
+      </div>
+    );
+  return (
+    <div className="rounded-md border border-slate-200 p-3 space-y-1">
+      <div className="text-sm font-semibold text-slate-900">{title}</div>
+      <Row label="Added" items={added} cls="text-emerald-700" />
+      <Row label="Updated" items={updated} cls="text-blue-700" />
+      <Row label="Removed" items={removed} cls="text-rose-700" />
+    </div>
+  );
+}
+
+function CatalogCsvButtons({
+  pressId,
+  pressName,
+  onApplied,
+}: {
+  pressId: string;
+  pressName: string | null;
+  onApplied: () => void;
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [csv, setCsv] = useState<string>("");
+  const [fileName, setFileName] = useState<string>("");
+  const [plan, setPlan] = useState<CatalogCsvPlan | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setCsv("");
+      setFileName("");
+      setPlan(null);
+    }
+  }, [open]);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const res = await apiRequest("GET", `/api/admin/manufacturers/${pressId}/catalog/csv/export`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safe = (pressName || "press").replace(/[^A-Za-z0-9_-]+/g, "-").toLowerCase();
+      a.download = `catalog-${safe}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast({ title: "Export failed", description: e?.message, variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const previewMut = useMutation({
+    mutationFn: async (content: string) => {
+      const r = await apiRequest(
+        "POST",
+        `/api/admin/manufacturers/${pressId}/catalog/csv/preview`,
+        { csv: content },
+      );
+      return (await r.json()) as CatalogCsvPlan;
+    },
+    onSuccess: (p) => setPlan(p),
+    onError: (e: any) =>
+      toast({ title: "Couldn't read CSV", description: e?.message, variant: "destructive" }),
+  });
+
+  const applyMut = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest(
+        "POST",
+        `/api/admin/manufacturers/${pressId}/catalog/csv/apply`,
+        { csv },
+      );
+      return (await r.json()) as { ok: boolean; result: Record<string, number> };
+    },
+    onSuccess: (res) => {
+      onApplied();
+      setOpen(false);
+      const r = res.result;
+      toast({
+        title: "Catalog updated",
+        description: `${r.tiersCreated} groups added · ${r.swatchesCreated + r.swatchesUpdated} swatches written · ${r.laddersWritten} price ladders · ${r.specsUpserted} specs`,
+      });
+    },
+    onError: (e: any) =>
+      toast({ title: "Apply failed", description: e?.message, variant: "destructive" }),
+  });
+
+  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFileName(f.name);
+    // Drop any prior preview immediately so a stale plan can't keep "Apply"
+    // enabled while the new file's preview is still loading.
+    setPlan(null);
+    setCsv("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      const content = String(reader.result ?? "");
+      setCsv(content);
+      previewMut.mutate(content);
+    };
+    reader.readAsText(f);
+    e.target.value = "";
+  }
+
+  const errs = plan?.errors ?? [];
+  // Apply only the plan currently shown: gate on a settled preview for the
+  // loaded CSV, never a leftover plan from a previous file.
+  const canApply =
+    !!plan &&
+    !!csv &&
+    errs.length === 0 &&
+    plan.hasChanges &&
+    !previewMut.isPending &&
+    !applyMut.isPending;
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={handleExport}
+        disabled={exporting}
+        className="flex-shrink-0"
+        data-testid="button-catalog-csv-export"
+      >
+        <Download className="w-3.5 h-3.5 mr-1.5" />
+        {exporting ? "Exporting…" : "Export CSV"}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen(true)}
+        className="flex-shrink-0"
+        data-testid="button-catalog-csv-upload"
+      >
+        <Upload className="w-3.5 h-3.5 mr-1.5" />
+        Upload CSV
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="dialog-catalog-csv">
+          <DialogHeader>
+            <DialogTitle>Upload catalog CSV</DialogTitle>
+            <DialogDescription>
+              Export the catalog, edit it in a spreadsheet, then upload it here. Every row is validated
+              and you'll see exactly what will be added, updated, or removed before anything is saved.
+              Re-uploading an unchanged export makes no changes.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={onFile}
+                className="hidden"
+                data-testid="input-catalog-csv-file"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                data-testid="button-catalog-csv-choose"
+              >
+                Choose CSV…
+              </Button>
+              {fileName && (
+                <span className="text-xs text-slate-500" data-testid="text-catalog-csv-filename">
+                  {fileName}
+                </span>
+              )}
+            </div>
+
+            {previewMut.isPending && (
+              <div className="py-6 text-center text-sm text-slate-500">Reading CSV…</div>
+            )}
+
+            {plan && errs.length > 0 && (
+              <div className="rounded-md border border-rose-200 bg-rose-50 p-3" data-testid="catalog-csv-errors">
+                <div className="text-xs font-semibold text-rose-700 mb-1.5">
+                  {errs.length} row {errs.length === 1 ? "error" : "errors"} — fix and re-upload
+                </div>
+                <ul className="space-y-1 text-xs text-rose-700">
+                  {errs.slice(0, 50).map((e, i) => (
+                    <li key={i} data-testid={`catalog-csv-error-${i}`}>
+                      Row {e.rowNum}: {e.message}
+                    </li>
+                  ))}
+                  {errs.length > 50 && <li>…and {errs.length - 50} more.</li>}
+                </ul>
+              </div>
+            )}
+
+            {plan &&
+              errs.length === 0 &&
+              (plan.hasChanges ? (
+                <div className="space-y-3" data-testid="catalog-csv-plan">
+                  <CatalogCsvPlanSection
+                    title="Color groups"
+                    added={plan.colorGroups.added}
+                    removed={plan.colorGroups.removed}
+                  />
+                  <CatalogCsvPlanSection
+                    title="Swatches"
+                    added={plan.swatches.added.map((s) => `${s.group} — ${s.name}`)}
+                    updated={plan.swatches.updated.map((s) => `${s.group} — ${s.name}`)}
+                    removed={plan.swatches.removed.map((s) => `${s.group} — ${s.name}`)}
+                  />
+                  <CatalogCsvPlanSection
+                    title="Pricing"
+                    added={plan.prices.added.map((p) => `${p.group} — qty ${p.qty}`)}
+                    updated={plan.prices.updated.map((p) => `${p.group} — qty ${p.qty}`)}
+                    removed={plan.prices.removed.map((p) => `${p.group} — qty ${p.qty}`)}
+                  />
+                  <CatalogCsvPlanSection
+                    title="Specs"
+                    added={plan.specs.added.map((s) => s.key)}
+                    updated={plan.specs.updated.map((s) => s.key)}
+                    removed={plan.specs.removed.map((s) => s.key)}
+                  />
+                </div>
+              ) : (
+                <div
+                  className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600"
+                  data-testid="catalog-csv-nochange"
+                >
+                  No changes — this CSV matches the current catalog.
+                </div>
+              ))}
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <Button variant="outline" onClick={() => setOpen(false)} data-testid="button-catalog-csv-close">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => applyMut.mutate()}
+              disabled={!canApply}
+              data-testid="button-catalog-csv-apply"
+            >
+              {applyMut.isPending ? "Applying…" : "Apply changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 // Task #670 — Hellbender pricing-sync button. Re-fetches Hellbender's
 // public Shopify catalog (every `/products/<handle>.js`), maps each
 // color's handle prefix to one of this press's tiers, and rewrites
@@ -2126,271 +2436,6 @@ function HellbenderPricingSyncButton({
   );
 }
 
-// ─── CSV download helper ─────────────────────────────────────────────────────
-function downloadCatalogCsv(pressDomain: string | null, catalog: Catalog) {
-  const rows: string[] = ["format,tier,color_name,hex,swatch_image_url"];
-  for (const fmt of catalog.formats) {
-    for (const tier of fmt.tiers) {
-      for (const color of tier.colors) {
-        const cells = [fmt.format, tier.name, color.name, color.swatchHex ?? "", color.swatchImageUrl ?? ""].map(
-          (c) => (c.includes(",") || c.includes('"') || c.includes("\n") ? `"${c.replace(/"/g, '""')}"` : c),
-        );
-        rows.push(cells.join(","));
-      }
-    }
-  }
-  const csv = rows.join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  const slug = (pressDomain ?? "press").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  a.download = `${slug}-colors.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-// ─── CSV upload dialog ────────────────────────────────────────────────────────
-type CsvRow = { format: string; tier: string; color_name: string; hex: string; swatch_image_url: string };
-type CsvParsed = { rows: CsvRow[]; parseErrors: string[] };
-type CsvResult = { created: number; updated: number; importErrors: string[] };
-
-function CsvUploadDialog({
-  pressId,
-  pressDomain,
-  catalog,
-  open,
-  onOpenChange,
-  onImported,
-}: {
-  pressId: string;
-  pressDomain: string | null;
-  catalog: Catalog;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  onImported: () => void;
-}) {
-  const { toast } = useToast();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [parsed, setParsed] = useState<CsvParsed | null>(null);
-  const [result, setResult] = useState<CsvResult | null>(null);
-
-  useEffect(() => {
-    if (!open) {
-      setParsed(null);
-      setResult(null);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  }, [open]);
-
-  function parseFile(f: File) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = (e.target?.result as string) ?? "";
-      const lines = text.split(/\r?\n/).filter((l) => l.trim());
-      if (lines.length < 2) {
-        toast({ title: "Empty CSV", description: "The file has no data rows.", variant: "destructive" });
-        return;
-      }
-      const header = lines[0].split(",").map((h) => h.trim().toLowerCase());
-      const idx = {
-        format: header.indexOf("format"),
-        tier: header.indexOf("tier"),
-        name: header.indexOf("color_name"),
-        hex: header.indexOf("hex"),
-        img: header.indexOf("swatch_image_url"),
-      };
-      if (idx.format < 0 || idx.tier < 0 || idx.name < 0) {
-        toast({ title: "Invalid CSV", description: "Missing required columns: format, tier, color_name", variant: "destructive" });
-        return;
-      }
-      const rows: CsvRow[] = [];
-      const parseErrors: string[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(",").map((c) => c.trim());
-        const fmt = cols[idx.format] ?? "";
-        const tier = cols[idx.tier] ?? "";
-        const name = cols[idx.name] ?? "";
-        if (!fmt || !tier || !name) {
-          parseErrors.push(`Row ${i + 1}: missing required field (format, tier, or color_name)`);
-          continue;
-        }
-        rows.push({
-          format: fmt,
-          tier,
-          color_name: name,
-          hex: idx.hex >= 0 ? (cols[idx.hex] ?? "") : "",
-          swatch_image_url: idx.img >= 0 ? (cols[idx.img] ?? "") : "",
-        });
-      }
-      setParsed({ rows, parseErrors });
-    };
-    reader.readAsText(f);
-  }
-
-  const importMut = useMutation({
-    mutationFn: async (): Promise<CsvResult> => {
-      if (!parsed) throw new Error("No data parsed");
-      let created = 0;
-      let updated = 0;
-      const importErrors: string[] = [];
-      // Build lookup: "format::tier" → { tierId, colors[] }
-      const tierMap = new Map<string, { tierId: string; colors: { id: string; name: string }[] }>();
-      for (const fmt of catalog.formats) {
-        for (const tier of fmt.tiers) {
-          const key = `${fmt.format.toLowerCase()}::${tier.name.toLowerCase()}`;
-          tierMap.set(key, { tierId: tier.id, colors: tier.colors.map((c) => ({ id: c.id, name: c.name })) });
-        }
-      }
-      for (const row of parsed.rows) {
-        const key = `${row.format.toLowerCase()}::${row.tier.toLowerCase()}`;
-        const match = tierMap.get(key);
-        if (!match) {
-          importErrors.push(`"${row.color_name}": format "${row.format}" / tier "${row.tier}" not found on this press`);
-          continue;
-        }
-        const body: Record<string, string> = { name: row.color_name };
-        if (row.hex) body.swatchHex = row.hex;
-        if (row.swatch_image_url) body.swatchImageUrl = row.swatch_image_url;
-        const existing = match.colors.find((c) => c.name.toLowerCase() === row.color_name.toLowerCase());
-        if (existing) {
-          await apiRequest("PATCH", `/api/admin/manufacturers/${pressId}/catalog/colors/${existing.id}`, body);
-          updated++;
-        } else {
-          await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/tiers/${match.tierId}/colors`, body);
-          created++;
-        }
-      }
-      return { created, updated, importErrors };
-    },
-    onSuccess: (res) => {
-      setResult(res);
-      onImported();
-      toast({
-        title: "CSV import complete",
-        description: `${res.created} created · ${res.updated} updated · ${res.importErrors.length} skipped`,
-        variant: res.importErrors.length > 0 ? "destructive" : "default",
-      });
-    },
-    onError: (e: any) =>
-      toast({ title: "Import failed", description: e?.message, variant: "destructive" }),
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl max-h-[80vh] overflow-y-auto" data-testid="dialog-csv-upload">
-        <DialogHeader>
-          <DialogTitle>Upload CSV</DialogTitle>
-          <DialogDescription>
-            Upload a CSV with columns <code className="text-xs bg-slate-100 px-1 rounded">format, tier, color_name, hex, swatch_image_url</code>.
-            Colors with a matching name in the same tier are updated; new names are created.
-            Rows referencing a format or tier not found on this press are reported and skipped.
-          </DialogDescription>
-        </DialogHeader>
-
-        {!parsed && !result && (
-          <label
-            className="flex flex-col items-center justify-center gap-2 cursor-pointer rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-sm text-slate-500 hover:bg-slate-100 transition-colors"
-            data-testid="csv-upload-drop-zone"
-          >
-            <Upload className="w-5 h-5 text-slate-400" />
-            <span>Choose a CSV file…</span>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".csv,text/csv"
-              className="sr-only"
-              data-testid="input-csv-file"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) parseFile(f);
-              }}
-            />
-          </label>
-        )}
-
-        {parsed && !result && (
-          <div className="space-y-3">
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-              <strong>{parsed.rows.length}</strong> row{parsed.rows.length !== 1 ? "s" : ""} ready to import
-              {parsed.parseErrors.length > 0 && (
-                <span className="ml-2 text-amber-700">
-                  · <strong>{parsed.parseErrors.length}</strong> parse error{parsed.parseErrors.length !== 1 ? "s" : ""}
-                </span>
-              )}
-            </div>
-            {parsed.parseErrors.length > 0 && (
-              <ul className="text-xs text-amber-700 space-y-0.5 max-h-20 overflow-y-auto">
-                {parsed.parseErrors.map((s, i) => <li key={i}>{s}</li>)}
-              </ul>
-            )}
-            <div className="max-h-52 overflow-y-auto rounded border border-slate-200">
-              <table className="w-full text-xs border-collapse">
-                <thead className="sticky top-0 bg-white">
-                  <tr className="border-b border-slate-200">
-                    <th className="text-left py-1.5 px-2 font-medium text-slate-600">Format</th>
-                    <th className="text-left py-1.5 px-2 font-medium text-slate-600">Tier</th>
-                    <th className="text-left py-1.5 px-2 font-medium text-slate-600">Color</th>
-                    <th className="text-left py-1.5 px-2 font-medium text-slate-600">Hex</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {parsed.rows.slice(0, 60).map((r, i) => (
-                    <tr key={i} className="border-b border-slate-100">
-                      <td className="py-1 px-2 text-slate-500">{r.format}</td>
-                      <td className="py-1 px-2 text-slate-500">{r.tier}</td>
-                      <td className="py-1 px-2 text-slate-900 font-medium">{r.color_name}</td>
-                      <td className="py-1 px-2 text-slate-500 font-mono">{r.hex || "—"}</td>
-                    </tr>
-                  ))}
-                  {parsed.rows.length > 60 && (
-                    <tr>
-                      <td colSpan={4} className="py-1.5 px-2 text-slate-400">…and {parsed.rows.length - 60} more rows</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {result && (
-          <div className="space-y-3" data-testid="csv-upload-results">
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-              <strong>{result.created}</strong> created · <strong>{result.updated}</strong> updated
-            </div>
-            {result.importErrors.length > 0 && (
-              <div>
-                <div className="text-xs font-medium text-amber-700 mb-1">
-                  {result.importErrors.length} skipped (format/tier not found on this press):
-                </div>
-                <ul className="text-xs text-slate-600 space-y-0.5 max-h-32 overflow-y-auto">
-                  {result.importErrors.map((s, i) => <li key={i}>{s}</li>)}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-csv-upload-close">
-            {result ? "Done" : "Cancel"}
-          </Button>
-          {parsed && !result && (
-            <Button
-              onClick={() => importMut.mutate()}
-              disabled={importMut.isPending || parsed.rows.length === 0}
-              data-testid="button-csv-upload-confirm"
-            >
-              {importMut.isPending ? "Importing…" : `Import ${parsed.rows.length} row${parsed.rows.length !== 1 ? "s" : ""}`}
-            </Button>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export function PressCatalogPanel({
   pressId,
   pressDomain,
@@ -2434,7 +2479,6 @@ export function PressCatalogPanel({
   // Hooks must run unconditionally — declare state before any early
   // return so a role flip from undefined → unauthorized doesn't trip
   // React's "rendered fewer hooks" guard.
-  const [csvUploadOpen, setCsvUploadOpen] = useState(false);
   // Task #2114 — the redesigned editor edits ONE format at a time. The
   // Format selector up top (mirrored by the Pricing "Product" control)
   // drives both Color Options and Pricing below.
@@ -2466,56 +2510,16 @@ export function PressCatalogPanel({
             panel.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <CatalogCsvButtons pressId={pressId} pressName={pressDomain} onApplied={invalidate} />
           {pressDomain === "hellbendervinyl.com" && (
             <>
               <HellbenderImportButton pressId={pressId} catalog={data ?? null} onImported={invalidate} />
               <HellbenderPricingSyncButton pressId={pressId} onSynced={invalidate} />
             </>
           )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="flex-shrink-0 flex items-center gap-1.5"
-                data-testid="button-csv-options"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                CSV Options
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onSelect={() => data && downloadCatalogCsv(pressDomain, data)}
-                disabled={!data}
-                data-testid="menuitem-csv-download"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Download as CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => setCsvUploadOpen(true)}
-                data-testid="menuitem-csv-upload"
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                Upload CSV
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
-      {data && (
-        <CsvUploadDialog
-          pressId={pressId}
-          pressDomain={pressDomain}
-          catalog={data}
-          open={csvUploadOpen}
-          onOpenChange={setCsvUploadOpen}
-          onImported={invalidate}
-        />
-      )}
       {isLoading || !data ? (
         <div className="text-slate-500 text-sm py-4">Loading…</div>
       ) : offered.size === 0 ? (

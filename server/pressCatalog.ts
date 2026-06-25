@@ -59,6 +59,12 @@ import {
   pressingSizeForFormat,
   type VinylColorTier,
 } from "@shared/pressing";
+import {
+  serializeCatalogCsv,
+  parseCatalogCsv,
+  buildCatalogCsvPlan,
+  applyCatalogCsv,
+} from "./pressCatalogCsv";
 
 // ─── Public catalog shape ────────────────────────────────────────────
 
@@ -2167,6 +2173,49 @@ export function registerPressCatalogRoutes(
       await seedPmpCatalog();
     }
     res.json(await getPressCatalog(pressId));
+  });
+
+  // ─── Task #2116 — Catalog CSV: Upload & Export ─────────────────────
+
+  // Export the whole catalog as a single editable CSV.
+  app.get("/api/admin/manufacturers/:id/catalog/csv/export", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+    const csv = await serializeCatalogCsv(pressId);
+    const safeName = (press.name || "press").replace(/[^A-Za-z0-9_-]+/g, "-").toLowerCase();
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="catalog-${safeName}.csv"`);
+    res.send(csv);
+  });
+
+  // Dry-run: parse + validate + diff an uploaded CSV without writing.
+  app.post("/api/admin/manufacturers/:id/catalog/csv/preview", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+    const csv = typeof req.body?.csv === "string" ? req.body.csv : "";
+    if (!csv.trim()) return res.status(400).json({ message: "No CSV content provided." });
+    const parsed = parseCatalogCsv(csv);
+    const plan = await buildCatalogCsvPlan(pressId, parsed);
+    res.json(plan);
+  });
+
+  // Apply an uploaded CSV transactionally. Refuses if any row failed
+  // validation so a bad file is never partially applied.
+  app.post("/api/admin/manufacturers/:id/catalog/csv/apply", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+    const csv = typeof req.body?.csv === "string" ? req.body.csv : "";
+    if (!csv.trim()) return res.status(400).json({ message: "No CSV content provided." });
+    const parsed = parseCatalogCsv(csv);
+    if (parsed.errors.length > 0) {
+      return res.status(400).json({ message: "The CSV has validation errors. Fix them and re-upload.", errors: parsed.errors });
+    }
+    const userId = (req as any).adminUserId ?? (req as any).session?.userId ?? null;
+    const result = await applyCatalogCsv(pressId, parsed, userId);
+    res.json({ ok: true, result, catalog: await getPressCatalog(pressId) });
   });
 
   // Toggle a format on/off for this press.
