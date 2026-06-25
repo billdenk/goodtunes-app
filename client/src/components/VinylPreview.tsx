@@ -21,6 +21,16 @@
 import type { VinylColorOption, JacketUpgrade } from "@shared/pressing";
 import type { AlbumFormat } from "@shared/schema";
 
+// Sentinel values that mean "no real art" — the server stamps
+// "/album-placeholder.svg" as the default; treat it the same as null so the
+// white-background vinyl placeholder renders instead of the old navy square.
+const NO_ART_SENTINELS = new Set(["/album-placeholder.svg", "", "null", "undefined"]);
+function resolveArtwork(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const v = url.trim();
+  return NO_ART_SENTINELS.has(v) ? null : v;
+}
+
 export function VinylPreview({
   artworkUrl,
   color,
@@ -55,6 +65,9 @@ export function VinylPreview({
 }) {
   // Task #982 — 7" singles have no inner sleeve in real life.
   const showInnerSleeve = format !== "7_inch";
+  // Strip legacy sentinel values ("/album-placeholder.svg", etc.) so they
+  // are treated as "no real art" and the white-background placeholder wins.
+  const artwork = resolveArtwork(artworkUrl);
   // Task #1310 — cassette renders as a tall J-card case, not a vinyl
   // disc. The J-card is printed both sides with the album cover, so we
   // show the art in a portrait cassette-case frame with a folded spine
@@ -80,9 +93,9 @@ export function VinylPreview({
         data-testid="cassette-preview"
       >
         <div className="absolute inset-0 overflow-hidden shadow-md border border-black/15 bg-slate-200">
-          {artworkUrl ? (
+          {artwork ? (
             <img
-              src={artworkUrl}
+              src={artwork}
               alt=""
               className="w-full h-full object-cover"
               draggable={false}
@@ -103,8 +116,8 @@ export function VinylPreview({
           {/* Folded J-card spine — a thin strip on the left edge that
               reads as the wrap-around fold (same art, darkened). */}
           <div className="absolute top-0 bottom-0 left-0" style={{ width: "11%" }} aria-hidden="true">
-            {artworkUrl && (
-              <img src={artworkUrl} alt="" className="w-full h-full object-cover" draggable={false} />
+            {artwork && (
+              <img src={artwork} alt="" className="w-full h-full object-cover" draggable={false} />
             )}
             <div className="absolute inset-0 bg-black/35" />
             <div className="absolute top-0 bottom-0 right-0 w-px bg-black/40" />
@@ -237,15 +250,15 @@ export function VinylPreview({
           className="absolute inset-0 bg-slate-200 overflow-hidden shadow-sm border border-black/10"
           data-testid="vinyl-preview-jacket"
         >
-          {artworkUrl ? (
+          {artwork ? (
             <img
-              src={artworkUrl}
+              src={artwork}
               alt=""
               className="w-full h-full object-cover"
               draggable={false}
             />
           ) : placeholderLogoUrl ? (
-            <div className="w-full h-full bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center p-[16%]">
+            <div className="w-full h-full bg-white flex items-center justify-center p-[16%]">
               <img
                 src={placeholderLogoUrl}
                 alt=""
@@ -255,7 +268,13 @@ export function VinylPreview({
               />
             </div>
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-slate-300 to-slate-400" />
+            <img
+              src="/vinyl-jacket-placeholder.svg"
+              alt=""
+              className="w-full h-full object-cover"
+              draggable={false}
+              data-testid="img-vinyl-jacket-placeholder"
+            />
           )}
           {/* Gatefold cue — thin centered fold seam, so a gatefold
               reads as two-panel even before you notice the wider
