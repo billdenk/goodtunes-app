@@ -19922,7 +19922,22 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/Login.tsx",
-    "snippet": "We sent a 6-digit code to <span className={`${isAdmin ? \"text-slate-800\" : \"text-white/85\"} font-medium`}>{emailOtpInfo?.email ?? \"your inbox\"}</span>. It expires in 10 minutes."
+    "snippet": "<p className={`${isAdmin ? \"text-slate-500\" : \"text-white/55\"} text-sm text-center mb-2`}>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/Login.tsx",
+    "snippet": "We emailed a 6-digit code to <span className={`${isAdmin ? \"text-slate-800\" : \"text-white/85\"} font-medium`}>{emailOtpInfo?.email ?? \"your inbox\"}</span>. Enter it below — it expires in 10 minutes."
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/Login.tsx",
+    "snippet": "<p className={`${isAdmin ? \"text-slate-400\" : \"text-fan-faint\"} text-xs text-center mb-4`}>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/Login.tsx",
+    "snippet": "<span className=\"text-sm text-slate-500\">Remember this device for 30 days</span>"
   },
   {
     "rule": "fan-text-tone",
@@ -19933,6 +19948,11 @@
     "rule": "fan-text-tone",
     "file": "client/src/pages/Login.tsx",
     "snippet": "<div className={`text-sm ${isAdmin ? \"text-slate-600\" : \"text-white/70\"}`} data-testid=\"text-oauth-hint\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/Login.tsx",
+    "snippet": "className={`absolute right-0 top-0 flex h-full w-11 items-center justify-center transition-colors ${isAdmin ? \"text-slate-400 hover:text-slate-600\" : \"text-fan-faint hover:text-fan-secondary\"}`}"
   },
   {
     "rule": "fan-text-tone",

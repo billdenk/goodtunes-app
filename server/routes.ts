@@ -1126,8 +1126,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/login", async (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ message: "Username or email and password are required" });
+    const { username, password: rawPassword } = req.body;
+    if (!username || !rawPassword) return res.status(400).json({ message: "Username or email and password are required" });
+    const password = String(rawPassword).trim();
     const raw = String(username).trim();
     const ident = (raw.startsWith("@") ? raw.slice(1) : raw).toLowerCase();
     const looksLikeEmail = ident.includes("@");

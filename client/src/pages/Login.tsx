@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthKind } from "@/hooks/useAuthKind";
 import { useLocation } from "wouter";
@@ -332,6 +333,12 @@ export function Login() {
   const [submitting, setSubmitting] = useState(false);
   // Task #2172 — "Remember this device for 30 days" checkbox (admin only).
   const [rememberDevice, setRememberDevice] = useState(false);
+  // Show/hide password toggles — one for the Sign In field, one for
+  // the Create Account password field.
+  const [showPassword, setShowPassword] = useState(false);
+  const [showRegPassword, setShowRegPassword] = useState(false);
+  const toggleShowPassword = useCallback(() => setShowPassword((v) => !v), []);
+  const toggleShowRegPassword = useCallback(() => setShowRegPassword((v) => !v), []);
 
   const { login, register, isLoginPending, isRegisterPending, loginError, registerError } = useAuth();
   const [, navigate] = useLocation();
@@ -1010,8 +1017,11 @@ export function Login() {
         <div className={s.card}>
           <div className="flex flex-col items-center mb-6"><GoodTunesLogo size="lg" variant={isAdmin ? "color" : "white"} /></div>
           <h1 className={`text-xl font-semibold text-center mb-2 ${titleColor}`}>Check your email</h1>
-          <p className={`${isAdmin ? "text-slate-500" : "text-white/55"} text-sm text-center mb-6`}>
-            We sent a 6-digit code to <span className={`${isAdmin ? "text-slate-800" : "text-white/85"} font-medium`}>{emailOtpInfo?.email ?? "your inbox"}</span>. It expires in 10 minutes.
+          <p className={`${isAdmin ? "text-slate-500" : "text-white/55"} text-sm text-center mb-2`}>
+            We emailed a 6-digit code to <span className={`${isAdmin ? "text-slate-800" : "text-white/85"} font-medium`}>{emailOtpInfo?.email ?? "your inbox"}</span>. Enter it below — it expires in 10 minutes.
+          </p>
+          <p className={`${isAdmin ? "text-slate-400" : "text-fan-faint"} text-xs text-center mb-4`}>
+            Not there? Check your spam or junk folder.
           </p>
           {emailOtpInfo?.devCode && (
             <p className={`${isAdmin ? "text-amber-700 bg-amber-50 border-amber-200" : "text-amber-200 bg-amber-500/10 border-amber-400/30"} text-xs border rounded px-2 py-1 mb-3 text-center`}>
@@ -1405,11 +1415,24 @@ export function Login() {
                       Forgot password?
                     </button>
                   </div>
-                  <input
-                    type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••" name="password" autoComplete="current-password"
-                    className={s.input} style={inputBg} required data-testid="input-login-password"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••" name="password" autoComplete="current-password"
+                      className={`${s.input} pr-11`} style={inputBg} required data-testid="input-login-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={toggleShowPassword}
+                      onMouseDown={(e) => e.preventDefault()}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-pressed={showPassword}
+                      className={`absolute right-0 top-0 flex h-full w-11 items-center justify-center transition-colors ${isAdmin ? "text-slate-400 hover:text-slate-600" : "text-fan-faint hover:text-fan-secondary"}`}
+                      data-testid="button-toggle-password-visibility"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
                 {error && <div className={s.errorBox}>{error}</div>}
                 <button
@@ -1487,11 +1510,24 @@ export function Login() {
             </div>
             <div>
               <label className={s.label}>Password</label>
-              <input
-                type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••" name="new-password" autoComplete="new-password" minLength={8}
-                className={s.input} style={inputBg} required data-testid="input-password"
-              />
+              <div className="relative">
+                <input
+                  type={showRegPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••" name="new-password" autoComplete="new-password" minLength={8}
+                  className={`${s.input} pr-11`} style={inputBg} required data-testid="input-password"
+                />
+                <button
+                  type="button"
+                  onClick={toggleShowRegPassword}
+                  onMouseDown={(e) => e.preventDefault()}
+                  aria-label={showRegPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showRegPassword}
+                  className={`absolute right-0 top-0 flex h-full w-11 items-center justify-center transition-colors ${isAdmin ? "text-slate-400 hover:text-slate-600" : "text-fan-faint hover:text-fan-secondary"}`}
+                  data-testid="button-toggle-reg-password-visibility"
+                >
+                  {showRegPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
               <p className={`text-xs mt-1.5 ${isAdmin ? "ml-0" : "ml-1"} ${
                 password.length === 0
                   ? (isAdmin ? "text-slate-400" : "text-white/35")
