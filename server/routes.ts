@@ -1856,6 +1856,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const stateBag = (req.session as any).oauthState as
       | { state: string; kind: "admin" | "customer"; provider: string; linkToUserId?: string; inviteToken?: string }
       | undefined;
+    // Task #2128 — Google refuses OAuth inside embedded/in-app browsers
+    // and (in the flows where it bounces back rather than rendering its
+    // own 403) returns `error=disallowed_useragent`. Map that to the
+    // login page's friendly embedded-browser explainer instead of the
+    // generic /error card, so the fan is steered to Apple/email or a real
+    // browser rather than reading "I can't access my account."
+    const oauthError = (req.body?.error as string) || (req.query.error as string);
+    if (oauthError === "disallowed_useragent") {
+      const kind = stateBag?.kind ?? "customer";
+      const loginPath = kind === "admin" ? "/admin/login" : "/login";
+      (req.session as any).oauthState = undefined;
+      return res.redirect(`${loginPath}?prompt=embedded_browser&provider=${provider}`);
+    }
     const incomingState = (req.body?.state as string) || (req.query.state as string);
     if (!stateBag || stateBag.provider !== provider || stateBag.state !== incomingState) {
       const params = new URLSearchParams({

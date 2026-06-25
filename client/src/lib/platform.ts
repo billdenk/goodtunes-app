@@ -52,6 +52,75 @@ export const isNativeIOS: boolean = isNative && nativePlatform === "ios";
  */
 export const isWebIOS: boolean = isIOS && !isNative;
 
+/**
+ * True when the page is running inside another app's embedded/in-app
+ * browser (a WebView the OS hands a host app) rather than a real browser
+ * or our own native shell.
+ *
+ * Why we care: Google refuses to run its OAuth flow inside embedded
+ * WebViews and returns a raw `403 disallowed_useragent` page. Fans who
+ * open a GoodTunes link from inside their email app, the Google app,
+ * Facebook/Instagram, etc. tap "Sign in with Google" and hit that dead
+ * 403, read it as "I can't get into my account," and create duplicate
+ * accounts. We can't change Google's rule, so we detect the embedded
+ * browser up front and steer the fan to Apple/email or a real browser.
+ *
+ * Pure so it can be unit-tested across user agents. Pass the UA string
+ * and whether the surface is iOS / our native app.
+ *
+ * MUST NOT flag genuine mobile Safari/Chrome/Firefox/Edge or our own
+ * Capacitor app — only true third-party in-app WebViews.
+ */
+export function detectInAppBrowser(
+  ua: string,
+  opts: { isIOS: boolean; isNative: boolean },
+): boolean {
+  // Our own Capacitor shell loads the remote origin in a WebView too, but
+  // it owns the native OAuth transport and is never the 403 trap.
+  if (opts.isNative) return false;
+  if (!ua) return false;
+
+  // Explicit fingerprints for the common host apps' in-app browsers.
+  const tokens = [
+    "FBAN", "FBAV", "FB_IAB", "FBIOS", // Facebook / Messenger
+    "Instagram",
+    "Line/",
+    "Twitter",
+    "LinkedInApp",
+    "Snapchat",
+    "Pinterest",
+    "WhatsApp",
+    "MicroMessenger", // WeChat
+    "musical_ly", "Bytedance", "TikTok", "BytedanceWebview",
+    "GSA/", // the Google app's own WebView
+  ];
+  if (tokens.some((t) => ua.includes(t))) return true;
+
+  // Android System WebView embedded in a host app reports `; wv)`.
+  if (/;\s*wv[);]/.test(ua) || /\bwv\b/.test(ua)) return true;
+
+  // Generic iOS WKWebView: real Safari carries both `Safari` and
+  // `Version/`; the alternative browsers carry their own marker
+  // (Chrome=CriOS, Firefox=FxiOS, Edge=EdgiOS, Opera=OPiOS). Anything
+  // else on iOS that is not our native app is a host-app WebView.
+  if (opts.isIOS) {
+    const isRealSafari = /Safari/.test(ua) && /Version\//.test(ua);
+    const isAltBrowser = /(CriOS|FxiOS|EdgiOS|OPiOS)/.test(ua);
+    if (!isRealSafari && !isAltBrowser) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Live evaluation of {@link detectInAppBrowser} for the current surface.
+ * Read this on the login screen to intercept "Sign in with Google" before
+ * it launches a doomed flow.
+ */
+export const isInAppBrowser: boolean =
+  typeof navigator !== "undefined" &&
+  detectInAppBrowser(navigator.userAgent ?? "", { isIOS, isNative });
+
 /** Chat tab + every "Chat with vendor" CTA. */
 export const chatEnabled = !isNative;
 

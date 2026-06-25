@@ -6,6 +6,7 @@ import { GoodTunesLogo } from "@/components/GoodTunesLogo";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, setAuthToken, queryClient, apiErrorBody, apiErrorStatus } from "@/lib/queryClient";
 import { track } from "@/lib/analytics";
+import { isInAppBrowser } from "@/lib/platform";
 import { FriendlyError } from "@/components/FriendlyError";
 import {
   Drawer,
@@ -361,6 +362,14 @@ export function Login() {
   const [claimDevCode, setClaimDevCode] = useState<string | null>(null);
   const [claimError, setClaimError] = useState<string | null>(null);
   const [claimBusy, setClaimBusy] = useState(false);
+  // In-app-browser Google trap. We render the explainer proactively
+  // whenever `isInAppBrowser` is true; this flag force-shows it after a
+  // doomed Google attempt bounced back with `disallowed_useragent` even
+  // if our UA sniff missed the embedded browser. Also tracks whether the
+  // "copy link" affordance just copied so the button can confirm.
+  const [embeddedBrowserBounce, setEmbeddedBrowserBounce] = useState(false);
+  const [embeddedLinkCopied, setEmbeddedLinkCopied] = useState(false);
+  const showEmbeddedBrowserHelp = !isAdmin && (isInAppBrowser || embeddedBrowserBounce);
   useEffect(() => {
     // Any change to the email clears the previous answer so a stale
     // OAuth-swap state can't strand a fan on the wrong provider.
@@ -449,6 +458,21 @@ export function Login() {
       setClaimPrompt({ provider: provider ?? "apple" });
       setClaimPhase("email");
       setMode("login");
+      window.history.replaceState({}, "", loginPath);
+    }
+    // Google bounced a doomed in-app-browser attempt back with
+    // `disallowed_useragent` (mapped server-side). Force-show the
+    // explainer + steer to Apple/email even if our UA sniff missed it,
+    // and never drop the fan on Google's raw 403 / the generic /error.
+    if (prompt === "embedded_browser") {
+      setEmbeddedBrowserBounce(true);
+      setMode("login");
+      toast({
+        title: "Google can't sign in here",
+        description:
+          "Google blocks sign-in inside in-app browsers. Open goodtunes.music in Safari or Chrome, or continue with Apple or email.",
+        variant: "destructive",
+      });
       window.history.replaceState({}, "", loginPath);
     }
     if (oauth && (next === "totp" || next === "enroll")) {
@@ -704,11 +728,44 @@ export function Login() {
   };
 
   const handleOAuth = (provider: "google" | "apple") => {
+    // In-app/embedded browsers (email apps, the Google app, Facebook/
+    // Instagram, …) get Google's raw `403 disallowed_useragent` because
+    // Google refuses OAuth inside WebViews. Intercept the doomed launch
+    // and surface the explainer instead of stranding the fan on a 403.
+    // Gate on the same flag that dims the button (`isInAppBrowser` OR a
+    // server-side `disallowed_useragent` bounce that our UA sniff missed),
+    // so a de-emphasized Google button never still fires a doomed launch.
+    if (provider === "google" && (isInAppBrowser || embeddedBrowserBounce) && kind === "customer") {
+      track("sign_in", { provider, kind, blocked: "in_app_browser" });
+      setEmbeddedBrowserBounce(true);
+      try { document.getElementById("embedded-browser-help")?.scrollIntoView({ behavior: "smooth", block: "center" }); } catch {}
+      return;
+    }
     // Fire before the redirect (the page is about to be replaced). Mode
     // distinguishes sign-up vs sign-in for the same OAuth click — the
     // segmented control above sets `mode`.
     track(mode === "register" ? "sign_up" : "sign_in", { provider, kind });
     window.location.href = `/api/auth/${provider}/start?kind=${kind}`;
+  };
+
+  // "Open in a real browser" affordance for the embedded-browser case.
+  // We can't reliably eject a WebView into Safari/Chrome from JS, so the
+  // dependable path is to copy the current URL and tell the fan to paste
+  // it into their browser. Falls back to a transient toast if the
+  // clipboard API is unavailable.
+  const copyBrowserLink = async () => {
+    const url = window.location.href;
+    try {
+      await navigator.clipboard.writeText(url);
+      setEmbeddedLinkCopied(true);
+      window.setTimeout(() => setEmbeddedLinkCopied(false), 2500);
+      toast({ title: "Link copied", description: "Paste it into Safari or Chrome to sign in with Google." });
+    } catch {
+      toast({
+        title: "Copy this link",
+        description: `${url} — open it in Safari or Chrome to sign in with Google.`,
+      });
+    }
   };
 
   const goToStep2 = (e: React.FormEvent) => {
@@ -1602,6 +1659,31 @@ export function Login() {
           </form>
         )}
 
+        {showEmbeddedBrowserHelp && !(mode === "register" && (step === 2 || step === "verify" || step === "exists")) && (
+          <div
+            id="embedded-browser-help"
+            className="mb-4 rounded-2xl p-4"
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }}
+            data-testid="banner-embedded-browser"
+          >
+            <p className="text-sm font-semibold text-fan-primary">Google sign-in won't work here</p>
+            <p className="mt-1 text-xs leading-relaxed text-fan-secondary">
+              Google blocks "Sign in with Google" inside in-app browsers. Open
+              {" "}<strong className="text-fan-primary">goodtunes.music</strong>{" "}
+              in Safari or Chrome, or continue with <strong className="text-fan-primary">Apple</strong> or
+              {" "}<strong className="text-fan-primary">email</strong> right here.
+            </p>
+            <button
+              type="button"
+              onClick={copyBrowserLink}
+              className={s.ghostBtn}
+              data-testid="button-copy-browser-link"
+            >
+              {embeddedLinkCopied ? "Link copied — paste in your browser" : "Copy link to open in browser"}
+            </button>
+          </div>
+        )}
+
         {!(mode === "register" && (step === 2 || step === "verify" || step === "exists")) && (
           <>
             <div className="flex items-center gap-3 my-5">
@@ -1612,7 +1694,8 @@ export function Login() {
             <div className="flex flex-col gap-2.5">
               <button
                 type="button" onClick={() => handleOAuth("google")}
-                className={s.oauthBtn} data-testid="button-google-signin"
+                className={`${s.oauthBtn}${showEmbeddedBrowserHelp ? " opacity-50" : ""}`}
+                data-testid="button-google-signin"
               >
                 <svg width={s.oauthIcon.googleW} height={s.oauthIcon.googleH} viewBox="0 0 48 48">
                   <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/>
