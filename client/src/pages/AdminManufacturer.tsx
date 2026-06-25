@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { formatUsdCents } from "@shared/money";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   BadgeCheck,
+  ChevronDown,
   ChevronRight,
+  Disc,
   Disc3,
   Download,
   Eye,
@@ -1658,6 +1660,25 @@ const VINYL_FORMATS: AlbumFormat[] = ["7_inch", "12_lp", "12_double"];
 function isVinylFormat(f: AlbumFormat): boolean {
   return VINYL_FORMATS.includes(f);
 }
+function CassetteIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="8" cy="12" r="2" />
+      <circle cx="16" cy="12" r="2" />
+      <path d="M8 14h8" />
+      <path d="M2 10h3M19 10h3" />
+    </svg>
+  );
+}
 // Disc size of a format (12" LP and 12" Double LP are both "12"; 7" is "7").
 // Each vinyl format owns its OWN swatch set — we do NOT read 12" Double LP
 // through 12" LP (see Task #2114 note in CatalogEditor). canonicalSwatchFormat
@@ -2309,6 +2330,7 @@ export function PressCatalogPanel({
           </p>
           <AddFormatPicker
             offered={offered}
+            offeredVinyl={[]}
             onPick={(fmt) => {
               setActiveFormat(fmt);
               toggleFormat.mutate({ format: fmt, enabled: true });
@@ -2318,32 +2340,17 @@ export function PressCatalogPanel({
         </div>
       ) : (
         <div className="space-y-5">
-          {/* FORMAT — pick the one format to edit; add more inline. */}
-          <div className="flex flex-wrap items-center gap-3" data-testid="catalog-format-selector">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Format</span>
-            <select
-              value={activeFormat ?? ""}
-              onChange={(e) => setActiveFormat((e.target.value || null) as AlbumFormat | null)}
-              className={INPUT + " w-auto min-w-[14rem]"}
-              data-testid="select-active-format"
-            >
-              {offeredFormats.map((f) => (
-                <option key={f} value={f}>
-                  {ALBUM_FORMAT_LABEL[f]}
-                </option>
-              ))}
-            </select>
-            {offered.size < ALBUM_FORMATS.length && (
-              <AddFormatPicker
-                offered={offered}
-                onPick={(fmt) => {
-                  setActiveFormat(fmt);
-                  toggleFormat.mutate({ format: fmt, enabled: true });
-                }}
-                disabled={toggleFormat.isPending}
-              />
-            )}
-          </div>
+          {/* FORMAT — category pills: Vinyl / CD / Cassette */}
+          <FormatCategorySelector
+            offered={offered}
+            activeFormat={activeFormat}
+            onSetFormat={setActiveFormat}
+            onAddFormat={(fmt) => {
+              setActiveFormat(fmt);
+              toggleFormat.mutate({ format: fmt, enabled: true });
+            }}
+            addBusy={toggleFormat.isPending}
+          />
           {activeFormat && (
             <CatalogEditor
               pressId={pressId}
@@ -2365,18 +2372,154 @@ export function PressCatalogPanel({
   );
 }
 
+// ─── Format category selector ────────────────────────────────────────────────
+// Shows Vinyl / CD / Cassette as top-level pill buttons. Vinyl is the umbrella
+// for 7"/12"/12"DLP; when >1 vinyl size is offered a secondary size-picker row
+// appears below. "Add format" and "Add size" are category-aware.
+function FormatCategorySelector({
+  offered,
+  activeFormat,
+  onSetFormat,
+  onAddFormat,
+  addBusy,
+}: {
+  offered: Set<string>;
+  activeFormat: AlbumFormat | null;
+  onSetFormat: (f: AlbumFormat) => void;
+  onAddFormat: (f: AlbumFormat) => void;
+  addBusy?: boolean;
+}) {
+  const offeredVinyl = VINYL_FORMATS.filter((f) => offered.has(f));
+  const vinylActive = !!activeFormat && isVinylFormat(activeFormat);
+
+  const pillBase =
+    "inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium transition-colors border";
+  const pillActive = "bg-slate-900 text-white border-slate-900";
+  const pillIdle =
+    "bg-white text-slate-700 border-slate-300 hover:border-slate-400 hover:bg-slate-50";
+
+  return (
+    <div className="space-y-2" data-testid="catalog-format-selector">
+      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Format</span>
+      {/* Top-level category pills */}
+      <div className="flex flex-wrap items-center gap-2">
+        {offeredVinyl.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              const target =
+                offeredVinyl.includes(activeFormat as AlbumFormat)
+                  ? (activeFormat as AlbumFormat)
+                  : offeredVinyl[0];
+              onSetFormat(target);
+            }}
+            className={[pillBase, vinylActive ? pillActive : pillIdle].join(" ")}
+            data-testid="pill-format-vinyl"
+          >
+            <Disc3 className="w-3.5 h-3.5" />
+            Vinyl
+            {vinylActive && offeredVinyl.length > 1 && (
+              <ChevronDown className="w-3 h-3 opacity-70" />
+            )}
+          </button>
+        )}
+        {offered.has("cd") && (
+          <button
+            type="button"
+            onClick={() => onSetFormat("cd")}
+            className={[pillBase, activeFormat === "cd" ? pillActive : pillIdle].join(" ")}
+            data-testid="pill-format-cd"
+          >
+            <Disc className="w-3.5 h-3.5" />
+            CD
+          </button>
+        )}
+        {offered.has("cassette") && (
+          <button
+            type="button"
+            onClick={() => onSetFormat("cassette")}
+            className={[
+              pillBase,
+              activeFormat === "cassette" ? pillActive : pillIdle,
+            ].join(" ")}
+            data-testid="pill-format-cassette"
+          >
+            <CassetteIcon className="w-3.5 h-3.5" />
+            Cassette
+          </button>
+        )}
+        <AddFormatPicker
+          offered={offered}
+          offeredVinyl={offeredVinyl}
+          onPick={onAddFormat}
+          disabled={addBusy}
+        />
+      </div>
+
+      {/* Secondary: vinyl size picker — only when vinyl is active */}
+      {vinylActive && (
+        <div className="flex flex-wrap items-center gap-2 pl-1 pt-0.5" data-testid="vinyl-size-selector">
+          {offeredVinyl.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => onSetFormat(f)}
+              className={[
+                "inline-flex items-center h-7 px-2.5 rounded-md text-xs font-medium transition-colors border",
+                activeFormat === f
+                  ? "bg-slate-100 text-slate-900 border-slate-400"
+                  : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700",
+              ].join(" ")}
+              data-testid={`pill-vinyl-size-${f}`}
+            >
+              {ALBUM_FORMAT_LABEL[f]}
+            </button>
+          ))}
+          {/* Add more vinyl sizes if not all three are offered */}
+          {VINYL_FORMATS.some((f) => !offered.has(f)) && (
+            <AddVinylSizePicker
+              offered={offered}
+              onPick={onAddFormat}
+              disabled={addBusy}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Top-level "Add format" — shows Vinyl (if no vinyl at all), CD, Cassette.
 function AddFormatPicker({
   offered,
+  offeredVinyl,
   onPick,
   disabled,
 }: {
   offered: Set<string>;
+  offeredVinyl: AlbumFormat[];
   onPick: (fmt: AlbumFormat) => void;
   disabled?: boolean;
 }) {
-  const available = ALBUM_FORMATS.filter((f) => !offered.has(f));
   const [open, setOpen] = useState(false);
-  if (available.length === 0) return null;
+
+  // Category-level: show "Vinyl" only when NO vinyl sizes at all, "CD" / "Cassette" when absent.
+  const items: { label: string; icon: ReactNode; fmt: AlbumFormat }[] = [];
+  if (offeredVinyl.length === 0) {
+    items.push({ label: "Vinyl", icon: <Disc3 className="w-3.5 h-3.5" />, fmt: "7_inch" });
+  }
+  if (!offered.has("cd")) {
+    items.push({ label: "CD", icon: <Disc className="w-3.5 h-3.5" />, fmt: "cd" });
+  }
+  if (!offered.has("cassette")) {
+    items.push({
+      label: "Cassette",
+      icon: <CassetteIcon className="w-3.5 h-3.5" />,
+      fmt: "cassette",
+    });
+  }
+  if (items.length === 0) return null;
+
   return (
     <div className="relative inline-block">
       <button
@@ -2391,6 +2534,54 @@ function AddFormatPicker({
       </button>
       {open && (
         <div className="absolute z-20 mt-1 min-w-[12rem] rounded-md border border-slate-200 bg-white shadow-lg py-1">
+          {items.map(({ label, icon, fmt }) => (
+            <button
+              key={fmt}
+              type="button"
+              onClick={() => {
+                onPick(fmt);
+                setOpen(false);
+              }}
+              className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+              data-testid={`option-add-format-${fmt}`}
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// "Add size" within the vinyl secondary row — adds a vinyl size not yet offered.
+function AddVinylSizePicker({
+  offered,
+  onPick,
+  disabled,
+}: {
+  offered: Set<string>;
+  onPick: (fmt: AlbumFormat) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const available = VINYL_FORMATS.filter((f) => !offered.has(f));
+  if (available.length === 0) return null;
+  return (
+    <div className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-dashed border-slate-300 text-xs text-slate-500 hover:border-[color:var(--brand-blue)] hover:text-[color:var(--brand-blue)] transition-colors disabled:opacity-50"
+        data-testid="button-add-vinyl-size"
+      >
+        <Plus className="w-3 h-3" />
+        Add size
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 min-w-[11rem] rounded-md border border-slate-200 bg-white shadow-lg py-1">
           {available.map((f) => (
             <button
               key={f}
@@ -2399,9 +2590,10 @@ function AddFormatPicker({
                 onPick(f);
                 setOpen(false);
               }}
-              className="block w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
-              data-testid={`option-add-format-${f}`}
+              className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+              data-testid={`option-add-vinyl-size-${f}`}
             >
+              <Disc3 className="w-3.5 h-3.5 text-slate-400" />
               {ALBUM_FORMAT_LABEL[f]}
             </button>
           ))}
