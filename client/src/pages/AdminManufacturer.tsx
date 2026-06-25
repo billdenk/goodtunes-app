@@ -2126,6 +2126,271 @@ function HellbenderPricingSyncButton({
   );
 }
 
+// ─── CSV download helper ─────────────────────────────────────────────────────
+function downloadCatalogCsv(pressDomain: string | null, catalog: Catalog) {
+  const rows: string[] = ["format,tier,color_name,hex,swatch_image_url"];
+  for (const fmt of catalog.formats) {
+    for (const tier of fmt.tiers) {
+      for (const color of tier.colors) {
+        const cells = [fmt.format, tier.name, color.name, color.swatchHex ?? "", color.swatchImageUrl ?? ""].map(
+          (c) => (c.includes(",") || c.includes('"') || c.includes("\n") ? `"${c.replace(/"/g, '""')}"` : c),
+        );
+        rows.push(cells.join(","));
+      }
+    }
+  }
+  const csv = rows.join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const slug = (pressDomain ?? "press").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  a.download = `${slug}-colors.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── CSV upload dialog ────────────────────────────────────────────────────────
+type CsvRow = { format: string; tier: string; color_name: string; hex: string; swatch_image_url: string };
+type CsvParsed = { rows: CsvRow[]; parseErrors: string[] };
+type CsvResult = { created: number; updated: number; importErrors: string[] };
+
+function CsvUploadDialog({
+  pressId,
+  pressDomain,
+  catalog,
+  open,
+  onOpenChange,
+  onImported,
+}: {
+  pressId: string;
+  pressDomain: string | null;
+  catalog: Catalog;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onImported: () => void;
+}) {
+  const { toast } = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [parsed, setParsed] = useState<CsvParsed | null>(null);
+  const [result, setResult] = useState<CsvResult | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setParsed(null);
+      setResult(null);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }, [open]);
+
+  function parseFile(f: File) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = (e.target?.result as string) ?? "";
+      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length < 2) {
+        toast({ title: "Empty CSV", description: "The file has no data rows.", variant: "destructive" });
+        return;
+      }
+      const header = lines[0].split(",").map((h) => h.trim().toLowerCase());
+      const idx = {
+        format: header.indexOf("format"),
+        tier: header.indexOf("tier"),
+        name: header.indexOf("color_name"),
+        hex: header.indexOf("hex"),
+        img: header.indexOf("swatch_image_url"),
+      };
+      if (idx.format < 0 || idx.tier < 0 || idx.name < 0) {
+        toast({ title: "Invalid CSV", description: "Missing required columns: format, tier, color_name", variant: "destructive" });
+        return;
+      }
+      const rows: CsvRow[] = [];
+      const parseErrors: string[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(",").map((c) => c.trim());
+        const fmt = cols[idx.format] ?? "";
+        const tier = cols[idx.tier] ?? "";
+        const name = cols[idx.name] ?? "";
+        if (!fmt || !tier || !name) {
+          parseErrors.push(`Row ${i + 1}: missing required field (format, tier, or color_name)`);
+          continue;
+        }
+        rows.push({
+          format: fmt,
+          tier,
+          color_name: name,
+          hex: idx.hex >= 0 ? (cols[idx.hex] ?? "") : "",
+          swatch_image_url: idx.img >= 0 ? (cols[idx.img] ?? "") : "",
+        });
+      }
+      setParsed({ rows, parseErrors });
+    };
+    reader.readAsText(f);
+  }
+
+  const importMut = useMutation({
+    mutationFn: async (): Promise<CsvResult> => {
+      if (!parsed) throw new Error("No data parsed");
+      let created = 0;
+      let updated = 0;
+      const importErrors: string[] = [];
+      // Build lookup: "format::tier" → { tierId, colors[] }
+      const tierMap = new Map<string, { tierId: string; colors: { id: string; name: string }[] }>();
+      for (const fmt of catalog.formats) {
+        for (const tier of fmt.tiers) {
+          const key = `${fmt.format.toLowerCase()}::${tier.name.toLowerCase()}`;
+          tierMap.set(key, { tierId: tier.id, colors: tier.colors.map((c) => ({ id: c.id, name: c.name })) });
+        }
+      }
+      for (const row of parsed.rows) {
+        const key = `${row.format.toLowerCase()}::${row.tier.toLowerCase()}`;
+        const match = tierMap.get(key);
+        if (!match) {
+          importErrors.push(`"${row.color_name}": format "${row.format}" / tier "${row.tier}" not found on this press`);
+          continue;
+        }
+        const body: Record<string, string> = { name: row.color_name };
+        if (row.hex) body.swatchHex = row.hex;
+        if (row.swatch_image_url) body.swatchImageUrl = row.swatch_image_url;
+        const existing = match.colors.find((c) => c.name.toLowerCase() === row.color_name.toLowerCase());
+        if (existing) {
+          await apiRequest("PATCH", `/api/admin/manufacturers/${pressId}/catalog/colors/${existing.id}`, body);
+          updated++;
+        } else {
+          await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/tiers/${match.tierId}/colors`, body);
+          created++;
+        }
+      }
+      return { created, updated, importErrors };
+    },
+    onSuccess: (res) => {
+      setResult(res);
+      onImported();
+      toast({
+        title: "CSV import complete",
+        description: `${res.created} created · ${res.updated} updated · ${res.importErrors.length} skipped`,
+        variant: res.importErrors.length > 0 ? "destructive" : "default",
+      });
+    },
+    onError: (e: any) =>
+      toast({ title: "Import failed", description: e?.message, variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl max-h-[80vh] overflow-y-auto" data-testid="dialog-csv-upload">
+        <DialogHeader>
+          <DialogTitle>Upload CSV</DialogTitle>
+          <DialogDescription>
+            Upload a CSV with columns <code className="text-xs bg-slate-100 px-1 rounded">format, tier, color_name, hex, swatch_image_url</code>.
+            Colors with a matching name in the same tier are updated; new names are created.
+            Rows referencing a format or tier not found on this press are reported and skipped.
+          </DialogDescription>
+        </DialogHeader>
+
+        {!parsed && !result && (
+          <label
+            className="flex flex-col items-center justify-center gap-2 cursor-pointer rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-sm text-slate-500 hover:bg-slate-100 transition-colors"
+            data-testid="csv-upload-drop-zone"
+          >
+            <Upload className="w-5 h-5 text-slate-400" />
+            <span>Choose a CSV file…</span>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="sr-only"
+              data-testid="input-csv-file"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) parseFile(f);
+              }}
+            />
+          </label>
+        )}
+
+        {parsed && !result && (
+          <div className="space-y-3">
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <strong>{parsed.rows.length}</strong> row{parsed.rows.length !== 1 ? "s" : ""} ready to import
+              {parsed.parseErrors.length > 0 && (
+                <span className="ml-2 text-amber-700">
+                  · <strong>{parsed.parseErrors.length}</strong> parse error{parsed.parseErrors.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+            {parsed.parseErrors.length > 0 && (
+              <ul className="text-xs text-amber-700 space-y-0.5 max-h-20 overflow-y-auto">
+                {parsed.parseErrors.map((s, i) => <li key={i}>{s}</li>)}
+              </ul>
+            )}
+            <div className="max-h-52 overflow-y-auto rounded border border-slate-200">
+              <table className="w-full text-xs border-collapse">
+                <thead className="sticky top-0 bg-white">
+                  <tr className="border-b border-slate-200">
+                    <th className="text-left py-1.5 px-2 font-medium text-slate-600">Format</th>
+                    <th className="text-left py-1.5 px-2 font-medium text-slate-600">Tier</th>
+                    <th className="text-left py-1.5 px-2 font-medium text-slate-600">Color</th>
+                    <th className="text-left py-1.5 px-2 font-medium text-slate-600">Hex</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parsed.rows.slice(0, 60).map((r, i) => (
+                    <tr key={i} className="border-b border-slate-100">
+                      <td className="py-1 px-2 text-slate-500">{r.format}</td>
+                      <td className="py-1 px-2 text-slate-500">{r.tier}</td>
+                      <td className="py-1 px-2 text-slate-900 font-medium">{r.color_name}</td>
+                      <td className="py-1 px-2 text-slate-500 font-mono">{r.hex || "—"}</td>
+                    </tr>
+                  ))}
+                  {parsed.rows.length > 60 && (
+                    <tr>
+                      <td colSpan={4} className="py-1.5 px-2 text-slate-400">…and {parsed.rows.length - 60} more rows</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {result && (
+          <div className="space-y-3" data-testid="csv-upload-results">
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <strong>{result.created}</strong> created · <strong>{result.updated}</strong> updated
+            </div>
+            {result.importErrors.length > 0 && (
+              <div>
+                <div className="text-xs font-medium text-amber-700 mb-1">
+                  {result.importErrors.length} skipped (format/tier not found on this press):
+                </div>
+                <ul className="text-xs text-slate-600 space-y-0.5 max-h-32 overflow-y-auto">
+                  {result.importErrors.map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-csv-upload-close">
+            {result ? "Done" : "Cancel"}
+          </Button>
+          {parsed && !result && (
+            <Button
+              onClick={() => importMut.mutate()}
+              disabled={importMut.isPending || parsed.rows.length === 0}
+              data-testid="button-csv-upload-confirm"
+            >
+              {importMut.isPending ? "Importing…" : `Import ${parsed.rows.length} row${parsed.rows.length !== 1 ? "s" : ""}`}
+            </Button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function PressCatalogPanel({
   pressId,
   pressDomain,
@@ -2169,7 +2434,7 @@ export function PressCatalogPanel({
   // Hooks must run unconditionally — declare state before any early
   // return so a role flip from undefined → unauthorized doesn't trip
   // React's "rendered fewer hooks" guard.
-  const [mrpImportOpen, setMrpImportOpen] = useState(false);
+  const [csvUploadOpen, setCsvUploadOpen] = useState(false);
   // Task #2114 — the redesigned editor edits ONE format at a time. The
   // Format selector up top (mirrored by the Pricing "Product" control)
   // drives both Color Options and Pricing below.
@@ -2189,7 +2454,6 @@ export function PressCatalogPanel({
 
   const offered = new Set((data?.formats ?? []).map((f) => f.format));
   const offeredFormats = ALBUM_FORMATS.filter((f) => offered.has(f));
-  const isMrp = pressDomain === MRP_DOMAIN_CLIENT;
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-press-catalog">
       <div className="flex items-start justify-between gap-4">
@@ -2202,30 +2466,53 @@ export function PressCatalogPanel({
             panel.
           </p>
         </div>
-        {pressDomain === "hellbendervinyl.com" && (
-          <div className="flex flex-wrap items-center gap-2">
-            <HellbenderImportButton pressId={pressId} catalog={data ?? null} onImported={invalidate} />
-            <HellbenderPricingSyncButton pressId={pressId} onSynced={invalidate} />
-          </div>
-        )}
-        {isMrp && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setMrpImportOpen(true)}
-            className="flex-shrink-0"
-            data-testid="button-mrp-import-open"
-          >
-            Import colors from memphisrecordpressing.com
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {pressDomain === "hellbendervinyl.com" && (
+            <>
+              <HellbenderImportButton pressId={pressId} catalog={data ?? null} onImported={invalidate} />
+              <HellbenderPricingSyncButton pressId={pressId} onSynced={invalidate} />
+            </>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="flex-shrink-0 flex items-center gap-1.5"
+                data-testid="button-csv-options"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                CSV Options
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onSelect={() => data && downloadCatalogCsv(pressDomain, data)}
+                disabled={!data}
+                data-testid="menuitem-csv-download"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download as CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setCsvUploadOpen(true)}
+                data-testid="menuitem-csv-upload"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Upload CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
-      {isMrp && (
-        <MrpImportDialog
+      {data && (
+        <CsvUploadDialog
           pressId={pressId}
-          open={mrpImportOpen}
-          onOpenChange={setMrpImportOpen}
+          pressDomain={pressDomain}
+          catalog={data}
+          open={csvUploadOpen}
+          onOpenChange={setCsvUploadOpen}
           onImported={invalidate}
         />
       )}
