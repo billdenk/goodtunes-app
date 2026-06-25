@@ -417,7 +417,8 @@ function NpoContactsPanel({ npoId }: { npoId: string }) {
           entityId={npoId}
           entityName="this non-profit"
           title="Contacts"
-          blurb="People who represent this non-profit. Add as many as you need."
+          voice="partner"
+          blurb="People who represent you. Add as many as you need."
           canInviteSubusers={probe.data?.ok === true}
         />
       </div>

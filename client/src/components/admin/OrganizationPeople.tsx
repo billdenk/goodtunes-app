@@ -90,6 +90,14 @@ export interface OrganizationPeopleProps {
   /** Optional one-liner under the title. */
   blurb?: string;
   /**
+   * Task #2129 — whose voice this panel speaks in. "operator" (default)
+   * is the third-person admin voice ("People who represent this partner");
+   * "partner" is the second-person voice a partner sees in their own portal
+   * ("People who represent you"). Only changes the default blurb — an
+   * explicit `blurb` always wins.
+   */
+  voice?: "operator" | "partner";
+  /**
    * Task #665 — gate the "+ Add ▾" menu. Defaults true (admin pages
    * are super_admin only). Partner shells fetch their own verb status
    * and pass false to hide the button for users without
@@ -116,11 +124,17 @@ export function OrganizationPeople({
   entityId,
   entityName,
   title = "Contacts",
-  blurb = "People who represent this partner. Add as many as you need.",
+  blurb,
+  voice = "operator",
   canInviteSubusers = true,
   entityWebsiteUrl,
   canAddAdmins = true,
 }: OrganizationPeopleProps) {
+  const resolvedBlurb =
+    blurb ??
+    (voice === "partner"
+      ? "People who represent you. Add as many as you need."
+      : "People who represent this partner. Add as many as you need.");
   const { toast } = useToast();
   const contactsKey = [apiPath] as const;
   const contactsQ = useQuery<Contact[]>({ queryKey: contactsKey });
@@ -163,7 +177,7 @@ export function OrganizationPeople({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-sm font-bold text-slate-900">{title}</h2>
-          {blurb && <p className="text-xs text-slate-500">{blurb}</p>}
+          {resolvedBlurb && <p className="text-xs text-slate-500">{resolvedBlurb}</p>}
         </div>
         <AddPeopleMenu
           entityKind={entityKind}

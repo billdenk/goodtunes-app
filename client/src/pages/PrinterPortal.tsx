@@ -650,6 +650,7 @@ function SettingsTab({ vendorId, printerName }: { vendorId: string; printerName:
             entityId={vendorId}
             entityName={printerName}
             title="Staff"
+            voice="partner"
             blurb="Teammates at your print shop. GoodTunes adds and removes staff for you — reach out if this list needs a change."
             canInviteSubusers={false}
             canAddAdmins={false}

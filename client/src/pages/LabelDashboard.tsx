@@ -615,6 +615,7 @@ function LabelContactsPanel({ labelId, labelName }: { labelId: string; labelName
           entityId={labelId}
           entityName={labelName}
           title="Contacts"
+          voice="partner"
           blurb="Invite teammates to your label. We'll grant the role if they already have an admin account, otherwise we mint an invite link."
           canInviteSubusers={probe.data?.ok === true}
         />

@@ -44,6 +44,8 @@ import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPa
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
+import { PartnerCapabilitiesCard, PRESS_CAPABILITIES } from "@/components/admin/PartnerCapabilitiesCard";
+import { Switch } from "@/components/ui/switch";
 import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
@@ -148,21 +150,13 @@ function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
             )}
           </div>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant={consented ? "outline" : "default"}
-          onClick={() => toggle.mutate(!consented)}
+        <Switch
+          checked={consented}
           disabled={toggle.isPending}
-          className={
-            consented
-              ? "shrink-0 border-slate-300 text-slate-700 hover:bg-slate-50"
-              : "shrink-0 bg-[var(--brand-blue)] text-white hover:bg-[var(--brand-blue)]/90 font-semibold"
-          }
+          onCheckedChange={(next) => toggle.mutate(next)}
+          className="shrink-0 mt-0.5"
           data-testid="button-toggle-auto-trigger"
-        >
-          {consented ? "Turn off" : "Turn on"}
-        </Button>
+        />
       </div>
 
       {/* Per-album pool ledger: accrued / released / available across this
@@ -698,32 +692,13 @@ export function AdminManufacturer() {
   );
 }
 
-// Task #916 — capability selector. A single press can serve up to three
-// capabilities (Vinyl / GoodDeeds / Fulfillment) and shows up in every
-// matching list automatically. Each toggle AUTO-SAVES on click (admin
+// Task #916 / #2129 — capability selector. A single press can serve up to
+// three capabilities (Vinyl / GoodDeeds / Fulfillment) and shows up in every
+// matching list automatically. Each toggle AUTO-SAVES on flip (admin
 // auto-save convention) via the same PUT used by the profile form; the last
 // remaining capability can't be turned off (mirrors the DB CHECK + API guard).
-const PRESS_CAPABILITIES = [
-  {
-    key: "doesVinyl" as const,
-    label: "Vinyl",
-    icon: Disc3,
-    blurb: "Presses records — appears on the Presses tab + RFQ broadcast.",
-  },
-  {
-    key: "doesGoodDeed" as const,
-    label: "GoodDeeds",
-    icon: BadgeCheck,
-    blurb: "Prints & finishes GoodDeed certificates.",
-  },
-  {
-    key: "doesFulfillment" as const,
-    label: "Fulfillment",
-    icon: Truck,
-    blurb: "Warehouses & ships finished units — appears in the Fulfillment nav.",
-  },
-];
-
+// Renders the shared PartnerCapabilitiesCard in operator voice — the same
+// card the press sees in its own portal, just third-person.
 function PressCapabilitiesCard({
   m,
   onSave,
@@ -733,82 +708,15 @@ function PressCapabilitiesCard({
   onSave: (patch: Partial<Manufacturer>) => void;
   saving: boolean;
 }) {
-  const { toast } = useToast();
-  const activeCount = PRESS_CAPABILITIES.filter((c) => Boolean(m[c.key])).length;
-
-  function toggle(key: (typeof PRESS_CAPABILITIES)[number]["key"]) {
-    const isOn = Boolean(m[key]);
-    if (isOn && activeCount <= 1) {
-      toast({
-        title: "Keep at least one capability",
-        description: "A press must do Vinyl, GoodDeeds, or Fulfillment.",
-        variant: "destructive",
-      });
-      return;
-    }
-    onSave({ [key]: !isOn } as Partial<Manufacturer>);
-  }
-
   return (
-    <div
-      className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-      data-testid="card-press-capabilities"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h3 className="text-slate-900 text-sm font-semibold">Capabilities</h3>
-          <p className="text-slate-500 text-xs mt-0.5">
-            What this partner does. One partner can serve all three and shows up in every matching list.
-          </p>
-        </div>
-        {saving && <span className="text-slate-400 text-xs font-medium">Saving…</span>}
-      </div>
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-        {PRESS_CAPABILITIES.map((c) => {
-          const on = Boolean(m[c.key]);
-          const Icon = c.icon;
-          return (
-            <button
-              key={c.key}
-              type="button"
-              role="switch"
-              aria-checked={on}
-              disabled={saving}
-              onClick={() => toggle(c.key)}
-              className={[
-                "text-left rounded-lg border p-3 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 disabled:opacity-60",
-                on
-                  ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/[0.06]"
-                  : "border-slate-200 bg-slate-50 hover:border-slate-300",
-              ].join(" ")}
-              data-testid={`toggle-capability-${c.key}`}
-            >
-              <div className="flex items-center gap-2">
-                <Icon
-                  className={`w-4 h-4 ${on ? "text-[var(--brand-blue)]" : "text-slate-400"}`}
-                />
-                <span
-                  className={`text-sm font-semibold ${on ? "text-slate-900" : "text-slate-500"}`}
-                >
-                  {c.label}
-                </span>
-                <span
-                  className={[
-                    "ml-auto inline-flex items-center justify-center h-4 px-1.5 rounded-full text-xs font-bold uppercase tracking-wide",
-                    on
-                      ? "bg-[var(--brand-blue)] text-white"
-                      : "bg-slate-200 text-slate-500",
-                  ].join(" ")}
-                >
-                  {on ? "On" : "Off"}
-                </span>
-              </div>
-              <p className="mt-1.5 text-xs leading-snug text-slate-500">{c.blurb}</p>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <PartnerCapabilitiesCard
+      viewer="operator"
+      capabilities={PRESS_CAPABILITIES}
+      values={m as unknown as Record<string, boolean>}
+      saving={saving}
+      guardNoun="capability"
+      onToggle={(key, next) => onSave({ [key]: next } as Partial<Manufacturer>)}
+    />
   );
 }
 

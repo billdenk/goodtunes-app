@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/Spinner";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -989,7 +990,7 @@ function RoleToggle({
       aria-checked={checked}
       data-testid={testId}
       className={[
-        "text-left rounded-xl border p-3 flex items-start gap-3 transition-colors",
+        "text-left rounded-xl border p-3 flex items-center justify-between gap-3 transition-colors w-full",
         checked
           ? "border-[var(--brand-blue)]/40 bg-[var(--brand-blue)]/5"
           : "border-slate-200 bg-white hover:bg-slate-50",
@@ -998,19 +999,6 @@ function RoleToggle({
         .filter(Boolean)
         .join(" ")}
     >
-      <span
-        className={[
-          "mt-0.5 inline-flex w-9 h-5 rounded-full p-0.5 transition-colors flex-shrink-0",
-          checked ? "bg-[var(--brand-blue)]" : "bg-slate-300",
-        ].join(" ")}
-      >
-        <span
-          className={[
-            "block w-4 h-4 rounded-full bg-white shadow transition-transform",
-            checked ? "translate-x-4" : "translate-x-0",
-          ].join(" ")}
-        />
-      </span>
       <span className="min-w-0">
         <span className="block text-slate-900 text-[13.5px] font-semibold">
           {label}
@@ -1018,6 +1006,9 @@ function RoleToggle({
         <span className="block text-slate-500 text-[11.5px] mt-0.5">
           {description}
         </span>
+      </span>
+      <span className="shrink-0 pointer-events-none">
+        <Switch checked={checked} disabled={disabled} aria-hidden tabIndex={-1} />
       </span>
     </button>
   );

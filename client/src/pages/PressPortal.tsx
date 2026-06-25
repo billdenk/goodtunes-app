@@ -41,6 +41,7 @@ import { AdminGoodDeedPricing } from "@/pages/AdminGoodDeedPricing";
 import { PressCatalogPanel } from "@/pages/AdminManufacturer";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
+import { PartnerCapabilitiesCard, PRESS_CAPABILITIES } from "@/components/admin/PartnerCapabilitiesCard";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -65,6 +66,11 @@ interface PressMe {
   contactPhone?: string | null;
   location?: string | null;
   bio?: string | null;
+  // Task #2129 — capability flags the portal's own Capabilities card renders
+  // + self-toggles (Vinyl / GoodDeeds / Fulfillment).
+  doesVinyl?: boolean;
+  doesGoodDeed?: boolean;
+  doesFulfillment?: boolean;
 }
 
 const STAGE_DEFS: { id: string; label: string }[] = [
@@ -1311,7 +1317,8 @@ function PressContactsPanel({ pressId, pressName }: { pressId: string; pressName
       entityId={pressId}
       entityName={pressName}
       title="Contacts"
-      blurb="Invite teammates and partners to this press. We'll grant the role if they already have an admin account, otherwise we mint an invite link."
+      voice="partner"
+      blurb="Invite teammates and partners to your press. We'll grant the role if they already have an admin account, otherwise we mint an invite link."
       canInviteSubusers={probe.data?.ok === true}
       canAddAdmins={probe.data?.canAddAdmins === true}
       entityWebsiteUrl={me?.websiteUrl ?? null}
@@ -1390,7 +1397,23 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
 
   if (isLoading) return <PanelLoading />;
   return (
-    <DashboardPanel padding="md">
+    <div className="space-y-4">
+      {/* Task #2129 — the press's own Capabilities card, second-person voice,
+          self-toggles via the same /profile PATCH (at-least-one guarded both
+          client- and server-side). Staff teammates see it read-only. */}
+      <PartnerCapabilitiesCard
+        viewer="partner"
+        capabilities={PRESS_CAPABILITIES}
+        values={{
+          doesVinyl: me?.doesVinyl ?? true,
+          doesGoodDeed: me?.doesGoodDeed ?? false,
+          doesFulfillment: me?.doesFulfillment ?? false,
+        }}
+        canEdit={canEdit}
+        saving={save.isPending}
+        onToggle={(key, next) => save.mutate({ [key]: next })}
+      />
+      <DashboardPanel padding="md">
       <h3 className="text-base font-semibold mb-3">Press profile</h3>
       <p className="text-xs text-slate-500 mb-4">Public-facing details artists and labels see when picking a press, plus the contact info platform notifications route to.</p>
       {!canEdit && (
@@ -1497,7 +1520,8 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
           >{save.isPending ? "Saving…" : "Save profile"}</Button>
         )}
       </div>
-    </DashboardPanel>
+      </DashboardPanel>
+    </div>
   );
 }
 

@@ -493,6 +493,12 @@ export function registerPressPortalRoutes(
       contactPhone: (press as any).contactPhone ?? null,
       location: (press as any).location ?? null,
       bio: (press as any).bio ?? null,
+      // Task #2129 — capability flags so the portal's own Capabilities card
+      // can render + self-toggle (Vinyl / GoodDeeds / Fulfillment). Default
+      // mirrors the schema column defaults.
+      doesVinyl: (press as any).doesVinyl ?? true,
+      doesGoodDeed: (press as any).doesGoodDeed ?? false,
+      doesFulfillment: (press as any).doesFulfillment ?? false,
     });
   });
 
@@ -1469,6 +1475,10 @@ export function registerPressPortalRoutes(
     contactPhone: z.string().max(40).nullable().optional(),
     location: z.string().max(500).nullable().optional(),
     bio: z.string().max(2000).nullable().optional(),
+    // Task #2129 — partners self-toggle their own services from the portal.
+    doesVinyl: z.boolean().optional(),
+    doesGoodDeed: z.boolean().optional(),
+    doesFulfillment: z.boolean().optional(),
   });
   app.patch("/api/press/:id/profile", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
@@ -1483,6 +1493,28 @@ export function registerPressPortalRoutes(
     if (parsed.data.contactPhone !== undefined) set.contactPhone = norm(parsed.data.contactPhone);
     if (parsed.data.location !== undefined) set.location = norm(parsed.data.location);
     if (parsed.data.bio !== undefined) set.bio = norm(parsed.data.bio);
+    // Task #2129 — capability flags. Merge the incoming toggle over the
+    // current row, then enforce the same at-least-one guard the DB CHECK
+    // does, returning a friendly message instead of a constraint 500.
+    const capsTouched =
+      parsed.data.doesVinyl !== undefined ||
+      parsed.data.doesGoodDeed !== undefined ||
+      parsed.data.doesFulfillment !== undefined;
+    if (capsTouched) {
+      const current = await storage.getManufacturerById(pressId);
+      if (!current) return res.status(404).json({ message: "Press not found" });
+      const nextVinyl = parsed.data.doesVinyl ?? (current as any).doesVinyl ?? true;
+      const nextGoodDeed = parsed.data.doesGoodDeed ?? (current as any).doesGoodDeed ?? false;
+      const nextFulfillment = parsed.data.doesFulfillment ?? (current as any).doesFulfillment ?? false;
+      if (!nextVinyl && !nextGoodDeed && !nextFulfillment) {
+        return res.status(400).json({
+          message: "Keep at least one service on — Vinyl, GoodDeeds, or Fulfillment.",
+        });
+      }
+      set.doesVinyl = nextVinyl;
+      set.doesGoodDeed = nextGoodDeed;
+      set.doesFulfillment = nextFulfillment;
+    }
     if (Object.keys(set).length === 0) return res.json({ ok: true });
     await db.update(manufacturers).set(set).where(eq(manufacturers.id, pressId));
     res.json({ ok: true });
