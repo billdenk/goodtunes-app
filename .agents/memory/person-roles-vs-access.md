@@ -25,9 +25,17 @@ the guard holds by construction, not by a runtime check.
 
 **How to apply:** keep business titles on the affiliation row, music hats in
 `people.roles[]`, system access in `users.role` — three distinct fields, never
-cross-written. The Person "Permissions" tab governs the person AS AN ARTIST
-only; partner-scope access is managed on the partner's own page, so deep-link
-there rather than duplicating an editable permission matrix on the Person page.
+cross-written. The Person "Permissions" tab shows artist-scope content (the
+"governs AS AN ARTIST" note, the artist permission matrix, the invite-to-artist
+panel) ONLY for actual artists; gate on artist shape / promoted / `"artist"` in
+`roles[]`, never render it for contact-shape partner staff (who get a partner
+note that only deep-links to each attached partner's own page — that's where
+their real access lives). **Why:** framing non-artist partner staff as artists
+mislabels them and offers controls that don't apply. Caveat: keep the
+ambassador toggle visible in BOTH branches — NPO ambassadors are contact-shape,
+so gating it on artist status would strip their promotion control. Partner-scope
+access is always managed on the partner's own page, never a duplicated editable
+matrix on the Person page.
 
 The other two axes:
 

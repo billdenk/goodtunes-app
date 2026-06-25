@@ -459,6 +459,21 @@ function tabsForPerson(person: PersonFull): { key: Tab; label: string }[] {
   return out;
 }
 
+// Task #2143 — a Person counts as an artist (and so gets the artist-scope
+// Permissions content: the "governs as an artist" note, the artist
+// permission matrix, the "Invite to this artist" panel) when the server
+// resolved them to the artist shape, when an operator promoted them, or
+// when they carry the "artist" creative role. Contact-shape partner staff
+// with none of these (Travis Whitlock at Hellbender, Andrew at PMP) are NOT
+// artists — their Permissions tab shows only their partner-staff access.
+function personIsArtist(person: PersonFull): boolean {
+  return (
+    person.shape === "artist" ||
+    person.isArtistPromoted === true ||
+    (person.roles ?? []).some((r) => r?.toLowerCase() === "artist")
+  );
+}
+
 export function AdminPerson() {
   const { user, isLoading: authLoading } = useAuth();
   const [, params] = useRoute<{ id: string }>("/admin/people/:id");
@@ -818,16 +833,24 @@ export function AdminPerson() {
         )}
         {tab === "permissions" && (
           <>
-            {/* Task #2071 — make explicit that everything on this tab
-                governs the person AS AN ARTIST. When they're also partner
-                staff, their label/press/vendor access is governed on that
-                partner's OWN page (single source of truth), so we point
-                there rather than duplicate an editable matrix here. */}
-            <ArtistScopeNote person={person} />
-            <PartnerPermissionsPanel scopeKind="artist" scopeId={person.id} scopeName={person.name} />
-            {/* Task #1020 — Invite someone to this artist without leaving
-                the page; scope is hard-locked to this Person. */}
-            <InviteToArtistPanel personId={person.id} personName={person.name} />
+            {/* Task #2071 / #2143 — the artist-scope framing (the "governs
+                AS AN ARTIST" note, the artist permission matrix, and the
+                "Invite to this artist" panel) only applies when this Person
+                is actually an artist. Contact-shape partner staff who aren't
+                artists (Travis Whitlock at Hellbender, Andrew at PMP) get
+                only their partner-staff access instead — their label / press
+                / vendor access is governed on that partner's OWN page. */}
+            {personIsArtist(person) ? (
+              <>
+                <ArtistScopeNote person={person} />
+                <PartnerPermissionsPanel scopeKind="artist" scopeId={person.id} scopeName={person.name} />
+                {/* Task #1020 — Invite someone to this artist without leaving
+                    the page; scope is hard-locked to this Person. */}
+                <InviteToArtistPanel personId={person.id} personName={person.name} />
+              </>
+            ) : (
+              <PartnerStaffScopeNote person={person} />
+            )}
             {/* Task #350 — Per-person ambassador toggle. Only meaningful
                 when the person is tied to a non-profit (server enforces
                 — toggle disabled otherwise). When ON, the NPO partner
@@ -1201,6 +1224,54 @@ function ArtistScopeNote({ person }: { person: PersonFull }) {
             ))}
           </ul>
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Permissions-tab note for non-artist partner staff (Task #2143) ──
+   Contact-shape people who aren't artists (Travis Whitlock at Hellbender,
+   Andrew at PMP) are partner staff, not performers — they have no own
+   catalog, releases, or profile to govern. So the Permissions tab drops
+   the artist-scope note, the artist permission matrix, and the "Invite to
+   this artist" panel entirely and shows only their partner-staff access:
+   their actual access at each attached partner is managed on that partner's
+   OWN page (the single source of truth). */
+function PartnerStaffScopeNote({ person }: { person: PersonFull }) {
+  const attachments = person.attachments ?? [];
+  return (
+    <div
+      className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 mb-4"
+      data-testid="note-permissions-partner-staff-scope"
+    >
+      <p className="text-sm text-slate-700">
+        <span className="font-semibold text-slate-900">{person.name}</span> is{" "}
+        <span className="font-semibold text-slate-900">partner staff</span>, not an
+        artist — they have no catalog, releases, or profile of their own. Their
+        access is managed on each attached partner's own page.
+      </p>
+      {attachments.length > 0 ? (
+        <div className="mt-2 text-xs text-slate-500" data-testid="note-permissions-partner-scopes">
+          <ul className="mt-1.5 space-y-1">
+            {attachments.map((a) => (
+              <li key={`${a.entityKind}-${a.entityId}`} data-testid={`link-permissions-partner-scope-${a.entityId}`}>
+                <Link
+                  href={CONTACT_ATTACHMENT_HREF[a.entityKind](a.entityId)}
+                  className="hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+                >
+                  Manage access at{" "}
+                  <span className="font-semibold text-slate-700">{a.entityName}</span>
+                </Link>
+                <span className="text-slate-400"> · {CONTACT_ATTACHMENT_LABEL[a.entityKind]}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-slate-500" data-testid="note-permissions-partner-staff-unattached">
+          This person isn't attached to any partner yet. Attach them to a label,
+          press, vendor, fulfillment partner, or non-profit to manage their access.
+        </p>
       )}
     </div>
   );
