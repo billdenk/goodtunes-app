@@ -2878,7 +2878,7 @@ function CatalogEditor({
   return (
     <div className="space-y-5" data-testid={`catalog-format-${fmt}`}>
       <CardHeader
-        title="Color options & pricing"
+        title="Color Options"
         editing={editing}
         dirty={anyDirty}
         onEnterEdit={() => setEditing(true)}
@@ -2896,7 +2896,7 @@ function CatalogEditor({
         >
           <div className="space-y-3 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Color options</span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Color Groups</span>
               {isMirror && (
                 <span className="text-xs text-slate-400">Shares the 12&quot; LP color set — edit under 12&quot; LP.</span>
               )}
@@ -2965,9 +2965,17 @@ function CatalogEditor({
                 )}
               </div>
             )}
+            {selectedSwatch && (
+              <div
+                className="text-xs text-slate-700 font-medium"
+                data-testid={`text-selected-swatch-name-${fmt}`}
+              >
+                {selectedSwatch.name}
+              </div>
+            )}
           </div>
           {/* Live preview — the press's placeholder art on the chosen disc. */}
-          <div className="flex flex-col items-center gap-1.5 md:pl-2">
+          <div className="flex flex-col items-start gap-1.5 md:pl-2">
             <VinylPreview
               /* Task #2117 — the operator/press-uploaded logo
                  (manufacturers.logoUrl) is the source of truth for the
@@ -2984,7 +2992,7 @@ function CatalogEditor({
               placeholderLogoUrl={pressLogoUrl ?? null}
             />
             <span className="text-xs text-slate-400" data-testid={`text-preview-color-${fmt}`}>
-              {selectedSwatch ? selectedSwatch.name : "No color selected"}
+              {ALBUM_FORMAT_LABEL[fmt]} w/ full-color Inner Sleeve
             </span>
             {/* Press-level placeholder art is editable by operators and this
                 press's own admins — applies across every format's preview. */}
