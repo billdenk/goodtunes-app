@@ -790,6 +790,59 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.use("/api/admin/labels", pressGlobalDenyGuard);
   app.use("/api/admin/instruments", pressGlobalDenyGuard);
 
+  // Task #2086 / GAP-7 — the label, manager, and non_profit partners each live
+  // in a scoped reporting portal (/label, /manager, /non-profit). They carry
+  // is_admin=true so they clear requireAdmin to reach their own scoped
+  // /api/{label,manager,non-profit}/* + /api/partner/reports/* data, plus a few
+  // shared admin endpoints their portals genuinely reuse (the global People
+  // search/create that backs the AddPeopleMenu roster builder, the invite +
+  // partner-contact flows). But the operator's OTHER global registries — the
+  // press/manufacturer registry and its wholesale catalogs, the gear
+  // (instruments) registry, and the label registry — are NOT part of their
+  // portal and must reject them server-side even on a hand-rolled request that
+  // never loaded the (nav-hidden) operator page. (manufacturer is denied by the
+  // press guards above/below; vendor/fulfillment by denyScopedVendorFulfillment;
+  // publisher is already 403'd by requireAdmin.)
+  //
+  // People is DELIBERATELY excluded from this set: the AddPeopleMenu roster
+  // builder embedded in the label + NPO portals reads/creates global People
+  // rows (GET/POST /api/admin/people, GET /api/admin/people/:id, PATCH
+  // .../can-invite-ambassadors), so denying it would break a working portal
+  // feature. Same for /api/admin/invites + /api/admin/partner-contacts, which
+  // the label-portal invite flow forwards into server-side.
+  const REPORTING_PARTNER_PORTAL_ROLES = new Set([
+    "label",
+    "manager",
+    "non_profit",
+  ]);
+  const denyReportingPartnerRegistry = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      const userId = await getUserIdFromRequest(req);
+      if (!userId) return next();
+      const { getUserRole } = await import("./auth/roles");
+      const role = (await getUserRole(userId))?.role;
+      if (role && REPORTING_PARTNER_PORTAL_ROLES.has(role)) {
+        return res
+          .status(403)
+          .json({ message: "Out of scope for this partner account." });
+      }
+    } catch {
+      // Resolver error: fall through. The underlying route still enforces
+      // requireAdmin (this guard only ADDS a deny for the three reporting
+      // partners), so a transient lookup failure cannot open the registry to
+      // anyone who wasn't already an operator. Mirrors the press guards above.
+    }
+    return next();
+  };
+  app.use("/api/admin/labels", denyReportingPartnerRegistry);
+  app.use("/api/admin/instruments", denyReportingPartnerRegistry);
+  app.use("/api/manufacturers", denyReportingPartnerRegistry);
+  app.use("/api/admin/manufacturers", denyReportingPartnerRegistry);
+
   // The press registry: a press may read/write ONLY its own manufacturer
   // record (and its catalog / pricing sub-routes). The global list, the
   // create endpoint, and any OTHER press id are denied. `scrape` is a
