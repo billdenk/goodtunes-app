@@ -45,3 +45,31 @@ made in between. The post-merge function and the direct run share one marker key
 applying one without stamping the other defeats the guard. (Caught in review: a
 standalone re-point script that itself updates unconditionally relies entirely on
 the post-merge marker for safety, so the marker must exist before you walk away.)
+
+## Two robustness traps when the backfill is a richer TS importer (not a flat UPDATE)
+
+When the backfill is a `scripts/seed-*.ts` that *plans* before writing (creates
+tiers, additive inserts, etc.), two non-obvious failures bite on **fresh clones**:
+
+1. **Never stamp the marker on a prerequisite-missing skip.** A planner that
+   emits "skip" for several reasons must distinguish *benign* skips (work already
+   done — e.g. "tier already present", which only appears under `--force` because
+   data + marker commit together) from *fatal* skips (a prerequisite is missing —
+   the template row you clone pricing from, or an existing tier you fill). If you
+   stamp the marker after a fatal skip, a fresh clone that briefly lacks the
+   prerequisite locks in a **partial/no-op** catalog forever. Tag each skip
+   `fatal: boolean` and **throw before writing/stamping** when any fatal skip
+   exists, except the legitimate "target entity not in this DB" self-gate (which
+   returns early without stamping so a later merge retries).
+   **Why:** post-merge runs once per marker; a wrongly-stamped marker is permanent.
+
+2. **Check the marker BEFORE writing a backup file (or any side effect).** Put the
+   marker short-circuit ahead of the "snapshot current state to
+   `scripts/backups/`" step, or every future no-op merge litters the workspace
+   with a backup and risks committing noise. Marker present → return before backup.
+
+Also: mirroring many remote images serially is too slow for one run — use a
+bounded concurrency pool (~8) and persist progress to the committed manifest
+after each (`writeFileSync` is sync, so parallel callbacks can't interleave the
+file), so a killed run resumes. nohup background processes do **not** survive
+across bash tool calls in this sandbox — they're reaped when the call returns.

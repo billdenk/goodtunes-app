@@ -792,6 +792,33 @@ backfill_hellbender_splatter() {
 backfill_hellbender_splatter dev  "${DATABASE_URL:-}"
 backfill_hellbender_splatter prod "${PROD_DATABASE_URL:-}"
 
+# Memphis Record Pressing FULL public color catalog (315 colors / 16 categories
+# from memphisrecordpressing.com/all-vinyl-colors) mirrored into the Memphis
+# press tiers. Idempotent + marker-guarded (post_merge_data_backfills /
+# memphis_mrp_color_catalog_v1): creates the 9 missing specialty tiers per vinyl
+# format (cloning price_ladder + jacket ladders from that format's "Metallic
+# Blends" tier so they price like Metallic until Bill edits them), then ADDITIVELY
+# fills/high-res-upgrades the existing tiers — never deletes, so operator extras
+# (Decepticons, Glow Green, EcoMix) are kept. High-res photos mirror into the
+# shared bucket ONCE; the resolved /objects URLs persist in the committed manifest
+# (scripts/data/memphis-colors.json) so dev + prod + fresh clones reuse them
+# instead of re-uploading. Self-gates: a clone without the Memphis press writes
+# nothing and leaves the marker unset to re-check on a later merge.
+backfill_memphis_colors() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping memphis-colors backfill on $label (no URL set)"
+    return 0
+  fi
+  if DATABASE_URL="$url" npx tsx scripts/seed-memphis-colors.ts; then
+    echo "post-merge: memphis-colors backfill ok on $label"
+  else
+    echo "post-merge: WARNING — memphis-colors backfill failed on $label (continuing)"
+  fi
+}
+backfill_memphis_colors dev  "${DATABASE_URL:-}"
+backfill_memphis_colors prod "${PROD_DATABASE_URL:-}"
+
 # Gibson sub-brand fold — every product on gibson.com is Gibson (Bill's call:
 # "anything with gibson.com as the URL is Gibson"). The Add-gear scraper used
 # to promote any gibson.com brand string that wasn't exactly "Gibson" into its

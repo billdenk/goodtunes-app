@@ -1,0 +1,2333 @@
+{
+  "press": {
+    "domain": "memphisrecordpressing.com",
+    "name": "Memphis Record Pressing"
+  },
+  "source": "https://memphisrecordpressing.com/all-vinyl-colors/",
+  "marker": "memphis_mrp_color_catalog_v1",
+  "note": "Full MRP public color catalog mirrored by code-prefix category. NEW specialty tiers clone pricing+jacket-ladders from \"Metallic Blends\" (placeholder-estimate, operator-editable). Existing tiers are additive: add missing items + upgrade matched swatch images to high-res; never rename/delete (SKU snapshots are name-based). A/B two-sided codes keep the A image as the swatch; the B-side URL is preserved here for audit. importSourceUrl is the page data-src; the importer attempts the size-suffix-stripped original first, falling back to this URL.",
+  "categories": [
+    {
+      "tierName": "Opaque",
+      "existing": true,
+      "sourceTier": null,
+      "colors": [
+        {
+          "code": "O01",
+          "name": "Opaque Brown",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O01-Opaque-Brown.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/4d502de8-4429-447c-b78f-f22e8293ee6a.png"
+        },
+        {
+          "code": "O02",
+          "name": "Opaque White",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O02-Opaque-White.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/51870ca5-3459-4b3c-a981-596a58a4e57a.png"
+        },
+        {
+          "code": "O03",
+          "name": "Opaque Apple Red",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O03-Opaque-Apple-Red.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/1bca5d22-4a5c-43fb-9a7a-4f94f64b9745.png"
+        },
+        {
+          "code": "O04",
+          "name": "Opaque Orchid",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O04-Opaque-Orchid.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/a927d5d8-e908-47d4-ae0b-74c22eaf290f.png"
+        },
+        {
+          "code": "O05",
+          "name": "Opaque Sky Blue",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O05-Opaque-Sky-Blue.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/9c6625eb-79d7-418e-8bdb-b79a0eb4c499.png"
+        },
+        {
+          "code": "O06",
+          "name": "Opaque Baby Blue",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O06-Opaque-Baby-Blue.png",
+          "position": 5,
+          "publicUrl": "/objects/uploads/29ec3254-5c67-44b3-8f71-47020c021617.png"
+        },
+        {
+          "code": "O07",
+          "name": "Opaque Tangerine",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O07-Opaque-Tangerine.png",
+          "position": 6,
+          "publicUrl": "/objects/uploads/b44db984-c772-4c78-8104-5bc030af02d0.png"
+        },
+        {
+          "code": "O08",
+          "name": "Opaque Baby Pink",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O08-Opaque-Baby-Pink.png",
+          "position": 7,
+          "publicUrl": "/objects/uploads/df2d86ed-3d6c-46e0-b255-5f8a66021552.png"
+        },
+        {
+          "code": "O09",
+          "name": "Opaque Canary Yellow",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O09-Opaque-Canary-Yellow.png",
+          "position": 8,
+          "publicUrl": "/objects/uploads/7f4fb2ed-342a-49d0-808d-5684843e2ebf.png"
+        },
+        {
+          "code": "O10",
+          "name": "Opaque Magenta",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O10-Opaque-Magenta.png",
+          "position": 9,
+          "publicUrl": "/objects/uploads/032410f7-ba0b-40e0-bcfc-c99469086f68.png"
+        },
+        {
+          "code": "O11",
+          "name": "Opaque Silver",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O11-Opaque-Silver.png",
+          "position": 10,
+          "publicUrl": "/objects/uploads/575f8044-b7ec-4c37-9abb-205e716d14d3.png"
+        },
+        {
+          "code": "O12",
+          "name": "Opaque Spring Green",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O12-Opaque-Spring-Green.png",
+          "position": 11,
+          "publicUrl": "/objects/uploads/ccbc8c98-182b-447c-a4f0-6dea5dcee6ec.png"
+        },
+        {
+          "code": "O13",
+          "name": "Opaque Gray",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O13-Opaque-Gray.png",
+          "position": 12,
+          "publicUrl": "/objects/uploads/0f82394a-3e6f-48e0-9c22-ba30a7c618ee.png"
+        },
+        {
+          "code": "O14",
+          "name": "Opaque Bone",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O14-Opaque-Bone.png",
+          "position": 13,
+          "publicUrl": "/objects/uploads/7471086c-175d-42b3-9d05-b9e7a45cd857.png"
+        },
+        {
+          "code": "O15",
+          "name": "Opaque Hot Pink",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O15-Opaque-Hot-Pink.png",
+          "position": 14,
+          "publicUrl": "/objects/uploads/a35bbd85-51e0-470a-892f-a2e175d7a284.png"
+        },
+        {
+          "code": "O16",
+          "name": "Opaque Gold",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O16-Opaque-Gold.png",
+          "position": 15,
+          "publicUrl": "/objects/uploads/46a75d98-0ac5-4aa8-8c4a-c70db7d23b58.png"
+        },
+        {
+          "code": "O17",
+          "name": "Opaque Fruit Punch",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O17-Opaque-Fruit-Punch.png",
+          "position": 16,
+          "publicUrl": "/objects/uploads/d0f27827-bc51-45e3-8266-fdb35dd1d983.png"
+        },
+        {
+          "code": "O18",
+          "name": "Opaque Olive Green",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O18-Opaque-Olive-Green.png",
+          "position": 17,
+          "publicUrl": "/objects/uploads/a72afcbf-3c0c-4725-8b9e-4812058a7bc9.png"
+        },
+        {
+          "code": "O19",
+          "name": "Opaque Aqua",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O19-Opaque-Aqua.png",
+          "position": 18,
+          "publicUrl": "/objects/uploads/83fe6591-386b-48bf-9ae2-7521fb892592.png"
+        },
+        {
+          "code": "O20",
+          "name": "Opaque Custard",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O20-Opaque-Custard.png",
+          "position": 19,
+          "publicUrl": "/objects/uploads/91fbb8c0-902b-4839-a1c2-06531f14657b.png"
+        },
+        {
+          "code": "O21",
+          "name": "Opaque Lemon",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O21-Opaque-Lemon.png",
+          "position": 20,
+          "publicUrl": "/objects/uploads/f122e4ed-3195-400f-880f-1253dfac2d0b.png"
+        },
+        {
+          "code": "O22",
+          "name": "Opaque Bluejay",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O22-Opaque-Bluejay.png",
+          "position": 21,
+          "publicUrl": "/objects/uploads/b35a266f-5c22-45b3-a820-ceaf538f643c.png"
+        },
+        {
+          "code": "O23",
+          "name": "Opaque Evergreen",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O23-Opaque-Evergreen.png",
+          "position": 22,
+          "publicUrl": "/objects/uploads/21571171-0bfd-44b9-abd4-9b049ce28166.png"
+        },
+        {
+          "code": "O24",
+          "name": "Opaque Violet",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/O24-Opaque-Violet.png",
+          "position": 23,
+          "publicUrl": "/objects/uploads/9dc9c0ee-c53d-4a50-afb4-0d59fe66d2cf.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Neon/Glow",
+      "existing": true,
+      "sourceTier": null,
+      "colors": [
+        {
+          "code": "N01",
+          "name": "Neon Violet",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/N01-Neon-Violet.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/181fd200-b772-4afa-8a78-c6fc81eeeae4.png"
+        },
+        {
+          "code": "N02",
+          "name": "Neon Green",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/N02-Neon-Green.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/083add42-353b-41d2-bfb3-bd76fa04ca1f.png"
+        },
+        {
+          "code": "N03",
+          "name": "Neon Yellow",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/N03-Neon-Yellow.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/4171347f-c28e-459a-ae3e-ed36712908fb.png"
+        },
+        {
+          "code": "N04",
+          "name": "Neon Orange",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/N04-Neon-Orange.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/3a019007-4fb6-4f51-99b2-f1cca77d4700.png"
+        },
+        {
+          "code": "N05",
+          "name": "Neon Coral",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/N05-Neon-Coral.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/352f2692-b720-40d7-902f-1f00941ba43e.png"
+        },
+        {
+          "code": "N06",
+          "name": "Neon Pink",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/N06-Neon-Pink.png",
+          "position": 5,
+          "publicUrl": "/objects/uploads/f85fd75a-1e03-4369-a093-cd10279bda10.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Translucent",
+      "existing": true,
+      "sourceTier": null,
+      "colors": [
+        {
+          "code": "T01",
+          "name": "Translucent Ruby",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T01-Translucent-Ruby.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/3e4c7976-6cbb-458b-aa4a-da2c71f504b8.png"
+        },
+        {
+          "code": "T02",
+          "name": "Ultra Clear",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T02-Ultra-Clear.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/3f376843-4bb2-46a7-a957-6c4c97e46bfd.png"
+        },
+        {
+          "code": "T03",
+          "name": "Translucent Cobalt",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T03-Translucent-Cobalt.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/1de63e41-98ac-44dc-ac76-515b01e9db39.png"
+        },
+        {
+          "code": "T04",
+          "name": "Translucent Emerald",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T04-Translucent-Emerald.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/1cd0d47e-db4b-49b6-8edb-2071cbbdc27c.png"
+        },
+        {
+          "code": "T05",
+          "name": "Translucent Grape",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T05-Translucent-Grape.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/0422f842-8fc5-4a50-ba3d-adf4b232b24e.png"
+        },
+        {
+          "code": "T06",
+          "name": "Translucent Light Blue hi",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T06-Translucent-Light-Blue-hi.jpg",
+          "position": 5,
+          "publicUrl": "/objects/uploads/2ec9c684-e5a7-42c4-b776-08a43f4fa096.jpg"
+        },
+        {
+          "code": "T07",
+          "name": "Translucent Lemonade",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T07-Translucent-Lemonade.png",
+          "position": 6,
+          "publicUrl": "/objects/uploads/8fb62a38-3f98-44ce-835f-af19ed52306e.png"
+        },
+        {
+          "code": "T08",
+          "name": "Translucent Orange Crush",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T08-Translucent-Orange-Crush.png",
+          "position": 7,
+          "publicUrl": "/objects/uploads/b5ff9021-5cc2-4716-9e2d-70cd274249a8.png"
+        },
+        {
+          "code": "T09",
+          "name": "Translucent Coke Bottle Clear",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T09-Translucent-Coke-Bottle-Clear.png",
+          "position": 8,
+          "publicUrl": "/objects/uploads/e6bf4364-8a31-4222-93f7-41843c539bf5.png"
+        },
+        {
+          "code": "T10",
+          "name": "Translucent Highlighter Yellow",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T10-Translucent-Highlighter-Yellow.png",
+          "position": 9,
+          "publicUrl": "/objects/uploads/2fa3d7d4-11ff-4bea-bc6d-e5f58bfbeb07.png"
+        },
+        {
+          "code": "T11",
+          "name": "Translucent Milky Clear",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T11-Translucent-Milky-Clear.png",
+          "position": 10,
+          "publicUrl": "/objects/uploads/52c2f8b3-576a-4773-9a06-81b77600b3e7.png"
+        },
+        {
+          "code": "T12",
+          "name": "Translucent Forest Green",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T12-Translucent-Forest-Green.png",
+          "position": 11,
+          "publicUrl": "/objects/uploads/16f4d542-6ab2-4d7f-91d2-fc55970c7538.png"
+        },
+        {
+          "code": "T13",
+          "name": "Translucent Sea Blue",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T13-Translucent-Sea-Blue.png",
+          "position": 12,
+          "publicUrl": "/objects/uploads/1ee244b3-ac06-4fa7-97d5-c8bae1deef28.png"
+        },
+        {
+          "code": "T14",
+          "name": "Translucent Tan",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T14-Translucent-Tan.png",
+          "position": 13,
+          "publicUrl": "/objects/uploads/c67e3dcd-8d3e-40f9-9888-9f7636517f38.png"
+        },
+        {
+          "code": "T15",
+          "name": "Translucent Black Ice",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/T15-Translucent-Black-Ice.png",
+          "position": 14,
+          "publicUrl": "/objects/uploads/2929613f-15b4-4111-b7e1-92a638bffa70.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Smoke Blends",
+      "existing": true,
+      "sourceTier": null,
+      "colors": [
+        {
+          "code": "SB01",
+          "name": "Clear Smoke",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/SB01-Clear-Smoke.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/a445592c-0c84-4756-bf8f-68435011e273.png"
+        },
+        {
+          "code": "SB02",
+          "name": "Red Smoke",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/SB02-Red-Smoke.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/f4fcaaf4-98e0-4953-a074-546d164eec70.png"
+        },
+        {
+          "code": "SB03",
+          "name": "Green Smoke",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/SB03-Green-Smoke.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/31a20d44-312c-4825-a38f-8dca059856ac.png"
+        },
+        {
+          "code": "SB04",
+          "name": "Purple Smoke",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/SB04-Purple-Smoke.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/6192366b-62e7-43e6-9d3d-cce02189ad7e.png"
+        },
+        {
+          "code": "SB05",
+          "name": "Silver Smoke",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/SB05-Silver-Smoke.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/b3f474be-e4f7-4883-83a9-26cad2e648f0.png"
+        },
+        {
+          "code": "SB06",
+          "name": "Electric Smoke",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/SB06-Electric-Smoke.png",
+          "position": 5,
+          "publicUrl": "/objects/uploads/ff375367-36c2-4e7e-8f9a-f2dab0756655.png"
+        },
+        {
+          "code": "SB07",
+          "name": "Blue Smoke",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/SB07-Blue-Smoke.png",
+          "position": 6,
+          "publicUrl": "/objects/uploads/a737acec-f783-4df3-8a3c-1851cd3fa27f.png"
+        },
+        {
+          "code": "SB08",
+          "name": "Yellow Smoke",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/SB08-Yellow-Smoke.png",
+          "position": 7,
+          "publicUrl": "/objects/uploads/8c7d8167-2c99-4af6-af93-fbfb784170ea.png"
+        },
+        {
+          "code": "SB09",
+          "name": "Orange Smoke",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/SB09-Orange-Smoke.png",
+          "position": 8,
+          "publicUrl": "/objects/uploads/daa62552-9f0b-4a34-aeaf-d980968625c7.png"
+        },
+        {
+          "code": "SB10",
+          "name": "Coke Bottle Clear Smoke",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/SB10-Coke-Bottle-Clear-Smoke.png",
+          "position": 9,
+          "publicUrl": "/objects/uploads/e5966624-4a24-4296-b236-82918c628a16.png"
+        },
+        {
+          "code": "SB11",
+          "name": "Highlighter Smoke",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/SB11-Highlighter-Smoke.png",
+          "position": 10,
+          "publicUrl": "/objects/uploads/cbd598a6-0838-4add-a5ff-10a528f417f9.png"
+        },
+        {
+          "code": "SB14",
+          "name": "Sea Blue Smoke",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/SB14-Sea-Blue-Smoke.png",
+          "position": 11,
+          "publicUrl": "/objects/uploads/7b0a5db0-5ff2-472b-850f-b226a3de009e.png"
+        },
+        {
+          "code": "SB15",
+          "name": "Tan Smoke",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/SB15-Tan-Smoke.png",
+          "position": 12,
+          "publicUrl": "/objects/uploads/6e02ab7e-aa94-409a-ad14-c0974d97a960.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Cream Blends",
+      "existing": true,
+      "sourceTier": null,
+      "colors": [
+        {
+          "code": "CB01",
+          "name": "Cocoa Cream",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/CB01-Cocoa-Cream.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/3c817c21-8a4f-4772-9301-2eac1ecc1904.png"
+        },
+        {
+          "code": "CB04",
+          "name": "Blueberry Cream",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/CB04-Blueberry-Cream.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/b3b45164-a3b8-4629-b10e-4d0b52479017.png"
+        },
+        {
+          "code": "CB05",
+          "name": "Sea Salt Cream",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/CB05-Sea-Salt-Cream.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/d7310424-2561-4d2e-a1cb-b7d734889ecb.png"
+        },
+        {
+          "code": "CB07",
+          "name": "Fig Cream",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/CB07-Fig-Cream.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/1cf848c5-5d4f-42d5-ba59-7c70043ff266.png"
+        },
+        {
+          "code": "CB08",
+          "name": "Mushroom Cream",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/CB08-Mushroom-Cream.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/50c95682-d7f1-4390-a2ba-944fa50a27d1.png"
+        },
+        {
+          "code": "CB09",
+          "name": "Honey Dew Melon Cream",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/CB09-Honey-Dew-Melon-Cream.png",
+          "position": 5,
+          "publicUrl": "/objects/uploads/80dd5b2d-5983-438a-acbf-6aa5c7b55d42.png"
+        },
+        {
+          "code": "CB10",
+          "name": "Earl Gray Cream",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/CB10-Earl-Gray-Cream.png",
+          "position": 6,
+          "publicUrl": "/objects/uploads/e674b545-c551-4357-bcff-374e512c486f.png"
+        },
+        {
+          "code": "CB11",
+          "name": "Watermelon Cream",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/CB11-Watermelon-Cream.png",
+          "position": 7,
+          "publicUrl": "/objects/uploads/ba2f56a8-8664-4576-a087-5d788df77c09.png"
+        },
+        {
+          "code": "CB12",
+          "name": "Caramel Cream",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/CB12-Caramel-Cream.png",
+          "position": 8,
+          "publicUrl": "/objects/uploads/7e5dfcae-4801-4d9e-ba8f-e4d687477cb1.png"
+        },
+        {
+          "code": "CB13",
+          "name": "Guava Cream",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/CB13-Guava-Cream.png",
+          "position": 9,
+          "publicUrl": "/objects/uploads/091daed4-0075-4244-9628-c3cf56b6dd6e.png"
+        },
+        {
+          "code": "CB14",
+          "name": "Pear Cream",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/CB14-Pear-Cream.png",
+          "position": 10,
+          "publicUrl": "/objects/uploads/d18aaa88-f409-4146-97d4-1d1fa73709b7.png"
+        },
+        {
+          "code": "CB15",
+          "name": "Blue Raspberry Cream",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/CB15-Blue-Raspberry-Cream.png",
+          "position": 11,
+          "publicUrl": "/objects/uploads/bca6ed3c-4d1e-45e9-9607-0fe08e0ab515.png"
+        },
+        {
+          "code": "CB20",
+          "name": "Green Apple Cream",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/04/CB20-Green-Apple-Cream.png",
+          "position": 12,
+          "publicUrl": "/objects/uploads/0f66c941-0514-41d5-b906-084fe2277f4c.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Metallic Blends",
+      "existing": true,
+      "sourceTier": null,
+      "colors": [
+        {
+          "code": "HB01",
+          "name": "Metallic Gold",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB01-Metallic-Gold.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/8890bb79-4246-40c7-86e0-aad5f35a1032.png"
+        },
+        {
+          "code": "HB02",
+          "name": "Metallic Silver",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB02-Metallic-Silver.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/88707bc3-4873-4bdf-88df-6a9b03783859.png"
+        },
+        {
+          "code": "HB03",
+          "name": "Metallic Copper",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB03-Metallic-Copper.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/a9fe5b90-9ce3-4fb1-9780-96f71bbcf9fa.png"
+        },
+        {
+          "code": "HB04",
+          "name": "Iridescent Blue",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB04-Iridescent-Blue.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/ed738731-b483-426c-b966-ce2c6251eedd.png"
+        },
+        {
+          "code": "HB05",
+          "name": "Iridescent White w/ Blue",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/07/HB05-Iridescent-White-w-Blue-400x400-2.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/5ce7756a-ef6e-4e33-9fc4-5e4502327d5b.png"
+        },
+        {
+          "code": "HB06",
+          "name": "Iridescent Green",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB06-Iridescent-Green.png",
+          "position": 5,
+          "publicUrl": "/objects/uploads/9f161668-b99a-4ca2-8ced-a23477f23392.png"
+        },
+        {
+          "code": "HB07",
+          "name": "Fluorescent Pink",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB07-Fluorescent-Pink.png",
+          "position": 6,
+          "publicUrl": "/objects/uploads/d182524f-b963-4cab-8b98-e88d0fb8be02.png"
+        },
+        {
+          "code": "HB08",
+          "name": "Fluorescent Yellow",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB08-Fluorescent-Yellow.png",
+          "position": 7,
+          "publicUrl": "/objects/uploads/25f109da-4726-4019-a6cb-4351ebc10043.png"
+        },
+        {
+          "code": "HB09",
+          "name": "Fluorescent Green",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB09-Fluorescent-Green.png",
+          "position": 8,
+          "publicUrl": "/objects/uploads/df92ba69-8224-4713-a8ab-1b87e6797476.png"
+        },
+        {
+          "code": "HB10",
+          "name": "Metallic Marble",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB10-Metallic-Marble.png",
+          "position": 9,
+          "publicUrl": "/objects/uploads/63419e35-5d6e-479b-a6e1-c8b26703e368.png"
+        },
+        {
+          "code": "HB11",
+          "name": "Royalty",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB11-Royalty.png",
+          "position": 10,
+          "publicUrl": "/objects/uploads/000cb772-6312-4df2-99cb-206800ebadf7.png"
+        },
+        {
+          "code": "HB12",
+          "name": "Go Tigers",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB12-Go-Tigers.png",
+          "position": 11,
+          "publicUrl": "/objects/uploads/f0d62ce4-2d55-47bf-9ea7-998556744506.png"
+        },
+        {
+          "code": "HB13",
+          "name": "Mercury",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB13-Mercury.png",
+          "position": 12,
+          "publicUrl": "/objects/uploads/bda1db1d-1060-4f17-a865-2fd7d74d3776.png"
+        },
+        {
+          "code": "HB14",
+          "name": "Centurion",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB14-Centurion.png",
+          "position": 13,
+          "publicUrl": "/objects/uploads/4f57627a-5cb3-4b54-97ec-f7c181c30c61.png"
+        },
+        {
+          "code": "HB15",
+          "name": "Bioluminescence",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB15-Bioluminescence.png",
+          "position": 14,
+          "publicUrl": "/objects/uploads/e24b5dc7-d0d1-4961-96c9-240ec7632e68.png"
+        },
+        {
+          "code": "HB16",
+          "name": "Garland",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB16-Garland.png",
+          "position": 15,
+          "publicUrl": "/objects/uploads/860e4821-11ea-424d-8c51-81cea1ad630e.png"
+        },
+        {
+          "code": "HB17",
+          "name": "Rust Alloy",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB17-Rust-Alloy.png",
+          "position": 16,
+          "publicUrl": "/objects/uploads/8ca21f38-a539-4153-8350-5c96c54d53c4.png"
+        },
+        {
+          "code": "HB18",
+          "name": "Tinseltown",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB18-Tinseltown.png",
+          "position": 17,
+          "publicUrl": "/objects/uploads/b46996c9-2546-4c03-a400-2e215d89aa05.png"
+        },
+        {
+          "code": "HB19",
+          "name": "Christmas Tree",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB19-Christmas-Tree.png",
+          "position": 18,
+          "publicUrl": "/objects/uploads/2081148f-54c6-412e-9afa-269df91cadcc.png"
+        },
+        {
+          "code": "HB20",
+          "name": "Poseidon",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB20-Poseidon.png",
+          "position": 19,
+          "publicUrl": "/objects/uploads/e55c40bb-cbd4-4815-a5c9-9df52700677e.png"
+        },
+        {
+          "code": "HB21",
+          "name": "Khaki Brown",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB21-Khaki-Brown.png",
+          "position": 20,
+          "publicUrl": "/objects/uploads/28149f22-fd8a-4483-a248-266bb50e0284.png"
+        },
+        {
+          "code": "HB22",
+          "name": "Jawbreaker",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB22-Jawbreaker.png",
+          "position": 21,
+          "publicUrl": "/objects/uploads/45102c3f-f4df-4229-9353-c8ee203ed271.png"
+        },
+        {
+          "code": "HB23",
+          "name": "Rainbow Road",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB23-Rainbow-Road.png",
+          "position": 22,
+          "publicUrl": "/objects/uploads/6d045a6a-61c0-435d-881a-e0830d1a4296.png"
+        },
+        {
+          "code": "HB24",
+          "name": "Baby Shower",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB24-Baby-Shower.png",
+          "position": 23,
+          "publicUrl": "/objects/uploads/6735f023-57a5-48fb-b2b3-73358e22770b.png"
+        },
+        {
+          "code": "HB25",
+          "name": "Galaxy",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB25-Galaxy.png",
+          "position": 24,
+          "publicUrl": "/objects/uploads/5d2d8aed-e134-4ebd-af9e-6b29dcf93337.png"
+        },
+        {
+          "code": "HB26",
+          "name": "Gun Metal Gray",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB26-Gun-Metal-Gray.png",
+          "position": 25,
+          "publicUrl": "/objects/uploads/c46f9d11-32e0-4abc-aa9c-e28bc4f6cb62.png"
+        },
+        {
+          "code": "HB27",
+          "name": "Cocoa Brown",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB27-Cocoa-Brown.png",
+          "position": 26,
+          "publicUrl": "/objects/uploads/693f0b81-ba15-4f8d-9659-608b9227d41e.png"
+        },
+        {
+          "code": "HB28",
+          "name": "Peach",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB28-Peach.png",
+          "position": 27,
+          "publicUrl": "/objects/uploads/ee525913-ac98-4d9f-a276-12e4cfa4f01b.png"
+        },
+        {
+          "code": "HB29",
+          "name": "Grass Green",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB29-Grass-Green.png",
+          "position": 28,
+          "publicUrl": "/objects/uploads/08908f04-7612-4a60-9993-bf3f6a12125e.png"
+        },
+        {
+          "code": "HB30",
+          "name": "Iridescent Gold",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB30-Iridescent-Gold.png",
+          "position": 29,
+          "publicUrl": "/objects/uploads/de166a48-b70b-4ee4-a90a-0affad021dce.png"
+        },
+        {
+          "code": "HB31",
+          "name": "Metallic Blue",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB31-Metallic-Blue.png",
+          "position": 30,
+          "publicUrl": "/objects/uploads/b90df9ed-d834-4e1f-9b0a-98faa2c631d3.png"
+        },
+        {
+          "code": "HB32",
+          "name": "Autobots",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB32-Autobots.png",
+          "position": 31,
+          "publicUrl": "/objects/uploads/997f4ab1-9a40-489f-ac1b-b8d1c8eaafd9.png"
+        },
+        {
+          "code": "HB34",
+          "name": "Baffin Bay",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB34-Baffin-Bay.png",
+          "position": 32,
+          "publicUrl": "/objects/uploads/b085f0eb-e75f-4943-9d93-b17766c6734f.png"
+        },
+        {
+          "code": "HB35",
+          "name": "Bellagio",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/08/HB35-Bellagio-400x400-1.png",
+          "position": 33,
+          "publicUrl": "/objects/uploads/743e82b6-2f5c-4e97-a31b-41bed43a4584.png"
+        },
+        {
+          "code": "HB36",
+          "name": "Everglades",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HB36-Everglades.png",
+          "position": 34,
+          "publicUrl": "/objects/uploads/19d067b2-40d8-416a-a868-223bfb0291ed.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Standard Blends",
+      "existing": false,
+      "sourceTier": "Metallic Blends",
+      "colors": [
+        {
+          "code": "MB01",
+          "name": "Sky",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB01-Sky.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/f2f56bf6-9a74-4c29-a26d-941951828714.png"
+        },
+        {
+          "code": "MB02",
+          "name": "Hardwood",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB02-Hardwood.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/1d84441c-2bc1-4b99-a7f6-564dfea9ba5b.png"
+        },
+        {
+          "code": "MB03",
+          "name": "Flume",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB03-Flume.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/2f02f880-8bd8-44d7-a8b2-5ae507176632.png"
+        },
+        {
+          "code": "MB04",
+          "name": "Limeade",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB04-Limeade.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/e3559a38-01f0-485f-a71c-f01e45b0c7fa.png"
+        },
+        {
+          "code": "MB07",
+          "name": "Lapis Lazuli",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB07-Lapis-Lazuli.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/11d2aa3a-050e-4312-9eb3-610c9dfbb38a.png"
+        },
+        {
+          "code": "MB08",
+          "name": "Maelstrom",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB08-Maelstrom.png",
+          "position": 5,
+          "publicUrl": "/objects/uploads/e60afdd3-53cb-4891-89da-3984dabe7266.png"
+        },
+        {
+          "code": "MB09",
+          "name": "Serenity",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB09-Serenity.png",
+          "position": 6,
+          "publicUrl": "/objects/uploads/6dda1a62-4df0-4946-a8f0-3423b7ad1ee1.png"
+        },
+        {
+          "code": "MB10",
+          "name": "Tiger's Eye",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB10-Tiger_s-Eye.png",
+          "position": 7,
+          "publicUrl": "/objects/uploads/3cc04d76-60ec-46c9-9b3c-c574da0bf8e0.png"
+        },
+        {
+          "code": "MB11",
+          "name": "Lily Pad",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB11-Lily-Pad.png",
+          "position": 8,
+          "publicUrl": "/objects/uploads/79b383df-91a7-450e-b7b5-8cbd20116567.png"
+        },
+        {
+          "code": "MB12",
+          "name": "Eggdrop",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB12-Eggdrop.png",
+          "position": 9,
+          "publicUrl": "/objects/uploads/6ec0beb3-9934-4945-aac4-6e01c87b9a8d.png"
+        },
+        {
+          "code": "MB13",
+          "name": "Fog",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB13-Fog.png",
+          "position": 10,
+          "publicUrl": "/objects/uploads/01ecb085-d3f0-449a-bf0a-4cbfa6967193.png"
+        },
+        {
+          "code": "MB14",
+          "name": "S'mores",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB14-S_mores.png",
+          "position": 11,
+          "publicUrl": "/objects/uploads/892d3c93-4500-4a0c-88e9-a94e1e0661f2.png"
+        },
+        {
+          "code": "MB15",
+          "name": "Dreamsicle",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB15-Dreamsicle.png",
+          "position": 12,
+          "publicUrl": "/objects/uploads/99dee3ae-ce82-422b-8b06-34b1370dacfe.png"
+        },
+        {
+          "code": "MB16",
+          "name": "Sangria",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB16-Sangria.png",
+          "position": 13,
+          "publicUrl": "/objects/uploads/20f88f71-d580-4ad8-895c-cdb3cc042b49.png"
+        },
+        {
+          "code": "MB17",
+          "name": "Seaside",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB17-Seaside.png",
+          "position": 14,
+          "publicUrl": "/objects/uploads/b19a7a59-33cb-4f32-83a0-96f89bf0858d.png"
+        },
+        {
+          "code": "MB18",
+          "name": "Candy Fleece",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB18-Candy-Fleece.png",
+          "position": 15,
+          "publicUrl": "/objects/uploads/6b3ad405-4d3f-4ec0-a83a-9b6f98926665.png"
+        },
+        {
+          "code": "MB23",
+          "name": "Tidal Wave",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB23-Tidal-Wave.png",
+          "position": 16,
+          "publicUrl": "/objects/uploads/d2d15aeb-2d6f-4fb8-b35f-5d6dac903b98.png"
+        },
+        {
+          "code": "MB29",
+          "name": "Caramel Apple",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB29-Caramel-Apple.png",
+          "position": 17,
+          "publicUrl": "/objects/uploads/5286056b-b05e-4387-b60b-90fb14c30285.png"
+        },
+        {
+          "code": "MB31",
+          "name": "Lemonade",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB31-Lemonade.png",
+          "position": 18,
+          "publicUrl": "/objects/uploads/07808920-b7d0-44b6-830e-153dedb6ed28.png"
+        },
+        {
+          "code": "MB32",
+          "name": "Ghost",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB32-Ghost.png",
+          "position": 19,
+          "publicUrl": "/objects/uploads/196c9098-a1de-4eb5-894a-a555812eb789.png"
+        },
+        {
+          "code": "MB36",
+          "name": "Mineral",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB36-Mineral.png",
+          "position": 20,
+          "publicUrl": "/objects/uploads/826975c5-4093-4b42-b90e-037aaeae6b0e.png"
+        },
+        {
+          "code": "MB39",
+          "name": "Bubblegum",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB39-Bubblegum.png",
+          "position": 21,
+          "publicUrl": "/objects/uploads/3672bb76-de84-4bfe-bc4a-58280398b628.png"
+        },
+        {
+          "code": "MB45",
+          "name": "Surge",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB45-Surge.png",
+          "position": 22,
+          "publicUrl": "/objects/uploads/08a2cb74-024f-407a-9b71-d22f92b8e805.png"
+        },
+        {
+          "code": "MB48",
+          "name": "Yellow Jacket",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB48-Yellow-Jacket.png",
+          "position": 23,
+          "publicUrl": "/objects/uploads/6c20c51a-f065-4b54-b407-eda284648b66.png"
+        },
+        {
+          "code": "MB49",
+          "name": "Poltergeist",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB49-Poltergeist.png",
+          "position": 24,
+          "publicUrl": "/objects/uploads/a01af69a-8d98-45e3-9619-80b3c65f26cf.png"
+        },
+        {
+          "code": "MB55",
+          "name": "New Twilight",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/MB55-New-Twilight-400x400-1.png",
+          "position": 25,
+          "publicUrl": "/objects/uploads/d075a13a-faeb-4561-90bc-206a0bde8472.png"
+        },
+        {
+          "code": "MB56",
+          "name": "Red Velvet",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB56-Red-Velvet.png",
+          "position": 26,
+          "publicUrl": "/objects/uploads/275bb7f7-7ef4-45af-a1fc-ea53ae56611c.png"
+        },
+        {
+          "code": "MB57",
+          "name": "Transparent Violet",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB57-Transparent-Violet.png",
+          "position": 27,
+          "publicUrl": "/objects/uploads/80bd01e2-0dc3-41f7-8d55-ee413485e946.png"
+        },
+        {
+          "code": "MB87",
+          "name": "Up In Smoke",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB87-Up-In-Smoke.png",
+          "position": 28,
+          "publicUrl": "/objects/uploads/459ed521-49ab-49a5-ba46-d37da53ccb8e.png"
+        },
+        {
+          "code": "MB98",
+          "name": "Atlantis",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB98-Atlantis.png",
+          "position": 29,
+          "publicUrl": "/objects/uploads/b5957bc3-9255-4cbe-a166-96e50368df16.png"
+        },
+        {
+          "code": "MB99",
+          "name": "Cove",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB99-Cove.png",
+          "position": 30,
+          "publicUrl": "/objects/uploads/b3ff21a1-03b1-4ea2-9ed3-41200a592579.png"
+        },
+        {
+          "code": "MB113",
+          "name": "Nebula",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB113-Nebula.png",
+          "position": 31,
+          "publicUrl": "/objects/uploads/1cea2e25-e69c-42d7-a452-6fa1607af404.png"
+        },
+        {
+          "code": "MB115",
+          "name": "Monet",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MB115-Monet.png",
+          "position": 32,
+          "publicUrl": "/objects/uploads/99315f8f-6bcf-466d-854b-554bc9b4425a.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Deluxe Blends",
+      "existing": false,
+      "sourceTier": "Metallic Blends",
+      "colors": [
+        {
+          "code": "MD05",
+          "name": "Golden Pearl",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD05-Golden-Pearl.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/d4dba64f-6952-4c27-8aab-fe88051f76b0.png"
+        },
+        {
+          "code": "MD06",
+          "name": "Bloodshot",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD06-Bloodshot.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/6d39bbe5-a93b-412a-a50a-ba49ffdf7b39.png"
+        },
+        {
+          "code": "MD19",
+          "name": "Omelette",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD19-Omelette.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/15180324-eab0-4b44-95f9-41d362205bf7.png"
+        },
+        {
+          "code": "MD20",
+          "name": "Salt n' Peppa",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD20-Salt-n-Peppa.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/cd180e0f-4637-43a9-8339-8d715d53328b.png"
+        },
+        {
+          "code": "MD21",
+          "name": "Red Slushie",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD21-Red-Slushie.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/cfdef824-54f9-41c3-b9f3-50c7d39d5078.png"
+        },
+        {
+          "code": "MD22",
+          "name": "Fun Dip",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD22-Fun-Dip.png",
+          "position": 5,
+          "publicUrl": "/objects/uploads/08e198ed-befd-4ffc-b25c-694da3443790.png"
+        },
+        {
+          "code": "MD24",
+          "name": "Koi Pond",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD24-Koi-Pond.png",
+          "position": 6,
+          "publicUrl": "/objects/uploads/91bc9283-9331-4149-8c79-a25016dce608.png"
+        },
+        {
+          "code": "MD25",
+          "name": "America",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD25-America.png",
+          "position": 7,
+          "publicUrl": "/objects/uploads/c7f86dad-4c62-403d-8d53-391e12f681e0.png"
+        },
+        {
+          "code": "MD26",
+          "name": "Sunspot",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD26-Sunspot.png",
+          "position": 8,
+          "publicUrl": "/objects/uploads/f0a4fa7d-1e61-4573-99c3-88693a97d8e5.png"
+        },
+        {
+          "code": "MD27",
+          "name": "Solar Flare",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD27-Solar-Flare.png",
+          "position": 9,
+          "publicUrl": "/objects/uploads/24ee1fa7-96b3-4cfa-a403-e33ab9f6804b.png"
+        },
+        {
+          "code": "MD28",
+          "name": "Bug Punch",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD28-Bug-Punch.png",
+          "position": 10,
+          "publicUrl": "/objects/uploads/8f3a39f1-4464-4cb4-a9dc-fc69d462aad7.png"
+        },
+        {
+          "code": "MD30",
+          "name": "Bleach",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD30-Bleach.png",
+          "position": 11,
+          "publicUrl": "/objects/uploads/7fc6436d-2edb-439f-9384-80eed87edb61.png"
+        },
+        {
+          "code": "MD33",
+          "name": "Iceberg",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD33-Iceberg.png",
+          "position": 12,
+          "publicUrl": "/objects/uploads/189622ed-20c6-4d51-ae05-b1a7fe791553.png"
+        },
+        {
+          "code": "MD34",
+          "name": "Cobweb",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD34-Cobweb.png",
+          "position": 13,
+          "publicUrl": "/objects/uploads/c9cd380e-1684-43ce-a823-03b3b6f7c03a.png"
+        },
+        {
+          "code": "MD35",
+          "name": "Sleepy Hollow",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD35-Sleepy-Hollow.png",
+          "position": 14,
+          "publicUrl": "/objects/uploads/adae5aca-8e25-4b1a-a2d4-b0b7e9534627.png"
+        },
+        {
+          "code": "MD37",
+          "name": "Amethyst",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD37-Amethyst.png",
+          "position": 15,
+          "publicUrl": "/objects/uploads/a42fa8e7-526e-4e6f-a959-e3bbf1b1a1a7.png"
+        },
+        {
+          "code": "MD38",
+          "name": "Sapphire",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD38-Sapphire.png",
+          "position": 16,
+          "publicUrl": "/objects/uploads/b80c6ee9-52df-4ab4-a8ab-bc8a0a5d0695.png"
+        },
+        {
+          "code": "MD40",
+          "name": "Jade",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD40-Jade.png",
+          "position": 17,
+          "publicUrl": "/objects/uploads/9f2b7f1f-73e4-45e4-b2be-93a070b3cf2e.png"
+        },
+        {
+          "code": "MD41",
+          "name": "Citrine",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD41-Citrine.png",
+          "position": 18,
+          "publicUrl": "/objects/uploads/88e353a9-d736-4f4d-a83b-670079f4e887.png"
+        },
+        {
+          "code": "MD42",
+          "name": "Swamp Thing",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD42-Swamp-Thing.png",
+          "position": 19,
+          "publicUrl": "/objects/uploads/96c09844-d61b-4769-97f3-ab42caaa6bdf.png"
+        },
+        {
+          "code": "MD43",
+          "name": "Garnet",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD43-Garnet.png",
+          "position": 20,
+          "publicUrl": "/objects/uploads/b45282e1-2a83-4272-bbb3-67514802d5c1.png"
+        },
+        {
+          "code": "MD44",
+          "name": "Zombie Brain",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD44-Zombie-Brain.png",
+          "position": 21,
+          "publicUrl": "/objects/uploads/97763524-5695-44fe-9808-7a32d0c1debf.png"
+        },
+        {
+          "code": "MD46",
+          "name": "Plutonium",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD46-Plutonium.png",
+          "position": 22,
+          "publicUrl": "/objects/uploads/585fe250-6e0c-4441-9cf4-8db7ad24b6e0.png"
+        },
+        {
+          "code": "MD47",
+          "name": "Cheshire",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD47-Cheshire.png",
+          "position": 23,
+          "publicUrl": "/objects/uploads/b8f22121-c0a6-4f9c-bbc5-375e10b55866.png"
+        },
+        {
+          "code": "MD50",
+          "name": "Onyx",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD50-Onyx.png",
+          "position": 24,
+          "publicUrl": "/objects/uploads/349a8ec9-7c9b-41b6-87e7-adf20f6d98e5.png"
+        },
+        {
+          "code": "MD51",
+          "name": "Ink Paint",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD51-Ink-Paint.png",
+          "position": 25,
+          "publicUrl": "/objects/uploads/10abbe40-23d8-42ec-b2d7-cc6c43906fdf.png"
+        },
+        {
+          "code": "MD52",
+          "name": "Lavender",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD52-Lavender.png",
+          "position": 26,
+          "publicUrl": "/objects/uploads/9d0ea980-9682-4a2e-9478-ea5a9dbf021a.png"
+        },
+        {
+          "code": "MD53",
+          "name": "Glass of Port",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD53-Glass-of-Port.png",
+          "position": 27,
+          "publicUrl": "/objects/uploads/fb102adc-0614-43a8-a5fb-0175b23362c5.png"
+        },
+        {
+          "code": "MD54",
+          "name": "Sun Drop",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD54-Sun-Drop.png",
+          "position": 28,
+          "publicUrl": "/objects/uploads/503dddad-5c1f-43ff-a0ad-5b3b71e991cb.png"
+        },
+        {
+          "code": "MD58",
+          "name": "Mardi Gras",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD58-Mardi-Gras.png",
+          "position": 29,
+          "publicUrl": "/objects/uploads/287c6e05-39ac-4e74-92ea-f5cb1c3f8c42.png"
+        },
+        {
+          "code": "MD59",
+          "name": "Peppermint",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/12/MD59-Peppermint-400x400_REV.png",
+          "position": 30,
+          "publicUrl": "/objects/uploads/c5ae1912-6789-4587-80b1-ccc1b2def897.png"
+        },
+        {
+          "code": "MD60",
+          "name": "Sakura",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD60-Sakura.png",
+          "position": 31,
+          "publicUrl": "/objects/uploads/6f38a309-1143-410e-acc1-899fda805677.png"
+        },
+        {
+          "code": "MD61",
+          "name": "Amber",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD61-Amber.png",
+          "position": 32,
+          "publicUrl": "/objects/uploads/5a0f571d-bbe3-47dd-ac57-34a3b55eec90.png"
+        },
+        {
+          "code": "MD62",
+          "name": "Joker",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD62-Joker.png",
+          "position": 33,
+          "publicUrl": "/objects/uploads/5e391bdc-2340-4577-921f-ff99fcf62dbd.png"
+        },
+        {
+          "code": "MD63",
+          "name": "Flamingo",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD63-Flamingo.png",
+          "position": 34,
+          "publicUrl": "/objects/uploads/36d7cf4b-d8c8-49c7-82ed-d2cb6092c6de.png"
+        },
+        {
+          "code": "MD64",
+          "name": "Algae",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD64-Algae.png",
+          "position": 35,
+          "publicUrl": "/objects/uploads/28277450-fb30-4f95-aee9-6180312ae8f2.png"
+        },
+        {
+          "code": "MD65",
+          "name": "Happy Meal",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD65-Happy-Meal.png",
+          "position": 36,
+          "publicUrl": "/objects/uploads/63273eba-4e3b-48b8-af94-9485a0b9f8a7.png"
+        },
+        {
+          "code": "MD66",
+          "name": "Eruption",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD66-Eruption.png",
+          "position": 37,
+          "publicUrl": "/objects/uploads/74594c70-9779-4b6f-a282-103bad9dea37.png"
+        },
+        {
+          "code": "MD67",
+          "name": "Yuletide",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD67-Yuletide.png",
+          "position": 38,
+          "publicUrl": "/objects/uploads/faffe10f-ef39-4226-a89e-4bbad872678d.png"
+        },
+        {
+          "code": "MD68",
+          "name": "Martian",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD68-Martian.png",
+          "position": 39,
+          "publicUrl": "/objects/uploads/cfcba731-35c1-4251-9026-13839345b2ef.png"
+        },
+        {
+          "code": "MD69",
+          "name": "Lemon Pepper",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD69-Lemon-Pepper.png",
+          "position": 40,
+          "publicUrl": "/objects/uploads/5b71871e-c3d4-4720-a7ca-ae131e05fb14.png"
+        },
+        {
+          "code": "MD70",
+          "name": "Wild Berries",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD70-Wild-Berries.png",
+          "position": 41,
+          "publicUrl": "/objects/uploads/e602b410-001a-4d65-b414-422ddf9ed6dd.png"
+        },
+        {
+          "code": "MD71",
+          "name": "Oriole",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD71-Oriole.png",
+          "position": 42,
+          "publicUrl": "/objects/uploads/ad1e6040-763c-4834-a7bd-2db5dfd71240.png"
+        },
+        {
+          "code": "MD72",
+          "name": "Tide Pods",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD72-Tide-Pods.png",
+          "position": 43,
+          "publicUrl": "/objects/uploads/4cabfd0b-9569-4e07-b5b6-a686d84d5a2f.png"
+        },
+        {
+          "code": "MD73",
+          "name": "Sweetart",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD73-Sweetart.png",
+          "position": 44,
+          "publicUrl": "/objects/uploads/fdec1d3e-e1e8-4138-af8a-d01ce584c521.png"
+        },
+        {
+          "code": "MD74",
+          "name": "Candyland",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD74-Candyland.png",
+          "position": 45,
+          "publicUrl": "/objects/uploads/2464f8ef-3acf-4693-a85b-2bfc59ff5820.png"
+        },
+        {
+          "code": "MD75",
+          "name": "The Hulk",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD75-The-Hulk.png",
+          "position": 46,
+          "publicUrl": "/objects/uploads/417366da-4bd1-49ca-b838-a143fb735ebb.png"
+        },
+        {
+          "code": "MD76",
+          "name": "Tropical Sunset",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD76-Tropical-Sunset.png",
+          "position": 47,
+          "publicUrl": "/objects/uploads/844b0891-6e7f-414d-b875-e1194a64f7de.png"
+        },
+        {
+          "code": "MD77",
+          "name": "Fat Tuesday",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD77-Fat-Tuesday.png",
+          "position": 48,
+          "publicUrl": "/objects/uploads/fcff9a82-dd92-47d5-9314-a5ca441fe5f9.png"
+        },
+        {
+          "code": "MD78",
+          "name": "Black Widow",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD78-Black-Widow.png",
+          "position": 49,
+          "publicUrl": "/objects/uploads/4cb358e2-cfc7-4707-9511-326cf45cba0a.png"
+        },
+        {
+          "code": "MD79",
+          "name": "Candy Corn",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD79-Candy-Corn.png",
+          "position": 50,
+          "publicUrl": "/objects/uploads/db291d33-1c1d-4b55-9ae5-79d9899f1f1d.png"
+        },
+        {
+          "code": "MD80",
+          "name": "Kintsugi",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD80-Kintsugi.png",
+          "position": 51,
+          "publicUrl": "/objects/uploads/e639cf3b-b0b4-412e-9855-b542b64415c5.png"
+        },
+        {
+          "code": "MD81",
+          "name": "Ultra Violet",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD81-Ultra-Violet.png",
+          "position": 52,
+          "publicUrl": "/objects/uploads/f84c54bb-e78c-4e5f-b47e-5e9260ef6804.png"
+        },
+        {
+          "code": "MD82",
+          "name": "Vaporwave",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD82-Vaporwave.png",
+          "position": 53,
+          "publicUrl": "/objects/uploads/fb7cbd2c-3584-4600-8881-7d6a0ceb1a80.png"
+        },
+        {
+          "code": "MD83",
+          "name": "Blizzard",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/07/MD83-Blizzard-400x400-1.png",
+          "position": 54,
+          "publicUrl": "/objects/uploads/021cf0ac-af5a-45de-9d12-00867e33b5e9.png"
+        },
+        {
+          "code": "MD84",
+          "name": "Ursula",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD84-Ursula.png",
+          "position": 55,
+          "publicUrl": "/objects/uploads/504331cb-2ebf-4431-a117-a50fd36e33c5.png"
+        },
+        {
+          "code": "MD85",
+          "name": "Mountain Ore",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD85-Mountain-Ore.png",
+          "position": 56,
+          "publicUrl": "/objects/uploads/4e025e19-7529-4bac-b16d-e61ef4e0b996.png"
+        },
+        {
+          "code": "MD86",
+          "name": "Thunder Storm",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD86-Thunder-Storm.png",
+          "position": 57,
+          "publicUrl": "/objects/uploads/5f536dcf-d438-4065-a2b1-011c02c7899f.png"
+        },
+        {
+          "code": "MD88",
+          "name": "Bloodlust",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD88-Bloodlust.png",
+          "position": 58,
+          "publicUrl": "/objects/uploads/99a539b8-711f-4a55-b6bb-ebe22dc44569.png"
+        },
+        {
+          "code": "MD89",
+          "name": "Crimson Moon",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD89-Crimson-Moon.png",
+          "position": 59,
+          "publicUrl": "/objects/uploads/30402eeb-fe2c-4a5e-9aa9-d410890be6a5.png"
+        },
+        {
+          "code": "MD90",
+          "name": "Shrek",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD90-Shrek.png",
+          "position": 60,
+          "publicUrl": "/objects/uploads/766f1e85-7428-45d2-b43b-85a322be213d.png"
+        },
+        {
+          "code": "MD91",
+          "name": "Toxic Waste",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD91-Toxic-Waste.png",
+          "position": 61,
+          "publicUrl": "/objects/uploads/6d1dd3af-341c-4207-a04d-e6cf204ad482.png"
+        },
+        {
+          "code": "MD92",
+          "name": "Labradorite",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD92-Labradorite.png",
+          "position": 62,
+          "publicUrl": "/objects/uploads/d65cdab6-342b-43a3-862f-511ef8a796b1.png"
+        },
+        {
+          "code": "MD93",
+          "name": "Into The Deep",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD93-Into-The-Deep-300x300-1.png",
+          "position": 63,
+          "publicUrl": "/objects/uploads/95c18233-1b68-4836-bb2c-26ba68e46e77.png"
+        },
+        {
+          "code": "MD103",
+          "name": "Assassin",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD103-Assassin.png",
+          "position": 64,
+          "publicUrl": "/objects/uploads/7ed7a5fa-6e88-4592-a2ef-6858aa2566f2.png"
+        },
+        {
+          "code": "MD104",
+          "name": "Andromeda",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD104-Andromeda.png",
+          "position": 65,
+          "publicUrl": "/objects/uploads/f3d4922b-9701-441a-9684-7ed957c82a4d.png"
+        },
+        {
+          "code": "MD105",
+          "name": "Britannica",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD105-Britannica.png",
+          "position": 66,
+          "publicUrl": "/objects/uploads/d2b5cfb2-d862-430e-8f37-19db631d5d2a.png"
+        },
+        {
+          "code": "MD107",
+          "name": "Crayons",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD107-Crayons.png",
+          "position": 67,
+          "publicUrl": "/objects/uploads/254f9080-8e16-4938-9631-69bf109f45e1.png"
+        },
+        {
+          "code": "MD109",
+          "name": "Royal Violet",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/MD109-Royal-Violet.png",
+          "position": 68,
+          "publicUrl": "/objects/uploads/43709547-740a-47b3-add3-49ca569bbe08.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Double Double",
+      "existing": false,
+      "sourceTier": "Metallic Blends",
+      "colors": [
+        {
+          "code": "DD02",
+          "name": "Apple / Orchid",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD02-Apple-Orchid-400x400-1.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/0e6a341d-bfa9-4ad9-a8ef-8b0474e26c16.png"
+        },
+        {
+          "code": "DD03",
+          "name": "Apple / Bone",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD03-Apple-Bone-400x400-1.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/daec9708-9822-48c6-a5f6-d1164e2bc118.png"
+        },
+        {
+          "code": "DD04",
+          "name": "Apple / Fruit Punch",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD04-Apple-Fruit-Punch-400x400-1.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/397dc5de-3223-417d-8b46-8bf86ebc22f0.png"
+        },
+        {
+          "code": "DD05",
+          "name": "Apple / Lemon",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD05-Apple-Lemon-400x400-1.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/3e1e2e26-12e7-4e30-aefa-385778dec9f2.png"
+        },
+        {
+          "code": "DD06",
+          "name": "Apple / Blue Jay",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD06-Apple-Blue-Jay-400x400-1.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/89e79e2d-6ed8-4f65-a615-342901a8219b.png"
+        },
+        {
+          "code": "DD07",
+          "name": "Apple / Evergreen",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD07-Apple-Evergreen-400x400-1.png",
+          "position": 5,
+          "publicUrl": "/objects/uploads/998fce02-09b2-4dc2-aebb-cc0bd1a99523.png"
+        },
+        {
+          "code": "DD08",
+          "name": "Orchid / Spring Green",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD08-Orchid-Spring-Green-400x400-1.png",
+          "position": 6,
+          "publicUrl": "/objects/uploads/f9ddfcbc-1baf-48b1-97f8-f2c8ee64a388.png"
+        },
+        {
+          "code": "DD09",
+          "name": "Orchid / Fruit Punch",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD09-Orchid-Fruit-Punch-400x400-1.png",
+          "position": 7,
+          "publicUrl": "/objects/uploads/40f59b2d-7e85-4a92-943e-5107cfda6209.png"
+        },
+        {
+          "code": "DD10",
+          "name": "Orchid / Evergreen",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD10-Orchid-Evergreen-400x400-1.png",
+          "position": 8,
+          "publicUrl": "/objects/uploads/6852a761-cd16-47a8-b851-c79af7346abd.png"
+        },
+        {
+          "code": "DD11",
+          "name": "Sky Blue / Baby Blue",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD11-Sky-Blue-Baby-Blue-400x400-1.png",
+          "position": 9,
+          "publicUrl": "/objects/uploads/073fabda-ca5e-44b8-9ebb-f4261f0137fb.png"
+        },
+        {
+          "code": "DD12",
+          "name": "Sky Blue / Magenta",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD12-Sky-Blue-Magenta-400x400-1.png",
+          "position": 10,
+          "publicUrl": "/objects/uploads/0e08e8cc-80db-4e66-8fb5-a47babe28e98.png"
+        },
+        {
+          "code": "DD13",
+          "name": "Sky Blue / Spring Green",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD13-Sky-Blue-Spring-Green-400x400-1.png",
+          "position": 11,
+          "publicUrl": "/objects/uploads/028993b5-bbf9-46e6-9b24-1340fc6fedc2.png"
+        },
+        {
+          "code": "DD14",
+          "name": "Sky Blue / Hot Pink",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD14-Sky-Blue-Hot-Pink-400x400-1.png",
+          "position": 12,
+          "publicUrl": "/objects/uploads/124639f5-4819-4ca2-8e84-9641c6fc8101.png"
+        },
+        {
+          "code": "DD19",
+          "name": "Tangerine / Spring Green",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD19-Tangerine-Spring-Green-400x400-1.png",
+          "position": 13,
+          "publicUrl": "/objects/uploads/3d582e45-8d46-4667-9191-7f10d1d6122b.png"
+        },
+        {
+          "code": "DD20",
+          "name": "Tangerine / Hot Pink",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD20-Tangerine-Hot-Pink-400x400-1.png",
+          "position": 14,
+          "publicUrl": "/objects/uploads/5961aaf2-1572-4f89-b5ff-1d154dc92ef3.png"
+        },
+        {
+          "code": "DD22",
+          "name": "Silver / Grey",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD22-Silver-Grey-400x400-1.png",
+          "position": 15,
+          "publicUrl": "/objects/uploads/f4535e08-26cf-4945-9f9b-824fafccf696.png"
+        },
+        {
+          "code": "DD23",
+          "name": "Silver / Bone",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD23-Silver-Bone-400x400-1.png",
+          "position": 16,
+          "publicUrl": "/objects/uploads/cafff560-1e40-411d-8015-731cf0c73a26.png"
+        },
+        {
+          "code": "DD25",
+          "name": "Grey / Fruit Punch",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD25-Grey-Fruit-Punch-400x400-1.png",
+          "position": 17,
+          "publicUrl": "/objects/uploads/7c643c19-9f37-44c5-99cc-0efd248feb66.png"
+        },
+        {
+          "code": "DD26",
+          "name": "Spring Green / Hot Pink",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD26-Spring-Green-Hot-Pink-400x400-1.png",
+          "position": 18,
+          "publicUrl": "/objects/uploads/9cb01998-8046-4175-b877-0cbdb5a09837.png"
+        },
+        {
+          "code": "DD27",
+          "name": "Spring Green / Fruit Punch",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD27-Spring-Green-Fruit-Punch-400x400-1.png",
+          "position": 19,
+          "publicUrl": "/objects/uploads/ea86520c-e0b6-474a-983b-b474622160f5.png"
+        },
+        {
+          "code": "DD28",
+          "name": "Spring Green / Lemon",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD28-Spring-Green-Lemon-400x400-1.png",
+          "position": 20,
+          "publicUrl": "/objects/uploads/b46f806d-f257-4d42-9535-4c049fe97a6f.png"
+        },
+        {
+          "code": "DD30",
+          "name": "Bone / Blue Jay",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD30-Bone-Blue-Jay-400x400-1.png",
+          "position": 21,
+          "publicUrl": "/objects/uploads/644115ed-4cbc-4225-8b50-8ce499fb3ffe.png"
+        },
+        {
+          "code": "DD33",
+          "name": "Gold / Fruit Punch",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD33-Gold-Fruit-Punch-400x400-1.png",
+          "position": 22,
+          "publicUrl": "/objects/uploads/81074507-1325-4066-9ad8-0945d92e27df.png"
+        },
+        {
+          "code": "DD34",
+          "name": "Apple / Magenta",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD34-Apple-Magenta-400x400-1.png",
+          "position": 23,
+          "publicUrl": "/objects/uploads/81ab0472-e3d6-43d5-b369-e3b66ac79eec.png"
+        },
+        {
+          "code": "DD37",
+          "name": "Silver / Aqua",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD37-Silver-Aqua-400x400-1.png",
+          "position": 24,
+          "publicUrl": "/objects/uploads/5f9bcc40-3771-4cb7-9d92-0a3dfe9acade.png"
+        },
+        {
+          "code": "DD41",
+          "name": "Fruit Punch / Aqua",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD41-Fruit-Punch-Aqua-400x400-1.png",
+          "position": 25,
+          "publicUrl": "/objects/uploads/0b3e9e13-83f5-41f0-8096-a31a81da8046.png"
+        },
+        {
+          "code": "DD42",
+          "name": "Aqua / Canary",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD42-Aqua-Canary-400x400-1.png",
+          "position": 26,
+          "publicUrl": "/objects/uploads/c6554e62-97d0-4883-bda7-80d96157afcc.png"
+        },
+        {
+          "code": "DD43",
+          "name": "Custard / Aqua",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/06/DD43-Custard-Aqua-400x400-1.png",
+          "position": 27,
+          "publicUrl": "/objects/uploads/dbc166ff-c999-453f-9976-98d2978dca3f.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Shimmer Blends",
+      "existing": false,
+      "sourceTier": "Metallic Blends",
+      "colors": [
+        {
+          "code": "SHM01",
+          "name": "Gold Ruby",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM01-Gold-Ruby-400x400-1.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/fef282a5-11f0-44d4-8aeb-2ca26082f5d5.png"
+        },
+        {
+          "code": "SHM02",
+          "name": "Silver Ruby",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/SHM02-Silver-Ruby.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/56b06f4c-92b8-4520-b289-029836cf2959.png"
+        },
+        {
+          "code": "SHM03",
+          "name": "Copper Ruby",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM03-Copper-Ruby-400x400-1.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/3a6a5351-7a3e-4bf7-8439-015c7135d975.png"
+        },
+        {
+          "code": "SHM04",
+          "name": "Gold Cobalt",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/07/SHM04-400x400_REV.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/c5969064-352e-4b4c-bef6-2ab7b8c82e49.png"
+        },
+        {
+          "code": "SHM06",
+          "name": "Copper Cobalt",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM06-Copper-Cobalt-400x400-1.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/4869a145-9d56-42c8-b2f7-5a640edb62dd.png"
+        },
+        {
+          "code": "SHM07",
+          "name": "Gold Emerald",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM07-Gold-Emerald-400x400-1.png",
+          "position": 5,
+          "publicUrl": "/objects/uploads/068b9c85-66e0-4381-bb63-88d851ad0f85.png"
+        },
+        {
+          "code": "SHM08",
+          "name": "Silver Emerald",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM08-Silver-Emerald-400x400-1.png",
+          "position": 6,
+          "publicUrl": "/objects/uploads/87da6a13-452b-4206-bcb9-5f1cc17945ac.png"
+        },
+        {
+          "code": "SHM09",
+          "name": "Copper Emerald",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM09-Copper-Emerald-400x400-1.png",
+          "position": 7,
+          "publicUrl": "/objects/uploads/acf97e96-983f-4835-b8a5-38fac92b9503.png"
+        },
+        {
+          "code": "SHM10",
+          "name": "Gold Grape",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM10-Gold-Grape-400x400-1.png",
+          "position": 8,
+          "publicUrl": "/objects/uploads/8295d8ea-75e5-478d-b4b3-10b54c98ec10.png"
+        },
+        {
+          "code": "SHM11",
+          "name": "Silver Grape",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM11-Silver-Grape-400x400-1.png",
+          "position": 9,
+          "publicUrl": "/objects/uploads/02f61927-7f61-437f-9619-799af21cdc7a.png"
+        },
+        {
+          "code": "SHM12",
+          "name": "Copper Grape",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/07/SHM12-Copper-Grape-400x400-1.png",
+          "position": 10,
+          "publicUrl": "/objects/uploads/09ad1912-4040-4fe6-95a2-f3552419a2f7.png"
+        },
+        {
+          "code": "SHM13",
+          "name": "Gold Yellow",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM13-Gold-Yellow-400x400-1.png",
+          "position": 11,
+          "publicUrl": "/objects/uploads/b5f97b5a-38d9-4014-8910-2947a7ad38ed.png"
+        },
+        {
+          "code": "SHM14",
+          "name": "Silver Yellow",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM14-Silver-Yellow-400x400-1.png",
+          "position": 12,
+          "publicUrl": "/objects/uploads/ee2004df-71bb-4249-9de8-b03149ff1ae2.png"
+        },
+        {
+          "code": "SHM18",
+          "name": "Gold Forest",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM18-Gold-Forest-400x400-1.png",
+          "position": 13,
+          "publicUrl": "/objects/uploads/3f523c2d-33cf-4e9b-97df-f91a3534b199.png"
+        },
+        {
+          "code": "SHM19",
+          "name": "Silver Forest",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM19-Silver-Forest-400x400-1.png",
+          "position": 14,
+          "publicUrl": "/objects/uploads/f447a37f-23d2-4ac9-ba21-97bc82f64546.png"
+        },
+        {
+          "code": "SHM20",
+          "name": "Copper Forest",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM20-Copper-Forest-400x400-1.png",
+          "position": 15,
+          "publicUrl": "/objects/uploads/d2612e58-3030-49d9-aab5-95a6c0231b19.png"
+        },
+        {
+          "code": "SHM21",
+          "name": "Gold Teal",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM21-Gold-Teal-400x400-1.png",
+          "position": 16,
+          "publicUrl": "/objects/uploads/ca541062-f106-4be2-b785-de5b84c2a680.png"
+        },
+        {
+          "code": "SHM22",
+          "name": "Silver Teal",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/07/SHM22-Silver-Teal-400x400-1.png",
+          "position": 17,
+          "publicUrl": "/objects/uploads/c26a3134-1017-4ea1-8b51-595bd4e11141.png"
+        },
+        {
+          "code": "SHM23",
+          "name": "Copper Teal",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM23-Copper-Teal-400x400-1.png",
+          "position": 18,
+          "publicUrl": "/objects/uploads/90e34191-c75c-4221-b287-c2318a0adf95.png"
+        },
+        {
+          "code": "SHM24",
+          "name": "Gold Black Ice",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM24-Gold-Black-Ice-400x400-1.png",
+          "position": 19,
+          "publicUrl": "/objects/uploads/9752daa3-1a1f-43b8-85c0-0dd744181635.png"
+        },
+        {
+          "code": "SHM25",
+          "name": "Silver Black Ice",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM25-Silver-Black-Ice-400x400-1.png",
+          "position": 20,
+          "publicUrl": "/objects/uploads/33956cd6-886f-477a-a290-43f63ed53f3a.png"
+        },
+        {
+          "code": "SHM26",
+          "name": "Copper Black Ice",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/09/SHM26-Copper-Black-Ice-400x400-1.png",
+          "position": 21,
+          "publicUrl": "/objects/uploads/aa510ddb-20ee-499d-a37c-86f3be44e8f9.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Glitter Blends",
+      "existing": false,
+      "sourceTier": "Metallic Blends",
+      "colors": [
+        {
+          "code": "HG01",
+          "name": "Ruby Glitter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG01-Ruby-Glitter.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/e710c80f-aa3a-46c8-973d-bf1eb76527f9.png"
+        },
+        {
+          "code": "HG02",
+          "name": "Ultra Clear Glitter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG02-Ultra-Clear-Glitter.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/e613b4a5-44a9-4d86-a790-b9045fedf2f5.png"
+        },
+        {
+          "code": "HG03",
+          "name": "Cobalt Glitter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG03-Cobalt-Glitter.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/4bd4dfe5-d491-4421-9251-96145a084969.png"
+        },
+        {
+          "code": "HG04",
+          "name": "Emerald Glitter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG04-Emerald-Glitter.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/863fa803-6bee-49ea-9250-9826b99133ac.png"
+        },
+        {
+          "code": "HG05",
+          "name": "Grape Glitter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG05-Grape-Glitter.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/de5280a2-6fb9-48b4-b39c-7594cf7052b6.png"
+        },
+        {
+          "code": "HG06",
+          "name": "Light Blue Glitter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG06-Light-Blue-Glitter.png",
+          "position": 5,
+          "publicUrl": "/objects/uploads/e3bf49a5-e74b-438b-b706-0a8823d99c84.png"
+        },
+        {
+          "code": "HG07",
+          "name": "Lemonade Glitter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG07-Lemonade-Glitter.png",
+          "position": 6,
+          "publicUrl": "/objects/uploads/73428436-f3c0-48ec-b8f6-d6127e2a480d.png"
+        },
+        {
+          "code": "HG08",
+          "name": "Orange Crush Glitter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG08-Orange-Crush-Glitter.png",
+          "position": 7,
+          "publicUrl": "/objects/uploads/75f7a77d-2614-49e3-8656-e4a1ef3f169c.png"
+        },
+        {
+          "code": "HG09",
+          "name": "Coke Bottle Glitter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG09-Coke-Bottle-Glitter.png",
+          "position": 8,
+          "publicUrl": "/objects/uploads/d5a881ff-ba8b-40fd-b1d7-bb583c3a6b3e.png"
+        },
+        {
+          "code": "HG10",
+          "name": "Highlighter Yellow Glitter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG10-Highlighter-Yellow-Glitter.png",
+          "position": 9,
+          "publicUrl": "/objects/uploads/62486381-deb1-44b3-a296-afdfd78b6842.png"
+        },
+        {
+          "code": "HG12",
+          "name": "Forest Green Glitter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG12-Forest-Green-Glitter.png",
+          "position": 10,
+          "publicUrl": "/objects/uploads/29789848-a271-4d99-8c65-0c79743160a7.png"
+        },
+        {
+          "code": "HG13",
+          "name": "Sea Blue Glitter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG13-Sea-Blue-Glitter.png",
+          "position": 11,
+          "publicUrl": "/objects/uploads/0a09e7a7-4a87-4eec-b6c0-bab850f4f649.png"
+        },
+        {
+          "code": "HG14",
+          "name": "Tan Glitter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG14-Tan-Glitter.png",
+          "position": 12,
+          "publicUrl": "/objects/uploads/0adc66d2-55b4-4c8d-816e-e1e94880c9ec.png"
+        },
+        {
+          "code": "HG15",
+          "name": "Black Ice Glitter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG15-Black-Ice-Glitter.png",
+          "position": 13,
+          "publicUrl": "/objects/uploads/99cee0ef-c9db-4de2-9fec-0b54bedf2cf8.png"
+        },
+        {
+          "code": "HG16",
+          "name": "Burlesque",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HG16-Burlesque.png",
+          "position": 14,
+          "publicUrl": "/objects/uploads/aef8a802-7303-4d41-91e4-7173ef908a91.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Ghostly Effect",
+      "existing": false,
+      "sourceTier": "Metallic Blends",
+      "colors": [
+        {
+          "code": "GE01",
+          "name": "Ruby Ghost",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/GE01-Ruby-Ghost.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/e106fa27-4af3-44e5-bf76-80732647de64.png"
+        },
+        {
+          "code": "GE03",
+          "name": "Cobalt Ghost",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/GE03-Cobalt-Ghost.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/44ddf3d0-f399-4da5-8d61-8e55b456b8b5.png"
+        },
+        {
+          "code": "GE04",
+          "name": "Emerald Ghost",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/GE04-Emerald-Ghost.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/56112a85-3cb8-4daf-a8d2-a88cbe55fc0e.png"
+        },
+        {
+          "code": "GE05",
+          "name": "Grape Ghost",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/GE05-Grape-Ghost.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/e78122fb-1684-4937-b45b-9742f947c499.png"
+        },
+        {
+          "code": "GE08",
+          "name": "Orange Crush Ghostly",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/GE08-Orange-Crush-Ghostly.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/e69cea7b-3e67-4357-ada5-fe70b6cc9c24.png"
+        },
+        {
+          "code": "GE12",
+          "name": "Forest Green Ghost",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/GE12-Forest-Green-Ghost.png",
+          "position": 5,
+          "publicUrl": "/objects/uploads/206cd7c8-5a56-4cc3-a929-9d62705802f7.png"
+        },
+        {
+          "code": "GE13",
+          "name": "Sea Blue Ghost",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/GE13-Sea-Blue-Ghost.png",
+          "position": 6,
+          "publicUrl": "/objects/uploads/0e1bb2e5-da24-40e7-9281-e6d4726dc38b.png"
+        },
+        {
+          "code": "GE15",
+          "name": "Black Ice Ghost",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/GE15-Black-Ice-Ghost.png",
+          "position": 7,
+          "publicUrl": "/objects/uploads/237052d2-8990-4ccd-a55b-ce3d0e680d59.png"
+        },
+        {
+          "code": "GE16",
+          "name": "Neon Violet Ghost",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/GE16-Neon-Violet-Ghost.png",
+          "position": 8,
+          "publicUrl": "/objects/uploads/688ccb16-4ac6-49c6-a49f-3c0aeddefc9a.png"
+        },
+        {
+          "code": "GE17",
+          "name": "Neon Green Ghost",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/GE17-Neon-Green-Ghost.png",
+          "position": 9,
+          "publicUrl": "/objects/uploads/c50b962e-b3a4-4abf-bd58-9fd675784e60.png"
+        },
+        {
+          "code": "GE18",
+          "name": "Neon Yellow Ghost",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/GE18-Neon-Yellow-Ghost.png",
+          "position": 10,
+          "publicUrl": "/objects/uploads/575bac87-9b55-4ad3-bc69-dcf5d761d9e1.png"
+        },
+        {
+          "code": "GE19",
+          "name": "Neon Orange Ghost",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/GE19-Neon-Orange-Ghost.png",
+          "position": 11,
+          "publicUrl": "/objects/uploads/beef8941-ca9c-4fd5-92d7-82fa7154fb8c.png"
+        },
+        {
+          "code": "GE20",
+          "name": "Neon Coral Ghost",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/GE20-Neon-Coral-Ghost.png",
+          "position": 12,
+          "publicUrl": "/objects/uploads/dc5d1c2b-138f-4d85-ba46-a1f36697ec6c.png"
+        },
+        {
+          "code": "GE21",
+          "name": "Neon Pink Ghost",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/06/GE21-Neon-Pink-Ghost.png",
+          "position": 13,
+          "publicUrl": "/objects/uploads/cad6e49f-9b75-492e-b052-3a491a3ae7ee.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Torrent Effect",
+      "existing": false,
+      "sourceTier": "Metallic Blends",
+      "colors": [
+        {
+          "code": "TOR03",
+          "name": "Stardust (A)",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/03/TOR03-Stardust-A_REV-for-size.png",
+          "importSourceUrlB": "https://memphisrecordpressing.com/wp-content/uploads/2026/03/TOR03-Gold-Torrent-B.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/4aba2ccc-3403-4c99-a37e-81b8e075f2fb.png"
+        },
+        {
+          "code": "TOR04",
+          "name": "Snowpiercer (A)",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/03/TOR04-Snowpiercer-A.png",
+          "importSourceUrlB": "https://memphisrecordpressing.com/wp-content/uploads/2026/03/TOR04-Snowpiercer-B.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/9d0929d1-53bb-413c-b004-5de56c129b29.png"
+        },
+        {
+          "code": "TOR05",
+          "name": "Toffee (A)",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/03/TOR05-Toffee-A.png",
+          "importSourceUrlB": "https://memphisrecordpressing.com/wp-content/uploads/2026/03/TOR05-Toffee-B.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/9fd5b5cc-5f03-455d-aaae-de21214e4d36.png"
+        },
+        {
+          "code": "TOR07",
+          "name": "Comet (A)",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/03/TOR07-Comet-A.png",
+          "importSourceUrlB": "https://memphisrecordpressing.com/wp-content/uploads/2026/03/TOR07-Comet-B.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/0787534d-1084-4626-a9ce-81b00a65fec7.png"
+        },
+        {
+          "code": "TOR09",
+          "name": "Spruce (A)",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2026/03/TOR09-Spruce-A.png",
+          "importSourceUrlB": "https://memphisrecordpressing.com/wp-content/uploads/2026/03/TOR09-Spruce-B.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/456d02e7-6c6d-4ca6-a65d-caa1841fdb98.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Color In Color",
+      "existing": false,
+      "sourceTier": "Metallic Blends",
+      "colors": [
+        {
+          "code": "CIC06",
+          "name": "O03 T14 w/ O02 Black splatter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/CIC06-O03-T14-w_-O02-Black-splatter.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/f7725d00-a3d7-415e-ad35-b88663af3c39.png"
+        },
+        {
+          "code": "CIC16",
+          "name": "T02 O19",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/CIC16-T02-O19.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/0aea9c8d-ecdb-44ab-9db8-35ff34e70c34.png"
+        },
+        {
+          "code": "CIC30",
+          "name": "T04 BLACK",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/CIC30-T04-BLACK.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/d54fc92a-0c3c-4a67-bf65-e52a3ebd9fa9.png"
+        },
+        {
+          "code": "COLO",
+          "name": "T11 BLACK w/ O12 splatter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/Color-in-Color-T11-BLACK-w_-O12-splatter.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/f120067f-52a5-4fb8-9d3b-14eed9a1dcee.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Half",
+      "existing": false,
+      "sourceTier": "Metallic Blends",
+      "colors": [
+        {
+          "code": "HALF",
+          "name": "O04 + O19 w/ Black Splatter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/Half-Half-O04-O19-w_-black-splatter.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/e6fd855a-e77b-4bf5-b738-5d1f36e038e4.png"
+        },
+        {
+          "code": "HALF",
+          "name": "O09 + Black",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/Half-Half-O09-Black.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/e3376dde-55d2-41fa-82ca-c6612a64f2c9.png"
+        },
+        {
+          "code": "HH18",
+          "name": "T09 + N05 w/ O03 Splatter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HH18-T09-N05-w_-O03-Heavy-Splatter.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/73ca3ae9-9d99-4f0f-83ab-b0c86d9cb3c4.png"
+        },
+        {
+          "code": "HH21",
+          "name": "O09 + O19",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HH21-O09-O19.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/68538f90-2085-4179-8b39-15d6200a2f09.png"
+        },
+        {
+          "code": "HH22",
+          "name": "O03 + O12",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HH22-O03-O12.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/21bd7e7f-316d-4613-8b09-80b192375eb4.png"
+        },
+        {
+          "code": "HH23",
+          "name": "O08 + Black",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HH23-O08-Black.png",
+          "position": 5,
+          "publicUrl": "/objects/uploads/60fecf4a-fce4-405f-8e9d-ab40cb5e23a4.png"
+        },
+        {
+          "code": "HH32",
+          "name": "O07 + O03",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/HH32-O07-O03.png",
+          "position": 6,
+          "publicUrl": "/objects/uploads/5d8ca9e1-ee5d-47b9-9d12-a9cbf44ef0b1.png"
+        }
+      ]
+    },
+    {
+      "tierName": "Splatter",
+      "existing": true,
+      "sourceTier": null,
+      "colors": [
+        {
+          "code": "SPL04",
+          "name": "O15 w/ O08 O09 O22",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/SPL04-O15-w_-O08-O09-O22.png",
+          "position": 0,
+          "publicUrl": "/objects/uploads/7860d180-3c17-41f8-835a-ac47b6fb0a19.png"
+        },
+        {
+          "code": "SPL05",
+          "name": "O24 w/ O19 O09 O04",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/SPL05-O24-w_-O19-O09-O04.png",
+          "position": 1,
+          "publicUrl": "/objects/uploads/a37b42e4-7205-4680-bf23-18e3375e3ce1.png"
+        },
+        {
+          "code": "SPL06",
+          "name": "T08 w/ black",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/SPL06-T08-w_-black.png",
+          "position": 2,
+          "publicUrl": "/objects/uploads/18fa21d1-68b7-4ebc-89e0-d25cb346303a.png"
+        },
+        {
+          "code": "SPL17",
+          "name": "N02 w/ O23",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/SPL17-N02-w_-O23.png",
+          "position": 3,
+          "publicUrl": "/objects/uploads/5529fd2a-2197-4bb3-8c04-85e64f71d3b9.png"
+        },
+        {
+          "code": "SPL18",
+          "name": "T08 w/ O03 O09",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/SPL18-T08-w_-O03-O09.png",
+          "position": 4,
+          "publicUrl": "/objects/uploads/8fef186e-92a7-4686-80ef-e86b7e2d0e92.png"
+        },
+        {
+          "code": "SPL22",
+          "name": "O13 w/ Black",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/SPL22-O13-w_-Black.png",
+          "position": 5,
+          "publicUrl": "/objects/uploads/235a9153-9052-4b3d-934e-32a6c3aa8665.png"
+        },
+        {
+          "code": "SPL30",
+          "name": "O02 w/ O03 O22",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/SPL30-O02-w_-O03-O22.png",
+          "position": 6,
+          "publicUrl": "/objects/uploads/2b3d0f20-462a-477e-995d-0f7f250f013b.png"
+        },
+        {
+          "code": "SPL35",
+          "name": "O10 w/ O22",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/SPL35-O10-w_-O22.png",
+          "position": 7,
+          "publicUrl": "/objects/uploads/35d76b68-3a4e-4502-9059-14321fb6268a.png"
+        },
+        {
+          "code": "SPL36",
+          "name": "T11 w/ O06 O12 N06",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/SPL36-T11-w_-O06-O12-N06.png",
+          "position": 8,
+          "publicUrl": "/objects/uploads/f596747a-7332-4108-a97f-8fc05b5d81ed.png"
+        },
+        {
+          "code": "SPLA",
+          "name": "O06 w/ O05 splatter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/Splatter-O06-w_-O05-splatter.png",
+          "position": 9,
+          "publicUrl": "/objects/uploads/541de31b-8c69-49ef-8482-d129b71607c0.png"
+        },
+        {
+          "code": "SPLA",
+          "name": "O22 w/ T03 splatter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/Splatter-O22-w_-T03-splatter.png",
+          "position": 10,
+          "publicUrl": "/objects/uploads/832e4ff3-0db7-4af0-8af3-176a61060a38.png"
+        },
+        {
+          "code": "SPLA",
+          "name": "T06 w/ O05 O04 BLK Heavy splatter",
+          "importSourceUrl": "https://memphisrecordpressing.com/wp-content/uploads/2025/05/Splatter-T06-w_-O05-O04-BLK-Heavy-splatter.png",
+          "position": 11,
+          "publicUrl": "/objects/uploads/6c7cc416-254e-44a4-aa1f-5f77173f152b.png"
+        }
+      ]
+    }
+  ]
+}
