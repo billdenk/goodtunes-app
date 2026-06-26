@@ -1780,9 +1780,7 @@ function PrinterAndPressPanel({
       </div>
       {locked && (
         <p className="text-xs text-slate-500 mt-1" data-testid="text-printer-lock-note">
-          You were invited by {invitedPress!.name}. The full pressing-plant directory
-          unlocks once your first run ships — message GoodTunes if you need to switch
-          sooner.
+          You were invited by {invitedPress!.name.replace(/\.+$/, "")}.
         </p>
       )}
     </div>
