@@ -670,12 +670,14 @@ export function AdminFrame({
             ) : isPress ? (
               // Task #2075 — a press only ever reaches an /admin/* page on
               // its own catalog editor (/admin/manufacturers/:ownId). Its
-              // Reports + GoodDeed pricing now live INLINE in the scoped
-              // press portal, so this rail links back to /vendor?tab=…
-              // instead of the operator /admin/reports +
-              // /admin/gooddeed-pricing pages (which the App.tsx press guard
-              // bounces). Keeps the catalog page's sidebar consistent with
-              // the portal's own left nav.
+              // Reports now live INLINE in the scoped press portal, so this
+              // rail links back to /vendor?tab=… instead of the operator
+              // /admin/reports page (which the App.tsx press guard bounces).
+              // Keeps the catalog page's sidebar consistent with the portal's
+              // own left nav. Task #2222 — the standalone "GoodDeed pricing"
+              // link was dropped here too: presses edit it inside Catalog →
+              // format dropdown → GoodDeeds, so the redundant rail link is
+              // hidden (this rail only ever shows to actual press logins).
               <>
                 <SidebarLink
                   icon={LayoutDashboard}
@@ -708,14 +710,6 @@ export function AdminFrame({
                   active={false}
                   onClick={() => navigate("/vendor?tab=reports")}
                   testId="nav-reports"
-                />
-                <SidebarLink
-                  icon={Receipt}
-                  label="GoodDeed pricing"
-                  count={-1}
-                  active={false}
-                  onClick={() => navigate("/vendor?tab=pricing")}
-                  testId="nav-gooddeed-pricing"
                 />
                 <SidebarLink
                   icon={Cog}

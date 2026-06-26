@@ -114,6 +114,12 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
 
   const resolveTab = (t: string | null, sub: string | null): TabId => {
     if (t === "settings" && sub === "catalog") return "catalog";
+    // Task #2222 — the standalone "GoodDeed pricing" view is hidden from
+    // press logins (they edit it inside Catalog → format dropdown →
+    // GoodDeeds). It stays reachable only in super-admin view, so a press
+    // hitting ?tab=pricing directly degrades to the dashboard rather than
+    // landing on a now-hidden section.
+    if (t === "pricing" && !isSuperAdminView) return "dashboard";
     if (t && (PRESS_TAB_IDS as string[]).includes(t)) return t as TabId;
     return "dashboard";
   };
@@ -134,7 +140,11 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
     );
   }
 
-  const tabs = modulesForRole("press") as ReadonlyArray<{ id: TabId; label: string }>;
+  // Task #2222 — hide the redundant standalone "GoodDeed pricing" tab from
+  // actual press logins (it duplicates Catalog → format dropdown → GoodDeeds).
+  // Operators viewing the portal in super-admin view still see it.
+  const tabs = (modulesForRole("press") as ReadonlyArray<{ id: TabId; label: string }>)
+    .filter((t) => isSuperAdminView || t.id !== "pricing");
 
   // Cached for the catalog tab (pressDomain drives Hellbender/MRP import buttons).
   const pressDomain = me?.domain ?? null;
