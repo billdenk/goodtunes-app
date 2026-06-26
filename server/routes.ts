@@ -16341,7 +16341,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const q = String(req.query.q ?? "").trim();
     if (!q) return res.json({ query: "", candidates: [] });
-    const result = await searchArtistCandidatesDetailed(q, 8);
+    const result = await searchArtistCandidatesDetailed(q, 8, { withReleases: true });
     if (!result.ok) {
       // Upstream errored (timeout, 5xx, parse, no_token). Surface a 502
       // with the reason so the client can show "Spotify lookup failed"

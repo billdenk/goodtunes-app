@@ -142,6 +142,19 @@ export type SpotifyArtistCandidate = {
   popularity: number;
   followers: number;
   genres: string[];
+  // Best-effort disambiguator: the name of the artist's most recent
+  // release. Only populated when a caller opts into enrichment (the admin
+  // picker), and null when Spotify returns no albums or the per-artist
+  // lookup failed.
+  //
+  // Why a release name and not followers/popularity/top-track: this app's
+  // Spotify client-credentials token returns artist objects *stripped* of
+  // followers/popularity/genres (all undefined), and /top-tracks answers
+  // 403 Forbidden. The /artists/{id}/albums endpoint, however, returns
+  // 200 with real release names — so for two obscure same-name artists
+  // (e.g. several "Black Angel"s) the latest release is frequently the
+  // only field that tells them apart.
+  latestRelease: string | null;
 };
 
 function normalize(s: string): string {
@@ -351,6 +364,11 @@ type SpotifyPageResult =
 export async function searchArtistCandidatesDetailed(
   rawName: string,
   limit = 5,
+  // `withReleases` opts into a best-effort per-candidate latest-release
+  // lookup so the admin picker can show a disambiguator. It's off by
+  // default because the serial credits-commit import loop calls this for
+  // every new person and must not pay N extra API round-trips.
+  opts: { withReleases?: boolean } = {},
 ): Promise<SpotifyCandidatesResult> {
   const name = rawName.trim();
   if (!name) return { ok: true, candidates: [] };
@@ -478,6 +496,7 @@ export async function searchArtistCandidatesDetailed(
     popularity: a.popularity ?? 0,
     followers: a.followers?.total ?? 0,
     genres: a.genres ?? [],
+    latestRelease: null,
   }));
   rows.sort((a, b) => {
     const ax = normalize(a.name) === wanted ? 1 : 0;
@@ -485,7 +504,62 @@ export async function searchArtistCandidatesDetailed(
     if (ax !== bx) return bx - ax;
     return b.popularity - a.popularity;
   });
-  return { ok: true, candidates: rows.slice(0, limit) };
+  const top = rows.slice(0, limit);
+  // Enrich only the candidates we're actually returning (≤ `limit`) with a
+  // latest-release hint. Best-effort + bounded concurrency so a slow
+  // Spotify upstream can't multiply into a long stall, and never throws —
+  // a candidate just keeps `latestRelease: null` if its lookup fails.
+  if (opts.withReleases && token && top.length > 0) {
+    await enrichLatestReleases(top, token);
+  }
+  return { ok: true, candidates: top };
+}
+
+// Per-artist latest-release lookup. We use /v1/artists/{id}/albums (which
+// answers 200 for this app's token, unlike /top-tracks which 403s) and
+// pick the most recently released album/single by release_date. US market
+// keeps the catalog consistent for the operator. Best-effort: returns null
+// on any non-2xx / transport error / empty list so the caller silently
+// falls back to name + avatar.
+async function fetchArtistLatestRelease(artistId: string, token: string): Promise<string | null> {
+  // limit caps at 10 for this app's token tier (15/20/50 answer 400
+  // "Invalid limit"); 10 is plenty to find the newest by release_date.
+  const url = `https://api.spotify.com/v1/artists/${encodeURIComponent(
+    artistId,
+  )}/albums?include_groups=album,single&limit=10&market=US`;
+  try {
+    const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } }, SEARCH_TIMEOUT_MS);
+    if (!res.ok) return null;
+    const json = (await res.json()) as { items?: Array<{ name?: string; release_date?: string }> };
+    const items = (json.items ?? []).filter((a) => a?.name);
+    if (items.length === 0) return null;
+    // Spotify's default ordering groups albums before singles rather than
+    // strict newest-first, so pick the max release_date ourselves. Dates are
+    // ISO-ish ("2024" or "2024-09-16"); lexical compare is correct for both.
+    items.sort((a, b) => String(b.release_date ?? "").localeCompare(String(a.release_date ?? "")));
+    const name = items[0]?.name;
+    return name ? String(name) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Mutates each candidate in place with its latest release, running at most
+// `CONCURRENCY` lookups at a time so a picker of 8 artists resolves in a
+// couple of rounds rather than 8 serial round-trips.
+async function enrichLatestReleases(candidates: SpotifyArtistCandidate[], token: string): Promise<void> {
+  const CONCURRENCY = 5;
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < candidates.length) {
+      const idx = cursor++;
+      const c = candidates[idx];
+      c.latestRelease = await fetchArtistLatestRelease(c.id, token);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, candidates.length) }, () => worker()),
+  );
 }
 
 // Return the top N Spotify artist candidates for a name so the admin

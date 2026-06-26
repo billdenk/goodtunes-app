@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, ExternalLink, Link2, X } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, Link2, Music2, X } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import {
@@ -78,6 +78,15 @@ interface SpotifyCandidate {
   popularity: number;
   followers: number;
   genres: string[];
+  /**
+   * Best-effort "latest release: <name>" hint from Spotify's albums
+   * endpoint (Spotify source only). For obscure same-name artists Spotify
+   * returns the artist object stripped of followers/popularity/genres, so
+   * this is frequently the only thing that distinguishes two identically-
+   * named artists. Null/absent when unavailable or when the candidate came
+   * from the Apple fallback.
+   */
+  latestRelease?: string | null;
 }
 
 interface AppleCandidate {
@@ -144,6 +153,36 @@ function formatFollowers(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
   return String(n);
+}
+
+// Mirror the server's name normalization so the picker can mark which
+// candidate is the exact-name match (the most-likely pick). Spotify ranks
+// exact matches first, but with popularity=0 across obscure candidates the
+// operator still needs a visible "this is the one you typed" cue.
+function normalizeName(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+// Compose the followers + top-genre line under a candidate's name,
+// skipping whatever's missing. The latest-release hint renders on its own
+// row (with a music-note icon) so it's not lost to truncation. Falls back
+// to a plain "Artist"/"Apple Music artist" label when nothing is known so
+// the row never looks broken.
+function candidateSubtitle(c: SpotifyCandidate): string {
+  const parts: string[] = [];
+  if (c.followers > 0) parts.push(`${formatFollowers(c.followers)} followers`);
+  if (c.genres[0]) parts.push(c.genres[0]);
+  if (parts.length > 0) return parts.join(" \u00b7 ");
+  // No followers/genre and no release to fall back on → generic label.
+  if (!c.latestRelease) return c.source === "apple" ? "Apple Music artist" : "Artist";
+  // Latest release exists and will render on its own line; keep this line
+  // empty so we don't repeat a generic "Artist" above it.
+  return "";
 }
 
 function Avatar({ name, photoUrl, size = 56 }: { name: string; photoUrl: string | null; size?: number }) {
@@ -1078,7 +1117,14 @@ export function NewAlbumArtistDialog({
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2 max-h-[360px] overflow-y-auto -mx-1 px-1">
-                {spotifyCandidates.map((c) => (
+                {spotifyCandidates.map((c) => {
+                  // Mark the candidate whose name exactly matches what the
+                  // operator typed — Spotify ranks it first, but with
+                  // popularity=0 across obscure hits the list otherwise
+                  // looks undifferentiated. The badge says "most likely".
+                  const isExact = normalizeName(c.name) === normalizeName(trimmed);
+                  const subtitle = candidateSubtitle(c);
+                  return (
                   // div + role=button (not a <button>) because the card
                   // contains a nested <a> (open-on-Spotify). Nesting <a>
                   // inside <button> is invalid HTML and breaks keyboard
@@ -1096,9 +1142,22 @@ export function NewAlbumArtistDialog({
                         handlePick(c);
                       }
                     }}
-                    className="flex flex-col items-center gap-2 p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-center active:scale-[0.98] transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]"
+                    className={`relative flex flex-col items-center gap-2 p-3 rounded-lg border text-center active:scale-[0.98] transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] ${
+                      isExact
+                        ? "border-[var(--brand-blue)] hover:brightness-95"
+                        : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                    style={isExact ? { backgroundColor: "var(--brand-blue-soft)" } : undefined}
                     data-testid={`option-spotify-${c.id}`}
                   >
+                    {isExact && (
+                      <span
+                        className="absolute top-1.5 right-1.5 inline-flex items-center rounded-full bg-[var(--brand-blue)] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-white"
+                        data-testid={`badge-exact-${c.id}`}
+                      >
+                        Exact match
+                      </span>
+                    )}
                     <Avatar name={c.name} photoUrl={c.photoUrl} size={64} />
                     <div className="w-full">
                       <div className="flex items-center justify-center gap-1 min-w-0">
@@ -1120,14 +1179,28 @@ export function NewAlbumArtistDialog({
                           </a>
                         )}
                       </div>
-                      <div className="text-[11px] text-slate-500 truncate">
-                        {c.followers > 0
-                          ? `${formatFollowers(c.followers)} followers`
-                          : c.genres[0] || (c.source === "apple" ? "Apple Music artist" : "Artist")}
-                      </div>
+                      {subtitle && (
+                        <div
+                          className="text-[11px] text-slate-500 truncate"
+                          data-testid={`text-candidate-meta-${c.id}`}
+                        >
+                          {subtitle}
+                        </div>
+                      )}
+                      {c.latestRelease && (
+                        <div
+                          className="mt-0.5 flex items-center justify-center gap-1 text-[11px] text-slate-500 min-w-0"
+                          title={`Latest release: "${c.latestRelease}"`}
+                          data-testid={`text-candidate-release-${c.id}`}
+                        >
+                          <Music2 className="w-3 h-3 flex-shrink-0 text-slate-400" />
+                          <span className="truncate">{c.latestRelease}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1155,6 +1228,16 @@ export function NewAlbumArtistDialog({
                     </>
                   )}
                 </div>
+                {picked.latestRelease && (
+                  <div
+                    className="text-[11.5px] text-slate-500 truncate flex items-center gap-1 mt-0.5"
+                    title={`Latest release: "${picked.latestRelease}"`}
+                    data-testid="text-picked-release"
+                  >
+                    <Music2 className="w-3 h-3 flex-shrink-0 text-slate-400" />
+                    <span className="truncate">Latest release: "{picked.latestRelease}"</span>
+                  </div>
+                )}
               </div>
             </div>
 

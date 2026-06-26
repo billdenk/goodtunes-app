@@ -9907,12 +9907,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
+    "snippet": "className=\"absolute top-1.5 right-1.5 inline-flex items-center rounded-full bg-[var(--brand-blue)] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-white\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
     "snippet": "<span className=\"text-[13px] font-semibold text-slate-900 truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
-    "snippet": "<div className=\"text-[11px] text-slate-500 truncate\">"
+    "snippet": "className=\"text-[11px] text-slate-500 truncate\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
+    "snippet": "className=\"mt-0.5 flex items-center justify-center gap-1 text-[11px] text-slate-500 min-w-0\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -9923,6 +9933,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
     "snippet": "<div className=\"text-[11.5px] text-slate-500 truncate flex items-center gap-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
+    "snippet": "className=\"text-[11.5px] text-slate-500 truncate flex items-center gap-1 mt-0.5\""
   },
   {
     "rule": "hardcoded-font-size",
