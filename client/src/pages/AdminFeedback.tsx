@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { Bug, Lightbulb, AlertTriangle, ExternalLink } from "lucide-react";
+import { Bug, Lightbulb, AlertTriangle, ExternalLink, Search } from "lucide-react";
 
 type Feedback = {
   id: string;
@@ -184,18 +184,32 @@ function AdminFeedbackInner() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<"all" | "bug" | "feature">("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
 
   const { data: rows, isLoading, isError, error, refetch } = useQuery<Feedback[]>({
     queryKey: ["/api/admin/feedback"],
   });
 
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
     return (rows ?? []).filter((f) => {
       if (kindFilter !== "all" && f.kind !== kindFilter) return false;
       if (statusFilter !== "all" && f.status !== statusFilter) return false;
+      if (q) {
+        const haystack = [
+          f.title,
+          f.body,
+          f.submitterScopeName,
+          f.submitterName,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
       return true;
     });
-  }, [rows, kindFilter, statusFilter]);
+  }, [rows, kindFilter, statusFilter, search]);
 
   const selected = useMemo(
     () => (rows ?? []).find((f) => f.id === selectedId) ?? null,
@@ -215,6 +229,17 @@ function AdminFeedbackInner() {
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[12rem]">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by title, partner, or keyword…"
+            className="h-9 w-full rounded-md border border-slate-200 bg-white pl-8 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+            data-testid="input-feedback-search"
+          />
+        </div>
         <div className="flex rounded-md border border-slate-200 p-0.5">
           {(["all", "bug", "feature"] as const).map((k) => (
             <button
