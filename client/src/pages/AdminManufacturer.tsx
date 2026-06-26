@@ -3696,32 +3696,30 @@ function CatalogEditor({
                 )}
               </div>
               <div className="flex flex-col items-start gap-1.5 md:pl-2">
-                <div className="rounded-md border border-slate-200 overflow-hidden">
-                  <VinylPreview
-                    artworkUrl={placeholderArt}
-                    color={previewColor}
-                    jacketUpgrade={DEFAULT_JACKET_UPGRADE}
-                    format={fmt}
-                    size="2xl"
-                    placeholderLogoUrl={placeholderArt ? null : (pressLogoUrl ?? null)}
-                    jacketOverlay={
-                      <button
-                        type="button"
-                        onClick={() => setPlaceholderEditorOpen(true)}
-                        className="group/edit absolute inset-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--brand-blue)]"
-                        aria-label={placeholderUrl ? "Change jacket image" : "Add jacket image"}
-                        data-testid={`button-edit-placeholder-art-${fmt}`}
-                      >
-                        <span className="absolute inset-0 bg-black/0 group-hover/edit:bg-black/40 group-focus-visible/edit:bg-black/40 transition-colors" />
-                        <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/edit:opacity-100 group-focus-visible/edit:opacity-100 transition-opacity">
-                          <span className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
-                            <Pencil className="w-4 h-4" />
-                          </span>
+                <VinylPreview
+                  artworkUrl={placeholderArt}
+                  color={previewColor}
+                  jacketUpgrade={DEFAULT_JACKET_UPGRADE}
+                  format={fmt}
+                  size="2xl"
+                  placeholderLogoUrl={placeholderArt ? null : (pressLogoUrl ?? null)}
+                  jacketOverlay={
+                    <button
+                      type="button"
+                      onClick={() => setPlaceholderEditorOpen(true)}
+                      className="group/edit absolute inset-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--brand-blue)]"
+                      aria-label={placeholderUrl ? "Change jacket image" : "Add jacket image"}
+                      data-testid={`button-edit-placeholder-art-${fmt}`}
+                    >
+                      <span className="absolute inset-0 bg-black/0 group-hover/edit:bg-black/40 group-focus-visible/edit:bg-black/40 transition-colors" />
+                      <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/edit:opacity-100 group-focus-visible/edit:opacity-100 transition-opacity">
+                        <span className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                          <Pencil className="w-4 h-4" />
                         </span>
-                      </button>
-                    }
-                  />
-                </div>
+                      </span>
+                    </button>
+                  }
+                />
                 <span className="text-xs text-slate-400" data-testid={`text-preview-color-${fmt}`}>
                   {ALBUM_FORMAT_LABEL[fmt]} w/ full-color Inner Sleeve
                 </span>
