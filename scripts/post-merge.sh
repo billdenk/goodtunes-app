@@ -8079,3 +8079,56 @@ SQL
 }
 migrate_partner_feedback dev  "${DATABASE_URL:-}"
 migrate_partner_feedback prod "${PROD_DATABASE_URL:-}"
+
+# Task #2305 — Set Pressing Business, Inc. catalog album-cover placeholder.
+# The Pressing Business press (id b35eecd0-c3a1-459d-a6ec-586dfe7e42b5)
+# previously had no vinyl_placeholder_url, causing its Catalog tab to fall
+# back to the small profile logo. Set the bundled branded SVG as the
+# placeholder so the Catalog tab shows the full-bleed jacket art and new
+# albums created under this press seed from it. Scoped to that one id and
+# only when the column is currently NULL/empty so a later operator edit is
+# never clobbered. Harmless no-op on the dev DB (press doesn't exist there).
+# Marker-guarded so it runs only once per DB.
+backfill_task_2305_pressing_business_jacket() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2305 pressing-business jacket on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2305_pressing_business_jacket'
+  ) THEN
+    UPDATE manufacturers
+       SET vinyl_placeholder_url = '/pressing-business-jacket.svg'
+     WHERE id = 'b35eecd0-c3a1-459d-a6ec-586dfe7e42b5'
+       AND (vinyl_placeholder_url IS NULL OR vinyl_placeholder_url = '');
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_2305_pressing_business_jacket');
+
+    RAISE NOTICE 'task-2305 backfill applied: Pressing Business jacket placeholder set';
+  ELSE
+    RAISE NOTICE 'task-2305 backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2305 pressing-business jacket ok on $label"
+    echo "$out" | grep -i 'task-2305' || true
+  else
+    echo "post-merge: WARNING — task-2305 pressing-business jacket failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_2305_pressing_business_jacket dev  "${DATABASE_URL:-}"
+backfill_task_2305_pressing_business_jacket prod "${PROD_DATABASE_URL:-}"
