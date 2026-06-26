@@ -49,6 +49,16 @@ const DRY = process.argv.includes("--dry");
 // and re-point existing rows at the new circle-cropped image, even when they
 // already carry a square photo. Without it the script only fills NULL rows.
 const REMASK = process.argv.includes("--remask");
+// --repoint: network-free restore. Re-point every non-Splatter Hellbender
+// color row back at its committed cropped photo (scripts/data/hellbender-photos.json),
+// overwriting only rows that are still blank OR carry a swatch this tool
+// manages (a photos.json or hellbender-records.json URL) — so an operator's
+// hand-picked swatch is preserved and the 31 Splatter rows are never touched.
+// Idempotent and offline (no Shopify fetch, no image mirroring), so it is
+// safe to run on every post-merge. This is the canonical "undo the synthetic
+// flat-disc regression" path.
+const REPOINT = process.argv.includes("--repoint");
+const RECORDS_MANIFEST = "scripts/data/hellbender-records.json";
 // Bump whenever maskToVinylDisc changes how it crops, so --remask knows a
 // manifest entry was minted by an OLDER mask and re-mirrors it. v2 added the
 // shape/edge-aware pass that crops the translucent white/clear/silver/smokey/
@@ -129,11 +139,95 @@ async function mirrorImage(url: string): Promise<string> {
   return `/objects/uploads/${id}`;
 }
 
-async function main() {
+async function resolvePress(): Promise<{ id: string; name: string } | null> {
   const pressRows = await db.execute<{ id: string; name: string }>(
     sql`SELECT id, name FROM manufacturers WHERE name ILIKE '%hellbender%' LIMIT 1`,
   );
-  const press = pressRows.rows[0];
+  return pressRows.rows[0] ?? null;
+}
+
+async function writeBackup(pressId: string, envLabel: string): Promise<void> {
+  const backup = await db.execute(sql`
+    SELECT jsonb_agg(to_jsonb(c)) AS colors
+    FROM press_colors c JOIN press_color_tiers t ON t.id = c.tier_id
+    WHERE t.press_id = ${pressId}`);
+  mkdirSync("scripts/backups", { recursive: true });
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupPath = `scripts/backups/hellbender-colors-${envLabel}-${ts}.json`;
+  writeFileSync(backupPath, JSON.stringify({ pressId, colors: backup.rows[0] }, null, 2));
+  console.log(`Backup written: ${backupPath}`);
+}
+
+async function printTierSummary(pressId: string): Promise<void> {
+  const after = await db.execute<{ tier: string; format: string; colors: number; with_photo: number }>(sql`
+    SELECT t.name AS tier, t.format, COUNT(c.id)::int AS colors,
+           COUNT(c.swatch_image_url)::int AS with_photo
+    FROM press_color_tiers t
+    LEFT JOIN press_colors c ON c.tier_id = t.id
+    WHERE t.press_id = ${pressId}
+    GROUP BY t.format, t.name, t.position ORDER BY t.format, t.position`);
+  console.log("\nHellbender tiers (colors / with_photo):");
+  for (const r of after.rows) console.log(`  ${r.format}  ${r.tier}: ${r.colors} / ${r.with_photo}`);
+}
+
+/**
+ * Network-free restore (--repoint). Re-point every non-Splatter Hellbender
+ * color row back at its committed cropped photo, overwriting only rows we
+ * manage: still-blank rows, rows carrying a synthetic flat-disc swatch (the
+ * 2026-06-16 regression, from hellbender-records.json), or rows already on a
+ * photos.json URL (idempotent). An operator's hand-picked swatch URL is in
+ * neither manifest, so it is preserved; Splatter tiers are skipped outright
+ * and their color names appear in neither manifest anyway.
+ */
+async function repoint(pressId: string): Promise<void> {
+  const photos: Manifest = existsSync(MANIFEST)
+    ? JSON.parse(readFileSync(MANIFEST, "utf8"))
+    : { source: "", colors: [] };
+  const records: Manifest = existsSync(RECORDS_MANIFEST)
+    ? JSON.parse(readFileSync(RECORDS_MANIFEST, "utf8"))
+    : { source: "", colors: [] };
+
+  const targets = photos.colors.filter((e) => !!e.publicUrl);
+  const missingPhoto = photos.colors.filter((e) => !e.publicUrl).map((e) => e.name);
+  if (missingPhoto.length) {
+    throw new Error(
+      `Refusing to re-point: ${missingPhoto.length} manifest color(s) have no publicUrl: ${missingPhoto.join(", ")}`,
+    );
+  }
+
+  // Managed swatch set = every URL this tooling has ever written (cropped
+  // photos + synthetic discs). We only overwrite blank rows or rows on one of
+  // these — never an operator's own swatch.
+  const managed = Array.from(
+    new Set([
+      ...photos.colors.map((e) => e.publicUrl).filter((u): u is string => !!u),
+      ...records.colors.map((e) => e.publicUrl).filter((u): u is string => !!u),
+    ]),
+  );
+  const managedIn = sql.join(
+    managed.map((u) => sql`${u}`),
+    sql`, `,
+  );
+
+  let updated = 0;
+  await db.transaction(async (tx) => {
+    for (const e of targets) {
+      const res = await tx.execute(sql`
+        UPDATE press_colors c
+        SET swatch_image_url = ${e.publicUrl}, import_source_url = ${e.importSourceUrl}
+        FROM press_color_tiers t
+        WHERE c.tier_id = t.id AND t.press_id = ${pressId}
+          AND t.name NOT ILIKE '%splatter%'
+          AND c.name = ${e.name}
+          AND (c.swatch_image_url IS NULL OR c.swatch_image_url IN (${managedIn}))`);
+      updated += res.rowCount ?? 0;
+    }
+  });
+  console.log(`\nDone. Non-Splatter color rows re-pointed to cropped photos: ${updated}.`);
+}
+
+async function main() {
+  const press = await resolvePress();
   if (!press) {
     console.log("Hellbender not found in this DB — nothing to do.");
     return;
@@ -141,6 +235,18 @@ async function main() {
   const pressId = press.id;
   const envLabel = process.env.DATABASE_URL === process.env.PROD_DATABASE_URL ? "prod" : "dev";
   console.log(`Target: ${envLabel} DB · press ${press.name} (${pressId})${DRY ? " · DRY RUN" : ""}`);
+
+  if (REPOINT) {
+    if (DRY) {
+      console.log("[DRY] --repoint makes no changes in dry mode.");
+      await printTierSummary(pressId);
+      return;
+    }
+    await writeBackup(pressId, envLabel);
+    await repoint(pressId);
+    await printTierSummary(pressId);
+    return;
+  }
 
   // ---- Backup ----
   const backup = await db.execute(sql`

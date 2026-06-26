@@ -3006,47 +3006,37 @@ SQL
 reconcile_hellbender_catalog dev  "${DATABASE_URL:-}"
 reconcile_hellbender_catalog prod "${PROD_DATABASE_URL:-}"
 
-# Hellbender record swatches — replace the old gray/white studio-mockup color
-# swatches with the realistic tinted-vinyl-disc swatches generated from the
-# supplied PSD (one disc per catalog color; see
-# scripts/backfill-hellbender-records.ts). The disc PNGs are already mirrored
-# into the shared Object Storage bucket and their /objects/uploads/<id> URLs
-# are committed in scripts/data/hellbender-records.json, so this never
-# re-uploads — it just re-points every Hellbender press_colors row at its disc
-# image. Main dev+prod were updated directly when the task shipped; this gate
-# lets a freshly-seeded clone converge without a manual pass.
+# Hellbender swatch photos — restore the real cropped Hellbender disc PHOTOS
+# (angled disc, GoodTunes label, transparent bg) as every non-Splatter color's
+# catalog swatch. A 2026-06-16 change had swapped them for synthetic flat-color
+# disc renders (scripts/backfill-hellbender-records.ts); that was a regression.
+# The cropped photos are already mirrored into the shared Object Storage bucket
+# and their /objects/uploads/<id> URLs are committed in
+# scripts/data/hellbender-photos.json, so --repoint never touches the network
+# or re-uploads — it just re-points each row at its committed photo.
 #
-# Marker-guarded (post_merge_data_backfills / hellbender_record_swatches_v1)
-# so it runs exactly once per DB and never clobbers a later operator swatch
-# edit (the script itself re-points unconditionally, so the guard lives here).
-backfill_hellbender_record_swatches() {
+# NOT marker-guarded: --repoint is operator-safe (it only overwrites a row that
+# is still blank or carries a swatch this tooling wrote — a photos.json or the
+# old records.json URL — never an operator's own swatch) AND it skips Splatter
+# tiers outright, so it is safe to run on every merge. Running every time (not
+# once) is deliberate: the previous once-per-DB records gate is exactly why the
+# later-added 12" grouped tiers were left blank, so a fresh clone reliably
+# converges as the seed materializes new tiers. (backfill-hellbender-records.ts
+# + hellbender-records.json stay in the tree as a fallback only.)
+backfill_hellbender_photo_swatches() {
   local label="$1" url="$2"
   if [ -z "$url" ]; then
-    echo "post-merge: skipping hellbender-record-swatches backfill on $label (no URL set)"
+    echo "post-merge: skipping hellbender-photo-swatches backfill on $label (no URL set)"
     return 0
   fi
-  if psql "$url" -v ON_ERROR_STOP=1 -tAc \
-       "SELECT 1 FROM post_merge_data_backfills WHERE name = 'hellbender_record_swatches_v1'" \
-       2>/dev/null | grep -q 1; then
-    echo "post-merge: hellbender-record-swatches backfill already applied on $label — skipping"
-    return 0
-  fi
-  if DATABASE_URL="$url" npx tsx scripts/backfill-hellbender-records.ts; then
-    psql "$url" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<'SQL'
-CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
-  name        text PRIMARY KEY,
-  applied_at  timestamp NOT NULL DEFAULT now()
-);
-INSERT INTO post_merge_data_backfills (name) VALUES ('hellbender_record_swatches_v1')
-  ON CONFLICT (name) DO NOTHING;
-SQL
-    echo "post-merge: hellbender-record-swatches backfill ok on $label"
+  if DATABASE_URL="$url" npx tsx scripts/backfill-hellbender-photos.ts --repoint; then
+    echo "post-merge: hellbender-photo-swatches backfill ok on $label"
   else
-    echo "post-merge: WARNING — hellbender-record-swatches backfill failed on $label (continuing)"
+    echo "post-merge: WARNING — hellbender-photo-swatches backfill failed on $label (continuing)"
   fi
 }
-backfill_hellbender_record_swatches dev  "${DATABASE_URL:-}"
-backfill_hellbender_record_swatches prod "${PROD_DATABASE_URL:-}"
+backfill_hellbender_photo_swatches dev  "${DATABASE_URL:-}"
+backfill_hellbender_photo_swatches prod "${PROD_DATABASE_URL:-}"
 
 # Task #394 — profile_photos: drop the bogus user_id→users.id FK, add
 # the new photo_url column, and make the legacy data_url nullable.
