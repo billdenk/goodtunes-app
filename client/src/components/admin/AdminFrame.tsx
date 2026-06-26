@@ -380,13 +380,14 @@ export function AdminFrame({
       !o.returnedAt &&
       o.fulfillmentStatus !== "returned",
   ).length;
-  // Task #2224 — Feedback inbox badge counts only NEW partner reports
-  // (untriaged), mirroring how the page surfaces fresh submissions.
+  // Feedback badge counts all unresolved reports (everything except terminal
+  // statuses). Terminal = operator explicitly closed or won't-do'd the item.
+  const FEEDBACK_TERMINAL_STATUSES = new Set(["closed", "wont_do"]);
   const { data: feedbackRows = [] } = useQuery<Array<{ status: string }>>({
     queryKey: ["/api/admin/feedback"],
     enabled: !!user?.isAdmin,
   });
-  const feedbackNewCount = feedbackRows.filter((f) => f.status === "new").length;
+  const feedbackNewCount = feedbackRows.filter((f) => !FEEDBACK_TERMINAL_STATUSES.has(f.status)).length;
   // Task #2279 — QA Orders cleanup nav entry is only meaningful when
   // Stripe is in test mode (pk_test_ key), i.e. dev / non-production.
   // Reuse the public publishable-key endpoint the BuySheet already hits
@@ -989,8 +990,8 @@ export function AdminFrame({
                 onClick={() => navigate("/admin/jobs")}
                 testId="nav-jobs"
               />
-              {/* Task #2224 — Partner feedback / bug-report triage inbox.
-                  Badge reflects untriaged ("new") reports. */}
+              {/* Partner feedback / bug-report triage inbox.
+                  Badge reflects all unresolved reports (excludes closed + wont_do). */}
               <SidebarLink
                 icon={MessageSquare}
                 label="Feedback"
