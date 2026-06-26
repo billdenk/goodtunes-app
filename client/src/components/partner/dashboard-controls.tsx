@@ -32,7 +32,7 @@ export function RangePicker<T extends string>({
             onClick={() => onChange(p.id as T)}
             aria-pressed={active}
             className={cn(
-              "h-8 px-3 inline-flex items-center justify-center rounded text-[12.5px] font-semibold transition-colors",
+              "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
               active
                 ? "bg-white text-slate-900 shadow-sm"
                 : "text-slate-500 hover:text-slate-900",

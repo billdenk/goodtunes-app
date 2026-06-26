@@ -12326,11 +12326,6 @@
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/components/partner/dashboard-controls.tsx",
-    "snippet": "\"h-8 px-3 inline-flex items-center justify-center rounded text-[12.5px] font-semibold transition-colors\","
-  },
-  {
-    "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
     "snippet": "<p className=\"text-slate-500 text-[12px] uppercase tracking-wider font-semibold\">Dashboard</p>"
   },
