@@ -28129,6 +28129,185 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Task #2218 — let a super_admin correct a fan's core identity (real name,
+  // display name, public @handle, login email, contact email, phone) from the
+  // customer detail page. Gated to super_admin: requireAdmin alone admits
+  // partner accounts, and identity edits are account-level power matching the
+  // sibling signin-link / promote / merge routes. Mailing addresses stay
+  // read-only here (append-only Stripe snapshots), so they aren't editable.
+  const updateAdminCustomerIdentity = async (req: Request, res: Response) => {
+    try {
+      const customerId = String(req.params.id);
+      const customer = await storage.getCustomer(customerId);
+      if (!customer) return res.status(404).json({ message: "Customer not found" });
+      if ((customer as any).mergedIntoId) {
+        return res
+          .status(409)
+          .json({ message: "This account was merged into another and can no longer be edited." });
+      }
+
+      const body = req.body ?? {};
+
+      // Body shape is validated with a Zod schema; async uniqueness (login
+      // email + @handle) is checked separately below because it needs the DB.
+      const emailShape = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const editCustomerSchema = z.object({
+        // Display name — required, mirrors the complete-signup contract (1–80).
+        displayName: z
+          .string({
+            required_error: "Display name is required (1–80 characters).",
+            invalid_type_error: "Display name is required (1–80 characters).",
+          })
+          .transform((v) => v.trim())
+          .pipe(
+            z
+              .string()
+              .min(1, "Display name is required (1–80 characters).")
+              .max(80, "Display name is required (1–80 characters)."),
+          ),
+        // Real name — optional, nullable, capped at 120; empty clears it so the
+        // header falls back to the display name.
+        realName: z
+          .string()
+          .optional()
+          .transform((v) => {
+            const t = String(v ?? "").trim().slice(0, 120);
+            return t.length ? t : null;
+          }),
+        // Login email — required and email-shaped (global uniqueness is the
+        // async pre-check below).
+        email: z
+          .string({
+            required_error: "Please enter a valid email address.",
+            invalid_type_error: "Please enter a valid email address.",
+          })
+          .transform((v) => v.trim().toLowerCase())
+          .pipe(z.string().regex(emailShape, "Please enter a valid email address.")),
+        // Contact email — optional deliverable address (used when the login
+        // email is an Apple private-relay alias). Reject relay aliases and
+        // malformed values; empty clears it.
+        contactEmail: z
+          .string()
+          .optional()
+          .transform((v) => String(v ?? "").trim().toLowerCase())
+          .refine(
+            (v) => v === "" || (emailShape.test(v) && !/@privaterelay\.appleid\.com$/i.test(v)),
+            "Please enter a deliverable email address.",
+          )
+          .transform((v) => (v.length ? v : null)),
+        // Phone — free-form, optional (full E.164 validation lives in a
+        // separate phone-verification task). Capped defensively; empty clears.
+        phone: z
+          .string()
+          .optional()
+          .transform((v) => {
+            const t = String(v ?? "").trim().slice(0, 40);
+            return t.length ? t : null;
+          }),
+        // Handle — normalized here; only re-validated/written when it actually
+        // changed (see below), so an unrelated save can't trip the gate.
+        handle: z
+          .string()
+          .optional()
+          .transform((v) => String(v ?? "").trim().toLowerCase()),
+      });
+
+      const parsed = editCustomerSchema.safeParse(body);
+      if (!parsed.success) {
+        const issue = parsed.error.issues[0];
+        return res.status(400).json({
+          field: String(issue?.path?.[0] ?? ""),
+          message: issue?.message ?? "Please check the highlighted field.",
+        });
+      }
+      const { displayName, realName, email, contactEmail, phone, handle: newHandle } = parsed.data;
+
+      // Login email global uniqueness — pre-check against another account so we
+      // can return a friendly, field-pinned 409 ("email taken") rather than
+      // leaning on the raw constraint violation.
+      const emailOwner = await storage.getCustomerByEmail(email);
+      if (emailOwner && emailOwner.id !== customerId) {
+        return res
+          .status(409)
+          .json({ field: "email", message: "That email is already in use by another account." });
+      }
+
+      // Handle — only re-validate (and re-write) when it actually changed, so
+      // an operator saving an unrelated field can't trip the format/uniqueness
+      // gate on a legacy fan whose existing handle predates current rules. The
+      // handle mirrors `username` (both globally unique) so playlist URLs and
+      // admin search keep resolving; write them lock-step. classifyHandle
+      // checks BOTH columns, so collisions surface here as a field-pinned 409.
+      const currentHandle = (((customer as any).handle as string | null) || customer.username || "")
+        .toLowerCase();
+      let handleChanged = false;
+      if (newHandle !== currentHandle) {
+        const classified = await classifyHandle(newHandle, customerId);
+        if (!classified.ok) {
+          const message =
+            classified.reason === "format"
+              ? "Handle must be 3–30 characters: lowercase letters, numbers, dot, underscore, or hyphen."
+              : classified.reason === "reserved"
+                ? "That handle is held for the artist — please pick another."
+                : "That handle is already taken.";
+          return res.status(409).json({ field: "handle", reason: classified.reason, message });
+        }
+        handleChanged = true;
+      }
+
+      // NOTE: we intentionally do NOT reset emailVerifiedAt when an operator
+      // corrects the login email. An operator changing it on the fan's behalf
+      // is an out-of-band-verified action (fixing a typo'd / dead address);
+      // forcing a re-verify would needlessly lock the fan out.
+      const update = {
+        displayName,
+        realName,
+        email,
+        contactEmail,
+        phone,
+        ...(handleChanged ? { handle: newHandle, username: newHandle } : {}),
+      };
+
+      try {
+        await storage.updateCustomer(customerId, update);
+      } catch (e: any) {
+        const code = e?.cause?.code ?? e?.code;
+        const constraint = String(e?.cause?.constraint ?? e?.constraint ?? e?.cause?.detail ?? "");
+        if (code === "23505") {
+          if (/email/i.test(constraint)) {
+            return res
+              .status(409)
+              .json({ field: "email", message: "That email is already in use by another account." });
+          }
+          if (/handle|username/i.test(constraint)) {
+            return res.status(409).json({ field: "handle", message: "That handle is already taken." });
+          }
+          return res.status(409).json({ message: "Those details conflict with another account." });
+        }
+        throw e;
+      }
+
+      const profile = await storage.getAdminCustomerProfile(customerId);
+      if (!profile) return res.status(404).json({ message: "Customer not found" });
+      return res.json(profile);
+    } catch (err) {
+      console.error("[admin-customer-update] failed", err);
+      return res.status(500).json({ message: "Couldn't update the customer." });
+    }
+  };
+  app.patch(
+    "/api/admin/customers/:id",
+    requireAdmin,
+    requireRole("super_admin"),
+    updateAdminCustomerIdentity,
+  );
+  app.put(
+    "/api/admin/customers/:id",
+    requireAdmin,
+    requireRole("super_admin"),
+    updateAdminCustomerIdentity,
+  );
+
   // Operator escape hatch — mint a fresh single-use sign-in link for a fan
   // when transactional email fails to reach them (Gmail spam-filtering, a
   // dead/typo'd address, an already-consumed welcome-back link). It's the

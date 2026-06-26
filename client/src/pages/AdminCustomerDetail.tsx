@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Mail, Phone, MapPin, ShoppingBag, Disc3, ListMusic, CheckCircle2, Plus, X, Search, Link2, AlertTriangle, ArrowLeftRight, Users } from "lucide-react";
+import { ArrowLeft, ExternalLink, Mail, Phone, MapPin, ShoppingBag, Disc3, ListMusic, CheckCircle2, Plus, X, Search, Link2, AlertTriangle, ArrowLeftRight, Users, Pencil } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -9,6 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { OrderDetailSheet, originBadge } from "@/components/admin/OrderDetailSheet";
 import { PromoteCustomerDialog } from "@/components/admin/PromoteCustomerDialog";
+import { AdminEditCustomerDialog } from "@/components/admin/AdminEditCustomerDialog";
 import type { CustomerUser, StripeAddressSnapshot } from "@shared/schema";
 
 /**
@@ -151,6 +152,11 @@ export function AdminCustomerDetail() {
   });
   const isSuperAdmin = meRole?.role === "super_admin";
   const [promoteOpen, setPromoteOpen] = useState(false);
+  // Task #2218 — edit a fan's core identity (super_admin only). The trigger
+  // is a hover-revealed pencil beside the name in the header, matching the
+  // other admin edit affordances (AdminLabel / AdminPerson), not a standalone
+  // button in the action cluster.
+  const [editOpen, setEditOpen] = useState(false);
 
   // Operator escape hatch — when a fan can't get in (email landed in spam, a
   // dead/typo'd address, an already-used welcome-back link) mint a fresh
@@ -261,7 +267,23 @@ export function AdminCustomerDetail() {
         </Link>
 
         <AdminPageHeader
-          title={name}
+          title={
+            <span className="group inline-flex items-center gap-2">
+              <span>{name}</span>
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setEditOpen(true)}
+                  aria-label="Edit customer identity"
+                  title="Edit identity"
+                  className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10 transition-opacity opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
+                  data-testid="button-edit-customer-identity"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              )}
+            </span>
+          }
           subtitle={
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
               <span className="inline-flex items-center gap-1.5">
@@ -570,6 +592,11 @@ export function AdminCustomerDetail() {
 
       {/* Task #1342 (#1) — shared order detail Sheet, opened from an order row. */}
       <OrderDetailSheet orderId={openOrderId} onClose={() => setOpenOrderId(null)} />
+
+      {/* Task #2218 — edit-identity dialog (super_admin only). */}
+      {isSuperAdmin && (
+        <AdminEditCustomerDialog open={editOpen} onOpenChange={setEditOpen} customer={c} />
+      )}
 
       {/* Task #1342 (#5) — promote-to-admin dialog (super_admin only). */}
       {promoteOpen && (
