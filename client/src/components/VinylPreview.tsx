@@ -31,6 +31,57 @@ function resolveArtwork(url: string | null | undefined): string | null {
   return NO_ART_SENTINELS.has(v) ? null : v;
 }
 
+// Shared jacket-art fill resolution: the single source of truth for what a
+// "no real art yet" album shows inside a square cover slot. Real art →
+// press-logo on a white jacket → GoodTunes vinyl/soundwave branded svg.
+// Never a blank gray box. Used by the VinylPreview jacket below AND by
+// operator surfaces (e.g. the SellPanel collapsed-format header thumbnail)
+// so the tiny thumbnail, the big preview, and the GoodDeed cert all fall
+// back to an identical branded default. `placeholderLogoUrl` is optional —
+// omit it on fan call sites so a press logo never leaks onto a fan cover
+// (it falls straight through to the GoodTunes branded svg).
+export function JacketArtFill({
+  artworkUrl,
+  placeholderLogoUrl,
+}: {
+  artworkUrl: string | null | undefined;
+  placeholderLogoUrl?: string | null;
+}) {
+  const artwork = resolveArtwork(artworkUrl);
+  if (artwork) {
+    return (
+      <img
+        src={artwork}
+        alt=""
+        className="w-full h-full object-cover"
+        draggable={false}
+      />
+    );
+  }
+  if (placeholderLogoUrl) {
+    return (
+      <div className="w-full h-full bg-white flex items-center justify-center p-[16%]">
+        <img
+          src={placeholderLogoUrl}
+          alt=""
+          className="max-w-full max-h-full object-contain opacity-80"
+          draggable={false}
+          data-testid="img-press-logo-placeholder"
+        />
+      </div>
+    );
+  }
+  return (
+    <img
+      src="/vinyl-jacket-placeholder.svg"
+      alt=""
+      className="w-full h-full object-cover"
+      draggable={false}
+      data-testid="img-vinyl-jacket-placeholder"
+    />
+  );
+}
+
 export function VinylPreview({
   artworkUrl,
   color,
@@ -250,32 +301,7 @@ export function VinylPreview({
           className="absolute inset-0 bg-slate-200 overflow-hidden shadow-sm border border-black/10"
           data-testid="vinyl-preview-jacket"
         >
-          {artwork ? (
-            <img
-              src={artwork}
-              alt=""
-              className="w-full h-full object-cover"
-              draggable={false}
-            />
-          ) : placeholderLogoUrl ? (
-            <div className="w-full h-full bg-white flex items-center justify-center p-[16%]">
-              <img
-                src={placeholderLogoUrl}
-                alt=""
-                className="max-w-full max-h-full object-contain opacity-80"
-                draggable={false}
-                data-testid="img-press-logo-placeholder"
-              />
-            </div>
-          ) : (
-            <img
-              src="/vinyl-jacket-placeholder.svg"
-              alt=""
-              className="w-full h-full object-cover"
-              draggable={false}
-              data-testid="img-vinyl-jacket-placeholder"
-            />
-          )}
+          <JacketArtFill artworkUrl={artworkUrl} placeholderLogoUrl={placeholderLogoUrl} />
           {/* Gatefold cue — thin centered fold seam, so a gatefold
               reads as two-panel even before you notice the wider
               footprint. */}

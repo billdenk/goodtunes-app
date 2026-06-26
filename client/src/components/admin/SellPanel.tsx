@@ -90,7 +90,7 @@ import {
   type JacketUpgrade,
   type VinylColorOption,
 } from "@shared/pressing";
-import { VinylPreview } from "@/components/VinylPreview";
+import { VinylPreview, JacketArtFill } from "@/components/VinylPreview";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import { CertSaleWindowPanel } from "@/components/admin/CertSaleWindowPanel";
 import { ChangeFormatDialog } from "@/components/admin/ChangeFormatDialog";
@@ -4692,11 +4692,15 @@ function SkuRow({
             className="flex-shrink-0 w-24 h-24 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40"
             data-testid={`button-row-thumb-${format}`}
           >
-            {artworkUrl ? (
-              <img src={artworkUrl} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <span className="block w-full h-full" aria-hidden />
-            )}
+            {/* Task #2233 — show the SAME branded default the big vinyl
+                preview below uses (real art → quoting-press logo on white →
+                GoodTunes vinyl/soundwave svg) instead of a blank gray box,
+                so a press-created art-less album looks branded everywhere.
+                placeholderLogoUrl mirrors the big preview exactly. */}
+            <JacketArtFill
+              artworkUrl={artworkUrl}
+              placeholderLogoUrl={(invitedPressItself ?? comparisonAnchorPress)?.logoUrl ?? null}
+            />
           </button>
           <div className="flex-1 min-w-0 space-y-1">
           {/* Task #397 — Tracks-row inline-editable title. Click the
