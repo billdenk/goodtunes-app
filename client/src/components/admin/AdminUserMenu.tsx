@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { LogOut, ShieldCheck, UserPlus, Check, UserPen } from "lucide-react";
+import { LogOut, ShieldCheck, UserPlus, Check, UserPen, FlaskConical, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -74,9 +74,24 @@ export function AdminUserMenu() {
   // The resolved primary/active hat (mirrors what every gate sees). Used to
   // tick the currently-active row even when no explicit override is stored
   // (activeKey null → primary hat is active by default).
-  const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
+  const { data: roleInfo } = useQuery<{
+    role: string;
+    roleScopeId: string | null;
+    devImpersonating?: boolean;
+    devPersonaLabel?: string | null;
+  }>({
     queryKey: ["/api/me/role"],
     enabled: !!user,
+  });
+
+  const exitPreview = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", "/api/dev/impersonate-hat");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      window.location.href = "/admin/dashboard";
+    },
   });
 
   const switchHat = useMutation({
@@ -149,6 +164,34 @@ export function AdminUserMenu() {
             {user.email}
           </div>
         </DropdownMenuLabel>
+
+        {/* Dev-only: show a prominent "Exit Preview" item whenever a synthetic
+            impersonation hat is active so the operator can return to god-view. */}
+        {roleInfo?.devImpersonating && (
+          <>
+            <DropdownMenuSeparator className="bg-amber-200" />
+            <div className="px-2 py-1">
+              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-600 mb-1">
+                <FlaskConical className="w-3 h-3" />
+                Previewing as
+              </div>
+              <div className="text-xs text-amber-700 font-medium truncate mb-1.5">
+                {roleInfo.devPersonaLabel ?? "Partner"}
+              </div>
+              <button
+                type="button"
+                onClick={() => exitPreview.mutate()}
+                disabled={exitPreview.isPending}
+                data-testid="button-exit-dev-preview"
+                className="w-full flex items-center gap-1.5 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors"
+              >
+                <X className="w-3 h-3" />
+                Exit Preview → God View
+              </button>
+            </div>
+            <DropdownMenuSeparator className="bg-amber-200" />
+          </>
+        )}
 
         {showSwitcher && (
           <>

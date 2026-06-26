@@ -9352,6 +9352,21 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/AdminFrame.tsx",
+    "snippet": "<div className=\"flex items-center justify-between gap-3 bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-[12.5px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminFrame.tsx",
+    "snippet": "<span className=\"text-amber-500 text-[11px]\">— restricted shell is live; real partner sees this</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminFrame.tsx",
+    "snippet": "className=\"text-amber-700 hover:text-amber-900 font-medium underline text-[12px] flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminFrame.tsx",
     "snippet": "<span className=\"text-[10.5px] font-semibold uppercase tracking-[0.12em] text-slate-400\">"
   },
   {

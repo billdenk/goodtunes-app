@@ -89,10 +89,17 @@ export function ViewAsSwitcher() {
   // jumping across any entity's admin detail page. Gated on the real logged-in
   // role (this control only navigates, it never swaps the session, so the role
   // response is stable). The server already scopes what each role can open.
-  const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
+  // Also hidden during a dev impersonation session — the operator is already
+  // in a persona (the admin user menu shows the "Exit Preview" control).
+  const { data: roleInfo } = useQuery<{
+    role: string;
+    roleScopeId: string | null;
+    devImpersonating?: boolean;
+  }>({
     queryKey: ["/api/me/role"],
   });
   const isSuperAdmin = roleInfo?.role === "super_admin";
+  const devImpersonating = !!roleInfo?.devImpersonating;
   const currentEntity = useMemo(() => {
     const search = typeof window !== "undefined" ? window.location.search : "";
     return detectCurrentEntity(location, search);
@@ -184,8 +191,9 @@ export function ViewAsSwitcher() {
   const PersonaIcon = persona.icon;
 
   // All hooks above run unconditionally; only the render is gated so a
-  // non-super-admin sees nothing at all.
-  if (!isSuperAdmin) return null;
+  // non-super-admin sees nothing at all. Also hidden during dev impersonation
+  // — the admin user menu already shows "Exit Preview → God View".
+  if (!isSuperAdmin || devImpersonating) return null;
 
   return (
     <div className="flex items-center gap-2" data-testid="view-as-switcher">

@@ -47,12 +47,30 @@ export interface Persona {
   endpoint?: string;
   /** Optional client-side filter (Maker vs Reseller both use /api/vendors). */
   filter?: (e: EntityLite) => boolean;
-  /** Where to land when an entity is picked. */
+  /** Where to land when an entity is picked in the ViewAs switcher (super-admin nav). */
   detailPath?: (id: string) => string;
   /** Where to land for "+ New" (the list page hosts the add modal). */
   listPath?: string;
   /** Customers don't get a "+ New" — fans self-sign-up. */
   allowCreate?: boolean;
+  /**
+   * Dev-only impersonation config. When present, picking this persona from
+   * the dev-login dropdown will set a synthetic hat with these role+scope
+   * details and land on `portalPath` — the genuine restricted partner shell
+   * (not the super-admin detail page). Absent on "god" (no hat needed).
+   */
+  devHat?: {
+    /** The partner role that governs the admin sidebar and API gates. */
+    role: string;
+    /** The membership scope kind (mirrors MEMBERSHIP_SCOPE_KINDS). */
+    scopeKind: string;
+    /**
+     * The portal home URL for this role. No entity-ID query param — the
+     * portal reads the scopeId from /api/me/role (impersonated). Use
+     * detailPath for the super-admin VIEW-AS URL (with ?...Id=).
+     */
+    portalPath: string;
+  };
 }
 
 /**
@@ -60,23 +78,18 @@ export interface Persona {
  * place of the Dashboard persona-slot). Partner roles follow in the same
  * order they appear in the View As switcher.
  *
- * `detailPath` drives BOTH the in-app switcher navigation AND the post-login
- * landing for the dev-login role dropdown on the admin login page.
- *
- * Personas with a real partner portal (Label, Artist, Non-profit) route to
- * that portal with the super-admin `?<scope>Id=` view-as query param the
- * backend already honours. The result is what that partner actually sees when
- * logged in — the useful version for QA / investor demos.
- *
- * Personas without a portal yet (Press, Maker, Reseller, Fulfillment) fall
- * back to the admin detail page. Swap their `detailPath` to the portal URL
- * once the portal ships — no other change needed here.
+ * `detailPath` drives the in-app switcher navigation (VIEW AS, super-admin
+ * navigation with entity-ID query param). `devHat.portalPath` drives the
+ * post-login landing for the dev-login role dropdown — it's the genuine
+ * restricted portal home (no entity-ID param; the portal reads from
+ * /api/me/role which the synthetic hat populates).
  */
 export const PERSONAS: Persona[] = [
   {
     key: "god",
     label: "God View",
     icon: Eye,
+    // No devHat — God View clears impersonation and returns to full super-admin.
   },
   {
     key: "label",
@@ -86,6 +99,11 @@ export const PERSONAS: Persona[] = [
     detailPath: (id) => `/label?labelId=${encodeURIComponent(id)}`,
     listPath: "/admin/labels",
     allowCreate: true,
+    devHat: {
+      role: "label",
+      scopeKind: "label",
+      portalPath: "/label",
+    },
   },
   {
     key: "press",
@@ -95,6 +113,11 @@ export const PERSONAS: Persona[] = [
     detailPath: (id) => `/admin/manufacturers/${id}`,
     listPath: "/admin/manufacturers",
     allowCreate: true,
+    devHat: {
+      role: "manufacturer",
+      scopeKind: "manufacturer",
+      portalPath: "/vendor",
+    },
   },
   {
     key: "artist",
@@ -104,6 +127,11 @@ export const PERSONAS: Persona[] = [
     detailPath: (id) => `/artist?personId=${encodeURIComponent(id)}`,
     listPath: "/admin/people",
     allowCreate: true,
+    devHat: {
+      role: "artist",
+      scopeKind: "artist",
+      portalPath: "/artist",
+    },
   },
   {
     key: "nonprofit",
@@ -113,6 +141,11 @@ export const PERSONAS: Persona[] = [
     detailPath: (id) => `/admin/non-profits/${id}`,
     listPath: "/admin/non-profits",
     allowCreate: true,
+    devHat: {
+      role: "non_profit",
+      scopeKind: "non_profit",
+      portalPath: "/non-profit",
+    },
   },
   {
     key: "maker",
@@ -123,6 +156,11 @@ export const PERSONAS: Persona[] = [
     detailPath: (id) => `/admin/makers/${id}`,
     listPath: "/admin/makers",
     allowCreate: true,
+    devHat: {
+      role: "vendor",
+      scopeKind: "vendor",
+      portalPath: "/vendor",
+    },
   },
   {
     key: "reseller",
@@ -133,6 +171,11 @@ export const PERSONAS: Persona[] = [
     detailPath: (id) => `/admin/vendors/${id}`,
     listPath: "/admin/vendors",
     allowCreate: true,
+    devHat: {
+      role: "vendor",
+      scopeKind: "vendor",
+      portalPath: "/vendor",
+    },
   },
   {
     key: "fulfillment",
@@ -142,6 +185,11 @@ export const PERSONAS: Persona[] = [
     detailPath: (id) => `/admin/fulfillment-partners/${id}`,
     listPath: "/admin/fulfillment-partners",
     allowCreate: true,
+    devHat: {
+      role: "fulfillment",
+      scopeKind: "fulfillment",
+      portalPath: "/vendor",
+    },
   },
 ];
 

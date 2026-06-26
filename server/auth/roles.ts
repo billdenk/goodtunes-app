@@ -22,7 +22,7 @@ import {
   type AdminRole,
   type MembershipScopeKind,
 } from "@shared/schema";
-import { getActiveMembershipKey, membershipKey } from "./activeMembership";
+import { getActiveMembershipKey, getDevImpersonationHat, membershipKey } from "./activeMembership";
 
 export type { AdminRole };
 export { membershipKey };
@@ -182,6 +182,23 @@ export async function getAllUserMemberships(userId: string): Promise<ResolvedMem
 // that no longer matches) fall straight through to the full set, keeping
 // behavior byte-for-byte identical to before the switcher existed.
 export async function getUserMemberships(userId: string): Promise<ResolvedMembership[]> {
+  // Dev-only impersonation hat: returns a synthetic single-hat membership
+  // for the chosen persona. Hard-gated on NODE_ENV so it can NEVER fire
+  // in production (the write endpoint 404s there too, making the session
+  // key unreachable by any real request).
+  if (process.env.NODE_ENV !== "production") {
+    const devHat = getDevImpersonationHat();
+    if (devHat) {
+      return [{
+        role: normalizeRole(devHat.role),
+        scopeKind: (MEMBERSHIP_SCOPE_KINDS as readonly string[]).includes(devHat.scopeKind ?? "")
+          ? (devHat.scopeKind as MembershipScopeKind)
+          : null,
+        scopeId: devHat.scopeId,
+        subRole: null,
+      }];
+    }
+  }
   const all = await getAllUserMemberships(userId);
   if (all.length <= 1) return all;
   const activeKey = getActiveMembershipKey();

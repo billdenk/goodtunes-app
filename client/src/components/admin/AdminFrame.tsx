@@ -388,6 +388,8 @@ export function AdminFrame({
     role: string;
     roleScopeId: string | null;
     canInvite?: boolean;
+    devImpersonating?: boolean;
+    devPersonaLabel?: string | null;
   }>({
     queryKey: ["/api/me/role"],
     enabled: !!user?.isAdmin,
@@ -1125,6 +1127,34 @@ export function AdminFrame({
         {/* Task #138 — Passive STT-creep alert banner. Lives outside
             the page-content max-width wrapper so it spans uniformly
             across every admin page without each page having to opt in. */}
+        {/* Dev-only: amber banner whenever a synthetic impersonation hat is
+            active. Makes it obvious the operator is in preview mode and
+            provides a one-click exit back to god-view. */}
+        {roleInfo?.devImpersonating && (
+          <div className="flex items-center justify-between gap-3 bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-[12.5px]">
+            <div className="flex items-center gap-2 text-amber-700">
+              <span className="text-amber-500">🔬</span>
+              <span className="font-semibold">Dev Preview</span>
+              <span className="text-amber-600">·</span>
+              <span>{roleInfo.devPersonaLabel ?? "Partner"}</span>
+              <span className="text-amber-500 text-[11px]">— restricted shell is live; real partner sees this</span>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const { apiRequest: api } = await import("@/lib/queryClient");
+                  await api("DELETE", "/api/dev/impersonate-hat");
+                } catch {}
+                window.location.href = "/admin/dashboard";
+              }}
+              className="text-amber-700 hover:text-amber-900 font-medium underline text-[12px] flex-shrink-0"
+              data-testid="button-exit-dev-preview-banner"
+            >
+              Exit Preview
+            </button>
+          </div>
+        )}
         <AutoSyncAlertBanner />
         {/* Task #364 — Mux pipeline health (missing secrets, errored
             ingests, large not-ingested backlog). Same passive +

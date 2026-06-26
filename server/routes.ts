@@ -24525,6 +24525,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const cap = computeInviteCapability(role, roleScopeId, canInviteSubusers);
 
+    // Dev-only: expose whether we're currently inside a dev persona
+    // impersonation so the client can show an "Exit Preview" button.
+    const devHat = process.env.NODE_ENV !== "production"
+      ? ((req.session as any).devImpersonationHat ?? null) as { label: string } | null
+      : null;
+
     res.json({
       role,
       roleScopeId,
@@ -24533,6 +24539,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       canInvite: cap.canInvite,
       allowedInviteRoles: cap.allowedRoles,
       allowAdvancedInvite: cap.allowAdvanced,
+      devImpersonating: devHat !== null,
+      devPersonaLabel: devHat?.label ?? null,
     });
   });
 
@@ -24595,6 +24603,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!match) return res.status(400).json({ message: "You don't hold that membership." });
     req.session.activeMembershipKey = key;
     res.json({ ok: true, activeKey: key });
+  });
+
+  // Dev/preview-only: set a synthetic impersonation hat so the admin
+  // shell renders exactly what a real partner admin would see. Stores
+  // the hat on the session; activeMembershipContext lifts it into ALS
+  // on every subsequent request so getUserMemberships returns it as the
+  // sole membership. Hard-gated on NODE_ENV — 404s in production so the
+  // session key is unreachable by any real request there. Restricted to
+  // super_admin so no partner account can bootstrap an elevated hat.
+  app.post("/api/dev/impersonate-hat", requireAdmin, async (req, res) => {
+    if (process.env.NODE_ENV === "production") return res.status(404).json({ message: "Not found" });
+    // Super-admin-only: partner roles must never set arbitrary synthetic hats.
+    const callerRole = await getUserRole(req.session.userId!);
+    if (callerRole?.role !== "super_admin") return res.status(403).json({ message: "Super-admin only" });
+    const { ADMIN_ROLES, MEMBERSHIP_SCOPE_KINDS } = await import("@shared/schema");
+    const { role, scopeKind, scopeId, label } = req.body ?? {};
+    if (!role || typeof role !== "string") return res.status(400).json({ message: "role required" });
+    // Validate role against the closed ADMIN_ROLES enum to prevent accidental
+    // super_admin normalisation (normalizeRole maps unknowns to super_admin).
+    if (!ADMIN_ROLES.includes(role as any)) return res.status(400).json({ message: `Unknown role: ${role}` });
+    // Validate scopeKind when present.
+    if (scopeKind != null && !MEMBERSHIP_SCOPE_KINDS.includes(scopeKind as any)) {
+      return res.status(400).json({ message: `Unknown scopeKind: ${scopeKind}` });
+    }
+    (req.session as any).devImpersonationHat = {
+      role,
+      scopeKind: scopeKind ?? null,
+      scopeId: scopeId ?? null,
+      label: label ?? role,
+    };
+    return res.json({ ok: true });
+  });
+
+  // Clear the dev impersonation hat and return to god-view.
+  app.delete("/api/dev/impersonate-hat", requireAdmin, async (req, res) => {
+    if (process.env.NODE_ENV === "production") return res.status(404).json({ message: "Not found" });
+    const callerRole = await getUserRole(req.session.userId!);
+    if (callerRole?.role !== "super_admin") return res.status(403).json({ message: "Super-admin only" });
+    delete (req.session as any).devImpersonationHat;
+    return res.json({ ok: true });
   });
 
   // List pending invites. Super-admins see all; artists see only invites

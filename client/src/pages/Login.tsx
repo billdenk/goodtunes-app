@@ -612,9 +612,24 @@ export function Login() {
       if (devPersonaKey) {
         try { sessionStorage.removeItem(DEV_LOGIN_PERSONA_KEY); } catch {}
         const persona = PERSONAS.find((p) => p.key === devPersonaKey);
-        if (persona && persona.endpoint) {
-          // Async resolution — navigate once we have the entity id.
+        // God View — clear any existing impersonation hat, land on dashboard.
+        if (!persona || !persona.devHat) {
           (async () => {
+            try { await apiRequest("DELETE", "/api/dev/impersonate-hat"); } catch {}
+            const target = "/admin/dashboard";
+            window.history.replaceState({}, "", target);
+            queryClient.invalidateQueries();
+            navigate(target);
+          })();
+          return;
+        }
+        // Partner persona — fetch the first entity, set the synthetic hat,
+        // then land on the genuine restricted portal home (not the operator
+        // detail page). The portal reads its scope from /api/me/role which
+        // now resolves to the impersonated role + scopeId.
+        if (persona.endpoint && persona.devHat) {
+          (async () => {
+            let portalPath = persona.devHat!.portalPath;
             try {
               const res = await apiRequest("GET", persona.endpoint!);
               const entities: EntityLite[] = await res.json();
@@ -622,19 +637,28 @@ export function Login() {
                 ? entities.filter(persona.filter)
                 : entities;
               const first = filtered[0];
-              if (first && persona.detailPath) {
-                dest = persona.detailPath(first.id);
+              if (first) {
+                // Set the dev impersonation hat on the session. After this
+                // every /api/me/role call will resolve to the partner role
+                // and scopeId, so all admin gates engage correctly.
+                await apiRequest("POST", "/api/dev/impersonate-hat", {
+                  role: persona.devHat!.role,
+                  scopeKind: persona.devHat!.scopeKind,
+                  scopeId: first.id,
+                  label: `${persona.label} · ${first.name}`,
+                });
               }
             } catch {
               // Fall back to the admin dashboard on any error.
+              portalPath = "/admin/dashboard";
             }
-            window.history.replaceState({}, "", dest);
+            window.history.replaceState({}, "", portalPath);
             queryClient.invalidateQueries();
-            navigate(dest);
+            navigate(portalPath);
           })();
           return;
         }
-        // God View (no endpoint) or unknown key — just land on dashboard.
+        // Fallback — just land on dashboard.
         dest = "/admin/dashboard";
       }
       window.history.replaceState({}, "", dest);
