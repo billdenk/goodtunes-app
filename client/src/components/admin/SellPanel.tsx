@@ -132,6 +132,10 @@ type Manufacturer = {
   id: string;
   name: string;
   logoUrl: string | null;
+  // Task #2261 — the press's uploaded default jacket image
+  // (`manufacturers.vinyl_placeholder_url`). Drives the admin package
+  // designer's no-art placeholder so it matches the press catalog editor.
+  vinylPlaceholderUrl?: string | null;
   coverUrl: string | null;
   bio: string | null;
   location: string | null;
@@ -4692,13 +4696,15 @@ function SkuRow({
             className="flex-shrink-0 w-24 h-24 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40"
             data-testid={`button-row-thumb-${format}`}
           >
-            {/* Task #2233 — show the SAME branded default the big vinyl
-                preview below uses (real art → quoting-press logo on white →
-                GoodTunes vinyl/soundwave svg) instead of a blank gray box,
-                so a press-created art-less album looks branded everywhere.
-                placeholderLogoUrl mirrors the big preview exactly. */}
+            {/* Task #2233/#2261 — show the SAME branded default the big
+                vinyl preview below uses (real art → press's uploaded default
+                jacket art → quoting-press logo on white → GoodTunes vinyl/
+                soundwave svg) instead of a blank gray box, so a press-created
+                art-less album looks branded everywhere. placeholderArtworkUrl
+                + placeholderLogoUrl mirror the big preview exactly. */}
             <JacketArtFill
               artworkUrl={artworkUrl}
+              placeholderArtworkUrl={(invitedPressItself ?? comparisonAnchorPress)?.vinylPlaceholderUrl ?? null}
               placeholderLogoUrl={(invitedPressItself ?? comparisonAnchorPress)?.logoUrl ?? null}
             />
           </button>
@@ -5745,11 +5751,13 @@ function SkuRow({
                   jacketUpgrade={jacketUpgrade}
                   format={format}
                   size="2xl"
-                  /* Task #2117 — when the album has no artwork yet, brand
-                     the operator/press jacket mockup with the quoting
-                     press's logo instead of a plain gray gradient. Real
-                     art always wins (VinylPreview only uses this when
-                     artworkUrl is empty). */
+                  /* Task #2117/#2261 — when the album has no artwork yet,
+                     brand the operator/press jacket mockup. Prefer the
+                     press's uploaded default jacket image (matches the press
+                     catalog editor), then fall back to the quoting press's
+                     logo, then the generic placeholder. Real art always wins
+                     (VinylPreview only uses these when artworkUrl is empty). */
+                  placeholderArtworkUrl={(invitedPressItself ?? comparisonAnchorPress)?.vinylPlaceholderUrl ?? null}
                   placeholderLogoUrl={(invitedPressItself ?? comparisonAnchorPress)?.logoUrl ?? null}
                   jacketOverlay={(onEditArtwork || canChangeFormat) ? (
                     <>

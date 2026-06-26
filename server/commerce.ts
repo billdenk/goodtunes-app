@@ -1631,6 +1631,12 @@ export function registerCommerceRoutes(app: Express) {
         id: press.id,
         name: press.name,
         logoUrl: (press as any).logoUrl ?? null,
+        // Task #2261 — the press's uploaded default jacket image, so the
+        // admin package designer can show the same branded jacket art the
+        // press catalog editor shows on an art-less album (logo is the
+        // corporate icon fallback). Operator-only payload; never reaches a
+        // fan-facing cover.
+        vinylPlaceholderUrl: (press as any).vinylPlaceholderUrl ?? null,
         coverUrl: (press as any).coverUrl ?? null,
         bio: (press as any).bio ?? null,
         location: (press as any).location ?? null,

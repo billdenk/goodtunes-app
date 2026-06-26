@@ -33,18 +33,25 @@ function resolveArtwork(url: string | null | undefined): string | null {
 
 // Shared jacket-art fill resolution: the single source of truth for what a
 // "no real art yet" album shows inside a square cover slot. Real art →
-// press-logo on a white jacket → GoodTunes vinyl/soundwave branded svg.
-// Never a blank gray box. Used by the VinylPreview jacket below AND by
-// operator surfaces (e.g. the SellPanel collapsed-format header thumbnail)
-// so the tiny thumbnail, the big preview, and the GoodDeed cert all fall
-// back to an identical branded default. `placeholderLogoUrl` is optional —
-// omit it on fan call sites so a press logo never leaks onto a fan cover
-// (it falls straight through to the GoodTunes branded svg).
+// press's uploaded default jacket art (full-bleed) → press-logo on a white
+// jacket → GoodTunes vinyl/soundwave branded svg. Never a blank gray box.
+// Used by the VinylPreview jacket below AND by operator surfaces (e.g. the
+// SellPanel collapsed-format header thumbnail) so the tiny thumbnail, the
+// big preview, and the GoodDeed cert all fall back to an identical branded
+// default. `placeholderArtworkUrl` + `placeholderLogoUrl` are optional —
+// omit them on fan call sites so a press's uploaded jacket art / logo never
+// leaks onto a fan cover (it falls straight through to the GoodTunes branded
+// svg). Task #2261 — `placeholderArtworkUrl` is the press's uploaded default
+// jacket image (`manufacturers.vinyl_placeholder_url`); when present it wins
+// over the corporate logo so the admin package designer matches the press
+// catalog editor (which renders the same uploaded art full-bleed).
 export function JacketArtFill({
   artworkUrl,
+  placeholderArtworkUrl,
   placeholderLogoUrl,
 }: {
   artworkUrl: string | null | undefined;
+  placeholderArtworkUrl?: string | null;
   placeholderLogoUrl?: string | null;
 }) {
   const artwork = resolveArtwork(artworkUrl);
@@ -55,6 +62,18 @@ export function JacketArtFill({
         alt=""
         className="w-full h-full object-cover"
         draggable={false}
+      />
+    );
+  }
+  const placeholderArt = resolveArtwork(placeholderArtworkUrl);
+  if (placeholderArt) {
+    return (
+      <img
+        src={placeholderArt}
+        alt=""
+        className="w-full h-full object-cover"
+        draggable={false}
+        data-testid="img-press-jacket-placeholder"
       />
     );
   }
@@ -89,6 +108,7 @@ export function VinylPreview({
   size = "md",
   jacketOverlay,
   format,
+  placeholderArtworkUrl,
   placeholderLogoUrl,
 }: {
   artworkUrl: string | null | undefined;
@@ -103,6 +123,14 @@ export function VinylPreview({
   // gradient for fan-facing call sites, so a press logo never leaks
   // onto a fan album cover.
   placeholderLogoUrl?: string | null;
+  // Task #2261 — the press's uploaded default jacket image
+  // (`manufacturers.vinyl_placeholder_url`). When present (and the album
+  // has no real art), it renders FULL-BLEED as the jacket — winning over
+  // `placeholderLogoUrl` — so the admin package designer shows the same
+  // uploaded art the press catalog editor shows. Optional/undefined keeps
+  // the logo/gradient fallback, so press jacket art never leaks onto a fan
+  // album cover.
+  placeholderArtworkUrl?: string | null;
   // Task #393 — optional ReactNode rendered absolutely-positioned
   // INSIDE the jacket div, so a hover-pencil from the SellPanel format
   // card can sit on the jacket itself (top-right) without overlapping
@@ -150,6 +178,14 @@ export function VinylPreview({
               alt=""
               className="w-full h-full object-cover"
               draggable={false}
+            />
+          ) : resolveArtwork(placeholderArtworkUrl) ? (
+            <img
+              src={resolveArtwork(placeholderArtworkUrl)!}
+              alt=""
+              className="w-full h-full object-cover"
+              draggable={false}
+              data-testid="img-press-jacket-placeholder"
             />
           ) : placeholderLogoUrl ? (
             <div className="w-full h-full bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center p-[18%]">
@@ -301,7 +337,7 @@ export function VinylPreview({
           className="absolute inset-0 bg-slate-200 overflow-hidden shadow-sm border border-black/10"
           data-testid="vinyl-preview-jacket"
         >
-          <JacketArtFill artworkUrl={artworkUrl} placeholderLogoUrl={placeholderLogoUrl} />
+          <JacketArtFill artworkUrl={artworkUrl} placeholderArtworkUrl={placeholderArtworkUrl} placeholderLogoUrl={placeholderLogoUrl} />
           {/* Gatefold cue — thin centered fold seam, so a gatefold
               reads as two-panel even before you notice the wider
               footprint. */}
