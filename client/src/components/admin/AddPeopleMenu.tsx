@@ -224,6 +224,8 @@ function PersonPicker({
   prefillOnly,
   onPrefillFields,
   pasteSecondary,
+  hidePaste,
+  onCreateFromName,
 }: {
   value: PersonLite | null;
   onChange: (p: PersonLite | null) => void;
@@ -231,6 +233,15 @@ function PersonPicker({
   testIdPrefix: string;
   /** Adds a "Search Spotify" fallback button (only used by Invite Artist). */
   enableSpotify?: boolean;
+  /** Task #2228 — drop the paste-a-URL affordance entirely (only the
+      People search renders). Used by Add Admin, where pasting a
+      Bandcamp/Spotify URL to invite a business admin makes no sense. */
+  hidePaste?: boolean;
+  /** Task #2228 — when provided, the no-match "Add '<name>'" affordance
+      hands the typed name up to the parent instead of minting a bare
+      Person row immediately. Used by Add Admin so the typed name rides
+      the existing partner-contacts name+email submit path. */
+  onCreateFromName?: (name: string) => void;
   /** Task #699 — when true, search is the primary (top) input and the
       paste-a-URL affordance collapses behind a secondary "Paste a link
       instead" toggle at the bottom, so it never reads as a second
@@ -624,17 +635,21 @@ function PersonPicker({
               <span className="text-xs text-slate-500">No matches in People.</span>
               <button
                 type="button"
-                onClick={() => createBareMut.mutate(q.trim())}
-                disabled={createBareMut.isPending || !q.trim()}
+                onClick={() =>
+                  onCreateFromName
+                    ? onCreateFromName(q.trim())
+                    : createBareMut.mutate(q.trim())
+                }
+                disabled={(onCreateFromName ? false : createBareMut.isPending) || !q.trim()}
                 className="text-xs font-semibold text-[var(--brand-blue)] hover:underline inline-flex items-center gap-1 disabled:opacity-60"
                 data-testid={`button-${testIdPrefix}-create-bare`}
               >
-                {createBareMut.isPending ? (
+                {!onCreateFromName && createBareMut.isPending ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
                 ) : (
                   <Plus className="w-3 h-3" />
                 )}
-                Create “{q.trim()}”
+                {onCreateFromName ? "Add" : "Create"} “{q.trim()}”
               </button>
             </li>
           ) : (
@@ -728,7 +743,10 @@ function PersonPicker({
 
   return (
     <div className="space-y-2">
-      {pasteSecondary ? (
+      {hidePaste ? (
+        // Task #2228 — Add Admin: People search only, no paste-a-URL.
+        searchBlock
+      ) : pasteSecondary ? (
         // Task #699 — search-first layout: People search + Spotify import
         // are the primary path; paste-a-URL collapses behind a secondary
         // toggle so it never competes as a second primary affordance.
@@ -789,15 +807,15 @@ function AttachContactDialog(
   },
 ) {
   const { toast } = useToast();
-  // Task #665 — dual-mode UX: "Pick existing" tab shows the PersonPicker
-  // (search People, paste URL, Spotify fallback); "New contact" tab
-  // collapses the picker and exposes a plain Name input. The server's
-  // /api/admin/partner-contacts route accepts either {personId} OR
-  // {name+email} — this UI mirrors that contract so operators can't
-  // hit the "Name is required" dead-end the reviewer flagged.
-  const [mode, setMode] = useState<"existing" | "new">("existing");
+  // Task #2228 — Add Admin is one search-first input (no Pick existing /
+  // New contact tabs). The operator types a name; matching People appear
+  // to pick from, and when nothing matches the typed name can be added
+  // straight from the input. A picked Person rides as {personId}; a
+  // typed-only name rides as {name} — the /api/admin/partner-contacts
+  // route accepts either, so both land without the old "Name is
+  // required" dead-end.
   const [picked, setPicked] = useState<PersonLite | null>(null);
-  const [name, setName] = useState("");
+  const [typedName, setTypedName] = useState("");
   const [title, setTitleField] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -805,10 +823,6 @@ function AttachContactDialog(
   // for a press (manufacturer) admin invite; ignored by every other
   // partner kind. Staff get view + invite-artists only.
   const [level, setLevel] = useState<"owner_admin" | "staff">("owner_admin");
-  // Operator-supplied/scraped photo carried through to the new Person so
-  // the press invite link can show a face. Hydrated from a paste-a-URL
-  // prefill in New Contact mode.
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const isPressAdmin = props.kind === "admin" && props.entityKind === "manufacturer";
   // Invite-Ready state — populated after submit when the email doesn't
   // resolve to an existing users row so we minted a partner-scoped
@@ -824,14 +838,12 @@ function AttachContactDialog(
   const [copied, setCopied] = useState(false);
 
   function reset() {
-    setMode("existing");
     setPicked(null);
-    setName("");
+    setTypedName("");
     setTitleField("");
     setEmail("");
     setPhone("");
     setLevel("owner_admin");
-    setPhotoUrl(null);
     setInvite(null);
     setCopied(false);
   }
@@ -922,23 +934,22 @@ function AttachContactDialog(
         return { mode: "ambassador" as const };
       }
       // Admin path — unified partner-contacts endpoint does upsert +
-      // attach + (grant role OR mint invite) in one round-trip.
-      if (mode === "existing" && !picked) throw new Error("Pick a Person first");
-      if (mode === "new" && !name.trim()) throw new Error("Name is required");
+      // attach + (grant role OR mint invite) in one round-trip. Task #2228
+      // — a picked Person submits as {personId}; a typed-only name submits
+      // as {name}, which the server upserts into a Person.
+      if (!picked && !typedName.trim()) throw new Error("Pick or name a Person first");
       if (!email.trim()) throw new Error("Email is required");
       const r = await apiRequest("POST", "/api/admin/partner-contacts", {
         entityKind: props.entityKind === "fulfillment" ? "fulfillment_partner" : props.entityKind,
         entityId: props.entityId,
-        personId: mode === "existing" ? picked?.id ?? null : null,
-        name: mode === "existing" ? picked?.name ?? null : name.trim(),
+        personId: picked?.id ?? null,
+        name: picked?.name ?? typedName.trim(),
         title: title.trim() || null,
         email: email.trim(),
         phone: phone.trim() || null,
-        // Task #699 — press teammate tier + scraped photo. Server ignores
-        // `level` for non-manufacturer kinds; photoUrl only lands on a
-        // newly-minted Person (existing rows keep their photo).
+        // Task #699 — press teammate tier. Server ignores `level` for
+        // non-manufacturer kinds.
         level: isPressAdmin ? level : undefined,
-        photoUrl: mode === "new" ? photoUrl ?? undefined : undefined,
       });
       const body = await r.json();
       return { mode: "admin" as const, body };
@@ -1088,39 +1099,50 @@ function AttachContactDialog(
           </div>
         ) : (
           <div className="space-y-3">
-            {props.kind === "admin" && (
-              // Task #665 — explicit mode switch so "Add Admin" matches
-              // the spec's dual flow: pick an existing Person, or fill
-              // in a new contact's name/title/email/phone in one shot.
-              <div
-                className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs font-semibold"
-                data-testid={`tabs-${props.testIdPrefix}-${props.kind}-mode`}
-              >
-                <button
-                  type="button"
-                  onClick={() => { setMode("existing"); setName(""); }}
-                  className={[
-                    "px-3 py-1 rounded-md transition-colors",
-                    mode === "existing" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
-                  ].join(" ")}
-                  data-testid={`tab-${props.testIdPrefix}-${props.kind}-mode-existing`}
+            {props.kind === "admin" ? (
+              // Task #2228 — one search-first input. Type a name to pick a
+              // matching Person, or add the typed name straight from the
+              // input when nothing matches (no paste-a-URL, no tabs). A
+              // typed-only name shows here as a locked chip with a clear.
+              typedName ? (
+                <div
+                  className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2"
+                  data-testid={`picked-${props.testIdPrefix}-${props.kind}-typed`}
                 >
-                  Pick existing
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setMode("new"); setPicked(null); }}
-                  className={[
-                    "px-3 py-1 rounded-md transition-colors",
-                    mode === "new" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
-                  ].join(" ")}
-                  data-testid={`tab-${props.testIdPrefix}-${props.kind}-mode-new`}
-                >
-                  New contact
-                </button>
-              </div>
-            )}
-            {(props.kind !== "admin" || mode === "existing") && (
+                  <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
+                    <Plus className="w-4 h-4" />
+                  </div>
+                  <span className="text-sm text-slate-800 flex-1 truncate">
+                    {typedName}
+                  </span>
+                  <span className="text-xs text-slate-400">New contact</span>
+                  <button
+                    type="button"
+                    onClick={() => setTypedName("")}
+                    className="text-slate-400 hover:text-rose-600 transition-colors"
+                    aria-label="Clear selection"
+                    data-testid={`button-${props.testIdPrefix}-${props.kind}-typed-clear`}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <PersonPicker
+                  value={picked}
+                  onChange={setPicked}
+                  excludeIds={props.attachedIds}
+                  testIdPrefix={`${props.testIdPrefix}-${props.kind}`}
+                  hidePaste
+                  onCreateFromName={(n) => {
+                    setPicked(null);
+                    setTypedName(n);
+                  }}
+                  onPrefilled={(info) => {
+                    if (info.title && !title.trim()) setTitleField(info.title);
+                  }}
+                />
+              )
+            ) : (
               <PersonPicker
                 value={picked}
                 onChange={setPicked}
@@ -1130,44 +1152,6 @@ function AttachContactDialog(
                   if (info.title && !title.trim()) setTitleField(info.title);
                 }}
               />
-            )}
-            {props.kind === "admin" && mode === "new" && (
-              <div className="space-y-3">
-                {/* Task #665 — paste-a-URL prefill in New Contact mode.
-                    Bandcamp / Apple / Spotify / LinkedIn / generic bio
-                    URLs scrape Name + Title (and any contact links)
-                    straight into the form without minting a Person row;
-                    the partner-contacts POST will create the Person on
-                    submit. */}
-                <PersonPicker
-                  value={null}
-                  onChange={() => { /* prefill-only: no Person ever picked here */ }}
-                  excludeIds={props.attachedIds}
-                  testIdPrefix={`${props.testIdPrefix}-${props.kind}-new`}
-                  prefillOnly
-                  onPrefillFields={(f) => {
-                    if (f.name) setName(f.name);
-                    if (f.title && !title.trim()) setTitleField(f.title);
-                    if (f.email && !email.trim()) setEmail(f.email);
-                    if (f.phone && !phone.trim()) setPhone(f.phone);
-                    // Task #699 — carry the scraped photo onto the new
-                    // Person so the press invite shows a face.
-                    if (f.photoUrl && !photoUrl) setPhotoUrl(f.photoUrl);
-                  }}
-                />
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
-                    Name
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="e.g. Pat Williams"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    data-testid={`input-${props.testIdPrefix}-${props.kind}-name`}
-                  />
-                </div>
-              </div>
             )}
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1302,8 +1286,7 @@ function AttachContactDialog(
                   submit.isPending ||
                   (props.kind === "ambassador"
                     ? !picked
-                    : !email.trim() ||
-                      (mode === "existing" ? !picked : !name.trim()))
+                    : !email.trim() || (!picked && !typedName.trim()))
                 }
                 data-testid={`button-${props.testIdPrefix}-${props.kind}-submit`}
               >
