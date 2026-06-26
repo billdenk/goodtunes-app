@@ -81,6 +81,17 @@ export function FeedbackStatusPill({ status }: { status: string }) {
   );
 }
 
+function formatFeedbackDate(value: string | null): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 async function dataUrlToFile(dataUrl: string, name: string): Promise<File> {
   const res = await fetch(dataUrl);
   const blob = await res.blob();
@@ -329,14 +340,29 @@ export function FeedbackLauncher({ className }: { className?: string }) {
                           </p>
                           <p className="mt-0.5 text-xs uppercase tracking-wide text-slate-400">
                             {f.kind === "bug" ? "Bug" : "Feature request"}
+                            {formatFeedbackDate(f.createdAt) && (
+                              <span className="ml-2 normal-case tracking-normal text-slate-400">
+                                · {formatFeedbackDate(f.createdAt)}
+                              </span>
+                            )}
                           </p>
                         </div>
                         <FeedbackStatusPill status={f.status} />
                       </div>
-                      {f.publicReply && (
-                        <p className="mt-2 rounded bg-slate-50 p-2 text-sm text-slate-700">
+                      {f.publicReply ? (
+                        <p
+                          className="mt-2 rounded bg-slate-50 p-2 text-sm text-slate-700"
+                          data-testid={`text-feedback-reply-${f.id}`}
+                        >
                           <span className="font-medium">GoodTunes: </span>
                           {f.publicReply}
+                        </p>
+                      ) : (
+                        <p
+                          className="mt-2 text-xs italic text-slate-400"
+                          data-testid={`text-feedback-noreply-${f.id}`}
+                        >
+                          No reply yet
                         </p>
                       )}
                     </li>
