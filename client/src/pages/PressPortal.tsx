@@ -156,6 +156,11 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       name={me?.name ?? "Your press"}
       logoUrl={me?.logoUrl ?? null}
       navLogoUrl={me?.navLogoUrl ?? null}
+      // The press wordmark already sits in the rail header (top-left), so the
+      // content page header would just repeat the press name. Hide it when the
+      // PRESS is logged in; keep it in the super-admin view so operators still
+      // see the "(super-admin view)" indicator.
+      hideHeaderIdentity={!isSuperAdminView}
       fallbackIcon={Factory}
       tabs={tabs}
       activeTab={tab}

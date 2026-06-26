@@ -27,6 +27,12 @@ The standalone portals (label/manager/non_profit/publisher) ride `OperatorShell 
 
 **How to apply:** Mirror SidebarLink's treatment, with two gotchas: (1) use the `text-sm` scale token rather than SidebarLink's grandfathered hardcoded ~13.5px size — the sub-pixel diff is imperceptible and a literal `text-[13.5px]` (even in a comment) trips design-lint's hardcoded-size rule. (2) Don't "fix" only OperatorShell's active background to a visible tint — SidebarLink's active bg is an alpha-on-var no-op (renders nothing, see trap below), so matching that no-op keeps both rails identical; changing one alone re-introduces the inconsistency.
 
+## Press portal hides the OperatorShell content page-header identity
+
+The press portal whitelabels its rail header with the press wordmark (navLogoUrl/logo + name, top-left, replacing the GoodTunes mark), so `OperatorShell`'s content page-header eyebrow + name would just repeat the press name. PressPortal passes `hideHeaderIdentity={!isSuperAdminView}` to suppress that band when the PRESS logs in; the super-admin operator-preview view KEEPS it so the "(super-admin view)" indicator stays visible. `hideHeaderIdentity` is leftnav-only and hides just the page-header identity (eyebrow/name/subtitle) — the band still renders if `headerExtras`/`headerActions` are present, and collapses entirely otherwise. Other portals don't pass it (default false), so they're unchanged.
+
+**Why:** Bill — a press should see its name once (rail), not twice. The operator's own admin (AdminFrame) is untouched and keeps the GoodTunes logo top-left.
+
 ## Alpha-on-CSS-var renders nothing
 
 `bg-[color:var(--brand-blue)]/NN` (or any `var(--brand-*)/NN` alpha) produces **no color** — Tailwind can't alpha a CSS var. On the old dark surfaces this was silently broken too. Use a `bg-blue-100`/`bg-blue-50` tint or a solid `var(--brand-blue)` fill instead. (See also `tailwind-var-opacity.md`.)

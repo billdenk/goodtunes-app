@@ -64,6 +64,12 @@ export type OperatorShellProps<TabId extends string> = {
   /** Slot for the RangePicker + CompareToggle row on analytics-heavy
    * shells (Artist + Label). Rendered as a flex row under the title. */
   headerActions?: React.ReactNode;
+  /** Press portal opt-in (leftnav only). The press already shows its wordmark
+   * in the rail header (top-left, replacing the GoodTunes logo), so repeating
+   * the role eyebrow + name in the content page header is redundant. When true,
+   * the content page-header identity (eyebrow + name + subtitle) is hidden; the
+   * band still renders if headerExtras/headerActions are present. */
+  hideHeaderIdentity?: boolean;
   tabs: ReadonlyArray<TabDef<TabId>>;
   activeTab: TabId;
   onTabChange: (id: TabId) => void;
@@ -101,6 +107,7 @@ export function OperatorShell<TabId extends string>({
   subtitle,
   headerExtras,
   headerActions,
+  hideHeaderIdentity = false,
   tabs,
   activeTab,
   onTabChange,
@@ -305,30 +312,38 @@ export function OperatorShell<TabId extends string>({
 
           {/* Page header — regular-admin-style: title + optional subtitle,
               no oversized logo/eyebrow identity block (that now lives in
-              the rail). Consistent with how admin pages render their headings. */}
-          <div className="flex-shrink-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-5">
-            <div className={cn(maxW, "mx-auto")}>
-              <div className="flex items-start gap-4">
-                <div className="min-w-0 flex-1">
-                  <p className="text-slate-500 text-xs uppercase tracking-wider font-semibold" data-testid="text-operator-role">
-                    {roleLabel}
-                  </p>
-                  <h1 className="text-xl font-bold text-slate-900 truncate" data-testid="text-operator-name">
-                    {name}
-                  </h1>
-                  {subtitle && (
-                    <div className="text-slate-500 text-sm mt-0.5" data-testid="text-operator-subtitle">
-                      {subtitle}
+              the rail). Consistent with how admin pages render their headings.
+              The press portal sets `hideHeaderIdentity` because its wordmark
+              already sits in the rail header, so the eyebrow + name here would
+              just repeat it; the whole band collapses when there are no header
+              extras/actions to show. */}
+          {(!hideHeaderIdentity || headerExtras || headerActions) && (
+            <div className="flex-shrink-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-5">
+              <div className={cn(maxW, "mx-auto")}>
+                {!hideHeaderIdentity && (
+                  <div className="flex items-start gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-slate-500 text-xs uppercase tracking-wider font-semibold" data-testid="text-operator-role">
+                        {roleLabel}
+                      </p>
+                      <h1 className="text-xl font-bold text-slate-900 truncate" data-testid="text-operator-name">
+                        {name}
+                      </h1>
+                      {subtitle && (
+                        <div className="text-slate-500 text-sm mt-0.5" data-testid="text-operator-subtitle">
+                          {subtitle}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
+                {headerExtras && <div className={cn(!hideHeaderIdentity && "mt-4")}>{headerExtras}</div>}
+                {headerActions && (
+                  <div className={cn("flex flex-wrap items-center gap-2", !hideHeaderIdentity && "mt-4")}>{headerActions}</div>
+                )}
               </div>
-              {headerExtras && <div className="mt-4">{headerExtras}</div>}
-              {headerActions && (
-                <div className="flex flex-wrap items-center gap-2 mt-4">{headerActions}</div>
-              )}
             </div>
-          </div>
+          )}
 
           {/* Scrollable content area. */}
           <div className="flex-1 overflow-y-auto">
