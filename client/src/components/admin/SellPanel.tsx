@@ -1833,13 +1833,6 @@ function PressInfoPopover({ press }: { press: Manufacturer }) {
                 >
                   {press.name}
                 </div>
-                <span
-                  className="text-[9.5px] uppercase tracking-wider font-semibold text-slate-500 bg-slate-100 border border-slate-200 rounded-sm px-1 py-[1px] shrink-0"
-                  title="Today every vinyl Cost uses Hellbender Vinyl's published rate sheet as the default. Per-plant quotes wire in next."
-                  data-testid={`pill-press-source-${press.id}`}
-                >
-                  Hellbender reference rates
-                </span>
               </div>
               {press.location && (
                 <div
@@ -2281,7 +2274,7 @@ function CostTooltip({
     publishingTrackCount: number;
     paymentProcessingCents: number;
     goodtunesCents: number;
-    source?: "hellbender" | "placeholder" | "catalog" | "mrp-default";
+    source?: "placeholder" | "catalog";
   };
   // Task #624 — admin-only broker-discount preview. When > 0 and the
   // current user is super_admin, the tooltip adds an "Internal mfg
@@ -2351,13 +2344,9 @@ function CostTooltip({
             />
           </div>
         )}
-        {breakdown.source && (
+        {breakdown.source === "placeholder" && (
           <div className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100">
-            {breakdown.source === "hellbender"
-              ? "Source: Hellbender Vinyl reference matrix"
-              : breakdown.source === "mrp-default"
-                ? "Source: MRP catalog (platform default — no press invited yet)"
-                : "Placeholder — per-plant matrix pending"}
+            {"Placeholder — add rates in Admin → Presses to price this row"}
           </div>
         )}
       </PopoverContent>
@@ -3104,41 +3093,14 @@ function SkuRow({
         return {
           manufacturingCents: existing.costSnapshotManufacturingCents,
           ...sideCarFor(true),
-          source: "hellbender" as const,
+          source: "placeholder" as const,
           needsQuote: false,
           usingSnapshot: true,
         };
       }
-      // Task #656 — no invited press, but MRP's catalog is shipped as
-      // the platform-wide manufacturing default. Map the legacy color-
-      // tier pick to MRP's three-tier scheme (black → "Black",
-      // everything else → "Color") and snap parsedQty up to MRP's
-      // confirmed rungs. We resolve against MRP's default jacket via
-      // the same `priceLadder` the invited-press path uses, so a
-      // missing/unconfirmed rung still falls back to needsQuote (with
-      // updated copy pointing operators at Admin → Presses → MRP).
-      const mrpFormat = mrpDefaultFormat;
-      if (mrpFormat && mrpFormat.tiers.length > 0) {
-        const tierName = vinylColor.tier === "black" ? "Black" : "Color";
-        const mrpTier =
-          mrpFormat.tiers.find((t) => t.name.toLowerCase() === tierName.toLowerCase()) ??
-          mrpFormat.tiers[0];
-        const mrpSnap = snapCatalogLadder(mrpTier.priceLadder, parsedQty);
-        const cents = mrpSnap?.unitCents ?? 0;
-        if (mrpSnap && cents > 0) {
-          return {
-            manufacturingCents: cents,
-            ...sideCarFor(false),
-            source: "mrp-default" as const,
-            needsQuote: false,
-            usingSnapshot: false,
-          };
-        }
-      }
-      // No MRP rung available for this tier × qty (e.g. an off-catalog
-      // size or a rung not yet confirmed by MRP). Surface the same
-      // needsQuote chrome as before but with copy that points at the
-      // real place to confirm a rung (Admin → Presses → MRP).
+      // No confirmed rung for this press × color × qty. Show "needs
+      // quote" so the operator knows to add rates for this press in
+      // Admin → Presses rather than borrowing another plant's numbers.
       return {
         manufacturingCents: 0,
         ...sideCarFor(false),
@@ -3187,7 +3149,6 @@ function SkuRow({
     catalogSnap,
     trackCount,
     priceCentsForCost,
-    mrpDefaultFormat,
     parsedQty,
     pressSetButFormatUnsupported,
   ]);
@@ -3870,17 +3831,13 @@ function SkuRow({
       if (usingCatalog && pickedTier) {
         return snapCatalogLadder(pickedTier.priceLadder, qty)?.unitCents ?? null;
       }
-      if (isVinyl && mrpDefaultFormat && mrpDefaultFormat.tiers.length > 0) {
-        const tierName = vinylColor.tier === "black" ? "Black" : "Color";
-        const mrpTier =
-          mrpDefaultFormat.tiers.find(
-            (t) => t.name.toLowerCase() === tierName.toLowerCase(),
-          ) ?? mrpDefaultFormat.tiers[0];
-        return snapCatalogLadder(mrpTier.priceLadder, qty)?.unitCents ?? null;
-      }
+      // For vinyl with no confirmed catalog tier, return null so the
+      // estimate table shows "needs quote" rather than borrowing
+      // another press's ladder.
+      if (isVinyl) return null;
       return breakdown?.manufacturingCents ?? null;
     },
-    [usingCatalog, pickedTier, isVinyl, mrpDefaultFormat, vinylColor, breakdown],
+    [usingCatalog, pickedTier, isVinyl, breakdown],
   );
   const estimateTableRows = useMemo<
     { qty: number; netCents: number | null }[]
@@ -5527,7 +5484,7 @@ function SkuRow({
                           ? `No confirmed price rung for ${pickedTier?.name ?? "this tier"} at ${opts.blockQty.toLocaleString()} pcs on ${invitedPressItself?.name ?? "this press"}. Confirm the rung in Admin → Presses.`
                           : invitedPressItself
                             ? `No quote yet from ${invitedPressItself.name} for this format. Add an estimate in the Quotes section below.`
-                            : `No MRP rung for this tier at ${opts.blockQty.toLocaleString()} pcs — confirm the rung in Admin → Presses → MRP, or invite a different press.`}
+                            : `No confirmed rates for this format at ${opts.blockQty.toLocaleString()} pcs — add rates for the chosen press in Admin → Presses, or invite a press that has a confirmed catalog.`}
                       </div>
                     )}
                     <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
@@ -6901,11 +6858,9 @@ function SkuRow({
                   : isVinyl
                     ? (breakdown?.needsQuote
                         ? "needs quote"
-                        : breakdown?.source === "mrp-default"
-                          ? "live · MRP default"
-                          : breakdown?.usingSnapshot
-                            ? "locked · Hellbender"
-                            : "live · Hellbender")
+                        : breakdown?.usingSnapshot
+                          ? "locked · saved"
+                          : "needs quote")
                     : "placeholder"})
               </span>
             </span>
@@ -6943,7 +6898,7 @@ function SkuRow({
             >
               {usingCatalog
                 ? `No confirmed price rung for ${pickedTier?.name ?? "this tier"} at ${parsedQty.toLocaleString()} pcs on ${invitedPressItself?.name ?? "this press"} — manufacturing reads as $0 until the rung is confirmed in Admin → Presses.`
-                : `No MRP rung for ${ALBUM_FORMAT_LABEL[format]} at ${parsedQty.toLocaleString()} pcs — confirm the rung in Admin → Presses → MRP so this format reads a real manufacturing cost.`}
+                : `No confirmed rates for ${ALBUM_FORMAT_LABEL[format]} at ${parsedQty.toLocaleString()} pcs — add rates for this press in Admin → Presses so this format reads a real manufacturing cost.`}
             </div>
           )}
 
