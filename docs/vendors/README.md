@@ -9,6 +9,7 @@ When a vendor updates their public specs (color catalog, templates, turn times, 
 - [Memphis Record Pressing (MRP)](./mrp.md)
 - [Physical Music Products (PMP)](./pmp.md)
 - [Hellbender Vinyl](./hellbender.md)
+- [Viryl Technologies](./viryl.md)
 
 ## Platform upload requirements (highest spec across all plants)
 

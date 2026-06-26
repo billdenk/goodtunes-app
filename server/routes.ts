@@ -90,6 +90,7 @@ import {
   completedTemplateConfigToAlbumFormat,
   matchInvitedPressToVendor,
   defaultCompletedTemplateConfig,
+  VENDOR_IDS,
   type VendorId,
   type CompletedTemplateConfig,
 } from "@shared/vendorSpecs";
@@ -29946,13 +29947,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   const artValidateSchema = z.object({
     albumId: z.string().min(1),
-    vendorId: z.enum(["mrp", "pmp", "hellbender", "generic"]),
+    vendorId: z.enum(VENDOR_IDS),
     templateId: z.string().min(1),
     pressName: z.string().optional(), // real plant name for message attribution
   });
   const audioValidateSchema = z.object({
     albumId: z.string().min(1),
-    vendorId: z.enum(["mrp", "pmp", "hellbender", "generic"]),
+    vendorId: z.enum(VENDOR_IDS),
     vinylSize: z.enum(['7"', '10"', '12"']),
     rpm: z.coerce.number().refine((n) => n === 33 || n === 45),
     side: z.string().nullable().optional(),
@@ -30154,7 +30155,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/admin/albums/:id/preflight-masters", requireAdminBearer, async (req, res) => {
     const albumId = req.params.id;
     const schema = z.object({
-      vendorId: z.enum(["mrp", "pmp", "hellbender", "generic"]),
+      vendorId: z.enum(VENDOR_IDS),
       vinylSize: z.enum(['7"', '10"', '12"']),
       rpm: z.union([z.literal(33), z.literal(45)]),
       pressName: z.string().optional(), // real plant name for message attribution
@@ -30494,7 +30495,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!(await requireOperator(req, res))) return;
     const album = await storage.getAlbumById(req.params.id, { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
-    const vendor = z.enum(["mrp", "pmp", "hellbender", "generic"]).safeParse(req.body?.vendorId);
+    const vendor = z.enum(VENDOR_IDS).safeParse(req.body?.vendorId);
     if (!vendor.success) return res.status(400).json({ message: "Pick a valid vendor (MRP, PMP, Hellbender, or a generic spec)." });
     const cfg = completedConfigSchema.safeParse(req.body?.config);
     if (!cfg.success) return res.status(400).json({ message: cfg.error.message });
@@ -30991,7 +30992,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const albumId = req.params.albumId;
       const body = z
         .object({
-          vendorId: z.enum(["mrp", "pmp", "hellbender", "generic"]),
+          vendorId: z.enum(VENDOR_IDS),
           overrideJustification: z.string().trim().min(8).optional(),
         })
         .safeParse(req.body);

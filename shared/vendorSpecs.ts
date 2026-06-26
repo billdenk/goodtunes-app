@@ -14,7 +14,12 @@
 // `usage: "print" | "display"` discriminator to ArtAsset and skip the
 // bleed/CMYK rules for `display`.
 
-export type VendorId = "mrp" | "pmp" | "hellbender" | "generic";
+// Single source of truth for every preflight/print vendor id. Server
+// request schemas (z.enum) derive from this so adding a plant here
+// automatically widens the API allowlist — never re-list these ids in a
+// hand-written enum.
+export const VENDOR_IDS = ["mrp", "pmp", "hellbender", "viryl", "generic"] as const;
+export type VendorId = (typeof VENDOR_IDS)[number];
 
 export type VinylSize = '7"' | '10"' | '12"';
 export type VinylRpm = 33 | 45;
@@ -104,6 +109,21 @@ const PMP_TEMPLATES: TemplateSpec[] = [
   // PMP issues templates per-project via CSR; we surface the common
   // 12" jacket so the hint UI has something to draw against.
   { id: "12_single_jacket", label: '12" Single Jacket (CSR-issued)', size: '12"', finishedInches: { w: 12, h: 12 }, bleedInches: 0.125 },
+];
+
+// Viryl Technologies Corp. (Toronto). Sourced from docs/vendors/viryl.md.
+// Viryl publishes 300 DPI / CMYK / 1/8" bleed and a 4" (101.6 mm) label
+// diameter for 12" — wider than the 3.875" the US plants use. 7" and 12"
+// gatefold jackets are Custom Quote at Viryl, but the templates are the
+// industry-standard finished sizes so the artist can lay out against them.
+const VIRYL_TEMPLATES: TemplateSpec[] = [
+  { id: "12_center_label",  label: '12" Center Label (4″)',     size: '12"', finishedInches: { w: 4.0, h: 4.0 },     bleedInches: 0.125 },
+  { id: "12_single_jacket", label: '12" Single Jacket (digitally printed)', size: '12"', finishedInches: { w: 12, h: 12 }, bleedInches: 0.125 },
+  { id: "12_gatefold",      label: '12" Gatefold Jacket',       size: '12"', finishedInches: { w: 24, h: 12 },       bleedInches: 0.125 },
+  { id: "10_center_label",  label: '10" Center Label',          size: '10"', finishedInches: { w: 3.5, h: 3.5 },     bleedInches: 0.125 },
+  { id: "10_single_jacket", label: '10" Single Jacket',         size: '10"', finishedInches: { w: 10, h: 10 },       bleedInches: 0.125 },
+  { id: "7_center_label",   label: '7" Center Label',           size: '7"',  finishedInches: { w: 3.5, h: 3.5 },     bleedInches: 0.125 },
+  { id: "7_single_jacket",  label: '7" Single Jacket',          size: '7"',  finishedInches: { w: 7.0625, h: 7.0625 }, bleedInches: 0.125 },
 ];
 
 // MRP's published per-side max table (using the upper end of each
@@ -213,6 +233,34 @@ export const VENDOR_SPECS: Record<VendorId, VendorSpec> = {
     audio: {
       requiredFormats: ["wav"],
       requiredBitDepth: null, // not stated
+      maxSideSecondsBySizeRpm: MRP_MAX_SIDE,
+      oneFilePerSide: true,
+      requireSideBreakTracklist: true,
+      warnLoudFirst: false,
+    },
+  },
+  viryl: {
+    id: "viryl",
+    label: "Viryl Technologies",
+    sourceUrl: "https://viryl.ca",
+    art: {
+      requiredPpi: 300, // Viryl publishes a 300 DPI minimum
+      // Viryl states CMYK; pms/grayscale stay accepted (printable as
+      // spot/black plates) for parity with the other plants and to avoid
+      // false-failing a grayscale label.
+      allowedColorSpaces: ["cmyk", "pms", "grayscale"],
+      // Viryl accepts PDF (preferred), AI, and PSD. AI is sniffed as EPS.
+      acceptedFormats: ["pdf", "eps", "psd"],
+      requireEmbeddedFonts: true,
+      warnIfDielineEmbedded: true,
+      templates: VIRYL_TEMPLATES,
+    },
+    audio: {
+      // Viryl doesn't publish audio specs (confirm with the PM at order
+      // time), so we apply the platform-wide rule: 24-bit WAV, one file per
+      // side, MRP's per-side length table. See docs/vendors/viryl.md.
+      requiredFormats: ["wav"],
+      requiredBitDepth: 24,
       maxSideSecondsBySizeRpm: MRP_MAX_SIDE,
       oneFilePerSide: true,
       requireSideBreakTracklist: true,
