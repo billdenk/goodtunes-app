@@ -2079,29 +2079,37 @@ function CatalogCsvButtons({
 
   return (
     <>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={handleExport}
-        disabled={exporting}
-        className="flex-shrink-0"
-        data-testid="button-catalog-csv-export"
-      >
-        <Download className="w-3.5 h-3.5 mr-1.5" />
-        {exporting ? "Exporting…" : "Export CSV"}
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => setOpen(true)}
-        className="flex-shrink-0"
-        data-testid="button-catalog-csv-upload"
-      >
-        <Upload className="w-3.5 h-3.5 mr-1.5" />
-        Upload CSV
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="flex-shrink-0"
+            data-testid="button-catalog-csv-options"
+          >
+            <FileText className="w-3.5 h-3.5 mr-1.5" />
+            CSV Options
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuItem
+            onSelect={handleExport}
+            disabled={exporting}
+            data-testid="button-catalog-csv-export"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            {exporting ? "Exporting…" : "Export CSV"}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => setOpen(true)}
+            data-testid="button-catalog-csv-upload"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Upload CSV
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="dialog-catalog-csv">
@@ -2527,10 +2535,8 @@ export function PressCatalogPanel({
         <div className="flex-1">
           <h2 className="text-[15px] font-semibold text-slate-900">Catalog</h2>
           <p className="text-[13px] text-slate-500 mt-1">
-            Set this press up the way you think about it: pick a format, list the colors you offer for
-            it (grouped by finish — Black / Color / Splatter…), then price each color group by run
-            quantity. Artists invited by this press see the resulting picker on their album's Sell
-            panel.
+            The products you offer in one place. Here you can adjust or add color options, upload
+            vinyl swatch images, and dial in prices for each quantity.
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -2577,7 +2583,13 @@ export function PressCatalogPanel({
               activeFormat={activeTab as AlbumFormat}
               setActiveFormat={(f) => setActiveTab(f)}
               offeredFormats={offeredFormats}
+              offered={offered}
               onChanged={invalidate}
+              onAddVinylSize={(fmt) => {
+                setActiveTab(fmt);
+                toggleFormat.mutate({ format: fmt, enabled: true });
+              }}
+              addBusy={toggleFormat.isPending}
               onRemoveFormat={() => toggleFormat.mutate({ format: activeTab as AlbumFormat, enabled: false })}
               removeBusy={toggleFormat.isPending}
               isFormatHidden={!!(data?.formats.find((f) => f.format === activeTab)?.hidden)}
@@ -2637,9 +2649,10 @@ function FormatDropdown({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-slate-300 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]"
+              className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full border border-slate-300 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]"
               data-testid="button-format-dropdown"
             >
+              {vinylActive && <Disc3 className="w-3.5 h-3.5 text-slate-500" />}
               {activeLabel}
               <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
             </button>
@@ -2750,36 +2763,6 @@ function FormatDropdown({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-
-      {/* Secondary: vinyl size picker — only when vinyl is active */}
-      {vinylActive && (
-        <div className="flex flex-wrap items-center gap-2 pl-1 pt-0.5" data-testid="vinyl-size-selector">
-          {offeredVinyl.map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => onSetTab(f)}
-              className={[
-                "inline-flex items-center h-7 px-2.5 rounded-md text-xs font-medium transition-colors border",
-                activeTab === f
-                  ? "bg-slate-100 text-slate-900 border-slate-400"
-                  : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700",
-              ].join(" ")}
-              data-testid={`pill-vinyl-size-${f}`}
-            >
-              {ALBUM_FORMAT_LABEL[f]}
-            </button>
-          ))}
-          {/* Add more vinyl sizes if not all three are offered */}
-          {VINYL_FORMATS.some((f) => !offered.has(f)) && (
-            <AddVinylSizePicker
-              offered={offered}
-              onPick={onAddFormat}
-              disabled={addBusy}
-            />
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -3086,7 +3069,10 @@ function CatalogEditor({
   activeFormat,
   setActiveFormat,
   offeredFormats,
+  offered,
   onChanged,
+  onAddVinylSize,
+  addBusy,
   onRemoveFormat,
   removeBusy,
   isFormatHidden,
@@ -3101,7 +3087,10 @@ function CatalogEditor({
   activeFormat: AlbumFormat;
   setActiveFormat: (f: AlbumFormat) => void;
   offeredFormats: AlbumFormat[];
+  offered: Set<string>;
   onChanged: () => void;
+  onAddVinylSize: (fmt: AlbumFormat) => void;
+  addBusy: boolean;
   onRemoveFormat: () => void;
   removeBusy: boolean;
   isFormatHidden: boolean;
@@ -3514,182 +3503,239 @@ function CatalogEditor({
 
   return (
     <div className="space-y-5" data-testid={`catalog-format-${fmt}`}>
-      <CardHeader
-        title={
-          <span className="flex items-center gap-2">
-            Color Options
-            {isFormatHidden && (
-              <span
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wide bg-slate-100 text-slate-500 ring-1 ring-slate-200"
-                data-testid={`badge-format-hidden-${fmt}`}
-              >
-                <EyeOff className="w-3 h-3" />
-                Hidden
-              </span>
-            )}
-          </span>
-        }
-        editing={editing}
-        dirty={anyDirty}
-        onEnterEdit={() => setEditing(true)}
-        onCancelEdit={exitEdit}
-        testId={`catalog-${fmt}`}
-        titleClassName="text-sm font-semibold text-slate-900"
-        rightSlot={formatMenuSlot}
-      />
+      <div className="rounded-lg border border-slate-200 bg-white">
 
-      {/* COLOR OPTIONS — vinyl only */}
-      {isVinyl && (
-        <div
-          className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start"
-          data-testid={`color-options-${fmt}`}
-        >
-          <div className="space-y-3 min-w-0">
+        {/* PRODUCT TYPE — vinyl size pills */}
+        {isVinyl && (
+          <div className="px-5 pt-5 pb-4">
+            <div className="flex items-start justify-between gap-4 mb-3">
+              <span className="text-sm font-semibold text-slate-800">Product Type</span>
+              <div className="flex items-center gap-1.5">
+                {isFormatHidden && (
+                  <span
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wide bg-slate-100 text-slate-500 ring-1 ring-slate-200"
+                    data-testid={`badge-format-hidden-${fmt}`}
+                  >
+                    <EyeOff className="w-3 h-3" /> Hidden
+                  </span>
+                )}
+                {formatMenuSlot}
+                {!editing ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+                    data-testid={`button-edit-catalog-${fmt}`}
+                  >
+                    Edit
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={exitEdit}
+                    className="text-xs text-slate-500 hover:underline underline-offset-2"
+                    data-testid={`button-cancel-edit-${fmt}`}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Color Groups</span>
-              {isMirror && (
-                <span className="text-xs text-slate-400">Shares the 12&quot; LP color set — edit under 12&quot; LP.</span>
+              {offeredFormats.filter((f) => isVinylFormat(f)).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setActiveFormat(f)}
+                  className={[
+                    "h-8 px-3.5 rounded-full text-xs font-medium transition-colors border",
+                    f === fmt
+                      ? "border-[color:var(--brand-blue)] text-[color:var(--brand-blue)] bg-white"
+                      : "border-transparent text-slate-600 hover:border-slate-200 bg-white",
+                  ].join(" ")}
+                  data-testid={`pill-product-type-${f}`}
+                >
+                  {ALBUM_FORMAT_LABEL[f]}
+                </button>
+              ))}
+              {VINYL_FORMATS.some((f) => !offered.has(f)) && (
+                <AddVinylSizePicker offered={offered} onPick={onAddVinylSize} disabled={addBusy} />
               )}
             </div>
-            {colorTiers.length === 0 ? (
-              <div className="text-xs text-slate-500">
-                No color groups yet{isMirror ? " — add them under 12\" LP." : "."}
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={colorGroupId ?? ""}
-                  onChange={(e) => setColorGroupId(e.target.value || null)}
-                  className={INPUT + " w-auto min-w-[12rem]"}
-                  data-testid={`select-color-group-${fmt}`}
-                >
-                  {colorTiers.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-                {editing && !isMirror && selectedColorTier && (
-                  <DeleteTierButton
-                    tier={selectedColorTier}
-                    onConfirm={() => deleteTier.mutate(selectedColorTier.id)}
-                    disabled={deleteTier.isPending}
-                  />
-                )}
-                {editing && !isMirror &&
-                  (!addingGroup ? (
-                    <button
-                      type="button"
-                      onClick={() => setAddingGroup(true)}
-                      className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2"
-                      data-testid={`button-add-color-group-${fmt}`}
-                    >
-                      + Add color group
-                    </button>
-                  ) : (
-                    groupAdder
-                  ))}
-              </div>
-            )}
-            {/* Swatch chips for the selected color group */}
-            {selectedColorTier && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                {selectedColorTier.colors.map((c) => (
-                  <SwatchChip
-                    key={c.id}
-                    pressId={pressId}
-                    color={c}
-                    onChanged={onChanged}
-                    editable={editing && !isMirror}
-                    onPreview={() => setSelectedSwatchId(c.id)}
-                    selected={c.id === selectedSwatchId}
-                    mirror={
-                      editing && !isMirror
-                        ? { catalog, groupName: selectedColorTier.name, currentSize: discSize, currentLabel: ALBUM_FORMAT_LABEL[fmt] }
-                        : undefined
-                    }
-                  />
-                ))}
-                {editing && !isMirror && (
-                  <AddSwatchChip pressId={pressId} tierId={selectedColorTier.id} onChanged={onChanged} />
-                )}
-              </div>
-            )}
-            {selectedSwatch && (
-              <div
-                className="text-xs text-slate-700 font-medium"
-                data-testid={`text-selected-swatch-name-${fmt}`}
-              >
-                {selectedSwatch.name}
-              </div>
-            )}
           </div>
-          {/* Live preview — the press's placeholder art on the chosen disc.
-              The square jacket itself is the edit affordance: hovering
-              reveals a dimming scrim + pencil chip (the same pattern as the
-              album-art editor on the album page), and clicking opens the
-              shared upload dialog. Keyboard-focusable so it also works for
-              touch + a11y. Press-level art is editable by operators and this
-              press's own admins, and applies across every format's preview. */}
-          <div className="flex flex-col items-start gap-1.5 md:pl-2">
-            <VinylPreview
-              /* The dedicated "Jacket placeholder image" (vinylPlaceholderUrl,
-                 edited via the dialog below) is the source of truth, falling
-                 back to the bundled per-domain jacket art — both render as the
-                 full-bleed jacket (placeholderArt). The press PROFILE logo
-                 (manufacturers.logoUrl, the small "icon") must NOT override the
-                 jacket placeholder — it's a last-resort branded fallback only
-                 for presses that have neither a placeholder nor bundled art. */
-              artworkUrl={placeholderArt}
-              color={previewColor}
-              jacketUpgrade={DEFAULT_JACKET_UPGRADE}
-              format={fmt}
-              size="2xl"
-              placeholderLogoUrl={placeholderArt ? null : (pressLogoUrl ?? null)}
-              jacketOverlay={
+        )}
+
+        {/* For non-vinyl formats: header with edit controls */}
+        {!isVinyl && (
+          <div className="px-5 pt-5 pb-4 flex items-center justify-between gap-4">
+            <span className="text-sm font-semibold text-slate-800">
+              {ALBUM_FORMAT_LABEL[fmt]}
+            </span>
+            <div className="flex items-center gap-1.5">
+              {formatMenuSlot}
+              {!editing ? (
                 <button
                   type="button"
-                  onClick={() => setPlaceholderEditorOpen(true)}
-                  className="group/edit absolute inset-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--brand-blue)]"
-                  aria-label={placeholderUrl ? "Change jacket image" : "Add jacket image"}
-                  data-testid={`button-edit-placeholder-art-${fmt}`}
+                  onClick={() => setEditing(true)}
+                  className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+                  data-testid={`button-edit-catalog-${fmt}`}
                 >
-                  <span className="absolute inset-0 bg-black/0 group-hover/edit:bg-black/40 group-focus-visible/edit:bg-black/40 transition-colors" />
-                  <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/edit:opacity-100 group-focus-visible/edit:opacity-100 transition-opacity">
-                    <span className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
-                      <Pencil className="w-4 h-4" />
-                    </span>
-                  </span>
+                  Edit
                 </button>
-              }
-            />
-            <span className="text-xs text-slate-400" data-testid={`text-preview-color-${fmt}`}>
-              {ALBUM_FORMAT_LABEL[fmt]} w/ full-color Inner Sleeve
-            </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={exitEdit}
+                  className="text-xs text-slate-500 hover:underline underline-offset-2"
+                  data-testid={`button-cancel-edit-${fmt}`}
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-      <PressLogoEditorDialog
-        name="this press"
-        title="Jacket placeholder image"
-        logoUrl={placeholderUrl}
-        apiPath={`/api/admin/manufacturers/${pressId}`}
-        fieldName="vinylPlaceholderUrl"
-        open={placeholderEditorOpen}
-        onOpenChange={setPlaceholderEditorOpen}
-        onInvalidate={() => {
-          void invalidateAdminEntity(queryClient, "manufacturer", pressId);
-          onChanged();
-        }}
-        FallbackIcon={Factory}
-        testIdPrefix="placeholder"
-        hint="Shown as the branded jacket in this catalog's color preview. A square image works best; clear it to fall back to the default press artwork."
-      />
+        )}
 
-      {/* PRICING */}
-      <div className="space-y-3 border-t border-slate-100 pt-4" data-testid={`pricing-${fmt}`}>
+        {/* COLOR OPTIONS — vinyl only */}
+        {isVinyl && (
+          <div className="border-t border-slate-100 px-5 py-4" data-testid={`color-options-${fmt}`}>
+            <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+              <div className="space-y-3 min-w-0">
+                <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Color</span>
+                {colorTiers.length === 0 ? (
+                  <div className="text-xs text-slate-500">
+                    No color groups yet{isMirror ? " — add them under 12\" LP." : "."}
+                    {editing && !isMirror && !addingGroup && (
+                      <button
+                        type="button"
+                        onClick={() => setAddingGroup(true)}
+                        className="ml-2 text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+                        data-testid={`button-add-color-group-first-${fmt}`}
+                      >
+                        + Add group
+                      </button>
+                    )}
+                    {editing && !isMirror && addingGroup && groupAdder}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {isMirror && (
+                      <span className="text-xs text-slate-400 block">
+                        Shares the 12&quot; LP color set — edit under 12&quot; LP.
+                      </span>
+                    )}
+                    <div className="relative">
+                      <select
+                        value={colorGroupId ?? ""}
+                        onChange={(e) => setColorGroupId(e.target.value || null)}
+                        className="w-full h-9 pl-3 pr-9 rounded-md border border-slate-300 bg-white text-sm text-slate-700 appearance-none focus:outline-none focus:border-[color:var(--brand-blue)] focus:ring-1 focus:ring-[color:var(--brand-blue)]"
+                        data-testid={`select-color-group-${fmt}`}
+                      >
+                        {colorTiers.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    </div>
+                    {editing && !isMirror && (
+                      <div className="flex items-center gap-2">
+                        {selectedColorTier && (
+                          <DeleteTierButton
+                            tier={selectedColorTier}
+                            onConfirm={() => deleteTier.mutate(selectedColorTier.id)}
+                            disabled={deleteTier.isPending}
+                          />
+                        )}
+                        {!addingGroup ? (
+                          <button
+                            type="button"
+                            onClick={() => setAddingGroup(true)}
+                            className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+                            data-testid={`button-add-color-group-${fmt}`}
+                          >
+                            + Add color group
+                          </button>
+                        ) : (
+                          groupAdder
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {selectedColorTier && (
+                  <div className="flex flex-wrap items-center gap-1.5" data-testid={`swatches-${fmt}`}>
+                    {selectedColorTier.colors.map((c) => (
+                      <SwatchChip
+                        key={c.id}
+                        pressId={pressId}
+                        color={c}
+                        onChanged={onChanged}
+                        editable={editing && !isMirror}
+                        onPreview={() => setSelectedSwatchId(c.id)}
+                        selected={c.id === selectedSwatchId}
+                        mirror={
+                          editing && !isMirror
+                            ? { catalog, groupName: selectedColorTier.name, currentSize: discSize, currentLabel: ALBUM_FORMAT_LABEL[fmt] }
+                            : undefined
+                        }
+                      />
+                    ))}
+                    {editing && !isMirror && (
+                      <AddSwatchChip pressId={pressId} tierId={selectedColorTier.id} onChanged={onChanged} />
+                    )}
+                  </div>
+                )}
+                {selectedSwatch && (
+                  <div
+                    className="flex items-center gap-1.5 text-xs text-slate-700"
+                    data-testid={`text-selected-swatch-name-${fmt}`}
+                  >
+                    <Pencil className="w-3 h-3 text-slate-400" />
+                    {selectedSwatch.name}
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col items-start gap-1.5 md:pl-2">
+                <div className="rounded-md border border-slate-200 overflow-hidden">
+                  <VinylPreview
+                    artworkUrl={placeholderArt}
+                    color={previewColor}
+                    jacketUpgrade={DEFAULT_JACKET_UPGRADE}
+                    format={fmt}
+                    size="2xl"
+                    placeholderLogoUrl={placeholderArt ? null : (pressLogoUrl ?? null)}
+                    jacketOverlay={
+                      <button
+                        type="button"
+                        onClick={() => setPlaceholderEditorOpen(true)}
+                        className="group/edit absolute inset-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--brand-blue)]"
+                        aria-label={placeholderUrl ? "Change jacket image" : "Add jacket image"}
+                        data-testid={`button-edit-placeholder-art-${fmt}`}
+                      >
+                        <span className="absolute inset-0 bg-black/0 group-hover/edit:bg-black/40 group-focus-visible/edit:bg-black/40 transition-colors" />
+                        <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/edit:opacity-100 group-focus-visible/edit:opacity-100 transition-opacity">
+                          <span className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                            <Pencil className="w-4 h-4" />
+                          </span>
+                        </span>
+                      </button>
+                    }
+                  />
+                </div>
+                <span className="text-xs text-slate-400" data-testid={`text-preview-color-${fmt}`}>
+                  {ALBUM_FORMAT_LABEL[fmt]} w/ full-color Inner Sleeve
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      {/* PRICE PER UNIT */}
+      <div className="border-t border-slate-100 px-5 py-4 space-y-3" data-testid={`pricing-${fmt}`}>
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Pricing</span>
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
+            Price per unit
+            {editing && <Pencil className="w-3 h-3 text-slate-400" />}
+          </span>
           {editing && selectedPriceTier && (
             <SaveLink
               dirty={dirty}
@@ -3879,8 +3925,26 @@ function CatalogEditor({
             )}
           </div>
         )}
-        {isVinyl && <PressTemplateSpecsCard pressId={pressId} fmt={fmt} />}
       </div>
+      {isVinyl && <PressTemplateSpecsCard pressId={pressId} fmt={fmt} />}
+      </div>
+
+      <PressLogoEditorDialog
+        name="this press"
+        title="Jacket placeholder image"
+        logoUrl={placeholderUrl}
+        apiPath={`/api/admin/manufacturers/${pressId}`}
+        fieldName="vinylPlaceholderUrl"
+        open={placeholderEditorOpen}
+        onOpenChange={setPlaceholderEditorOpen}
+        onInvalidate={() => {
+          void invalidateAdminEntity(queryClient, "manufacturer", pressId);
+          onChanged();
+        }}
+        FallbackIcon={Factory}
+        testIdPrefix="placeholder"
+        hint="Shown as the branded jacket in this catalog's color preview. A square image works best; clear it to fall back to the default press artwork."
+      />
     </div>
   );
 }
@@ -3912,8 +3976,8 @@ const TEMPLATE_COMPONENTS: {
   hint: string;
 }[] = [
   { key: "jacket", label: "Jacket", hint: "Outer sleeve / cover artwork" },
-  { key: "labels", label: "Center labels", hint: "On-disc label artwork" },
-  { key: "inner_sleeve", label: "Inner sleeve", hint: "Printed inner sleeve / bag" },
+  { key: "inner_sleeve", label: "Inner Sleeve", hint: "Printed inner sleeve / bag" },
+  { key: "labels", label: "Center Labels", hint: "On-disc label artwork" },
 ];
 
 function PressTemplateSpecsCard({ pressId, fmt }: { pressId: string; fmt: AlbumFormat }) {
@@ -3950,15 +4014,11 @@ function PressTemplateSpecsCard({ pressId, fmt }: { pressId: string; fmt: AlbumF
   });
 
   return (
-    <div className="mt-6 pt-6 border-t border-slate-100">
-      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-        Print templates
+    <div className="border-t border-slate-100 px-5 py-4">
+      <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+        Specs
       </span>
-      <p className="text-xs text-slate-400 mt-1 mb-3">
-        Upload the blank print templates artists design their artwork on for this product. Saved
-        templates become artist downloads on the album and feed the finished-file check.
-      </p>
-      <div className="space-y-2">
+      <div className="mt-3 divide-y divide-slate-100">
         {TEMPLATE_COMPONENTS.map((c) => (
           <TemplateComponentRow
             key={c.key}
@@ -4155,6 +4215,7 @@ function TemplateComponentRow({
   const [uploading, setUploading] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [showDims, setShowDims] = useState(false);
 
   // Optional check-dims. These refine the finished-file check baseline
   // (preferred over the measured fallback when set; left blank = fallback).
@@ -4219,87 +4280,113 @@ function TemplateComponentRow({
   const isImageFile = !!fileUrl && /\.(png|jpg|jpeg|gif|webp|svg)(\?|$)/i.test(fileUrl);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
-      <div className="flex items-center gap-3">
-        {/* Thumbnail — clickable to open preview panel */}
-        {fileUrl && (
+    <div className="py-2.5" data-testid={`template-row-${spec?.componentKey ?? label}`}>
+      <div className="text-xs text-slate-500 mb-1" title={hint}>
+        {label}
+      </div>
+      <div className="flex items-center gap-2">
+        {fileUrl ? (
+          <div className="flex-1 min-w-0 flex items-center gap-2 h-9 px-3 rounded-md border border-slate-200 bg-slate-50">
+            {isImageFile ? (
+              <img src={fileUrl} alt="" className="w-5 h-5 rounded object-cover shrink-0" />
+            ) : (
+              <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+            )}
+            <a
+              href={fileUrl}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-w-0 truncate text-xs text-slate-600 hover:text-[var(--brand-blue)]"
+              data-testid={`link-press-template-${spec?.componentKey ?? label}`}
+              title={fileName ?? "Download template"}
+            >
+              <span data-testid={`text-template-filename-${spec?.componentKey ?? label}`}>
+                {fileName}
+              </span>
+            </a>
+          </div>
+        ) : (
+          <input
+            value={urlDraft}
+            onChange={(e) => setUrlDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitUrl();
+            }}
+            placeholder="Paste a URL"
+            className="flex-1 min-w-0 h-9 px-3 rounded-md border border-slate-300 bg-white text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-[color:var(--brand-blue)] focus:ring-1 focus:ring-[color:var(--brand-blue)]"
+            disabled={busy || uploading}
+            data-testid={`input-template-url-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          />
+        )}
+
+        {!fileUrl && urlDraft.trim() && (
           <button
             type="button"
-            onClick={() => setPreviewOpen(true)}
-            className="w-10 h-10 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-colors flex items-center justify-center overflow-hidden shrink-0 group"
-            title="Preview template"
-            data-testid={`button-template-thumbnail-${spec?.componentKey ?? label}`}
+            onClick={commitUrl}
+            disabled={busy}
+            className="h-9 px-3 rounded-md border border-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)] text-xs font-medium text-[color:var(--brand-blue)] hover:opacity-90 disabled:opacity-50 shrink-0"
+            data-testid={`button-save-template-url-${label.toLowerCase().replace(/\s+/g, "-")}`}
           >
-            {isImageFile ? (
-              <img src={fileUrl} alt="Template preview" className="w-full h-full object-cover" />
-            ) : (
-              <FileText className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
-            )}
+            {busy ? "Saving…" : "Save"}
           </button>
         )}
 
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-slate-800">{label}</div>
-          {fileUrl ? (
-            <div className="mt-0.5 flex items-center gap-2 min-w-0">
-              <span
-                className="text-xs text-slate-500 truncate"
-                data-testid={`text-template-filename-${spec?.componentKey ?? label}`}
-              >
-                {fileName}
-              </span>
-              <a
-                href={fileUrl}
-                download
-                target="_blank"
-                rel="noopener noreferrer"
-                className="shrink-0 inline-flex items-center gap-1 text-xs text-[var(--brand-blue)] hover:underline underline-offset-2"
-                data-testid={`link-press-template-${spec?.componentKey ?? label}`}
-                title="Download template"
-              >
-                <Download className="w-3 h-3" />
-                Download
-              </a>
-            </div>
-          ) : (
-            <div className="mt-0.5 text-xs text-slate-400">{hint}</div>
-          )}
-        </div>
+        {!fileUrl && (
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={busy || uploading}
+            className="h-9 w-9 inline-flex items-center justify-center rounded-md border border-slate-300 bg-white text-slate-500 hover:text-slate-800 hover:border-slate-400 disabled:opacity-50 shrink-0"
+            title={uploading ? "Uploading…" : "Upload a file"}
+            data-testid={`button-upload-template-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          >
+            <Upload className="w-4 h-4" />
+          </button>
+        )}
 
-        {fileUrl ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <IconButton
-                label={`${label} template actions`}
-                variant="ghost"
-                size="md"
-                disabled={busy || uploading}
-                className="text-slate-500 hover:text-slate-800"
-                data-testid={`button-template-menu-${spec?.componentKey ?? label}`}
-              >
-                <MoreHorizontal />
-              </IconButton>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton
+              label={`${label} template options`}
+              variant="ghost"
+              size="md"
+              disabled={busy || uploading}
+              className="text-slate-500 hover:text-slate-800"
+              data-testid={`button-template-menu-${spec?.componentKey ?? label}`}
+            >
+              <MoreHorizontal />
+            </IconButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {fileUrl && (
               <DropdownMenuItem onSelect={() => setPreviewOpen(true)}>
                 <Eye className="w-4 h-4 mr-2" />
                 Preview
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => fileRef.current?.click()}>
-                <Upload className="w-4 h-4 mr-2" />
-                Replace file
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-rose-600 focus:text-rose-600"
-                onSelect={() => setConfirmRemove(true)}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Remove
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
+            )}
+            <DropdownMenuItem onSelect={() => fileRef.current?.click()}>
+              <Upload className="w-4 h-4 mr-2" />
+              {fileUrl ? "Replace file" : "Upload a file"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setShowDims((v) => !v)}>
+              <FileText className="w-4 h-4 mr-2" />
+              {showDims ? "Hide finished-file check" : "Finished-file check…"}
+            </DropdownMenuItem>
+            {fileUrl && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-rose-600 focus:text-rose-600"
+                  onSelect={() => setConfirmRemove(true)}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Remove
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Template preview panel — floating, resizable */}
@@ -4311,44 +4398,10 @@ function TemplateComponentRow({
         />
       )}
 
-      {!spec?.templateFileUrl && (
-        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-          <input
-            value={urlDraft}
-            onChange={(e) => setUrlDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitUrl();
-            }}
-            placeholder="Paste a template URL…"
-            className={INPUT}
-            disabled={busy || uploading}
-            data-testid={`input-template-url-${label.toLowerCase().replace(/\s+/g, "-")}`}
-          />
-          <div className="flex items-center gap-2 shrink-0">
-            <SaveLink
-              dirty={!!urlDraft.trim()}
-              busy={busy}
-              onClick={commitUrl}
-              testId={`button-save-template-url-${label.toLowerCase().replace(/\s+/g, "-")}`}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy || uploading}
-              onClick={() => fileRef.current?.click()}
-              data-testid={`button-upload-template-${label.toLowerCase().replace(/\s+/g, "-")}`}
-            >
-              <Upload className="w-3.5 h-3.5 mr-1.5" />
-              {uploading ? "Uploading…" : "Upload"}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <div className="mt-3 border-t border-slate-100 pt-3">
+      {showDims && (
+        <div className="mt-2.5 rounded-md border border-slate-100 bg-slate-50/60 p-3">
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">
             Finished-file check (optional)
           </span>
           <SaveLink
@@ -4398,7 +4451,8 @@ function TemplateComponentRow({
             <option value="cmyk-or-pms">CMYK or PMS</option>
           </select>
         </div>
-      </div>
+        </div>
+      )}
 
       <input
         ref={fileRef}
@@ -4712,24 +4766,21 @@ function SwatchChip({
   });
   const sizeLabel = (s: DiscSize) => (s === "12" ? '12" LP' : '7" Single');
 
-  // Read-only chip — a static badge with no Dialog, so the catalog reads
-  // calmly until the operator clicks the card's pencil to edit. When the
-  // editor passes onPreview, the chip is still clickable so it can drive
-  // the live preview without entering edit mode.
+  // Read-only chip — circular disc swatch (no text label). When the
+  // editor passes onPreview, clicking the disc drives the live preview.
   if (!editable) {
-    const ringCls = selected ? "border-[color:var(--brand-blue)] ring-1 ring-[color:var(--brand-blue)]" : "border-slate-200";
-    const inner = (
-      <>
-        <span
-          className="w-4 h-4 rounded-full border border-slate-200 shrink-0 overflow-hidden"
-          style={
-            color.swatchImageUrl
-              ? { backgroundImage: `url(${color.swatchImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
-              : { background: color.swatchHex ?? "#cccccc" }
-          }
-        />
-        <span className="truncate max-w-[10rem]">{color.name}</span>
-      </>
+    const ringCls = selected
+      ? "ring-2 ring-[color:var(--brand-blue)] ring-offset-1"
+      : "";
+    const discEl = (
+      <span
+        className={`w-7 h-7 rounded-full border border-black/10 shrink-0 overflow-hidden block ${ringCls}`}
+        style={
+          color.swatchImageUrl
+            ? { backgroundImage: `url(${color.swatchImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+            : { background: color.swatchHex ?? "#cccccc" }
+        }
+      />
     );
     if (onPreview) {
       return (
@@ -4737,24 +4788,22 @@ function SwatchChip({
           type="button"
           onClick={onPreview}
           aria-pressed={selected}
-          className={`inline-flex items-center gap-1.5 h-7 pl-1 pr-2.5 rounded-full border bg-white text-xs text-slate-700 hover:border-[color:var(--brand-blue)] transition-colors ${ringCls}`}
+          className="rounded-full transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]"
           data-testid={`chip-color-${color.id}`}
+          title={color.name}
         >
-          {inner}
+          {discEl}
         </button>
       );
     }
     return (
-      <span
-        className="inline-flex items-center gap-1.5 h-7 pl-1 pr-2.5 rounded-full border border-slate-200 bg-white text-xs text-slate-700"
-        data-testid={`chip-color-${color.id}`}
-      >
-        {inner}
+      <span data-testid={`chip-color-${color.id}`} title={color.name}>
+        {discEl}
       </span>
     );
   }
 
-  const ringCls = selected ? "border-[color:var(--brand-blue)] ring-1 ring-[color:var(--brand-blue)]" : "border-slate-200";
+  const ringCls = selected ? "ring-2 ring-[color:var(--brand-blue)] ring-offset-1" : "";
   return (
     <>
       <button
@@ -4764,19 +4813,15 @@ function SwatchChip({
           setEditing(true);
         }}
         aria-pressed={selected}
-        className={`inline-flex items-center gap-1.5 h-7 pl-1 pr-2.5 rounded-full border bg-white text-xs text-slate-700 hover:border-[color:var(--brand-blue)] transition-colors ${ringCls}`}
+        className={`w-7 h-7 rounded-full border border-black/10 overflow-hidden shrink-0 transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] ${ringCls}`}
+        style={
+          color.swatchImageUrl
+            ? { backgroundImage: `url(${color.swatchImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+            : { background: color.swatchHex ?? "#cccccc" }
+        }
         data-testid={`chip-color-${color.id}`}
-      >
-        <span
-          className="w-4 h-4 rounded-full border border-slate-200 shrink-0 overflow-hidden"
-          style={
-            color.swatchImageUrl
-              ? { backgroundImage: `url(${color.swatchImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
-              : { background: color.swatchHex ?? "#cccccc" }
-          }
-        />
-        <span className="truncate max-w-[10rem]">{color.name}</span>
-      </button>
+        title={color.name}
+      />
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -5026,11 +5071,11 @@ function AddSwatchChip({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full border border-dashed border-slate-300 text-xs text-slate-500 hover:border-[color:var(--brand-blue)] hover:text-[color:var(--brand-blue)] transition-colors"
+        className="w-7 h-7 rounded-full border border-dashed border-slate-300 inline-flex items-center justify-center text-slate-400 hover:border-[color:var(--brand-blue)] hover:text-[color:var(--brand-blue)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]"
         data-testid={`button-add-color-${tierId}`}
+        title="Add color"
       >
-        <Plus className="w-3 h-3" />
-        Add color
+        <Plus className="w-3.5 h-3.5" />
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-sm">
