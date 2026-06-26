@@ -49,14 +49,23 @@ export function JacketArtFill({
   artworkUrl,
   placeholderArtworkUrl,
   placeholderLogoUrl,
+  loading,
 }: {
   artworkUrl: string | null | undefined;
   placeholderArtworkUrl?: string | null;
   placeholderLogoUrl?: string | null;
+  // Task #2314 — while the invited-press data is still loading we don't
+  // yet know which branded placeholder to show, so render a pulsing
+  // skeleton over the (opacity-0) fallback and crossfade the resolved
+  // art/placeholder in once `loading` flips false. Optional/undefined
+  // keeps the original instant render for every existing call site.
+  loading?: boolean;
 }) {
   const artwork = resolveArtwork(artworkUrl);
+  const placeholderArt = resolveArtwork(placeholderArtworkUrl);
+  let content: React.ReactNode;
   if (artwork) {
-    return (
+    content = (
       <img
         src={artwork}
         alt=""
@@ -64,10 +73,8 @@ export function JacketArtFill({
         draggable={false}
       />
     );
-  }
-  const placeholderArt = resolveArtwork(placeholderArtworkUrl);
-  if (placeholderArt) {
-    return (
+  } else if (placeholderArt) {
+    content = (
       <img
         src={placeholderArt}
         alt=""
@@ -76,9 +83,8 @@ export function JacketArtFill({
         data-testid="img-press-jacket-placeholder"
       />
     );
-  }
-  if (placeholderLogoUrl) {
-    return (
+  } else if (placeholderLogoUrl) {
+    content = (
       <div className="w-full h-full bg-white flex items-center justify-center p-[16%]">
         <img
           src={placeholderLogoUrl}
@@ -89,15 +95,40 @@ export function JacketArtFill({
         />
       </div>
     );
+  } else {
+    content = (
+      <img
+        src="/vinyl-jacket-placeholder.svg"
+        alt=""
+        className="w-full h-full object-cover"
+        draggable={false}
+        data-testid="img-vinyl-jacket-placeholder"
+      />
+    );
   }
+  // Callers that never opt into the loading affordance (loading === undefined)
+  // get the original bare render. Callers that pass a boolean keep the wrapper
+  // mounted across the true→false flip so the resolved art crossfades in via
+  // the opacity transition instead of snapping from skeleton to content.
+  if (loading === undefined) return <>{content}</>;
   return (
-    <img
-      src="/vinyl-jacket-placeholder.svg"
-      alt=""
-      className="w-full h-full object-cover"
-      draggable={false}
-      data-testid="img-vinyl-jacket-placeholder"
-    />
+    <div className="relative w-full h-full">
+      <div
+        className={[
+          "w-full h-full transition-opacity duration-300",
+          loading ? "opacity-0" : "opacity-100",
+        ].join(" ")}
+      >
+        {content}
+      </div>
+      {loading && (
+        <div
+          className="absolute inset-0 animate-pulse bg-slate-200"
+          data-testid="jacket-loading-skeleton"
+          aria-hidden="true"
+        />
+      )}
+    </div>
   );
 }
 
@@ -110,6 +141,7 @@ export function VinylPreview({
   format,
   placeholderArtworkUrl,
   placeholderLogoUrl,
+  loading,
 }: {
   artworkUrl: string | null | undefined;
   color: VinylColorOption;
@@ -141,6 +173,11 @@ export function VinylPreview({
   // innersleeve strip. Larger vinyl formats (12" LP etc.) keep it.
   // Optional/undefined keeps the strip for back-compat call sites.
   format?: AlbumFormat;
+  // Task #2314 — while the invited-press data is still resolving, show a
+  // pulsing skeleton over the jacket tile and crossfade the resolved art /
+  // branded placeholder in once it's done, so the swap reads as intentional
+  // rather than a content jump. Optional/undefined keeps the instant render.
+  loading?: boolean;
 }) {
   // Task #982 — 7" singles have no inner sleeve in real life.
   const showInnerSleeve = format !== "7_inch";
@@ -172,6 +209,16 @@ export function VinylPreview({
         data-testid="cassette-preview"
       >
         <div className="absolute inset-0 overflow-hidden shadow-md border border-black/15 bg-slate-200">
+          <div
+            className={
+              loading === undefined
+                ? "w-full h-full"
+                : [
+                    "w-full h-full transition-opacity duration-300",
+                    loading ? "opacity-0" : "opacity-100",
+                  ].join(" ")
+            }
+          >
           {artwork ? (
             <img
               src={artwork}
@@ -199,6 +246,17 @@ export function VinylPreview({
             </div>
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-slate-300 to-slate-400" />
+          )}
+          </div>
+          {/* Task #2314 — pulsing skeleton over the J-card while the
+              invited-press data resolves; removed once loading completes
+              so the art/placeholder underneath crossfades in. */}
+          {loading && (
+            <div
+              className="absolute inset-0 animate-pulse bg-slate-200"
+              data-testid="jacket-loading-skeleton"
+              aria-hidden="true"
+            />
           )}
           {/* Folded J-card spine — a thin strip on the left edge that
               reads as the wrap-around fold (same art, darkened). */}
@@ -337,7 +395,7 @@ export function VinylPreview({
           className="absolute inset-0 bg-slate-200 overflow-hidden shadow-sm border border-black/10"
           data-testid="vinyl-preview-jacket"
         >
-          <JacketArtFill artworkUrl={artworkUrl} placeholderArtworkUrl={placeholderArtworkUrl} placeholderLogoUrl={placeholderLogoUrl} />
+          <JacketArtFill artworkUrl={artworkUrl} placeholderArtworkUrl={placeholderArtworkUrl} placeholderLogoUrl={placeholderLogoUrl} loading={loading} />
           {/* Gatefold cue — thin centered fold seam, so a gatefold
               reads as two-panel even before you notice the wider
               footprint. */}

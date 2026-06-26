@@ -466,7 +466,7 @@ export function SellPanel({
   // calculator. Falls back to platform defaults format-by-format when
   // the press hasn't filled in its own numbers yet, so artists always
   // see a usable readout. Also drives the Presses panel hard-lock.
-  const { data: invitedPress } = useQuery<InvitedPressResponse>({
+  const { data: invitedPress, isLoading: invitedPressLoading } = useQuery<InvitedPressResponse>({
     queryKey: ["/api/admin/albums", albumId, "invited-press"],
     // Task #1025 — see the skus query above; the catalog this drives can
     // drift under us, so reconcile on mount/focus. "always" (not `true`)
@@ -1407,6 +1407,7 @@ export function SellPanel({
                           onAfterBump={handleAfterBump}
                           allPresses={allPresses ?? null}
                           invitedPressItself={invitedPress?.press ?? null}
+                          pressLoading={invitedPressLoading}
                           pressFormatsByPress={pressFormatsByPress}
                           allPlannedQuantities={data.skus
                             .map((s) => s.plannedQuantity ?? 0)
@@ -1477,6 +1478,7 @@ export function SellPanel({
                         onAfterBump={handleAfterBump}
                         allPresses={allPresses ?? null}
                         invitedPressItself={invitedPress?.press ?? null}
+                        pressLoading={invitedPressLoading}
                         pressFormatsByPress={pressFormatsByPress}
                         allPlannedQuantities={data.skus
                           .map((s) => s.plannedQuantity ?? 0)
@@ -2415,6 +2417,7 @@ function SkuRow({
   onAfterBump,
   allPresses,
   invitedPressItself,
+  pressLoading = false,
   pressFormatsByPress,
   allPlannedQuantities,
 }: {
@@ -2575,6 +2578,11 @@ function SkuRow({
   // this format with a "Currently quoting" pill on the invited one.
   allPresses?: Manufacturer[] | null;
   invitedPressItself?: Manufacturer | null;
+  // Task #2314 — true while the album's invited-press query is still
+  // loading, so the jacket preview tiles can show a pulsing skeleton and
+  // crossfade the branded placeholder in once it resolves (instead of the
+  // neutral fallback snapping to the press art mid-render).
+  pressLoading?: boolean;
   // Task #635 — `(pressId → Set<format>)` index so the popover can
   // narrow `allPresses` down to those actually offering this format.
   pressFormatsByPress?: Map<string, Set<string>>;
@@ -4704,6 +4712,7 @@ function SkuRow({
               artworkUrl={artworkUrl}
               placeholderArtworkUrl={invitedPressItself?.vinylPlaceholderUrl ?? null}
               placeholderLogoUrl={invitedPressItself?.logoUrl ?? null}
+              loading={pressLoading}
             />
           </button>
           <div className="flex-1 min-w-0 space-y-1">
@@ -5757,6 +5766,7 @@ function SkuRow({
                      (VinylPreview only uses these when artworkUrl is empty). */
                   placeholderArtworkUrl={invitedPressItself?.vinylPlaceholderUrl ?? null}
                   placeholderLogoUrl={invitedPressItself?.logoUrl ?? null}
+                  loading={pressLoading}
                   jacketOverlay={(onEditArtwork || canChangeFormat) ? (
                     <>
                       <span
