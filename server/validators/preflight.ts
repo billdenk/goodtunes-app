@@ -124,6 +124,14 @@ export type ValidateArtOpts = {
   vendorId: VendorId;
   templateId: string;
   fileName: string | null;
+  /**
+   * The real press name to show in error messages. When the vendorId is
+   * "generic" (an unrecognised press), this is the actual plant name so
+   * messages read "<press> requires CMYK" instead of "your pressing plant
+   * requires CMYK". Also adds a "general vinyl spec" qualifier so operators
+   * know the rule comes from industry standards, not a measured plant spec.
+   */
+  pressDisplayName?: string;
 };
 
 export function validateArt(buf: Buffer, opts: ValidateArtOpts): CheckResult[] {
@@ -140,16 +148,24 @@ export function validateArt(buf: Buffer, opts: ValidateArtOpts): CheckResult[] {
     }];
   }
 
+  // Use the real press name for attribution; fall back to the spec label.
+  const pressName = opts.pressDisplayName ?? spec.label;
+  // When using the generic spec, append a qualifier so the operator knows
+  // these are industry-standard rules, not a plant-specific measured spec.
+  const genericNote = opts.vendorId === "generic" && opts.pressDisplayName
+    ? ` (general vinyl spec — no plant-specific specs on file for ${opts.pressDisplayName})`
+    : "";
+
   // 1. File format
   const sniffed = sniffFormat(buf);
   const claimed = extOf(opts.fileName);
   const effective = sniffed !== "unknown" ? sniffed : claimed;
   if (effective === "unknown") {
     checks.push({ key: "art.format", label: "File format", status: "fail",
-      message: `Could not identify file type. ${spec.label} accepts: ${spec.art.acceptedFormats.join(", ").toUpperCase()}.` });
+      message: `Could not identify file type. ${pressName} accepts: ${spec.art.acceptedFormats.join(", ").toUpperCase()}.${genericNote}` });
   } else if (!spec.art.acceptedFormats.includes(effective as ArtFileFormat)) {
     checks.push({ key: "art.format", label: "File format", status: "fail",
-      message: `${effective.toUpperCase()} not accepted. ${spec.label} requires: ${spec.art.acceptedFormats.join(", ").toUpperCase()}.` });
+      message: `${effective.toUpperCase()} not accepted. ${pressName} requires: ${spec.art.acceptedFormats.join(", ").toUpperCase()}.${genericNote}` });
   } else {
     checks.push({ key: "art.format", label: "File format", status: "pass",
       message: `${effective.toUpperCase()} accepted.` });
@@ -160,10 +176,10 @@ export function validateArt(buf: Buffer, opts: ValidateArtOpts): CheckResult[] {
     const re = new RegExp(spec.art.filenamePattern);
     if (opts.fileName && re.test(opts.fileName)) {
       checks.push({ key: "art.filename", label: "Filename convention", status: "pass",
-        message: `Matches ${spec.label}'s required pattern.` });
+        message: `Matches ${pressName}'s required pattern.` });
     } else {
       checks.push({ key: "art.filename", label: "Filename convention", status: "fail",
-        message: `${spec.label} requires Catalog#_ArtistName_TemplateType_YYYYMMDD.ext (e.g. ABC123_DAVIDBOWIE_CENTERLABEL_20240101.pdf).` });
+        message: `${pressName} requires Catalog#_ArtistName_TemplateType_YYYYMMDD.ext (e.g. ABC123_DAVIDBOWIE_CENTERLABEL_20240101.pdf).` });
     }
   }
 
@@ -204,13 +220,13 @@ export function validateArt(buf: Buffer, opts: ValidateArtOpts): CheckResult[] {
     const cs = sniffPdfColorSpace(buf);
     if (cs === "rgb") {
       checks.push({ key: "art.color_space", label: "Color mode", status: "fail",
-        message: `RGB detected — ${spec.label} requires ${spec.art.allowedColorSpaces.map((c) => c.toUpperCase()).join(" / ")}.` });
+        message: `RGB detected — ${pressName} requires ${spec.art.allowedColorSpaces.map((c) => c.toUpperCase()).join(" / ")}.${genericNote}` });
     } else if (spec.art.allowedColorSpaces.includes(cs)) {
       checks.push({ key: "art.color_space", label: "Color mode", status: "pass",
         message: `${cs.toUpperCase()} — accepted.` });
     } else {
       checks.push({ key: "art.color_space", label: "Color mode", status: "warn",
-        message: `Could not determine color space. ${spec.label} requires ${spec.art.allowedColorSpaces.map((c) => c.toUpperCase()).join(" / ")}.` });
+        message: `Could not determine color space. ${pressName} requires ${spec.art.allowedColorSpaces.map((c) => c.toUpperCase()).join(" / ")}.${genericNote}` });
     }
 
     // 6. Embedded / outlined fonts
@@ -224,7 +240,7 @@ export function validateArt(buf: Buffer, opts: ValidateArtOpts): CheckResult[] {
           message: "All fonts embedded." });
       } else {
         checks.push({ key: "art.fonts", label: "Fonts", status: "fail",
-          message: `${spec.label} requires fonts to be embedded or outlined.` });
+          message: `${pressName} requires fonts to be embedded or outlined.${genericNote}` });
       }
     }
 
@@ -244,7 +260,7 @@ export function validateArt(buf: Buffer, opts: ValidateArtOpts): CheckResult[] {
     checks.push({ key: "art.dimensions", label: "Dimensions", status: "warn",
       message: `Could not auto-probe ${effective.toUpperCase()} dimensions. Verify ${(template.finishedInches.w + template.bleedInches * 2).toFixed(2)}″ × ${(template.finishedInches.h + template.bleedInches * 2).toFixed(2)}″ at ${spec.art.requiredPpi} PPI.` });
     checks.push({ key: "art.color_space", label: "Color mode", status: "warn",
-      message: `Could not auto-probe color mode. ${spec.label} requires ${spec.art.allowedColorSpaces.map((c) => c.toUpperCase()).join(" / ")}.` });
+      message: `Could not auto-probe color mode. ${pressName} requires ${spec.art.allowedColorSpaces.map((c) => c.toUpperCase()).join(" / ")}.${genericNote}` });
   }
 
   return checks;
@@ -268,6 +284,8 @@ export type ValidateAudioOpts = {
   // Optional: which side this particular file is for ("A", "B"…). Drives
   // the "one file per side" hint.
   side?: string | null;
+  /** Real press name to use in messages. See ValidateArtOpts.pressDisplayName. */
+  pressDisplayName?: string;
 };
 
 export async function validateAudio(buf: Buffer, opts: ValidateAudioOpts): Promise<CheckResult[]> {
@@ -276,6 +294,11 @@ export async function validateAudio(buf: Buffer, opts: ValidateAudioOpts): Promi
   if (!spec) {
     return [{ key: "audio.config", label: "Vendor", status: "fail", message: "Unknown vendor — pick one before uploading." }];
   }
+
+  const pressName = opts.pressDisplayName ?? spec.label;
+  const genericNote = opts.vendorId === "generic" && opts.pressDisplayName
+    ? ` (general vinyl spec — no plant-specific specs on file for ${opts.pressDisplayName})`
+    : "";
 
   // Probe with music-metadata (already a dep). Best-effort: parse from
   // buffer; fall back to "unknown" on failure.
@@ -310,23 +333,23 @@ export async function validateAudio(buf: Buffer, opts: ValidateAudioOpts): Promi
       message: `${format.toUpperCase()} accepted.` });
   } else if (format) {
     checks.push({ key: "audio.format", label: "Format", status: "fail",
-      message: `${format.toUpperCase()} — ${spec.label} requires ${spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.` });
+      message: `${format.toUpperCase()} — ${pressName} requires ${spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.${genericNote}` });
   } else {
     checks.push({ key: "audio.format", label: "Format", status: "warn",
-      message: `Format unknown — ${spec.label} requires ${spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.` });
+      message: `Format unknown — ${pressName} requires ${spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.${genericNote}` });
   }
 
   // 2. Bit depth
   if (spec.audio.requiredBitDepth != null) {
     if (bitDepth == null) {
       checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "warn",
-        message: `Couldn't read bit depth — ${spec.label} requires ${spec.audio.requiredBitDepth}-bit.` });
+        message: `Couldn't read bit depth — ${pressName} requires ${spec.audio.requiredBitDepth}-bit.${genericNote}` });
     } else if (bitDepth >= spec.audio.requiredBitDepth) {
       checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "pass",
-        message: `${bitDepth}-bit — meets ${spec.label}'s ${spec.audio.requiredBitDepth}-bit minimum.` });
+        message: `${bitDepth}-bit — meets ${pressName}'s ${spec.audio.requiredBitDepth}-bit minimum.` });
     } else {
       checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "fail",
-        message: `${bitDepth}-bit — ${spec.label} requires ${spec.audio.requiredBitDepth}-bit.` });
+        message: `${bitDepth}-bit — ${pressName} requires ${spec.audio.requiredBitDepth}-bit.${genericNote}` });
     }
   }
 
@@ -354,7 +377,7 @@ export async function validateAudio(buf: Buffer, opts: ValidateAudioOpts): Promi
     }
     if (worstOver > 0) {
       checks.push({ key: "audio.side_length", label: "Side length", status: "fail",
-        message: `Side ${worstSide} exceeds ${spec.label}'s ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM by ${fmtMinSec(worstOver)}.` });
+        message: `Side ${worstSide} exceeds ${pressName}'s ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM by ${fmtMinSec(worstOver)}.${genericNote}` });
     } else {
       checks.push({ key: "audio.side_length", label: "Side length", status: "pass",
         message: `All sides within ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM.` });
@@ -372,7 +395,7 @@ export async function validateAudio(buf: Buffer, opts: ValidateAudioOpts): Promi
         message: `Tagged side ${opts.side}.` });
     } else {
       checks.push({ key: "audio.one_per_side", label: "One file per side", status: "warn",
-        message: `${spec.label} requires one file per side — tag this upload with its side (A / B / …).` });
+        message: `${pressName} requires one file per side — tag this upload with its side (A / B / …).${genericNote}` });
     }
   }
 
@@ -383,7 +406,7 @@ export async function validateAudio(buf: Buffer, opts: ValidateAudioOpts): Promi
         message: `${opts.sideBreaks.length} side(s) supplied with per-track times.` });
     } else {
       checks.push({ key: "audio.tracklist", label: "Tracklist", status: "fail",
-        message: `${spec.label} requires a tracklist with side breaks and per-track times.` });
+        message: `${pressName} requires a tracklist with side breaks and per-track times.${genericNote}` });
     }
   }
 
@@ -425,6 +448,8 @@ export type ValidateAudioFromSpecsOpts = {
   fileName: string | null;
   sideBreaks?: SideBreakInput[];
   side?: string | null;
+  /** Real press name to use in messages. See ValidateArtOpts.pressDisplayName. */
+  pressDisplayName?: string;
 };
 
 // Map the stored columns to a (wav | aiff | flac | other) bucket using
@@ -467,6 +492,11 @@ export function validateAudioFromSpecs(
     return [{ key: "audio.config", label: "Vendor", status: "fail", message: "Unknown vendor — pick one before uploading." }];
   }
 
+  const pressName = opts.pressDisplayName ?? spec.label;
+  const genericNote = opts.vendorId === "generic" && opts.pressDisplayName
+    ? ` (general vinyl spec — no plant-specific specs on file for ${opts.pressDisplayName})`
+    : "";
+
   // 1. Format
   const klass = classifyStoredFormat(specs.format, specs.containerExt);
   const pretty = prettyStoredFormat(specs.format, specs.containerExt);
@@ -476,13 +506,13 @@ export function validateAudioFromSpecs(
     (klass === "flac" && spec.audio.requiredFormats.includes("flac"));
   if (klass === "unknown") {
     checks.push({ key: "audio.format", label: "Format", status: "warn",
-      message: `Format unknown — ${spec.label} requires ${spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.` });
+      message: `Format unknown — ${pressName} requires ${spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.${genericNote}` });
   } else if (matches) {
     checks.push({ key: "audio.format", label: "Format", status: "pass",
       message: `${pretty} accepted.` });
   } else {
     checks.push({ key: "audio.format", label: "Format", status: "fail",
-      message: `${pretty} — ${spec.label} requires ${spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.` });
+      message: `${pretty} — ${pressName} requires ${spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.${genericNote}` });
   }
 
   // 2. Bit depth — NULL stored value is the ONLY trigger for the
@@ -491,13 +521,13 @@ export function validateAudioFromSpecs(
   if (spec.audio.requiredBitDepth != null) {
     if (specs.bitDepth == null) {
       checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "warn",
-        message: `Couldn't read bit depth — ${spec.label} requires ${spec.audio.requiredBitDepth}-bit.` });
+        message: `Couldn't read bit depth — ${pressName} requires ${spec.audio.requiredBitDepth}-bit.${genericNote}` });
     } else if (specs.bitDepth >= spec.audio.requiredBitDepth) {
       checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "pass",
-        message: `${specs.bitDepth}-bit — meets ${spec.label}'s ${spec.audio.requiredBitDepth}-bit minimum.` });
+        message: `${specs.bitDepth}-bit — meets ${pressName}'s ${spec.audio.requiredBitDepth}-bit minimum.` });
     } else {
       checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "fail",
-        message: `${specs.bitDepth}-bit — ${spec.label} requires ${spec.audio.requiredBitDepth}-bit.` });
+        message: `${specs.bitDepth}-bit — ${pressName} requires ${spec.audio.requiredBitDepth}-bit.${genericNote}` });
     }
   }
 
@@ -525,7 +555,7 @@ export function validateAudioFromSpecs(
     }
     if (worstOver > 0) {
       checks.push({ key: "audio.side_length", label: "Side length", status: "fail",
-        message: `Side ${worstSide} exceeds ${spec.label}'s ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM by ${fmtMinSec(worstOver)}.` });
+        message: `Side ${worstSide} exceeds ${pressName}'s ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM by ${fmtMinSec(worstOver)}.${genericNote}` });
     } else {
       checks.push({ key: "audio.side_length", label: "Side length", status: "pass",
         message: `All sides within ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM.` });
@@ -542,7 +572,7 @@ export function validateAudioFromSpecs(
         message: `Tagged side ${opts.side}.` });
     } else {
       checks.push({ key: "audio.one_per_side", label: "One file per side", status: "warn",
-        message: `${spec.label} requires one file per side — tag this upload with its side (A / B / …).` });
+        message: `${pressName} requires one file per side — tag this upload with its side (A / B / …).${genericNote}` });
     }
   }
 
@@ -553,7 +583,7 @@ export function validateAudioFromSpecs(
         message: `${opts.sideBreaks.length} side(s) supplied with per-track times.` });
     } else {
       checks.push({ key: "audio.tracklist", label: "Tracklist", status: "fail",
-        message: `${spec.label} requires a tracklist with side breaks and per-track times.` });
+        message: `${pressName} requires a tracklist with side breaks and per-track times.${genericNote}` });
     }
   }
 

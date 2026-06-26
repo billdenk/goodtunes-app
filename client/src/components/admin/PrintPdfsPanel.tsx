@@ -63,6 +63,7 @@ function fmtKb(b: number) {
 export function PrintPdfsPanel({
   albumId,
   vendor,
+  pressName,
 }: {
   albumId: string;
   // Task #597 — vendor selection is now lifted to the Press tab. When
@@ -73,10 +74,17 @@ export function PrintPdfsPanel({
   // hidden pre-meeting via HIDDEN_PREFLIGHT_VENDORS; restore by
   // emptying that set in vendorSpecs.ts).
   vendor?: VendorId;
+  // Task #2309 — real press name for button / history attribution when
+  // vendorId is "generic" (no measured spec on file for this plant).
+  pressName?: string;
 }) {
   const { toast } = useToast();
   const [internalVendorId, setInternalVendorId] = useState<VendorId>(() => defaultPreflightVendor());
   const vendorId: VendorId = vendor ?? internalVendorId;
+  // Display name for the press: use the real press name when available (incl.
+  // generic-vendor albums where the plant has no measured spec on file), then
+  // fall back to the VENDOR_SPECS label so MRP / PMP always show correctly.
+  const pressDisplayName = pressName ?? VENDOR_SPECS[vendorId]?.label ?? vendorId;
   const [blocked, setBlocked] = useState<GenerateError | null>(null);
   const [justification, setJustification] = useState("");
 
@@ -109,7 +117,8 @@ export function PrintPdfsPanel({
     onSuccess: (gen) => {
       setBlocked(null);
       setJustification("");
-      toast({ title: "Print PDFs generated", description: `${gen.artifacts.length} template(s) for ${VENDOR_SPECS[gen.vendorId as VendorId]?.label ?? gen.vendorId}.` });
+      const genLabel = pressDisplayName ?? VENDOR_SPECS[gen.vendorId as VendorId]?.label ?? gen.vendorId;
+      toast({ title: "Print PDFs generated", description: `${gen.artifacts.length} template(s) for ${genLabel}.` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "print-pdfs"] });
     },
     onError: (e: any) => {
@@ -163,7 +172,7 @@ export function PrintPdfsPanel({
             data-testid="button-print-generate"
           >
             {generate.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-            Generate print PDFs for {VENDOR_SPECS[vendorId].label}
+            Generate print PDFs for {pressDisplayName}
           </button>
         </div>
 
@@ -233,7 +242,7 @@ export function PrintPdfsPanel({
           <div key={g.id} className="rounded-md border border-slate-200 bg-white p-3" data-testid={`row-print-gen-${g.id}`}>
             <div className="flex items-center justify-between text-xs text-slate-600 mb-2">
               <span>
-                <span className="font-semibold text-slate-900">{VENDOR_SPECS[g.vendorId as VendorId]?.label ?? g.vendorId}</span>
+                <span className="font-semibold text-slate-900">{pressDisplayName ?? VENDOR_SPECS[g.vendorId as VendorId]?.label ?? g.vendorId}</span>
                 {" · "}
                 {new Date(g.createdAt).toLocaleString()}
               </span>

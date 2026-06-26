@@ -14,7 +14,7 @@
 // `usage: "print" | "display"` discriminator to ArtAsset and skip the
 // bleed/CMYK rules for `display`.
 
-export type VendorId = "mrp" | "pmp" | "hellbender";
+export type VendorId = "mrp" | "pmp" | "hellbender" | "generic";
 
 export type VinylSize = '7"' | '10"' | '12"';
 export type VinylRpm = 33 | 45;
@@ -116,7 +116,45 @@ const MRP_MAX_SIDE: VendorSpec["audio"]["maxSideSecondsBySizeRpm"] = {
   '7"':  { 33:  8 * 60, 45:  6 * 60 },
 };
 
+// Generic industry-standard vinyl spec used when the album's dedicated press
+// is not one of the three plants with measured specs on file (MRP/PMP/Hellbender).
+// The label is a placeholder — callers pass the real press name via `pressDisplayName`
+// on the validator opts so messages are attributed to the actual chosen plant.
+const GENERIC_VINYL_TEMPLATES: TemplateSpec[] = [
+  { id: "12_center_label",  label: '12" Center Label',        size: '12"', finishedInches: { w: 3.875, h: 3.875 }, bleedInches: 0.125 },
+  { id: "12_single_jacket", label: '12" Single Jacket',       size: '12"', finishedInches: { w: 12, h: 12 },       bleedInches: 0.125 },
+  { id: "12_gatefold",      label: '12" Gatefold Jacket',     size: '12"', finishedInches: { w: 24, h: 12 },       bleedInches: 0.125 },
+  { id: "10_center_label",  label: '10" Center Label',        size: '10"', finishedInches: { w: 3.5, h: 3.5 },     bleedInches: 0.125 },
+  { id: "10_single_jacket", label: '10" Single Jacket',       size: '10"', finishedInches: { w: 10, h: 10 },       bleedInches: 0.125 },
+  { id: "7_center_label",   label: '7" Center Label',         size: '7"',  finishedInches: { w: 3.5, h: 3.5 },     bleedInches: 0.125 },
+  { id: "7_single_jacket",  label: '7" Single Jacket',        size: '7"',  finishedInches: { w: 7.0625, h: 7.0625 }, bleedInches: 0.125 },
+];
+
 export const VENDOR_SPECS: Record<VendorId, VendorSpec> = {
+  // Generic spec for presses without plant-specific specs on file.
+  // The label is a neutral placeholder; real press name is threaded
+  // via pressDisplayName on the validator opts.
+  generic: {
+    id: "generic",
+    label: "your pressing plant",
+    sourceUrl: "",
+    art: {
+      requiredPpi: 300,
+      allowedColorSpaces: ["cmyk", "pms", "grayscale"],
+      acceptedFormats: ["pdf", "psd", "eps", "tiff", "indd-package"],
+      requireEmbeddedFonts: true,
+      warnIfDielineEmbedded: true,
+      templates: GENERIC_VINYL_TEMPLATES,
+    },
+    audio: {
+      requiredFormats: ["wav", "aiff"],
+      requiredBitDepth: 24,
+      maxSideSecondsBySizeRpm: MRP_MAX_SIDE,
+      oneFilePerSide: true,
+      requireSideBreakTracklist: true,
+      warnLoudFirst: false,
+    },
+  },
   mrp: {
     id: "mrp",
     label: "Memphis Record Pressing",
@@ -200,7 +238,9 @@ export function getTemplate(vendorId: VendorId, templateId: string): TemplateSpe
 // (1LP/2LP Color+Splatter + 7" Color confirmed; Black left as yellow
 // TBD placeholders). Removed from the hidden set so the SellPanel and
 // preflight surfaces treat it as a real, pickable plant.
-export const HIDDEN_PREFLIGHT_VENDORS: ReadonlySet<VendorId> = new Set<VendorId>(["hellbender"]);
+// "generic" is always hidden from manual pickers — it is only set
+// programmatically when the album's dedicated press has no measured spec.
+export const HIDDEN_PREFLIGHT_VENDORS: ReadonlySet<VendorId> = new Set<VendorId>(["hellbender", "generic"]);
 
 export function visiblePreflightVendors(): VendorSpec[] {
   return Object.values(VENDOR_SPECS).filter((s) => !HIDDEN_PREFLIGHT_VENDORS.has(s.id));
@@ -223,12 +263,34 @@ export function matchInvitedPressToVendor(pressName: string | null | undefined):
   const n = pressName.trim().toLowerCase();
   if (!n) return null;
   for (const v of Object.values(VENDOR_SPECS)) {
+    if (v.id === "generic") continue; // skip synthetic entry
     const label = v.label.toLowerCase();
     if (n === label || n.includes(label) || label.includes(n) || n.startsWith(v.id)) {
       return v.id;
     }
   }
   return null;
+}
+
+/**
+ * Like `matchInvitedPressToVendor` but never returns null: an unknown
+ * press maps to `"generic"` instead. Use this anywhere the Physical tab
+ * needs a VendorId to drive preflight — it guarantees a real spec is
+ * returned even when the album's dedicated plant has no measured spec on
+ * file, so the tab never silently impersonates MRP.
+ */
+export function resolveVendorIdForPress(pressName: string | null | undefined): VendorId {
+  return matchInvitedPressToVendor(pressName) ?? (pressName?.trim() ? "generic" : defaultPreflightVendor());
+}
+
+/**
+ * Returns true when `vendorId` is the synthetic generic spec rather than
+ * one of the three plants with measured specs on file. Use this to add the
+ * "general vinyl spec — no plant-specific specs on file" qualifier in UI
+ * and message strings.
+ */
+export function isGenericVendor(vendorId: VendorId): boolean {
+  return vendorId === "generic";
 }
 
 // ─── Task #2109 — Completed-template confirmation specs ───────────────

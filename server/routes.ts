@@ -29946,16 +29946,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   const artValidateSchema = z.object({
     albumId: z.string().min(1),
-    vendorId: z.enum(["mrp", "pmp", "hellbender"]),
+    vendorId: z.enum(["mrp", "pmp", "hellbender", "generic"]),
     templateId: z.string().min(1),
+    pressName: z.string().optional(), // real plant name for message attribution
   });
   const audioValidateSchema = z.object({
     albumId: z.string().min(1),
-    vendorId: z.enum(["mrp", "pmp", "hellbender"]),
+    vendorId: z.enum(["mrp", "pmp", "hellbender", "generic"]),
     vinylSize: z.enum(['7"', '10"', '12"']),
     rpm: z.coerce.number().refine((n) => n === 33 || n === 45),
     side: z.string().nullable().optional(),
     sideBreaks: z.string().optional(), // JSON-encoded SideBreakInput[]
+    pressName: z.string().optional(), // real plant name for message attribution
   });
 
   app.post(
@@ -29967,11 +29969,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!f) return res.status(400).json({ message: "No file uploaded" });
       const parsed = artValidateSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-      const { albumId, vendorId, templateId } = parsed.data;
+      const { albumId, vendorId, templateId, pressName } = parsed.data;
       try {
         const { validateArt } = await import("./validators/preflight");
         const { rollupStatus } = await import("../shared/uploadValidation");
-        const checks = validateArt(f.buffer, { vendorId, templateId, fileName: f.originalname });
+        const checks = validateArt(f.buffer, { vendorId, templateId, fileName: f.originalname, pressDisplayName: pressName });
         const assetUrl = await uploadBufferToObjectStorage(f.buffer, f.mimetype || "application/octet-stream");
         const row = await storage.insertUploadValidation({
           albumId,
@@ -30000,7 +30002,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!f) return res.status(400).json({ message: "No file uploaded" });
       const parsed = audioValidateSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-      const { albumId, vendorId, vinylSize, rpm, side } = parsed.data;
+      const { albumId, vendorId, vinylSize, rpm, side, pressName: audioPressName } = parsed.data;
       let sideBreaks: { side: string; trackTimesSeconds: number[] }[] | undefined;
       if (parsed.data.sideBreaks) {
         try {
@@ -30019,6 +30021,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           fileName: f.originalname ?? null,
           side: side ?? null,
           sideBreaks,
+          pressDisplayName: audioPressName,
         });
         const assetUrl = await uploadBufferToObjectStorage(f.buffer, f.mimetype || "application/octet-stream");
         const row = await storage.insertUploadValidation({
@@ -30151,13 +30154,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/admin/albums/:id/preflight-masters", requireAdminBearer, async (req, res) => {
     const albumId = req.params.id;
     const schema = z.object({
-      vendorId: z.enum(["mrp", "pmp", "hellbender"]),
+      vendorId: z.enum(["mrp", "pmp", "hellbender", "generic"]),
       vinylSize: z.enum(['7"', '10"', '12"']),
       rpm: z.union([z.literal(33), z.literal(45)]),
+      pressName: z.string().optional(), // real plant name for message attribution
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const { vendorId, vinylSize, rpm } = parsed.data;
+    const { vendorId, vinylSize, rpm, pressName: preflightPressName } = parsed.data;
     try {
       const album = await storage.getAlbumById(albumId, { includeHidden: true });
       if (!album) return res.status(404).json({ message: "Album not found" });
@@ -30276,6 +30280,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           // panel) so the Tracklist + Side length checks evaluate against
           // real data rather than warning that none was supplied.
           sideBreaks,
+          // Thread the real press name so messages read "Acme Records
+          // requires WAV" instead of "General vinyl spec requires WAV"
+          // when the album's dedicated plant has no measured spec on file.
+          pressDisplayName: preflightPressName,
         });
         const extMatch = url.match(/\.(\w+)(?:\?|$)/);
         const ext = extMatch ? extMatch[0] : "";
@@ -30486,8 +30494,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!(await requireOperator(req, res))) return;
     const album = await storage.getAlbumById(req.params.id, { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
-    const vendor = z.enum(["mrp", "pmp", "hellbender"]).safeParse(req.body?.vendorId);
-    if (!vendor.success) return res.status(400).json({ message: "Pick a valid vendor (MRP, PMP, or Hellbender)." });
+    const vendor = z.enum(["mrp", "pmp", "hellbender", "generic"]).safeParse(req.body?.vendorId);
+    if (!vendor.success) return res.status(400).json({ message: "Pick a valid vendor (MRP, PMP, Hellbender, or a generic spec)." });
     const cfg = completedConfigSchema.safeParse(req.body?.config);
     if (!cfg.success) return res.status(400).json({ message: cfg.error.message });
     const existing = await storage.getCompletedTemplateCheck(req.params.id);
@@ -30983,7 +30991,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const albumId = req.params.albumId;
       const body = z
         .object({
-          vendorId: z.enum(["mrp", "pmp", "hellbender"]),
+          vendorId: z.enum(["mrp", "pmp", "hellbender", "generic"]),
           overrideJustification: z.string().trim().min(8).optional(),
         })
         .safeParse(req.body);

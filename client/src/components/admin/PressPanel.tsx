@@ -23,7 +23,7 @@ import { formatUsdCents } from "@shared/money";
 import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2, Send, AlertCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, matchInvitedPressToVendor, defaultPreflightVendor, type VendorId } from "@shared/vendorSpecs";
+import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, resolveVendorIdForPress, isGenericVendor, defaultPreflightVendor, type VendorId } from "@shared/vendorSpecs";
 import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
 import { CompletedTemplatePanel } from "@/components/admin/CompletedTemplatePanel";
 import { PressTemplateDownloads, type PressTemplate } from "@/components/admin/PressTemplateDownloads";
@@ -371,14 +371,16 @@ export function PressPanel({
   // Task #1837 — also try matching against the effective press (chosen per-SKU)
   // when no artist/label stamp exists, so the Physical tab stays consistent
   // with what the Sell panel's Printer row shows to partner roles.
-  const defaultVendor: VendorId = useMemo(() => {
-    const matched = matchInvitedPressToVendor(invitedPress?.press?.name);
-    if (matched) return matched;
-    const effectiveMatched = matchInvitedPressToVendor(invitedPress?.effectivePress?.name);
-    if (effectiveMatched) return effectiveMatched;
-    // Same platform-default the Sell panel's mrpDefaults fallback resolves to.
-    return defaultPreflightVendor();
-  }, [invitedPress]);
+  // Task #2309 — use resolveVendorIdForPress (never returns null): unknown
+  // presses map to "generic" so preflight never silently defaults to MRP.
+  const resolvedPressName: string | undefined = useMemo(
+    () => invitedPress?.press?.name ?? invitedPress?.effectivePress?.name ?? undefined,
+    [invitedPress],
+  );
+  const defaultVendor: VendorId = useMemo(
+    () => resolveVendorIdForPress(resolvedPressName),
+    [resolvedPressName],
+  );
   const vendorId: VendorId = defaultVendor;
 
   const [vinylSize, setVinylSize] = useState<'7"' | '10"' | '12"'>('12"');
@@ -433,6 +435,7 @@ export function PressPanel({
         vendorId,
         vinylSize,
         rpm,
+        ...(resolvedPressName ? { pressName: resolvedPressName } : {}),
       });
       return r.json() as Promise<{ tracksValidated: number; tracksMissing: number }>;
     },
@@ -706,7 +709,7 @@ export function PressPanel({
           </p>
           <div className="rounded-md border border-slate-200 bg-white p-4 flex items-center gap-3">
             <span className="text-sm font-medium text-slate-900" data-testid="press-vendor-label">
-              {VENDOR_SPECS[vendorId]?.label ?? vendorId}
+              {resolvedPressName ?? VENDOR_SPECS[vendorId]?.label ?? vendorId}
             </span>
             <span className="text-xs text-slate-400">
               {invitedPress?.press?.name
@@ -715,6 +718,11 @@ export function PressPanel({
                   ? "chosen plant"
                   : "platform default"}
             </span>
+            {isGenericVendor(vendorId) && resolvedPressName && (
+              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 ml-1" data-testid="badge-generic-vendor">
+                general vinyl spec — no plant-specific specs on file
+              </span>
+            )}
           </div>
         </div>
 
@@ -784,6 +792,7 @@ export function PressPanel({
               albumId={albumId}
               kindFilter="audio"
               vendor={vendorId}
+              pressName={resolvedPressName}
               defaultVinylSize={vinylSize}
               defaultRpm={rpm}
               hidePicker
@@ -800,10 +809,11 @@ export function PressPanel({
           title="Art preflight"
           description="Drop a jacket / label / hype-sticker file to validate against the picked plant's print template before sending it to fulfillment."
           vendor={vendorId}
+          pressName={resolvedPressName}
         />
 
         {/* ── Print-ready PDFs (Task #327, moved from Sell) ──────────── */}
-        <PrintPdfsPanel albumId={albumId} vendor={vendorId} />
+        <PrintPdfsPanel albumId={albumId} vendor={vendorId} pressName={resolvedPressName} />
 
         {/* ── Completed-template confirmation (Task #2109) ───────────── */}
         <CompletedTemplatePanel albumId={albumId} vendor={vendorId} />

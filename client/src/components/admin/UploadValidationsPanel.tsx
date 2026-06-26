@@ -47,6 +47,7 @@ export function UploadValidationsPanel({
   description,
   onReprobeClick,
   vendor,
+  pressName,
   defaultVinylSize,
   defaultRpm,
   hidePicker,
@@ -71,6 +72,9 @@ export function UploadValidationsPanel({
   // supplied the internal vendor selector is hidden and this value
   // drives every validation upload + the spec-hint copy.
   vendor?: VendorId;
+  // Task #2309 — real press name for message attribution when vendorId
+  // is "generic" (no plant-specific specs on file).
+  pressName?: string;
   // Task #597 — defaults for the per-row "Replace this master" inline
   // form (size / RPM). They are *defaults*, not forced values: the
   // replace form lets the operator override per file since size/RPM/
@@ -95,6 +99,8 @@ export function UploadValidationsPanel({
   // restore by emptying HIDDEN_PREFLIGHT_VENDORS in vendorSpecs.ts).
   const [internalVendorId, setInternalVendorId] = useState<VendorId>(() => defaultPreflightVendor());
   const vendorId: VendorId = vendor ?? internalVendorId;
+  // pressName only used for message attribution, never for spec routing
+  const effectivePressName = pressName;
   const [templateId, setTemplateId] = useState<string>(VENDOR_SPECS[vendorId].art.templates[0].id);
   const [kind, setKind] = useState<"art" | "audio">(kindFilter ?? "art");
   const [internalVinylSize, setInternalVinylSize] = useState<'7"' | '10"' | '12"'>('12"');
@@ -124,6 +130,7 @@ export function UploadValidationsPanel({
       fd.append("file", file);
       fd.append("albumId", albumId);
       fd.append("vendorId", vendorId);
+      if (effectivePressName) fd.append("pressName", effectivePressName);
       if (kind === "art") {
         fd.append("templateId", templateId);
       } else {
@@ -358,6 +365,7 @@ export function UploadValidationsPanel({
                     vendorId: vendor,
                     defaultVinylSize: defaultVinylSize ?? '12"',
                     defaultRpm: defaultRpm ?? 33,
+                    pressName: effectivePressName,
                   }
                 : null
             }
@@ -375,7 +383,7 @@ function ValidationRow({
 }: {
   row: UploadValidationResult;
   onReprobeClick?: () => void;
-  replaceContext: { albumId: string; vendorId: VendorId; defaultVinylSize: '7"' | '10"' | '12"'; defaultRpm: 33 | 45 } | null;
+  replaceContext: { albumId: string; vendorId: VendorId; defaultVinylSize: '7"' | '10"' | '12"'; defaultRpm: 33 | 45; pressName?: string } | null;
 }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(row.status !== "pass");
@@ -417,6 +425,7 @@ function ValidationRow({
       fd.append("file", file);
       fd.append("albumId", replaceContext.albumId);
       fd.append("vendorId", replaceContext.vendorId);
+      if (replaceContext.pressName) fd.append("pressName", replaceContext.pressName);
       fd.append("vinylSize", replaceSize);
       fd.append("rpm", String(replaceRpm));
       fd.append("side", replaceSide || "A");
