@@ -56,6 +56,17 @@ the budget.)
    (a bare `[ … ]` that's false would exit the whole script). A single `RETURN` trap shreds the
    SSH private-key + pinned known_hosts temp files AND removes the temp `ghlfs` remote on every
    early-return/out-of-budget path, so no key material lingers on disk or in `.git/config`.
+3. **Escalate the per-step `timeout`s to SIGKILL (`--kill-after`).** Plain `timeout N cmd` only
+   sends SIGTERM, which an `ssh` / `git-lfs` child stuck on a large upload can IGNORE — so the
+   "clamp" silently overruns and the WHOLE post-merge blows past the platform kill. Symptom: a
+   merge's post-merge reported SETUP_FAILED at ~334s (>300s), stdout's last line was "syncing
+   GitHub build mirror" with no "sync ok", and the migrations that run AFTER the mirror call
+   never executed (they're idempotent and the NEXT merge re-ran them, and that merge's
+   force-push carried the stranded commit, so it self-healed — but the false failure is scary).
+   Fix: every git step runs under `timeout --kill-after=10 "$remain" …` so a SIGTERM-ignoring
+   child is SIGKILLed 10s after the soft deadline. Hard cap 275 + 10 = 285s < 300s, so the +10
+   can't itself blow the budget (once one step overruns, all later `remain` go negative and
+   self-skip). Never drop the `--kill-after`.
 
 **Silent-staleness coupling (matters now that Android auto-builds).** `codemagic.yaml`'s
 `android-internal` workflow auto-triggers on every push to `main` of this mirror (iOS stays

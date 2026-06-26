@@ -6920,6 +6920,14 @@ sync_github_build_mirror() {
   # post-merge. NEVER let a step run longer than the remaining budget, and never
   # raise MIRROR_BUDGET so high that migrations + mirror can exceed the platform
   # timeout (see .agents/memory/github-mirror-push.md "Time-budget coupling").
+  #
+  # SIGTERM escalation (load-bearing): every git step below is run under
+  # `timeout --kill-after=10`. Plain `timeout` only sends SIGTERM, which an ssh /
+  # git-lfs child stuck on a large upload can ignore — so the "clamp" silently
+  # overruns and the WHOLE post-merge blows past the platform kill (observed:
+  # script ran 334s > 300s, killed mid-push, dropping the post-mirror migrations).
+  # --kill-after escalates to SIGKILL 10s after the soft deadline, guaranteeing
+  # the clamp is actually enforced (hard cap 275 + 10 = 285s < 300s).
   local MIRROR_BUDGET=150
   local mirror_deadline=$((SECONDS + MIRROR_BUDGET))
   # ABSOLUTE wall-clock cap (load-bearing): SECONDS ≈ total elapsed script time
@@ -6954,7 +6962,7 @@ sync_github_build_mirror() {
   # fetch fail "non-fast-forward" -> have_remote stays 0 -> STEP 2 (LFS upload)
   # is skipped -> every new LFS object GH008-rejects the push forever. The '+'
   # resets the tracking ref to GitHub's actual tip so the delta/LFS diff is real.
-  if GIT_TERMINAL_PROMPT=0 timeout "$remain" \
+  if GIT_TERMINAL_PROMPT=0 timeout --kill-after=10 "$remain" \
        git fetch --no-tags "$GITHUB_MIRROR_URL" "+main:refs/remotes/ghmirror/main" >/dev/null 2>&1
   then
     have_remote=1
@@ -6988,7 +6996,7 @@ sync_github_build_mirror() {
           break
         fi
         if [ "$remain" -gt 120 ]; then remain=120; fi
-        GIT_TERMINAL_PROMPT=0 timeout "$remain" git lfs push --object-id ghlfs "$oid" 2>&1 || true
+        GIT_TERMINAL_PROMPT=0 timeout --kill-after=10 "$remain" git lfs push --object-id ghlfs "$oid" 2>&1 || true
       done
       git remote remove ghlfs >/dev/null 2>&1 || true
     fi
@@ -7004,7 +7012,7 @@ sync_github_build_mirror() {
     return 0
   fi
   if [ "$remain" -gt 90 ]; then remain=90; fi
-  out=$(GIT_LFS_SKIP_PUSH=1 GIT_TERMINAL_PROMPT=0 timeout "$remain" \
+  out=$(GIT_LFS_SKIP_PUSH=1 GIT_TERMINAL_PROMPT=0 timeout --kill-after=10 "$remain" \
           git push --no-verify --force "$GITHUB_MIRROR_URL" "HEAD:refs/heads/main" 2>&1) || rc=$?
   if [ "$rc" = 0 ]; then
     echo "post-merge: GitHub mirror sync ok ($head)"
