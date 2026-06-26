@@ -4,7 +4,7 @@
 // "tabs" header and the "leftnav" topbar) so EVERY invited-partner portal
 // — press, NPO, artist, label, vendor, manager, printer, fulfillment,
 // publisher — gets the same "Report a bug / request a feature" affordance
-// with no per-portal wiring. The dialog has two tabs: Report (form with
+// with no per-portal wiring. The dialog has two views: Report (form with
 // screenshot auto-capture) and My requests (the submitter's own history
 // with status). Submitter identity is derived server-side; the client
 // never sends a role/scope it could spoof.
@@ -22,11 +22,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { postAdminImage } from "@/lib/adminUpload";
@@ -101,11 +99,13 @@ async function dataUrlToFile(dataUrl: string, name: string): Promise<File> {
 export function FeedbackLauncher({ className }: { className?: string }) {
   const { toast } = useToast();
   const [open, setOpen] = React.useState(false);
-  const [tab, setTab] = React.useState<"report" | "mine">("report");
+  const [view, setView] = React.useState<"report" | "mine">("report");
   const [kind, setKind] = React.useState<FeedbackKind>("bug");
   const [title, setTitle] = React.useState("");
   const [body, setBody] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+
+  const canSubmit = title.trim().length > 0 && body.trim().length > 0;
 
   const mine = useQuery<MyFeedback[]>({
     queryKey: ["/api/partner/feedback/mine"],
@@ -143,13 +143,7 @@ export function FeedbackLauncher({ className }: { className?: string }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !body.trim()) {
-      toast({
-        title: "Add a title and a description",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!canSubmit) return;
     setSubmitting(true);
     try {
       const screenshotUrl = await captureScreenshot();
@@ -168,7 +162,7 @@ export function FeedbackLauncher({ className }: { className?: string }) {
         queryKey: ["/api/partner/feedback/mine"],
       });
       reset();
-      setTab("mine");
+      setView("mine");
       toast({
         title: kind === "bug" ? "Bug reported" : "Request sent",
         description: "Thanks — the GoodTunes team can see it now.",
@@ -192,7 +186,7 @@ export function FeedbackLauncher({ className }: { className?: string }) {
         size="sm"
         className={cn("gap-1.5", className)}
         onClick={() => {
-          setTab("report");
+          setView("report");
           setOpen(true);
         }}
         data-testid="button-open-feedback"
@@ -207,102 +201,128 @@ export function FeedbackLauncher({ className }: { className?: string }) {
           data-feedback-dialog="true"
           data-testid="dialog-feedback"
         >
+          {/* Header: title + quiet "My requests" secondary link */}
           <DialogHeader>
-            <DialogTitle>Help &amp; feedback</DialogTitle>
-            <DialogDescription>
-              Report a bug or request a feature. We capture your current screen
-              automatically.
-            </DialogDescription>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <DialogTitle>
+                  {view === "mine" ? "My requests" : "Help & feedback"}
+                </DialogTitle>
+                {view === "report" && (
+                  <DialogDescription className="mt-1">
+                    Report a bug or request a feature. We capture your current
+                    screen automatically.
+                  </DialogDescription>
+                )}
+              </div>
+              {view === "report" ? (
+                <button
+                  type="button"
+                  onClick={() => setView("mine")}
+                  className="shrink-0 mt-0.5 text-xs text-slate-400 hover:text-slate-600 transition-colors underline underline-offset-2"
+                  data-testid="link-feedback-my-requests"
+                >
+                  My requests
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setView("report")}
+                  className="shrink-0 mt-0.5 text-xs text-slate-400 hover:text-slate-600 transition-colors underline underline-offset-2"
+                  data-testid="link-feedback-new-report"
+                >
+                  New report
+                </button>
+              )}
+            </div>
           </DialogHeader>
 
-          <Tabs value={tab} onValueChange={(v) => setTab(v as "report" | "mine")}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="report" data-testid="tab-feedback-report">
-                Report
-              </TabsTrigger>
-              <TabsTrigger value="mine" data-testid="tab-feedback-mine">
-                My requests
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="report" className="mt-4">
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <RadioGroup
-                  value={kind}
-                  onValueChange={(v) => setKind(v as FeedbackKind)}
-                  className="grid grid-cols-2 gap-3"
+          {view === "report" ? (
+            <form onSubmit={handleSubmit} className="mt-5 space-y-5">
+              {/* Compact inline kind selector */}
+              <div
+                className="inline-flex rounded-md border border-slate-200 overflow-hidden text-sm"
+                role="group"
+                aria-label="Report type"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={kind === "bug"}
+                  onClick={() => setKind("bug")}
+                  className={cn(
+                    "px-3.5 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400",
+                    kind === "bug"
+                      ? "bg-slate-900 text-white"
+                      : "bg-white text-slate-600 hover:bg-slate-50",
+                  )}
+                  data-testid="seg-feedback-bug"
                 >
-                  <Label
-                    htmlFor="feedback-kind-bug"
-                    className={cn(
-                      "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm",
-                      kind === "bug"
-                        ? "border-slate-900 bg-slate-50"
-                        : "border-slate-200",
-                    )}
-                  >
-                    <RadioGroupItem
-                      value="bug"
-                      id="feedback-kind-bug"
-                      data-testid="radio-feedback-bug"
-                    />
-                    Bug
-                  </Label>
-                  <Label
-                    htmlFor="feedback-kind-feature"
-                    className={cn(
-                      "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm",
-                      kind === "feature"
-                        ? "border-slate-900 bg-slate-50"
-                        : "border-slate-200",
-                    )}
-                  >
-                    <RadioGroupItem
-                      value="feature"
-                      id="feedback-kind-feature"
-                      data-testid="radio-feedback-feature"
-                    />
-                    Feature request
-                  </Label>
-                </RadioGroup>
+                  Bug
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={kind === "feature"}
+                  onClick={() => setKind("feature")}
+                  className={cn(
+                    "px-3.5 py-1.5 font-medium border-l border-slate-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400",
+                    kind === "feature"
+                      ? "bg-slate-900 text-white"
+                      : "bg-white text-slate-600 hover:bg-slate-50",
+                  )}
+                  data-testid="seg-feedback-feature"
+                >
+                  Feature request
+                </button>
+              </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="feedback-title">Title</Label>
-                  <Input
-                    id="feedback-title"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    maxLength={200}
-                    placeholder={
-                      kind === "bug"
-                        ? "What went wrong?"
-                        : "What would you like to see?"
-                    }
-                    data-testid="input-feedback-title"
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="feedback-title" className="text-slate-700">
+                  Title
+                </Label>
+                <Input
+                  id="feedback-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  maxLength={200}
+                  placeholder={
+                    kind === "bug"
+                      ? "What went wrong?"
+                      : "What would you like to see?"
+                  }
+                  data-testid="input-feedback-title"
+                />
+              </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="feedback-body">Details</Label>
-                  <Textarea
-                    id="feedback-body"
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    maxLength={5000}
-                    rows={5}
-                    placeholder="Steps to reproduce, what you expected, anything that helps."
-                    data-testid="input-feedback-body"
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="feedback-body" className="text-slate-700">
+                  Details
+                </Label>
+                <Textarea
+                  id="feedback-body"
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  maxLength={5000}
+                  rows={5}
+                  placeholder="Steps to reproduce, what you expected, anything that helps."
+                  data-testid="input-feedback-body"
+                />
+              </div>
 
-                <p className="text-xs text-slate-500">
+              <div className="space-y-3">
+                <p className="text-xs text-slate-400">
                   A screenshot of this page is attached automatically.
                 </p>
 
+                {/* Submit button: quiet disabled state → solid accent when ready */}
                 <Button
                   type="submit"
-                  className="w-full"
-                  disabled={submitting}
+                  className={cn(
+                    "w-full transition-opacity",
+                    !canSubmit && "opacity-40 cursor-not-allowed",
+                  )}
+                  disabled={!canSubmit || submitting}
                   data-testid="button-submit-feedback"
                 >
                   {submitting && (
@@ -310,10 +330,10 @@ export function FeedbackLauncher({ className }: { className?: string }) {
                   )}
                   {submitting ? "Sending…" : "Send to GoodTunes"}
                 </Button>
-              </form>
-            </TabsContent>
-
-            <TabsContent value="mine" className="mt-4">
+              </div>
+            </form>
+          ) : (
+            <div className="mt-5">
               {mine.isLoading ? (
                 <div className="flex items-center justify-center py-10 text-slate-400">
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -326,11 +346,11 @@ export function FeedbackLauncher({ className }: { className?: string }) {
                   You haven't sent any feedback yet.
                 </p>
               ) : (
-                <ul className="max-h-80 space-y-3 overflow-y-auto pr-1">
+                <ul className="max-h-80 space-y-2 overflow-y-auto pr-1">
                   {mine.data.map((f) => (
                     <li
                       key={f.id}
-                      className="rounded-md border border-slate-200 p-3"
+                      className="rounded-lg border border-slate-100 bg-white px-3.5 py-3"
                       data-testid={`row-feedback-${f.id}`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -351,7 +371,7 @@ export function FeedbackLauncher({ className }: { className?: string }) {
                       </div>
                       {f.publicReply ? (
                         <p
-                          className="mt-2 rounded bg-slate-50 p-2 text-sm text-slate-700"
+                          className="mt-2.5 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700"
                           data-testid={`text-feedback-reply-${f.id}`}
                         >
                           <span className="font-medium">GoodTunes: </span>
@@ -369,8 +389,8 @@ export function FeedbackLauncher({ className }: { className?: string }) {
                   ))}
                 </ul>
               )}
-            </TabsContent>
-          </Tabs>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>
