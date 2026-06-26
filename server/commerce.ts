@@ -2576,6 +2576,16 @@ export function registerCommerceRoutes(app: Express) {
           }]
         : undefined;
 
+    // Task #2281 — QA test-purchase mode is now gated to privileged testers
+    // (super_admin or Bill's full-access fan account), not just any caller in a
+    // non-prod environment. Resolved via the unified-identity link in roles.ts.
+    const isQaCheckout =
+      process.env.REPLIT_DEPLOYMENT !== "1" &&
+      (await (async () => {
+        const { isQaCheckoutTester } = await import("./auth/roles");
+        return isQaCheckoutTester(customer);
+      })());
+
     const enrichedMetadata: Record<string, string> = {
       gt_customer_id: customer.id,
       gt_album_id: album.id,
@@ -2628,7 +2638,12 @@ export function registerCommerceRoutes(app: Express) {
       // a non-production (test-mode Stripe) environment. Downstream, the
       // materializer reads this to set origin='qa:test' and skip real
       // side-effects (fan library, stock, referrals, LLT bonus).
-      gt_is_qa: process.env.REPLIT_DEPLOYMENT !== "1" ? "1" : "0",
+      // Task #2281 — gate QA mode to privileged testers only (super_admin or
+      // Bill's full-access fan account). Any other admin/partner/fan in
+      // non-prod now gets a REAL test-mode Stripe checkout that materializes
+      // as a normal order. `isQaCheckoutTester` resolves the linked admin via
+      // the unified-identity link (users.customer_user_id).
+      gt_is_qa: isQaCheckout ? "1" : "0",
     };
     const returnUrl = `${absoluteOrigin(req)}/welcome?session_id={CHECKOUT_SESSION_ID}`;
     let session: Stripe.Checkout.Session;

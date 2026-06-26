@@ -23,6 +23,7 @@ import {
   type MembershipScopeKind,
 } from "@shared/schema";
 import { getActiveMembershipKey, getDevImpersonationHat, membershipKey } from "./activeMembership";
+import { isFullAccessEmail } from "@shared/fullAccess";
 
 export type { AdminRole };
 export { membershipKey };
@@ -244,6 +245,32 @@ export async function getUserRole(userId: string): Promise<UserRoleInfo | null> 
   const primary = pickPrimaryMembership(ms);
   if (!primary) return null;
   return { role: primary.role, roleScopeId: primary.scopeId };
+}
+
+// Task #2281 — QA checkout gating. In a non-production (test-mode Stripe)
+// environment a checkout session is only stamped as a QA test purchase
+// (gt_is_qa, which makes materialize skip real side-effects) for explicitly
+// privileged testers. Buyers are always customer-kind accounts, so we resolve
+// QA eligibility two ways:
+//   1. Bill's full-access fan account (isFullAccessEmail). The get.goodtunes
+//      share host only ever issues customer-kind sessions, so an admin-only
+//      check silently no-ops there — see shared/fullAccess.ts.
+//   2. A super_admin operator, found by following the unified-identity link
+//      (users.customer_user_id) from the fan account back to its admin row.
+// Every other admin/partner/fan in non-prod gets a REAL test-mode Stripe
+// checkout that materializes as a normal order.
+export async function isQaCheckoutTester(customer: {
+  id: string;
+  email?: string | null;
+}): Promise<boolean> {
+  if (isFullAccessEmail(customer.email)) return true;
+  const r = await db.execute<{ id: string }>(
+    sql`SELECT id FROM users WHERE customer_user_id = ${customer.id} LIMIT 1`,
+  );
+  const adminUserId = ((r as any).rows ?? [])[0]?.id as string | undefined;
+  if (!adminUserId) return false;
+  const info = await getUserRole(adminUserId);
+  return info?.role === "super_admin";
 }
 
 // Task #1036 — keep the user's membership SET in lock-step with the
