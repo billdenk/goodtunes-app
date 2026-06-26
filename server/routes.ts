@@ -3661,17 +3661,65 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     );
   });
 
+  // Resolve the human-readable partner entity name for a feedback row.
+  // Used to enrich the triage inbox with e.g. "Viryl Technologies" instead
+  // of just the generic scope kind label. Returns null when it can't be
+  // resolved so old/unresolvable rows degrade gracefully.
+  async function resolveScopeNameForFeedback(
+    scopeKind: string | null,
+    scopeId: string | null,
+  ): Promise<string | null> {
+    if (!scopeKind || !scopeId) return null;
+    try {
+      if (scopeKind === "manufacturer") {
+        const r = await db.execute(sql`SELECT name FROM manufacturers WHERE id = ${scopeId} LIMIT 1`);
+        return (r.rows[0] as any)?.name ?? null;
+      }
+      if (scopeKind === "vendor" || scopeKind === "fulfillment") {
+        const r = await db.execute(sql`SELECT name FROM vendors WHERE id = ${scopeId} LIMIT 1`);
+        return (r.rows[0] as any)?.name ?? null;
+      }
+      if (scopeKind === "label") {
+        const r = await db.execute(sql`SELECT name FROM labels WHERE id = ${scopeId} AND deleted_at IS NULL LIMIT 1`);
+        return (r.rows[0] as any)?.name ?? null;
+      }
+      if (scopeKind === "non_profit") {
+        const r = await db.execute(sql`SELECT name FROM organizations WHERE id = ${scopeId} LIMIT 1`);
+        return (r.rows[0] as any)?.name ?? null;
+      }
+      if (scopeKind === "artist" || scopeKind === "manager") {
+        const r = await db.execute(sql`SELECT display_name FROM people WHERE id = ${scopeId} LIMIT 1`);
+        return (r.rows[0] as any)?.display_name ?? null;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
   // Operator triage inbox — full list with server-derived submitter
-  // identity + internal notes.
+  // identity + internal notes. Each row is enriched with submitterScopeName
+  // (the actual entity name, e.g. "Viryl Technologies") so operators can tell
+  // exactly which partner filed the report.
   app.get("/api/admin/feedback", requireOperatorForFeedback, async (_req, res) => {
     const rows = await storage.getAllPartnerFeedback();
-    res.json(rows);
+    const enriched = await Promise.all(
+      rows.map(async (r) => ({
+        ...r,
+        submitterScopeName: await resolveScopeNameForFeedback(r.submitterScopeKind, r.submitterScopeId),
+      })),
+    );
+    res.json(enriched);
   });
 
   app.get("/api/admin/feedback/:id", requireOperatorForFeedback, async (req, res) => {
     const row = await storage.getPartnerFeedbackById(req.params.id);
     if (!row) return res.status(404).json({ message: "Not found" });
-    res.json(row);
+    const enriched = {
+      ...row,
+      submitterScopeName: await resolveScopeNameForFeedback(row.submitterScopeKind, row.submitterScopeId),
+    };
+    res.json(enriched);
   });
 
   app.patch("/api/admin/feedback/:id", requireOperatorForFeedback, async (req, res) => {

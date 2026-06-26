@@ -18,7 +18,6 @@ import { useToast } from "@/hooks/use-toast";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
@@ -37,6 +36,7 @@ type Feedback = {
   submitterRole: string | null;
   submitterScopeKind: string | null;
   submitterScopeId: string | null;
+  submitterScopeName: string | null;
   submitterName: string | null;
   submitterEmail: string | null;
   kind: "bug" | "feature";
@@ -87,12 +87,89 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+// Returns "role · EntityName" (or "role · scope kind" if name wasn't resolved,
+// or just "role" if no scope). Uses the server-resolved submitterScopeName when
+// present so e.g. "Manufacturer · Viryl Technologies" renders instead of the
+// generic "Manufacturer · manufacturer".
 function submitterLine(f: Feedback): string {
   const role = f.submitterRole ? f.submitterRole.replace(/_/g, " ") : "partner";
-  const scope = f.submitterScopeKind
-    ? ` · ${f.submitterScopeKind.replace(/_/g, " ")}`
-    : "";
-  return `${role}${scope}`;
+  const scopeLabel = f.submitterScopeName
+    ? f.submitterScopeName
+    : f.submitterScopeKind
+      ? f.submitterScopeKind.replace(/_/g, " ")
+      : null;
+  return scopeLabel ? `${role} · ${scopeLabel}` : role;
+}
+
+// Builds a "view as this partner" URL for super-admins. Uses the existing
+// scoped-portal routing each portal already honors for super_admins.
+//
+// Extra search params from the pageUrl are spread first so the enforced
+// scope params (scopeId/scopeKind, labelId, personId, etc.) always win and
+// cannot be overridden by a partner-controlled pageUrl.
+//
+// For scope kinds without a scoped-portal URL param (non_profit, manager),
+// we fall back to the operator-facing admin detail page — still useful for
+// triage. Returns null when id is unavailable.
+function viewAsPartnerUrl(f: Feedback): string | null {
+  const { submitterScopeKind: kind, submitterScopeId: id, pageUrl } = f;
+  if (!kind || !id) return null;
+
+  // Extract extra search params from the original pageUrl so we can carry
+  // tab/filter context into the scoped portal link. Applied BEFORE scope
+  // params so the enforced scope always takes precedence.
+  const extra: Record<string, string> = {};
+  if (pageUrl) {
+    try {
+      new URL(pageUrl).searchParams.forEach((v, k) => {
+        extra[k] = v;
+      });
+    } catch {
+      // Relative URL or invalid format — skip extra params.
+    }
+  }
+
+  // Scope params are applied AFTER extra so they cannot be overridden.
+  if (kind === "manufacturer") {
+    const p = new URLSearchParams({ ...extra, scopeId: id, scopeKind: "manufacturer" });
+    return `/vendor?${p}`;
+  }
+  if (kind === "vendor") {
+    const p = new URLSearchParams({ ...extra, scopeId: id, scopeKind: "vendor" });
+    return `/vendor?${p}`;
+  }
+  if (kind === "fulfillment") {
+    const p = new URLSearchParams({ ...extra, scopeId: id, scopeKind: "fulfillment" });
+    return `/vendor?${p}`;
+  }
+  if (kind === "label") {
+    // /label accepts ?labelId= for super-admin scoping.
+    const p = new URLSearchParams({ ...extra, labelId: id });
+    return `/label?${p}`;
+  }
+  if (kind === "artist") {
+    // /artist accepts ?personId= for super-admin scoping.
+    const p = new URLSearchParams({ ...extra, personId: id });
+    return `/artist?${p}`;
+  }
+  if (kind === "non_profit") {
+    // The /non-profit portal derives its scope from the authenticated user's
+    // membership and doesn't expose a super-admin URL override param. Link to
+    // the admin detail page instead so the operator can review the entity.
+    return `/admin/non-profits/${id}`;
+  }
+  if (kind === "manager") {
+    // Same pattern as non_profit — the /manager portal has no URL scope param.
+    return `/admin/managers/${id}`;
+  }
+  return null;
+}
+
+// Whether the "View as" link applies the scoped portal view (true) or just
+// links to the admin detail page (false). Used to pick the right label.
+function isFullScopedPortal(kind: string | null): boolean {
+  return kind === "manufacturer" || kind === "vendor" || kind === "fulfillment"
+    || kind === "label" || kind === "artist";
 }
 
 export function AdminFeedback() {
@@ -250,6 +327,12 @@ function FeedbackDetail({
   const [internalNotes, setInternalNotes] = useState(feedback.internalNotes ?? "");
   const [publicReply, setPublicReply] = useState(feedback.publicReply ?? "");
 
+  // Only super_admins can navigate the scoped-portal URLs that the "View as"
+  // action generates (/vendor?scopeId=…, /label?labelId=…, etc.). Plain admins
+  // see the existing raw "Page" link but not the "View as" action.
+  const { data: meRole } = useQuery<{ role: string }>({ queryKey: ["/api/me/role"] });
+  const isSuperAdmin = meRole?.role === "super_admin";
+
   const save = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("PATCH", `/api/admin/feedback/${feedback.id}`, {
@@ -275,6 +358,10 @@ function FeedbackDetail({
         variant: "destructive",
       }),
   });
+
+  const partnerUrl = isSuperAdmin ? viewAsPartnerUrl(feedback) : null;
+  const partnerLabel = feedback.submitterScopeName ?? feedback.submitterScopeKind ?? "partner";
+  const isPortalView = isFullScopedPortal(feedback.submitterScopeKind);
 
   return (
     <div
@@ -329,6 +416,25 @@ function FeedbackDetail({
                   data-testid="link-detail-page"
                 >
                   <span className="truncate">{feedback.pageUrl}</span>
+                  <ExternalLink className="h-3 w-3 shrink-0" />
+                </a>
+              </dd>
+            </div>
+          )}
+          {partnerUrl && (
+            <div className="col-span-2">
+              <dt className="text-xs uppercase tracking-wide text-slate-400">
+                {isPortalView ? "View as partner" : "Partner profile"}
+              </dt>
+              <dd>
+                <a
+                  href={partnerUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 rounded bg-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-300"
+                  data-testid="link-detail-view-as-partner"
+                >
+                  {isPortalView ? `View as ${partnerLabel}` : `Open ${partnerLabel}`}
                   <ExternalLink className="h-3 w-3 shrink-0" />
                 </a>
               </dd>
