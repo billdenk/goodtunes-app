@@ -26,6 +26,7 @@ import {
   Mail,
   MessageSquare,
   ClipboardList,
+  FlaskConical,
   HeartHandshake,
   ShoppingBag,
   PanelRightClose,
@@ -86,6 +87,7 @@ const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   "cert-names": "queues",
   feedback: "queues",
   jobs: "queues",
+  "qa-orders": "queues",
   customers: "audience",
   "platform-pricing": "system",
   "payouts-release": "system",
@@ -137,6 +139,7 @@ export type EntityKey =
   | "fan-orders"
   | "cert-names"
   | "feedback"
+  | "qa-orders"
   | "early-cut"
   | "fulfillment"
   | "customers"
@@ -384,6 +387,23 @@ export function AdminFrame({
     enabled: !!user?.isAdmin,
   });
   const feedbackNewCount = feedbackRows.filter((f) => f.status === "new").length;
+  // Task #2279 — QA Orders cleanup nav entry is only meaningful when
+  // Stripe is in test mode (pk_test_ key), i.e. dev / non-production.
+  // Reuse the public publishable-key endpoint the BuySheet already hits
+  // so we don't need a new route just to learn the mode.
+  const { data: checkoutCfg } = useQuery<{ isTestMode?: boolean }>({
+    queryKey: ["/api/checkout/publishable-key"],
+    enabled: !!user?.isAdmin,
+  });
+  const isStripeTestMode = !!checkoutCfg?.isTestMode;
+  // Only fetch the QA-order count when we're actually in test mode and
+  // the link will render — keeps prod from polling an endpoint whose
+  // nav entry never shows.
+  const { data: qaOrders = [] } = useQuery<unknown[]>({
+    queryKey: ["/api/admin/qa-orders"],
+    enabled: !!user?.isAdmin && isStripeTestMode,
+  });
+  const qaOrderCount = qaOrders.length;
   // Task #230 — NPO directory count drives the badge on the new NPOs
   // sidebar entry. Reuses the same /api/non-profits payload the rest
   // of the admin already hits.
@@ -979,6 +999,21 @@ export function AdminFrame({
                 onClick={() => navigate("/admin/feedback")}
                 testId="nav-feedback"
               />
+              {/* Task #2279 — QA test-order cleanup. Only shown when Stripe
+                  is in test mode (dev / non-production) so testers can find
+                  the page without knowing the URL; hidden entirely in prod
+                  where there are no qa:test orders. Badge shows the count
+                  only when > 0 (-1 suppresses it). */}
+              {isStripeTestMode && (
+                <SidebarLink
+                  icon={FlaskConical}
+                  label="QA Orders"
+                  count={qaOrderCount > 0 ? qaOrderCount : -1}
+                  active={active === "qa-orders"}
+                  onClick={() => navigate("/admin/qa-orders")}
+                  testId="nav-qa-orders"
+                />
+              )}
             </Section>
 
             <Section

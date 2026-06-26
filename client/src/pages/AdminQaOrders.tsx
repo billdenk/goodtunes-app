@@ -83,7 +83,7 @@ function AdminQaOrdersInner() {
   });
 
   return (
-    <AdminFrame title="QA Test Orders">
+    <AdminFrame active="qa-orders">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="flex items-start gap-3 mb-6">
           <div className="flex-1">
