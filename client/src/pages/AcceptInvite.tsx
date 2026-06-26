@@ -205,11 +205,17 @@ export default function AcceptInvite() {
 
         <button
           type="submit"
-          disabled={submitting || (data.inviteRole === "identity" && !!data.targetPersonName && !identityConfirmed)}
+          disabled={
+            submitting ||
+            displayName.trim().length === 0 ||
+            username.trim().length < 3 ||
+            password.length < 8 ||
+            (data.inviteRole === "identity" && !!data.targetPersonName && !identityConfirmed)
+          }
           className="w-full bg-[#319ED8] hover:bg-[#2789bd] disabled:bg-slate-300 text-white font-semibold rounded-lg py-2.5 transition-colors"
           data-testid="button-accept-invite"
         >
-          {submitting ? "Creating account…" : "Accept with email & password"}
+          {submitting ? "Creating account…" : "Accept invitation"}
         </button>
 
         {/* Task #78 — OAuth invite accept. Recipients can attach a
