@@ -1161,6 +1161,7 @@ type FunnelData = {
     completed: number;
     conversion: number;
   }[];
+  excludedInternal?: number;
 };
 type ReleaseLite = { albumId: string; title: string; artist: string; landed: number };
 
@@ -1260,6 +1261,10 @@ function ReleasePicker({
 
 function NativeFunnel({ qs }: { qs: string }) {
   const [albumId, setAlbumId] = useState<string>("");
+  // Task #2257 — opt-in: drop operator/staff + flagged-internal-device
+  // sessions from every funnel step. Off by default so the headline number
+  // stays the raw total until the operator chooses to filter.
+  const [excludeInternal, setExcludeInternal] = useState(false);
   const { data: releaseData, isLoading: loadingReleases } = useQuery<{ releases: ReleaseLite[] }>({
     queryKey: ["/api/admin/reports/funnel/releases"],
     queryFn: () => fetchJson(`/api/admin/reports/funnel/releases`),
@@ -1275,9 +1280,13 @@ function NativeFunnel({ qs }: { qs: string }) {
     error,
     refetch,
   } = useQuery<FunnelData>({
-    queryKey: ["/api/admin/reports/funnel", effectiveAlbumId, qs],
+    queryKey: ["/api/admin/reports/funnel", effectiveAlbumId, qs, excludeInternal],
     queryFn: () =>
-      fetchJson(`/api/admin/reports/funnel?albumId=${encodeURIComponent(effectiveAlbumId)}&groupBy=source&${qs}`),
+      fetchJson(
+        `/api/admin/reports/funnel?albumId=${encodeURIComponent(effectiveAlbumId)}&groupBy=source${
+          excludeInternal ? "&excludeInternal=1" : ""
+        }&${qs}`,
+      ),
     enabled: !!effectiveAlbumId,
   });
 
@@ -1293,9 +1302,26 @@ function NativeFunnel({ qs }: { qs: string }) {
             first-party analytics — no PostHog required.
           </p>
         </div>
-        {releases.length > 0 && (
-          <ReleasePicker releases={releases} value={effectiveAlbumId} onPick={setAlbumId} />
-        )}
+        <div className="flex flex-wrap items-end gap-3">
+          {releases.length > 0 && (
+            <label
+              className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none"
+              data-testid="toggle-funnel-exclude-internal"
+            >
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 accent-[var(--brand-blue)]"
+                checked={excludeInternal}
+                onChange={(e) => setExcludeInternal(e.target.checked)}
+                data-testid="checkbox-funnel-exclude-internal"
+              />
+              Exclude internal/test traffic
+            </label>
+          )}
+          {releases.length > 0 && (
+            <ReleasePicker releases={releases} value={effectiveAlbumId} onPick={setAlbumId} />
+          )}
+        </div>
       </div>
 
       {loadingReleases ? (
@@ -1317,6 +1343,12 @@ function NativeFunnel({ qs }: { qs: string }) {
               {data.steps[3]?.sessions.toLocaleString() ?? 0} purchases)
             </span>
           </div>
+          {excludeInternal && (data.excludedInternal ?? 0) > 0 && (
+            <p className="text-xs text-slate-400 -mt-3" data-testid="text-funnel-excluded-internal">
+              {data.excludedInternal?.toLocaleString()} internal/test record
+              {data.excludedInternal === 1 ? "" : "s"} excluded (sessions + purchases)
+            </p>
+          )}
 
           <div className="space-y-2.5">
             {data.steps.map((step, i) => {

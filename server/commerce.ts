@@ -2123,6 +2123,23 @@ export function registerCommerceRoutes(app: Express) {
     // onto orders.certConfirmedName at materialization so the cert PDF
     // (Path 2) prints it with no second step.
     certName: z.string().max(80).optional(),
+    // Task #2257 — funnel stitching. The buyer lands + browses on one host
+    // (e.g. get.goodtunes.music) under one analytics session, but the purchase
+    // completes on my.goodtunes.music with a brand-new analytics device/session
+    // that can't be linked. We carry the ORIGINAL session/device + first-touch
+    // source through Stripe metadata so materialization can emit a server-side
+    // `checkout_completed` event stitched back to the landing session — without
+    // it, completions read ~0 and get mislabeled "direct/unknown". All optional
+    // and analytics-only (never influences price or fulfillment).
+    funnelSessionId: z.string().max(200).optional(),
+    funnelDeviceId: z.string().max(200).optional(),
+    funnelAttribution: z
+      .object({
+        utmSource: z.string().max(256).optional(),
+        utmCampaign: z.string().max(256).optional(),
+        referrerHost: z.string().max(256).optional(),
+      })
+      .optional(),
   });
   app.post("/api/checkout/session", async (req, res) => {
     // Task #1766 / #1784 — a review "preview pass" is normally preview-only and
@@ -2596,6 +2613,15 @@ export function registerCommerceRoutes(app: Express) {
         totalShipChargedCents > 0 ? String(totalShipChargedCents) : "",
       gt_ship_custom_addon: String(customAddonShippingCents),
       gt_ship_band: shippingQuote ? shippingQuote.band : "",
+      // Task #2257 — original landing analytics identity + first-touch source,
+      // carried so materialize can stitch a server-side `checkout_completed`
+      // event back to the funnel session that started on a different host.
+      // Only written when present (keeps the Stripe 50-key/500-char budget).
+      ...(parsed.data.funnelSessionId ? { gt_funnel_session: parsed.data.funnelSessionId.slice(0, 200) } : {}),
+      ...(parsed.data.funnelDeviceId ? { gt_funnel_device: parsed.data.funnelDeviceId.slice(0, 200) } : {}),
+      ...(parsed.data.funnelAttribution?.utmSource ? { gt_funnel_utm_source: parsed.data.funnelAttribution.utmSource.slice(0, 256) } : {}),
+      ...(parsed.data.funnelAttribution?.utmCampaign ? { gt_funnel_utm_campaign: parsed.data.funnelAttribution.utmCampaign.slice(0, 256) } : {}),
+      ...(parsed.data.funnelAttribution?.referrerHost ? { gt_funnel_ref_host: parsed.data.funnelAttribution.referrerHost.slice(0, 256) } : {}),
     };
     const returnUrl = `${absoluteOrigin(req)}/welcome?session_id={CHECKOUT_SESSION_ID}`;
     let session: Stripe.Checkout.Session;
@@ -4193,6 +4219,48 @@ export async function materializeOrderFromSession(
         await dispatchOrderReceipt(order).catch((e) =>
           console.error(`[commerce] receipt email failed for ${order!.id}`, e?.message),
         );
+        // Task #2257 — stitch the completion back to the landing funnel
+        // session. The purchase finishes on a different host with a fresh
+        // analytics device/session, so the client `checkout_completed` event
+        // (fired on /welcome) lands on a NEW session the funnel can't link to
+        // the original landing — completions read ~0 and get mislabeled
+        // "direct/unknown". Here we emit a SERVER-SIDE `checkout_completed`
+        // carrying the ORIGINAL session id + first-touch source we stashed in
+        // the Stripe metadata, so the strict session funnel counts it on the
+        // same session that landed/viewed/started. Piggybacks on the atomic
+        // receipt claim above so it fires exactly once per order (a webhook +
+        // /welcome poll racing the same session can't double-emit). Best-
+        // effort: analytics must never break order materialization.
+        const funnelSession = full.metadata?.gt_funnel_session || session.metadata?.gt_funnel_session || null;
+        if (funnelSession) {
+          try {
+            const stitchPayload: Record<string, any> = {
+              albumId,
+              orderId: order.id,
+              priceCents: order.totalCents,
+              _stitched: true,
+            };
+            const fDevice = full.metadata?.gt_funnel_device || session.metadata?.gt_funnel_device;
+            const fUtmSource = full.metadata?.gt_funnel_utm_source || session.metadata?.gt_funnel_utm_source;
+            const fUtmCampaign = full.metadata?.gt_funnel_utm_campaign || session.metadata?.gt_funnel_utm_campaign;
+            const fRefHost = full.metadata?.gt_funnel_ref_host || session.metadata?.gt_funnel_ref_host;
+            if (fDevice) stitchPayload._device_id = fDevice;
+            if (fUtmSource) stitchPayload._utm_source = fUtmSource;
+            if (fUtmCampaign) stitchPayload._utm_campaign = fUtmCampaign;
+            if (fRefHost) stitchPayload._referrer_host = fRefHost;
+            await storage.insertAnalyticsEvents([
+              {
+                name: "checkout_completed",
+                payload: stitchPayload,
+                ts: new Date(),
+                sessionId: funnelSession,
+                userId: customerId,
+              },
+            ]);
+          } catch (e: any) {
+            console.error(`[commerce] funnel stitch failed for ${order.id}`, e?.message);
+          }
+        }
       }
     } catch (e: any) {
       console.error(`[commerce] receipt claim failed for ${order.id}`, e?.message);

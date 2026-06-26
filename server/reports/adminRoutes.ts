@@ -239,9 +239,15 @@ export function registerAdminReportRoutes(app: Express) {
   // The funnel itself for one release, date-ranged + broken down by source.
   app.get("/api/admin/reports/funnel", adminGuard, wrap(async (req, res) => {
     const albumId = String(req.query.albumId || "");
+    // Task #2257 — opt-in internal/test-traffic exclusion. Off by default so
+    // the headline number stays the raw total; the operator flips it on to
+    // see the funnel with operator/staff + flagged-device sessions removed.
+    const excludeInternal =
+      req.query.excludeInternal === "1" || req.query.excludeInternal === "true";
     const data = await acquisitionFunnel(ctxFromReq(req), {
       albumId,
       groupBy: req.query.groupBy === "source" ? "source" : null,
+      excludeInternal,
     });
     res.json(data);
   }));

@@ -20,7 +20,7 @@ import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { formatUsdCents } from "@shared/money";
 import { useLocation } from "wouter";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
-import { track } from "@/lib/analytics";
+import { track, getAnalyticsSessionId, getAnalyticsDeviceId, getAnalyticsAttribution } from "@/lib/analytics";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -990,6 +990,22 @@ export function BuySheet({
               }
             : undefined,
         shippingCountry: (giftShip && giftShipCountry) ? giftShipCountry : country,
+        // Task #2257 — forward this landing session's analytics identity +
+        // first-touch source so the server can stitch the completion back to
+        // the funnel even though the purchase finishes on a different host
+        // (my.goodtunes.music) with a fresh analytics device/session.
+        funnelSessionId: getAnalyticsSessionId() ?? undefined,
+        funnelDeviceId: getAnalyticsDeviceId() ?? undefined,
+        funnelAttribution: (() => {
+          const a = getAnalyticsAttribution();
+          return a
+            ? {
+                utmSource: a.utmSource ?? undefined,
+                utmCampaign: a.utmCampaign ?? undefined,
+                referrerHost: a.referrerHost ?? undefined,
+              }
+            : undefined;
+        })(),
       });
       const j = await r.json();
       if (!j.clientSecret) throw new Error(j?.message ?? "Checkout failed to start");

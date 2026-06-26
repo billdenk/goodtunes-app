@@ -11,10 +11,12 @@ import {
   orders,
   orderItems,
   customerUsers,
+  users,
   analyticsEvents,
   songs,
   payoutAccounts,
 } from "@shared/schema";
+import { isFullAccessEmail } from "@shared/fullAccess";
 import { and, eq, ne, gte, lte, inArray, sql, desc, isNull, isNotNull, or, not } from "drizzle-orm";
 
 export interface AdminReportContext {
@@ -831,11 +833,11 @@ export async function funnelReleases() {
 
 export async function acquisitionFunnel(
   ctx: AdminReportContext,
-  opts: { albumId: string; groupBy?: "source" | null },
+  opts: { albumId: string; groupBy?: "source" | null; excludeInternal?: boolean },
 ) {
   const albumId = String(opts.albumId || "");
   if (!albumId) {
-    return { album: null, steps: [], overallConversion: 0, bySource: [] };
+    return { album: null, steps: [], overallConversion: 0, bySource: [], excludedInternal: 0 };
   }
 
   const albumRow = (
@@ -862,16 +864,75 @@ export async function acquisitionFunnel(
       sql`${analyticsEvents.payload}->>'albumId' = ${albumId}`,
     ));
 
-  // Per session: which funnel events it hit (for THIS album) + its source.
-  type Sess = { hit: Set<string>; source: SourceBucket };
+  // Task #2257 — opt-in internal/test-traffic exclusion. We treat a session
+  // as internal if ANY of its events is flagged at the source (the client
+  // stamps `_internal: true` on operator/staff devices) OR its userId belongs
+  // to a known operator/staff account: an admin (`users` row) or a full-access
+  // operator fan account. We resolve the userId set up front from just the
+  // userIds present in this funnel's rows so the lookup stays bounded.
+  const internalUserIds = new Set<string>();
+  if (opts.excludeInternal) {
+    const userIds = Array.from(
+      new Set(rows.map((r) => r.userId).filter((id): id is string => !!id)),
+    );
+    if (userIds.length > 0) {
+      // Any analytics userId that matches an admin `users` row is staff.
+      const adminRows = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(inArray(users.id, userIds));
+      for (const a of adminRows) internalUserIds.add(a.id);
+      // Full-access operator fan accounts (e.g. Bill's @billy) — match by email.
+      const fanRows = await db
+        .select({ id: customerUsers.id, email: customerUsers.email })
+        .from(customerUsers)
+        .where(inArray(customerUsers.id, userIds));
+      for (const f of fanRows) {
+        if (isFullAccessEmail(f.email)) internalUserIds.add(f.id);
+      }
+    }
+  }
+
+  // Retroactive internal-DEVICE denylist. The forward-looking `_internal` stamp
+  // only marks events AFTER an operator/staff member signs in on a device, so
+  // OLD logged-out QA/test sessions on that same device predate the stamp and
+  // would otherwise inflate the top of the funnel. We therefore treat a whole
+  // device as internal if ANY of its events is internal (stamped OR a staff
+  // userId — derived from the rows below), and also honor an explicitly
+  // server-maintained denylist (`GT_INTERNAL_DEVICE_IDS`, comma-separated) for
+  // devices we know are internal but that never produced a stamped/staff event.
+  // Both are applied at session-classification time so historical sessions are
+  // excluded immediately, not only future stamped ones.
+  const internalDeviceIds = new Set<string>(
+    (process.env.GT_INTERNAL_DEVICE_IDS || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+
+  // Per session: which of the TOP-OF-FUNNEL events it hit (for THIS album) +
+  // its source. The completion step is NOT counted from analytics events here
+  // (see the order-derived reconciliation below) — instead the stitched
+  // `checkout_completed` event is used only as an attribution BRIDGE so we can
+  // map a paid order back to the source of the session that originally landed.
+  type Sess = { hit: Set<string>; source: SourceBucket; internal: boolean; devices: Set<string> };
   const sessions = new Map<string, Sess>();
+  // orderId → landing session identity, taken ONLY from the server-side
+  // stitched completion (`_stitched: true`), which carries the original
+  // landing session id. The client `/welcome` `checkout_completed` also carries
+  // an orderId but fires on the NEW purchase-host session, so it must never win
+  // the bridge.
+  const orderToSession = new Map<string, string>();
+  // userId → the landing sessions it appears in (fallback attribution for
+  // historical orders with no stitch, e.g. a fan who browsed while signed in).
+  const userToSessions = new Map<string, Set<string>>();
   for (const r of rows) {
     const p = (r.payload as any) ?? {};
     if (p.albumId !== albumId) continue;
     const identity = r.sessionId ?? r.userId ?? r.eventId;
     let s = sessions.get(identity);
     if (!s) {
-      s = { hit: new Set(), source: deriveSource(p) };
+      s = { hit: new Set(), source: deriveSource(p), internal: false, devices: new Set() };
       sessions.set(identity, s);
     } else if (s.source.key === "direct") {
       // First-touch should be consistent, but if an earlier event landed
@@ -880,24 +941,150 @@ export async function acquisitionFunnel(
       const cand = deriveSource(p);
       if (cand.key !== "direct") s.source = cand;
     }
+    // Internal if any event carries the device marker or a staff/operator
+    // userId. Sticky once set — the whole session is internal.
+    const eventInternal = p._internal === true || (r.userId && internalUserIds.has(r.userId));
+    if (eventInternal) s.internal = true;
+    // Track this session's device(s) and grow the internal-device denylist:
+    // a device that ever produced an internal event is internal forever, which
+    // retroactively taints its older logged-out sessions in the pass below.
+    const deviceId = p._device_id ? String(p._device_id) : null;
+    if (deviceId) {
+      s.devices.add(deviceId);
+      if (eventInternal) internalDeviceIds.add(deviceId);
+    }
+    if (r.userId) {
+      let set = userToSessions.get(r.userId);
+      if (!set) { set = new Set(); userToSessions.set(r.userId, set); }
+      set.add(identity);
+    }
+    if (r.name === "checkout_completed") {
+      // Bridge only — never a counted step (completions come from orders).
+      if (p._stitched === true && p.orderId) orderToSession.set(String(p.orderId), identity);
+      continue;
+    }
     s.hit.add(r.name);
   }
 
-  // Strict funnel: a session counts at step N only if it reached every
-  // prior step. Aggregate overall + per-source in one pass.
-  const overall = [0, 0, 0, 0];
-  const sourceAgg = new Map<string, { label: string; counts: number[] }>();
-  for (const s of Array.from(sessions.values())) {
+  // Retroactive device denylist pass: any session that shares a device with a
+  // known-internal device is internal too — even if its OWN events carry no
+  // marker and no staff userId (the historical logged-out QA session case).
+  // This is what makes the exclude-internal toggle deflate top-of-funnel
+  // inflation from past internal testing, not just future stamped traffic.
+  if (opts.excludeInternal && internalDeviceIds.size > 0) {
+    for (const s of Array.from(sessions.values())) {
+      if (s.internal) continue;
+      for (const d of Array.from(s.devices)) {
+        if (internalDeviceIds.has(d)) { s.internal = true; break; }
+      }
+    }
+  }
+
+  // Depth = how far a session got through the TOP three steps (landed →
+  // viewed offer → started checkout). Completion is handled separately.
+  const TOP_STEPS = FUNNEL_STEPS.length - 1; // 3 — drop the completed step
+  const topDepth = (s: Sess) => {
     let depth = 0;
-    for (let i = 0; i < FUNNEL_STEPS.length; i++) {
+    for (let i = 0; i < TOP_STEPS; i++) {
       if (s.hit.has(FUNNEL_STEPS[i].event)) depth = i + 1;
       else break;
     }
+    return depth;
+  };
+
+  // Strict funnel for the top three steps: a session counts at step N only if
+  // it reached every prior step. Aggregate overall + per-source in one pass.
+  let excludedInternal = 0;
+  const overall = [0, 0, 0, 0];
+  const sourceAgg = new Map<string, { label: string; counts: number[] }>();
+  const getBucket = (src: SourceBucket) => {
+    let b = sourceAgg.get(src.key);
+    if (!b) { b = { label: src.label, counts: [0, 0, 0, 0] }; sourceAgg.set(src.key, b); }
+    return b;
+  };
+  for (const s of Array.from(sessions.values())) {
+    // Drop internal/test sessions entirely before counting so every step
+    // and the per-source breakdown stay consistent (the conversion math is
+    // recomputed from the reduced counts below).
+    if (opts.excludeInternal && s.internal) {
+      excludedInternal += 1;
+      continue;
+    }
+    const depth = topDepth(s);
     if (depth === 0) continue;
     for (let i = 0; i < depth; i++) overall[i] += 1;
-    const bucket = sourceAgg.get(s.source.key) ?? { label: s.source.label, counts: [0, 0, 0, 0] };
+    const bucket = getBucket(s.source);
     for (let i = 0; i < depth; i++) bucket.counts[i] += 1;
-    sourceAgg.set(s.source.key, bucket);
+  }
+
+  // ─── Completion step is order-derived (ground truth) ───────────────────
+  // The purchase finishes on a different host with a brand-new analytics
+  // session, so counting `checkout_completed` events would miss every
+  // historical purchase (and mislabel new ones). Instead we count actual paid
+  // orders for this release in the window, and attribute each to a source:
+  //   1) the server-stitched completion bridge (precise — carries the original
+  //      landing session id captured at checkout via Stripe metadata),
+  //   2) else the buyer's own landing session (signed-in browsing),
+  //   3) else "Direct / unknown" (honest fallback when we can't attribute it).
+  const paidOrders = await db
+    .select({ id: orders.id, customerId: orders.customerId })
+    .from(orders)
+    .where(and(
+      eq(orders.albumId, albumId),
+      inArray(orders.status, ["paid", "shipped", "complete", "completed"]),
+      gte(orders.createdAt, ctx.from),
+      lte(orders.createdAt, ctx.to),
+    ));
+
+  // Extend the internal set with buyer accounts so internal/test PURCHASES are
+  // dropped from the completed step too (a staff member's own test buy).
+  if (opts.excludeInternal && paidOrders.length > 0) {
+    const buyerIds = Array.from(
+      new Set(paidOrders.map((o) => o.customerId).filter((id): id is string => !!id)),
+    ).filter((id) => !internalUserIds.has(id));
+    if (buyerIds.length > 0) {
+      const fanRows = await db
+        .select({ id: customerUsers.id, email: customerUsers.email })
+        .from(customerUsers)
+        .where(inArray(customerUsers.id, buyerIds));
+      for (const f of fanRows) if (isFullAccessEmail(f.email)) internalUserIds.add(f.id);
+      const adminBuyerRows = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(inArray(users.id, buyerIds));
+      for (const a of adminBuyerRows) internalUserIds.add(a.id);
+    }
+  }
+
+  const DIRECT: SourceBucket = { key: "direct", label: "Direct / unknown" };
+  const pickDeepestSession = (ids?: Set<string>): Sess | null => {
+    if (!ids) return null;
+    let best: Sess | null = null;
+    let bestDepth = -1;
+    for (const id of Array.from(ids)) {
+      const s = sessions.get(id);
+      if (!s) continue;
+      const d = topDepth(s);
+      if (d > bestDepth) { bestDepth = d; best = s; }
+    }
+    return best;
+  };
+  for (const o of paidOrders) {
+    const bridged = orderToSession.get(o.id);
+    const bridgedSess = bridged ? sessions.get(bridged) : undefined;
+    const fallbackSess = !bridgedSess && o.customerId ? pickDeepestSession(userToSessions.get(o.customerId)) : null;
+    const linked = bridgedSess ?? fallbackSess;
+    // Drop internal/test purchases when excluding: a staff/full-access buyer,
+    // or a purchase attributed to an internal (e.g. flagged-device) session.
+    if (
+      opts.excludeInternal &&
+      ((o.customerId && internalUserIds.has(o.customerId)) || linked?.internal === true)
+    ) {
+      excludedInternal += 1;
+      continue;
+    }
+    overall[3] += 1;
+    getBucket(linked?.source ?? DIRECT).counts[3] += 1;
   }
 
   const steps = FUNNEL_STEPS.map((st, i) => ({
@@ -929,6 +1116,7 @@ export async function acquisitionFunnel(
     steps,
     overallConversion,
     bySource,
+    excludedInternal,
   };
 }
 

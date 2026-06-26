@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, setAuthToken, getAuthToken } from "@/lib/queryClient";
-import { identifyAnalyticsUser, track } from "@/lib/analytics";
+import { identifyAnalyticsUser, markInternalDevice, track } from "@/lib/analytics";
+import { isFullAccessEmail } from "@shared/fullAccess";
 
 interface AuthUser {
   id: string;
@@ -68,7 +69,14 @@ export function useAuth() {
   // Runs whenever /api/me resolves so refreshes / OAuth round-trips re-identify.
   useEffect(() => {
     identifyAnalyticsUser(user?.id ?? null);
-  }, [user?.id]);
+    // Task #2257 — durably flag this browser as internal/test traffic once an
+    // admin or full-access operator signs in, so the acquisition funnel can
+    // opt-in exclude their (often later, logged-out) sessions. Never cleared
+    // on sign-out — the device stays flagged.
+    if (user && (user.kind === "admin" || user.isAdmin || isFullAccessEmail(user.email))) {
+      markInternalDevice(true);
+    }
+  }, [user?.id, user?.kind, user?.isAdmin, user?.email]);
 
   const loginMutation = useMutation({
     mutationFn: async (data: { username: string; password: string }) => {

@@ -81,6 +81,42 @@ type Attribution = {
 const ATTRIBUTION_KEY = "gt:attribution";
 let attribution: Attribution | null = null;
 
+// ─── Internal / test-traffic device marker (Task #2257) ─────────────────
+// Operators and staff hammer the live release pages (QA, demos, "does the
+// buy flow still work?"), inflating the top of the acquisition funnel. We
+// can't reliably catch that server-side because most of it is logged-out, so
+// we durably flag the DEVICE: once an admin — or a full-access operator
+// account — has signed in on this browser, every analytics event it emits
+// (even later, even logged-out) carries `_internal: true` in its payload.
+// The admin Funnels report exposes an opt-in toggle to drop those sessions.
+// localStorage (not session) so the flag survives sign-out and new tabs.
+// Default analytics stay honest — the marker only EXCLUDES when asked.
+const INTERNAL_KEY = "gt:internal-device";
+let internalDevice = false;
+function loadInternalFlag() {
+  try {
+    internalDevice = localStorage.getItem(INTERNAL_KEY) === "1";
+  } catch {}
+}
+
+// Durably flag (or clear) this browser as internal/test traffic. Called from
+// useAuth when an admin or full-access operator signs in; idempotent.
+export function markInternalDevice(on: boolean) {
+  internalDevice = on;
+  try {
+    if (on) localStorage.setItem(INTERNAL_KEY, "1");
+    else localStorage.removeItem(INTERNAL_KEY);
+  } catch {}
+}
+
+// Current first-touch campaign attribution snapshot (or null). Lets the
+// checkout call forward the landing session's source across the cross-domain
+// purchase redirect so the server can stitch the completion back to it.
+export function getAnalyticsAttribution(): Attribution | null {
+  if (!attribution) captureAttribution();
+  return attribution;
+}
+
 function referrerHost(): string | null {
   try {
     if (typeof document === "undefined" || !document.referrer) return null;
@@ -214,6 +250,7 @@ function ensureInit() {
   if (initialized || typeof window === "undefined") return;
   initialized = true;
   captureAttribution();
+  loadInternalFlag();
   loadFromStorage();
   setInterval(() => { void flush(); }, FLUSH_INTERVAL_MS);
   window.addEventListener("pagehide", () => { void flush(true); });
@@ -253,7 +290,9 @@ export function track<N extends AnalyticsEventName>(name: N, payload: AnalyticsE
   const event: AnalyticsEvent = {
     id: uuid(),
     name,
-    payload: payload as any,
+    // Stamp `_internal` into the payload on flagged operator/staff devices so
+    // the funnel report can opt-in exclude this session (Task #2257).
+    payload: (internalDevice ? { ...(payload as any), _internal: true } : payload) as any,
     ts: Date.now(),
     ...envelope,
   };
