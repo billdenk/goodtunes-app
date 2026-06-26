@@ -9842,6 +9842,16 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
+    "snippet": "className=\"w-full h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
+    "snippet": "<p className=\"text-[11.5px] text-slate-400 leading-snug\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
     "snippet": "className=\"text-[12.5px] font-medium text-slate-500 hover:text-slate-900 underline-offset-2 hover:underline disabled:opacity-60\""
   },
   {
@@ -12308,11 +12318,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
     "snippet": "<div className=\"mt-1 flex items-center gap-2 text-[11px]\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/partner/PartnerDashboard.tsx",
-    "snippet": "<div className=\"h-[220px] flex items-center justify-center text-slate-400 text-[12px]\" data-testid=\"trend-empty\">"
   },
   {
     "rule": "hardcoded-font-size",

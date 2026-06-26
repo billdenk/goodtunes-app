@@ -322,6 +322,32 @@ export type SpotifyCandidatesResult =
   | { ok: true; candidates: SpotifyArtistCandidate[] }
   | { ok: false; reason: "no_token" | "fetch_error" | "upstream_error" | "parse_error"; status?: number; detail?: string };
 
+// Largest per-request page size this app's token accepts. Spotify
+// rejects `limit=20` for our client-credentials token with a
+// 400 "Invalid limit", but `limit=10` succeeds — so we never request
+// more than this in a single call and widen the pool with `offset`
+// paging instead.
+const SPOTIFY_SEARCH_PAGE_SIZE = 10;
+// How many pages to pull. 3 × 10 = a 30-candidate pool, deep enough to
+// catch obscure exact-name artists (e.g. "Black Canoe" at ~position 8-9)
+// that rank just past the first page and that Spotify's unstable
+// ordering floats in and out of a single fetch.
+const SPOTIFY_SEARCH_PAGES = 3;
+
+type SpotifyRawArtist = {
+  id: string;
+  name: string;
+  external_urls?: { spotify?: string };
+  images?: Array<{ url: string; width: number; height: number }>;
+  popularity?: number;
+  followers?: { total?: number };
+  genres?: string[];
+};
+
+type SpotifyPageResult =
+  | { ok: true; items: SpotifyRawArtist[] }
+  | { ok: false; reason: "no_token" | "fetch_error" | "upstream_error" | "parse_error"; status?: number; detail?: string };
+
 export async function searchArtistCandidatesDetailed(
   rawName: string,
   limit = 5,
@@ -334,103 +360,125 @@ export async function searchArtistCandidatesDetailed(
     return { ok: false, reason: "no_token" };
   }
 
-  const url = `${SEARCH_URL}?q=${encodeURIComponent(name)}&type=artist&limit=${Math.min(20, Math.max(1, limit))}`;
-
-  // Spotify's search endpoint (and Replit's egress to it) is occasionally
-  // flaky — we see sporadic socket resets / 5xx that resolve on an
-  // immediate re-fetch. Demo experience: the admin types "The Beatles"
-  // and gets "Spotify lookup failed." even though everything's fine.
-  // Retry once on transport error OR upstream 5xx with a small backoff
-  // before surfacing the failure UI. 401 still triggers the existing
-  // token-refresh + retry path.
-  const fetchOnce = async (bearer: string) =>
-    fetchWithTimeout(url, { headers: { Authorization: `Bearer ${bearer}` } }, SEARCH_TIMEOUT_MS);
   const isTransientStatus = (s: number) => s === 429 || (s >= 500 && s < 600);
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  let res: Response | null = null;
-  let lastFetchErr: string | null = null;
-  try {
-    res = await fetchOnce(token);
-  } catch (err) {
-    lastFetchErr = (err as Error)?.message ?? "";
-  }
-  // Quiet retry on transport error or transient upstream status.
-  if (!res || (res.status !== 401 && (res.status === 0 || isTransientStatus(res.status)) && res.ok === false)) {
-    await sleep(350);
+  // Fetch a single page at `offset`. Carries the existing retry/timeout/
+  // 401-refresh behavior: Spotify's search endpoint (and Replit's egress
+  // to it) is occasionally flaky — sporadic socket resets / 5xx that
+  // resolve on an immediate re-fetch — and a stale token surfaces as a
+  // 401 that the token refresh fixes. The outer `token` is updated on a
+  // 401 refresh so later pages reuse the fresh token.
+  const fetchPage = async (offset: number): Promise<SpotifyPageResult> => {
+    const url = `${SEARCH_URL}?q=${encodeURIComponent(name)}&type=artist&limit=${SPOTIFY_SEARCH_PAGE_SIZE}&offset=${offset}`;
+    const fetchOnce = async (bearer: string) =>
+      fetchWithTimeout(url, { headers: { Authorization: `Bearer ${bearer}` } }, SEARCH_TIMEOUT_MS);
+
+    let res: Response | null = null;
+    let lastFetchErr: string | null = null;
     try {
-      res = await fetchOnce(token);
+      res = await fetchOnce(token!);
     } catch (err) {
-      lastFetchErr = (err as Error)?.message ?? lastFetchErr;
-      res = null;
+      lastFetchErr = (err as Error)?.message ?? "";
     }
-  }
-  if (!res) {
-    console.warn("[spotify] candidates: fetch_error (after retry)", lastFetchErr, "name=", name);
-    return { ok: false, reason: "fetch_error", detail: lastFetchErr ?? "" };
-  }
-  if (res.status === 401) {
-    token = await getAccessToken(true);
-    if (!token) {
-      console.warn("[spotify] candidates: no_token after 401 refresh for", name);
-      return { ok: false, reason: "no_token" };
+    // Quiet retry on transport error or transient upstream status.
+    if (!res || (res.status !== 401 && (res.status === 0 || isTransientStatus(res.status)) && res.ok === false)) {
+      await sleep(350);
+      try {
+        res = await fetchOnce(token!);
+      } catch (err) {
+        lastFetchErr = (err as Error)?.message ?? lastFetchErr;
+        res = null;
+      }
     }
+    if (!res) {
+      console.warn("[spotify] candidates: fetch_error (after retry)", lastFetchErr, "name=", name, "offset=", offset);
+      return { ok: false, reason: "fetch_error", detail: lastFetchErr ?? "" };
+    }
+    if (res.status === 401) {
+      const refreshed = await getAccessToken(true);
+      if (!refreshed) {
+        console.warn("[spotify] candidates: no_token after 401 refresh for", name);
+        return { ok: false, reason: "no_token" };
+      }
+      token = refreshed;
+      try {
+        res = await fetchOnce(token);
+      } catch (err) {
+        const detail = (err as Error)?.message ?? "";
+        console.warn("[spotify] candidates: fetch_error after 401", detail, "name=", name, "offset=", offset);
+        return { ok: false, reason: "fetch_error", detail };
+      }
+    }
+    // Final transient retry — a 5xx after the first retry above can still
+    // happen if the first attempt threw and the second got an upstream
+    // hiccup. Give it one more shot before failing.
+    if (!res.ok && isTransientStatus(res.status)) {
+      await sleep(500);
+      try {
+        res = await fetchOnce(token!);
+      } catch (err) {
+        const detail = (err as Error)?.message ?? "";
+        console.warn("[spotify] candidates: fetch_error on transient retry", detail, "name=", name, "offset=", offset);
+        return { ok: false, reason: "fetch_error", detail };
+      }
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.warn("[spotify] candidates: upstream_error", res.status, body.slice(0, 200), "name=", name, "offset=", offset);
+      return { ok: false, reason: "upstream_error", status: res.status, detail: body.slice(0, 200) };
+    }
+
+    let json: any;
     try {
-      res = await fetchOnce(token);
+      json = await res.json();
     } catch (err) {
       const detail = (err as Error)?.message ?? "";
-      console.warn("[spotify] candidates: fetch_error after 401", detail, "name=", name);
-      return { ok: false, reason: "fetch_error", detail };
+      console.warn("[spotify] candidates: parse_error", detail, "name=", name, "offset=", offset);
+      return { ok: false, reason: "parse_error", detail };
     }
-  }
-  // Final transient retry — a 5xx after the first retry above can still
-  // happen if the first attempt threw and the second got an upstream
-  // hiccup. Give it one more shot before failing.
-  if (!res.ok && isTransientStatus(res.status)) {
-    await sleep(500);
-    try {
-      res = await fetchOnce(token);
-    } catch (err) {
-      const detail = (err as Error)?.message ?? "";
-      console.warn("[spotify] candidates: fetch_error on transient retry", detail, "name=", name);
-      return { ok: false, reason: "fetch_error", detail };
-    }
-  }
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    console.warn("[spotify] candidates: upstream_error", res.status, body.slice(0, 200), "name=", name);
-    return { ok: false, reason: "upstream_error", status: res.status, detail: body.slice(0, 200) };
+    return { ok: true, items: (json?.artists?.items ?? []) as SpotifyRawArtist[] };
+  };
+
+  // Pull the first page. If it fails, surface the failure exactly like
+  // the single-page version did so the UI keeps its honest error states.
+  const first = await fetchPage(0);
+  if (!first.ok) {
+    return { ok: false, reason: first.reason, status: first.status, detail: first.detail };
   }
 
-  let json: any;
-  try {
-    json = await res.json();
-  } catch (err) {
-    const detail = (err as Error)?.message ?? "";
-    console.warn("[spotify] candidates: parse_error", detail, "name=", name);
-    return { ok: false, reason: "parse_error", detail };
+  // Merge in deeper pages (best-effort). A later page hiccuping must not
+  // fail the whole search — we already have a valid first page — so we
+  // simply stop paging on the first non-ok deeper page. We also stop
+  // early once a page returns fewer than a full page (no more results).
+  const merged: SpotifyRawArtist[] = [...first.items];
+  if (first.items.length >= SPOTIFY_SEARCH_PAGE_SIZE) {
+    for (let page = 1; page < SPOTIFY_SEARCH_PAGES; page++) {
+      const next = await fetchPage(page * SPOTIFY_SEARCH_PAGE_SIZE);
+      if (!next.ok) break;
+      merged.push(...next.items);
+      if (next.items.length < SPOTIFY_SEARCH_PAGE_SIZE) break;
+    }
   }
-  const items = (json?.artists?.items ?? []) as Array<{
-    id: string;
-    name: string;
-    external_urls?: { spotify?: string };
-    images?: Array<{ url: string; width: number; height: number }>;
-    popularity?: number;
-    followers?: { total?: number };
-    genres?: string[];
-  }>;
+
+  // De-duplicate by artist id (the same artist can appear on more than
+  // one page given Spotify's unstable ordering), then keep the existing
+  // ranking: exact normalized-name matches first, the rest by popularity.
   const wanted = normalize(name);
-  const rows: SpotifyArtistCandidate[] = items
-    .filter((a) => !!a.external_urls?.spotify)
-    .map((a) => ({
-      id: a.id,
-      name: a.name,
-      spotifyUrl: a.external_urls!.spotify!,
-      photoUrl: (a.images ?? []).slice().sort((x, y) => y.width - x.width)[0]?.url ?? null,
-      popularity: a.popularity ?? 0,
-      followers: a.followers?.total ?? 0,
-      genres: a.genres ?? [],
-    }));
+  const byId = new Map<string, SpotifyRawArtist>();
+  for (const a of merged) {
+    if (!a?.external_urls?.spotify) continue;
+    if (!byId.has(a.id)) byId.set(a.id, a);
+  }
+  const rows: SpotifyArtistCandidate[] = Array.from(byId.values()).map((a) => ({
+    id: a.id,
+    name: a.name,
+    spotifyUrl: a.external_urls!.spotify!,
+    photoUrl: (a.images ?? []).slice().sort((x, y) => y.width - x.width)[0]?.url ?? null,
+    popularity: a.popularity ?? 0,
+    followers: a.followers?.total ?? 0,
+    genres: a.genres ?? [],
+  }));
   rows.sort((a, b) => {
     const ax = normalize(a.name) === wanted ? 1 : 0;
     const bx = normalize(b.name) === wanted ? 1 : 0;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, ExternalLink, X } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, Link2, X } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import {
@@ -244,6 +244,12 @@ export function NewAlbumArtistDialog({
   }, [open]);
 
   const trimmed = name.trim();
+  // The Name box doubles as a paste-a-link field: if the operator drops a
+  // full http(s) URL in here (Spotify artist link, Apple Music, Bandcamp,
+  // bio page) we resolve it via the same scrape path as a search pick
+  // instead of treating it as a name to search. This gives the operator a
+  // guaranteed fallback for obscure artists when name search comes up dry.
+  const isPastedUrl = /^https?:\/\//i.test(trimmed);
 
   // ---------- Local typeahead ----------
   const { data: people = [] } = useQuery<PersonLite[]>({
@@ -398,8 +404,8 @@ export function NewAlbumArtistDialog({
   // Dup guard mirrors the streaming-confirm flow: if the scrape returns
   // a name that already exists locally (or an itunesArtistId that does),
   // open the existing row instead of double-creating.
-  const handlePasteUrl = async () => {
-    const trimmedUrl = pasteUrl.trim();
+  const handlePasteUrl = async (urlOverride?: string) => {
+    const trimmedUrl = (urlOverride ?? pasteUrl).trim();
     if (!trimmedUrl) return;
     setPasteError(null);
     let scrape: ScrapeResult;
@@ -410,7 +416,7 @@ export function NewAlbumArtistDialog({
       // surface inline so the admin can fill the fields by hand.
       const msg = e?.message?.match(/\{[\s\S]*"message"\s*:\s*"([^"]+)"/)?.[1]
         || e?.message
-        || "Couldn't read that URL.";
+        || "Couldn't resolve that link.";
       setPasteError(msg);
       return;
     }
@@ -680,15 +686,17 @@ export function NewAlbumArtistDialog({
         {stage === "intro" && (
           <div className="flex-1 flex flex-col p-5 overflow-hidden">
             {/* Add-a-person is Search-only (Task #976). The Paste + Credits
-                tabs are intentionally hidden: Paste mostly duplicates the
-                streaming-confirm flow and Credits read as track credits with
-                no Add action. The segmented tab row is dropped so Search
+                tabs are intentionally hidden: Credits read as track credits
+                with no Add action. The segmented tab row is dropped so Search
                 doesn't look like a one-item toggle. `introTab` stays pinned to
                 its "search" default (set on open) and the Paste/Credits panels
                 below remain in the tree but never render, so re-enabling the
                 tabs later is a small change, not a rebuild. The Artist +
                 Producer default roles still ride along on save via
-                `creativeRoles`, independent of the now-hidden Credits UI. */}
+                `creativeRoles`, independent of the now-hidden Credits UI.
+                Paste-a-link is still reachable: the Search tab's Name box
+                detects a pasted http(s) URL and resolves it through the same
+                scrape + confirm path (see the `isPastedUrl` branch below). */}
 
             <div className="flex-1 overflow-y-auto">
               {/* ---- SEARCH TAB ---- */}
@@ -706,9 +714,12 @@ export function NewAlbumArtistDialog({
                       ref={inputRef}
                       type="text"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(e) => { setName(e.target.value); setPasteError(null); }}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && localMatches[0] && hasExactLocal) {
+                        if (e.key === "Enter" && isPastedUrl && !busy) {
+                          e.preventDefault();
+                          handlePasteUrl(trimmed);
+                        } else if (e.key === "Enter" && localMatches[0] && hasExactLocal) {
                           e.preventDefault();
                           pickLocal(localMatches[0]);
                         } else if (e.key === "Enter" && trimmed && localMatches.length === 0) {
@@ -721,7 +732,7 @@ export function NewAlbumArtistDialog({
                       data-testid="input-artist-name"
                     />
                     <p className="text-[11.5px] text-slate-400 mt-1.5 leading-snug">
-                      We'll match against people already in your catalog as you type.
+                      Type a name to match your catalog, or paste a Spotify / Apple Music link.
                     </p>
                   </div>
 
@@ -752,7 +763,43 @@ export function NewAlbumArtistDialog({
                     </div>
                   )}
 
-                  {trimmed && localMatches.length === 0 && (
+                  {/* Pasted-link branch — the operator dropped a full URL in
+                      the Name box. Resolve it through the same scrape +
+                      confirm path a search pick uses (Apple/Spotify route
+                      straight to the confirm stage; Bandcamp/bio pages stage
+                      a prefill). This is the guaranteed fallback for obscure
+                      artists that name search can't surface. */}
+                  {trimmed && isPastedUrl && (
+                    <div className="space-y-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handlePasteUrl(trimmed)}
+                        disabled={busy}
+                        className="w-full h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+                        data-testid="button-resolve-pasted-link"
+                      >
+                        {scrapeMut.isPending ? (
+                          <Spinner className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Link2 className="w-3.5 h-3.5" />
+                        )}
+                        Resolve this link
+                      </button>
+                      {pasteError && (
+                        <p
+                          className="text-xs text-amber-700 leading-snug"
+                          data-testid="text-paste-url-error"
+                        >
+                          {pasteError}
+                        </p>
+                      )}
+                      <p className="text-[11.5px] text-slate-400 leading-snug">
+                        Looks like a link — we'll pull the artist's name, photo, and profile.
+                      </p>
+                    </div>
+                  )}
+
+                  {trimmed && !isPastedUrl && localMatches.length === 0 && (
                     // Demo-day pitfall: a previous layout used a 2-column
                     // grid with a generic "Search Spotify" button on the
                     // right. Viewers kept clicking it after typing just a
