@@ -8,6 +8,8 @@ import {
   topFans,
   fanMap,
   referralEarnings,
+  partnerFunnelReleases,
+  partnerAcquisitionFunnel,
   type ReportContext,
 } from "./index";
 import { toCsv, dollarsFromCents } from "./csv";
@@ -157,6 +159,30 @@ export function registerReportRoutes(app: Express) {
       })),
       ["artist", "units", "perUnit", "earnings"],
     ));
+  });
+
+  // Task #2258 — partner acquisition funnel, scoped to the partner's own
+  // releases (super_admin impersonation honored by requireReportScope).
+  app.get("/api/partner/reports/funnel/releases", requireReportScope, async (req, res) => {
+    try {
+      const data = await partnerFunnelReleases(ctxFromReq(req));
+      res.json(data);
+    } catch (e: any) {
+      console.error("[reports/funnel/releases]", e);
+      res.status(500).json({ message: e.message });
+    }
+  });
+  app.get("/api/partner/reports/funnel", requireReportScope, async (req, res) => {
+    try {
+      const data = await partnerAcquisitionFunnel(ctxFromReq(req), {
+        albumId: String(req.query.albumId || ""),
+        excludeInternal: req.query.excludeInternal === "1" || req.query.excludeInternal === "true",
+      });
+      res.json(data);
+    } catch (e: any) {
+      console.error("[reports/funnel]", e);
+      res.status(500).json({ message: e.message });
+    }
   });
 
   // Header endpoint — tells the client what scope the caller has so

@@ -38,6 +38,7 @@ import {
   YAxis,
 } from "recharts";
 import { Download, MapPin, TrendingUp } from "lucide-react";
+import { CampaignLinkBuilder } from "@/components/operator/CampaignLinkBuilder";
 
 const BLUE = "#319ED8";
 const MINT = "#4AFFCA";
@@ -1163,7 +1164,7 @@ type FunnelData = {
   }[];
   excludedInternal?: number;
 };
-type ReleaseLite = { albumId: string; title: string; artist: string; landed: number };
+type ReleaseLite = { albumId: string; title: string; artist: string; landed: number; shareSlug: string | null };
 
 function ReleasePicker({
   releases,
@@ -1291,8 +1292,10 @@ function NativeFunnel({ qs }: { qs: string }) {
   });
 
   const maxSessions = data?.steps?.[0]?.sessions || 0;
+  const selectedRelease = releases.find((r) => r.albumId === effectiveAlbumId) ?? null;
 
   return (
+    <div className="space-y-4">
     <Card>
       <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
         <div>
@@ -1415,6 +1418,8 @@ function NativeFunnel({ qs }: { qs: string }) {
         </div>
       )}
     </Card>
+    {selectedRelease && <CampaignLinkBuilder release={selectedRelease} />}
+    </div>
   );
 }
 

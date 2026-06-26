@@ -24,6 +24,7 @@ import {
 // Heart for song-favorite metrics — keeps the artist dashboard's
 // favourites column visually paired with the player's heart action.
 import { Heart, User as UserIcon, Users } from "lucide-react";
+import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
@@ -90,7 +91,7 @@ function rangeFor(preset: PresetId): Range {
 export function ArtistDashboard() {
   const [preset, setPreset] = useState<PresetId>("30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"dashboard" | "overview" | "audience" | "catalog" | "orders" | "buyers" | "referrals">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "overview" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals">("dashboard");
   const range = useMemo(() => rangeFor(preset), [preset]);
   const qs = useMemo(() => {
     const u = new URLSearchParams({ from: range.from, to: range.to });
@@ -162,6 +163,13 @@ export function ArtistDashboard() {
       )}
       {tab === "overview" && <OverviewTab qs={qs} />}
       {tab === "audience" && <AudienceTab qs={qs} />}
+      {tab === "acquisition" && (
+        <AcquisitionTab
+          kind="artist"
+          scopeId={new URLSearchParams(window.location.search).get("personId")}
+          rangeQs={qs}
+        />
+      )}
       {tab === "catalog" && <CatalogTab qs={qs} />}
       {tab === "orders" && <OrdersTab qs={qs} />}
       {tab === "buyers" && <BuyersTab qs={qs} personId={me.data?.personId ?? null} />}
@@ -210,7 +218,7 @@ function InvitedByPressRow({ press, hasShippedFirst }: {
 }
 
 const ARTIST_TABS = modulesForRole("artist") as ReadonlyArray<{
-  id: "dashboard" | "overview" | "audience" | "catalog" | "orders" | "buyers" | "referrals";
+  id: "dashboard" | "overview" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals";
   label: string;
 }>;
 type ArtistTabId = (typeof ARTIST_TABS)[number]["id"];

@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { formatUsdCents } from "@shared/money";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Heart, Music as MusicIcon, Mail, Clock, UserPlus, Users, Trash2, Send, Copy, Check, ChevronDown, LayoutDashboard, ShoppingBag, ScrollText, Network } from "lucide-react";
+import { Heart, Music as MusicIcon, Mail, Clock, UserPlus, Users, Trash2, Send, Copy, Check, ChevronDown, LayoutDashboard, ShoppingBag, ScrollText, Network, Megaphone } from "lucide-react";
+import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { DashboardPanel } from "@/components/partner/dashboard-controls";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
@@ -84,8 +85,8 @@ type Tree = {
 
 const fmt = (c: number) => formatUsdCents(c);
 
-const BASE_NPO_TABS = modulesForRole("non_profit") as ReadonlyArray<{ id: "dashboard" | "artists" | "buyers" | "invites"; label: string }>;
-type NpoTabId = "dashboard" | "artists" | "buyers" | "invites" | "ledger" | "tree";
+const BASE_NPO_TABS = modulesForRole("non_profit") as ReadonlyArray<{ id: "dashboard" | "artists" | "acquisition" | "buyers" | "invites"; label: string }>;
+type NpoTabId = "dashboard" | "artists" | "acquisition" | "buyers" | "invites" | "ledger" | "tree";
 
 
 export function NonProfitDashboard() {
@@ -143,6 +144,7 @@ export function NonProfitDashboard() {
       navIcons={{
         dashboard: LayoutDashboard,
         artists: Users,
+        acquisition: Megaphone,
         buyers: ShoppingBag,
         invites: UserPlus,
         ledger: ScrollText,
@@ -157,6 +159,7 @@ export function NonProfitDashboard() {
         />
       )}
       {tab === "artists" && <ArtistsTab />}
+      {tab === "acquisition" && <AcquisitionTab kind="non_profit" scopeId={npoId ?? null} />}
       {tab === "buyers" && npoId && (
         <BuyerReport
           buyersUrl={`/api/non-profit/${npoId}/buyers`}

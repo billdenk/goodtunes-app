@@ -17,6 +17,7 @@ import {
   payoutAccounts,
 } from "@shared/schema";
 import { isFullAccessEmail } from "@shared/fullAccess";
+import { pgArray } from "../lib/pgArray";
 import { and, eq, ne, gte, lte, inArray, sql, desc, isNull, isNotNull, or, not } from "drizzle-orm";
 
 export interface AdminReportContext {
@@ -801,21 +802,31 @@ function deriveSource(p: Record<string, any>): SourceBucket {
 // changes the window. Sorted by landing volume so the busiest releases
 // surface first. `proving-ground` releases with zero traffic won't appear
 // here — that's honest (nothing to show yet).
-export async function funnelReleases() {
+export async function funnelReleases(restrictAlbumIds?: readonly string[] | null) {
+  // Partner-scoped callers pass the partner's own album ids. `null`/undefined
+  // = god-view (super_admin) — every release. An empty array = a partner with
+  // no releases — return nothing rather than leaking the global list.
+  if (restrictAlbumIds && restrictAlbumIds.length === 0) {
+    return { releases: [] as { albumId: string; title: string; artist: string; landed: number; shareSlug: string | null }[] };
+  }
+  const restrict =
+    restrictAlbumIds && restrictAlbumIds.length > 0
+      ? sql` AND payload->>'albumId' = ANY(${pgArray(restrictAlbumIds as string[])})`
+      : sql``;
   const rows = await db.execute<{ album_id: string; landed: string }>(sql`
     SELECT payload->>'albumId' AS album_id,
            COUNT(DISTINCT COALESCE(session_id, user_id, id)) AS landed
       FROM analytics_events
      WHERE name = 'album_viewed'
-       AND payload->>'albumId' IS NOT NULL
+       AND payload->>'albumId' IS NOT NULL${restrict}
      GROUP BY 1
      ORDER BY landed DESC
      LIMIT 200
   `);
   const ids = (rows.rows as any[]).map((r) => r.album_id).filter(Boolean);
-  if (ids.length === 0) return { releases: [] as { albumId: string; title: string; artist: string; landed: number }[] };
+  if (ids.length === 0) return { releases: [] as { albumId: string; title: string; artist: string; landed: number; shareSlug: string | null }[] };
   const albumRows = await db
-    .select({ id: albums.id, title: albums.title, artist: albums.artist })
+    .select({ id: albums.id, title: albums.title, artist: albums.artist, shareSlug: albums.shareSlug })
     .from(albums)
     .where(inArray(albums.id, ids));
   const byId = new Map(albumRows.map((a) => [a.id, a]));
@@ -827,8 +838,47 @@ export async function funnelReleases() {
       title: byId.get(id)!.title,
       artist: byId.get(id)!.artist,
       landed: landedById.get(id) ?? 0,
+      shareSlug: byId.get(id)!.shareSlug ?? null,
     }))
     .sort((a, b) => b.landed - a.landed);
+  return { releases };
+}
+
+// All releases a partner OWNS — including ones with ZERO funnel traffic — so the
+// campaign link-builder can mint tagged links for a brand-new release before any
+// fan has landed on it (the exact moment a partner needs the link). Distinct from
+// funnelReleases(), which lists only releases that already have album_viewed
+// traffic (the funnel picker's honest "nothing to show yet" set). Soft-deleted
+// albums are excluded. Sorted busiest-first, then by title for the zero-traffic tail.
+export async function ownedReleasesWithFunnel(albumIds: readonly string[]) {
+  const empty = {
+    releases: [] as { albumId: string; title: string; artist: string; landed: number; shareSlug: string | null }[],
+  };
+  if (albumIds.length === 0) return empty;
+  const albumRows = await db
+    .select({ id: albums.id, title: albums.title, artist: albums.artist, shareSlug: albums.shareSlug })
+    .from(albums)
+    .where(and(inArray(albums.id, albumIds as string[]), isNull(albums.deletedAt)));
+  if (albumRows.length === 0) return empty;
+  const liveIds = albumRows.map((a) => a.id);
+  const counts = await db.execute<{ album_id: string; landed: string }>(sql`
+    SELECT payload->>'albumId' AS album_id,
+           COUNT(DISTINCT COALESCE(session_id, user_id, id)) AS landed
+      FROM analytics_events
+     WHERE name = 'album_viewed'
+       AND payload->>'albumId' = ANY(${pgArray(liveIds)})
+     GROUP BY 1
+  `);
+  const landedById = new Map((counts.rows as any[]).map((r) => [r.album_id, safeNum(r.landed)]));
+  const releases = albumRows
+    .map((a) => ({
+      albumId: a.id,
+      title: a.title,
+      artist: a.artist,
+      landed: landedById.get(a.id) ?? 0,
+      shareSlug: a.shareSlug ?? null,
+    }))
+    .sort((a, b) => b.landed - a.landed || a.title.localeCompare(b.title));
   return { releases };
 }
 

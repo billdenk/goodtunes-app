@@ -23,7 +23,8 @@ import {
 // Heart for song-favorite metrics, Star for artist-roster metrics —
 // per docs/design-system.md the brand uses these two icons as a quick
 // visual cue for what a count means (favorites vs roster size).
-import { Heart, Star, Building2, LayoutDashboard, BarChart3, Users, Disc3, ShoppingBag, FileBarChart } from "lucide-react";
+import { Heart, Star, Building2, LayoutDashboard, BarChart3, Users, Disc3, ShoppingBag, FileBarChart, Megaphone } from "lucide-react";
+import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
@@ -129,7 +130,7 @@ type SortKey = "revenue" | "units" | "plays" | "listeners" | "buyers" | "albumCo
 export function LabelDashboard() {
   const [preset, setPreset] = useState<PresetId>("30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"dashboard" | "overview" | "roster" | "catalog" | "orders">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "overview" | "acquisition" | "roster" | "catalog" | "orders">("dashboard");
   const range = useMemo(() => rangeFor(preset), [preset]);
   const qs = useMemo(() => {
     const u = new URLSearchParams({ from: range.from, to: range.to });
@@ -189,6 +190,7 @@ export function LabelDashboard() {
       navIcons={{
         dashboard: LayoutDashboard,
         overview: BarChart3,
+        acquisition: Megaphone,
         roster: Users,
         catalog: Disc3,
         orders: ShoppingBag,
@@ -208,6 +210,7 @@ export function LabelDashboard() {
         />
       )}
       {tab === "overview" && <OverviewTab qs={qs} labelId={me.data?.labelId ?? null} labelName={labelName} />}
+      {tab === "acquisition" && <AcquisitionTab kind="label" scopeId={labelIdParam} rangeQs={qs} />}
       {tab === "roster" && <RosterTab qs={qs} labelIdParam={labelIdParam} />}
       {tab === "catalog" && <CatalogTab qs={qs} />}
       {tab === "orders" && <OrdersTab qs={qs} labelIdParam={labelIdParam} />}
@@ -252,7 +255,7 @@ function InvitedByPressRow({ press, hasShippedFirst }: {
 }
 
 const LABEL_TABS = modulesForRole("label") as ReadonlyArray<{
-  id: "dashboard" | "overview" | "roster" | "catalog" | "orders";
+  id: "dashboard" | "overview" | "acquisition" | "roster" | "catalog" | "orders";
   label: string;
 }>;
 type LabelTabId = (typeof LABEL_TABS)[number]["id"];

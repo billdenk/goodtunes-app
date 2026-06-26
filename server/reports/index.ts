@@ -12,6 +12,7 @@ import {
 import { and, eq, ne, gte, lte, inArray, sql, desc, isNotNull, or } from "drizzle-orm";
 import type { PartnerScope } from "../auth/roles";
 import { effectiveScopeFilter, effectiveOrgId, isOrgScope } from "../auth/roles";
+import { funnelReleases, ownedReleasesWithFunnel, acquisitionFunnel } from "./admin";
 
 /**
  * Task #80 — Partner reporting v1.
@@ -556,4 +557,70 @@ export async function referralEarnings(ctx: ReportContext) {
   })).sort((a, b) => b.units - a.units);
   const earningsCents = artists.reduce((s, a) => s + a.earningsCents, 0);
   return { artists, totalUnits, perUnitCents: perUnit, earningsCents, scopeLabel };
+}
+
+// ─── Partner acquisition funnel (Task #2258) ──────────────────────────────
+// Reuse the corrected operator funnel (server/reports/admin.ts) but scoped
+// STRICTLY to the partner's own releases. We never re-implement funnel
+// correctness here — only the album-id gate that keeps one partner from
+// reading another's data.
+
+/**
+ * The set of album ids whose funnel a partner may see.
+ *  - `null`  → super_admin god-view (no impersonation): every release.
+ *  - `[]`    → a legitimate empty cohort (partner with no releases / no
+ *              referred artists): show nothing, never the global list.
+ *  - ids[]   → the partner's own releases.
+ *
+ * Non-profits don't own albums (resolveScope returns `[]` for them), so their
+ * funnel cohort is the releases of the artists they referred — the same cohort
+ * that earns them money in the Referrals tab (resolveOrgScope).
+ */
+export async function resolveFunnelAlbumIds(ctx: ReportContext): Promise<string[] | null> {
+  if (isOrgScope(ctx.scope)) {
+    const o = await resolveOrgScope(ctx);
+    if (o.referredArtistIds.length === 0) return [];
+    const rows = await db
+      .select({ id: albums.id })
+      .from(albums)
+      .where(inArray(albums.primaryArtistId, o.referredArtistIds));
+    return rows.map((r) => r.id);
+  }
+  const s = await resolveScope(ctx);
+  return s.albumIds;
+}
+
+/**
+ * Releases the partner may pick from in the Acquisition tab.
+ *  - god-view (`null`): keep the trafficked-only picker — we can't enumerate
+ *    every album in the catalog, and an operator always has trafficked releases.
+ *  - a real partner: list ALL owned releases, including ones with zero funnel
+ *    traffic, so the campaign link-builder works for a brand-new release before
+ *    any fan has landed (a `[]` cohort still yields nothing — no leak).
+ */
+export async function partnerFunnelReleases(ctx: ReportContext) {
+  const albumIds = await resolveFunnelAlbumIds(ctx);
+  if (albumIds === null) return funnelReleases(null);
+  return ownedReleasesWithFunnel(albumIds);
+}
+
+/**
+ * The acquisition funnel for ONE of the partner's releases. Guards the
+ * requested albumId against the partner's allowed set first — an out-of-scope
+ * (or empty) id returns an empty funnel, never another partner's data.
+ */
+export async function partnerAcquisitionFunnel(
+  ctx: ReportContext,
+  opts: { albumId: string; excludeInternal?: boolean },
+) {
+  const albumId = String(opts.albumId || "");
+  const empty = { album: null, steps: [], overallConversion: 0, bySource: [], excludedInternal: 0 };
+  if (!albumId) return empty;
+  const allowed = await resolveFunnelAlbumIds(ctx);
+  // null = god-view (super_admin, no impersonation) — any album is fine.
+  if (allowed !== null && !allowed.includes(albumId)) return empty;
+  return acquisitionFunnel(
+    { from: ctx.from, to: ctx.to },
+    { albumId, groupBy: "source", excludeInternal: opts.excludeInternal },
+  );
 }

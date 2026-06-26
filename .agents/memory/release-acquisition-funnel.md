@@ -39,3 +39,28 @@ album_viewed → bundle_viewed → checkout_started → checkout_completed.
 SQL GROUP BY) for any new release-scoped report. `funnelReleases()` joins back to
 the `albums` table and drops ids that no longer exist there — synthetic/test
 albumIds won't appear in the picker even if they have events.
+
+`funnelReleases()` returns `{ releases: [...] }` (NOT a bare array); each release
+carries `albumId` (NOT `id`), title, artist, landed, shareSlug.
+
+## Partner-facing funnel = thin scoped wrappers over the same engine
+Partners (artist/label/non_profit) get the SAME funnel in their own dashboard
+(client/src/components/operator/AcquisitionTab.tsx, shared across all three) via
+`partnerFunnelReleases(ctx)` / `partnerAcquisitionFunnel(ctx,{albumId})` in
+server/reports/index.ts — do NOT re-implement funnel math. Routes:
+`GET /api/partner/reports/funnel/releases` + `/funnel`, both `requireReportScope`.
+
+Scoping contract (the security backbone): `resolveFunnelAlbumIds(ctx)` returns
+`null` = god-view (super_admin, no impersonation, every album fine) | `[]` = a
+real partner that owns no albums (or an org/non_profit scope — orgs own no albums)
+→ funnel shows empty | a populated list = the partner's own album ids.
+`partnerAcquisitionFunnel` refuses a foreign albumId by returning the **empty
+shape** (`{album:null,steps:[],...}`), NOT a 403 — by design, so the client just
+renders empty rather than erroring.
+
+**Why:** super_admin impersonation (`?asPartner=<id>&asPartnerKind=label|artist|non_profit`)
+is honored ONLY for super_admin inside `requireReportScope`/`effectiveScopeFilter`;
+a real partner's asPartner is ignored (they resolve their own scope), so passing
+scopeId from the client is harmless. The link-builder sets utm_source(channel)+
+utm_campaign so generated links self-attribute back into the same "by source" table
+(deriveSource key = `utm:<source.lower>|<campaign.lower>`).
