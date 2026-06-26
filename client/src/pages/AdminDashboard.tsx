@@ -904,8 +904,22 @@ function PrimaryChart({
           Loading…
         </div>
       ) : merged.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
-          No activity in this range yet.
+        <div className="flex-1 relative min-h-[180px]" data-testid="dashboard-chart-empty">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={[]} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+              <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} />
+              <YAxis
+                stroke="#94a3b8"
+                fontSize={11}
+                domain={[0, 1]}
+                tickFormatter={(v: number) => (isCurrency ? `$${(v / 100).toFixed(0)}` : `${v}`)}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span className="text-slate-400 text-sm">No activity in this range yet.</span>
+          </div>
         </div>
       ) : (
         <ResponsiveContainer width="100%" height="100%">

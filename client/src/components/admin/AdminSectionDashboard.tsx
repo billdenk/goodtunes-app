@@ -447,12 +447,21 @@ function TrendChart({
     return <div className="h-[220px] bg-slate-50 rounded-lg animate-pulse" />;
   }
   if (!metrics.length || !series.length) {
+    // Render a real (empty) chart frame — grid + axes — rather than a
+    // bare "no activity" string, so every role dashboard keeps the same
+    // three-section silhouette even before any data lands.
     return (
-      <div
-        className="h-[220px] flex items-center justify-center text-slate-400 text-xs"
-        data-testid="section-trend-empty"
-      >
-        No activity in this window yet.
+      <div className="h-[220px] relative" data-testid="section-trend-empty">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={[]} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
+            <XAxis dataKey="date" tick={{ fill: "rgb(100, 116, 139)", fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: "rgb(100, 116, 139)", fontSize: 11 }} axisLine={false} tickLine={false} width={42} domain={[0, 1]} />
+          </LineChart>
+        </ResponsiveContainer>
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <span className="text-slate-400 text-xs">No activity in this window yet.</span>
+        </div>
       </div>
     );
   }

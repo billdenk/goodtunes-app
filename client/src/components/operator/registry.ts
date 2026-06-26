@@ -50,6 +50,7 @@ export interface OperatorModuleDef {
 
 export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // Artist shell — `/artist` (ArtistDashboard.tsx)
+  { id: "dashboard", label: "Dashboard", roles: ["artist"] },
   { id: "overview",  label: "Overview",  roles: ["artist"] },
   { id: "audience",  label: "Audience",  roles: ["artist"] },
   { id: "catalog",   label: "Catalog",   roles: ["artist"] },

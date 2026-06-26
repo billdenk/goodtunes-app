@@ -213,6 +213,24 @@ async function pressUnits(
   return Number(((row as any).rows ?? [{}])[0]?.units ?? 0);
 }
 
+// Every album a press manufactures, resolved the same way pressUnits
+// scopes its CTE (SKU press_id snapshot, sale-time press_invited_albums
+// stamp, or artist/label invited_by_press_id provenance). Used by the
+// press dashboard to roll up gross sales + orders across those releases.
+async function pressAlbumIds(pressId: string): Promise<string[]> {
+  const row = await db.execute<any>(sql`
+    SELECT DISTINCT a.id
+    FROM albums a
+    LEFT JOIN people pe ON pe.id = a.primary_artist_id
+    LEFT JOIN labels l ON l.id = a.label_id
+    WHERE a.id IN (SELECT album_id FROM album_skus WHERE press_id = ${pressId})
+       OR a.id IN (SELECT album_id FROM press_invited_albums WHERE press_id = ${pressId})
+       OR pe.invited_by_press_id = ${pressId}
+       OR l.invited_by_press_id = ${pressId}
+  `).catch(() => ({ rows: [] }) as any);
+  return (((row as any).rows ?? []) as any[]).map((x) => x.id) as string[];
+}
+
 // ─── Per-scope resolution ────────────────────────────────────────────
 
 type ResolvedScope =
@@ -503,36 +521,58 @@ async function buildNpoPayload(
   const [cCur, cPrv] = await Promise.all([credits(r), credits(prior)]);
   const t = cCur ?? { pending: 0, paid: 0 };
 
-  // Referred artists in window vs prior.
-  async function refCount(window: RangeWindow | null) {
+  // Orders that earned this NPO a donation in-window — one referral
+  // credit is written per qualifying sale, so DISTINCT order_id over the
+  // ledger is the honest order count (no double-count across per-copy
+  // credits on a multi-quantity order).
+  async function npoOrders(window: RangeWindow | null) {
     if (!window) return null;
     const row = await db.execute<any>(sql`
-      SELECT COUNT(*)::bigint AS n FROM people
-      WHERE referred_by_org_id = ${scope.id}
-        AND COALESCE(created_at, NOW()) >= ${window.from}
-        AND COALESCE(created_at, NOW()) < ${window.to}
+      SELECT COUNT(DISTINCT order_id)::bigint AS n
+      FROM referral_credits
+      WHERE referrer_org_id = ${scope.id}
+        AND referrer_kind = 'non_profit'
+        AND created_at >= ${window.from} AND created_at < ${window.to}
     `).catch(() => ({ rows: [{ n: 0 }] }) as any);
     return Number(((row as any).rows ?? [{}])[0]?.n ?? 0);
   }
-  const [refCur, refPrv] = await Promise.all([refCount(r), refCount(prior)]);
+  const [ordCur, ordPrv] = await Promise.all([npoOrders(r), npoOrders(prior)]);
 
-  // Albums released by referred artists in window.
-  const artistIdsRow = await db.execute<any>(
+  // New fans = first-ever listeners of the songs released by artists this
+  // NPO referred (first-play-per-listener, bucketed into the window) —
+  // mirrors the artist/label new-fan definition, scoped to NPO songs.
+  const referredArtistIdsRow = await db.execute<any>(
     sql`SELECT id FROM people WHERE referred_by_org_id = ${scope.id}`,
-  );
-  const referredArtistIds = ((artistIdsRow as any).rows ?? []).map((x: any) => x.id) as string[];
-  async function albumCount(window: RangeWindow | null) {
-    if (!window) return null;
-    if (!referredArtistIds.length) return 0;
-    const row = await db.execute<any>(sql`
-      SELECT COUNT(*)::bigint AS n FROM albums
-      WHERE primary_artist_id = ANY(${pgArray(referredArtistIds)})
-        AND COALESCE(created_at, NOW()) >= ${window.from}
-        AND COALESCE(created_at, NOW()) < ${window.to}
-    `);
-    return Number(((row as any).rows ?? [{}])[0]?.n ?? 0);
+  ).catch(() => ({ rows: [] }) as any);
+  const referredArtistIds = (((referredArtistIdsRow as any).rows ?? []) as any[]).map((x) => x.id) as string[];
+  let npoSongIds: string[] = [];
+  if (referredArtistIds.length) {
+    const songRows = await db.execute<any>(sql`
+      SELECT s.id
+      FROM songs s
+      JOIN albums a ON a.id = s.album_id
+      WHERE a.primary_artist_id = ANY(${pgArray(referredArtistIds)})
+    `).catch(() => ({ rows: [] }) as any);
+    npoSongIds = (((songRows as any).rows ?? []) as any[]).map((x) => x.id) as string[];
   }
-  const [albCur, albPrv] = await Promise.all([albumCount(r), albumCount(prior)]);
+  async function npoNewFans(window: RangeWindow | null) {
+    if (!window) return null;
+    if (!npoSongIds.length) return 0;
+    const nf = await db.execute<any>(sql`
+      WITH first_play AS (
+        SELECT COALESCE(user_id, session_id) AS listener, MIN(ts) AS first_ts
+        FROM analytics_events
+        WHERE name = 'play_start'
+          AND payload->>'songId' = ANY(${pgArray(npoSongIds)})
+          AND COALESCE(user_id, session_id) IS NOT NULL
+        GROUP BY 1
+      )
+      SELECT COUNT(*)::bigint AS new_fans FROM first_play
+      WHERE first_ts >= ${window.from} AND first_ts < ${window.to}
+    `).catch(() => ({ rows: [{ new_fans: 0 }] }) as any);
+    return Number(((nf as any).rows ?? [{}])[0]?.new_fans ?? 0);
+  }
+  const [fansCur, fansPrv] = await Promise.all([npoNewFans(r), npoNewFans(prior)]);
 
   // Task #1632 — live donation reporting. Units attributable to this
   // NPO's earmark come straight off the referral_credits ledger (one
@@ -571,8 +611,13 @@ async function buildNpoPayload(
   const [dCur, dPrv] = await Promise.all([donations(r), donations(prior)]);
   const d = dCur ?? { units: 0, earmark: 0, goh: 0, donated: 0 };
 
+  // NPO metric set leads with orders + new fans (mission reach), then
+  // the money that follows: donated / pending / paid. Gross/net, units,
+  // referred-artist counts and album counts are intentionally dropped —
+  // an NPO cares about reach and dollars raised, not catalog volume.
   const kpis: Kpi[] = [
-    { id: "units", label: "Units sold", value: d.units, prior: dPrv?.units ?? null, format: "number" },
+    { id: "orders", label: "Orders", value: ordCur ?? 0, prior: ordPrv ?? null, format: "number", note: "$1/order earmark to this cause" },
+    { id: "newFans", label: "New fans", value: fansCur ?? 0, prior: fansPrv ?? null, format: "number", note: "First-time listeners of referred artists" },
     {
       id: "donated",
       label: "Dollars donated",
@@ -587,14 +632,12 @@ async function buildNpoPayload(
     },
     { id: "pending", label: "Pending payout", value: t.pending, prior: cPrv?.pending ?? null, format: "currency" },
     { id: "paid", label: "Paid out", value: t.paid, prior: cPrv?.paid ?? null, format: "currency" },
-    { id: "refArtists", label: "Referred artists", value: refCur ?? 0, prior: refPrv ?? null, format: "number" },
-    { id: "albums", label: "Albums released", value: albCur ?? 0, prior: albPrv ?? null, format: "number" },
-    { id: "playsReferred", label: "Plays from referred", value: null, format: "number", comingSoon: true, note: "Plays attribution lands with follow-up" },
   ];
 
-  // Daily series — payout accrual.
+  // Daily series — orders, new fans, and payout accrual.
   const accrual = await db.execute<any>(sql`
     SELECT date_trunc('day', created_at)::date::text AS day,
+      COUNT(DISTINCT order_id)::bigint AS orders,
       COALESCE(SUM(amount_cents), 0)::bigint AS amount
     FROM referral_credits
     WHERE referrer_org_id = ${scope.id}
@@ -602,10 +645,30 @@ async function buildNpoPayload(
     GROUP BY 1 ORDER BY 1 ASC
   `).catch(() => ({ rows: [] }) as any);
 
+  const newFansDaily = npoSongIds.length
+    ? await db.execute<any>(sql`
+        WITH first_play AS (
+          SELECT COALESCE(user_id, session_id) AS listener, MIN(ts) AS first_ts
+          FROM analytics_events
+          WHERE name = 'play_start'
+            AND payload->>'songId' = ANY(${pgArray(npoSongIds)})
+            AND COALESCE(user_id, session_id) IS NOT NULL
+          GROUP BY 1
+        )
+        SELECT date_trunc('day', first_ts)::date::text AS day, COUNT(*)::bigint AS new_fans
+        FROM first_play
+        WHERE first_ts >= ${r.from} AND first_ts < ${r.to}
+        GROUP BY 1 ORDER BY 1 ASC
+      `).catch(() => ({ rows: [] }) as any)
+    : ({ rows: [] } as any);
+
   const series = mergeDaily(r, [
-    { rows: ((accrual as any).rows ?? []) as any[], pending: (x: any) => Number(x.amount ?? 0) },
+    { rows: ((accrual as any).rows ?? []) as any[], orders: (x: any) => Number(x.orders ?? 0), pending: (x: any) => Number(x.amount ?? 0) },
+    { rows: ((newFansDaily as any).rows ?? []) as any[], newFans: (x: any) => Number(x.new_fans ?? 0) },
   ]);
   const chartMetrics: ChartMetric[] = [
+    { id: "orders", label: "Orders", format: "number" },
+    { id: "newFans", label: "New fans", format: "number" },
     { id: "pending", label: "Payout accrual", format: "currency" },
   ];
 
@@ -673,6 +736,85 @@ async function buildVendorPayload(
   prior: RangeWindow | null,
   subKind: "vendor" | "manufacturer" | "fulfillment" = "vendor",
 ): Promise<{ kpis: Kpi[]; chartMetrics: ChartMetric[]; series: SeriesPoint[]; activity: ActivityItem[] }> {
+  // Press / manufacturer scope gets a sales-oriented metric set —
+  // gross sales, orders, and units across the releases it manufactures —
+  // instead of the vendor pipeline tiles. Fans/plays are intentionally
+  // omitted (a press doesn't own listening); "Revenue (your cut)" and
+  // "Avg turn-time" stay honest coming-soon until the per-press payout
+  // split and pressing-pipeline turn events ship.
+  if (subKind === "manufacturer") {
+    const albumIds = await pressAlbumIds(scope.id);
+    async function pSales(window: RangeWindow | null) {
+      if (!window) return null;
+      if (!albumIds.length) return { gross: 0, orders: 0 };
+      const row = await db.execute<any>(sql`
+        SELECT
+          COALESCE(SUM(CASE WHEN status <> 'refunded' THEN total_cents ELSE 0 END), 0)::bigint AS gross,
+          COUNT(*) FILTER (WHERE status <> 'refunded')::bigint AS orders
+        FROM orders
+        WHERE status IN ('paid','shipped','refunded')
+          AND album_id = ANY(${pgArray(albumIds)})
+          AND created_at >= ${window.from} AND created_at < ${window.to}
+      `).catch(() => ({ rows: [] }) as any);
+      const x = (((row as any).rows ?? [])[0]) ?? { gross: 0, orders: 0 };
+      return { gross: Number(x.gross ?? 0), orders: Number(x.orders ?? 0) };
+    }
+    const [salesCur, salesPrv, unitsCur, unitsPrv] = await Promise.all([
+      pSales(r),
+      pSales(prior),
+      pressUnits(scope.id, r),
+      prior ? pressUnits(scope.id, prior) : Promise.resolve(null),
+    ]);
+    const kpis: Kpi[] = [
+      { id: "gross", label: "Gross sales", value: salesCur?.gross ?? 0, prior: salesPrv?.gross ?? null, format: "currency", note: "Across this press's releases" },
+      { id: "revenue", label: "Revenue (your cut)", value: null, format: "currency", comingSoon: true, note: "Per-press payout split lands with the payouts pipeline" },
+      { id: "orders", label: "Orders", value: salesCur?.orders ?? 0, prior: salesPrv?.orders ?? null, format: "number" },
+      { id: "units", label: "Units sold", value: unitsCur ?? 0, prior: unitsPrv, format: "number", note: "Paid physical copies pressed" },
+      { id: "turn", label: "Avg turn-time", value: null, format: "duration", comingSoon: true, note: "Turn-time tracking lands with the pressing pipeline" },
+    ];
+    const salesDaily = albumIds.length
+      ? await db.execute<any>(sql`
+          SELECT date_trunc('day', created_at)::date::text AS day,
+            COALESCE(SUM(CASE WHEN status <> 'refunded' THEN total_cents ELSE 0 END), 0)::bigint AS gross,
+            COUNT(*) FILTER (WHERE status <> 'refunded')::bigint AS orders
+          FROM orders
+          WHERE status IN ('paid','shipped','refunded')
+            AND album_id = ANY(${pgArray(albumIds)})
+            AND created_at >= ${r.from} AND created_at < ${r.to}
+          GROUP BY 1 ORDER BY 1 ASC
+        `).catch(() => ({ rows: [] }) as any)
+      : ({ rows: [] } as any);
+    const series = mergeDaily(r, [
+      { rows: ((salesDaily as any).rows ?? []) as any[], gross: (x: any) => Number(x.gross ?? 0), orders: (x: any) => Number(x.orders ?? 0) },
+    ]);
+    const chartMetrics: ChartMetric[] = [
+      { id: "gross", label: "Gross", format: "currency" },
+      { id: "orders", label: "Orders", format: "number" },
+    ];
+    const activity: ActivityItem[] = [];
+    if (albumIds.length) {
+      const orderRows = await db.execute<any>(sql`
+        SELECT o.id, o.created_at, o.total_cents, a.title AS album_title, a.id AS album_id
+        FROM orders o
+        JOIN albums a ON a.id = o.album_id
+        WHERE o.status IN ('paid','shipped')
+          AND o.album_id = ANY(${pgArray(albumIds)})
+          AND o.created_at >= ${r.from} AND o.created_at < ${r.to}
+        ORDER BY o.created_at DESC LIMIT 10
+      `).catch(() => ({ rows: [] }) as any);
+      for (const o of ((orderRows as any).rows ?? []) as any[]) {
+        activity.push({
+          kind: "order",
+          ts: new Date(o.created_at).toISOString(),
+          title: `Order — ${o.album_title}`,
+          detail: `$${(Number(o.total_cents) / 100).toFixed(2)}`,
+          href: `/admin/albums/${o.album_id}`,
+        });
+      }
+    }
+    return { kpis, chartMetrics, series, activity };
+  }
+
   // Most vendor-pipeline metrics aren't tracked end-to-end yet — render
   // as coming-soon tiles so the shell still feels populated and the
   // operator can see *where* the numbers will land once the pipeline
@@ -704,19 +846,9 @@ async function buildVendorPayload(
     completed = null;
   }
 
-  // Task #1632 — live unit count for the releases a press manufactures
-  // (paid physical copies, refunds excluded). Only meaningful for the
-  // manufacturer (press) scope; vendor/fulfillment rows keep the
-  // coming-soon tile since they aren't the pressing party.
-  let pressUnitsCur: number | null = null;
-  let pressUnitsPrv: number | null = null;
-  if (subKind === "manufacturer") {
-    [pressUnitsCur, pressUnitsPrv] = await Promise.all([
-      pressUnits(scope.id, r),
-      prior ? pressUnits(scope.id, prior) : Promise.resolve(null),
-    ]);
-  }
-
+  // Press (manufacturer) scope returns its own sales-oriented payload
+  // above; this path now only serves vendor + fulfillment rows, which
+  // aren't the pressing party, so units stay coming-soon.
   const kpis: Kpi[] = [
     openJobs === null
       ? { id: "open", label: "Open jobs", value: null, format: "number", comingSoon: true }
@@ -724,9 +856,7 @@ async function buildVendorPayload(
     completed === null
       ? { id: "done", label: "Completed", value: null, format: "number", comingSoon: true }
       : { id: "done", label: "Completed", value: completed, format: "number" },
-    pressUnitsCur === null
-      ? { id: "units", label: "Units shipped", value: null, format: "number", comingSoon: true, note: "Unit ship events land with fulfillment status hookup" }
-      : { id: "units", label: "Units sold", value: pressUnitsCur, prior: pressUnitsPrv, format: "number", note: "Paid physical copies across this press's releases" },
+    { id: "units", label: "Units shipped", value: null, format: "number", comingSoon: true, note: "Unit ship events land with fulfillment status hookup" },
     { id: "revenue", label: "Revenue (your cut)", value: null, format: "currency", comingSoon: true, note: "Per-vendor payout split ships with Task #245 follow-up" },
     { id: "turn", label: "Avg turn-time", value: null, format: "duration", comingSoon: true },
   ];

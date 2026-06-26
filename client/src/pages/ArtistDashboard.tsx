@@ -12,6 +12,7 @@ import { useMemo, useState } from "react";
 import { formatUsd, formatUsdCents } from "@shared/money";
 import { Link } from "wouter";
 import { SalesMap, type SalesGeoPayload } from "@/components/partner/SalesMap";
+import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
 import { BreakEvenBar } from "@/components/BreakEvenBar";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -89,7 +90,7 @@ function rangeFor(preset: PresetId): Range {
 export function ArtistDashboard() {
   const [preset, setPreset] = useState<PresetId>("30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"overview" | "audience" | "catalog" | "orders" | "buyers" | "referrals">("overview");
+  const [tab, setTab] = useState<"dashboard" | "overview" | "audience" | "catalog" | "orders" | "buyers" | "referrals">("dashboard");
   const range = useMemo(() => rangeFor(preset), [preset]);
   const qs = useMemo(() => {
     const u = new URLSearchParams({ from: range.from, to: range.to });
@@ -151,6 +152,14 @@ export function ArtistDashboard() {
       onTabChange={setTab}
       spaceContent
     >
+      {tab === "dashboard" && (
+        <PartnerDashboard
+          scope="artist"
+          title={artistName}
+          subtitle="Sales and listening at a glance"
+          scopeIdQs={new URLSearchParams(window.location.search).get("personId")}
+        />
+      )}
       {tab === "overview" && <OverviewTab qs={qs} />}
       {tab === "audience" && <AudienceTab qs={qs} />}
       {tab === "catalog" && <CatalogTab qs={qs} />}
@@ -201,7 +210,7 @@ function InvitedByPressRow({ press, hasShippedFirst }: {
 }
 
 const ARTIST_TABS = modulesForRole("artist") as ReadonlyArray<{
-  id: "overview" | "audience" | "catalog" | "orders" | "buyers" | "referrals";
+  id: "dashboard" | "overview" | "audience" | "catalog" | "orders" | "buyers" | "referrals";
   label: string;
 }>;
 type ArtistTabId = (typeof ARTIST_TABS)[number]["id"];
