@@ -1575,6 +1575,7 @@ export function AdminAlbum() {
                   vinylFormat={(album.vinylFormat as any) ?? null}
                   readyToSend={completeness?.pressReadyToSend ?? false}
                   sendBlockers={completeness?.press.missing ?? []}
+                  pressMode={isPress}
                 />
               )}
               {safeTab === "shopify" && allowed.has("shopify") && (

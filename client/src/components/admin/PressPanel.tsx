@@ -24,6 +24,7 @@ import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2, Send, Alert
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, resolveVendorIdForPress, isGenericVendor, defaultPreflightVendor, type VendorId } from "@shared/vendorSpecs";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
 import { CompletedTemplatePanel } from "@/components/admin/CompletedTemplatePanel";
 import { PressTemplateDownloads, type PressTemplate } from "@/components/admin/PressTemplateDownloads";
@@ -295,6 +296,7 @@ export function PressPanel({
   vinylFormat,
   readyToSend = false,
   sendBlockers = [],
+  pressMode = false,
 }: {
   albumId: string;
   songs: PressPanelSong[];
@@ -310,6 +312,12 @@ export function PressPanel({
   // quiet helper note while the submit is disabled).
   readyToSend?: boolean;
   sendBlockers?: string[];
+  // Task #2320 — true when a press (manufacturer role) is viewing this
+  // tab in their own portal (vs an operator in God-view). When the
+  // album resolves to the synthetic "generic" spec, the press sees a
+  // dedicated note + a CTA to send GoodTunes their plant's exact specs
+  // instead of just the terse operator badge.
+  pressMode?: boolean;
 }) {
   const showVinylSides =
     !!physicalFormat && physicalFormat !== "cassette" && physicalFormat !== "cd";
@@ -719,11 +727,51 @@ export function PressPanel({
                   : "platform default"}
             </span>
             {isGenericVendor(vendorId) && resolvedPressName && (
-              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 ml-1" data-testid="badge-generic-vendor">
-                general vinyl spec — no plant-specific specs on file
-              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    tabIndex={0}
+                    className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 ml-1 cursor-help"
+                    data-testid="badge-generic-vendor"
+                  >
+                    Basic Spec
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-xs leading-relaxed">
+                  GoodTunes doesn&rsquo;t have this plant&rsquo;s exact specs on file yet, so
+                  files are checked against a general industry-standard vinyl spec
+                  (300&nbsp;PPI art, CMYK/PMS, 24-bit WAV).
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
+          {/* Task #2320 — when the press itself is viewing this tab and the
+              album resolves to the generic spec, explain plainly that
+              GoodTunes doesn't have their plant's exact specs yet, and offer a
+              CTA to send them so preflight checks against their real
+              requirements. Operators (God-view) don't see this note — the
+              terse "Basic Spec" badge above is enough for them. */}
+          {pressMode && isGenericVendor(vendorId) && (
+            <div
+              className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800"
+              data-testid="note-press-basic-spec"
+            >
+              <p className="font-semibold text-amber-900">We&rsquo;re checking against a basic vinyl spec.</p>
+              <p className="mt-1">
+                GoodTunes doesn&rsquo;t have {resolvedPressName ?? "your plant"}&rsquo;s exact
+                specs on file yet, so preflight checks these files against a general
+                industry-standard vinyl spec rather than your own. Send us your art and
+                audio requirements and we&rsquo;ll check every release against your exact specs.
+              </p>
+              <a
+                href="mailto:support@goodtunes.music?subject=Add%20our%20pressing%20plant%20specs"
+                className="mt-2 inline-block font-semibold text-amber-900 underline underline-offset-2"
+                data-testid="link-contact-goodtunes-specs"
+              >
+                Contact GoodTunes to add your specs
+              </a>
+            </div>
+          )}
         </div>
 
         {/* ── Check masters against plant specs (Task #597) ──────────

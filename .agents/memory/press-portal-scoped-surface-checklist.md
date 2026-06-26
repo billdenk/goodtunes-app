@@ -31,3 +31,19 @@ different one of these (create scoped but typeahead global; remove endpoint
 scope-only; photo trigger live). Scope = `default_press_id == :id` OR
 primary_artist on a press-homed album (mirror `sqlPersonInPressScope`); do NOT
 broaden to credited people — a featured guest would leak across presses.
+
+## The press's album "Physical/Preflight" surface is NOT its own component
+A press (role `manufacturer`) opens the SAME God-View album page
+`/admin/albums/:id` "Physical" tab — `PressPanel` — as operators; there is no
+separate press-portal album surface. (Don't confuse it with the QuickPrinter
+`VendorScopeRouter → /api/printer/:id` preflight surface; that's a different
+portal.) The press tab is hidden only for artist/label. So anything already in
+PressPanel is visible to presses; to show press-only copy, thread a `pressMode`
+prop down from AdminAlbum (true when role is `manufacturer`), the same pattern
+`AlbumDashboardPanel` uses.
+
+**Why:** a task assumed presses had a distinct printer-portal preflight surface
+and nearly built a duplicate — the fix was a one-prop change to the shared
+PressPanel. Note: `isGenericVendor(vendorId)` can only be true when a press name
+is set but unmatched, so a resolved press name is always present alongside it
+(generic badge + any press-name-dependent note co-appear, never one alone).
