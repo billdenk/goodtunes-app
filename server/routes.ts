@@ -16311,6 +16311,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.status(400).json({ message: "Provide a Spotify track URL or a search query." });
   });
 
+  // Task #2239 — paste-a-Spotify-artist-link lookup for the Press Portal
+  // add-artist dialog. The press can paste an artist URL
+  // (https://open.spotify.com/artist/{id} or spotify:artist:{id}) instead
+  // of searching by name; we resolve it to the canonical name + portrait +
+  // Spotify URL so the held draft starts with real metadata. Mirrors the
+  // track-lookup guards: Spotify-not-configured → 503, unresolvable → 404.
+  app.post("/api/admin/spotify/artist-lookup", requireAdmin, async (req, res) => {
+    if (!spotifyConfigured()) {
+      return res.status(503).json({ message: "Spotify is not configured." });
+    }
+    const url = String(req.body?.url ?? "").trim();
+    if (!url) {
+      return res.status(400).json({ message: "Provide a Spotify artist URL." });
+    }
+    // Extract the artist id so we can return a canonical open.spotify.com
+    // URL regardless of which form (web / URI / with query params) the
+    // press pasted.
+    const m =
+      /\/artist\/([A-Za-z0-9]+)/.exec(url) ||
+      /spotify:artist:([A-Za-z0-9]+)/.exec(url);
+    const artistId = m?.[1];
+    if (!artistId) {
+      return res.status(404).json({ message: "Couldn't resolve that Spotify link." });
+    }
+    const { fetchSpotifyArtistPhotoByUrl } = await import("./lib/spotify");
+    const result = await fetchSpotifyArtistPhotoByUrl(url);
+    if (!result || !result.name) {
+      return res.status(404).json({ message: "Couldn't resolve that Spotify link." });
+    }
+    return res.json({
+      name: result.name,
+      photoUrl: result.photoUrl,
+      spotifyUrl: `https://open.spotify.com/artist/${artistId}`,
+    });
+  });
+
   // iTunes Search API for artist-name → Apple Music profile resolution.
   // No auth, no SDK — public endpoint, returns artistId + artistLinkUrl
   // which we then feed into the existing /api/admin/people/scrape path

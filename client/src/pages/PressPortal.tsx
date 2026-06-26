@@ -599,18 +599,78 @@ function InviteDialog({ open, onOpenChange, pressId }: { open: boolean; onOpenCh
   const [candidates, setCandidates] = useState<StreamCandidate[]>([]);
   const [searched, setSearched] = useState(false);
   const [picked, setPicked] = useState<StreamCandidate | null>(null);
+  // Task #2239 — paste-a-Spotify-artist-link error surface (artist path).
+  const [linkError, setLinkError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const reset = () => {
     setEmail(""); setName(""); setWelcomeNote(""); setAlbumTitle("");
     setQuery(""); setCandidates([]); setSearched(false); setPicked(null);
-    setSearching(false); setRole("artist");
+    setSearching(false); setRole("artist"); setLinkError(null);
+  };
+
+  // Task #2239 — when the press pastes a Spotify artist URL into the search
+  // box, resolve it directly to a candidate instead of running a name
+  // search. Accepts the web URL and the spotify:artist: URI forms.
+  const isSpotifyArtistUrl = (s: string) =>
+    /open\.spotify\.com\/artist\/[A-Za-z0-9]/.test(s) || /spotify:artist:[A-Za-z0-9]/.test(s);
+
+  const resolveSpotifyLink = async (url: string) => {
+    setSearching(true);
+    setSearched(true);
+    setCandidates([]);
+    setLinkError(null);
+    const token = getAuthToken();
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    try {
+      const res = await fetch(`/api/admin/spotify/artist-lookup`, {
+        method: "POST",
+        credentials: "include",
+        headers,
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) {
+        // Surface the server's specific reason when it gives one (e.g.
+        // "Spotify is not configured." on a 503) instead of collapsing
+        // every failure to the generic resolve error.
+        let msg = "Couldn't resolve that Spotify link.";
+        try {
+          const body = (await res.json()) as { message?: string };
+          if (res.status === 503 && body?.message) msg = body.message;
+        } catch { /* keep the generic message */ }
+        setLinkError(msg);
+        setSearching(false);
+        return;
+      }
+      const json = (await res.json()) as { name: string; photoUrl: string | null; spotifyUrl: string };
+      const candidate: StreamCandidate = {
+        id: `spotify-link-${json.spotifyUrl}`,
+        name: json.name,
+        source: "spotify",
+        spotifyUrl: json.spotifyUrl,
+        photoUrl: json.photoUrl,
+      };
+      setCandidates([candidate]);
+      pickCandidate(candidate);
+    } catch {
+      setLinkError("Couldn't resolve that Spotify link.");
+    }
+    setSearching(false);
   };
 
   // Spotify search with Apple fallback — mirrors NewAlbumArtistDialog.
+  // A pasted Spotify artist link is resolved directly instead.
   const runSearch = async () => {
     const q = query.trim();
     if (!q) return;
+    if (isSpotifyArtistUrl(q)) {
+      await resolveSpotifyLink(q);
+      return;
+    }
+    setLinkError(null);
     setSearching(true);
     setSearched(true);
     setCandidates([]);
@@ -707,9 +767,9 @@ function InviteDialog({ open, onOpenChange, pressId }: { open: boolean; onOpenCh
                   draft starts with their real name + photo. */}
               <div className="flex gap-2">
                 <Input
-                  placeholder="Search Spotify / Apple for the artist"
+                  placeholder="Search by name or paste a Spotify artist link"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => { setQuery(e.target.value); if (linkError) setLinkError(null); }}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); runSearch(); } }}
                   data-testid="input-invite-streaming-search"
                 />
@@ -721,10 +781,15 @@ function InviteDialog({ open, onOpenChange, pressId }: { open: boolean; onOpenCh
                   className="h-9 shrink-0"
                   data-testid="button-invite-streaming-search"
                 >
-                  {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
+                  {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : (isSpotifyArtistUrl(query.trim()) ? "Resolve" : "Search")}
                 </Button>
               </div>
-              {searched && !searching && candidates.length === 0 && (
+              {linkError && (
+                <p className="text-xs text-rose-600" data-testid="text-invite-link-error">
+                  {linkError}
+                </p>
+              )}
+              {searched && !searching && !linkError && candidates.length === 0 && (
                 <p className="text-xs text-slate-500" data-testid="text-invite-no-candidates">
                   No streaming matches. Pick again or type the artist name below.
                 </p>
