@@ -518,8 +518,9 @@ function PressDashboardTab({
             ))}
       </section>
 
-      {/* Albums by stage — compact pill strip */}
-      {summary && (
+      {/* Albums by stage — compact pill strip.
+          Hidden for now at Bill's request; logic kept so it can be restored. */}
+      {false && summary && (
         <DashboardPanel padding="md" data-testid="dashboard-by-stage">
           <h3 className="text-sm font-semibold text-slate-700 mb-3">Albums by stage</h3>
           <div className="flex flex-wrap gap-2">
