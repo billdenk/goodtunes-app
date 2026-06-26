@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthKind } from "@/hooks/useAuthKind";
@@ -372,6 +372,12 @@ export function Login() {
   const [step, setStep] = useState<Step>(1);
   const [loginIdent, setLoginIdent] = useState("");
   const [password, setPassword] = useState("");
+  // Refs for the login-mode inputs. Chrome's password manager often
+  // writes autofill values directly into the DOM without firing React's
+  // onChange, leaving the controlled state empty. Reading from the ref
+  // on submit captures whatever is actually in the field.
+  const loginIdentRef = useRef<HTMLInputElement>(null);
+  const loginPasswordRef = useRef<HTMLInputElement>(null);
   const [realName, setRealName] = useState("");
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
@@ -689,7 +695,7 @@ export function Login() {
   const finalDisplayLive = (displayTouched ? displayName : suggestedDisplay).trim();
   const step2Valid = finalUsernameLive.length >= 3 && finalDisplayLive.length > 0;
 
-  const switchMode = (m: Mode) => { setMode(m); setStep(1); setVerifyCode(""); setVerifyError(null); setVerifyToken(null); clearPendingVerify(); };
+  const switchMode = (m: Mode) => { setMode(m); setStep(1); setPassword(""); setVerifyCode(""); setVerifyError(null); setVerifyToken(null); clearPendingVerify(); };
 
   // Rehydrate a pending signup-code step on mount. A new fan who asked
   // for a 6-digit code and then refreshed (or wandered off to their
@@ -979,10 +985,36 @@ export function Login() {
     } catch {}
   };
 
+  // Sync native `change` events fired by Chrome autofill into React state.
+  // React's onChange maps to the native `input` event; Chrome's password
+  // manager fires a native `change` event (not `input`) when it fills the
+  // field, so React never sees it. This effect attaches a direct native
+  // listener that mirrors the autofilled value into state — making loginValid
+  // true and enabling the submit button as soon as autofill lands.
+  useEffect(() => {
+    const unameEl = loginIdentRef.current;
+    const pwEl = loginPasswordRef.current;
+    if (mode !== "login" || !unameEl || !pwEl) return;
+    const syncIdent = () => setLoginIdent(unameEl.value.replace(/\s/g, ""));
+    const syncPw = () => setPassword(pwEl.value);
+    unameEl.addEventListener("change", syncIdent);
+    pwEl.addEventListener("change", syncPw);
+    return () => {
+      unameEl.removeEventListener("change", syncIdent);
+      pwEl.removeEventListener("change", syncPw);
+    };
+  }, [mode]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Chrome's password manager writes autofill values into the DOM
+    // without firing React's onChange, leaving controlled state empty.
+    // Read the real DOM value from the ref when available; fall back to
+    // React state for browsers that do fire onChange (Safari, Firefox).
+    const actualIdent = (loginIdentRef.current?.value ?? loginIdent).trim();
+    const actualPassword = loginPasswordRef.current?.value ?? password;
     try {
-      const result: any = await login({ username: loginIdent.trim(), password });
+      const result: any = await login({ username: actualIdent, password: actualPassword });
       if (result?.requiresEnrollment) {
         setAdminPhase("enroll");
       } else if (result?.requires2fa) {
@@ -1493,6 +1525,7 @@ export function Login() {
             <div>
               <label className={s.label}>Username or Email</label>
               <input
+                ref={loginIdentRef}
                 type="text" name="username" value={loginIdent}
                 onChange={(e) => setLoginIdent(e.target.value.replace(/\s/g, ""))}
                 onBlur={runLookup}
@@ -1551,6 +1584,7 @@ export function Login() {
                   </div>
                   <div className="relative">
                     <input
+                      ref={loginPasswordRef}
                       type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••" name="password" autoComplete="current-password"
                       className={`${s.input} pr-11`} style={inputBg} required data-testid="input-login-password"
