@@ -810,6 +810,11 @@ function CertPortraitArt({ album }: { album: Album }) {
   );
 }
 
+// Sentinel artwork values that mean "no real art" — same set as VinylPreview.
+// When the album's artwork matches one of these (or equals the press's own
+// placeholder URL), we treat it as "no art" and apply the press-logo treatment.
+const CERT_NO_ART_SENTINELS = new Set(["/album-placeholder.svg", "", "null", "undefined"]);
+
 const CertCard = forwardRef(function CertCard(
   { album, ownerName, num, isPreview = false, ownerPhotoUrl, shape, w }: CertCardProps,
   ref: Ref<HTMLDivElement>,
@@ -818,7 +823,19 @@ const CertCard = forwardRef(function CertCard(
   useEffect(() => {
     setArtFailed(false);
   }, [album.artwork]);
-  const showArt = !!album.artwork && !artFailed;
+
+  // Detect whether the album's artwork is actually the press's logo placeholder
+  // (seeded at album creation under a press) rather than a real fan-facing cover.
+  // We compare to both the sentinel set and to the press's own placeholder URL so
+  // the press-logo jacket treatment renders in both cases (sentinel OR seeded URL).
+  const pressPlaceholderLogoUrl = (album as any).pressPlaceholderLogoUrl as string | null | undefined;
+  const isArtworkPressPlaceholder =
+    !!pressPlaceholderLogoUrl &&
+    (!album.artwork ||
+      CERT_NO_ART_SENTINELS.has(album.artwork.trim()) ||
+      album.artwork === pressPlaceholderLogoUrl);
+  const showRealArt = !!album.artwork && !artFailed && !isArtworkPressPlaceholder;
+  const showPressLogo = !showRealArt && !!pressPlaceholderLogoUrl;
 
   const certNumStr = isPreview ? "[Demo]" : `#${num.toString().padStart(2, "0")}`;
   const initial = (ownerName.replace(/^@/, "").trim()[0] || "?").toUpperCase();
@@ -853,8 +870,13 @@ const CertCard = forwardRef(function CertCard(
           orange frame at its natural square height (full width between the orange
           edges, no object-cover zoom/crop), with the cover's own bottom edge
           dissolving into transparent so it melts into the navy below. Both ride
-          under the same BLEED_SCRIM that ramps to solid navy at the bottom. */}
-      {showArt ? (
+          under the same BLEED_SCRIM that ramps to solid navy at the bottom.
+          When the album has no real art but a press logo placeholder is set, we
+          render that logo on a white jacket background (mirroring VinylPreview's
+          press-logo jacket treatment) so press-branded GoodDeed cards stay on-brand.
+          Albums with no press (or a press without a placeholder) fall back to the
+          generic AlbumCover branded placeholder. */}
+      {showRealArt ? (
         shape === "square" ? (
           <img
             src={album.artwork}
@@ -881,9 +903,56 @@ const CertCard = forwardRef(function CertCard(
             data-testid="img-cert-art"
           />
         )
+      ) : showPressLogo ? (
+        // Press-logo placeholder: white jacket background + logo centered +
+        // contained. Mirrors VinylPreview's vinyl jacket `placeholderLogoUrl`
+        // treatment. The BLEED_SCRIM below fades the jacket into navy so the
+        // ownership block reads cleanly over it.
+        shape === "square" ? (
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ zIndex: 0, background: "#ffffff", padding: "20%" }}
+            data-testid="img-cert-art"
+          >
+            <img
+              src={pressPlaceholderLogoUrl as string}
+              alt=""
+              crossOrigin="anonymous"
+              className="max-w-full max-h-full object-contain"
+              style={{ opacity: 0.85 }}
+              data-testid="img-cert-press-logo"
+            />
+          </div>
+        ) : (
+          // Portrait / Story: white square anchored to the inside-top of the
+          // orange frame, dissolving into transparent at the bottom — the same
+          // geometry as real artwork on these two formats.
+          <div
+            className="absolute top-0 left-0 w-full flex items-center justify-center"
+            style={{
+              zIndex: 0,
+              aspectRatio: "1 / 1",
+              background: "#ffffff",
+              padding: "20%",
+              WebkitMaskImage: COVER_BOTTOM_MASK,
+              maskImage: COVER_BOTTOM_MASK,
+            }}
+            data-testid="img-cert-art"
+          >
+            <img
+              src={pressPlaceholderLogoUrl as string}
+              alt=""
+              crossOrigin="anonymous"
+              className="max-w-full max-h-full object-contain"
+              style={{ opacity: 0.85 }}
+              data-testid="img-cert-press-logo"
+            />
+          </div>
+        )
       ) : (
-        // No artwork → branded placeholder (artist photo ghosted, or the
-        // brand-toned tile) so the cert never shows a broken-image glyph.
+        // No artwork and no press logo → branded placeholder (artist photo
+        // ghosted, or the brand-toned tile) so the cert never shows a
+        // broken-image glyph.
         <div className="absolute inset-0" style={{ zIndex: 0 }} data-testid="img-cert-art">
           <AlbumCover
             artwork={null}

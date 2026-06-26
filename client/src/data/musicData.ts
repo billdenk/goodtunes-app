@@ -63,6 +63,13 @@ export interface Album {
   // dead). Comes from the API row only; `null`/absent = no photo to fall
   // back to, so the cover degrades to a brand-toned tile with the name.
   artistPhoto?: string | null;
+  // The press's white-logo-SVG placeholder URL (manufacturers.vinyl_placeholder_url),
+  // resolved server-side from the primary artist's defaultPressId. When the
+  // album's own artwork equals this URL (or is absent), surfaces like the
+  // GoodDeed card render the press-logo treatment (white background, logo
+  // centered + contained) instead of the generic branded AlbumCover placeholder.
+  // Null/absent = no press, or press has no placeholder set.
+  pressPlaceholderLogoUrl?: string | null;
 }
 
 export interface Song {

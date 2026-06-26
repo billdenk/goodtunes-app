@@ -541,6 +541,39 @@ async function resolveArtistPhotoUrl(primaryArtistId: string | null | undefined)
   }
 }
 
+// Resolves the press's vinyl_placeholder_url for an album, used by the
+// GoodDeed card to render a branded press-logo placeholder instead of the
+// generic AlbumCover tile when the album has no real artwork. Looks up the
+// primary artist's defaultPressId → manufacturer.vinylPlaceholderUrl.
+// Falls back to the label's defaultPressId if no artist press is found.
+// Best-effort: never throws, returns null on any miss.
+async function resolvePressPlaceholderLogoUrl(
+  primaryArtistId: string | null | undefined,
+  labelId?: string | null,
+): Promise<string | null> {
+  try {
+    if (primaryArtistId) {
+      const person = await storage.getPersonById(primaryArtistId);
+      const pressId = (person as any)?.defaultPressId ?? null;
+      if (pressId) {
+        const press = await storage.getManufacturerById(pressId);
+        if ((press as any)?.vinylPlaceholderUrl) return (press as any).vinylPlaceholderUrl as string;
+      }
+    }
+    if (labelId) {
+      const label = await storage.getLabelById(labelId);
+      const pressId = (label as any)?.defaultPressId ?? null;
+      if (pressId) {
+        const press = await storage.getManufacturerById(pressId);
+        if ((press as any)?.vinylPlaceholderUrl) return (press as any).vinylPlaceholderUrl as string;
+      }
+    }
+  } catch {
+    // best-effort
+  }
+  return null;
+}
+
 // Enriches a batch of albums with their primary artist photo URL in one
 // parallel pass, deduplicating person lookups so a shared artist only
 // fetches once. Used by the /api/albums list route.
@@ -20621,7 +20654,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const derivedExplicit =
       album.isExplicit || songs.some((s) => (s as any).isExplicit === true);
     const artistPhoto = await resolveArtistPhotoUrl((album as any).primaryArtistId);
-    return res.json({ ...album, isExplicit: derivedExplicit, artistPhoto, songs });
+    const pressPlaceholderLogoUrl = await resolvePressPlaceholderLogoUrl(
+      (album as any).primaryArtistId,
+      (album as any).labelId,
+    );
+    return res.json({ ...album, isExplicit: derivedExplicit, artistPhoto, pressPlaceholderLogoUrl, songs });
   });
 
   // Task #1310 — PUBLIC two-part share-link resolver
@@ -20685,7 +20722,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const derivedExplicit =
       album.isExplicit || songs.some((s) => (s as any).isExplicit === true);
     const artistPhoto = await resolveArtistPhotoUrl((album as any).primaryArtistId);
-    return res.json({ ...album, isExplicit: derivedExplicit, artistPhoto, songs });
+    const pressPlaceholderLogoUrl = await resolvePressPlaceholderLogoUrl(
+      (album as any).primaryArtistId,
+      (album as any).labelId,
+    );
+    return res.json({ ...album, isExplicit: derivedExplicit, artistPhoto, pressPlaceholderLogoUrl, songs });
   });
 
   // Task #1778 — the standalone "Coming <date>" teaser endpoints were retired:
@@ -20740,7 +20781,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const derivedExplicit =
       album.isExplicit || songs.some((s) => (s as any).isExplicit === true);
     const artistPhoto = await resolveArtistPhotoUrl((album as any).primaryArtistId);
-    return res.json({ ...album, isExplicit: derivedExplicit, artistPhoto, songs });
+    const pressPlaceholderLogoUrl = await resolvePressPlaceholderLogoUrl(
+      (album as any).primaryArtistId,
+      (album as any).labelId,
+    );
+    return res.json({ ...album, isExplicit: derivedExplicit, artistPhoto, pressPlaceholderLogoUrl, songs });
   });
 
   // Catalog-wide song list. PlayerContext fetches this once and builds an
