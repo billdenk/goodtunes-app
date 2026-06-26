@@ -148,7 +148,7 @@ import {
   type PressTemplateSpec,
   type InsertPressTemplateSpec,
 } from "@shared/schema";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { db } from "./db";
 import { pgArray } from "./lib/pgArray";
 import { softDeleteEntity, restoreEntity, purgeEntity } from "./softDelete";
@@ -1170,6 +1170,11 @@ function normalizeAlbumArtwork(value: unknown): string {
   if (s === "" || s === "null" || s === "undefined") return "";
   return s;
 }
+
+// Task #2255 — keep at most this many live trusted-device rows per admin.
+// A typical admin trusts a handful of browsers; ten is generous headroom
+// while still bounding the table for an admin who signs in regularly.
+const ADMIN_TRUSTED_DEVICE_MAX_PER_USER = 10;
 
 export class DbStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
@@ -4713,7 +4718,31 @@ export class DbStorage implements IStorage {
       .insert(adminTrustedDevices)
       .values({ userId, tokenHash, expiresAt })
       .returning();
+    // Task #2255 — opportunistic cleanup on each mint. Nothing else ever
+    // deletes these rows, so without this an admin who signs in regularly
+    // accumulates an unbounded pile of stale (already-expired or just old)
+    // hash rows. The bypass read already filters on expiry, so this is
+    // housekeeping, not a security fix.
+    await this.pruneAdminTrustedDevices(userId);
     return row;
+  }
+  // Drop dead rows: (1) every globally-expired row — cheap on this tiny
+  // table and catches devices for admins who never sign in again — and
+  // (2) cap the given user's remaining LIVE rows to the N most recent so a
+  // single admin can't grow the table without limit. The just-inserted row
+  // is always the newest, so it survives the cap.
+  async pruneAdminTrustedDevices(userId: string): Promise<void> {
+    await db.delete(adminTrustedDevices).where(lt(adminTrustedDevices.expiresAt, new Date()));
+    await db.execute(sql`
+      DELETE FROM admin_trusted_devices
+       WHERE user_id = ${userId}
+         AND id NOT IN (
+           SELECT id FROM admin_trusted_devices
+            WHERE user_id = ${userId}
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${ADMIN_TRUSTED_DEVICE_MAX_PER_USER}
+         )
+    `);
   }
   async getAdminTrustedDevice(tokenHash: string): Promise<AdminTrustedDevice | undefined> {
     const [row] = await db
