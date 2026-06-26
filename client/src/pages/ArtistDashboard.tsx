@@ -91,7 +91,11 @@ function rangeFor(preset: PresetId): Range {
 export function ArtistDashboard() {
   const [preset, setPreset] = useState<PresetId>("30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"dashboard" | "overview" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "overview" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals">(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "dashboard" || t === "overview" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals") return t;
+    return "dashboard";
+  });
   const range = useMemo(() => rangeFor(preset), [preset]);
   const qs = useMemo(() => {
     const u = new URLSearchParams({ from: range.from, to: range.to });
@@ -150,7 +154,12 @@ export function ArtistDashboard() {
       }
       tabs={ARTIST_TABS}
       activeTab={tab}
-      onTabChange={setTab}
+      onTabChange={(newTab) => {
+        setTab(newTab);
+        const sp = new URLSearchParams(window.location.search);
+        sp.set("tab", newTab);
+        history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+      }}
       spaceContent
     >
       {tab === "dashboard" && (

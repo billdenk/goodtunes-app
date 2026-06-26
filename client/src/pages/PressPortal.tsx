@@ -159,6 +159,15 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   // Cached for the catalog tab (pressDomain drives Hellbender/MRP import buttons).
   const pressDomain = me?.domain ?? null;
 
+  // Write the active tab back to the URL (history replace, not push) so that
+  // window.location.href captured by FeedbackLauncher carries the real sub-page.
+  const handleTabChange = (newTab: TabId) => {
+    setTab(newTab);
+    const sp = new URLSearchParams(window.location.search);
+    sp.set("tab", newTab);
+    history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+  };
+
   return (
     <OperatorShell
       testId="press-shell"
@@ -173,19 +182,20 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
         pricing: CircleDollarSign,
         settings: Cog,
       }}
-      roleLabel={isSuperAdminView ? "Press portal (super-admin view)" : "Press portal"}
+      roleLabel="Press portal"
+      superAdminView={isSuperAdminView}
       name={me?.name ?? "Your press"}
       logoUrl={me?.logoUrl ?? null}
       navLogoUrl={me?.navLogoUrl ?? null}
       // The press wordmark already sits in the rail header (top-left), so the
-      // content page header would just repeat the press name. Hide it when the
-      // PRESS is logged in; keep it in the super-admin view so operators still
-      // see the "(super-admin view)" indicator.
-      hideHeaderIdentity={!isSuperAdminView}
+      // content page header would just repeat the press name — always hide it.
+      // Super-admin mode is signalled by the "Super-admin view" badge in the
+      // top nav (superAdminView), not by a duplicated content-header eyebrow.
+      hideHeaderIdentity
       fallbackIcon={Factory}
       tabs={tabs}
       activeTab={tab}
-      onTabChange={setTab}
+      onTabChange={handleTabChange}
     >
       {tab === "dashboard" && (
         <PressDashboardTab pressId={pressId} isSuperAdminView={isSuperAdminView} />

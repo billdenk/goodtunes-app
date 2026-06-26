@@ -130,7 +130,11 @@ type SortKey = "revenue" | "units" | "plays" | "listeners" | "buyers" | "albumCo
 export function LabelDashboard() {
   const [preset, setPreset] = useState<PresetId>("30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"dashboard" | "overview" | "acquisition" | "roster" | "catalog" | "orders">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "overview" | "acquisition" | "roster" | "catalog" | "orders">(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "dashboard" || t === "overview" || t === "acquisition" || t === "roster" || t === "catalog" || t === "orders") return t;
+    return "dashboard";
+  });
   const range = useMemo(() => rangeFor(preset), [preset]);
   const qs = useMemo(() => {
     const u = new URLSearchParams({ from: range.from, to: range.to });
@@ -184,7 +188,12 @@ export function LabelDashboard() {
       }
       tabs={LABEL_TABS}
       activeTab={tab}
-      onTabChange={setTab}
+      onTabChange={(newTab) => {
+        setTab(newTab);
+        const sp = new URLSearchParams(window.location.search);
+        sp.set("tab", newTab);
+        history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+      }}
       spaceContent
       layout="leftnav"
       navIcons={{

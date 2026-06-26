@@ -433,23 +433,37 @@ function FeedbackDetail({
             <div className="col-span-2">
               <dt className="text-xs uppercase tracking-wide text-slate-400">Page</dt>
               <dd className="truncate">
-                <a
-                  href={feedback.pageUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-slate-700 underline"
-                  data-testid="link-detail-page"
-                >
-                  <span className="truncate">{feedback.pageUrl}</span>
-                  <ExternalLink className="h-3 w-3 shrink-0" />
-                </a>
+                {partnerUrl ? (
+                  // When a scoped partner link is available (super-admin view),
+                  // show the raw captured URL as reference text only — clicking
+                  // it would open the partner-relative URL in the operator's own
+                  // context, which routes to the global Resellers page instead of
+                  // the partner's portal. Use the "Open in portal" action below.
+                  <span
+                    className="text-slate-500 text-sm break-all"
+                    data-testid="text-detail-page-ref"
+                  >
+                    {feedback.pageUrl}
+                  </span>
+                ) : (
+                  <a
+                    href={feedback.pageUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-slate-700 underline"
+                    data-testid="link-detail-page"
+                  >
+                    <span className="truncate">{feedback.pageUrl}</span>
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </a>
+                )}
               </dd>
             </div>
           )}
           {partnerUrl && (
             <div className="col-span-2">
               <dt className="text-xs uppercase tracking-wide text-slate-400">
-                {isPortalView ? "View as partner" : "Partner profile"}
+                {isPortalView ? "Open in portal" : "Partner profile"}
               </dt>
               <dd>
                 <a
@@ -459,7 +473,7 @@ function FeedbackDetail({
                   className="inline-flex items-center gap-1 rounded bg-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-300"
                   data-testid="link-detail-view-as-partner"
                 >
-                  {isPortalView ? `View as ${partnerLabel}` : `Open ${partnerLabel}`}
+                  {isPortalView ? `Open ${partnerLabel}'s portal` : `Open ${partnerLabel}`}
                   <ExternalLink className="h-3 w-3 shrink-0" />
                 </a>
               </dd>

@@ -125,7 +125,11 @@ type SortKey = "revenue" | "units" | "plays" | "listeners" | "buyers" | "albumCo
 export function ManagerDashboard() {
   const [preset, setPreset] = useState<PresetId>("30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"overview" | "roster" | "catalog" | "orders">("overview");
+  const [tab, setTab] = useState<"overview" | "roster" | "catalog" | "orders">(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "overview" || t === "roster" || t === "catalog" || t === "orders") return t;
+    return "overview";
+  });
   const range = useMemo(() => rangeFor(preset), [preset]);
   const qs = useMemo(() => {
     const u = new URLSearchParams({ from: range.from, to: range.to });
@@ -176,7 +180,12 @@ export function ManagerDashboard() {
       }
       tabs={MANAGER_TABS}
       activeTab={tab}
-      onTabChange={setTab}
+      onTabChange={(newTab) => {
+        setTab(newTab as "overview" | "roster" | "catalog" | "orders");
+        const sp = new URLSearchParams(window.location.search);
+        sp.set("tab", newTab);
+        history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+      }}
       spaceContent
       layout="leftnav"
       navIcons={{

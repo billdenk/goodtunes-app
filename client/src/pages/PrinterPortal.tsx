@@ -48,8 +48,14 @@ interface PrinterMe {
   location?: string | null;
 }
 
+const PRINTER_TAB_IDS: readonly string[] = ["dashboard", "print-queue", "catalog", "albums", "people", "settings"];
+
 export function PrinterPortal({ vendorId, isSuperAdminView }: { vendorId: string; isSuperAdminView: boolean }) {
-  const [tab, setTab] = useState<TabId>("dashboard");
+  const [tab, setTab] = useState<TabId>(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t && PRINTER_TAB_IDS.includes(t)) return t as TabId;
+    return "dashboard";
+  });
   const { data: me, isLoading } = useQuery<PrinterMe>({
     queryKey: [`/api/printer/${vendorId}/me`],
   });
@@ -64,16 +70,24 @@ export function PrinterPortal({ vendorId, isSuperAdminView }: { vendorId: string
 
   const tabs = modulesForRole("printer") as ReadonlyArray<{ id: TabId; label: string }>;
 
+  const handleTabChange = (newTab: TabId) => {
+    setTab(newTab);
+    const sp = new URLSearchParams(window.location.search);
+    sp.set("tab", newTab);
+    history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+  };
+
   return (
     <OperatorShell
       testId="printer-shell"
-      roleLabel={isSuperAdminView ? "GoodDeed printer (super-admin view)" : "GoodDeed printer"}
+      roleLabel="GoodDeed printer"
+      superAdminView={isSuperAdminView}
       name={me?.name ?? "Your print shop"}
       logoUrl={me?.logoUrl ?? null}
       fallbackIcon={Printer}
       tabs={tabs}
       activeTab={tab}
-      onTabChange={setTab}
+      onTabChange={handleTabChange}
       layout="leftnav"
       navIcons={{
         dashboard: LayoutDashboard,

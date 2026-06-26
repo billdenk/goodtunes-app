@@ -99,7 +99,11 @@ export function NonProfitDashboard() {
     if (caps?.canViewTree) base.push({ id: "tree", label: "Team tree" });
     return base;
   }, [caps?.canViewTree]);
-  const [tab, setTab] = useState<NpoTabId>("dashboard");
+  const [tab, setTab] = useState<NpoTabId>(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "dashboard" || t === "artists" || t === "buyers" || t === "invites" || t === "ledger" || t === "tree") return t;
+    return "dashboard";
+  });
 
   if (me.error) {
     const msg = (me.error as any)?.message || "We couldn't load your non-profit scope.";
@@ -139,7 +143,12 @@ export function NonProfitDashboard() {
       }
       tabs={tabs}
       activeTab={tab}
-      onTabChange={setTab as (id: string) => void}
+      onTabChange={(newTab) => {
+        setTab(newTab as NpoTabId);
+        const sp = new URLSearchParams(window.location.search);
+        sp.set("tab", newTab);
+        history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+      }}
       layout="leftnav"
       navIcons={{
         dashboard: LayoutDashboard,

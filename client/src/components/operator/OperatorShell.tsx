@@ -24,7 +24,7 @@
 
 import * as React from "react";
 import { Link } from "wouter";
-import { Circle, type LucideIcon } from "lucide-react";
+import { Circle, Eye, type LucideIcon } from "lucide-react";
 import { DashboardTabs, type TabDef } from "@/components/partner/dashboard-controls";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
 import { FeedbackLauncher } from "@/components/operator/FeedbackLauncher";
@@ -71,6 +71,11 @@ export type OperatorShellProps<TabId extends string> = {
    * the content page-header identity (eyebrow + name + subtitle) is hidden; the
    * band still renders if headerExtras/headerActions are present. */
   hideHeaderIdentity?: boolean;
+  /** When true, an operator is viewing this partner's portal in super-admin
+   * mode (not the partner themselves). Renders an elegant "Super-admin view"
+   * badge in the top nav instead of repeating "(super-admin view)" in the
+   * role eyebrow / content header. */
+  superAdminView?: boolean;
   tabs: ReadonlyArray<TabDef<TabId>>;
   activeTab: TabId;
   onTabChange: (id: TabId) => void;
@@ -109,6 +114,7 @@ export function OperatorShell<TabId extends string>({
   headerExtras,
   headerActions,
   hideHeaderIdentity = false,
+  superAdminView = false,
   tabs,
   activeTab,
   onTabChange,
@@ -138,6 +144,20 @@ export function OperatorShell<TabId extends string>({
 
   const maxW = maxWidth === "5xl" ? "max-w-5xl" : "max-w-6xl";
   const radius = logoShape === "circle" ? "rounded-full" : "rounded-2xl";
+
+  // Elegant top-nav badge that signals an operator is viewing this portal in
+  // super-admin mode. Uses the soft brand-blue token (inline style — Tailwind
+  // can't alpha a CSS var) to match the active-nav treatment.
+  const superAdminBadge = superAdminView ? (
+    <span
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
+      style={{ backgroundColor: "var(--brand-blue-soft)", color: "var(--brand-blue)" }}
+      data-testid="badge-super-admin-view"
+    >
+      <Eye className="h-3.5 w-3.5" />
+      Super-admin view
+    </span>
+  ) : null;
 
   // Shared identity block (logo + role eyebrow + name + subtitle), used by
   // both layouts so the two chromes stay visually identical above the fold.
@@ -294,13 +314,14 @@ export function OperatorShell<TabId extends string>({
           {/* Top header strip — h-14, matches AdminFrame's sticky top bar.
               Profile menu pinned top-right (desktop + mobile). */}
           <div
-            className="h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center px-4 sm:px-6"
+            className="h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center gap-3 px-4 sm:px-6"
             data-testid="operator-shell-topbar"
           >
             {/* Mobile: show the entity name since the rail is hidden. */}
-            <span className="md:hidden text-sm font-semibold text-slate-800 truncate flex-1 mr-3" aria-hidden="true">
+            <span className="md:hidden text-sm font-semibold text-slate-800 truncate min-w-0" aria-hidden="true">
               {name}
             </span>
+            {superAdminBadge}
             <div className="ml-auto flex items-center gap-3" data-testid="operator-shell-account">
               <FeedbackLauncher />
               <AdminUserMenu />
@@ -367,6 +388,7 @@ export function OperatorShell<TabId extends string>({
         <div className={cn(maxW, "mx-auto px-4 sm:px-6 py-6")}>
           <div className={cn("flex items-center gap-4", (headerExtras || headerActions) && "mb-6")}>
             {identity}
+            {superAdminBadge}
             <div className="ml-auto shrink-0 self-start flex items-center gap-3" data-testid="operator-shell-account">
               <FeedbackLauncher />
               <AdminUserMenu />

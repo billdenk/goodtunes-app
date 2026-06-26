@@ -150,7 +150,11 @@ function RoleRouter({ meRole }: { meRole: MeRole | null | undefined }) {
 }
 
 function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string; role: string; superAdminScopeKind?: "vendor" | "manufacturer" | "fulfillment" }) {
-  const [tab, setTab] = useState<VendorTabId>("dashboard");
+  const [tab, setTab] = useState<VendorTabId>(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "dashboard" || t === "services") return t;
+    return "dashboard";
+  });
   // GoodDeed Services is vendor-only server-side (gateVendorAccess in
   // server/routes.ts admits role==='vendor' only). The shared module
   // registry encodes this — manufacturer + fulfillment scopes get the
@@ -172,6 +176,13 @@ function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string;
     role === "fulfillment" ? "Fulfillment portal" :
     "Vendor portal";
 
+  const handleTabChange = (newTab: VendorTabId) => {
+    setTab(newTab);
+    const sp = new URLSearchParams(window.location.search);
+    sp.set("tab", newTab);
+    history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+  };
+
   return (
     <OperatorShell
       testId="vendor-shell"
@@ -181,7 +192,7 @@ function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string;
       fallbackIcon={Store}
       tabs={tabs}
       activeTab={tab}
-      onTabChange={setTab}
+      onTabChange={handleTabChange}
       layout="leftnav"
       navIcons={{
         dashboard: LayoutDashboard,
