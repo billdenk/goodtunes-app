@@ -333,7 +333,7 @@ type AuditSection = "tracks" | "masters" | "lyrics" | "credits";
 // `direct`, Shopify for `shopify`, Bonus in both. The Press tab is
 // NEVER shown in Shopify mode (the label fulfills the physical
 // product themselves; there is no press to talk about).
-function visibleTabsFor(
+export function visibleTabsFor(
   album: {
     sellMode?: string | null;
     sellQuoteLockedAt?: string | null;
