@@ -868,6 +868,63 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   };
 
+  // Task #2253 — press-scoped middlewares mirroring commerce.ts's
+  // requirePressScope / pressPortal.ts's requirePressEditor, defined HERE so
+  // the press People-create/scrape/discography endpoints below can reuse the
+  // person-scrape closures (safeFetch, pickPerson, …) that only exist inside
+  // registerRoutes. These gate /api/press/:id/people* — they do NOT relax the
+  // /api/admin/people deny wall.
+  const requirePressScopeRoute = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    const userId = await getUserIdFromRequest(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const { getUserRole, findMembershipForScope } = await import("./auth/roles");
+    const info = await getUserRole(userId);
+    const pressId = String(req.params.id);
+    if (!info) return res.status(403).json({ message: "Forbidden" });
+    if (info.role === "super_admin" || info.role === "admin") return next();
+    if (await findMembershipForScope(userId, "manufacturer", pressId)) return next();
+    return res.status(403).json({ message: "Forbidden" });
+  };
+  const requirePressEditorRoute = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    const userId = await getUserIdFromRequest(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const { pressUserCanEdit } = await import("./auth/partnerPermissions");
+    const ok = await pressUserCanEdit(userId, String(req.params.id));
+    if (!ok) {
+      return res.status(403).json({
+        message:
+          "Staff accounts can view the press and invite artists, but only an Owner/Admin can change settings or operations.",
+      });
+    }
+    next();
+  };
+  // A person is "in scope" for a press when homed to it (default_press_id)
+  // OR the primary artist on an album awarded to it. Mirrors the predicate
+  // in pressPortal.ts so a press can only enrich people it can already see.
+  const personInPressScope = async (pressId: string, personId: string): Promise<boolean> => {
+    const r = await db.execute<{ ok: boolean }>(sql`
+      SELECT (
+        EXISTS (SELECT 1 FROM people pp WHERE pp.id = ${personId}
+                  AND pp.deleted_at IS NULL AND pp.default_press_id = ${pressId})
+        OR EXISTS (
+          SELECT 1 FROM albums a
+          JOIN pressing_order_requests por ON por.album_id = a.id
+            AND por.status <> 'cancelled'
+            AND por.package_snapshot ->> 'pressId' = ${pressId}
+          WHERE a.deleted_at IS NULL AND a.primary_artist_id = ${personId}
+        )
+      ) AS ok`);
+    return !!((r as any).rows?.[0]?.ok);
+  };
+
   // Global operator registries a press must never read.
   const pressGlobalDenyGuard = async (
     req: Request,
@@ -16120,6 +16177,55 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } as any);
     return res.status(201).json(p);
   });
+  // Task #2253 — God-View "Add Person" for a Press. Mirrors the admin create
+  // above but FORCES default_press_id to the press so the new artist lands in
+  // the press's People roster immediately. Gated to Owner/Admin (not Staff).
+  app.post(
+    "/api/press/:id/people",
+    requireAdmin,
+    requirePressScopeRoute,
+    requirePressEditorRoute,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const b = req.body ?? {};
+      if (!b.name) return res.status(400).json({ message: "name is required" });
+      const opt = (v: any) => (v ? String(v) : null);
+      let photoUrl = opt(b.photoUrl);
+      if (!photoUrl && b.contactEmail) {
+        photoUrl = await tryGravatarRehost(String(b.contactEmail));
+      }
+      const p = await storage.createPerson({
+        name: String(b.name),
+        photoUrl,
+        coverUrl: opt(b.coverUrl),
+        bio: stripAppleMusicBoilerplate(opt(b.bio)) || null,
+        appleMusicUrl: opt(b.appleMusicUrl),
+        spotifyUrl: opt(b.spotifyUrl),
+        tidalUrl: opt(b.tidalUrl),
+        qobuzUrl: opt(b.qobuzUrl),
+        deezerUrl: opt(b.deezerUrl),
+        pandoraUrl: opt(b.pandoraUrl),
+        itunesArtistId: opt(b.itunesArtistId),
+        instagramUrl: opt(b.instagramUrl),
+        tiktokUrl: opt(b.tiktokUrl),
+        twitterUrl: opt(b.twitterUrl),
+        blueskyUrl: opt(b.blueskyUrl),
+        facebookUrl: opt(b.facebookUrl),
+        websiteUrl: opt(b.websiteUrl),
+        linkedinUrl: opt(b.linkedinUrl),
+        labelId: opt(b.labelId),
+        managerId: opt(b.managerId),
+        isGroup: b.isGroup === true || b.isGroup === "true",
+        groupKind: opt(b.groupKind),
+        roles: sanitizeRoles(b.roles),
+      } as any);
+      // Home the new person to this press so it appears in scope immediately.
+      await db.execute(
+        sql`UPDATE people SET default_press_id = ${pressId} WHERE id = ${p.id}`,
+      );
+      return res.status(201).json({ ...p, defaultPressId: pressId });
+    },
+  );
   app.put("/api/admin/people/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
     // Task #79 — an artist-scoped partner editing their own person row
@@ -16526,10 +16632,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const rows = await storage.getDiscographyByArtistName(name);
     return res.json(rows);
   });
-  app.put("/api/admin/people/:id/discography", requireAdmin, async (req, res) => {
-    const id = String(req.params.id);
-    const body = req.body ?? {};
-    const items = Array.isArray(body.items) ? body.items : [];
+  const runDiscographySave = async (id: string, items: any[]) => {
     // Normalize the loose ScrapedArtistAlbum shape from the admin client
     // into the strict insert shape. Anything missing collectionId/name/type
     // is dropped — we'd rather skip a malformed row than crash the whole pull.
@@ -16614,8 +16717,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     const rows = await storage.replaceDiscographyForPerson(id, norm);
+    return rows;
+  };
+  app.put("/api/admin/people/:id/discography", requireAdmin, async (req, res) => {
+    const rows = await runDiscographySave(
+      String(req.params.id),
+      Array.isArray(req.body?.items) ? req.body.items : [],
+    );
     return res.json(rows);
   });
+  // Task #2253 — press portal discography enrichment for an in-scope person.
+  app.put(
+    "/api/press/:id/people/:personId/discography",
+    requireAdmin,
+    requirePressScopeRoute,
+    requirePressEditorRoute,
+    async (req, res) => {
+      const personId = String(req.params.personId);
+      if (!(await personInPressScope(String(req.params.id), personId))) {
+        return res.status(404).json({ message: "Not found" });
+      }
+      const rows = await runDiscographySave(
+        personId,
+        Array.isArray(req.body?.items) ? req.body.items : [],
+      );
+      return res.json(rows);
+    },
+  );
 
   app.delete("/api/admin/people/:id", requireAdmin, async (req, res) => {
     {
@@ -17121,7 +17249,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Per replit.md: we host the song in-app for ~2 weeks then send fans back
   // to Apple/Spotify via these same URLs ("referring them to give them
   // business"). One paste fills both jobs.
-  app.post("/api/admin/people/scrape", requireAdminBearer, async (req, res) => {
+  const handlePersonScrape = async (req: Request, res: Response) => {
     const url = String(req.body?.url ?? "").trim();
     if (!url || !/^https?:\/\//i.test(url)) {
       return res.status(400).json({ message: "A full https:// artist URL is required" });
@@ -17473,7 +17601,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const msg = e?.name === "AbortError" ? "Streaming page took too long to respond." : (e?.message || "Unable to read that page");
       res.status(502).json({ message: msg });
     }
-  });
+  };
+  app.post("/api/admin/people/scrape", requireAdminBearer, handlePersonScrape);
+  // Task #2253 — press portal paste-a-URL scrape. Same prefill logic, gated to
+  // the press scope (Owner/Admin) so the God-View Add Person dialog works in
+  // the Press portal without touching the /api/admin/people deny wall.
+  app.post(
+    "/api/press/:id/people/scrape",
+    requireAdmin,
+    requirePressScopeRoute,
+    requirePressEditorRoute,
+    handlePersonScrape,
+  );
 
   // ----- SuperCredits™ catalog: Instruments + vendors ----------------------
   app.get("/api/instruments", async (req, res) => {

@@ -498,7 +498,16 @@ function FanMap({
   );
 }
 
-export function AlbumDashboardPanel({ albumId }: { albumId: string }) {
+export function AlbumDashboardPanel({
+  albumId,
+  pressMode = false,
+}: {
+  albumId: string;
+  // Press partners see commerce numbers only — engagement/play analytics
+  // (Plays, Listeners, New-vs-returning, Most-popular-songs) are hidden so a
+  // press never gets the artist's listening telemetry, just what they pressed.
+  pressMode?: boolean;
+}) {
   const { data, isLoading, isError, error, refetch } = useQuery<DashboardPayload>({
     queryKey: ["/api/admin/albums", albumId, "dashboard"],
     queryFn: async () => {
@@ -574,32 +583,38 @@ export function AlbumDashboardPanel({ albumId }: { albumId: string }) {
           icon={Package}
           testId="kpi-orders"
         />
-        <StatCard
-          label="Plays"
-          value={lifetime.plays.toLocaleString()}
-          icon={Play}
-          testId="kpi-plays"
-        />
-        <StatCard
-          label="Listeners"
-          value={lifetime.listeners.toLocaleString()}
-          icon={Headphones}
-          testId="kpi-listeners"
-        />
+        {!pressMode && (
+          <StatCard
+            label="Plays"
+            value={lifetime.plays.toLocaleString()}
+            icon={Play}
+            testId="kpi-plays"
+          />
+        )}
+        {!pressMode && (
+          <StatCard
+            label="Listeners"
+            value={lifetime.listeners.toLocaleString()}
+            icon={Headphones}
+            testId="kpi-listeners"
+          />
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* (3) New vs. returning fans */}
-        <SectionCard
-          title="New vs. returning fans"
-          subtitle="Based on purchases — was this album a fan's first GoodTunes buy?"
-          testId="section-new-vs-returning"
-        >
-          <NewVsReturning
-            newBuyers={newVsReturning.newBuyers}
-            returning={newVsReturning.returningBuyers}
-          />
-        </SectionCard>
+        {/* (3) New vs. returning fans — hidden for press partners. */}
+        {!pressMode && (
+          <SectionCard
+            title="New vs. returning fans"
+            subtitle="Based on purchases — was this album a fan's first GoodTunes buy?"
+            testId="section-new-vs-returning"
+          >
+            <NewVsReturning
+              newBuyers={newVsReturning.newBuyers}
+              returning={newVsReturning.returningBuyers}
+            />
+          </SectionCard>
+        )}
 
         {/* (2) Add-ons sold with drill-down */}
         <SectionCard
@@ -629,7 +644,8 @@ export function AlbumDashboardPanel({ albumId }: { albumId: string }) {
         </SectionCard>
       </div>
 
-      {/* (4) Most popular songs */}
+      {/* (4) Most popular songs — play-ranked, hidden for press partners. */}
+      {!pressMode && (
       <SectionCard
         title="Most popular songs"
         subtitle={
@@ -691,6 +707,7 @@ export function AlbumDashboardPanel({ albumId }: { albumId: string }) {
           </ul>
         )}
       </SectionCard>
+      )}
 
       {/* (5) Where fans live */}
       <SectionCard

@@ -259,17 +259,19 @@ test("SESSION: the same boundary holds for a session-authenticated press", async
   assert.equal(ownFormatCosts.status, 401, "session is bearer-only on commerce format-cost reads");
 });
 
-// ─── Partner-reports scope resolves to the press's own row ────────────
+// ─── Partner-reports module is fail-closed for a press ───────────────
+// Task #2082 — manufacturers (incl. resellers), vendors, and fulfillment own
+// no albums and have no album/org scope, so requireReportScope fails them
+// closed on the ENTIRE partner-reports module (including the /scope header
+// endpoint) rather than letting them fall through to the super_admin god-view.
+// A press's real data lives in its own scoped surfaces — the partner dashboard
+// (/api/partner/:scope/*) and the press portal (/api/press/:id/*, Task #2253) —
+// never this album-sales reports module.
 
-test("SESSION: /api/partner/reports/scope resolves role=manufacturer scoped to its own row", async () => {
-  // resolveReportScope reads req.session.userId directly, so this surface is
-  // session-only by design.
+test("SESSION: a press is fail-closed (403) on the partner-reports module", async () => {
   const client = await makeSessionClient(pressUserId);
   const res = await client.get("/api/partner/reports/scope");
-  assert.equal(res.status, 200, "a press resolves a report scope");
-  assert.equal(res.json?.role, "manufacturer", "scope role is manufacturer");
-  assert.equal(res.json?.roleScopeId, ownPressId, "scope is pinned to the press's own row");
-  assert.equal(res.json?.viewAs, null, "a real press caller is not impersonating");
+  assert.equal(res.status, 403, "a press never reaches partner-reports; it uses its own scoped dashboard");
 });
 
 after(async () => {

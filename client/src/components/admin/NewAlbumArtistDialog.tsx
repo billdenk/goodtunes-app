@@ -145,6 +145,31 @@ export interface NewAlbumArtistDialogProps {
    * "Add person".
    */
   mode?: "album" | "person";
+  /**
+   * Base path for the person create/scrape/discography calls. Defaults to
+   * "/api/admin" (God-View AdminPeople). The Press portal passes
+   * "/api/press/:id" so the same flow routes through the press-scoped
+   * endpoints (which force-home the new person to the press) instead of the
+   * deny-walled /api/admin/people/* routes. Apple/Spotify search and the
+   * local catalog lookup are NOT deny-walled, so they always stay on
+   * /api/admin and /api/people respectively.
+   */
+  personApiBase?: string;
+  /**
+   * Extra query keys to invalidate after a person is created (e.g. the press
+   * People roster) so the new artist shows up immediately.
+   */
+  invalidateOnCreate?: unknown[][];
+  /**
+   * URL for the local typeahead catalog lookup. Defaults to "/api/people"
+   * (God-View — the global catalog). The Press portal passes
+   * "/api/press/:id/people" so the typeahead enumerates ONLY the press's own
+   * scoped roster — a press must never be able to enumerate out-of-scope
+   * people through the Add dialog (cross-press isolation). Because that
+   * roster only contains people already homed to the press, picking a local
+   * match is a plain navigation with nothing to (re-)associate.
+   */
+  localPeopleApiBase?: string;
 }
 
 type Stage = "intro" | "streaming" | "confirm";
@@ -214,6 +239,9 @@ export function NewAlbumArtistDialog({
   onSkip,
   busy: parentBusy,
   mode = "album",
+  personApiBase = "/api/admin",
+  invalidateOnCreate,
+  localPeopleApiBase = "/api/people",
 }: NewAlbumArtistDialogProps) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -292,7 +320,7 @@ export function NewAlbumArtistDialog({
 
   // ---------- Local typeahead ----------
   const { data: people = [] } = useQuery<PersonLite[]>({
-    queryKey: ["/api/people"],
+    queryKey: [localPeopleApiBase],
   });
   const localMatches = useMemo(() => {
     if (!trimmed) return [];
@@ -413,17 +441,20 @@ export function NewAlbumArtistDialog({
   // ---------- Mutations ----------
   const scrapeMut = useMutation({
     mutationFn: async (u: string): Promise<ScrapeResult> => {
-      const res = await apiRequest("POST", "/api/admin/people/scrape", { url: u });
+      const res = await apiRequest("POST", `${personApiBase}/people/scrape`, { url: u });
       return (await res.json()) as ScrapeResult;
     },
   });
   const createPersonMut = useMutation({
     mutationFn: async (body: Record<string, unknown>): Promise<PersonLite> => {
-      const res = await apiRequest("POST", "/api/admin/people", body);
+      const res = await apiRequest("POST", `${personApiBase}/people`, body);
       return (await res.json()) as PersonLite;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/people"] });
+      qc.invalidateQueries({ queryKey: [localPeopleApiBase] });
+      for (const key of invalidateOnCreate ?? []) {
+        qc.invalidateQueries({ queryKey: key });
+      }
     },
   });
 
@@ -665,7 +696,7 @@ export function NewAlbumArtistDialog({
           spotifyUrl: null,
           position: idx,
         }));
-        apiRequest("PUT", `/api/admin/people/${person.id}/discography`, { items }).catch(() => {
+        apiRequest("PUT", `${personApiBase}/people/${person.id}/discography`, { items }).catch(() => {
           /* discography is a bonus — silent on failure */
         });
       }

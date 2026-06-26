@@ -92,6 +92,7 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // via direct ?tab= URL). GoodDeed pricing renders INLINE (Task #2075).
   { id: "dashboard", label: "Dashboard",        roles: ["press"] },
   { id: "customers", label: "Customers",        roles: ["press"] },
+  { id: "people",    label: "People",           roles: ["press"] },
   { id: "catalog",   label: "Catalog",          roles: ["press"] },
   { id: "pricing",   label: "GoodDeed pricing", roles: ["press"] },
   { id: "settings",  label: "Settings",         roles: ["press"] },

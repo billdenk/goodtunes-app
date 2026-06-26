@@ -23,8 +23,8 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link, useSearch } from "wouter";
-import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign, BookOpen } from "lucide-react";
+import { Link, useSearch, useLocation } from "wouter";
+import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign, BookOpen, Contact, Search as SearchIcon } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -50,18 +50,28 @@ import { AdminReports } from "@/pages/AdminReports";
 import { AdminGoodDeedPricing } from "@/pages/AdminGoodDeedPricing";
 import { PressCatalogPanel } from "@/pages/AdminManufacturer";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
+import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { PartnerCapabilitiesCard, PRESS_CAPABILITIES } from "@/components/admin/PartnerCapabilitiesCard";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  PersonCard,
+  PersonRow,
+  CreditFilterRail,
+  EmptyState,
+  type PersonLite,
+} from "@/pages/AdminPeople";
+import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
+import { PRIMARY_CREATIVE_CREDITS } from "@/components/admin/RolePicker";
 
 // pipeline + reports stay in the union so direct ?tab= URLs still render
 // their content (they're just hidden from the nav per Task #2188).
-type TabId = "dashboard" | "customers" | "catalog" | "pipeline" | "reports" | "pricing" | "settings";
+type TabId = "dashboard" | "customers" | "people" | "catalog" | "pipeline" | "reports" | "pricing" | "settings";
 
-const PRESS_TAB_IDS: TabId[] = ["dashboard", "customers", "catalog", "pipeline", "reports", "pricing", "settings"];
+const PRESS_TAB_IDS: TabId[] = ["dashboard", "customers", "people", "catalog", "pipeline", "reports", "pricing", "settings"];
 
 interface MeRole { role: string; roleScopeId: string | null; }
 interface PressMe {
@@ -156,6 +166,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       navIcons={{
         dashboard: LayoutDashboard,
         customers: Users,
+        people: Contact,
         catalog: BookOpen,
         pipeline: GitBranch,
         reports: FileBarChart,
@@ -180,6 +191,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
         <PressDashboardTab pressId={pressId} isSuperAdminView={isSuperAdminView} />
       )}
       {tab === "customers" && <CustomersTab pressId={pressId} />}
+      {tab === "people" && <PressPeopleTab pressId={pressId} />}
       {tab === "catalog" && (
         <div className="space-y-4" data-testid="press-catalog-tab">
           <AdminPageHeader
@@ -398,6 +410,203 @@ function CustomerDrawer({ pressId, cust, onClose }: { pressId: string; cust: Cus
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─── People tab (press-scoped) ─────────────────────────────────────────
+//
+// A scoped mirror of God-View AdminPeople: the same grid/list cards, credit
+// filter rail, and view toggle — but the list is fetched from the
+// press-scoped /api/press/:id/people endpoint (requireAdmin +
+// requirePressScope), so a press only ever sees artists homed to it or
+// primary-artist on one of its albums. Cross-press isolation is enforced
+// server-side; this surface never touches /api/admin/people (the deny wall
+// 403s presses there). "Add an artist" reuses the same invite dialog the
+// Customers tab uses — inviting homes the artist to this press on accept.
+// Opening a card deep-links to /admin/people/:id, which renders its own
+// press-scoped mode (tabs trimmed, remove-from-press, etc.).
+
+function PressPeopleTab({ pressId }: { pressId: string }) {
+  const [, setLocation] = useLocation();
+  const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [view, setView] = useViewMode("press-people");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [addOpen, setAddOpen] = useState(false);
+
+  const { data: people = [], isLoading } = useQuery<PersonLite[]>({
+    queryKey: [`/api/press/${pressId}/people`],
+  });
+  // Task #699 / #2253 — Staff teammates are read-only on People: hide the Add
+  // control (the server also 403s the press create/scrape endpoints for them).
+  const { data: me } = useQuery<PressMe>({
+    queryKey: [`/api/press/${pressId}/me`],
+  });
+  const canEdit = me?.canEdit !== false;
+
+  const toggleRole = (role: string) => {
+    const k = role.toLowerCase();
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  };
+
+  // Headline credits first (RolePicker is the source of truth), then any
+  // other credit actually present in the scoped data.
+  const allCredits = useMemo(() => {
+    const primaryKeys = new Set(PRIMARY_CREATIVE_CREDITS.map((c) => c.toLowerCase()));
+    const extras = new Map<string, string>();
+    for (const p of people) {
+      for (const r of [...(p.roles ?? []), ...(p.derivedRoles ?? [])]) {
+        const t = (r ?? "").trim();
+        const k = t.toLowerCase();
+        if (!k || primaryKeys.has(k) || extras.has(k)) continue;
+        extras.set(k, t);
+      }
+    }
+    const extraList = Array.from(extras.values()).sort((a, b) => a.localeCompare(b));
+    return [...PRIMARY_CREATIVE_CREDITS, ...extraList];
+  }, [people]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let rows = q ? people.filter((p) => p.name.toLowerCase().includes(q)) : people.slice();
+    if (selected.size > 0) {
+      rows = rows.filter((p) => {
+        const tags = [...(p.roles ?? []), ...(p.derivedRoles ?? [])].map((r) =>
+          (r ?? "").trim().toLowerCase(),
+        );
+        for (const sel of Array.from(selected)) {
+          if (tags.includes(sel)) return true;
+        }
+        return false;
+      });
+    }
+    rows.sort((a, b) => a.name.localeCompare(b.name));
+    return rows;
+  }, [people, search, selected]);
+
+  return (
+    <div className="space-y-5">
+      <AdminPageHeader
+        title="People"
+        subtitle="Artists homed to your press, plus anyone leading an album you're pressing."
+        testId="heading-press-people"
+        actions={
+          <>
+            {searchOpen ? (
+              <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
+                <SearchIcon className="w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search people"
+                  className="w-44 text-sm bg-transparent outline-none placeholder:text-slate-400"
+                  data-testid="input-search-press-people"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setSearchOpen(false);
+                  }}
+                  className="text-slate-400 hover:text-slate-700"
+                  aria-label="Close search"
+                >
+                  <XIcon className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                className="h-9 w-9 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+                aria-label="Search"
+                data-testid="button-open-search-press-people"
+              >
+                <SearchIcon className="w-4 h-4" />
+              </button>
+            )}
+            <ViewModeToggle value={view} onChange={setView} testIdPrefix="view-mode-press-people" />
+            {canEdit && (
+              <Button
+                type="button"
+                onClick={() => setAddOpen(true)}
+                className="h-9 rounded-full bg-slate-900 text-white hover:bg-slate-800 font-semibold text-sm px-4"
+                data-testid="button-add-press-person"
+              >
+                <Sparkles className="w-4 h-4 mr-2" /> Add an artist
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      {allCredits.length > 0 && (
+        <CreditFilterRail
+          credits={allCredits}
+          selected={selected}
+          onToggle={toggleRole}
+          onClear={() => setSelected(new Set())}
+        />
+      )}
+
+      {isLoading ? (
+        <PanelLoading />
+      ) : filtered.length === 0 ? (
+        <EmptyState searching={search.trim().length > 0 || selected.size > 0} />
+      ) : view === "grid" ? (
+        <div
+          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-6"
+          data-testid="grid-press-people"
+        >
+          {filtered.map((p) => (
+            <PersonCard
+              key={p.id}
+              person={p}
+              labelName={p.affiliation?.name ?? null}
+              onOpen={() => setLocation(`/admin/people/${p.id}`)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div
+          className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+          data-testid="list-press-people"
+        >
+          {filtered.map((p) => (
+            <PersonRow
+              key={p.id}
+              person={p}
+              labelName={p.affiliation?.name ?? null}
+              onOpen={() => setLocation(`/admin/people/${p.id}`)}
+            />
+          ))}
+        </div>
+      )}
+
+      {canEdit && (
+        <NewAlbumArtistDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          mode="person"
+          personApiBase={`/api/press/${pressId}`}
+          localPeopleApiBase={`/api/press/${pressId}/people`}
+          invalidateOnCreate={[[`/api/press/${pressId}/people`]]}
+          onSkip={() => setAddOpen(false)}
+          onSelect={({ id }) => {
+            setAddOpen(false);
+            queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/people`] });
+            if (id) setLocation(`/admin/people/${id}`);
+          }}
+        />
+      )}
+    </div>
   );
 }
 

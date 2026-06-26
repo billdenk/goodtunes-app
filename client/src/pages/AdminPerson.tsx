@@ -474,6 +474,143 @@ function personIsArtist(person: PersonFull): boolean {
   );
 }
 
+/* ─── Press-scoped read-only panels (Task #2253) ───────────────────────
+   A press partner sees the artist through these trimmed, read-only views
+   instead of the operator panels (which re-fetch deny-walled
+   /api/admin/people/* sub-resources). Everything renders from the person
+   object already loaded via the press-scoped endpoint. */
+
+function PressPersonOverview({
+  person,
+  labelName,
+}: {
+  person: PersonFull;
+  labelName: string | null;
+}) {
+  const credits = [
+    ...(person.roles ?? []),
+    ...(person.derivedRoles ?? []),
+  ]
+    .map((r) => (r ?? "").trim())
+    .filter(Boolean);
+  const uniqCredits = Array.from(
+    new Map(credits.map((c) => [c.toLowerCase(), c])).values(),
+  );
+  return (
+    <div className="space-y-4" data-testid="panel-press-person-overview">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Artist
+          </div>
+          <div className="text-slate-900 text-sm font-semibold mt-0.5">
+            {person.name}
+          </div>
+          <div className="text-slate-500 text-xs">
+            {labelName ? `Signed to ${labelName}` : "Independent"}
+          </div>
+        </div>
+        {person.bio && (
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Bio
+            </div>
+            <p className="text-slate-600 text-sm mt-1 whitespace-pre-line">
+              {person.bio}
+            </p>
+          </div>
+        )}
+        {uniqCredits.length > 0 && (
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Credits
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              {uniqCredits.map((c) => (
+                <span
+                  key={c}
+                  className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium"
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      <p className="text-slate-400 text-xs px-1">
+        Artist profile details are managed by GoodTunes. Use the Releases tab
+        to manage the albums associated with your press.
+      </p>
+    </div>
+  );
+}
+
+function PressPersonCover({ person }: { person: PersonFull }) {
+  return (
+    <div className="space-y-3" data-testid="panel-press-person-cover">
+      <div className="aspect-[3/1] w-full rounded-2xl overflow-hidden bg-slate-100 ring-1 ring-slate-200">
+        {person.coverUrl ? (
+          <img
+            src={person.coverUrl}
+            alt={`${person.name} cover`}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">
+            No cover image
+          </div>
+        )}
+      </div>
+      <p className="text-slate-400 text-xs px-1">
+        The artist's cover image is managed by GoodTunes.
+      </p>
+    </div>
+  );
+}
+
+function PressPersonStreaming({ person }: { person: PersonFull }) {
+  const links = [
+    { label: "Apple Music", url: person.appleMusicUrl },
+    { label: "Spotify", url: person.spotifyUrl },
+    { label: "Tidal", url: person.tidalUrl },
+    { label: "Qobuz", url: person.qobuzUrl },
+    { label: "Deezer", url: person.deezerUrl },
+    { label: "Pandora", url: person.pandoraUrl },
+  ].filter((l) => !!l.url) as { label: string; url: string }[];
+  return (
+    <div
+      className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3"
+      data-testid="panel-press-person-streaming"
+    >
+      <h2 className="text-slate-900 text-sm font-bold">Streaming</h2>
+      {links.length === 0 ? (
+        <p className="text-slate-500 text-xs">
+          No streaming links on file.
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {links.map((l) => (
+            <li key={l.label}>
+              <a
+                href={l.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[var(--brand-blue)] text-sm hover:underline"
+                data-testid={`link-streaming-${l.label
+                  .toLowerCase()
+                  .replace(/\s+/g, "-")}`}
+              >
+                {l.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function AdminPerson() {
   const { user, isLoading: authLoading } = useAuth();
   const [, params] = useRoute<{ id: string }>("/admin/people/:id");
@@ -504,8 +641,40 @@ export function AdminPerson() {
   // the wide background banner needs more real estate.
   const [photoEditorOpen, setPhotoEditorOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
   const personId = params?.id ?? "";
   const backCrumb = useSmartBackCrumb();
+
+  // Task #2253 — press-scoped viewer. A manufacturer (press) partner is
+  // isAdmin=true but the global /api/admin/people/* surface 403s them
+  // (pressGlobalDenyGuard), so when a press opens an artist we read
+  // through the press-scoped endpoints and render a trimmed, read-only
+  // view: no Gear/Splits/Payouts/Permissions, no system-delete (only
+  // "Remove from press"), and other-press releases are locked. Note the
+  // artist's *global* Dashboard is intentionally omitted in press mode —
+  // it would aggregate sales across every press and leak other presses'
+  // numbers, which req 4 forbids. Members (group lineup) is also dropped
+  // because its sub-resource fetch is behind the same deny wall.
+  const { data: roleInfo } = useQuery<{ role?: string; roleScopeId?: string | null }>({
+    queryKey: ["/api/me/role"],
+    enabled: !!user?.isAdmin,
+  });
+  const pressMode = roleInfo?.role === "manufacturer";
+  const pressId = pressMode ? (roleInfo?.roleScopeId ?? "") : "";
+  // Task #2253 — read-only press Staff (canEdit=false) must not be offered the
+  // destructive "Remove from press" verb; the remove endpoint also 403s them.
+  // Default to editable unless the press /me payload explicitly says otherwise.
+  const { data: pressMe } = useQuery<{ canEdit?: boolean }>({
+    queryKey: [`/api/press/${pressId}/me`],
+    enabled: pressMode && !!pressId,
+  });
+  const pressCanEdit = pressMe?.canEdit !== false;
+  const PRESS_PERSON_TABS: { key: Tab; label: string }[] = [
+    { key: "overview", label: "Overview" },
+    { key: "cover", label: "Cover" },
+    { key: "releases", label: "Releases" },
+    { key: "streaming", label: "Streaming" },
+  ];
 
   // Mirror of AdminAlbum's deleteAlbum mutation. Person FKs on tracks +
   // albums.primaryArtistId are SET NULL, so deletion unlinks credits and
@@ -533,6 +702,28 @@ export function AdminPerson() {
     },
   });
 
+  // Task #2253 — press partners can never system-delete a person. The
+  // Trash affordance becomes "Remove from press": clear default_press_id
+  // if it points here, record press_switch_history, person row persists.
+  const removeFromPress = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `/api/press/${pressId}/people/${personId}/remove`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/press/${pressId}/people`] });
+      toast({ title: "Removed from your press." });
+      setRemoveConfirmOpen(false);
+      navigate("/vendor?tab=people");
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't remove from press",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
   useEffect(() => {
     document.body.classList.add("gt-admin");
     return () => {
@@ -544,8 +735,10 @@ export function AdminPerson() {
   // admin-only fields (currently `shippingAddress`) that must not leak
   // through the public /api/people/:id endpoint other pages rely on.
   const { data: person, isLoading, error } = useQuery<PersonFull>({
-    queryKey: ["/api/admin/people", personId],
-    enabled: !!user?.isAdmin && !!personId,
+    queryKey: pressMode
+      ? [`/api/press/${pressId}/people/${personId}`]
+      : ["/api/admin/people", personId],
+    enabled: !!user?.isAdmin && !!personId && (!pressMode || !!pressId),
   });
   const { data: labels = [] } = useQuery<LabelLite[]>({
     queryKey: ["/api/labels"],
@@ -559,9 +752,19 @@ export function AdminPerson() {
   // cached by the admin sidebar's count query — TanStack dedupes the
   // request so this is effectively free.
   const { data: allAlbums = [] } = useQuery<PersonPreviewAlbum[]>({
-    queryKey: ["/api/albums"],
-    enabled: !!user?.isAdmin,
+    queryKey: pressMode
+      ? [`/api/press/${pressId}/people/${personId}/albums`]
+      : ["/api/albums"],
+    enabled: !!user?.isAdmin && (!pressMode || !!pressId),
   });
+  // In press mode the albums feed already carries an editableByThisPress
+  // flag per row (homed-here vs. another-press). Build a lookup so the
+  // Releases grid can lock + grey the rows that belong to another press.
+  const pressEditableById: Record<string, boolean> | undefined = pressMode
+    ? Object.fromEntries(
+        (allAlbums as any[]).map((a) => [a.id, !!a.editableByThisPress]),
+      )
+    : undefined;
 
   const labelName =
     person?.labelId
@@ -576,7 +779,9 @@ export function AdminPerson() {
   // Dashboard shell on a partner contact.
   useEffect(() => {
     if (!person) return;
-    const allowed = new Set(tabsForPerson(person).map((t) => t.key));
+    const allowed = new Set(
+      (pressMode ? PRESS_PERSON_TABS : tabsForPerson(person)).map((t) => t.key),
+    );
     if (!allowed.has(tab)) {
       setTabState("overview");
       try {
@@ -693,31 +898,50 @@ export function AdminPerson() {
         <div className="flex items-start gap-5">
           {/* Avatar doubles as the photo editor trigger — same hover-scrim
               + pencil-chip pattern as AdminAlbum's cover thumbnail. */}
-          <button
-            type="button"
-            onClick={() => setPhotoEditorOpen(true)}
-            className="group relative rounded-full overflow-hidden flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2"
-            style={{ width: 96, height: 96 }}
-            aria-label="Edit artist photo"
-            data-testid="button-edit-person-photo"
-          >
-            <PersonAvatar
-              name={person.name}
-              photoUrl={person.photoUrl}
-              size={96}
-            />
-            <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 [@media(hover:none)]:bg-black/30 transition-colors" />
-            <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
-              <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
-                <UserIcon className="w-4 h-4" />
-              </span>
-            </span>
-          </button>
-          <PhotoEditorDialog
-            person={person}
-            open={photoEditorOpen}
-            onOpenChange={setPhotoEditorOpen}
-          />
+          {pressMode ? (
+            /* Press mode is read-only on the person profile — render a static
+               avatar with no photo-editor trigger (the server also deny-walls
+               /api/admin/people writes for presses). */
+            <div
+              className="rounded-full overflow-hidden flex-shrink-0"
+              style={{ width: 96, height: 96 }}
+              data-testid="img-person-photo"
+            >
+              <PersonAvatar
+                name={person.name}
+                photoUrl={person.photoUrl}
+                size={96}
+              />
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setPhotoEditorOpen(true)}
+                className="group relative rounded-full overflow-hidden flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2"
+                style={{ width: 96, height: 96 }}
+                aria-label="Edit artist photo"
+                data-testid="button-edit-person-photo"
+              >
+                <PersonAvatar
+                  name={person.name}
+                  photoUrl={person.photoUrl}
+                  size={96}
+                />
+                <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 [@media(hover:none)]:bg-black/30 transition-colors" />
+                <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
+                  <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                    <UserIcon className="w-4 h-4" />
+                  </span>
+                </span>
+              </button>
+              <PhotoEditorDialog
+                person={person}
+                open={photoEditorOpen}
+                onOpenChange={setPhotoEditorOpen}
+              />
+            </>
+          )}
           <div className="flex-1 min-w-0">
             <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
               {/* Task #665 — contact-shape Persons are partner reps, not
@@ -754,7 +978,7 @@ export function AdminPerson() {
           data-testid="tabs-admin-person"
         >
           <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
-            {tabsForPerson(person).map((t) => (
+            {(pressMode ? PRESS_PERSON_TABS : tabsForPerson(person)).map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
@@ -773,23 +997,42 @@ export function AdminPerson() {
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => setDeleteConfirmOpen(true)}
-            disabled={deletePerson.isPending}
-            aria-label="Delete person"
-            className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 flex-shrink-0"
-            data-testid="button-delete-person"
-          >
-            <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-              Delete
-            </span>
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {pressMode ? (
+            /* Task #2253 — a press can never system-delete a person; the only
+               destructive verb available is un-homing the artist from their
+               press, and that is Owner/Admin-only — read-only Staff don't see
+               it (the remove endpoint also 403s them). */
+            pressCanEdit ? (
+              <button
+                type="button"
+                onClick={() => setRemoveConfirmOpen(true)}
+                disabled={removeFromPress.isPending}
+                aria-label="Remove from press"
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 mb-1 rounded-md text-xs font-medium text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-800 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 flex-shrink-0"
+                data-testid="button-remove-from-press"
+              >
+                Remove from press
+              </button>
+            ) : null
+          ) : (
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={deletePerson.isPending}
+              aria-label="Delete person"
+              className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 flex-shrink-0"
+              data-testid="button-delete-person"
+            >
+              <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                Delete
+              </span>
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* TAB CONTENT */}
-        {tab === "dashboard" && (
+        {tab === "dashboard" && !pressMode && (
           <AdminPartnerDashboard
             scope="artist"
             scopeIdQs={person.id}
@@ -798,32 +1041,53 @@ export function AdminPerson() {
           />
         )}
         {tab === "overview" && (
-          person.shape === "contact"
-            ? <ContactOverviewPanel person={person} />
-            : <OverviewPanel person={person} labels={labels} managers={managers} />
+          pressMode ? (
+            <PressPersonOverview person={person} labelName={labelName} />
+          ) : person.shape === "contact" ? (
+            <ContactOverviewPanel person={person} />
+          ) : (
+            <OverviewPanel person={person} labels={labels} managers={managers} />
+          )
         )}
         {/* Task #1783 — who gets this artist's end-of-day sales report.
             Reuses the partner-notification recipient settings; the daily
             digest only goes to people set up here. */}
-        {tab === "overview" && person.shape !== "contact" && (
+        {tab === "overview" && !pressMode && person.shape !== "contact" && (
           <div className="mt-4">
             <NotificationsCard partnerKind="person" partnerId={person.id} partnerName={person.name} />
           </div>
         )}
-        {tab === "cover" && <ImageUploadPanel person={person} field="cover" />}
-        {tab === "members" && person.isGroup && <MembersPanel person={person} />}
-        {tab === "releases" && (
-          <ReleasesPanel person={person} allAlbums={allAlbums} />
+        {tab === "cover" && (
+          pressMode ? (
+            <PressPersonCover person={person} />
+          ) : (
+            <ImageUploadPanel person={person} field="cover" />
+          )
         )}
-        {tab === "streaming" && <DiscographyPanel person={person} />}
-        {tab === "gear" && (
+        {tab === "members" && !pressMode && person.isGroup && <MembersPanel person={person} />}
+        {tab === "releases" && (
+          <ReleasesPanel
+            person={person}
+            allAlbums={allAlbums}
+            pressMode={pressMode}
+            editableById={pressEditableById}
+          />
+        )}
+        {tab === "streaming" && (
+          pressMode ? (
+            <PressPersonStreaming person={person} />
+          ) : (
+            <DiscographyPanel person={person} />
+          )
+        )}
+        {tab === "gear" && !pressMode && (
           <PersonGearManager personId={person.id} personName={person.name} />
         )}
         {/* Task #616 — Read-only splits rail. Splits are owned by the
             album's Splits tab; this is just a rollup of "where does this
             person earn?" with deep-links back to the source album. */}
-        {tab === "splits" && <PersonSplitsRail personId={person.id} />}
-        {tab === "payouts" && (
+        {tab === "splits" && !pressMode && <PersonSplitsRail personId={person.id} />}
+        {tab === "payouts" && !pressMode && (
           <PayoutAccountPanel
             ownerKind="person"
             ownerId={person.id}
@@ -831,7 +1095,7 @@ export function AdminPerson() {
             ownerEmail={(person as any).email ?? null}
           />
         )}
-        {tab === "permissions" && (
+        {tab === "permissions" && !pressMode && (
           <>
             {/* Task #2071 / #2143 — the artist-scope framing (the "governs
                 AS AN ARTIST" note, the artist permission matrix, and the
@@ -908,6 +1172,51 @@ export function AdminPerson() {
               data-testid="button-delete-person-confirm"
             >
               {deletePerson.isPending ? "Deleting…" : "Delete person"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Task #2253 — press "Remove from press" confirm. Non-destructive to
+          the person record: it only un-homes the artist from this press
+          (clears default_press_id). Re-adding via the People tab re-links. */}
+      <Dialog
+        open={removeConfirmOpen}
+        onOpenChange={(v) => !removeFromPress.isPending && setRemoveConfirmOpen(v)}
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-remove-from-press"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+              Remove <span className="italic">{person.name}</span> from your press?
+            </DialogTitle>
+            <DialogDescription className="text-[13px] font-normal text-slate-500">
+              This un-links the artist from your press. Their profile,
+              credits, and releases stay on GoodTunes — you just won't see
+              them in your People list anymore. You can re-add them later
+              from the People tab.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-1">
+            <Button
+              type="button"
+              onClick={() => setRemoveConfirmOpen(false)}
+              disabled={removeFromPress.isPending}
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              data-testid="button-remove-from-press-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => removeFromPress.mutate()}
+              disabled={removeFromPress.isPending}
+              className="bg-slate-900 hover:bg-slate-800 text-white ml-2"
+              data-testid="button-remove-from-press-confirm"
+            >
+              {removeFromPress.isPending ? "Removing…" : "Remove from press"}
             </Button>
           </div>
         </DialogContent>
@@ -2304,9 +2613,15 @@ function ImageUploadPanel({
 function ReleasesPanel({
   person,
   allAlbums,
+  pressMode = false,
+  editableById,
 }: {
   person: PersonFull;
   allAlbums: PersonPreviewAlbum[];
+  // Task #2253 — in press mode the grid hides operator-only affordances
+  // (Buyers roster, Add Album) and locks any album homed to another press.
+  pressMode?: boolean;
+  editableById?: Record<string, boolean>;
 }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -2406,7 +2721,7 @@ function ReleasesPanel({
           <p className="text-slate-400 text-[11.5px]">{subline}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {releases.length > 0 && (
+          {!pressMode && releases.length > 0 && (
             <Link
               href={`/admin/people/${person.id}/buyers`}
               className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors inline-flex items-center gap-1.5 text-xs font-medium"
@@ -2446,20 +2761,23 @@ function ReleasesPanel({
           </button>
           {/* Task #447 — skip the "Who's the artist?" gate: we're already
               on the artist's page, so create the shell with their id
-              attached and jump straight into onboarding. */}
-          <button
-            type="button"
-            disabled={createAlbum.isPending}
-            onClick={() => {
-              if (createAlbum.isPending) return;
-              setTitleDialogOpen(true);
-            }}
-            className="px-2.5 h-8 rounded-md text-xs font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            data-testid="button-new-album-for-person"
-          >
-            <Plus className="w-3 h-3" />
-            Add Album
-          </button>
+              attached and jump straight into onboarding. Hidden in press
+              mode — a press doesn't mint GoodTunes release shells. */}
+          {!pressMode && (
+            <button
+              type="button"
+              disabled={createAlbum.isPending}
+              onClick={() => {
+                if (createAlbum.isPending) return;
+                setTitleDialogOpen(true);
+              }}
+              className="px-2.5 h-8 rounded-md text-xs font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="button-new-album-for-person"
+            >
+              <Plus className="w-3 h-3" />
+              Add Album
+            </button>
+          )}
         </div>
       </div>
       <div className="p-6">
@@ -2476,17 +2794,13 @@ function ReleasesPanel({
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {filtered.map((r) => (
-              <Link
-                key={r.id}
-                // Task #468 — carry the person id forward so the Album
-                // page's delete handler can land the operator back on
-                // this Person page on success (smart-back convention).
-                href={`/admin/albums/${r.id}?from=person&personId=${person.id}`}
-                className="text-left group"
-                data-testid={`release-row-${r.id}`}
-              >
-                <div className="aspect-square rounded-lg overflow-hidden bg-slate-100 ring-1 ring-slate-200 group-hover:ring-slate-300 transition-shadow">
+            {filtered.map((r) => {
+              // Task #2253 — in press mode, only albums homed to THIS press
+              // are editable. Other-press albums are shown but locked: a
+              // greyed, non-clickable tile with a lock badge + tooltip.
+              const editable = editableById ? !!editableById[r.id] : true;
+              const cover = (
+                <div className="aspect-square rounded-lg overflow-hidden bg-slate-100 ring-1 ring-slate-200 group-hover:ring-slate-300 transition-shadow relative">
                   {r.artwork ? (
                     <img
                       src={r.artwork}
@@ -2498,23 +2812,59 @@ function ReleasesPanel({
                       <ImageIcon className="w-6 h-6" />
                     </div>
                   )}
-                </div>
-                <div className="mt-2 flex items-center gap-1.5">
-                  <div className="text-slate-900 text-[12.5px] font-semibold truncate flex-1">
-                    {r.title}
-                  </div>
-                  {r.isHidden && (
-                    <span className="text-[9.5px] uppercase tracking-wider text-slate-400 font-semibold flex-shrink-0">
-                      Hidden
+                  {!editable && (
+                    <span className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-white/90 ring-1 ring-slate-200 text-slate-500 shadow-sm">
+                      <Lock className="w-3 h-3" />
                     </span>
                   )}
                 </div>
-                <div className="text-slate-400 text-[11px] truncate">
-                  {r.type}
-                  {r.year ? ` \u00B7 ${r.year}` : ""}
-                </div>
-              </Link>
-            ))}
+              );
+              const meta = (
+                <>
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <div className="text-slate-900 text-[12.5px] font-semibold truncate flex-1">
+                      {r.title}
+                    </div>
+                    {r.isHidden && (
+                      <span className="text-[9.5px] uppercase tracking-wider text-slate-400 font-semibold flex-shrink-0">
+                        Hidden
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-slate-400 text-[11px] truncate">
+                    {r.type}
+                    {r.year ? ` \u00B7 ${r.year}` : ""}
+                  </div>
+                </>
+              );
+              if (!editable) {
+                return (
+                  <div
+                    key={r.id}
+                    className="text-left opacity-60 cursor-not-allowed select-none"
+                    title="This album is associated with another Press"
+                    data-testid={`release-row-locked-${r.id}`}
+                  >
+                    {cover}
+                    {meta}
+                  </div>
+                );
+              }
+              return (
+                <Link
+                  key={r.id}
+                  // Task #468 — carry the person id forward so the Album
+                  // page's delete handler can land the operator back on
+                  // this Person page on success (smart-back convention).
+                  href={`/admin/albums/${r.id}?from=person&personId=${person.id}`}
+                  className="text-left group"
+                  data-testid={`release-row-${r.id}`}
+                >
+                  {cover}
+                  {meta}
+                </Link>
+              );
+            })}
           </div>
         )}
       </div>

@@ -341,7 +341,7 @@ function visibleTabsFor(
     isPrepping?: boolean;
     isSpinPromo?: boolean;
   },
-  opts?: { hidePress?: boolean },
+  opts?: { hidePress?: boolean; hideCustomers?: boolean },
 ): { key: Tab; label: string }[] {
   // SPIN Promo albums are digital-only legacy releases. The Package /
   // Physical / Shopify manufacturing surfaces are irrelevant and are
@@ -382,7 +382,7 @@ function visibleTabsFor(
   // operator-only (hidden for artist/label partners via `hidePress`) and reads
   // last in the bar, right after Customers.
   const withCustomers = (tabs: { key: Tab; label: string }[]) =>
-    opts?.hidePress
+    opts?.hidePress || opts?.hideCustomers
       ? tabs
       : [
           ...tabs,
@@ -446,6 +446,13 @@ export function AdminAlbum() {
   });
   const isArtist = adminRoleInfo?.role === "artist";
   const isLabel = adminRoleInfo?.role === "label";
+  // Task #2253 — a press partner (role==='manufacturer') opening an album
+  // homed to their press keeps the Physical/manufacturing surface (that's
+  // their job) but loses the fan-facing Customers + Early-access tabs and the
+  // play-analytics dashboard cards. Presses only reach their OWN albums via
+  // the Releases grid (other-press rows are locked), so role alone is a safe
+  // signal here.
+  const isPress = adminRoleInfo?.role === "manufacturer";
   // Hide the Physical/press section (pressing plant + master preflight) for
   // artist and label partners for now — manufacturing stays with operators.
   const hidePressSection = isArtist || isLabel;
@@ -986,9 +993,9 @@ export function AdminAlbum() {
   // avoid TDZ on `album` in the dependency array.
   useEffect(() => {
     if (!album) return;
-    const allowed = visibleTabsFor(album, { hidePress: hidePressSection }).map((t) => t.key);
+    const allowed = visibleTabsFor(album, { hidePress: hidePressSection, hideCustomers: isPress }).map((t) => t.key);
     if (!allowed.includes(tab)) setTab("dashboard");
-  }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, album?.isSpinPromo, tab, album, hidePressSection]);
+  }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, album?.isSpinPromo, tab, album, hidePressSection, isPress]);
 
   // Task #674 — Mirror the active tab into the URL (`?tab=`) so a refresh
   // reopens the same tab. Uses `replace` so repeated tab clicks don't
@@ -1276,7 +1283,7 @@ export function AdminAlbum() {
           data-testid="tabs-admin-album"
         >
           <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
-            {visibleTabsFor(album, { hidePress: hidePressSection }).map((t) => {
+            {visibleTabsFor(album, { hidePress: hidePressSection, hideCustomers: isPress }).map((t) => {
               const status = (completeness as any)?.[t.key] as
                 | SectionStatus
                 | undefined;
@@ -1505,12 +1512,12 @@ export function AdminAlbum() {
             `tab` back to "sell" whenever the current tab leaves the
             allowed set. */}
         {(() => {
-          const allowed = new Set(visibleTabsFor(album, { hidePress: hidePressSection }).map((t) => t.key));
+          const allowed = new Set(visibleTabsFor(album, { hidePress: hidePressSection, hideCustomers: isPress }).map((t) => t.key));
           const safeTab: Tab = allowed.has(tab) ? tab : "dashboard";
           return (
             <>
               {safeTab === "dashboard" && allowed.has("dashboard") && (
-                <AlbumDashboardPanel albumId={album.id} />
+                <AlbumDashboardPanel albumId={album.id} pressMode={isPress} />
               )}
               {safeTab === "overview" && allowed.has("overview") && (
                 <OverviewPanel album={album} />

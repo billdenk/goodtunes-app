@@ -27,6 +27,7 @@ import {
   pressColorTiers,
 } from "@shared/schema";
 import { evaluateEarlyCut, syncEarlyCutQueue, resolveAlbumPressTier } from "./earlyCut";
+import { hasArtistShape } from "./lib/personArtistShape";
 
 // Pipeline stage IDs the Pipeline tab renders columns for. Derived in
 // `deriveStage` below — never persisted on the album row.
@@ -875,6 +876,252 @@ export function registerPressPortalRoutes(
       invited: (invited as any).rows ?? [],
       accepted: (accepted as any).rows ?? [],
     });
+  });
+
+  // ─── Task #2253 — Press-scoped People ─────────────────────────────
+  // Press partners are blocked from /api/admin/people/* by the global
+  // deny guard, so the People tab + the scoped Person page read through
+  // these endpoints instead (requireAdmin + requirePressScope keeps the
+  // cross-press wall intact). A person is "in scope" for a press when
+  // they're homed to it (people.default_press_id = :id) OR they're the
+  // primary artist on an album awarded to it (pressing_order_requests
+  // package snapshot pressId = :id).
+  const sqlPersonInPressScope = (pressId: string, personId: string): SQL => sql`
+    (
+      EXISTS (SELECT 1 FROM people pp WHERE pp.id = ${personId}
+                AND pp.deleted_at IS NULL AND pp.default_press_id = ${pressId})
+      OR EXISTS (
+        SELECT 1 FROM albums a
+        JOIN pressing_order_requests por ON por.album_id = a.id
+          AND por.status <> 'cancelled'
+          AND por.package_snapshot ->> 'pressId' = ${pressId}
+        WHERE a.deleted_at IS NULL AND a.primary_artist_id = ${personId}
+      )
+    )
+  `;
+
+  // GET /api/press/:id/people — the press's artist roster, shaped for
+  // the AdminPeople grid/list (PersonLite + derivedRoles + affiliation).
+  app.get("/api/press/:id/people", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const press = await storage.getManufacturerById(pressId);
+    const rows = await db.execute<any>(sql`
+      SELECT p.id, p.name, p.photo_url AS "photoUrl", p.bio,
+             p.label_id AS "labelId", p.itunes_artist_id AS "itunesArtistId",
+             p.spotify_url AS "spotifyUrl", p.roles, p.is_group AS "isGroup",
+             p.is_artist_promoted AS "isArtistPromoted",
+             COALESCE((
+               SELECT array_agg(DISTINCT z.r) FROM (
+                 SELECT role AS r FROM track_writers    WHERE person_id = p.id AND role IS NOT NULL AND role <> ''
+                 UNION SELECT role FROM track_performers WHERE person_id = p.id AND role IS NOT NULL AND role <> ''
+                 UNION SELECT role FROM album_credits    WHERE person_id = p.id AND role IS NOT NULL AND role <> ''
+               ) z
+             ), ARRAY[]::text[]) AS "derivedRoles",
+             (EXISTS (SELECT 1 FROM albums a2 WHERE a2.primary_artist_id = p.id AND a2.deleted_at IS NULL)
+              OR EXISTS (SELECT 1 FROM person_discography pd WHERE pd.person_id = p.id)
+              OR EXISTS (SELECT 1 FROM users u WHERE u.role = 'artist' AND u.role_scope_id = p.id)) AS "isArtistShape"
+      FROM people p
+      WHERE p.deleted_at IS NULL
+        AND (
+          p.default_press_id = ${pressId}
+          OR EXISTS (
+            SELECT 1 FROM albums a
+            JOIN pressing_order_requests por ON por.album_id = a.id
+              AND por.status <> 'cancelled'
+              AND por.package_snapshot ->> 'pressId' = ${pressId}
+            WHERE a.deleted_at IS NULL AND a.primary_artist_id = p.id
+          )
+        )
+      ORDER BY p.name ASC
+    `);
+    const affiliation = press
+      ? { entityKind: "manufacturer", entityId: pressId, name: press.name }
+      : null;
+    const out = (((rows as any).rows ?? []) as any[]).map((p) => {
+      const storedRoles: string[] = Array.isArray(p.roles) ? p.roles : [];
+      const derived: string[] = Array.isArray(p.derivedRoles) ? p.derivedRoles.slice() : [];
+      const isArtist = hasArtistShape({
+        isArtistPromoted: !!p.isArtistPromoted,
+        isGroup: !!p.isGroup,
+        manualRoles: storedRoles,
+        hasDerivedCredit: derived.length > 0,
+        hasArtistCatalogSignal: !!p.isArtistShape,
+      });
+      if (isArtist && !derived.some((r) => r.toLowerCase() === "artist")) derived.unshift("Artist");
+      return {
+        id: p.id,
+        name: p.name,
+        photoUrl: p.photoUrl ?? null,
+        bio: p.bio ?? null,
+        labelId: p.labelId ?? null,
+        itunesArtistId: p.itunesArtistId ?? null,
+        spotifyUrl: p.spotifyUrl ?? null,
+        spotifyHasMatch: null,
+        affiliation,
+        roles: storedRoles,
+        derivedRoles: derived,
+      };
+    });
+    res.json(out);
+  });
+
+  // GET /api/press/:id/people/:personId — PersonFull-shaped detail for
+  // the scoped Person page. 404 when out of scope. Cross-press / PII
+  // fields (shippingAddress, another press's invite stamp) are stripped.
+  app.get("/api/press/:id/people/:personId", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const personId = String(req.params.personId);
+    const scope = await db.execute<{ ok: boolean }>(
+      sql`SELECT ${sqlPersonInPressScope(pressId, personId)} AS ok`,
+    );
+    if (!((scope as any).rows?.[0]?.ok)) return res.status(404).json({ message: "Person not found" });
+    const p: any = await storage.getPersonById(personId);
+    if (!p) return res.status(404).json({ message: "Person not found" });
+    // Derived credit roles + artist shape (mirror /api/admin/people/:id).
+    const derived: string[] = [];
+    let isArtistSignal = false;
+    try {
+      const cr = await db.execute<{ role: string }>(sql`
+        SELECT DISTINCT role FROM (
+          SELECT role FROM track_writers    WHERE person_id = ${personId} AND role IS NOT NULL AND role <> ''
+          UNION SELECT role FROM track_performers WHERE person_id = ${personId} AND role IS NOT NULL AND role <> ''
+          UNION SELECT role FROM album_credits    WHERE person_id = ${personId} AND role IS NOT NULL AND role <> ''
+        ) r ORDER BY role ASC
+      `);
+      for (const r of ((cr as any).rows ?? [])) if (r.role) derived.push(String(r.role));
+      const sig = await db.execute<{ ok: boolean }>(sql`
+        SELECT (EXISTS (SELECT 1 FROM albums WHERE primary_artist_id = ${personId} AND deleted_at IS NULL)
+                OR EXISTS (SELECT 1 FROM person_discography WHERE person_id = ${personId})
+                OR EXISTS (SELECT 1 FROM users WHERE role = 'artist' AND role_scope_id = ${personId})) AS ok
+      `);
+      isArtistSignal = !!((sig as any).rows?.[0]?.ok);
+    } catch (e: any) {
+      console.warn(`[press:${pressId} person:${personId}] derived roles lookup failed: ${e?.message}`);
+    }
+    const storedRoles: string[] = Array.isArray(p.roles) ? p.roles : [];
+    const isArtist = hasArtistShape({
+      isArtistPromoted: !!p.isArtistPromoted,
+      isGroup: !!p.isGroup,
+      manualRoles: storedRoles,
+      hasDerivedCredit: derived.length > 0,
+      hasArtistCatalogSignal: isArtistSignal,
+    });
+    if (isArtist && !derived.some((r) => r.toLowerCase() === "artist")) derived.unshift("Artist");
+    res.json({
+      id: p.id,
+      name: p.name,
+      photoUrl: p.photoUrl ?? null,
+      coverUrl: p.coverUrl ?? null,
+      photoLocked: !!p.photoLocked,
+      coverLocked: !!p.coverLocked,
+      bio: p.bio ?? null,
+      labelId: p.labelId ?? null,
+      managerId: p.managerId ?? null,
+      appleMusicUrl: p.appleMusicUrl ?? null,
+      spotifyUrl: p.spotifyUrl ?? null,
+      tidalUrl: p.tidalUrl ?? null,
+      qobuzUrl: p.qobuzUrl ?? null,
+      deezerUrl: p.deezerUrl ?? null,
+      pandoraUrl: p.pandoraUrl ?? null,
+      itunesArtistId: p.itunesArtistId ?? null,
+      instagramUrl: p.instagramUrl ?? null,
+      tiktokUrl: p.tiktokUrl ?? null,
+      twitterUrl: p.twitterUrl ?? null,
+      blueskyUrl: p.blueskyUrl ?? null,
+      facebookUrl: p.facebookUrl ?? null,
+      websiteUrl: p.websiteUrl ?? null,
+      isGroup: !!p.isGroup,
+      groupKind: p.groupKind ?? null,
+      // Cross-press / PII stripped: never expose the mailing address or
+      // another press's invite stamp to a press partner.
+      shippingAddress: null,
+      shippingAddressStruct: null,
+      invitedByPressId: p.invitedByPressId === pressId ? pressId : null,
+      artistShareSlug: p.artistShareSlug ?? null,
+      shape: isArtist ? "artist" : "contact",
+      isArtistPromoted: !!p.isArtistPromoted,
+      roles: storedRoles,
+      derivedRoles: derived,
+    });
+  });
+
+  // GET /api/press/:id/people/:personId/albums — the artist's GoodTunes
+  // releases, each flagged editableByThisPress. Albums homed to another
+  // press come back too (so the Releases grid can grey + lock them).
+  app.get("/api/press/:id/people/:personId/albums", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const personId = String(req.params.personId);
+    const scope = await db.execute<{ ok: boolean }>(
+      sql`SELECT ${sqlPersonInPressScope(pressId, personId)} AS ok`,
+    );
+    if (!((scope as any).rows?.[0]?.ok)) return res.status(404).json({ message: "Person not found" });
+    const p: any = await storage.getPersonById(personId);
+    const needle = String(p?.name ?? "").trim().toLowerCase();
+    const rows = await db.execute<any>(sql`
+      SELECT a.id, a.title, a.artist, a.artwork, a.year,
+             a.physical_format AS type,
+             a.primary_artist_id AS "primaryArtistId",
+             a.is_hidden AS "isHidden",
+             a.is_goodtunes_release AS "isGoodTunesRelease",
+             EXISTS (
+               SELECT 1 FROM pressing_order_requests por
+               WHERE por.album_id = a.id AND por.status <> 'cancelled'
+                 AND por.package_snapshot ->> 'pressId' = ${pressId}
+             ) AS "editableByThisPress"
+      FROM albums a
+      WHERE a.deleted_at IS NULL
+        AND a.is_goodtunes_release = true
+        AND (a.primary_artist_id = ${personId}
+             OR (${needle} <> '' AND LOWER(TRIM(COALESCE(a.artist, ''))) = ${needle}))
+      ORDER BY a.year DESC NULLS LAST
+    `);
+    res.json(
+      (((rows as any).rows ?? []) as any[]).map((a) => ({
+        id: a.id,
+        title: a.title,
+        artist: a.artist ?? null,
+        artwork: a.artwork ?? null,
+        year: a.year ?? null,
+        type: a.type ?? "LP",
+        primaryArtistId: a.primaryArtistId ?? null,
+        isHidden: !!a.isHidden,
+        isGoodTunesRelease: !!a.isGoodTunesRelease,
+        editableByThisPress: !!a.editableByThisPress,
+      })),
+    );
+  });
+
+  // POST /api/press/:id/people/:personId/remove — un-home the artist
+  // from THIS press. The person record persists (re-adding via Add /
+  // search re-links); only default_press_id is cleared (and the invite
+  // stamp if it pointed here). History is recorded for the grey-out
+  // "switched away" window. A press can NEVER system-delete a person.
+  app.post("/api/press/:id/people/:personId/remove", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const personId = String(req.params.personId);
+    const scope = await db.execute<{ ok: boolean }>(
+      sql`SELECT ${sqlPersonInPressScope(pressId, personId)} AS ok`,
+    );
+    if (!((scope as any).rows?.[0]?.ok)) return res.status(404).json({ message: "Person not found" });
+    const upd = await db.execute<{ id: string }>(sql`
+      UPDATE people
+         SET default_press_id = NULL,
+             invited_by_press_id = CASE WHEN invited_by_press_id = ${pressId}
+                                        THEN NULL ELSE invited_by_press_id END
+       WHERE id = ${personId} AND default_press_id = ${pressId}
+       RETURNING id
+    `);
+    const unhomed = (((upd as any).rows ?? []) as any[]).length > 0;
+    if (unhomed) {
+      await db.insert(pressSwitchHistory).values({
+        customerKind: "artist",
+        customerId: personId,
+        fromPressId: pressId,
+        toPressId: null,
+        reason: "removed_by_press",
+      });
+    }
+    res.json({ ok: true, unhomed });
   });
 
   // POST /api/press/:id/invite — thin wrapper that delegates into the

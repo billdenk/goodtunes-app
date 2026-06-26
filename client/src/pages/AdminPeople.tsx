@@ -30,7 +30,7 @@ import { AddEntityButton } from "@/components/admin/AddEntityButton";
  *   2. "Add manually" → just a name field. The Person opens with empty
  *      tabs and the admin fills in Photo / Streaming / Discography there.
  */
-interface PersonLite {
+export interface PersonLite {
   id: string;
   name: string;
   photoUrl: string | null;
@@ -403,7 +403,7 @@ export function AdminPeople() {
  * Lives in AdminPeople.tsx for now; promote to client/src/components/admin/
  * if a second surface needs the same vocabulary.
  */
-function StreamingBadge({
+export function StreamingBadge({
   person,
   size,
 }: {
@@ -443,7 +443,7 @@ function StreamingBadge({
   );
 }
 
-function PersonCard({
+export function PersonCard({
   person,
   labelName,
   onOpen,
@@ -495,7 +495,7 @@ function PersonCard({
   );
 }
 
-function PersonRow({
+export function PersonRow({
   person,
   labelName,
   onOpen,
@@ -552,7 +552,7 @@ function PersonRow({
  * unioned with read-only `derivedRoles` (inferred from real track/album
  * credits), case-insensitively de-duped, headline credits floated first.
  */
-function creditTags(person: PersonLite): string[] {
+export function creditTags(person: PersonLite): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const r of [...(person.roles ?? []), ...(person.derivedRoles ?? [])]) {
@@ -588,7 +588,7 @@ function creditTags(person: PersonLite): string[] {
  *
  * Quiet slate pills, consistent with RolePicker's read-only "From credits".
  */
-function CreditBadges({
+export function CreditBadges({
   credits,
   personId,
   align = "start",
@@ -728,7 +728,7 @@ function CreditBadges({
  * the People list by one or more creative credits. "All" clears the
  * filter; selected chips read in brand blue. Selection lives in the URL.
  */
-function CreditFilterRail({
+export function CreditFilterRail({
   credits,
   selected,
   onToggle,
@@ -778,7 +778,7 @@ function CreditFilterRail({
   );
 }
 
-function EmptyState({ searching }: { searching: boolean }) {
+export function EmptyState({ searching }: { searching: boolean }) {
   return (
     <div
       className="py-16 flex flex-col items-center justify-center text-center"
@@ -800,7 +800,7 @@ function EmptyState({ searching }: { searching: boolean }) {
 }
 
 
-function initialFor(name: string): string {
+export function initialFor(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return "?";
   return trimmed.charAt(0).toUpperCase();
