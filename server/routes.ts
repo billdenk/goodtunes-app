@@ -21539,6 +21539,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const sessionId = e.sessionId ? String(e.sessionId) : null;
         const platform = e.platform ? String(e.platform) : null;
         const referrer = e.referrer ? String(e.referrer) : null;
+        // Campaign attribution — client-set, first-touch per session. Cap
+        // each at 256 chars defensively (the client already trims). These
+        // are campaign tags, not user identifiers, so no extra PII gate is
+        // needed beyond keeping them out of the indexable top-level columns.
+        const attr = (k: string): string | null => {
+          const v = e[k];
+          return v != null && String(v).trim() ? String(v).trim().slice(0, 256) : null;
+        };
+        const utmSource = attr("utmSource");
+        const utmMedium = attr("utmMedium");
+        const utmCampaign = attr("utmCampaign");
+        const utmContent = attr("utmContent");
+        const utmTerm = attr("utmTerm");
+        const gclid = attr("gclid");
+        const fbclid = attr("fbclid");
+        const referrerHost = attr("referrerHost");
         const payload = e.payload && typeof e.payload === "object" ? e.payload : {};
         // Mirror the envelope fields into the persisted payload so the
         // analytics_events table is self-contained (one row → one event
@@ -21552,6 +21568,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           _referrer: referrer,
           _country: geo.country,
           _region: geo.region,
+          // Campaign attribution mirrored into the payload jsonb so a single
+          // analytics_events query can GROUP BY source without joins. Only
+          // written when present so events stay compact.
+          ...(utmSource ? { _utm_source: utmSource } : {}),
+          ...(utmMedium ? { _utm_medium: utmMedium } : {}),
+          ...(utmCampaign ? { _utm_campaign: utmCampaign } : {}),
+          ...(utmContent ? { _utm_content: utmContent } : {}),
+          ...(utmTerm ? { _utm_term: utmTerm } : {}),
+          ...(gclid ? { _gclid: gclid } : {}),
+          ...(fbclid ? { _fbclid: fbclid } : {}),
+          ...(referrerHost ? { _referrer_host: referrerHost } : {}),
         };
         return {
           clientId: e.id ? String(e.id) : undefined,

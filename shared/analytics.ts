@@ -18,6 +18,25 @@ export type AnalyticsEnvelope = {
   userId?: string | null;
   platform?: AnalyticsPlatform;
   referrer?: string | null;
+  // ─── Campaign attribution (first-touch, set by the client) ──────────
+  // Captured once on the first page load of a session that carries any
+  // of these in the URL, then persisted for the rest of the session so
+  // every subsequent event is attributed to the same campaign (in-session
+  // navigation strips the query params, so first-touch must win). These
+  // are the standard UTM params plus the Google/Facebook click ids and a
+  // pre-parsed referrer host. No new PII — these are campaign tags, not
+  // user identifiers.
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+  utmContent?: string | null;
+  utmTerm?: string | null;
+  gclid?: string | null;
+  fbclid?: string | null;
+  // Host portion of `document.referrer` (e.g. "instagram.com"). Email and
+  // social apps usually strip the full referrer, but when present this is
+  // the attribution fallback when no utm_source is set.
+  referrerHost?: string | null;
   // Filled in server-side from the request (IP-derived). The client never
   // sets these — they're authoritative from the ingest endpoint.
   country?: string | null;

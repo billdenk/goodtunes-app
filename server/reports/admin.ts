@@ -745,6 +745,193 @@ export async function rawEvents(ctx: AdminReportContext, opts: { name?: string; 
   return { rows, limit };
 }
 
+// ─── Release acquisition funnel (Task #2127) ───────────────────────────
+// Compute a PostHog-independent, release-scoped acquisition funnel from
+// our own analytics_events table:
+//
+//   landed (album_viewed) → viewed offer (bundle_viewed)
+//     → started checkout (checkout_started) → completed (checkout_completed)
+//
+// We count DISTINCT sessions reaching each step, treated as a strict
+// funnel — a session only counts at step N if it also reached every prior
+// step. Step-to-step conversion is computed from those subset counts.
+//
+// `groupBy: "source"` breaks the same funnel down by acquisition source,
+// derived first-touch from the campaign params mirrored into the payload
+// (`_utm_source`/`_utm_campaign`), falling back to the referrer host
+// (`_referrer_host`), then "direct". The client persists first-touch UTMs
+// for the whole session, so every event in a session carries the same
+// source — we just read the first non-empty one.
+
+const FUNNEL_EVENT_NAMES = [
+  "album_viewed",
+  "bundle_viewed",
+  "checkout_started",
+  "checkout_completed",
+] as const;
+
+const FUNNEL_STEPS: { key: string; label: string; event: (typeof FUNNEL_EVENT_NAMES)[number] }[] = [
+  { key: "landed", label: "Landed on the release", event: "album_viewed" },
+  { key: "viewed_offer", label: "Viewed the offer", event: "bundle_viewed" },
+  { key: "started_checkout", label: "Started checkout", event: "checkout_started" },
+  { key: "completed", label: "Completed purchase", event: "checkout_completed" },
+];
+
+type SourceBucket = { key: string; label: string };
+
+function deriveSource(p: Record<string, any>): SourceBucket {
+  const utmSource = typeof p._utm_source === "string" ? p._utm_source.trim() : "";
+  const utmCampaign = typeof p._utm_campaign === "string" ? p._utm_campaign.trim() : "";
+  if (utmSource) {
+    return {
+      key: `utm:${utmSource.toLowerCase()}|${utmCampaign.toLowerCase()}`,
+      label: utmCampaign ? `${utmSource} · ${utmCampaign}` : utmSource,
+    };
+  }
+  const refHost = typeof p._referrer_host === "string" ? p._referrer_host.trim() : "";
+  if (refHost) return { key: `ref:${refHost.toLowerCase()}`, label: refHost };
+  return { key: "direct", label: "Direct / unknown" };
+}
+
+// Releases that have ANY funnel event ever — powers the Reports release
+// picker. Not date-bounded so the picker stays stable as the operator
+// changes the window. Sorted by landing volume so the busiest releases
+// surface first. `proving-ground` releases with zero traffic won't appear
+// here — that's honest (nothing to show yet).
+export async function funnelReleases() {
+  const rows = await db.execute<{ album_id: string; landed: string }>(sql`
+    SELECT payload->>'albumId' AS album_id,
+           COUNT(DISTINCT COALESCE(session_id, user_id, id)) AS landed
+      FROM analytics_events
+     WHERE name = 'album_viewed'
+       AND payload->>'albumId' IS NOT NULL
+     GROUP BY 1
+     ORDER BY landed DESC
+     LIMIT 200
+  `);
+  const ids = (rows.rows as any[]).map((r) => r.album_id).filter(Boolean);
+  if (ids.length === 0) return { releases: [] as { albumId: string; title: string; artist: string; landed: number }[] };
+  const albumRows = await db
+    .select({ id: albums.id, title: albums.title, artist: albums.artist })
+    .from(albums)
+    .where(inArray(albums.id, ids));
+  const byId = new Map(albumRows.map((a) => [a.id, a]));
+  const landedById = new Map((rows.rows as any[]).map((r) => [r.album_id, safeNum(r.landed)]));
+  const releases = ids
+    .filter((id) => byId.has(id))
+    .map((id) => ({
+      albumId: id,
+      title: byId.get(id)!.title,
+      artist: byId.get(id)!.artist,
+      landed: landedById.get(id) ?? 0,
+    }))
+    .sort((a, b) => b.landed - a.landed);
+  return { releases };
+}
+
+export async function acquisitionFunnel(
+  ctx: AdminReportContext,
+  opts: { albumId: string; groupBy?: "source" | null },
+) {
+  const albumId = String(opts.albumId || "");
+  if (!albumId) {
+    return { album: null, steps: [], overallConversion: 0, bySource: [] };
+  }
+
+  const albumRow = (
+    await db.select({ id: albums.id, title: albums.title, artist: albums.artist }).from(albums).where(eq(albums.id, albumId)).limit(1)
+  )[0];
+
+  const rows = await db
+    .select({
+      name: analyticsEvents.name,
+      payload: analyticsEvents.payload,
+      sessionId: analyticsEvents.sessionId,
+      userId: analyticsEvents.userId,
+      eventId: analyticsEvents.id,
+    })
+    .from(analyticsEvents)
+    .where(and(
+      inArray(analyticsEvents.name, FUNNEL_EVENT_NAMES as unknown as string[]),
+      gte(analyticsEvents.ts, ctx.from),
+      lte(analyticsEvents.ts, ctx.to),
+      // Bound row volume DB-side — a wide date range across all releases would
+      // otherwise load every funnel event into memory just to discard most of
+      // them. The defensive in-JS `p.albumId !== albumId` check stays as a
+      // belt-and-suspenders guard.
+      sql`${analyticsEvents.payload}->>'albumId' = ${albumId}`,
+    ));
+
+  // Per session: which funnel events it hit (for THIS album) + its source.
+  type Sess = { hit: Set<string>; source: SourceBucket };
+  const sessions = new Map<string, Sess>();
+  for (const r of rows) {
+    const p = (r.payload as any) ?? {};
+    if (p.albumId !== albumId) continue;
+    const identity = r.sessionId ?? r.userId ?? r.eventId;
+    let s = sessions.get(identity);
+    if (!s) {
+      s = { hit: new Set(), source: deriveSource(p) };
+      sessions.set(identity, s);
+    } else if (s.source.key === "direct") {
+      // First-touch should be consistent, but if an earlier event landed
+      // before attribution was captured, prefer a real source when one of
+      // this session's events carries it.
+      const cand = deriveSource(p);
+      if (cand.key !== "direct") s.source = cand;
+    }
+    s.hit.add(r.name);
+  }
+
+  // Strict funnel: a session counts at step N only if it reached every
+  // prior step. Aggregate overall + per-source in one pass.
+  const overall = [0, 0, 0, 0];
+  const sourceAgg = new Map<string, { label: string; counts: number[] }>();
+  for (const s of Array.from(sessions.values())) {
+    let depth = 0;
+    for (let i = 0; i < FUNNEL_STEPS.length; i++) {
+      if (s.hit.has(FUNNEL_STEPS[i].event)) depth = i + 1;
+      else break;
+    }
+    if (depth === 0) continue;
+    for (let i = 0; i < depth; i++) overall[i] += 1;
+    const bucket = sourceAgg.get(s.source.key) ?? { label: s.source.label, counts: [0, 0, 0, 0] };
+    for (let i = 0; i < depth; i++) bucket.counts[i] += 1;
+    sourceAgg.set(s.source.key, bucket);
+  }
+
+  const steps = FUNNEL_STEPS.map((st, i) => ({
+    key: st.key,
+    label: st.label,
+    sessions: overall[i],
+    // Conversion from the previous step (step 0 has no prior → 1).
+    stepConversion: i === 0 ? 1 : overall[i - 1] ? overall[i] / overall[i - 1] : 0,
+  }));
+  const overallConversion = overall[0] ? overall[3] / overall[0] : 0;
+
+  const bySource =
+    opts.groupBy === "source"
+      ? Array.from(sourceAgg.entries())
+          .map(([key, v]) => ({
+            key,
+            source: v.label,
+            landed: v.counts[0],
+            viewedOffer: v.counts[1],
+            startedCheckout: v.counts[2],
+            completed: v.counts[3],
+            conversion: v.counts[0] ? v.counts[3] / v.counts[0] : 0,
+          }))
+          .sort((a, b) => b.landed - a.landed)
+      : [];
+
+  return {
+    album: albumRow ? { id: albumRow.id, title: albumRow.title, artist: albumRow.artist } : { id: albumId, title: "Unknown release", artist: "" },
+    steps,
+    overallConversion,
+    bySource,
+  };
+}
+
 // ─── PostHog embeds — surface configured iframe URLs ───────────────────
 export function posthogEmbeds() {
   return {

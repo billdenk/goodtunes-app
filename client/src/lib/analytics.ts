@@ -60,6 +60,81 @@ function detectPlatform(): AnalyticsPlatform | undefined {
 const sessionId = uuid();
 const deviceId = readDeviceId();
 let currentUserId: string | null = null;
+
+// ─── Campaign attribution (first-touch) ─────────────────────────────────
+// On the first page load that carries any campaign params in the URL, we
+// snapshot them and persist for the rest of the session. In-session
+// navigation strips the query string, so first-touch must win — once a
+// session is attributed we never overwrite it. Persisted to sessionStorage
+// (not localStorage) so it scopes to this tab/session, matching the
+// in-memory `sessionId`.
+type Attribution = {
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  utmContent: string | null;
+  utmTerm: string | null;
+  gclid: string | null;
+  fbclid: string | null;
+  referrerHost: string | null;
+};
+const ATTRIBUTION_KEY = "gt:attribution";
+let attribution: Attribution | null = null;
+
+function referrerHost(): string | null {
+  try {
+    if (typeof document === "undefined" || !document.referrer) return null;
+    const host = new URL(document.referrer).hostname || null;
+    // Drop our own host — a same-site referrer isn't an acquisition source.
+    if (host && typeof window !== "undefined" && host === window.location.hostname) return null;
+    return host;
+  } catch {
+    return null;
+  }
+}
+
+function captureAttribution() {
+  if (typeof window === "undefined") return;
+  // First-touch already persisted? Keep it — never overwrite.
+  if (attribution) return;
+  try {
+    const saved = sessionStorage.getItem(ATTRIBUTION_KEY);
+    if (saved) {
+      attribution = JSON.parse(saved) as Attribution;
+      return;
+    }
+  } catch {}
+  let params: URLSearchParams;
+  try {
+    params = new URLSearchParams(window.location.search);
+  } catch {
+    return;
+  }
+  const get = (k: string) => {
+    const v = params.get(k);
+    return v && v.trim() ? v.trim().slice(0, 256) : null;
+  };
+  const next: Attribution = {
+    utmSource: get("utm_source"),
+    utmMedium: get("utm_medium"),
+    utmCampaign: get("utm_campaign"),
+    utmContent: get("utm_content"),
+    utmTerm: get("utm_term"),
+    gclid: get("gclid"),
+    fbclid: get("fbclid"),
+    referrerHost: referrerHost(),
+  };
+  // Only persist if we actually learned something — otherwise leave the
+  // session unattributed so a later inbound link (rare, but possible on a
+  // long-lived tab) can still set first-touch.
+  const hasAny = Object.entries(next).some(([, v]) => v !== null);
+  if (!hasAny) return;
+  attribution = next;
+  try {
+    sessionStorage.setItem(ATTRIBUTION_KEY, JSON.stringify(next));
+  } catch {}
+}
+
 let queue: AnalyticsEvent[] = [];
 let recent: AnalyticsEvent[] = [];
 let initialized = false;
@@ -138,6 +213,7 @@ async function flush(useBeacon = false): Promise<void> {
 function ensureInit() {
   if (initialized || typeof window === "undefined") return;
   initialized = true;
+  captureAttribution();
   loadFromStorage();
   setInterval(() => { void flush(); }, FLUSH_INTERVAL_MS);
   window.addEventListener("pagehide", () => { void flush(true); });
@@ -147,12 +223,24 @@ function ensureInit() {
 }
 
 function buildEnvelope(): AnalyticsEnvelope {
+  // Cheap safety net: if the very first tracked event somehow fires before
+  // ensureInit ran (it shouldn't — track() calls ensureInit first), still
+  // attempt first-touch capture so we never miss the landing event's UTMs.
+  if (!attribution) captureAttribution();
   return {
     deviceId,
     sessionId,
     userId: currentUserId,
     platform: detectPlatform(),
     referrer: typeof document !== "undefined" ? document.referrer || null : null,
+    utmSource: attribution?.utmSource ?? null,
+    utmMedium: attribution?.utmMedium ?? null,
+    utmCampaign: attribution?.utmCampaign ?? null,
+    utmContent: attribution?.utmContent ?? null,
+    utmTerm: attribution?.utmTerm ?? null,
+    gclid: attribution?.gclid ?? null,
+    fbclid: attribution?.fbclid ?? null,
+    referrerHost: attribution?.referrerHost ?? null,
   };
 }
 

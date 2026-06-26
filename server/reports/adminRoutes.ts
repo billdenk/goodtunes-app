@@ -13,6 +13,8 @@ import {
   rawEvents,
   posthogEmbeds,
   incompleteAlbums,
+  funnelReleases,
+  acquisitionFunnel,
   type AdminReportContext,
 } from "./admin";
 import { toCsv, dollarsFromCents } from "./csv";
@@ -225,5 +227,22 @@ export function registerAdminReportRoutes(app: Express) {
   // ─── PostHog embed config ────────────────────────────────────────
   app.get("/api/admin/reports/posthog", adminGuard, wrap(async (_req, res) => {
     res.json(posthogEmbeds());
+  }));
+
+  // ─── Release acquisition funnel (Task #2127) ─────────────────────
+  // Releases that have any funnel traffic — powers the picker. Not
+  // date-bounded so the list stays stable as the window changes.
+  app.get("/api/admin/reports/funnel/releases", adminGuard, wrap(async (_req, res) => {
+    res.json(await funnelReleases());
+  }));
+
+  // The funnel itself for one release, date-ranged + broken down by source.
+  app.get("/api/admin/reports/funnel", adminGuard, wrap(async (req, res) => {
+    const albumId = String(req.query.albumId || "");
+    const data = await acquisitionFunnel(ctxFromReq(req), {
+      albumId,
+      groupBy: req.query.groupBy === "source" ? "source" : null,
+    });
+    res.json(data);
   }));
 }

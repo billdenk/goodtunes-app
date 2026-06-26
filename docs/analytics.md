@@ -38,9 +38,14 @@ Every event leaves the browser wrapped in an `AnalyticsEnvelope`:
 | `userId` | set via `identifyAnalyticsUser()` from `useAuth` | `null` for anonymous fans |
 | `platform` | `web-mobile` (<1024px) or `web-desktop` | Coarse split; refined when we ship the RN port |
 | `referrer` | `document.referrer` at fire time | Useful for "where did this play start" |
+| `utmSource` / `utmMedium` / `utmCampaign` / `utmContent` / `utmTerm` | Parsed from the landing URL query (`utm_*`), **first-touch per session** | Campaign attribution. Captured once on the first load that carries any of them, persisted to `sessionStorage` (`gt:attribution`) for the rest of the session so in-session navigation — which strips the query string — can't lose it. Each trimmed to 256 chars. |
+| `gclid` / `fbclid` | Google / Facebook click ids from the landing URL | Same first-touch capture + persistence as the UTMs |
+| `referrerHost` | Host of `document.referrer` (e.g. `instagram.com`) | Attribution fallback when no `utm_source` is set; same-host referrers are dropped (not an acquisition source) |
 | `country` / `region` | Server-stamped from `cf-ipcountry` / `x-vercel-ip-country` headers | Best-effort; null if behind a proxy that strips them |
 
-The envelope is mirrored into the event's `payload` JSONB on insert (as `_device_id`, `_session_id`, `_platform`, `_referrer`, `_country`, `_region`) so a single query against `analytics_events` is enough for any rollup — no joins required.
+The campaign fields are **not** new PII — they're campaign tags, not user identifiers — so they ride in the envelope without a separate consent gate.
+
+The envelope is mirrored into the event's `payload` JSONB on insert (as `_device_id`, `_session_id`, `_platform`, `_referrer`, `_country`, `_region`, plus the campaign keys `_utm_source` / `_utm_medium` / `_utm_campaign` / `_utm_content` / `_utm_term` / `_gclid` / `_fbclid` / `_referrer_host` when present) so a single query against `analytics_events` is enough for any rollup — no joins required. The campaign keys are only written when non-empty, so most events stay compact.
 
 ## Client SDK — `client/src/lib/analytics.ts`
 
@@ -75,6 +80,32 @@ Server-side forwarding to PostHog runs through plain `fetch` to `${POSTHOG_HOST}
 Forwarding is fire-and-forget — a PostHog outage never blocks `/api/events`, and the canonical record always lives in our `analytics_events` table.
 
 Because PostHog is called server-side, ad-blockers can't drop events, and we still own the raw data.
+
+## Release acquisition funnel (native, PostHog-independent)
+
+Admin → Reports → **Funnels** leads with a first-party acquisition funnel computed entirely from our own `analytics_events` table — no PostHog dependency. It answers "for this release, how many people landed, viewed the offer, started checkout, and bought — and where did they come from?"
+
+The four steps map to existing events (all carry `albumId` in their payload):
+
+| Step | Event |
+| --- | --- |
+| Landed on the release | `album_viewed` |
+| Viewed the offer | `bundle_viewed` |
+| Started checkout | `checkout_started` |
+| Completed purchase | `checkout_completed` |
+
+**Strict funnel by distinct session.** A session counts at step _N_ only if it also reached every prior step (we walk each session's hit-set in order and stop at the first gap). Step-to-step conversion is `sessions[N] / sessions[N-1]`; overall conversion is `completed / landed`. Session identity is `COALESCE(session_id, user_id, event_id)`.
+
+**Source breakdown (first-touch).** Each session's source is derived from the campaign keys mirrored into the payload: `_utm_source` (+ `_utm_campaign` for the label) → falls back to `_referrer_host` → `Direct / unknown`. The client persists first-touch UTMs for the whole session, so every event already carries the same source; the aggregator just reads the first non-empty one (and upgrades a `direct` session if a later event in it carries a real source).
+
+Endpoints (both `requireRole("super_admin","admin")`, date-ranged via `?from`/`?to`):
+
+| Route | Returns |
+| --- | --- |
+| `GET /api/admin/reports/funnel/releases` | Releases that have any `album_viewed` traffic, with landing counts, sorted busiest-first — powers the release picker. **Not** date-bounded so the picker stays stable as the window changes. Only returns releases that still exist in the `albums` table. |
+| `GET /api/admin/reports/funnel?albumId=…&groupBy=source` | The four-step funnel for one release in the window, plus the per-source breakdown when `groupBy=source`. |
+
+Aggregation happens in JS (load rows → reduce), matching the `topContent` pattern in [`server/reports/admin.ts`](../server/reports/admin.ts) — `acquisitionFunnel()` and `funnelReleases()`.
 
 ### `admin_list_error` (server-only)
 

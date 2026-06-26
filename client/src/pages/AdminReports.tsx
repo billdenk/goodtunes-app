@@ -244,7 +244,7 @@ export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) 
           {isAdmin && <TabsContent value="overview"><OverviewTab qs={qs} /></TabsContent>}
           {isAdmin && <TabsContent value="revenue"><RevenueTab qs={qs} /></TabsContent>}
           {isAdmin && <TabsContent value="engagement"><EngagementTab qs={qs} /></TabsContent>}
-          {isAdmin && <TabsContent value="funnels"><FunnelsTab /></TabsContent>}
+          {isAdmin && <TabsContent value="funnels"><FunnelsTab qs={qs} /></TabsContent>}
           {isAdmin && <TabsContent value="ops"><OpsTab qs={qs} /></TabsContent>}
           {isSuper && <TabsContent value="recon"><ReconciliationTab qs={qs} /></TabsContent>}
           {isSuper && <TabsContent value="events"><RawEventsTab qs={qs} /></TabsContent>}
@@ -1147,13 +1147,253 @@ function TopList({ title, rows, columns, csv, testIdPrefix, idKey }: { title: st
   );
 }
 
-function FunnelsTab() {
+type FunnelStep = { key: string; label: string; sessions: number; stepConversion: number };
+type FunnelData = {
+  album: { id: string; title: string; artist: string } | null;
+  steps: FunnelStep[];
+  overallConversion: number;
+  bySource: {
+    key: string;
+    source: string;
+    landed: number;
+    viewedOffer: number;
+    startedCheckout: number;
+    completed: number;
+    conversion: number;
+  }[];
+};
+type ReleaseLite = { albumId: string; title: string; artist: string; landed: number };
+
+function ReleasePicker({
+  releases,
+  value,
+  onPick,
+}: {
+  releases: ReleaseLite[];
+  value: string;
+  onPick: (albumId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = releases.find((r) => r.albumId === value);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label
+        htmlFor="funnel-release-trigger"
+        className="text-xs uppercase tracking-wider text-slate-500 font-semibold"
+      >
+        Release
+      </Label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            id="funnel-release-trigger"
+            type="button"
+            className="
+              inline-flex items-center gap-2 h-9 self-start min-w-[280px] max-w-[420px]
+              rounded-md border border-slate-300 bg-white px-3 text-sm
+              text-left text-slate-900 hover:border-slate-400
+              focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]
+              focus:border-transparent
+            "
+            data-testid="button-funnel-release"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+          >
+            <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+            <span className="flex-1 truncate">
+              {selected ? `${selected.title} — ${selected.artist}` : "Pick a release…"}
+            </span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          sideOffset={4}
+          className="p-0 w-[min(420px,calc(100vw-2rem))] bg-white border border-slate-200 text-slate-900 shadow-lg"
+        >
+          <Command
+            className={[
+              "bg-white text-slate-900",
+              "[&_[cmdk-input-wrapper]]:border-slate-200",
+              "[&_[cmdk-item]]:text-slate-700",
+              "[&_[cmdk-item][data-selected=true]]:bg-slate-100",
+              "[&_[cmdk-item][data-selected=true]]:text-slate-900",
+            ].join(" ")}
+          >
+            <CommandInput
+              placeholder="Search releases…"
+              className="text-slate-900 placeholder:text-slate-400"
+              data-testid="input-funnel-release-search"
+            />
+            <CommandList>
+              <CommandEmpty>
+                <div className="px-3 py-4 text-xs text-slate-500">No releases with funnel traffic yet.</div>
+              </CommandEmpty>
+              <CommandGroup heading="Releases with traffic">
+                {releases.map((r) => (
+                  <CommandItem
+                    key={r.albumId}
+                    value={`${r.title} ${r.artist} ${r.albumId}`}
+                    onSelect={() => {
+                      onPick(r.albumId);
+                      setOpen(false);
+                    }}
+                    data-testid={`option-funnel-release-${r.albumId}`}
+                    className="flex items-center justify-between gap-2 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-slate-900">{r.title}</div>
+                      <div className="truncate text-xs text-slate-500 mt-0.5">{r.artist}</div>
+                    </div>
+                    <span className="text-xs text-slate-400 tabular-nums flex-shrink-0">
+                      {r.landed.toLocaleString()} landed
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
+function NativeFunnel({ qs }: { qs: string }) {
+  const [albumId, setAlbumId] = useState<string>("");
+  const { data: releaseData, isLoading: loadingReleases } = useQuery<{ releases: ReleaseLite[] }>({
+    queryKey: ["/api/admin/reports/funnel/releases"],
+    queryFn: () => fetchJson(`/api/admin/reports/funnel/releases`),
+  });
+  const releases = releaseData?.releases ?? [];
+  // Default to the busiest release once the list loads.
+  const effectiveAlbumId = albumId || releases[0]?.albumId || "";
+
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery<FunnelData>({
+    queryKey: ["/api/admin/reports/funnel", effectiveAlbumId, qs],
+    queryFn: () =>
+      fetchJson(`/api/admin/reports/funnel?albumId=${encodeURIComponent(effectiveAlbumId)}&groupBy=source&${qs}`),
+    enabled: !!effectiveAlbumId,
+  });
+
+  const maxSessions = data?.steps?.[0]?.sessions || 0;
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-700">Acquisition funnel</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Landed → viewed the offer → started checkout → bought. Distinct sessions, computed from
+            first-party analytics — no PostHog required.
+          </p>
+        </div>
+        {releases.length > 0 && (
+          <ReleasePicker releases={releases} value={effectiveAlbumId} onPick={setAlbumId} />
+        )}
+      </div>
+
+      {loadingReleases ? (
+        <LoadingState />
+      ) : releases.length === 0 ? (
+        <EmptyState message="No release has funnel traffic yet. Once fans land on a release page, it'll show up here." />
+      ) : isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : isLoading || !data ? (
+        <LoadingState />
+      ) : (
+        <div className="space-y-5" data-testid="native-funnel">
+          <div className="flex items-baseline gap-3">
+            <span className="text-2xl font-semibold text-slate-900 tabular-nums" data-testid="text-funnel-overall-conversion">
+              {fmtPct(data.overallConversion)}
+            </span>
+            <span className="text-xs text-slate-500">
+              landed → bought ({data.steps[0]?.sessions.toLocaleString() ?? 0} sessions →{" "}
+              {data.steps[3]?.sessions.toLocaleString() ?? 0} purchases)
+            </span>
+          </div>
+
+          <div className="space-y-2.5">
+            {data.steps.map((step, i) => {
+              const pct = maxSessions ? Math.round((step.sessions / maxSessions) * 100) : 0;
+              return (
+                <div key={step.key} data-testid={`funnel-step-${step.key}`}>
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="font-medium text-slate-700">{step.label}</span>
+                    <span className="text-slate-500 tabular-nums">
+                      <span className="font-semibold text-slate-900" data-testid={`text-funnel-step-count-${step.key}`}>
+                        {step.sessions.toLocaleString()}
+                      </span>
+                      {i > 0 && (
+                        <span className="ml-2 text-xs text-slate-400">
+                          {fmtPct(step.stepConversion)} from prev
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-[var(--brand-blue)]"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs uppercase tracking-wider text-slate-500 font-bold">By source</h4>
+            </div>
+            {data.bySource.length === 0 ? (
+              <EmptyState message="No source breakdown for this window." />
+            ) : (
+              <table className="w-full text-sm" data-testid="table-funnel-sources">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                    <th className="py-2 font-bold">Source</th>
+                    <th className="py-2 font-bold text-right">Landed</th>
+                    <th className="py-2 font-bold text-right">Offer</th>
+                    <th className="py-2 font-bold text-right">Checkout</th>
+                    <th className="py-2 font-bold text-right">Bought</th>
+                    <th className="py-2 font-bold text-right">Conv.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.bySource.map((s) => (
+                    <tr key={s.key} className="border-b border-slate-100" data-testid={`row-funnel-source-${s.key}`}>
+                      <td className="py-2 text-slate-700">{s.source}</td>
+                      <td className="py-2 text-right tabular-nums text-slate-700">{s.landed.toLocaleString()}</td>
+                      <td className="py-2 text-right tabular-nums text-slate-700">{s.viewedOffer.toLocaleString()}</td>
+                      <td className="py-2 text-right tabular-nums text-slate-700">{s.startedCheckout.toLocaleString()}</td>
+                      <td className="py-2 text-right tabular-nums text-slate-900 font-medium">{s.completed.toLocaleString()}</td>
+                      <td className="py-2 text-right tabular-nums text-slate-700">{fmtPct(s.conversion)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function FunnelsTab({ qs }: { qs: string }) {
   const { data } = useQuery<{ funnelUrl: string | null; retentionUrl: string | null; host: string }>({
     queryKey: ["/api/admin/reports/posthog"],
     queryFn: () => fetchJson(`/api/admin/reports/posthog`),
   });
   return (
     <div className="space-y-4">
+      <NativeFunnel qs={qs} />
       <Card>
         <h3 className="text-sm font-semibold text-slate-700 mb-3">Funnel — visit → play → checkout</h3>
         {data?.funnelUrl ? (
