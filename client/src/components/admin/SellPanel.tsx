@@ -4702,8 +4702,8 @@ function SkuRow({
                 + placeholderLogoUrl mirror the big preview exactly. */}
             <JacketArtFill
               artworkUrl={artworkUrl}
-              placeholderArtworkUrl={(invitedPressItself ?? comparisonAnchorPress)?.vinylPlaceholderUrl ?? null}
-              placeholderLogoUrl={(invitedPressItself ?? comparisonAnchorPress)?.logoUrl ?? null}
+              placeholderArtworkUrl={invitedPressItself?.vinylPlaceholderUrl ?? null}
+              placeholderLogoUrl={invitedPressItself?.logoUrl ?? null}
             />
           </button>
           <div className="flex-1 min-w-0 space-y-1">
@@ -5755,8 +5755,8 @@ function SkuRow({
                      catalog editor), then fall back to the quoting press's
                      logo, then the generic placeholder. Real art always wins
                      (VinylPreview only uses these when artworkUrl is empty). */
-                  placeholderArtworkUrl={(invitedPressItself ?? comparisonAnchorPress)?.vinylPlaceholderUrl ?? null}
-                  placeholderLogoUrl={(invitedPressItself ?? comparisonAnchorPress)?.logoUrl ?? null}
+                  placeholderArtworkUrl={invitedPressItself?.vinylPlaceholderUrl ?? null}
+                  placeholderLogoUrl={invitedPressItself?.logoUrl ?? null}
                   jacketOverlay={(onEditArtwork || canChangeFormat) ? (
                     <>
                       <span
