@@ -51,6 +51,19 @@ export function isPurchaseFunnelHost(host?: string): boolean {
   return h === GET_HOST || h === STORE_HOST;
 }
 
+// True when the page is served from the canonical player host
+// (my.goodtunes.music). Used to extend the campaign "locked preview" surface
+// to logged-out visitors on the player host so shared links render the same
+// Buy pill / offer modal / Get Details chrome regardless of which host they
+// land on. Returns false in dev / *.replit.app (single host) — the predicate
+// only activates on the real production player subdomain.
+export function isPlayerHost(host?: string): boolean {
+  const h = (host ?? (typeof window === "undefined" ? "" : window.location.host))
+    .toLowerCase()
+    .split(":")[0];
+  return h === PLAYER_HOST;
+}
+
 export function useAuthKind(): AuthKind {
   return useMemo(() => {
     if (typeof window === "undefined") return "customer";

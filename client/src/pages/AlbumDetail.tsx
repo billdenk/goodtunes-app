@@ -53,7 +53,7 @@ import { AlbumCover } from "@/components/ui/AlbumCover";
 import { GearDetailBody, type GearArtist, type GearArtistNote } from "@/components/gear/GearDetailBody";
 import { ChevronLeft, Share, MoreHorizontal, Lock, ShieldCheck, Music2, ArrowRight, Eye } from "lucide-react";
 import { buyEnabled, nativeDownloadsEnabled, streamingHandoffEnabled } from "@/lib/platform";
-import { isPurchaseFunnelHost } from "@/hooks/useAuthKind";
+import { isPurchaseFunnelHost, isPlayerHost } from "@/hooks/useAuthKind";
 import { LockedOfferModal } from "@/components/ui/LockedOfferModal";
 import { hasPreviewPass } from "@/lib/previewPass";
 import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeDownloads";
@@ -404,12 +404,16 @@ function AlbumDetailMobile({
   // gate Add-to-Playlist (previews cannot playlist songs they don't truly own).
   const trulyOwns = isOwned && !isPreviewAlbum;
   const previewFirst = buyEnabled && !isOwned && !fullPlaybackAccess;
-  // Task #1734 — purchase-funnel "locked unlock" presentation (get./store.
-  // host, web only, not owned). The MY player never sets this so it stays
-  // 100% unchanged.
-  const lockedPreview = previewFirst && isPurchaseFunnelHost();
   const queueHasUpcoming = queue.length - currentIndex - 1 > 0;
   const { user, updateProfile } = useAuth();
+  // Task #1734 — purchase-funnel "locked unlock" presentation (get./store.
+  // host, web only, not owned). Task #2273 — extended to the player host
+  // (my.) for logged-out visitors so a shared link renders the same campaign
+  // surface regardless of which host it lands on. Owned / logged-in fans on
+  // my. are completely unaffected (previewFirst is false for owners).
+  const lockedPreview =
+    previewFirst &&
+    (isPurchaseFunnelHost() || (!user && isPlayerHost()));
   const favSongs = useFavoriteSongs();
   const [showCert, setShowCert] = useState(false);
   // Task #44 — opens the Buy bottom sheet (format picker + signed-cert

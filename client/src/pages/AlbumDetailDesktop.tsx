@@ -13,7 +13,7 @@ import { BuySheet, type OfferSelection } from "@/components/checkout/BuySheet";
 import { buyEnabled } from "@/lib/platform";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { isPurchaseFunnelHost } from "@/hooks/useAuthKind";
+import { isPurchaseFunnelHost, isPlayerHost } from "@/hooks/useAuthKind";
 import { LockedOfferModal } from "@/components/ui/LockedOfferModal";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import {
@@ -349,11 +349,15 @@ export function AlbumDetailDesktop({
     ? formatSalesBeginDate(album?.goodTunesReleaseDate) ?? "soon"
     : null;
 
-  // Task #1734 — purchase-funnel "locked unlock" presentation. Only on the
-  // get./store. host (web), for a release the viewer doesn't own. The MY
-  // player (my.goodtunes.music) never sets this, so it stays 100% unchanged.
+  // Task #1734 — purchase-funnel "locked unlock" presentation (get./store.
+  // host, web only, not owned). Task #2273 — extended to the player host
+  // (my.) for logged-out visitors so a shared link renders the same campaign
+  // surface regardless of which host it lands on. Owned / logged-in fans on
+  // my. are completely unaffected (effectiveOwned is true, or user is set).
   const lockedPreview =
-    buyEnabled && !effectiveOwned && isPurchaseFunnelHost();
+    buyEnabled &&
+    !effectiveOwned &&
+    (isPurchaseFunnelHost() || (!user && isPlayerHost()));
 
   // Task #1185 — resolve the fan's owning order(s) for this album so the ⋯
   // menu can offer GoodDeed actions (view cert/provenance/ownership +
