@@ -230,6 +230,7 @@ export interface IStorage {
   updateAlbumVideo(id: string, data: Partial<AlbumVideo>): Promise<AlbumVideo | undefined>;
   deleteAlbumVideo(id: string): Promise<void>;
   listAlbumPhotos(albumId: string): Promise<AlbumPhoto[]>;
+  getAlbumPhotoById(id: string): Promise<AlbumPhoto | undefined>;
   createAlbumPhoto(data: InsertAlbumPhoto): Promise<AlbumPhoto>;
   updateAlbumPhoto(id: string, data: Partial<AlbumPhoto>): Promise<AlbumPhoto | undefined>;
   deleteAlbumPhoto(id: string): Promise<void>;
@@ -1573,6 +1574,11 @@ export class DbStorage implements IStorage {
     return db.select().from(albumPhotos)
       .where(and(eq(albumPhotos.albumId, albumId), isNull(albumPhotos.deletedAt)))
       .orderBy(asc(albumPhotos.position), asc(albumPhotos.id));
+  }
+  async getAlbumPhotoById(id: string): Promise<AlbumPhoto | undefined> {
+    const [p] = await db.select().from(albumPhotos)
+      .where(and(eq(albumPhotos.id, id), isNull(albumPhotos.deletedAt)));
+    return p;
   }
   async createAlbumPhoto(data: InsertAlbumPhoto): Promise<AlbumPhoto> {
     const [p] = await db.insert(albumPhotos).values(data as any).returning();

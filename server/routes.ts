@@ -15123,6 +15123,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     caption: insertAlbumPhotoSchema.shape.caption.nullable().optional(),
   });
 
+  // Resolve whether the caller may see the *original* bonus media (poster /
+  // photo masters), which is admin OR the album's owner — never host/is-fan.
+  // Pre-purchase posters and photos are publicly-fetchable /objects/ masters,
+  // so a non-owner getting the real URL (then a cosmetic CSS blur) leaks the
+  // full-res asset via Reader / view-source / DOM. Owners + admins get the
+  // real URL; everyone else gets a server-rendered blurred preview route.
+  async function bonusMediaViewerAccess(req: Request, albumId: string) {
+    if (await isAdminUser(req)) return { isAdmin: true, owns: true };
+    const auth = await getAuthFromRequest(req);
+    let owns = false;
+    if (auth?.kind === "customer") {
+      try { owns = await storage.userOwnsAlbum(auth.userId, albumId); } catch { owns = false; }
+    }
+    return { isAdmin: false, owns };
+  }
+
   // Public read — bonus videos/photos are listener-facing content, surfaced
   // on the fan AlbumDetail page below the tracklist. Anonymous fans hit this,
   // so no auth gate. `loadAlbumForBonusRead` separately checks isAdminUser
@@ -15137,12 +15153,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // fetchable /objects/ master) or the internal Mux asset id — that would
     // hand out the downloadable original we promise never leaves as a file.
     if (await isAdminUser(req)) return res.json(rows);
+    // Non-admins: the poster is the only image we'd return, and it's a
+    // publicly-fetchable /objects/ master. Owners get the real poster; every
+    // other viewer (logged-out, or signed-in-but-hasn't-bought) gets a
+    // server-rendered blurred preview URL so the original never ships in the
+    // markup. Gate strictly on ownership, never host/is-fan.
+    const { owns } = await bonusMediaViewerAccess(req, album.id);
     const safe = rows.map((v: any) => ({
       id: v.id,
       albumId: v.albumId,
       title: v.title,
       description: v.description ?? null,
-      posterUrl: v.posterUrl ?? null,
+      posterUrl: owns
+        ? (v.posterUrl ?? null)
+        : `/api/album-media/video/${v.id}/preview`,
       position: v.position,
       muxPlaybackId: v.muxPlaybackId ?? null,
       muxStatus: v.muxStatus ?? null,
@@ -15153,7 +15177,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const album = await loadAlbumForBonusRead(req, res);
     if (!album) return;
     const rows = await storage.listAlbumPhotos(album.id);
-    return res.json(rows);
+    const { isAdmin, owns } = await bonusMediaViewerAccess(req, album.id);
+    // Admins (CMS) and owners get the real photoUrl (a publicly-fetchable
+    // /objects/ master). Everyone else gets a server-rendered blurred preview
+    // URL so the full-res photo never reaches a non-owner's markup.
+    if (isAdmin || owns) return res.json(rows);
+    const safe = rows.map((p: any) => ({
+      ...p,
+      photoUrl: `/api/album-media/photo/${p.id}/preview`,
+    }));
+    return res.json(safe);
+  });
+
+  // Server-rendered, irreversibly-blurred preview for a locked bonus poster /
+  // photo. Looked up BY ID (never a client-supplied URL), the source bytes are
+  // read server-side and downscaled+blurred before streaming — so a non-owner
+  // can render a teaser tile without the original master URL ever appearing in
+  // their payload. Safe for anyone (the bytes are a smear), so no auth gate.
+  app.get("/api/album-media/:kind/:id/preview", async (req, res) => {
+    const kind = String(req.params.kind);
+    if (kind !== "video" && kind !== "photo") {
+      return res.status(404).json({ message: "Not found" });
+    }
+    const id = String(req.params.id);
+    let sourceUrl: string | null = null;
+    if (kind === "video") {
+      const v = await storage.getAlbumVideoById(id);
+      sourceUrl = v?.posterUrl ?? null;
+    } else {
+      const p = await storage.getAlbumPhotoById(id);
+      sourceUrl = p?.photoUrl ?? null;
+    }
+    try {
+      const { renderBonusMediaPreview } = await import("./bonusMediaPreview");
+      const buf = await renderBonusMediaPreview(sourceUrl, kind);
+      res.setHeader("Content-Type", "image/webp");
+      res.setHeader("Cache-Control", "public, max-age=300");
+      return res.end(buf);
+    } catch {
+      return res.status(404).json({ message: "Not found" });
+    }
   });
 
   // Task #1734 — "Get Notified" waitlist capture for a pre-launch release.
@@ -21687,6 +21750,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
 
+    // Bonus media thumbnails are masters too (poster_url / photo_url point at
+    // publicly-fetchable /objects/ originals), so gate them exactly like the
+    // album-page endpoints: admins + the album owner see the real poster/photo;
+    // every other viewer gets the server-rendered blurred preview URL. Gate on
+    // ownership, never host/is-fan.
+    let bonusViewerIsAdmin = false;
+    const bonusOwnedAlbumIds = new Set<string>();
+    if (videoRows.length || photoRows.length) {
+      bonusViewerIsAdmin = await isAdminUser(req);
+      if (!bonusViewerIsAdmin) {
+        const auth = await getAuthFromRequest(req);
+        if (auth?.kind === "customer") {
+          const ids = new Set<string>([
+            ...videoRows.map((v) => v.album_id),
+            ...photoRows.map((p) => p.album_id),
+          ]);
+          for (const aid of ids) {
+            try {
+              if (await storage.userOwnsAlbum(auth.userId, aid)) bonusOwnedAlbumIds.add(aid);
+            } catch { /* treat as not-owned */ }
+          }
+        }
+      }
+    }
+    const bonusCanSeeOriginal = (albumId: string) =>
+      bonusViewerIsAdmin || bonusOwnedAlbumIds.has(albumId);
+
     return res.json({
       query: q,
       results: {
@@ -21729,18 +21819,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         })),
         videos: videoRows.map((v) => {
           const al = albumById.get(v.album_id);
+          const seeOriginal = bonusCanSeeOriginal(v.album_id);
           return {
             kind: "video", id: v.id, title: v.title, subtitle: al ? `Bonus video · ${al.title}` : "Bonus video",
-            thumbUrl: v.poster_url ?? al?.coverUrl ?? null,
+            thumbUrl: seeOriginal
+              ? (v.poster_url ?? al?.coverUrl ?? null)
+              : (v.poster_url ? `/api/album-media/video/${v.id}/preview` : (al?.coverUrl ?? null)),
             href: `/album/${v.album_id}`, albumId: v.album_id,
           };
         }),
         photos: photoRows.map((p) => {
           const al = albumById.get(p.album_id);
+          const seeOriginal = bonusCanSeeOriginal(p.album_id);
           return {
             kind: "photo", id: p.id, title: p.caption ?? "Photo",
             subtitle: al ? `Bonus photo · ${al.title}` : "Bonus photo",
-            thumbUrl: p.photo_url ?? null,
+            thumbUrl: seeOriginal
+              ? (p.photo_url ?? null)
+              : (p.photo_url ? `/api/album-media/photo/${p.id}/preview` : null),
             href: `/album/${p.album_id}`, albumId: p.album_id,
           };
         }),
