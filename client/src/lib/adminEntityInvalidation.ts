@@ -80,9 +80,13 @@ export async function invalidateAdminEntity(
           ["/api/people"],
         ];
       case "manufacturer":
+        // Also bust the press-portal /me key so the Press Admin sees the
+        // updated vinylPlaceholderUrl immediately (the portal reads that
+        // endpoint for its catalog panel, not /api/manufacturers/:id).
         return [
           ["/api/manufacturers", id],
           ["/api/manufacturers"],
+          [`/api/press/${id}/me`],
         ];
       case "album":
         return [

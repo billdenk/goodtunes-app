@@ -74,7 +74,7 @@ export function PressLogoEditorDialog({
 
   const setFromUrl = useMutation({
     mutationFn: async (url: string) => {
-      await apiRequest("PUT", apiPath, { logoUrl: url });
+      await apiRequest("PUT", apiPath, { [fieldName]: url });
       return url;
     },
     onSuccess: () => {

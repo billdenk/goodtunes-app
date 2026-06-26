@@ -502,6 +502,10 @@ export function registerPressPortalRoutes(
       doesVinyl: (press as any).doesVinyl ?? true,
       doesGoodDeed: (press as any).doesGoodDeed ?? false,
       doesFulfillment: (press as any).doesFulfillment ?? false,
+      // Jacket placeholder image — the Press Portal catalog tab passes this
+      // into PressCatalogPanel so the VinylPreview and editor reflect the
+      // saved image without a separate fetch.
+      vinylPlaceholderUrl: (press as any).vinylPlaceholderUrl ?? null,
     });
   });
 

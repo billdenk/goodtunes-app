@@ -85,6 +85,8 @@ interface PressMe {
   doesVinyl?: boolean;
   doesGoodDeed?: boolean;
   doesFulfillment?: boolean;
+  // Jacket placeholder image for the catalog's VinylPreview.
+  vinylPlaceholderUrl?: string | null;
 }
 
 const STAGE_DEFS: { id: string; label: string }[] = [
@@ -170,7 +172,11 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
             subtitle="Edit your formats, color tiers, and per-quantity ladders — including the masters-prep cost per tier. Artists you invite see the resulting picker on their album's Sell panel."
             testId="heading-press-catalog"
           />
-          <PressCatalogPanel pressId={pressId} pressDomain={pressDomain} />
+          <PressCatalogPanel
+            pressId={pressId}
+            pressDomain={pressDomain}
+            placeholderUrl={me?.vinylPlaceholderUrl ?? null}
+          />
         </div>
       )}
       {tab === "pipeline" && <PipelineTab pressId={pressId} />}
