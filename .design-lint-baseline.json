@@ -12261,6 +12261,11 @@
   },
   {
     "rule": "hardcoded-font-size",
+    "file": "client/src/components/operator/OperatorShell.tsx",
+    "snippet": "<p className=\"text-[7px] text-slate-400 font-medium uppercase tracking-wider mb-1.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
     "snippet": "<p className=\"text-slate-500 text-[12px] uppercase tracking-wider font-semibold\">Dashboard</p>"
   },

@@ -273,10 +273,10 @@ export function OperatorShell<TabId extends string>({
           {/* "Powered by GoodTunes" — bottom of rail. GoodTunes logo moves
               here so the partner's own logo claims the top-left position. */}
           <div className="flex-shrink-0 border-t border-slate-200 px-4 py-3">
-            <p className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-1.5">
+            <p className="text-[7px] text-slate-400 font-medium uppercase tracking-wider mb-1.5">
               Powered by
             </p>
-            <img src={gtLogo} alt="GoodTunes" className="h-5 w-auto opacity-50" />
+            <img src={gtLogo} alt="GoodTunes" className="h-[27px] w-auto" />
           </div>
         </aside>
 
