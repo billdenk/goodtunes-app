@@ -93,6 +93,7 @@ import {
   VENDOR_IDS,
   type VendorId,
   type CompletedTemplateConfig,
+  type AudioSpecOverride,
 } from "@shared/vendorSpecs";
 import {
   rollupCompletedTemplate,
@@ -30023,6 +30024,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           side: side ?? null,
           sideBreaks,
           pressDisplayName: audioPressName,
+          // Task #2324 — enforce the press's operator-confirmed audio
+          // numbers (bit depth / sample rate / per-side length) when set.
+          audioOverride: await audioOverrideForVendor(vendorId),
         });
         const assetUrl = await uploadBufferToObjectStorage(f.buffer, f.mimetype || "application/octet-stream");
         const row = await storage.insertUploadValidation({
@@ -30181,6 +30185,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // so the plant's preflight runs against what they actually cut.
       const { validateAudioFromSpecs } = await import("./validators/preflight");
       const { rollupStatus } = await import("../shared/uploadValidation");
+      // Task #2324 — operator/partner-editable audio override for this
+      // press, resolved ONCE for the whole run (album-level, not per-track).
+      const audioOverride = await audioOverrideForVendor(vendorId);
       // Task #541 — prefer the artist's vinyl-side ordering when set,
       // so a track destined for Side B is checked against Side B's
       // length budget (and stamped with side="B" on the validation row)
@@ -30285,6 +30292,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           // requires WAV" instead of "General vinyl spec requires WAV"
           // when the album's dedicated plant has no measured spec on file.
           pressDisplayName: preflightPressName,
+          // Task #2324 — enforce the press's operator-confirmed audio numbers.
+          audioOverride,
         });
         const extMatch = url.match(/\.(\w+)(?:\?|$)/);
         const ext = extMatch ? extMatch[0] : "";
@@ -30426,6 +30435,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const all = await storage.getManufacturers();
     const match = all.find((m) => matchInvitedPressToVendor(m.name) === vendorId);
     return match?.id ?? null;
+  }
+
+  // Task #2324 — load the operator/partner-editable AUDIO override for a
+  // vendor (bridged to manufacturers.id the same way pressIdForVendor does)
+  // and shape it for the audio validators. Returns null when no press maps
+  // or no override row exists → validators fall back to the measured-constant
+  // baseline (never worse than before this table existed). Bill's rule:
+  // specs are admin-editable, never hardcoded/fabricated.
+  async function audioOverrideForVendor(
+    vendorId: VendorId,
+  ): Promise<AudioSpecOverride | null> {
+    const pressId = await pressIdForVendor(vendorId);
+    if (!pressId) return null;
+    const row = await storage.getPressAudioSpec(pressId);
+    if (!row) return null;
+    return {
+      requiredBitDepth: row.requiredBitDepth,
+      requiredSampleRateHz: row.requiredSampleRateHz,
+      maxSideSeconds: row.maxSideSeconds ?? null,
+    };
   }
 
   // The required finished components for (vendor, config) with any
@@ -30707,6 +30736,94 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     async (req, res) => {
       if (!(await requirePressManager(req, res, req.params.id))) return;
       await storage.deletePressTemplateSpec(req.params.id, req.params.specId);
+      res.json({ ok: true });
+    },
+  );
+
+  // ─── Task #2324 — per-press operator/partner-editable AUDIO spec ─────────
+  // One row per press (press_audio_specs). Mirrors the template-specs CRUD
+  // above: a press-scoped manufacturer admin (or super_admin/admin) may
+  // read/write/clear the plant's CONFIRMED audio numbers. The audio
+  // preflight validator resolves these OVER the measured-constant baseline
+  // (resolveAudioSpec); a NULL field inherits the baseline. Bill's rule:
+  // specs are admin-editable, never hardcoded/fabricated.
+  const rpmSecondsSchema = z
+    .object({
+      "33": z.number().int().min(60).max(3600).nullable().optional(),
+      "45": z.number().int().min(60).max(3600).nullable().optional(),
+    })
+    .partial();
+  const audioSpecBodySchema = z.object({
+    requiredBitDepth: z.number().int().min(8).max(32).nullable().optional(),
+    requiredSampleRateHz: z.number().int().min(8000).max(384000).nullable().optional(),
+    maxSideSeconds: z
+      .object({
+        '7"': rpmSecondsSchema,
+        '10"': rpmSecondsSchema,
+        '12"': rpmSecondsSchema,
+      })
+      .partial()
+      .nullable()
+      .optional(),
+    notes: z.string().trim().max(1000).nullable().optional(),
+  });
+
+  app.get(
+    "/api/admin/manufacturers/:id/audio-spec",
+    requireAdminBearer,
+    async (req, res) => {
+      if (!(await requirePressManager(req, res, req.params.id))) return;
+      const press = await storage.getManufacturerById(req.params.id);
+      if (!press) return res.status(404).json({ message: "Press not found" });
+      res.json({ spec: await storage.getPressAudioSpec(req.params.id) });
+    },
+  );
+
+  app.put(
+    "/api/admin/manufacturers/:id/audio-spec",
+    requireAdminBearer,
+    async (req, res) => {
+      if (!(await requirePressManager(req, res, req.params.id))) return;
+      const press = await storage.getManufacturerById(req.params.id);
+      if (!press) return res.status(404).json({ message: "Press not found" });
+      const body = audioSpecBodySchema.safeParse(req.body);
+      if (!body.success) return res.status(400).json({ message: body.error.message });
+      // Strip empty per-side cells so an all-null grid stores as NULL
+      // (→ inherit baseline) rather than an empty object that masks it.
+      const rawGrid = body.data.maxSideSeconds ?? null;
+      let maxSideSeconds: typeof rawGrid = null;
+      if (rawGrid) {
+        const cleaned: Record<string, Record<string, number>> = {};
+        for (const [size, cell] of Object.entries(rawGrid)) {
+          if (!cell) continue;
+          const inner: Record<string, number> = {};
+          for (const [rpm, secs] of Object.entries(cell)) {
+            if (typeof secs === "number") inner[rpm] = secs;
+          }
+          if (Object.keys(inner).length > 0) cleaned[size] = inner;
+        }
+        maxSideSeconds = Object.keys(cleaned).length > 0 ? (cleaned as any) : null;
+      }
+      const spec = await storage.upsertPressAudioSpec(
+        {
+          pressId: req.params.id,
+          requiredBitDepth: body.data.requiredBitDepth ?? null,
+          requiredSampleRateHz: body.data.requiredSampleRateHz ?? null,
+          maxSideSeconds: maxSideSeconds as any,
+          notes: body.data.notes ?? null,
+        },
+        req.session.userId ?? null,
+      );
+      res.json({ spec });
+    },
+  );
+
+  app.delete(
+    "/api/admin/manufacturers/:id/audio-spec",
+    requireAdminBearer,
+    async (req, res) => {
+      if (!(await requirePressManager(req, res, req.params.id))) return;
+      await storage.deletePressAudioSpec(req.params.id);
       res.json({ ok: true });
     },
   );

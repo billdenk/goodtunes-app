@@ -150,6 +150,9 @@ import {
   pressTemplateSpecs,
   type PressTemplateSpec,
   type InsertPressTemplateSpec,
+  pressAudioSpecs,
+  type PressAudioSpec,
+  type InsertPressAudioSpec,
 } from "@shared/schema";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -941,6 +944,17 @@ export interface IStorage {
     updatedByUserId: string | null,
   ): Promise<PressTemplateSpec>;
   deletePressTemplateSpec(pressId: string, specId: string): Promise<void>;
+
+  // ---- Task #2324 — Operator-editable press AUDIO spec override ------
+  // One row per press (keyed manufacturers.id). The audio preflight
+  // validator resolves this OVER the measured-constant baseline; an
+  // absent row falls back to the constants.
+  getPressAudioSpec(pressId: string): Promise<PressAudioSpec | null>;
+  upsertPressAudioSpec(
+    input: InsertPressAudioSpec,
+    updatedByUserId: string | null,
+  ): Promise<PressAudioSpec>;
+  deletePressAudioSpec(pressId: string): Promise<void>;
 
   // ---- Task #225 — Pressing-order requests --------------------------
   listPressingOrderRequests(opts: {
@@ -5311,6 +5325,45 @@ export class DbStorage implements IStorage {
     await db
       .delete(pressTemplateSpecs)
       .where(and(eq(pressTemplateSpecs.pressId, pressId), eq(pressTemplateSpecs.id, specId)));
+  }
+
+  // ---- Task #2324 — Operator-editable press AUDIO spec override ------
+  async getPressAudioSpec(pressId: string): Promise<PressAudioSpec | null> {
+    const [row] = await db
+      .select()
+      .from(pressAudioSpecs)
+      .where(eq(pressAudioSpecs.pressId, pressId))
+      .limit(1);
+    return row ?? null;
+  }
+  async upsertPressAudioSpec(
+    input: InsertPressAudioSpec,
+    updatedByUserId: string | null,
+  ): Promise<PressAudioSpec> {
+    const values = {
+      ...input,
+      updatedByUserId,
+      updatedAt: new Date(),
+    };
+    const [row] = await db
+      .insert(pressAudioSpecs)
+      .values(values)
+      .onConflictDoUpdate({
+        target: pressAudioSpecs.pressId,
+        set: {
+          requiredBitDepth: values.requiredBitDepth ?? null,
+          requiredSampleRateHz: values.requiredSampleRateHz ?? null,
+          maxSideSeconds: values.maxSideSeconds ?? null,
+          notes: values.notes ?? null,
+          updatedByUserId,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
+  }
+  async deletePressAudioSpec(pressId: string): Promise<void> {
+    await db.delete(pressAudioSpecs).where(eq(pressAudioSpecs.pressId, pressId));
   }
 
   // ---- Task #225 — Pressing-order requests --------------------------

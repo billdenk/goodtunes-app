@@ -14,3 +14,5 @@ description: The validation step that catches schema.ts columns/tables the DB is
 **Direction-only by design:** DB-only columns/tables (legacy leftovers, prod-only seeds) are NOT flagged — that direction is handled by the Publish diff + post-merge reconciliation and would be noisy false positives. We only catch what code needs but the DB lacks.
 
 **Register via the validation skill** (`setValidationCommand`), never by hand-editing `.replit` (that edit is blocked).
+
+**Stale workflow status after same-restart table creation:** the `schema-drift-smoke` WORKFLOW line is a snapshot from its last run (often the restart moment). If you create the missing table/column AFTER that restart, the workflow still shows FAILED with the old timestamp. Trust a fresh direct `tsx scripts/schema-drift-smoke.ts` over the cached workflow status — re-run it, don't believe the stale red.

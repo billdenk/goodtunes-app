@@ -22,12 +22,20 @@ import { rollupStatus } from "@shared/uploadValidation";
 import {
   getVendorSpec,
   getTemplate,
+  resolveAudioSpec,
   type ArtFileFormat,
+  type AudioSpecOverride,
   type ColorSpace,
   type VendorId,
   type VinylRpm,
   type VinylSize,
 } from "@shared/vendorSpecs";
+
+const fmtHz = (hz: number) => {
+  const khz = hz / 1000;
+  const s = Number.isInteger(khz) ? String(khz) : khz.toFixed(1);
+  return `${s} kHz`;
+};
 
 const fmtMinSec = (sec: number) => {
   const m = Math.floor(sec / 60);
@@ -286,6 +294,9 @@ export type ValidateAudioOpts = {
   side?: string | null;
   /** Real press name to use in messages. See ValidateArtOpts.pressDisplayName. */
   pressDisplayName?: string;
+  // Task #2324 — operator/partner-editable audio override merged OVER the
+  // measured-constant baseline. NULL field inherits the baseline.
+  audioOverride?: AudioSpecOverride | null;
 };
 
 export async function validateAudio(buf: Buffer, opts: ValidateAudioOpts): Promise<CheckResult[]> {
@@ -294,6 +305,9 @@ export async function validateAudio(buf: Buffer, opts: ValidateAudioOpts): Promi
   if (!spec) {
     return [{ key: "audio.config", label: "Vendor", status: "fail", message: "Unknown vendor — pick one before uploading." }];
   }
+  // Task #2324 — enforce the operator's confirmed audio numbers (merged
+  // over the baseline) when present; otherwise the plant's baseline spec.
+  const audio = resolveAudioSpec(opts.vendorId, opts.audioOverride) ?? spec.audio;
 
   const pressName = opts.pressDisplayName ?? spec.label;
   const genericNote = opts.vendorId === "generic" && opts.pressDisplayName
@@ -325,36 +339,50 @@ export async function validateAudio(buf: Buffer, opts: ValidateAudioOpts): Promi
   const isAiff = !!format && /aiff|aifc/.test(format);
   const isFlac = !!format && /flac/.test(format);
   const matches =
-    (isWav && spec.audio.requiredFormats.includes("wav")) ||
-    (isAiff && spec.audio.requiredFormats.includes("aiff")) ||
-    (isFlac && spec.audio.requiredFormats.includes("flac"));
+    (isWav && audio.requiredFormats.includes("wav")) ||
+    (isAiff && audio.requiredFormats.includes("aiff")) ||
+    (isFlac && audio.requiredFormats.includes("flac"));
   if (format && matches) {
     checks.push({ key: "audio.format", label: "Format", status: "pass",
       message: `${format.toUpperCase()} accepted.` });
   } else if (format) {
     checks.push({ key: "audio.format", label: "Format", status: "fail",
-      message: `${format.toUpperCase()} — ${pressName} requires ${spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.${genericNote}` });
+      message: `${format.toUpperCase()} — ${pressName} requires ${audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.${genericNote}` });
   } else {
     checks.push({ key: "audio.format", label: "Format", status: "warn",
-      message: `Format unknown — ${pressName} requires ${spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.${genericNote}` });
+      message: `Format unknown — ${pressName} requires ${audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.${genericNote}` });
   }
 
   // 2. Bit depth
-  if (spec.audio.requiredBitDepth != null) {
+  if (audio.requiredBitDepth != null) {
     if (bitDepth == null) {
       checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "warn",
-        message: `Couldn't read bit depth — ${pressName} requires ${spec.audio.requiredBitDepth}-bit.${genericNote}` });
-    } else if (bitDepth >= spec.audio.requiredBitDepth) {
+        message: `Couldn't read bit depth — ${pressName} requires ${audio.requiredBitDepth}-bit.${genericNote}` });
+    } else if (bitDepth >= audio.requiredBitDepth) {
       checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "pass",
-        message: `${bitDepth}-bit — meets ${pressName}'s ${spec.audio.requiredBitDepth}-bit minimum.` });
+        message: `${bitDepth}-bit — meets ${pressName}'s ${audio.requiredBitDepth}-bit minimum.` });
     } else {
       checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "fail",
-        message: `${bitDepth}-bit — ${pressName} requires ${spec.audio.requiredBitDepth}-bit.${genericNote}` });
+        message: `${bitDepth}-bit — ${pressName} requires ${audio.requiredBitDepth}-bit.${genericNote}` });
     }
   }
 
-  // 3. Sample rate present
-  if (sampleRate) {
+  // 3. Sample rate — presence-only UNLESS the press confirmed a minimum
+  // (audio.requiredSampleRateHz, via the per-press override). No plant
+  // publishes one by default, so this stays a soft "present?" check until
+  // an operator records a real number.
+  if (audio.requiredSampleRateHz != null) {
+    if (sampleRate == null) {
+      checks.push({ key: "audio.sample_rate", label: "Sample rate", status: "warn",
+        message: `Sample rate not declared in the file header — ${pressName} requires ${fmtHz(audio.requiredSampleRateHz)}.${genericNote}` });
+    } else if (sampleRate >= audio.requiredSampleRateHz) {
+      checks.push({ key: "audio.sample_rate", label: "Sample rate", status: "pass",
+        message: `${sampleRate.toLocaleString()} Hz — meets ${pressName}'s ${fmtHz(audio.requiredSampleRateHz)} minimum.` });
+    } else {
+      checks.push({ key: "audio.sample_rate", label: "Sample rate", status: "fail",
+        message: `${sampleRate.toLocaleString()} Hz — ${pressName} requires ${fmtHz(audio.requiredSampleRateHz)}.${genericNote}` });
+    }
+  } else if (sampleRate) {
     checks.push({ key: "audio.sample_rate", label: "Sample rate", status: "pass",
       message: `${sampleRate.toLocaleString()} Hz.` });
   } else {
@@ -363,7 +391,7 @@ export async function validateAudio(buf: Buffer, opts: ValidateAudioOpts): Promi
   }
 
   // 4. Per-side length (when we have a side-breaks tracklist)
-  const maxTable = spec.audio.maxSideSecondsBySizeRpm;
+  const maxTable = audio.maxSideSecondsBySizeRpm;
   const maxSide = maxTable?.[opts.vinylSize]?.[opts.rpm] ?? null;
   if (opts.sideBreaks && opts.sideBreaks.length > 0 && maxSide != null) {
     let worstOver = 0;
@@ -389,7 +417,7 @@ export async function validateAudio(buf: Buffer, opts: ValidateAudioOpts): Promi
 
   // 5. One file per side — we can't enforce across uploads in a single
   // call, but if `side` is missing we surface a warn.
-  if (spec.audio.oneFilePerSide) {
+  if (audio.oneFilePerSide) {
     if (opts.side && /^[A-Z][0-9]?$/.test(opts.side)) {
       checks.push({ key: "audio.one_per_side", label: "One file per side", status: "pass",
         message: `Tagged side ${opts.side}.` });
@@ -400,7 +428,7 @@ export async function validateAudio(buf: Buffer, opts: ValidateAudioOpts): Promi
   }
 
   // 6. Side-break tracklist supplied
-  if (spec.audio.requireSideBreakTracklist) {
+  if (audio.requireSideBreakTracklist) {
     if (opts.sideBreaks && opts.sideBreaks.length > 0) {
       checks.push({ key: "audio.tracklist", label: "Tracklist", status: "pass",
         message: `${opts.sideBreaks.length} side(s) supplied with per-track times.` });
@@ -450,6 +478,9 @@ export type ValidateAudioFromSpecsOpts = {
   side?: string | null;
   /** Real press name to use in messages. See ValidateArtOpts.pressDisplayName. */
   pressDisplayName?: string;
+  // Task #2324 — operator/partner-editable audio override merged OVER the
+  // measured-constant baseline. NULL field inherits the baseline.
+  audioOverride?: AudioSpecOverride | null;
 };
 
 // Map the stored columns to a (wav | aiff | flac | other) bucket using
@@ -491,6 +522,9 @@ export function validateAudioFromSpecs(
   if (!spec) {
     return [{ key: "audio.config", label: "Vendor", status: "fail", message: "Unknown vendor — pick one before uploading." }];
   }
+  // Task #2324 — enforce the operator's confirmed audio numbers (merged
+  // over the baseline) when present; otherwise the plant's baseline spec.
+  const audio = resolveAudioSpec(opts.vendorId, opts.audioOverride) ?? spec.audio;
 
   const pressName = opts.pressDisplayName ?? spec.label;
   const genericNote = opts.vendorId === "generic" && opts.pressDisplayName
@@ -501,38 +535,50 @@ export function validateAudioFromSpecs(
   const klass = classifyStoredFormat(specs.format, specs.containerExt);
   const pretty = prettyStoredFormat(specs.format, specs.containerExt);
   const matches =
-    (klass === "wav" && spec.audio.requiredFormats.includes("wav")) ||
-    (klass === "aiff" && spec.audio.requiredFormats.includes("aiff")) ||
-    (klass === "flac" && spec.audio.requiredFormats.includes("flac"));
+    (klass === "wav" && audio.requiredFormats.includes("wav")) ||
+    (klass === "aiff" && audio.requiredFormats.includes("aiff")) ||
+    (klass === "flac" && audio.requiredFormats.includes("flac"));
   if (klass === "unknown") {
     checks.push({ key: "audio.format", label: "Format", status: "warn",
-      message: `Format unknown — ${pressName} requires ${spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.${genericNote}` });
+      message: `Format unknown — ${pressName} requires ${audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.${genericNote}` });
   } else if (matches) {
     checks.push({ key: "audio.format", label: "Format", status: "pass",
       message: `${pretty} accepted.` });
   } else {
     checks.push({ key: "audio.format", label: "Format", status: "fail",
-      message: `${pretty} — ${pressName} requires ${spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.${genericNote}` });
+      message: `${pretty} — ${pressName} requires ${audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}.${genericNote}` });
   }
 
   // 2. Bit depth — NULL stored value is the ONLY trigger for the
   // "couldn't read" warn. A populated number always pass/fails
   // cleanly against the plant's minimum.
-  if (spec.audio.requiredBitDepth != null) {
+  if (audio.requiredBitDepth != null) {
     if (specs.bitDepth == null) {
       checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "warn",
-        message: `Couldn't read bit depth — ${pressName} requires ${spec.audio.requiredBitDepth}-bit.${genericNote}` });
-    } else if (specs.bitDepth >= spec.audio.requiredBitDepth) {
+        message: `Couldn't read bit depth — ${pressName} requires ${audio.requiredBitDepth}-bit.${genericNote}` });
+    } else if (specs.bitDepth >= audio.requiredBitDepth) {
       checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "pass",
-        message: `${specs.bitDepth}-bit — meets ${pressName}'s ${spec.audio.requiredBitDepth}-bit minimum.` });
+        message: `${specs.bitDepth}-bit — meets ${pressName}'s ${audio.requiredBitDepth}-bit minimum.` });
     } else {
       checks.push({ key: "audio.bit_depth", label: "Bit depth", status: "fail",
-        message: `${specs.bitDepth}-bit — ${pressName} requires ${spec.audio.requiredBitDepth}-bit.${genericNote}` });
+        message: `${specs.bitDepth}-bit — ${pressName} requires ${audio.requiredBitDepth}-bit.${genericNote}` });
     }
   }
 
-  // 3. Sample rate present
-  if (specs.sampleRate) {
+  // 3. Sample rate — presence-only UNLESS the press confirmed a minimum
+  // (audio.requiredSampleRateHz, via the per-press override).
+  if (audio.requiredSampleRateHz != null) {
+    if (specs.sampleRate == null) {
+      checks.push({ key: "audio.sample_rate", label: "Sample rate", status: "warn",
+        message: `Sample rate not on file — ${pressName} requires ${fmtHz(audio.requiredSampleRateHz)}. Re-probe the master.${genericNote}` });
+    } else if (specs.sampleRate >= audio.requiredSampleRateHz) {
+      checks.push({ key: "audio.sample_rate", label: "Sample rate", status: "pass",
+        message: `${specs.sampleRate.toLocaleString()} Hz — meets ${pressName}'s ${fmtHz(audio.requiredSampleRateHz)} minimum.` });
+    } else {
+      checks.push({ key: "audio.sample_rate", label: "Sample rate", status: "fail",
+        message: `${specs.sampleRate.toLocaleString()} Hz — ${pressName} requires ${fmtHz(audio.requiredSampleRateHz)}.${genericNote}` });
+    }
+  } else if (specs.sampleRate) {
     checks.push({ key: "audio.sample_rate", label: "Sample rate", status: "pass",
       message: `${specs.sampleRate.toLocaleString()} Hz.` });
   } else {
@@ -541,7 +587,7 @@ export function validateAudioFromSpecs(
   }
 
   // 4. Per-side length (when caller supplies side-breaks)
-  const maxTable = spec.audio.maxSideSecondsBySizeRpm;
+  const maxTable = audio.maxSideSecondsBySizeRpm;
   const maxSide = maxTable?.[opts.vinylSize]?.[opts.rpm] ?? null;
   if (opts.sideBreaks && opts.sideBreaks.length > 0 && maxSide != null) {
     let worstOver = 0;
@@ -566,7 +612,7 @@ export function validateAudioFromSpecs(
   }
 
   // 5. One file per side
-  if (spec.audio.oneFilePerSide) {
+  if (audio.oneFilePerSide) {
     if (opts.side && /^[A-Z][0-9]?$/.test(opts.side)) {
       checks.push({ key: "audio.one_per_side", label: "One file per side", status: "pass",
         message: `Tagged side ${opts.side}.` });
@@ -577,7 +623,7 @@ export function validateAudioFromSpecs(
   }
 
   // 6. Side-break tracklist supplied
-  if (spec.audio.requireSideBreakTracklist) {
+  if (audio.requireSideBreakTracklist) {
     if (opts.sideBreaks && opts.sideBreaks.length > 0) {
       checks.push({ key: "audio.tracklist", label: "Tracklist", status: "pass",
         message: `${opts.sideBreaks.length} side(s) supplied with per-track times.` });

@@ -66,6 +66,14 @@ export type VendorSpec = {
     requiredFormats: Array<"wav" | "aiff" | "flac">;
     /** Required bit depth; null = not stated by vendor. */
     requiredBitDepth: number | null;
+    /**
+     * Required minimum sample rate in Hz. Optional/absent = no published
+     * minimum → presence-only check (as today). No plant publishes one,
+     * so every baseline leaves this undefined; a per-press override
+     * (press_audio_specs.requiredSampleRateHz) can set it once a plant PM
+     * confirms a real number. See resolveAudioSpec.
+     */
+    requiredSampleRateHz?: number | null;
     /** Per-side max length (in seconds) per size + rpm. null = not stated. */
     maxSideSecondsBySizeRpm: Partial<Record<VinylSize, Partial<Record<VinylRpm, number>>>> | null;
     /** Hard rule: one audio file per side. */
@@ -256,9 +264,12 @@ export const VENDOR_SPECS: Record<VendorId, VendorSpec> = {
       templates: VIRYL_TEMPLATES,
     },
     audio: {
-      // Viryl doesn't publish audio specs (confirm with the PM at order
-      // time), so we apply the platform-wide rule: 24-bit WAV, one file per
-      // side, MRP's per-side length table. See docs/vendors/viryl.md.
+      // Viryl's 2024 price sheet confirms WAV, one file per side (A/B), and a
+      // PQ sheet / track listing — but publishes no bit depth, sample rate, or
+      // per-side length table (those are TBD until a Viryl PM confirms them).
+      // So bit depth + the per-side length table stay on the platform-wide
+      // fallback: 24-bit WAV, MRP's per-side length table. See
+      // docs/vendors/viryl.md "Audio file requirements".
       requiredFormats: ["wav"],
       requiredBitDepth: 24,
       maxSideSecondsBySizeRpm: MRP_MAX_SIDE,
@@ -272,6 +283,62 @@ export const VENDOR_SPECS: Record<VendorId, VendorSpec> = {
 export function getVendorSpec(id: string | null | undefined): VendorSpec | null {
   if (!id) return null;
   return (VENDOR_SPECS as Record<string, VendorSpec>)[id] ?? null;
+}
+
+// Task #2324 — per-press AUDIO spec override, supplied by an operator (or a
+// press-scoped partner admin) via press_audio_specs. Mirrors how the
+// art/template specs are operator-editable. A NULL/absent field inherits
+// the plant's measured-constant baseline; a set value wins. Decoupled from
+// the DB row shape (server casts the row into this) so this stays a pure
+// shared module with no schema import.
+export type AudioSpecOverride = {
+  requiredBitDepth?: number | null;
+  requiredSampleRateHz?: number | null;
+  maxSideSeconds?: Partial<Record<VinylSize, Partial<Record<VinylRpm, number>>>> | null;
+};
+
+const ALL_VINYL_SIZES: VinylSize[] = ['7"', '10"', '12"'];
+const ALL_VINYL_RPMS: VinylRpm[] = [33, 45];
+
+// Resolve the audio spec a validator should enforce for (vendorId, override):
+// the plant's baseline audio block with any operator-set override values
+// merged OVER it. Per-side length cells merge individually (an override only
+// replaces the cells it sets). Returns null only for an unknown vendor.
+export function resolveAudioSpec(
+  vendorId: VendorId,
+  override?: AudioSpecOverride | null,
+): VendorSpec["audio"] | null {
+  const base = VENDOR_SPECS[vendorId]?.audio;
+  if (!base) return null;
+  if (!override) return base;
+
+  let maxSide = base.maxSideSecondsBySizeRpm;
+  if (override.maxSideSeconds) {
+    const merged: Partial<Record<VinylSize, Partial<Record<VinylRpm, number>>>> = {};
+    for (const size of ALL_VINYL_SIZES) {
+      const baseCell = base.maxSideSecondsBySizeRpm?.[size];
+      const ovCell = override.maxSideSeconds[size];
+      if (!baseCell && !ovCell) continue;
+      const cell: Partial<Record<VinylRpm, number>> = {};
+      for (const rpm of ALL_VINYL_RPMS) {
+        const v = ovCell?.[rpm] != null ? ovCell[rpm] : baseCell?.[rpm];
+        if (v != null) cell[rpm] = v;
+      }
+      if (Object.keys(cell).length > 0) merged[size] = cell;
+    }
+    maxSide = merged;
+  }
+
+  return {
+    ...base,
+    requiredBitDepth:
+      override.requiredBitDepth != null ? override.requiredBitDepth : base.requiredBitDepth,
+    requiredSampleRateHz:
+      override.requiredSampleRateHz != null
+        ? override.requiredSampleRateHz
+        : (base.requiredSampleRateHz ?? null),
+    maxSideSecondsBySizeRpm: maxSide,
+  };
 }
 
 export function getTemplate(vendorId: VendorId, templateId: string): TemplateSpec | null {

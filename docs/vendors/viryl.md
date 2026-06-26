@@ -218,7 +218,17 @@ Each additional splatter colour beyond the first adds $0.15 (140g) / $0.25 (180g
 
 ## Audio file requirements
 
-Not stated in the 2024 price sheet — confirm with Viryl project manager at time of order.
+The 2024 price sheet's terms state: *"Vinyl mastering requires the customer to supply vinyl-ready WAV files to mastering engineer's specifications for side A and B with a PQ sheet (track listing). If files are not vinyl-ready / mastered for vinyl, additional fees may be required."* So Viryl confirms:
+
+- **Format:** WAV.
+- **One file per side** (A and B), with a **PQ sheet / track listing**.
+
+What the price sheet does **not** publish — and what a Viryl PM must confirm:
+
+- **Bit depth / sample rate** (TBD — preflight applies the platform-wide 24-bit WAV fallback until a number is on file).
+- **Per-side maximum length** by size/RPM (TBD — preflight applies MRP's per-side length table until a number is on file).
+
+These no longer require a code change. Once a Viryl PM confirms the numbers, an operator (or a Viryl press-scoped partner admin) records them in the press catalog's **Audio spec** card (Admin → Manufacturers → Viryl → any vinyl format → Audio spec): minimum bit depth, minimum sample rate, and a per-side maximum-length grid (size × RPM, in minutes). The audio preflight resolves these *over* the measured baseline in `shared/vendorSpecs.ts` — any field left blank inherits the baseline, so nothing is fabricated. Clearing the override falls back entirely to the documented platform-wide fallback. The hardcoded `viryl.audio` block in `shared/vendorSpecs.ts` stays on the fallback; the override row is the source of truth for confirmed numbers.
 
 ## Packaging notes
 

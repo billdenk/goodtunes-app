@@ -3925,6 +3925,7 @@ function CatalogEditor({
         )}
       </div>
       {isVinyl && <PressTemplateSpecsCard pressId={pressId} fmt={fmt} />}
+      {isVinyl && <PressAudioSpecCard pressId={pressId} />}
       </div>
 
       <PressLogoEditorDialog
@@ -4045,6 +4046,224 @@ function PressTemplateSpecsCard({ pressId, fmt }: { pressId: string; fmt: AlbumF
             onRemove={(specId) => remove.mutate(specId)}
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Task #2324 — Operator/partner-editable AUDIO spec override ──────────────
+// One row per press. Mirrors PressTemplateSpecsCard but for the AUDIO
+// preflight: the plant's CONFIRMED bit depth, sample-rate minimum, and
+// per-side length budgets. The validator resolves these OVER the measured
+// constants in shared/vendorSpecs.ts — a BLANK field inherits the baseline,
+// so nothing is fabricated. Most plants (Viryl etc.) publish no audio
+// numbers at all, which is the gap this fills. Press-scoped (not per format).
+type PressAudioSpec = {
+  id: string;
+  requiredBitDepth: number | null;
+  requiredSampleRateHz: number | null;
+  maxSideSeconds: Record<string, Record<string, number>> | null;
+  notes: string | null;
+};
+const AUDIO_SIZES = ['7"', '10"', '12"'] as const;
+const AUDIO_RPMS = ["33", "45"] as const;
+
+function PressAudioSpecCard({ pressId }: { pressId: string }) {
+  const { toast } = useToast();
+  const qk = ["/api/admin/manufacturers", pressId, "audio-spec"];
+  const { data, isLoading } = useQuery<{ spec: PressAudioSpec | null }>({ queryKey: qk });
+  const spec = data?.spec ?? null;
+
+  const [bitDepth, setBitDepth] = useState("");
+  const [sampleKhz, setSampleKhz] = useState("");
+  const [grid, setGrid] = useState<Record<string, Record<string, string>>>({});
+  const [notes, setNotes] = useState("");
+
+  // Rehydrate the draft from the saved row whenever it (re)loads. Seconds
+  // are surfaced to operators as minutes (one decimal); Hz as kHz.
+  useEffect(() => {
+    setBitDepth(spec?.requiredBitDepth != null ? String(spec.requiredBitDepth) : "");
+    setSampleKhz(
+      spec?.requiredSampleRateHz != null ? String(spec.requiredSampleRateHz / 1000) : "",
+    );
+    const g: Record<string, Record<string, string>> = {};
+    for (const size of AUDIO_SIZES) {
+      for (const rpm of AUDIO_RPMS) {
+        const secs = spec?.maxSideSeconds?.[size]?.[rpm];
+        if (typeof secs === "number") {
+          (g[size] ??= {})[rpm] = String(Math.round((secs / 60) * 10) / 10);
+        }
+      }
+    }
+    setGrid(g);
+    setNotes(spec?.notes ?? "");
+  }, [spec]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const maxSideSeconds: Record<string, Record<string, number>> = {};
+      for (const size of AUDIO_SIZES) {
+        for (const rpm of AUDIO_RPMS) {
+          const raw = grid[size]?.[rpm];
+          const mins = raw != null && raw.trim() !== "" ? Number(raw) : NaN;
+          if (Number.isFinite(mins) && mins > 0) {
+            (maxSideSeconds[size] ??= {})[rpm] = Math.round(mins * 60);
+          }
+        }
+      }
+      const bd = bitDepth.trim() !== "" ? Number(bitDepth) : NaN;
+      const khz = sampleKhz.trim() !== "" ? Number(sampleKhz) : NaN;
+      const res = await apiRequest("PUT", `/api/admin/manufacturers/${pressId}/audio-spec`, {
+        requiredBitDepth: Number.isFinite(bd) ? Math.round(bd) : null,
+        requiredSampleRateHz: Number.isFinite(khz) ? Math.round(khz * 1000) : null,
+        maxSideSeconds: Object.keys(maxSideSeconds).length > 0 ? maxSideSeconds : null,
+        notes: notes.trim() !== "" ? notes.trim() : null,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk });
+      toast({ title: "Audio spec saved" });
+    },
+    onError: (e: any) =>
+      toast({ title: e?.message || "Couldn't save audio spec", variant: "destructive" }),
+  });
+  const remove = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/audio-spec`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk });
+      toast({ title: "Audio override cleared — inheriting baseline" });
+    },
+    onError: (e: any) =>
+      toast({ title: e?.message || "Couldn't clear audio spec", variant: "destructive" }),
+  });
+
+  const busy = save.isPending || remove.isPending || isLoading;
+  const setCell = (size: string, rpm: string, v: string) =>
+    setGrid((g) => ({ ...g, [size]: { ...(g[size] ?? {}), [rpm]: v } }));
+
+  return (
+    <div className="border-t border-slate-100 px-5 py-4">
+      <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+        Audio spec
+      </span>
+      <p className="mt-1 text-xs text-slate-400">
+        The plant's confirmed cutting requirements. Leave a field blank to inherit the
+        measured baseline — nothing here is assumed. These drive the album's audio preflight.
+      </p>
+
+      <div className="mt-3 flex flex-wrap gap-4">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-600">Min bit depth</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={8}
+            max={32}
+            value={bitDepth}
+            disabled={busy}
+            onChange={(e) => setBitDepth(e.target.value)}
+            placeholder="inherit"
+            className="w-28 rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-800 focus:border-slate-400 focus:outline-none disabled:opacity-50"
+            data-testid="input-audio-bit-depth"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-600">Min sample rate (kHz)</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.1"
+            min={8}
+            value={sampleKhz}
+            disabled={busy}
+            onChange={(e) => setSampleKhz(e.target.value)}
+            placeholder="inherit"
+            className="w-32 rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-800 focus:border-slate-400 focus:outline-none disabled:opacity-50"
+            data-testid="input-audio-sample-rate"
+          />
+        </label>
+      </div>
+
+      <div className="mt-4">
+        <span className="text-xs font-medium text-slate-600">
+          Max side length (minutes)
+        </span>
+        <div className="mt-2 overflow-x-auto">
+          <table className="text-sm">
+            <thead>
+              <tr className="text-xs text-slate-400">
+                <th className="px-2 py-1 text-left font-medium">Size</th>
+                {AUDIO_RPMS.map((rpm) => (
+                  <th key={rpm} className="px-2 py-1 text-left font-medium">
+                    {rpm} RPM
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {AUDIO_SIZES.map((size) => (
+                <tr key={size}>
+                  <td className="px-2 py-1 text-slate-600">{size}</td>
+                  {AUDIO_RPMS.map((rpm) => (
+                    <td key={rpm} className="px-2 py-1">
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.1"
+                        min={0}
+                        value={grid[size]?.[rpm] ?? ""}
+                        disabled={busy}
+                        onChange={(e) => setCell(size, rpm, e.target.value)}
+                        placeholder="inherit"
+                        className="w-24 rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-800 focus:border-slate-400 focus:outline-none disabled:opacity-50"
+                        data-testid={`input-audio-side-${size.replace(/\D/g, "")}-${rpm}`}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <label className="mt-4 flex flex-col gap-1">
+        <span className="text-xs font-medium text-slate-600">Notes</span>
+        <textarea
+          rows={2}
+          value={notes}
+          disabled={busy}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Optional context for operators (e.g. source of these numbers)."
+          className="rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-800 focus:border-slate-400 focus:outline-none disabled:opacity-50"
+          data-testid="input-audio-notes"
+        />
+      </label>
+
+      <div className="mt-4 flex items-center gap-3">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => save.mutate()}
+          className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-900 disabled:opacity-50"
+          data-testid="button-save-audio-spec"
+        >
+          {save.isPending ? "Saving…" : "Save audio spec"}
+        </button>
+        {spec && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => remove.mutate()}
+            className="text-sm text-slate-500 hover:text-[var(--brand-heart)] disabled:opacity-50"
+            data-testid="button-clear-audio-spec"
+          >
+            Clear override
+          </button>
+        )}
       </div>
     </div>
   );

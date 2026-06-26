@@ -7841,6 +7841,40 @@ SQL
 migrate_press_template_specs dev  "${DATABASE_URL:-}"
 migrate_press_template_specs prod "${PROD_DATABASE_URL:-}"
 
+# Task #2324 — per-press operator/partner-editable AUDIO spec override.
+# One row per press (unique on press_id); the audio preflight resolves
+# these OVER the measured baseline in shared/vendorSpecs.ts (NULL field =
+# inherit). schema-drift-guard fails on a missing table, so create it on
+# both DBs idempotently here.
+migrate_press_audio_specs() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press_audio_specs migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS press_audio_specs (
+  id                       varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id                 varchar NOT NULL UNIQUE,
+  required_bit_depth       integer,
+  required_sample_rate_hz  integer,
+  max_side_seconds         jsonb,
+  notes                    text,
+  updated_by_user_id       varchar,
+  updated_at               timestamp NOT NULL DEFAULT now()
+);
+COMMIT;
+SQL
+  then
+    echo "post-merge: press_audio_specs migration ok on $label"
+  else
+    echo "post-merge: WARNING — press_audio_specs migration failed on $label (continuing)"
+  fi
+}
+migrate_press_audio_specs dev  "${DATABASE_URL:-}"
+migrate_press_audio_specs prod "${PROD_DATABASE_URL:-}"
+
 # Task #2109 — ONE-TIME seed: migrate MRP's measured artboard sizes (real
 # Nov-2025 print-ready files) into Memphis Record Pressing's catalog so the
 # one press we have confirmed data for is genuinely catalog-backed, not

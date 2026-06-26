@@ -3,7 +3,7 @@ import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqu
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import type { SignedCertLadderRung } from "./signedCertLadder";
-import type { CompletedTemplateConfig } from "./vendorSpecs";
+import type { CompletedTemplateConfig, VinylSize, VinylRpm } from "./vendorSpecs";
 import type { CompletedTemplateComponent } from "./uploadValidation";
 
 // Task #475 — 30-day soft-delete Trash. Every admin-deletable entity
@@ -2522,6 +2522,36 @@ export const insertPressTemplateSpecSchema = createInsertSchema(pressTemplateSpe
   updatedAt: true,
 });
 export type InsertPressTemplateSpec = z.infer<typeof insertPressTemplateSpecSchema>;
+
+// Task #2324 — per-press AUDIO spec override. One row per press
+// (unique on pressId). The audio preflight baseline lives as measured
+// constants in shared/vendorSpecs.ts; this table lets an operator (or a
+// press-scoped partner admin) record the plant's CONFIRMED numbers so we
+// never hardcode or fabricate them. A NULL field inherits the plant's
+// baseline; a set value wins (see resolveAudioSpec). This mirrors
+// press_template_specs, which already makes the art/template specs
+// operator-editable. maxSideSeconds is the sparse per-side length table
+// keyed size → rpm (same shape as VendorSpec.audio.maxSideSecondsBySizeRpm)
+// — only the cells the operator filled in override the baseline table.
+// notes is operator reference metadata only (never read by the validator).
+export const pressAudioSpecs = pgTable("press_audio_specs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pressId: varchar("press_id").notNull().unique(),
+  requiredBitDepth: integer("required_bit_depth"),
+  requiredSampleRateHz: integer("required_sample_rate_hz"),
+  maxSideSeconds: jsonb("max_side_seconds").$type<
+    Partial<Record<VinylSize, Partial<Record<VinylRpm, number>>>>
+  >(),
+  notes: text("notes"),
+  updatedByUserId: varchar("updated_by_user_id"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+export type PressAudioSpec = typeof pressAudioSpecs.$inferSelect;
+export const insertPressAudioSpecSchema = createInsertSchema(pressAudioSpecs).omit({
+  id: true,
+  updatedAt: true,
+});
+export type InsertPressAudioSpec = z.infer<typeof insertPressAudioSpecSchema>;
 
 // Task #670 — audit log for automated pricing imports (Hellbender's
 // Shopify scrape today; future MRP/PMP sync rows land here too).
