@@ -57,6 +57,10 @@ args = "app-icon-guards-smoke"
 task = "workflow.run"
 args = "ios-ipa-icon-smoke"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "codemagic-android-changeset-smoke"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -128,6 +132,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python3 scripts/verify-ios-ipa-icon-smoke.py"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "codemagic-android-changeset-smoke"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 scripts/verify-codemagic-android-changeset-smoke.py"
 
 [workflows.workflow.metadata]
 isValidation = true

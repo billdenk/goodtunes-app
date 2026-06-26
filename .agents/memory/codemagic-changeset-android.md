@@ -28,6 +28,12 @@ base.
 - `includes` DISABLES the default include-all — list every native path explicitly,
   or a real native change skips (the dangerous direction). The include set is
   complete because the Android shell can only change via those paths.
+- A validation guard now enforces this invariant automatically (check
+  `codemagic-android-changeset-smoke`): it FAILS the build if a native-shell path
+  present on disk isn't covered by the includes list. The guard works off an
+  EXPLICIT known-path set, so adding a brand-new native-config file means updating
+  BOTH the `includes` list AND the guard's path set in lockstep — it won't
+  auto-discover an unknown new path on its own.
 - Bias is toward BUILD: listing `package.json`/lock also rebuilds on non-native
   dep bumps (acceptable). A wasted ~$0.50 beats shipping testers a stale shell.
 - Don't add `ios/` to this workflow — iOS-only changes don't affect the `.aab`.
