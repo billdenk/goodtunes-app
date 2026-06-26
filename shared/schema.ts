@@ -4780,6 +4780,61 @@ export type PartnerPermissionOverride = typeof partnerPermissionOverrides.$infer
 export type PartnerPermissions = typeof partnerPermissions.$inferSelect;
 export type InsertPartnerPermissions = typeof partnerPermissions.$inferInsert;
 
+// ─── Task #2224 — Partner feedback / bug-report inbox ────────────────
+// Self-contained table for the in-portal "Report a bug / request a
+// feature" widget. Any invited partner role (press, NPO, artist, label,
+// vendor, manager, printer, fulfillment, publisher) submits from inside
+// their portal; operators triage in a dedicated /admin/feedback inbox.
+//
+// The submitter's role/scope/name/email are SNAPSHOT here, server-derived
+// at submit time (never trusted from the client) so the inbox shows who
+// actually filed it even if their hat changes later. No FK to users — we
+// store the id as a plain varchar (matching the loose-FK lessons in the
+// rest of the schema) and keep the display fields denormalized.
+//
+// status lifecycle: new → reviewing → in_progress → shipped → closed
+// (with wont_do as the alternate terminal state). `escalated` is the
+// "Escalated to dev" flag. `internalNotes` is operator-only; `publicReply`
+// is surfaced back to the submitter in their "My requests" history.
+export const partnerFeedback = pgTable("partner_feedback", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  submitterUserId: varchar("submitter_user_id").notNull(),
+  submitterRole: text("submitter_role"),
+  submitterScopeKind: text("submitter_scope_kind"),
+  submitterScopeId: varchar("submitter_scope_id"),
+  submitterName: text("submitter_name"),
+  submitterEmail: text("submitter_email"),
+  kind: text("kind").notNull(), // "bug" | "feature"
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  pageUrl: text("page_url"),
+  screenshotUrl: text("screenshot_url"),
+  status: text("status").notNull().default("new"), // new|reviewing|in_progress|shipped|closed|wont_do
+  escalated: boolean("escalated").notNull().default(false),
+  internalNotes: text("internal_notes"),
+  publicReply: text("public_reply"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertPartnerFeedbackSchema = createInsertSchema(partnerFeedback).omit({
+  id: true,
+  submitterUserId: true,
+  submitterRole: true,
+  submitterScopeKind: true,
+  submitterScopeId: true,
+  submitterName: true,
+  submitterEmail: true,
+  status: true,
+  escalated: true,
+  internalNotes: true,
+  publicReply: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertPartnerFeedback = z.infer<typeof insertPartnerFeedbackSchema>;
+export type PartnerFeedback = typeof partnerFeedback.$inferSelect;
+
 // ─── Task #1036 — Unified identity P1: memberships ───────────────────
 // One account → many scopes. Each membership is one "hat" a user wears
 // (an artist Person, a label, an NPO/organization, a press/manufacturer,

@@ -24,6 +24,7 @@ import {
   GitBranch,
   Settings as Cog,
   Mail,
+  MessageSquare,
   ClipboardList,
   HeartHandshake,
   ShoppingBag,
@@ -83,6 +84,7 @@ const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   "pressing-orders": "queues",
   "fan-orders": "queues",
   "cert-names": "queues",
+  feedback: "queues",
   jobs: "queues",
   customers: "audience",
   "platform-pricing": "system",
@@ -134,6 +136,7 @@ export type EntityKey =
   | "pressing-orders"
   | "fan-orders"
   | "cert-names"
+  | "feedback"
   | "early-cut"
   | "fulfillment"
   | "customers"
@@ -374,6 +377,13 @@ export function AdminFrame({
       !o.returnedAt &&
       o.fulfillmentStatus !== "returned",
   ).length;
+  // Task #2224 — Feedback inbox badge counts only NEW partner reports
+  // (untriaged), mirroring how the page surfaces fresh submissions.
+  const { data: feedbackRows = [] } = useQuery<Array<{ status: string }>>({
+    queryKey: ["/api/admin/feedback"],
+    enabled: !!user?.isAdmin,
+  });
+  const feedbackNewCount = feedbackRows.filter((f) => f.status === "new").length;
   // Task #230 — NPO directory count drives the badge on the new NPOs
   // sidebar entry. Reuses the same /api/non-profits payload the rest
   // of the admin already hits.
@@ -958,6 +968,16 @@ export function AdminFrame({
                 active={active === "jobs"}
                 onClick={() => navigate("/admin/jobs")}
                 testId="nav-jobs"
+              />
+              {/* Task #2224 — Partner feedback / bug-report triage inbox.
+                  Badge reflects untriaged ("new") reports. */}
+              <SidebarLink
+                icon={MessageSquare}
+                label="Feedback"
+                count={feedbackNewCount}
+                active={active === "feedback"}
+                onClick={() => navigate("/admin/feedback")}
+                testId="nav-feedback"
               />
             </Section>
 

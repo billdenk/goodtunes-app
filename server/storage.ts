@@ -89,6 +89,9 @@ import {
   managers,
   manufacturers,
   fulfillmentPartners,
+  partnerFeedback,
+  type PartnerFeedback,
+  type InsertPartnerFeedback,
   rfqs,
   rfqReplies,
   type Manufacturer,
@@ -375,6 +378,30 @@ export interface IStorage {
   createLabel(data: InsertLabel & { id?: string }): Promise<Label>;
   updateLabel(id: string, data: Partial<Label>): Promise<Label | undefined>;
   deleteLabel(id: string): Promise<void>;
+
+  // Task #2224 — Partner feedback / bug-report inbox CRUD.
+  createPartnerFeedback(
+    data: InsertPartnerFeedback & {
+      submitterUserId: string;
+      submitterRole?: string | null;
+      submitterScopeKind?: string | null;
+      submitterScopeId?: string | null;
+      submitterName?: string | null;
+      submitterEmail?: string | null;
+    },
+  ): Promise<PartnerFeedback>;
+  getPartnerFeedbackForUser(userId: string): Promise<PartnerFeedback[]>;
+  getAllPartnerFeedback(): Promise<PartnerFeedback[]>;
+  getPartnerFeedbackById(id: string): Promise<PartnerFeedback | undefined>;
+  updatePartnerFeedback(
+    id: string,
+    data: Partial<
+      Pick<
+        PartnerFeedback,
+        "status" | "escalated" | "internalNotes" | "publicReply"
+      >
+    >,
+  ): Promise<PartnerFeedback | undefined>;
 
   // Manager ENTITY CRUD (Task #1425). Each person.managerId points here
   // (nullable, SET NULL). Mirrors the Label CRUD exactly; managers have
@@ -2479,6 +2506,58 @@ export class DbStorage implements IStorage {
     // while the label sits in trash; on Purge the existing
     // ON DELETE SET NULL kicks in and clears the credit.
     await softDeleteEntity("label", id, userId ?? null);
+  }
+
+  // Task #2224 — Partner feedback / bug-report inbox.
+  async createPartnerFeedback(
+    data: InsertPartnerFeedback & {
+      submitterUserId: string;
+      submitterRole?: string | null;
+      submitterScopeKind?: string | null;
+      submitterScopeId?: string | null;
+      submitterName?: string | null;
+      submitterEmail?: string | null;
+    },
+  ): Promise<PartnerFeedback> {
+    const [row] = await db.insert(partnerFeedback).values(data as any).returning();
+    return row;
+  }
+  async getPartnerFeedbackForUser(userId: string): Promise<PartnerFeedback[]> {
+    return db
+      .select()
+      .from(partnerFeedback)
+      .where(eq(partnerFeedback.submitterUserId, userId))
+      .orderBy(desc(partnerFeedback.createdAt));
+  }
+  async getAllPartnerFeedback(): Promise<PartnerFeedback[]> {
+    return db
+      .select()
+      .from(partnerFeedback)
+      .orderBy(desc(partnerFeedback.createdAt));
+  }
+  async getPartnerFeedbackById(id: string): Promise<PartnerFeedback | undefined> {
+    const [row] = await db
+      .select()
+      .from(partnerFeedback)
+      .where(eq(partnerFeedback.id, id))
+      .limit(1);
+    return row;
+  }
+  async updatePartnerFeedback(
+    id: string,
+    data: Partial<
+      Pick<
+        PartnerFeedback,
+        "status" | "escalated" | "internalNotes" | "publicReply"
+      >
+    >,
+  ): Promise<PartnerFeedback | undefined> {
+    const [row] = await db
+      .update(partnerFeedback)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(partnerFeedback.id, id))
+      .returning();
+    return row;
   }
 
   // ----- Manager ENTITY CRUD (Task #1425) -----------------------------

@@ -7990,3 +7990,49 @@ SQL
 }
 migrate_manufacturers_gooddeed_printing_json dev  "${DATABASE_URL:-}"
 migrate_manufacturers_gooddeed_printing_json prod "${PROD_DATABASE_URL:-}"
+
+# Task #2224 — Partner feedback / bug-report inbox. Self-contained table;
+# any invited partner role submits from inside their portal and operators
+# triage at /admin/feedback. Additive + idempotent; schema-drift-smoke
+# fails if shared/schema.ts declares partner_feedback but the table is
+# missing here.
+migrate_partner_feedback() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping partner_feedback migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS partner_feedback (
+  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  submitter_user_id varchar NOT NULL,
+  submitter_role text,
+  submitter_scope_kind text,
+  submitter_scope_id varchar,
+  submitter_name text,
+  submitter_email text,
+  kind text NOT NULL,
+  title text NOT NULL,
+  body text NOT NULL,
+  page_url text,
+  screenshot_url text,
+  status text NOT NULL DEFAULT 'new',
+  escalated boolean NOT NULL DEFAULT false,
+  internal_notes text,
+  public_reply text,
+  created_at timestamp NOT NULL DEFAULT now(),
+  updated_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS partner_feedback_submitter_idx ON partner_feedback (submitter_user_id);
+CREATE INDEX IF NOT EXISTS partner_feedback_status_idx ON partner_feedback (status);
+COMMIT;
+SQL
+  then
+    echo "post-merge: partner_feedback migration ok on $label"
+  else
+    echo "post-merge: WARNING — partner_feedback migration failed on $label (continuing)"
+  fi
+}
+migrate_partner_feedback dev  "${DATABASE_URL:-}"
+migrate_partner_feedback prod "${PROD_DATABASE_URL:-}"

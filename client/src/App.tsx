@@ -92,6 +92,7 @@ import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
 import { AdminPrintQueue } from "@/pages/AdminPrintQueue";
 import { AdminCertNames } from "@/pages/AdminCertNames";
+import { AdminFeedback } from "@/pages/AdminFeedback";
 import { AdminLegacyImageAudit } from "@/pages/AdminLegacyImageAudit";
 import { CertProvenance } from "@/pages/CertProvenance";
 import { FindGoodDeed } from "@/pages/FindGoodDeed";
@@ -818,6 +819,9 @@ function Router() {
         {/* Task #1609 — Review + act on flagged digital cert names. */}
         <Route path="/admin/cert-names">
           <ProtectedRoute component={AdminCertNames} />
+        </Route>
+        <Route path="/admin/feedback">
+          <ProtectedRoute component={AdminFeedback} />
         </Route>
         {/* Task #434 — Audit imported rows still on tinifycdn.com */}
         <Route path="/admin/legacy-image-audit">

@@ -64,7 +64,7 @@ import {
 } from "./dropboxZip";
 import { promisify } from "util";
 import { z } from "zod";
-import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema, insertTrackPublishingSplitSchema, insertTrackMechanicalSplitSchema, insertOrganizationSchema, insertReleaseNotifySignupSchema, insertRigQuoteRequestSchema } from "@shared/schema";
+import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema, insertTrackPublishingSplitSchema, insertTrackMechanicalSplitSchema, insertOrganizationSchema, insertReleaseNotifySignupSchema, insertRigQuoteRequestSchema, insertPartnerFeedbackSchema } from "@shared/schema";
 import { ALBUM_FORMATS, type AlbumFormat } from "@shared/schema";
 import { SHORT_CATEGORIES } from "@shared/categories";
 import { SHARE_LINK_HOST } from "@shared/shareSlug";
@@ -82,7 +82,7 @@ import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistFor
 import { resolveStreamingLinksFromAppleCollectionId, resolveStreamingLinksForCollections, hasAnyResolvedLink, appleCollectionIdFromUrl, appleCountryFromUrl } from "./lib/streamingLinks";
 import { adminLoginPasswordOk, isLinkableEmail, isProviderVerifiedEmailForLink } from "./auth/identityLink";
 import { applyAppleFirstAuthName } from "./auth/appleName";
-import { getUserRole } from "./auth/roles";
+import { getUserRole, getUserMemberships, pickPrimaryMembership } from "./auth/roles";
 import { resolveInviterBranding } from "./inviteBranding";
 import {
   requiredFinishedComponents,
@@ -3421,6 +3421,155 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     await storage.setUserAdmin(target.id, true);
     return res.json({ id: target.id, username: target.username, displayName: target.displayName, isAdmin: true });
+  });
+
+  // ─── Task #2224 — Partner feedback / bug-report inbox ──────────────
+  // Any invited partner (press, NPO, artist, label, vendor, manager,
+  // printer, fulfillment, publisher) reports a bug / requests a feature
+  // from inside their portal. We must NOT use requireAdmin here because
+  // it 403s publisher accounts (they're walled off from /api/admin/*),
+  // and publishers are a supported feedback role. Instead admit any
+  // authenticated admin-kind user that carries isAdmin=true (every
+  // partner role does) and derive identity server-side — the client role
+  // is never trusted.
+  async function requirePartnerFeedbackAuthor(
+    req: Request,
+    res: Response,
+    next: Function,
+  ) {
+    const a = await getAuthFromRequest(req);
+    if (!a || a.kind !== "admin")
+      return res.status(401).json({ message: "Unauthorized" });
+    const user = await storage.getUser(a.userId);
+    if (!user?.isAdmin)
+      return res.status(403).json({ message: "Partner account required" });
+    req.session.userId = a.userId;
+    req.session.kind = "admin";
+    next();
+  }
+
+  // Operator-only guard for the triage inbox. requireAdmin admits every
+  // partner-admin role (label, manager, artist, vendor, …), so layer an
+  // explicit super_admin/admin check on top — only true operators triage.
+  async function requireOperatorForFeedback(
+    req: Request,
+    res: Response,
+    next: Function,
+  ) {
+    const a = await getAuthFromRequest(req);
+    if (!a || a.kind !== "admin")
+      return res.status(401).json({ message: "Unauthorized" });
+    const user = await storage.getUser(a.userId);
+    if (!user?.isAdmin)
+      return res.status(403).json({ message: "Admin only" });
+    const role = (await getUserRole(a.userId))?.role;
+    if (role !== "super_admin" && role !== "admin")
+      return res.status(403).json({ message: "Operator only" });
+    req.session.userId = a.userId;
+    req.session.kind = "admin";
+    next();
+  }
+
+  const FEEDBACK_STATUSES = [
+    "new",
+    "reviewing",
+    "in_progress",
+    "shipped",
+    "closed",
+    "wont_do",
+  ] as const;
+
+  // Submit a bug/feature report. Identity (role/scope/name/email) is
+  // SNAPSHOT here from the server's own resolution so the inbox shows who
+  // actually filed it.
+  app.post("/api/partner/feedback", requirePartnerFeedbackAuthor, async (req, res) => {
+    const userId = (await getAuthFromRequest(req))!.userId;
+    const parsed = insertPartnerFeedbackSchema
+      .extend({
+        kind: z.enum(["bug", "feature"]),
+        title: z.string().trim().min(1).max(200),
+        body: z.string().trim().min(1).max(5000),
+        pageUrl: z.string().trim().max(2000).optional().nullable(),
+        screenshotUrl: z.string().trim().max(2000).optional().nullable(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid feedback", errors: parsed.error.flatten() });
+    }
+    // Drop any client-sent submitterUserId — we use the authenticated id.
+    const { submitterUserId: _ignore, ...clean } = parsed.data as any;
+
+    const memberships = await getUserMemberships(userId);
+    const primary = pickPrimaryMembership(memberships);
+    const user = await storage.getUser(userId);
+
+    const created = await storage.createPartnerFeedback({
+      ...clean,
+      submitterUserId: userId,
+      submitterRole: primary?.role ?? null,
+      submitterScopeKind: primary?.scopeKind ?? null,
+      submitterScopeId: primary?.scopeId ?? null,
+      submitterName: user?.displayName ?? user?.username ?? null,
+      submitterEmail: user?.email ?? null,
+    });
+    res.status(201).json(created);
+  });
+
+  // The submitter's own history. Never exposes internalNotes.
+  app.get("/api/partner/feedback/mine", requirePartnerFeedbackAuthor, async (req, res) => {
+    const userId = (await getAuthFromRequest(req))!.userId;
+    const rows = await storage.getPartnerFeedbackForUser(userId);
+    res.json(
+      rows.map((r) => ({
+        id: r.id,
+        kind: r.kind,
+        title: r.title,
+        body: r.body,
+        pageUrl: r.pageUrl,
+        screenshotUrl: r.screenshotUrl,
+        status: r.status,
+        publicReply: r.publicReply,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+      })),
+    );
+  });
+
+  // Operator triage inbox — full list with server-derived submitter
+  // identity + internal notes.
+  app.get("/api/admin/feedback", requireOperatorForFeedback, async (_req, res) => {
+    const rows = await storage.getAllPartnerFeedback();
+    res.json(rows);
+  });
+
+  app.get("/api/admin/feedback/:id", requireOperatorForFeedback, async (req, res) => {
+    const row = await storage.getPartnerFeedbackById(req.params.id);
+    if (!row) return res.status(404).json({ message: "Not found" });
+    res.json(row);
+  });
+
+  app.patch("/api/admin/feedback/:id", requireOperatorForFeedback, async (req, res) => {
+    const patch: {
+      status?: (typeof FEEDBACK_STATUSES)[number];
+      escalated?: boolean;
+      internalNotes?: string | null;
+      publicReply?: string | null;
+    } = {};
+    if (req.body.status !== undefined) {
+      if (!FEEDBACK_STATUSES.includes(req.body.status))
+        return res.status(400).json({ message: "Invalid status" });
+      patch.status = req.body.status;
+    }
+    if (req.body.escalated !== undefined) patch.escalated = !!req.body.escalated;
+    if (req.body.internalNotes !== undefined)
+      patch.internalNotes = req.body.internalNotes === "" ? null : String(req.body.internalNotes);
+    if (req.body.publicReply !== undefined)
+      patch.publicReply = req.body.publicReply === "" ? null : String(req.body.publicReply);
+    if (Object.keys(patch).length === 0)
+      return res.status(400).json({ message: "Nothing to update" });
+    const updated = await storage.updatePartnerFeedback(req.params.id, patch);
+    if (!updated) return res.status(404).json({ message: "Not found" });
+    res.json(updated);
   });
 
   // Image upload for album artwork / vendor logos / person photos. Streams

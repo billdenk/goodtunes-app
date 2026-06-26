@@ -27,6 +27,7 @@ import { Link } from "wouter";
 import { Circle, type LucideIcon } from "lucide-react";
 import { DashboardTabs, type TabDef } from "@/components/partner/dashboard-controls";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
+import { FeedbackLauncher } from "@/components/operator/FeedbackLauncher";
 import { cn } from "@/lib/utils";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 
@@ -301,6 +302,7 @@ export function OperatorShell<TabId extends string>({
               {name}
             </span>
             <div className="ml-auto flex items-center gap-3" data-testid="operator-shell-account">
+              <FeedbackLauncher />
               <AdminUserMenu />
             </div>
           </div>
@@ -365,7 +367,8 @@ export function OperatorShell<TabId extends string>({
         <div className={cn(maxW, "mx-auto px-4 sm:px-6 py-6")}>
           <div className={cn("flex items-center gap-4", (headerExtras || headerActions) && "mb-6")}>
             {identity}
-            <div className="shrink-0 self-start" data-testid="operator-shell-account">
+            <div className="ml-auto shrink-0 self-start flex items-center gap-3" data-testid="operator-shell-account">
+              <FeedbackLauncher />
               <AdminUserMenu />
             </div>
           </div>
