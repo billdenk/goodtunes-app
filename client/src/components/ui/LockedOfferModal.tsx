@@ -22,6 +22,7 @@ import { useQuery } from "@tanstack/react-query";
 import { IconButton } from "@/components/ui/IconButton";
 import { getCampaignRelease, type ReleaseContent } from "@/pages/Hope";
 import type { OfferSelection } from "@/components/checkout/BuySheet";
+import { PhotoLightbox, type LightboxPhoto } from "@/components/ui/PhotoLightbox";
 
 /**
  * Task #1734 / #1816 — the auto-opening "offer" modal that fronts the
@@ -297,24 +298,64 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
 
 /* ── campaign steps ───────────────────────────────────────────────── */
 
-function OverviewStep({ c, heroSrc }: { c: ReleaseContent; heroSrc: string }) {
+function OverviewStep({
+  c,
+  heroSrc,
+  onGalleryOpen,
+}: {
+  c: ReleaseContent;
+  heroSrc: string;
+  onGalleryOpen: (i: number) => void;
+}) {
+  const gallery = c.gallery ?? [];
+  const hasGallery = gallery.length > 0;
+
   return (
     <div data-testid="step-overview">
       <h1 className="text-fan-primary text-2xl font-bold tracking-tight mb-5">
         {c.overview.heading}
       </h1>
       <div className="flex flex-col sm:flex-row gap-5">
-        <div
-          className="flex-shrink-0 mx-auto sm:mx-0 w-44 h-44 rounded-2xl overflow-hidden bg-white"
-          style={{ boxShadow: "0 12px 36px rgba(0,0,0,0.4)" }}
-        >
-          <img
-            src={heroSrc}
-            alt={`${c.artistName} — ${c.releaseName}`}
-            className="w-full h-full object-cover"
-            data-testid="img-overview-hero"
-          />
-        </div>
+        {hasGallery ? (
+          <div className="flex-shrink-0 mx-auto sm:mx-0 grid grid-cols-2 gap-1.5 w-44">
+            {gallery.map((item, i) => (
+              <button
+                key={i}
+                type="button"
+                aria-label={item.caption}
+                onClick={() => onGalleryOpen(i)}
+                data-testid={`button-gallery-thumb-${i}`}
+                className="group relative aspect-square rounded-xl overflow-hidden bg-white cursor-zoom-in"
+                style={{ boxShadow: "0 6px 18px rgba(0,0,0,0.35)" }}
+              >
+                <img
+                  src={`${c.imageBase}/${item.src}`}
+                  alt={item.caption}
+                  className="w-full h-full object-contain p-1.5"
+                  draggable={false}
+                />
+                <span
+                  className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-md inline-flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ background: "rgba(0,0,0,0.55)" }}
+                >
+                  <Expand className="w-2.5 h-2.5" strokeWidth={2.4} />
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div
+            className="flex-shrink-0 mx-auto sm:mx-0 w-44 h-44 rounded-2xl overflow-hidden bg-white"
+            style={{ boxShadow: "0 12px 36px rgba(0,0,0,0.4)" }}
+          >
+            <img
+              src={heroSrc}
+              alt={`${c.artistName} — ${c.releaseName}`}
+              className="w-full h-full object-cover"
+              data-testid="img-overview-hero"
+            />
+          </div>
+        )}
         <div className="flex-1 min-w-0 text-fan-secondary text-sm leading-relaxed flex flex-col gap-3">
           {c.overview.paragraphs.map((p, i) => (
             <p key={i}>{p}</p>
@@ -746,6 +787,7 @@ export function LockedOfferModal({
     campaign ? campaign.gift.min * 100 : 7500,
   );
   const [zoomSrc, setZoomSrc] = useState<string | null>(null);
+  const [galleryOpen, setGalleryOpen] = useState<number | null>(null);
 
   // Real prices from the buy-options endpoint, so the recap matches checkout.
   const { data: buyOptions } = useQuery<{
@@ -774,6 +816,7 @@ export function LockedOfferModal({
       setSignedQty(0);
       setBoxQty(0);
       setZoomSrc(null);
+      setGalleryOpen(null);
       setEmail(prefilledEmail ?? "");
       setError(null);
       setSubmitting(false);
@@ -897,6 +940,13 @@ export function LockedOfferModal({
 
     const idx = ORDER.indexOf(step);
     const go = (s: Step) => setStep(s);
+
+    // Build the lightbox photo list from the campaign gallery entries.
+    const galleryPhotos: LightboxPhoto[] = (campaign.gallery ?? []).map((g, i) => ({
+      id: String(i),
+      photoUrl: `${campaign.imageBase}/${g.src}`,
+      caption: g.caption,
+    }));
 
     // Campaign notify-only (/hope): editorial overview → Get Early Access.
     const showNotify = leadNotify;
@@ -1041,11 +1091,11 @@ export function LockedOfferModal({
                   )}
                 </div>
               ) : (
-                <OverviewStep c={campaign} heroSrc={heroSrc} />
+                <OverviewStep c={campaign} heroSrc={heroSrc} onGalleryOpen={setGalleryOpen} />
               )
             ) : (
               <>
-                {step === "overview" && <OverviewStep c={campaign} heroSrc={heroSrc} />}
+                {step === "overview" && <OverviewStep c={campaign} heroSrc={heroSrc} onGalleryOpen={setGalleryOpen} />}
                 {step === "buy" && (
                   <BundleStep
                     c={campaign}
@@ -1198,6 +1248,14 @@ export function LockedOfferModal({
         </div>
 
         {zoomSrc && <Lightbox src={zoomSrc} onClose={() => setZoomSrc(null)} />}
+        {galleryOpen !== null && galleryPhotos.length > 0 && (
+          <PhotoLightbox
+            photos={galleryPhotos}
+            index={galleryOpen}
+            onIndexChange={setGalleryOpen}
+            onClose={() => setGalleryOpen(null)}
+          />
+        )}
       </div>
     );
   }

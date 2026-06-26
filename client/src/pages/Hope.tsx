@@ -23,6 +23,9 @@ export type ReleaseContent = {
   previewNote: string;
   imageBase: string;
   images: { hero: string; cert: string; box: string; logo: string; cover: string };
+  /** Ordered list of gallery images shown in the overview step lightbox.
+   *  Each `src` is relative to `imageBase`. Falls back to the hero when absent. */
+  gallery?: { src: string; caption: string }[];
   org: string;
   prices: { bundle: number; signed: number };
   gift: { min: number; presets: number[] };
@@ -68,6 +71,30 @@ const RELEASES: Record<string, ReleaseContent> = {
       logo: "goodtunes-logo-white.png",
       cover: "hope-cover.png",
     },
+    gallery: [
+      {
+        src: "hope-mockup-phone.png",
+        caption: "Instant access to the music with the free GoodTunes® Player.",
+      },
+      {
+        src: "hope-mockup-vinyl.png",
+        caption: "7\" vinyl tracks \u201CGold\u201D & \u201CBetter Days\u201D.",
+      },
+      {
+        src: "hope-mockup-album.png",
+        caption: "Album Artwork",
+      },
+      {
+        src: "hope-mockup-cert.png",
+        caption:
+          "A numbered, personalized printable PDF GoodDeed® Certificate suitable for framing.",
+      },
+      {
+        src: "hope-mockup-booklet.jpg",
+        caption:
+          "Special-edition companion booklet featuring lyrics, Jane's poems, exclusive photos and more.",
+      },
+    ],
     org: "Nightbirde Foundation",
     prices: { bundle: 25, signed: 25 },
     gift: { min: 75, presets: [75, 100, 250] },
