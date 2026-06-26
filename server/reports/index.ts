@@ -9,7 +9,7 @@ import {
   shopifyRedemptionCodes,
   analyticsEvents,
 } from "@shared/schema";
-import { and, eq, gte, lte, inArray, sql, desc, isNotNull, or } from "drizzle-orm";
+import { and, eq, ne, gte, lte, inArray, sql, desc, isNotNull, or } from "drizzle-orm";
 import type { PartnerScope } from "../auth/roles";
 import { effectiveScopeFilter, effectiveOrgId, isOrgScope } from "../auth/roles";
 
@@ -206,6 +206,8 @@ function scopedAlbumFilter(albumIds: string[] | null, albumCol: any) {
 async function getPaidOrders(ctx: ReportContext, albumIds: string[] | null) {
   const filters = [
     inArray(orders.status, ["paid", "shipped", "complete", "completed"]),
+    // Task #2270 — exclude QA test-purchase orders from all partner reports.
+    ne(orders.origin, "qa:test"),
     gte(orders.createdAt, ctx.from),
     lte(orders.createdAt, ctx.to),
   ];

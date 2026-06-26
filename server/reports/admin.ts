@@ -68,7 +68,8 @@ export async function platformKpis(ctx: AdminReportContext) {
     const paid = await db
       .select({ id: orders.id, totalCents: orders.totalCents, customerId: orders.customerId, platformFeeCents: orders.platformFeeCents })
       .from(orders)
-      .where(and(eq(orders.status, "paid"), gte(orders.createdAt, from), lte(orders.createdAt, to)));
+      // Task #2270 — exclude QA test-purchase orders from god-view KPIs.
+      .where(and(eq(orders.status, "paid"), ne(orders.origin, "qa:test"), gte(orders.createdAt, from), lte(orders.createdAt, to)));
     let gmv = 0; let net = 0; const buyers = new Set<string>();
     for (const r of paid) {
       gmv += r.totalCents;

@@ -101,6 +101,8 @@ async function loadPrinterQueue(
     .innerJoin(orders, eq(orders.id, signedCertCertificates.orderId))
     .innerJoin(albums, eq(albums.id, orders.albumId))
     .innerJoin(customerUsers, eq(orders.customerId, customerUsers.id))
+    // Task #2270 — exclude QA test-purchase orders from the print queue.
+    .where(ne(orders.origin, "qa:test"))
     .$dynamic();
   if (status) q = q.where(eq(signedCertCertificates.nameStatus, status));
   const rows = await q

@@ -8,7 +8,7 @@
 // is just a re-hit of the endpoint — useful when a row is unlocked or
 // the cover art changes.
 import type { Express, Request, Response } from "express";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, like, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, like, ne, sql } from "drizzle-orm";
 import PDFDocument from "pdfkit";
 // qrcode ships no bundled types and we don't want to vendor a .d.ts just
 // for this single import — same pattern as server/auth/totp.ts.
@@ -777,6 +777,8 @@ export function registerCertificateRoutes(app: Express) {
       .innerJoin(albums, eq(albums.id, orders.albumId))
       .innerJoin(customerUsers, eq(orders.customerId, customerUsers.id))
       .$dynamic();
+    // Task #2270 — exclude QA test-purchase orders from the print queue.
+    q = q.where(ne(orders.origin, "qa:test"));
     if (status) q = q.where(eq(signedCertCertificates.nameStatus, status));
     const rows = await q.orderBy(asc(signedCertCertificates.confirmedAt), desc(signedCertCertificates.createdAt)).limit(500);
     res.json(

@@ -124,12 +124,15 @@ const MAX_COPIES_PER_CHECKOUT = 10;
 const dollars = (cents: number) => formatUsdCents(cents);
 
 let stripePromise: Promise<Stripe | null> | null = null;
-async function getStripePromise() {
+// Task #2270 — cached after the first key fetch; set before loadStripe resolves.
+let _isStripeTestMode = false;
+async function getStripePromise(): Promise<Stripe | null> {
   if (stripePromise) return stripePromise;
   stripePromise = (async () => {
     const r = await apiRequest("GET", "/api/checkout/publishable-key");
     const j = await r.json();
     if (!j.publishableKey) throw new Error("Stripe isn't configured yet");
+    _isStripeTestMode = !!j.isTestMode;
     return loadStripe(j.publishableKey);
   })();
   return stripePromise;
@@ -593,6 +596,9 @@ export function BuySheet({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [stripe, setStripe] = useState<Stripe | null>(null);
+  // Task #2270 — true when Stripe is in test mode (pk_test_ key); shows
+  // a "no real charge" banner over the Embedded Checkout surface.
+  const [isTestMode, setIsTestMode] = useState(false);
   // Destination + live shipping quote so the displayed total matches what
   // Stripe will charge (embedded checkout can't surface a country-driven
   // shipping rate on its own — we price it server-side and lock the
@@ -667,7 +673,9 @@ export function BuySheet({
 
   useEffect(() => {
     if (!clientSecret) return;
-    getStripePromise().then(setStripe).catch((e) => setError(e?.message ?? "Stripe failed to load"));
+    getStripePromise()
+      .then((s) => { setStripe(s); setIsTestMode(_isStripeTestMode); })
+      .catch((e) => setError(e?.message ?? "Stripe failed to load"));
   }, [clientSecret]);
 
   // Task #1816 — persist the handed-off selection so it survives the sign-in
@@ -1122,6 +1130,18 @@ export function BuySheet({
           {/* ── Stripe Embedded Checkout (full-width) ── */}
           {inCheckout && (
             <div className="flex-1 min-h-0 overflow-y-auto">
+              {/* Task #2270 — QA test mode indicator */}
+              {isTestMode && (
+                <div className="flex flex-col gap-0.5 px-4 py-2.5 bg-amber-400/20 border-b border-amber-400/30 text-amber-300 text-xs font-medium" data-testid="banner-test-mode">
+                  <div className="flex items-center gap-2">
+                    <span>🧪</span>
+                    <span>Test mode — no real charge</span>
+                  </div>
+                  <div className="pl-6 text-amber-300/70 font-normal">
+                    Use card <code className="font-mono">4242 4242 4242 4242</code>, any future date, any 3-digit CVC, any ZIP.
+                  </div>
+                </div>
+              )}
               {stripe && clientSecret ? (
                 <div className="bg-white text-slate-900" data-testid="embedded-checkout">
                   <EmbeddedCheckoutProvider stripe={stripe} options={{ clientSecret }}>
@@ -2674,6 +2694,18 @@ export function BuySheet({
           </div>
         )}
 
+        {/* Task #2270 — QA test mode indicator (desktop) */}
+        {inCheckout && isTestMode && (
+          <div className="flex flex-col gap-0.5 px-4 py-2.5 bg-amber-400/20 border-b border-amber-400/30 text-amber-300 text-xs font-medium" data-testid="banner-test-mode-desktop">
+            <div className="flex items-center gap-2">
+              <span>🧪</span>
+              <span>Test mode — no real charge</span>
+            </div>
+            <div className="pl-6 text-amber-300/70 font-normal">
+              Use card <code className="font-mono">4242 4242 4242 4242</code>, any future date, any 3-digit CVC, any ZIP.
+            </div>
+          </div>
+        )}
         {inCheckout && stripe && clientSecret && (
           <div className="px-2 pb-2 overflow-y-auto max-h-[82vh] bg-white text-slate-900" data-testid="embedded-checkout">
             <EmbeddedCheckoutProvider stripe={stripe} options={{ clientSecret }}>

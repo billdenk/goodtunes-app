@@ -955,10 +955,12 @@ export function registerCommerceRoutes(app: Express) {
 
   // GET /api/checkout/publishable-key — the browser fetches this to boot
   // Stripe.js. Lives behind the connector so the key isn't hardcoded.
+  // Also returns `isTestMode: true` when the key starts with `pk_test_`
+  // so the BuySheet can show a "no real charge" indicator.
   app.get("/api/checkout/publishable-key", async (_req, res) => {
     try {
       const key = await getStripePublishableKey();
-      res.json({ publishableKey: key });
+      res.json({ publishableKey: key, isTestMode: key.startsWith("pk_test_") });
     } catch (e: any) {
       res.status(503).json({ message: e?.message ?? "Stripe not configured" });
     }
@@ -2622,6 +2624,11 @@ export function registerCommerceRoutes(app: Express) {
       ...(parsed.data.funnelAttribution?.utmSource ? { gt_funnel_utm_source: parsed.data.funnelAttribution.utmSource.slice(0, 256) } : {}),
       ...(parsed.data.funnelAttribution?.utmCampaign ? { gt_funnel_utm_campaign: parsed.data.funnelAttribution.utmCampaign.slice(0, 256) } : {}),
       ...(parsed.data.funnelAttribution?.referrerHost ? { gt_funnel_ref_host: parsed.data.funnelAttribution.referrerHost.slice(0, 256) } : {}),
+      // Task #2270 — QA test-purchase flag. Set when the operator is using
+      // a non-production (test-mode Stripe) environment. Downstream, the
+      // materializer reads this to set origin='qa:test' and skip real
+      // side-effects (fan library, stock, referrals, LLT bonus).
+      gt_is_qa: process.env.REPLIT_DEPLOYMENT !== "1" ? "1" : "0",
     };
     const returnUrl = `${absoluteOrigin(req)}/welcome?session_id={CHECKOUT_SESSION_ID}`;
     let session: Stripe.Checkout.Session;
@@ -3109,6 +3116,56 @@ export function registerCommerceRoutes(app: Express) {
   });
 
   // ─── Admin order list + ship ────────────────────────────────────
+  // Task #2270 — QA test-purchase order cleanup.
+  // GET  /api/admin/qa-orders       — list all qa:test orders (super-admin).
+  // DELETE /api/admin/qa-orders/:id — hard-delete a single qa:test order.
+  app.get("/api/admin/qa-orders", requireAdmin, async (req, res) => {
+    try {
+      const rows = await db.execute<{
+        id: string; created_at: string; album_id: string; album_title: string;
+        buyer_email: string; buyer_name: string | null; total_cents: number;
+        status: string; stripe_checkout_session_id: string | null;
+      }>(sql`
+        SELECT o.id, o.created_at, o.album_id, a.title AS album_title,
+               o.buyer_email, o.buyer_name, o.total_cents, o.status,
+               o.stripe_checkout_session_id
+          FROM orders o
+          LEFT JOIN albums a ON a.id = o.album_id
+         WHERE o.origin = 'qa:test'
+         ORDER BY o.created_at DESC
+         LIMIT 200
+      `);
+      res.json((rows as any).rows ?? []);
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Failed to load QA orders" });
+    }
+  });
+
+  app.delete("/api/admin/qa-orders/:id", requireAdmin, async (req, res) => {
+    const id = req.params.id;
+    try {
+      // Verify this is actually a qa:test order before deleting.
+      const [o] = await db.select({ id: orders.id, origin: orders.origin })
+        .from(orders)
+        .where(eq(orders.id, id));
+      if (!o) return res.status(404).json({ message: "Order not found" });
+      if (o.origin !== "qa:test") {
+        return res.status(403).json({ message: "Only qa:test orders can be deleted here" });
+      }
+      // Delete child rows first to respect FKs, then the order itself.
+      await db.execute(sql`DELETE FROM order_copies WHERE order_id = ${id}`);
+      await db.execute(sql`DELETE FROM order_items WHERE order_id = ${id}`);
+      await db.execute(sql`DELETE FROM signed_cert_reservations WHERE order_id = ${id}`);
+      await db.execute(sql`DELETE FROM signed_cert_certificates WHERE order_id = ${id}`);
+      await db.execute(sql`DELETE FROM referral_credits WHERE order_id = ${id}`);
+      await db.execute(sql`DELETE FROM custom_addon_gift_boxes WHERE order_id = ${id}`);
+      await db.execute(sql`DELETE FROM orders WHERE id = ${id} AND origin = 'qa:test'`);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Failed to delete QA order" });
+    }
+  });
+
   app.get("/api/admin/orders", requireAdmin, async (req, res) => {
     const status = (req.query.status as string | undefined)?.trim();
 
@@ -3604,6 +3661,11 @@ export async function materializeOrderFromSession(
   const skuKind = session.metadata?.gt_sku_kind || classifySkuKind(skuFormat);
   const artistSnapshotId = session.metadata?.gt_artist_id || albumRow?.primaryArtistId || null;
   const labelSnapshotId = session.metadata?.gt_label_id || albumRow?.labelId || null;
+  // Task #2270 — QA test-purchase flag. When set, the order is recorded
+  // with origin='qa:test' and side-effects (fan library, stock decrement,
+  // referral credits, LLT bonus) are skipped so test runs don't pollute
+  // real data. Gift boxes are kept so the Gift of Hope flow is testable.
+  const isQa = session.metadata?.gt_is_qa === "1";
 
   // Shipping breakdown. The base/markup split and resolved band come from
   // the metadata we stamped at session create. The fan-charged total is
@@ -3821,6 +3883,9 @@ export async function materializeOrderFromSession(
             shippingChargedCents: shipChargedCents,
             shippingBand: shipBand,
             taxCents,
+            // Task #2270 — QA test-purchase orders are stamped so they can
+            // be excluded from reports, buyer rosters, and fulfillment queues.
+            origin: isQa ? "qa:test" : "direct",
           })
           .onConflictDoNothing({ target: orders.stripeCheckoutSessionId })
           .returning();
@@ -3899,6 +3964,9 @@ export async function materializeOrderFromSession(
             shippingChargedCents: order!.shippingChargedCents ?? shipChargedCents,
             shippingBand: order!.shippingBand ?? shipBand,
             taxCents: order!.taxCents ?? taxCents,
+            // Task #2270 — preserve origin='qa:test' if the pending row was
+            // already flagged; stamp it now if the pending row wasn't (fallback).
+            origin: order!.origin === "qa:test" || isQa ? "qa:test" : (order!.origin ?? "direct"),
           })
           .where(eq(orders.id, order!.id))
           .returning();
@@ -3952,22 +4020,28 @@ export async function materializeOrderFromSession(
     // Unlock the album for the fan. Idempotent via unique (userId,albumId).
     // The user_albums.user_id FK to users(id) was dropped at Task #44 so
     // this column holds either an admin user id or a customer_user id.
-    await db
-      .insert(userAlbums)
-      .values({ userId: customerId, albumId })
-      .onConflictDoNothing();
-    // Task #1460 — owning a qualifying Nick Carter LLT release also
-    // unlocks the shared "Love Life Tragedy (Bonus)" album. No-op for any
-    // other album; idempotent (skips if already owned).
-    await grantLltBonusIfEligible(db, customerId, albumId);
+    // Task #2270 — QA test-purchase orders skip fan library, LLT bonus,
+    // stock decrement, and referral credits so test runs don't pollute real
+    // data. Gift boxes are kept so the Gift of Hope flow is fully testable.
+    if (!isQa) {
+      await db
+        .insert(userAlbums)
+        .values({ userId: customerId, albumId })
+        .onConflictDoNothing();
+      // Task #1460 — owning a qualifying Nick Carter LLT release also
+      // unlocks the shared "Love Life Tragedy (Bonus)" album. No-op for any
+      // other album; idempotent (skips if already owned).
+      await grantLltBonusIfEligible(db, customerId, albumId);
+    }
     // Task #2061 — fan-out paid custom-addon lines into per-box rows the
     // buyer personalizes after checkout. Idempotent; no-op when the order
     // carries no custom-addon line.
     await ensureGiftBoxesForOrder(order);
-    // Decrement stock — guarded by `wasAlreadyPaid` so concurrent
-    // materializations of the same session don't double-decrement.
+    // Decrement stock — guarded by `wasAlreadyPaid` AND `isQa` so QA orders
+    // never reduce real inventory and concurrent materializations of the same
+    // session don't double-decrement.
     // Task #549 — multi-quantity orders subtract N, not 1.
-    if (!wasAlreadyPaid) {
+    if (!wasAlreadyPaid && !isQa) {
       await db
         .update(albumSkus)
         .set({ stock: sql`GREATEST(${albumSkus.stock} - ${quantity}, 0)` })
@@ -3995,7 +4069,7 @@ export async function materializeOrderFromSession(
     //     press_invited_albums row at $0 (no payout — presses earn
     //     through manufacturing margin, this row only powers the
     //     press portal's invited-artists report).
-    if (!wasAlreadyPaid && order.artistSnapshotId) {
+    if (!wasAlreadyPaid && !isQa && order.artistSnapshotId) {
       try {
         const r = await db.execute<{
           referred_by_person_id: string | null;

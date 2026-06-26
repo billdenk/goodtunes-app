@@ -89,6 +89,7 @@ export async function buyerRoster(
     LEFT JOIN profile_photos pp ON pp.user_id = o.customer_id
     WHERE ${scopeFilter}
       AND o.status IN ('paid','shipped','complete','completed')
+      AND o.origin <> 'qa:test'
       AND o.created_at >= ${from} AND o.created_at < ${to}
     ORDER BY o.created_at DESC
     LIMIT ${limit}

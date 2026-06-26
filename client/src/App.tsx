@@ -91,6 +91,7 @@ import { AdminWelcomeBack } from "@/pages/AdminWelcomeBack";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
 import { AdminPrintQueue } from "@/pages/AdminPrintQueue";
+import { AdminQaOrders } from "@/pages/AdminQaOrders";
 import { AdminCertNames } from "@/pages/AdminCertNames";
 import { AdminFeedback } from "@/pages/AdminFeedback";
 import { AdminLegacyImageAudit } from "@/pages/AdminLegacyImageAudit";
@@ -1093,6 +1094,10 @@ function Router() {
             via /api/admin/trash returning 403 for everyone else. */}
         <Route path="/admin/trash">
           <ProtectedRoute component={AdminTrash} />
+        </Route>
+        {/* Task #2270 — QA test-purchase order cleanup (non-production only). */}
+        <Route path="/admin/qa-orders">
+          <ProtectedRoute component={AdminQaOrders} />
         </Route>
         {/* Bare /admin used to render the legacy 3-column monolith. We now
             redirect straight into the new Albums index so anyone who lands
