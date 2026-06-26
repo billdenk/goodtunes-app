@@ -117,7 +117,7 @@ function songCreditsPayload(
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { AlbumDetailDesktop } from "@/pages/AlbumDetailDesktop";
 import { shareAlbum } from "@/lib/shareAlbum";
-import { isSunrisePending, formatSalesBeginDate } from "@shared/albumStage";
+import { isSunrisePending, formatSalesBeginDate, hasReachedSunset, albumStage } from "@shared/albumStage";
 import { SalesBeginArrivalModal } from "@/components/ui/SalesBeginArrivalModal";
 import { goBack } from "@/lib/navHistory";
 
@@ -875,6 +875,8 @@ function AlbumDetailMobile({
     const was = wasPlayingRef.current;
     wasPlayingRef.current = isPlaying;
     if (!buyEnabled || isOwned) return;
+    // Sunset: never auto-open Buy after a preview ends — the release is gone.
+    if (hasReachedSunset(apiAlbum?.streamingReleaseDate)) return;
     // Task #1628 — during a "Sales Begin" locked preview the page is read-only;
     // never auto-open the Buy sheet when a preview ends.
     if (isSunrisePending(apiAlbum?.goodTunesReleaseDate)) return;
@@ -1112,6 +1114,13 @@ function AlbumDetailMobile({
     ? formatSalesBeginDate(apiAlbum?.goodTunesReleaseDate) ?? "soon"
     : null;
 
+  // Sunset: the album's GoodTunes exclusive window has closed. Uses the shared
+  // `albumStage()` helper so the fan surface and the admin Albums-list tab agree
+  // on the same lifecycle rule. Hidden/prepping albums are already 404'd
+  // server-side so those paths only add future-proofing here.
+  // Owners keep full play access; non-owners see a disabled "Sold Out" pill.
+  const isSunset = !isOwned && albumStage(apiAlbum ?? {}) === "sunset";
+
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden relative">
       <section className="relative w-full h-screen text-fan-primary flex flex-col">
@@ -1172,8 +1181,9 @@ function AlbumDetailMobile({
             const full = songs.find((x) => x.id === s.id);
             if (full) handlePlaySong({ ...full, album });
           }}
+          soldOut={isSunset}
           onOpenBuy={
-            buyEnabled
+            buyEnabled && !isSunset
               ? () => {
                   if (lockedPreview || publicPreview) {
                     setOfferStartAtBundle(true);
@@ -1188,8 +1198,8 @@ function AlbumDetailMobile({
           lockedPreview={lockedPreview}
           notifyOnly={notifyOnly}
           publicPreview={publicPreview}
-          onGetNotified={() => { setOfferStartAtBundle(false); setShowOfferModal(true); }}
-          onGetDetails={() => { setOfferStartAtBundle(false); setShowOfferModal(true); }}
+          onGetNotified={isSunset ? undefined : () => { setOfferStartAtBundle(false); setShowOfferModal(true); }}
+          onGetDetails={isSunset ? undefined : () => { setOfferStartAtBundle(false); setShowOfferModal(true); }}
           onToggleAlbumDownload={handleToggleAlbumDownload}
           onToggleSongDownload={(id) => toggleSongDownload(id)}
           onOpenSongMenu={(s, rect) => {
@@ -1221,6 +1231,7 @@ function AlbumDetailMobile({
 
         {showBuySheet && !notifyOnly && (
           <BuySheet
+            soldOut={isSunset}
             albumId={album.id}
             signedCertDefault={buySheetSignedDefault}
             initialSelection={buySheetSelection}
@@ -1251,6 +1262,7 @@ function AlbumDetailMobile({
             artworkUrl={album.artwork}
             priceCents={buyPriceCents}
             salesPending={salesPending}
+            soldOut={isSunset}
             notifyOnly={notifyOnly}
             salesBeginLabel={salesBeginLabel}
             forceBuy={publicPreview === "buy"}

@@ -135,6 +135,10 @@ export interface AlbumDetailMobileSurfaceProps {
    *  replaced by a disabled "Sales Begin {label}" pill (e.g. "Sales Begin
    *  6/8"); previews stay playable. Null/undefined = live buy behavior. */
   salesBeginLabel?: string | null;
+  /** Sunset release (past streamingReleaseDate). When true AND the fan
+   *  doesn't own the album, the Buy CTA is replaced by a disabled "Sold
+   *  Out" pill with no path into checkout. Previews stay playable. */
+  soldOut?: boolean;
   /** Task #1734 — purchase-funnel "locked unlock" presentation. When true,
    *  the surface hides the ⋯ album menu (share-only chrome) and the action
    *  row leads with a secondary Play + primary Buy/Get Notified + a "Get
@@ -212,6 +216,7 @@ export function AlbumDetailMobileSurface({
   onPlaySong,
   onOpenBuy,
   salesBeginLabel,
+  soldOut = false,
   lockedPreview = false,
   notifyOnly = false,
   publicPreview,
@@ -733,12 +738,25 @@ export function AlbumDetailMobileSurface({
               Play
             </button>
           )}
-          {/* Buy CTA. Owners never see it (ownedNums guard). We no longer
-              swap this for a "Sold Out" pill or a "Listen on…" streaming
-              handoff after a sunset date — albums stay a clean Play + Buy
-              surface. (Stream-only releases lead with "Stream this" above.) */}
+          {/* Sunset releases: disabled "Sold Out" pill, no path into checkout. */}
+          {ownedNums.length === 0 && album.priceCents != null && soldOut && (
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              className="flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-sm text-fan-secondary flex-shrink-0 cursor-default"
+              style={{ background: "rgba(255,255,255,0.10)" }}
+              data-testid="button-sold-out"
+            >
+              Sold Out
+            </button>
+          )}
+          {/* Buy CTA. Owners never see it (ownedNums guard). Sunset releases
+              (soldOut=true) show the "Sold Out" pill above. (Stream-only
+              releases lead with "Stream this" above.) */}
           {ownedNums.length === 0 &&
             album.priceCents != null &&
+            !soldOut &&
             onOpenBuy &&
             // Task #1628 / #1755 — locked-preview "Get Notified" wins when
             // either sales haven't begun yet (sunrise) OR a campaign fan link
@@ -904,7 +922,7 @@ export function AlbumDetailMobileSurface({
             buttons so the transport row stays a clean, balanced pair of pills.
             Negative top margin tucks it just under the buttons; only renders on
             the preview surfaces, so the owned/normal layout is untouched. */}
-        {publicPreview && onGetDetails && (
+        {publicPreview && onGetDetails && !soldOut && (
           <div className="bg-[color:var(--brand-bg)] flex justify-center px-5 -mt-1">
             <button
               type="button"

@@ -522,6 +522,7 @@ export function BuySheet({
   onClose,
   signedCertDefault = false,
   initialSelection,
+  soldOut = false,
 }: {
   albumId: string;
   onClose: () => void;
@@ -532,6 +533,10 @@ export function BuySheet({
   /** Task #1816 — when launched from the campaign offer modal, seed the whole
    *  order and skip the Cart step (open straight at Shipping). */
   initialSelection?: OfferSelection;
+  /** Defense-in-depth: when true (sunset release reached via a stale
+   *  deep-link), the sheet renders a "no longer available" message and
+   *  a Close button instead of the format picker / payment flow. */
+  soldOut?: boolean;
 }) {
   const { user } = useAuth();
   const isCustomerSignedIn = !!user && user.kind === "customer";
@@ -1030,6 +1035,42 @@ export function BuySheet({
     }
   }, [inCheckout, albumId]);
   const isDesktop = useMediaQuery("(min-width: 768px)");
+
+  // Defense-in-depth: if a stale deep-link somehow opens the BuySheet on a
+  // sunset release, render a clear "no longer available" overlay instead of
+  // the payment flow.
+  if (soldOut) {
+    return (
+      <div
+        className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/70"
+        onClick={onClose}
+        data-testid="overlay-buy-sheet-sold-out"
+      >
+        <div
+          className="relative w-full sm:max-w-[440px] rounded-t-3xl sm:rounded-3xl bg-[#0d1235] text-white shadow-2xl px-8 py-10 flex flex-col items-center gap-4 text-center"
+          style={{ boxShadow: "0 -20px 60px rgba(0,0,0,0.6)" }}
+          onClick={(e) => e.stopPropagation()}
+          data-testid="sheet-buy-sold-out"
+        >
+          <div>
+            <div className="text-base font-bold text-white">No longer available</div>
+            <p className="text-fan-secondary text-sm mt-1 leading-snug">
+              This release is no longer available for purchase on GoodTunes.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-11 px-6 rounded-full font-semibold text-sm text-fan-primary transition-opacity active:opacity-70"
+            style={{ background: "rgba(255,255,255,0.12)" }}
+            data-testid="button-sold-out-close"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Desktop layout — wide two-column panel (≥768px)

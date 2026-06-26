@@ -59,7 +59,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { CertPdfViewerSheet } from "@/components/ui/CertPdfViewerSheet";
 import { track } from "@/lib/analytics";
-import { isSunrisePending, formatSalesBeginDate } from "@shared/albumStage";
+import { isSunrisePending, formatSalesBeginDate, hasReachedSunset, albumStage } from "@shared/albumStage";
 import { SalesBeginArrivalModal } from "@/components/ui/SalesBeginArrivalModal";
 import { AlbumCover } from "@/components/ui/AlbumCover";
 
@@ -349,6 +349,13 @@ export function AlbumDetailDesktop({
     ? formatSalesBeginDate(album?.goodTunesReleaseDate) ?? "soon"
     : null;
 
+  // Sunset: the album's GoodTunes exclusive window has closed. Uses the shared
+  // `albumStage()` helper so the fan surface and the admin Albums-list tab agree
+  // on the same lifecycle rule. Hidden/prepping albums are already 404'd
+  // server-side so those paths only add future-proofing here.
+  // Owners keep full play access; non-owners see a disabled "Sold Out" pill.
+  const isSunset = !effectiveOwned && albumStage(album ?? {}) === "sunset";
+
   // Task #1734 — purchase-funnel "locked unlock" presentation (get./store.
   // host, web only, not owned). Task #2273 — extended to the player host
   // (my.) for logged-out visitors so a shared link renders the same campaign
@@ -545,6 +552,8 @@ export function AlbumDetailDesktop({
     signedCert?: boolean;
     selection?: OfferSelection;
   }) => {
+    // Sunset: no purchase path for non-owners.
+    if (isSunset) return;
     // Task #1628 — read-only during a "Sales Begin" locked preview.
     // Task #1784 — EXCEPT the /staging dry-run, which intentionally walks the
     // BuySheet to the Stripe card screen even while the release is prepping.
@@ -557,6 +566,7 @@ export function AlbumDetailDesktop({
   // publicPreview surface). The modal's own onBuy then hands off to BuySheet.
   // Fallback to BuySheet directly on surfaces where the offer sheet is absent.
   const handleBuyClick = (opts?: { signedCert?: boolean }) => {
+    if (isSunset) return;
     if (lockedPreview || publicPreview) {
       setOfferStartAtBundle(true);
       setShowOfferModal(true);
@@ -610,6 +620,8 @@ export function AlbumDetailDesktop({
     const was = wasPlayingRef.current;
     wasPlayingRef.current = player.isPlaying;
     if (!buyEnabled || effectiveOwned) return;
+    // Sunset: never auto-open Buy after a preview ends.
+    if (hasReachedSunset(album?.streamingReleaseDate)) return;
     // Task #1628 — never auto-open Buy during a "Sales Begin" locked preview.
     if (salesPending) return;
     if (!player.previewMode) return;
@@ -784,6 +796,7 @@ export function AlbumDetailDesktop({
             isMultiOwned={isMulti}
             onPlayVideo={effectiveOwned ? setPlayingVideoId : undefined}
             onBuyBundle={buyEnabled ? handleBuyClick : undefined}
+            soldOut={isSunset}
             salesBeginLabel={salesBeginLabel}
             signedCertPriceCents={buyEnabled ? signedCertPriceCents : null}
             signedCertSoldOut={signedCertSoldOut}
@@ -1090,6 +1103,7 @@ export function AlbumDetailDesktop({
 
       {showBuySheet && album && !notifyOnly && (
         <BuySheet
+          soldOut={isSunset}
           albumId={album.id}
           signedCertDefault={buyAddons.signedCert}
           initialSelection={buyAddons.selection}
@@ -1110,6 +1124,7 @@ export function AlbumDetailDesktop({
           artworkUrl={album.artwork}
           priceCents={buyPriceCents}
           salesPending={salesPending}
+          soldOut={isSunset}
           notifyOnly={notifyOnly}
           salesBeginLabel={salesBeginLabel}
           forceBuy={publicPreview === "buy"}

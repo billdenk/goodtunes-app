@@ -19,6 +19,7 @@ import {
 import { formatUsdCents } from "@shared/money";
 import { apiRequest } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
+import { IconButton } from "@/components/ui/IconButton";
 import { getCampaignRelease, type ReleaseContent } from "@/pages/Hope";
 import type { OfferSelection } from "@/components/checkout/BuySheet";
 
@@ -76,6 +77,10 @@ export type LockedOfferModalProps = {
   prefilledEmail?: string | null;
   /** Light attribution stamped on the signup row ("get" / "store"). */
   source?: string;
+  /** Sunset release (past streamingReleaseDate). When true, the modal body
+   *  is replaced by a "no longer available" message so a fan who lands here
+   *  via a stale deep-link never reaches the payment flow. */
+  soldOut?: boolean;
   /** Task #1784 — /staging dry-run: force the Buy CTA even while the release
    *  is prepping/notify-only, so a reviewer can walk the purchase screens. */
   forceBuy?: boolean;
@@ -701,6 +706,7 @@ export function LockedOfferModal({
   artworkUrl,
   priceCents,
   salesPending,
+  soldOut = false,
   notifyOnly,
   salesBeginLabel,
   onBuy,
@@ -780,6 +786,59 @@ export function LockedOfferModal({
   }, [bundleQty, signedQty]);
 
   if (!open) return null;
+
+  // Defense-in-depth: a fan who reaches this modal via a stale deep-link on a
+  // sunset release sees a clear "no longer available" state rather than a broken
+  // purchase flow.
+  if (soldOut) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ background: "rgba(0,0,0,0.72)" }}
+        onClick={onClose}
+        data-testid="locked-offer-modal-sold-out"
+      >
+        <div
+          className="relative w-full max-w-sm rounded-2xl p-8 flex flex-col items-center gap-4 text-center"
+          style={{ background: CARD_BG }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <IconButton
+            icon={<X />}
+            size="md"
+            variant="glass"
+            onClick={onClose}
+            aria-label="Close"
+            className="absolute top-4 right-4"
+            data-testid="button-close-sold-out"
+          />
+          {artworkUrl && (
+            <img
+              src={artworkUrl}
+              alt={title}
+              className="w-24 h-24 rounded-xl object-cover opacity-60"
+            />
+          )}
+          <div>
+            <p className="text-fan-primary font-bold text-lg">{title}</p>
+            {artist && <p className="text-fan-secondary text-sm mt-0.5">{artist}</p>}
+          </div>
+          <p className="text-fan-secondary text-sm leading-relaxed">
+            This release is no longer available for purchase on GoodTunes.
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-2 h-11 px-6 rounded-full font-semibold text-sm text-fan-primary transition-opacity active:opacity-70"
+            style={{ background: "rgba(255,255,255,0.12)" }}
+            data-testid="button-close-sold-out-cta"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const priceLabel = priceCents != null ? formatUsdCents(priceCents) : null;
 

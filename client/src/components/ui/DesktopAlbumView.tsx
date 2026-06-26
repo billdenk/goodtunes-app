@@ -97,6 +97,11 @@ export type DesktopAlbumViewProps = {
    *  by a disabled "Sales Begin {label}" pill (e.g. "Sales Begin 6/8");
    *  previews stay playable. Null/undefined = live buy behavior. */
   salesBeginLabel?: string | null;
+  /** Sunset release (past streamingReleaseDate). When true AND the fan
+   *  doesn't own the album, every Buy/Get-Notified CTA is replaced by a
+   *  disabled "Sold Out" pill — no path into checkout. Previews stay
+   *  playable. */
+  soldOut?: boolean;
   /** Printed-and-signed GoodDeed add-on price (cents). When provided
    *  AND the album isn't owned, a hover-revealed chip pops below the
    *  Buy pill so the fan can toggle the add-on in before checkout.
@@ -316,6 +321,7 @@ export function DesktopAlbumView({
   onShuffle,
   onBuyBundle,
   salesBeginLabel,
+  soldOut = false,
   notifyOnly = false,
   signedCertPriceCents = null,
   signedCertSoldOut = false,
@@ -799,11 +805,23 @@ export function DesktopAlbumView({
                       Play
                     </button>
                   )}
-                  {/* Task #1784 — /staging dry-run leads with Buy {price} (mint)
+                  {/* Sunset: disabled "Sold Out" pill — no path into checkout. */}
+                  {soldOut ? (
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      className="inline-flex items-center gap-2 h-11 px-5 rounded-full font-semibold text-sm text-fan-secondary cursor-default"
+                      style={{ background: "rgba(255,255,255,0.10)" }}
+                      data-testid="button-sold-out"
+                    >
+                      Sold Out
+                    </button>
+                  ) : /* Task #1784 — /staging dry-run leads with Buy {price} (mint)
                       even while the release is prepping, walking the BuySheet to
                       the Stripe card screen. /hope leads with mint Get Early
-                      Access. Otherwise the Task #1755/#1734 defaults. */}
-                  {publicPreview === "buy" && onBuyBundle && album.priceCents != null ? (
+                      Access. Otherwise the Task #1755/#1734 defaults. */
+                  publicPreview === "buy" && onBuyBundle && album.priceCents != null ? (
                     <button
                       type="button"
                       onClick={() => onBuyBundle?.()}
@@ -852,7 +870,7 @@ export function DesktopAlbumView({
                   ) : null}
                   {/* Task #1784 — "Get Details" re-opens the offer modal; sits
                       to the right of the primary CTA on the preview surfaces. */}
-                  {publicPreview && onGetDetails && (
+                  {publicPreview && onGetDetails && !soldOut && (
                     <button
                       type="button"
                       onClick={onGetDetails}
@@ -877,13 +895,26 @@ export function DesktopAlbumView({
                     isPlaying={!!isPlaying}
                     onClick={canPlay ? onPlayPreview : undefined}
                   />
-                  {/* Buy pill. We no longer swap this for a "Sold Out" pill or
-                      a "Listen on…" streaming handoff after a sunset date — the
-                      album stays a clean Play + Buy surface. Gated on
-                      `onBuyBundle` (undefined on native, where buying is
-                      disabled) so the iOS app never surfaces a purchase CTA —
-                      App Review 3.1.1, matching the mobile shell. */}
-                  {onBuyBundle &&
+                  {/* Sunset: disabled "Sold Out" pill — no path into checkout.
+                      Gated on priceCents so stream-only albums (priceCents=null)
+                      that merely reached a sunset date are unaffected. */}
+                  {soldOut && album.priceCents != null && (
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      className="inline-flex items-center gap-2 h-11 px-5 rounded-full font-semibold text-sm text-fan-secondary cursor-default"
+                      style={{ background: "rgba(255,255,255,0.10)" }}
+                      data-testid="button-sold-out"
+                    >
+                      Sold Out
+                    </button>
+                  )}
+                  {/* Buy pill. Sunset releases (soldOut=true) show the pill
+                      above. Gated on `onBuyBundle` (undefined on native, where
+                      buying is disabled) so the iOS app never surfaces a
+                      purchase CTA — App Review 3.1.1. */}
+                  {!soldOut && onBuyBundle &&
                     album.priceCents != null &&
                     // Task #1628 — staged release: sales haven't begun, so the
                     // Buy pill is replaced by a disabled "Sales Begin {date}"
