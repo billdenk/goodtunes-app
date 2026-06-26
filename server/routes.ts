@@ -2827,7 +2827,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.cookie("gt_trusted_device", deviceToken, {
         httpOnly: true,
         secure: true,
-        sameSite: "none",
+        // Task #2231 — Lax, not None. Admin sign-in is a first-party,
+        // same-site, top-level flow, so the cookie only ever needs to ride
+        // the admin host's own POST /api/login. SameSite=None marks it a
+        // cross-site cookie, which Safari ITP / Cloudflare proxies cap or
+        // drop — silently breaking the 30-day "remember this device" bypass
+        // in production. Lax is sent on same-site requests and survives.
+        sameSite: "lax",
         maxAge: 30 * 24 * 60 * 60 * 1000,
         path: "/",
       });
@@ -2936,7 +2942,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.cookie("gt_trusted_device", deviceToken, {
         httpOnly: true,
         secure: true,
-        sameSite: "none",
+        // Task #2231 — Lax, not None. See the matching note on the TOTP
+        // verify mint above: a first-party same-site login cookie marked
+        // SameSite=None gets capped/dropped by Safari ITP and proxies,
+        // which is why the remembered-device bypass failed in production.
+        sameSite: "lax",
         maxAge: 30 * 24 * 60 * 60 * 1000,
         path: "/",
       });
