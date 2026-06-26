@@ -184,7 +184,7 @@ export function OperatorShell<TabId extends string>({
             header band (replacing the GoodTunes logo). Vertical nav in the
             middle. "Powered by GoodTunes" pinned to the foot.
             Hidden on phones, which fall back to the horizontal tab bar. */}
-        <aside className="w-[220px] flex-shrink-0 bg-white border-r border-slate-200 hidden md:flex md:flex-col">
+        <aside className="w-[220px] flex-shrink-0 bg-white hidden md:flex md:flex-col">
           {/* Partner logo + name — top-left rail header, mirrors AdminFrame's
               h-14 logo band. When a full-size navLogoUrl is set (press
               whitelabel, Task #2191), render it height-constrained so the
@@ -229,7 +229,7 @@ export function OperatorShell<TabId extends string>({
               code uses the text-sm scale token (the sub-pixel difference is
               imperceptible). Keep these in lock-step with SidebarLink. */}
           <nav
-            className="flex-1 px-2 pt-2 pb-3 space-y-0.5 overflow-y-auto"
+            className="flex-1 px-2 pt-2 pb-3 space-y-0.5 overflow-y-auto border-r border-slate-200"
             data-testid="operator-shell-nav"
           >
             {tabs.map((t) => {
@@ -279,7 +279,7 @@ export function OperatorShell<TabId extends string>({
 
           {/* "Powered by GoodTunes" — bottom of rail. GoodTunes logo moves
               here so the partner's own logo claims the top-left position. */}
-          <div className="flex-shrink-0 border-t border-slate-200 px-4 py-3">
+          <div className="flex-shrink-0 border-t border-r border-slate-200 px-4 py-3">
             <p className="text-[7px] text-slate-400 font-medium uppercase tracking-wider mb-1.5">
               Powered by
             </p>
