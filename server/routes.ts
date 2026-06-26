@@ -1374,8 +1374,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const masked = maskEmail(user.email);
       console.log(`[admin-otp] code for ${user.email}: ${code} (expires ${expiresAt.toISOString()})`);
       const { sendAdminOtpEmail: _sendOtp } = await import("./mail");
-      await _sendOtp(user.email, code, 10);
-      // Mail failures are logged centrally as `[mail-failure]` from server/mail.ts.
+      const _otpSend = await _sendOtp(user.email, code, 10);
+      // Resend transport errors are logged centrally as `[mail-failure]`
+      // from server/mail.ts, but two non-delivery cases return ok:false
+      // WITHOUT a failure log because they're expected dev states:
+      // a missing RESEND_API_KEY and a synthetic recipient. With the
+      // Chrome-autofill fix now routing more admins to this email-code
+      // step, a silent mail outage means a full admin lockout — so
+      // surface ANY non-delivery loudly here and point on-call at the
+      // `[admin-otp]` fallback line above, which always carries the live
+      // code regardless of mail status.
+      if (!_otpSend.ok) {
+        console.error(
+          `[admin-otp] EMAIL NOT DELIVERED to ${masked} reason=${JSON.stringify(_otpSend.reason)} — recover the code from the [admin-otp] log line above (expires ${expiresAt.toISOString()}).`,
+        );
+      }
       return res.json({
         requiresEmailCode: true,
         userId: user.id,
