@@ -5,6 +5,7 @@ import type { AlbumPhysicalFormat } from "@shared/schema";
 import { createPortal } from "react-dom";
 import { Card } from "@/components/ui/card";
 import { AlbumCover } from "@/components/ui/AlbumCover";
+import { realArtwork } from "@/lib/realArtwork";
 import { Link, useLocation, useRoute, useSearch } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -1134,7 +1135,7 @@ export function AdminAlbum() {
           >
             <div className="w-full h-full transition-transform group-hover:scale-[1.03]" data-testid="img-album-cover">
               <AlbumCover
-                artwork={album.artwork}
+                artwork={realArtwork(album.artwork)}
                 artistPhoto={album.artistPhoto}
                 title={album.title}
               />
@@ -4543,10 +4544,10 @@ function TracksPanel({
           // Only show real artwork while a track is selected; idle state
           // falls through to the dock's slate placeholder so the empty
           // pill reads honestly (no art = no art shown).
-          currentSong && album.artwork ? (
+          currentSong && realArtwork(album.artwork) ? (
             <div className="w-10 h-10 rounded-md flex-shrink-0 overflow-hidden bg-slate-700">
               <img
-                src={album.artwork}
+                src={realArtwork(album.artwork)}
                 alt=""
                 className="w-full h-full object-cover"
               />

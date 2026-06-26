@@ -21,6 +21,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { AlbumCover } from "@/components/ui/AlbumCover";
+import { realArtwork } from "@/lib/realArtwork";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   ViewModeToggle,
@@ -143,26 +144,6 @@ function albumSectionHref(
 ): string {
   // albumHref always emits a query string (`?from=albums…`), so `&` is safe.
   return `${albumHref(albumId, listQuery)}&section=${section}`;
-}
-
-// Task #2021 — decide whether an album row carries a *real* cover. `artwork`
-// is a NOT-NULL string, so "no cover" arrives as one of several sentinels: the
-// empty string, the literal "null"/"undefined" (a stale `String(nullish)`
-// write), or the legacy "/album-placeholder.svg" default. All of those mean
-// "no real art" — return undefined so <AlbumCover> renders its branded
-// placeholder instead of a broken-image "?" glyph.
-function realArtwork(artwork: string | null | undefined): string | undefined {
-  if (!artwork) return undefined;
-  const v = artwork.trim();
-  if (
-    v === "" ||
-    v === "null" ||
-    v === "undefined" ||
-    v === "/album-placeholder.svg"
-  ) {
-    return undefined;
-  }
-  return v;
 }
 
 export function AdminAlbums() {
