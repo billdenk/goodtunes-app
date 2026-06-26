@@ -26,6 +26,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { IconButton } from "@/components/ui/IconButton";
 import { SheetBack, SheetClose } from "@/components/ui/SheetChrome";
+import { FanInput, FanSelect } from "@/components/ui/fan-field";
 import { cn } from "@/lib/utils";
 import { Check, ChevronRight, Gift, Minus, Plus, ShoppingBag, Sparkles } from "lucide-react";
 import { VinylPreview } from "@/components/VinylPreview";
@@ -1279,16 +1280,16 @@ export function BuySheet({
                               <p className="text-fan-faint text-xs leading-snug">
                                 The physical record ships here. Downloads + GoodDeed stay with you — you can gift them after checkout.
                               </p>
-                              <input type="text" value={giftShipName} onChange={(e) => setGiftShipName(e.target.value)} placeholder="Recipient full name" className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-name" />
-                              <input type="text" value={giftShipLine1} onChange={(e) => setGiftShipLine1(e.target.value)} placeholder="Address line 1" className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-line1" />
-                              <input type="text" value={giftShipLine2} onChange={(e) => setGiftShipLine2(e.target.value)} placeholder="Apt, suite, floor (optional)" className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-line2" />
+                              <FanInput compact type="text" value={giftShipName} onChange={(e) => setGiftShipName(e.target.value)} placeholder="Recipient full name" data-testid="input-gift-ship-name" />
+                              <FanInput compact type="text" value={giftShipLine1} onChange={(e) => setGiftShipLine1(e.target.value)} placeholder="Address line 1" data-testid="input-gift-ship-line1" />
+                              <FanInput compact type="text" value={giftShipLine2} onChange={(e) => setGiftShipLine2(e.target.value)} placeholder="Apt, suite, floor (optional)" data-testid="input-gift-ship-line2" />
                               <div className="grid grid-cols-2 gap-2">
-                                <input type="text" value={giftShipCity} onChange={(e) => setGiftShipCity(e.target.value)} placeholder="City" className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-city" />
-                                <input type="text" value={giftShipState} onChange={(e) => setGiftShipState(e.target.value)} placeholder="State / Province" className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-state" />
+                                <FanInput compact type="text" value={giftShipCity} onChange={(e) => setGiftShipCity(e.target.value)} placeholder="City" data-testid="input-gift-ship-city" />
+                                <FanInput compact type="text" value={giftShipState} onChange={(e) => setGiftShipState(e.target.value)} placeholder="State / Province" data-testid="input-gift-ship-state" />
                               </div>
                               <div className="grid grid-cols-2 gap-2">
-                                <input type="text" value={giftShipZip} onChange={(e) => setGiftShipZip(e.target.value)} placeholder="ZIP / Postal code" className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-zip" />
-                                <input type="text" value={giftShipCountry} onChange={(e) => setGiftShipCountry(e.target.value.toUpperCase().slice(0, 2))} placeholder="Country (US, GB…)" maxLength={2} className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-country" />
+                                <FanInput compact type="text" value={giftShipZip} onChange={(e) => setGiftShipZip(e.target.value)} placeholder="ZIP / Postal code" data-testid="input-gift-ship-zip" />
+                                <FanInput compact type="text" value={giftShipCountry} onChange={(e) => setGiftShipCountry(e.target.value.toUpperCase().slice(0, 2))} placeholder="Country (US, GB…)" maxLength={2} data-testid="input-gift-ship-country" />
                               </div>
                             </div>
                           )}
@@ -1480,11 +1481,10 @@ export function BuySheet({
                       >
                         Ship to
                       </label>
-                      <select
+                      <FanSelect
                         id="buy-ship-country-d"
                         value={country}
                         onChange={(e) => setCountry(e.target.value)}
-                        className="w-full rounded-2xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-base text-white appearance-none focus:outline-none focus:border-white/25"
                         data-testid="select-ship-country"
                       >
                         <optgroup label="Common destinations" className="bg-[#0d1235]">
@@ -1501,7 +1501,7 @@ export function BuySheet({
                             </option>
                           ))}
                         </optgroup>
-                      </select>
+                      </FanSelect>
                     </div>
 
                     {/* ZIP / postal code */}
@@ -1512,7 +1512,7 @@ export function BuySheet({
                       >
                         ZIP / Postal code
                       </label>
-                      <input
+                      <FanInput
                         id="buy-postal-code-d"
                         type="text"
                         inputMode="text"
@@ -1520,7 +1520,6 @@ export function BuySheet({
                         value={postalCode}
                         onChange={(e) => setPostalCode(e.target.value)}
                         placeholder="e.g. 90210"
-                        className="w-full rounded-2xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-base text-white placeholder:text-white/35 appearance-none focus:outline-none focus:border-white/25"
                         data-testid="input-postal-code"
                       />
                     </div>
@@ -1776,14 +1775,13 @@ export function BuySheet({
                       Name on your GoodDeed® certificate{" "}
                       <span className="text-fan-faint">(optional)</span>
                     </label>
-                    <input
+                    <FanInput
                       id="cert-step-cert-name-d"
                       type="text"
                       value={certName}
                       maxLength={80}
                       onChange={(e) => setCertName(e.target.value)}
                       placeholder={defaultCertName || "e.g. Jane Doe"}
-                      className="w-full rounded-2xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-base text-white placeholder:text-white/35 focus:outline-none focus:border-white/25"
                       data-testid="input-cert-name"
                     />
                     <p className="text-fan-faint text-xs mt-1.5 ml-1 leading-snug">
@@ -2055,16 +2053,16 @@ export function BuySheet({
                           <p className="text-fan-faint text-xs leading-snug">
                             The physical record ships here. Downloads + GoodDeed stay with you — you can gift them after checkout.
                           </p>
-                          <input type="text" value={giftShipName} onChange={(e) => setGiftShipName(e.target.value)} placeholder="Recipient full name" className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-name-m" />
-                          <input type="text" value={giftShipLine1} onChange={(e) => setGiftShipLine1(e.target.value)} placeholder="Address line 1" className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-line1-m" />
-                          <input type="text" value={giftShipLine2} onChange={(e) => setGiftShipLine2(e.target.value)} placeholder="Apt, suite, floor (optional)" className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-line2-m" />
+                          <FanInput compact type="text" value={giftShipName} onChange={(e) => setGiftShipName(e.target.value)} placeholder="Recipient full name" data-testid="input-gift-ship-name-m" />
+                          <FanInput compact type="text" value={giftShipLine1} onChange={(e) => setGiftShipLine1(e.target.value)} placeholder="Address line 1" data-testid="input-gift-ship-line1-m" />
+                          <FanInput compact type="text" value={giftShipLine2} onChange={(e) => setGiftShipLine2(e.target.value)} placeholder="Apt, suite, floor (optional)" data-testid="input-gift-ship-line2-m" />
                           <div className="grid grid-cols-2 gap-2">
-                            <input type="text" value={giftShipCity} onChange={(e) => setGiftShipCity(e.target.value)} placeholder="City" className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-city-m" />
-                            <input type="text" value={giftShipState} onChange={(e) => setGiftShipState(e.target.value)} placeholder="State / Province" className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-state-m" />
+                            <FanInput compact type="text" value={giftShipCity} onChange={(e) => setGiftShipCity(e.target.value)} placeholder="City" data-testid="input-gift-ship-city-m" />
+                            <FanInput compact type="text" value={giftShipState} onChange={(e) => setGiftShipState(e.target.value)} placeholder="State / Province" data-testid="input-gift-ship-state-m" />
                           </div>
                           <div className="grid grid-cols-2 gap-2">
-                            <input type="text" value={giftShipZip} onChange={(e) => setGiftShipZip(e.target.value)} placeholder="ZIP / Postal code" className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-zip-m" />
-                            <input type="text" value={giftShipCountry} onChange={(e) => setGiftShipCountry(e.target.value.toUpperCase().slice(0, 2))} placeholder="Country (US, GB…)" maxLength={2} className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-country-m" />
+                            <FanInput compact type="text" value={giftShipZip} onChange={(e) => setGiftShipZip(e.target.value)} placeholder="ZIP / Postal code" data-testid="input-gift-ship-zip-m" />
+                            <FanInput compact type="text" value={giftShipCountry} onChange={(e) => setGiftShipCountry(e.target.value.toUpperCase().slice(0, 2))} placeholder="Country (US, GB…)" maxLength={2} data-testid="input-gift-ship-country-m" />
                           </div>
                         </div>
                       )}
@@ -2254,11 +2252,10 @@ export function BuySheet({
                   >
                     Ship to
                   </label>
-                  <select
+                  <FanSelect
                     id="buy-ship-country"
                     value={country}
                     onChange={(e) => setCountry(e.target.value)}
-                    className="w-full rounded-2xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-base text-white appearance-none focus:outline-none focus:border-white/25"
                     data-testid="select-ship-country"
                   >
                     <optgroup label="Common destinations" className="bg-[#0d1235]">
@@ -2275,7 +2272,7 @@ export function BuySheet({
                         </option>
                       ))}
                     </optgroup>
-                  </select>
+                  </FanSelect>
                 </div>
 
                 {/* ZIP / postal code — Task #1636. Drives the live sales-tax
@@ -2292,7 +2289,7 @@ export function BuySheet({
                   >
                     ZIP / Postal code
                   </label>
-                  <input
+                  <FanInput
                     id="buy-postal-code"
                     type="text"
                     inputMode="text"
@@ -2300,7 +2297,6 @@ export function BuySheet({
                     value={postalCode}
                     onChange={(e) => setPostalCode(e.target.value)}
                     placeholder="e.g. 90210"
-                    className="w-full rounded-2xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-base text-white placeholder:text-white/35 appearance-none focus:outline-none focus:border-white/25"
                     data-testid="input-postal-code"
                   />
                 </div>
@@ -2579,14 +2575,13 @@ export function BuySheet({
                   Name on your GoodDeed® certificate{" "}
                   <span className="text-fan-faint">(optional)</span>
                 </label>
-                <input
+                <FanInput
                   id="cert-step-cert-name"
                   type="text"
                   value={certName}
                   maxLength={80}
                   onChange={(e) => setCertName(e.target.value)}
                   placeholder={defaultCertName || "e.g. Jane Doe"}
-                  className="w-full rounded-2xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-base text-white placeholder:text-white/35 focus:outline-none focus:border-white/25"
                   data-testid="input-cert-name"
                 />
                 <p className="text-fan-faint text-xs mt-1.5 ml-1 leading-snug">
