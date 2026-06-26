@@ -64,7 +64,7 @@ import {
 } from "./dropboxZip";
 import { promisify } from "util";
 import { z } from "zod";
-import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema, insertTrackPublishingSplitSchema, insertTrackMechanicalSplitSchema, insertOrganizationSchema, insertReleaseNotifySignupSchema, insertRigQuoteRequestSchema, insertPartnerFeedbackSchema } from "@shared/schema";
+import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCampaignGalleryItemSchema, insertCreditRoleSchema, insertTrackPublishingSplitSchema, insertTrackMechanicalSplitSchema, insertOrganizationSchema, insertReleaseNotifySignupSchema, insertRigQuoteRequestSchema, insertPartnerFeedbackSchema } from "@shared/schema";
 import { ALBUM_FORMATS, type AlbumFormat } from "@shared/schema";
 import { SHORT_CATEGORIES } from "@shared/categories";
 import { SHARE_LINK_HOST } from "@shared/shareSlug";
@@ -15122,6 +15122,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const updateAlbumPhotoSchema = insertAlbumPhotoSchema.partial().extend({
     caption: insertAlbumPhotoSchema.shape.caption.nullable().optional(),
   });
+  const updateCampaignGalleryItemSchema = insertCampaignGalleryItemSchema.partial();
 
   // Resolve whether the caller may see the *original* bonus media (poster /
   // photo masters), which is admin OR the album's owner — never host/is-fan.
@@ -15701,6 +15702,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   app.delete("/api/admin/album-photos/:id", requireAdminBearer, async (req, res) => {
     await storage.deleteAlbumPhoto(String(req.params.id), req.session.userId ?? null);
+    return res.json({ message: "Deleted" });
+  });
+
+  // ----- Task #2283 — campaign overview gallery (locked Preview & Purchase) --
+  // The gallery images are public marketing/product mockups shown in the
+  // LockedOfferModal overview step (no master to protect, unlike bonus photos),
+  // so the read is public and returns image URLs directly. Empty list ⇒ the
+  // client falls back to the static campaign-registry gallery.
+  app.get("/api/albums/:id/gallery", async (req, res) => {
+    const album = await loadAlbumForBonusRead(req, res);
+    if (!album) return;
+    const rows = await storage.listCampaignGalleryItems(album.id);
+    return res.json(rows);
+  });
+  app.post("/api/admin/albums/:id/gallery", requireAdminBearer, async (req, res) => {
+    const albumId = String(req.params.id);
+    if (!(await ensureAlbumExists(albumId, res))) return;
+    const existing = await storage.listCampaignGalleryItems(albumId);
+    const parsed = insertCampaignGalleryItemSchema.safeParse({
+      albumId,
+      imageUrl: req.body?.imageUrl,
+      caption: typeof req.body?.caption === "string" ? req.body.caption : "",
+      position: typeof req.body?.position === "number" ? req.body.position : existing.length,
+    });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const g = await storage.createCampaignGalleryItem(parsed.data);
+    return res.status(201).json(g);
+  });
+  app.put("/api/admin/gallery-items/:id", requireAdminBearer, async (req, res) => {
+    const parsed = updateCampaignGalleryItemSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const { albumId: _i, ...patch } = parsed.data as any;
+    const g = await storage.updateCampaignGalleryItem(String(req.params.id), patch);
+    if (!g) return res.status(404).json({ message: "Gallery item not found" });
+    return res.json(g);
+  });
+  app.delete("/api/admin/gallery-items/:id", requireAdminBearer, async (req, res) => {
+    await storage.deleteCampaignGalleryItem(String(req.params.id), req.session.userId ?? null);
     return res.json({ message: "Deleted" });
   });
 

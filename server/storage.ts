@@ -24,6 +24,8 @@ import {
   type InsertAlbumVideo,
   type AlbumPhoto,
   type InsertAlbumPhoto,
+  type CampaignGalleryItem,
+  type InsertCampaignGalleryItem,
   type AlbumWithLabel,
   type EnrichedInstrumentVendor,
   type TrackWriter,
@@ -132,6 +134,7 @@ import {
   creditRoles,
   albumVideos,
   albumPhotos,
+  campaignGalleryItems,
   releaseNotifySignups,
   type ReleaseNotifySignup,
   type InsertReleaseNotifySignup,
@@ -234,6 +237,15 @@ export interface IStorage {
   createAlbumPhoto(data: InsertAlbumPhoto): Promise<AlbumPhoto>;
   updateAlbumPhoto(id: string, data: Partial<AlbumPhoto>): Promise<AlbumPhoto | undefined>;
   deleteAlbumPhoto(id: string): Promise<void>;
+
+  // Task #2283 — CMS-editable overview gallery for the locked Preview &
+  // Purchase modal (LockedOfferModal). Per-album list of captioned images;
+  // empty ⇒ the modal falls back to the static campaign registry gallery.
+  listCampaignGalleryItems(albumId: string): Promise<CampaignGalleryItem[]>;
+  getCampaignGalleryItemById(id: string): Promise<CampaignGalleryItem | undefined>;
+  createCampaignGalleryItem(data: InsertCampaignGalleryItem): Promise<CampaignGalleryItem>;
+  updateCampaignGalleryItem(id: string, data: Partial<CampaignGalleryItem>): Promise<CampaignGalleryItem | undefined>;
+  deleteCampaignGalleryItem(id: string, userId?: string | null): Promise<void>;
 
   // Task #1734 — "Get Notified" waitlist for pre-launch releases. Capture is
   // idempotent per (album, email); the admin list is how operators reach the
@@ -1595,6 +1607,32 @@ export class DbStorage implements IStorage {
   }
   async deleteAlbumPhoto(id: string, userId?: string | null): Promise<void> {
     await softDeleteEntity("album_photo", id, userId ?? null);
+  }
+  async listCampaignGalleryItems(albumId: string): Promise<CampaignGalleryItem[]> {
+    return db.select().from(campaignGalleryItems)
+      .where(and(eq(campaignGalleryItems.albumId, albumId), isNull(campaignGalleryItems.deletedAt)))
+      .orderBy(asc(campaignGalleryItems.position), asc(campaignGalleryItems.id));
+  }
+  async getCampaignGalleryItemById(id: string): Promise<CampaignGalleryItem | undefined> {
+    const [g] = await db.select().from(campaignGalleryItems)
+      .where(and(eq(campaignGalleryItems.id, id), isNull(campaignGalleryItems.deletedAt)));
+    return g;
+  }
+  async createCampaignGalleryItem(data: InsertCampaignGalleryItem): Promise<CampaignGalleryItem> {
+    const [g] = await db.insert(campaignGalleryItems).values(data as any).returning();
+    return g;
+  }
+  async updateCampaignGalleryItem(id: string, data: Partial<CampaignGalleryItem>): Promise<CampaignGalleryItem | undefined> {
+    const { id: _i, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) {
+      const [g] = await db.select().from(campaignGalleryItems).where(eq(campaignGalleryItems.id, id));
+      return g;
+    }
+    const [g] = await db.update(campaignGalleryItems).set(rest).where(eq(campaignGalleryItems.id, id)).returning();
+    return g;
+  }
+  async deleteCampaignGalleryItem(id: string, userId?: string | null): Promise<void> {
+    await softDeleteEntity("campaign_gallery_item", id, userId ?? null);
   }
   async addReleaseNotifySignup(data: InsertReleaseNotifySignup): Promise<ReleaseNotifySignup> {
     // Idempotent: a fan re-tapping "Get Notified" must not error or

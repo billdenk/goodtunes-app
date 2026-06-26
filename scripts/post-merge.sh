@@ -194,6 +194,41 @@ SQL
 migrate_rig_quote_requests dev  "${DATABASE_URL:-}"
 migrate_rig_quote_requests prod "${PROD_DATABASE_URL:-}"
 
+# Task #2283 — CMS-editable overview gallery for the locked Preview & Purchase
+# modal. shared/schema.ts declares campaign_gallery_items; hand-apply the
+# canonical CREATE TABLE on BOTH dev and prod to keep the schema-drift guard
+# green and the publish dev→prod diff empty. Idempotent.
+migrate_campaign_gallery_items() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping campaign_gallery_items migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS campaign_gallery_items (
+  id                      varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id                varchar NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  image_url               text    NOT NULL,
+  caption                 text    NOT NULL DEFAULT '',
+  position                integer NOT NULL DEFAULT 0,
+  deleted_at              timestamp,
+  deleted_by_user_id      varchar,
+  deleted_via_parent_id   varchar
+);
+CREATE INDEX IF NOT EXISTS campaign_gallery_items_album_idx
+  ON campaign_gallery_items (album_id);
+COMMIT;
+SQL
+  then
+    echo "post-merge: campaign_gallery_items migration ok on $label"
+  else
+    echo "post-merge: WARNING — campaign_gallery_items migration failed on $label (continuing)"
+  fi
+}
+migrate_campaign_gallery_items dev  "${DATABASE_URL:-}"
+migrate_campaign_gallery_items prod "${PROD_DATABASE_URL:-}"
+
 # Task #2109 — admin "Confirm a completed PDF matches the press specs".
 # shared/schema.ts declares completed_template_checks (one row per album);
 # hand-apply the canonical CREATE TABLE on BOTH dev and prod to keep the

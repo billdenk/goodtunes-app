@@ -684,6 +684,29 @@ export const albumPhotos = pgTable("album_photos", {
   ...softDeleteCols,
 });
 
+// Task #2283 — CMS-editable overview gallery for the locked Preview &
+// Purchase surface (LockedOfferModal). The campaign "overview" step shows a
+// small grid of product mockups (phone, vinyl, certificate, booklet, …) with
+// per-image captions, opened into a lightbox. Those were hardcoded in the
+// Hope.tsx campaign registry, so swapping an image or editing a caption meant
+// an engineer + a deploy. This table lets the operator manage that gallery
+// per-album from the admin without touching code. When an album has NO rows
+// here, the modal falls back to the static registry gallery (so existing
+// campaigns keep working untouched).
+export const campaignGalleryItems = pgTable("campaign_gallery_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  // /objects/uploads/<uuid>.<ext> — same upload path as album artwork.
+  // Stored as a FULL url (not relative to a campaign imageBase) so it's
+  // self-contained and survives a campaign-registry refactor.
+  imageUrl: text("image_url").notNull(),
+  // Caption shown under the lightbox image (and as the thumbnail's aria
+  // label). Empty string allowed for an image-only entry.
+  caption: text("caption").notNull().default(""),
+  position: integer("position").notNull().default(0),
+  ...softDeleteCols,
+});
+
 // Task #1734 — "Get Notified" signups on a pre-launch release. When a fan
 // lands on the get.goodtunes.music locked-preview page for a release whose
 // sales haven't begun yet (sunrise pending), the primary CTA is "Get
@@ -3534,6 +3557,15 @@ export type AlbumVideo = typeof albumVideos.$inferSelect;
 export const insertAlbumPhotoSchema = createInsertSchema(albumPhotos).omit({ id: true });
 export type InsertAlbumPhoto = z.infer<typeof insertAlbumPhotoSchema>;
 export type AlbumPhoto = typeof albumPhotos.$inferSelect;
+
+export const insertCampaignGalleryItemSchema = createInsertSchema(campaignGalleryItems).omit({
+  id: true,
+  deletedAt: true,
+  deletedByUserId: true,
+  deletedViaParentId: true,
+});
+export type InsertCampaignGalleryItem = z.infer<typeof insertCampaignGalleryItemSchema>;
+export type CampaignGalleryItem = typeof campaignGalleryItems.$inferSelect;
 
 export const insertReleaseNotifySignupSchema = createInsertSchema(releaseNotifySignups, {
   email: z.string().trim().email().max(254),

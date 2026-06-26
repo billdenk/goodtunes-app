@@ -3546,6 +3546,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           </div>
         </DialogContent>
       </Dialog>
+      <CampaignGalleryPanel albumId={album.id} />
       <AlbumNpoSplitPanel albumId={album.id} />
     </div>
   );
@@ -16753,6 +16754,659 @@ function AlbumPhotoSheet({
                 </>
               ) : (
                 <>{isEdit ? "Save" : "Add photo"}</>
+              )}
+            </button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Task #2283 — CampaignGalleryPanel ───────────────────────────────
+// CMS for the overview gallery shown in the locked Preview & Purchase
+// modal (LockedOfferModal). Those product mockups + captions used to be
+// hardcoded in the Hope.tsx campaign registry; this panel lets the
+// operator upload images, edit captions, reorder (drag), and delete —
+// no code change, no deploy. When this list is empty the modal falls
+// back to the static registry gallery, so existing campaigns are
+// untouched until the operator adds the first image here.
+interface CampaignGalleryItem {
+  id: string;
+  albumId: string;
+  imageUrl: string;
+  caption: string;
+  position: number;
+}
+
+type GallerySheetMode =
+  | { kind: "closed" }
+  | { kind: "new"; initialFile?: File }
+  | { kind: "edit"; item: CampaignGalleryItem };
+
+function CampaignGalleryPanel({ albumId }: { albumId: string }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [sheet, setSheet] = useState<GallerySheetMode>({ kind: "closed" });
+  const [toDelete, setToDelete] = useState<CampaignGalleryItem | null>(null);
+  const galleryKey = ["/api/albums", albumId, "gallery"] as const;
+
+  const { data: items = [], isLoading } = useQuery<CampaignGalleryItem[]>({
+    queryKey: galleryKey,
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/gallery-items/${id}`);
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: galleryKey });
+      toast({ title: "Image removed" });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't remove the image",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Reorder writes each item's new position then refetches. Mirrors the
+  // bonus-photo reorder shape (persist position per row).
+  const reorderMut = useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      await Promise.all(
+        orderedIds.map((id, i) =>
+          apiRequest("PUT", `/api/admin/gallery-items/${id}`, { position: i }),
+        ),
+      );
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: galleryKey });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't reorder",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+      qc.invalidateQueries({ queryKey: galleryKey });
+    },
+  });
+
+  const sorted = items.slice().sort((a, b) => a.position - b.position);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropOnId, setDropOnId] = useState<string | null>(null);
+  const handleDrop = (targetId: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    const src = dragId;
+    setDragId(null);
+    setDropOnId(null);
+    if (!src || src === targetId) return;
+    const ids = sorted.map((s) => s.id);
+    const from = ids.indexOf(src);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    const next = ids.slice();
+    next.splice(from, 1);
+    next.splice(from < to ? to - 1 : to, 0, src);
+    if (next.every((id, i) => id === ids[i])) return;
+    reorderMut.mutate(next);
+  };
+
+  return (
+    <Card
+      className="rounded-2xl shadow-sm overflow-hidden"
+      data-testid="panel-campaign-gallery"
+    >
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+        <div>
+          <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
+            <ImageIcon className="w-4 h-4 text-slate-400" />
+            Campaign Gallery
+          </h2>
+          <p className="text-slate-400 text-[11.5px]">
+            {items.length} {items.length === 1 ? "image" : "images"} · shown in
+            the locked Preview &amp; Purchase overview · drag to reorder
+          </p>
+        </div>
+      </div>
+      <div className="p-5">
+        <p className="text-slate-500 text-xs leading-relaxed mb-4">
+          These product mockups appear in the campaign's overview gallery
+          (phone, vinyl, certificate, booklet…). Leave this empty to keep using
+          the built-in gallery; add an image to take over.
+        </p>
+        {isLoading ? (
+          <div className="py-10 flex items-center justify-center">
+            <Spinner className="w-5 h-5 text-slate-400 animate-spin" />
+          </div>
+        ) : items.length === 0 ? (
+          <BonusPhotoDropzone
+            onPickFile={(f) => setSheet({ kind: "new", initialFile: f })}
+          />
+        ) : (
+          <div
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4"
+            data-testid="grid-campaign-gallery"
+          >
+            {sorted.map((it) => (
+              <div
+                key={it.id}
+                draggable
+                onDragStart={() => setDragId(it.id)}
+                onDragOver={(e) => {
+                  if (!dragId || dragId === it.id) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (dropOnId !== it.id) setDropOnId(it.id);
+                }}
+                onDragEnd={() => {
+                  setDragId(null);
+                  setDropOnId(null);
+                }}
+                onDrop={handleDrop(it.id)}
+                className={[
+                  "rounded-xl transition-shadow",
+                  dropOnId === it.id ? "ring-2 ring-[var(--brand-blue)]" : "",
+                  dragId === it.id ? "opacity-50" : "",
+                ].join(" ")}
+              >
+                <GalleryTile
+                  item={it}
+                  onDelete={() => setToDelete(it)}
+                  onEdit={() => setSheet({ kind: "edit", item: it })}
+                />
+              </div>
+            ))}
+            <AddTile
+              busy={false}
+              label="Add image"
+              onClick={() => setSheet({ kind: "new" })}
+              testId="button-add-gallery-image"
+            />
+          </div>
+        )}
+      </div>
+      {sheet.kind !== "closed" && (
+        <CampaignGallerySheet
+          mode={sheet}
+          albumId={albumId}
+          onClose={() => setSheet({ kind: "closed" })}
+          onSaved={async () => {
+            setSheet({ kind: "closed" });
+            await qc.invalidateQueries({ queryKey: galleryKey });
+            toast({
+              title: sheet.kind === "edit" ? "Image updated" : "Image added",
+            });
+          }}
+          onRequestDelete={(it) => setToDelete(it)}
+        />
+      )}
+
+      <AlertDialog
+        open={toDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setToDelete(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-confirm-delete-gallery-image">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this image?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the image from the campaign overview gallery. This
+              can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-gallery-image">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (toDelete) deleteMut.mutate(toDelete.id);
+                setToDelete(null);
+                setSheet({ kind: "closed" });
+              }}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              data-testid="button-confirm-delete-gallery-image"
+            >
+              Remove image
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
+
+function GalleryTile({
+  item,
+  onDelete,
+  onEdit,
+}: {
+  item: CampaignGalleryItem;
+  onDelete: () => void;
+  onEdit: () => void;
+}) {
+  return (
+    <div
+      className="group relative aspect-square rounded-xl overflow-hidden bg-slate-100 ring-1 ring-slate-200 shadow-sm cursor-move"
+      data-testid={`tile-gallery-${item.id}`}
+    >
+      <img
+        src={item.imageUrl}
+        alt={item.caption || ""}
+        className="w-full h-full object-cover pointer-events-none"
+      />
+      {item.caption && (
+        <>
+          <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/70 to-transparent" />
+          <div
+            className="absolute bottom-2 left-2 right-2 text-white text-[11.5px] font-medium truncate drop-shadow"
+            data-testid={`text-gallery-caption-${item.id}`}
+          >
+            {item.caption}
+          </div>
+        </>
+      )}
+      <TileActions onEdit={onEdit} onDelete={onDelete} />
+    </div>
+  );
+}
+
+function CampaignGallerySheet({
+  mode,
+  albumId,
+  onClose,
+  onSaved,
+  onRequestDelete,
+}: {
+  mode: { kind: "new"; initialFile?: File } | { kind: "edit"; item: CampaignGalleryItem };
+  albumId: string;
+  onClose: () => void;
+  onSaved: () => void;
+  onRequestDelete: (it: CampaignGalleryItem) => void;
+}) {
+  const isEdit = mode.kind === "edit";
+  const existing = isEdit ? mode.item : null;
+
+  const [caption, setCaption] = useState(existing?.caption ?? "");
+  const [imageUrl, setImageUrl] = useState<string | null>(
+    existing?.imageUrl ?? null,
+  );
+  const [dragActive, setDragActive] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [source, setSource] = useState<"upload" | "url">("upload");
+  const [importUrl, setImportUrl] = useState("");
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handlePickFile(file: File) {
+    setErr(null);
+    setUploadingImage(true);
+    try {
+      const url = await uploadImageFile(file);
+      setImageUrl(url);
+    } catch (e: any) {
+      setErr(e?.message || "Upload failed");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  async function handleImportUrl() {
+    let trimmed = importUrl.trim();
+    if (!trimmed) {
+      setErr("Paste a URL first.");
+      return;
+    }
+    if (!/^https?:\/\//i.test(trimmed)) trimmed = `https://${trimmed}`;
+    setErr(null);
+    setUploadingImage(true);
+    try {
+      const res = await apiRequest("POST", "/api/admin/fetch-image-from-url", {
+        url: trimmed,
+      });
+      const { url } = (await res.json()) as { url: string };
+      setImageUrl(url);
+    } catch (e: any) {
+      const raw = String(e?.message || "");
+      const jsonStart = raw.indexOf("{");
+      if (jsonStart >= 0) {
+        try {
+          const parsed = JSON.parse(raw.slice(jsonStart));
+          if (parsed?.message) {
+            setErr(String(parsed.message));
+            return;
+          }
+        } catch {
+          /* fall through */
+        }
+      }
+      setErr(raw.replace(/^\d+:\s*/, "") || "Couldn't fetch that image.");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  function handleSourceChange(next: "upload" | "url") {
+    if (next === source) return;
+    setSource(next);
+    setErr(null);
+    setDragActive(false);
+  }
+
+  useEffect(() => {
+    if (mode.kind === "new" && mode.initialFile) {
+      handlePickFile(mode.initialFile);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const canSubmit = !!imageUrl && !uploadingImage && !busy;
+
+  async function handleSubmit() {
+    if (!canSubmit || !imageUrl) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const trimmed = caption.trim();
+      if (isEdit && existing) {
+        await apiRequest("PUT", `/api/admin/gallery-items/${existing.id}`, {
+          imageUrl,
+          caption: trimmed,
+        });
+      } else {
+        await apiRequest("POST", `/api/admin/albums/${albumId}/gallery`, {
+          imageUrl,
+          caption: trimmed,
+        });
+      }
+      onSaved();
+    } catch (e: any) {
+      console.error("[CampaignGallerySheet] submit failed", e);
+      setErr(e?.message || "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (busy || uploadingImage) return;
+        if (!o) onClose();
+      }}
+    >
+      <DialogContent
+        className="!bg-white !border-slate-200 !rounded-2xl !shadow-xl !p-0 !gap-0 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col [&>button]:!text-slate-400 [&>button]:hover:!text-slate-700"
+        data-testid="dialog-campaign-gallery-sheet"
+      >
+        <DialogHeader className="px-5 py-4 border-b border-slate-100 flex-shrink-0 space-y-0">
+          <DialogTitle className="text-slate-900 text-[17px] font-semibold">
+            {isEdit ? "Edit image" : "Add an image"}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            {isEdit
+              ? "Update the image or its caption."
+              : "Pick an image, then add an optional caption."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-5 pb-4">
+            {imageUrl ? (
+              <div className="relative w-full max-w-sm mx-auto aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                <img
+                  src={imageUrl}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
+                {uploadingImage && (
+                  <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                    <Spinner className="w-5 h-5 text-[var(--brand-blue)] animate-spin" />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingImage || busy}
+                  className="absolute bottom-3 right-3 text-xs font-medium px-2.5 py-1.5 rounded-md bg-white/95 backdrop-blur-md text-slate-700 hover:text-[var(--brand-blue)] shadow-sm border border-black/5 disabled:opacity-50"
+                  data-testid="button-replace-gallery-image"
+                >
+                  Replace image
+                </button>
+              </div>
+            ) : (
+              <div className="w-full max-w-sm mx-auto">
+                <div className="inline-flex p-0.5 rounded-lg bg-slate-100 mb-3 text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={() => handleSourceChange("upload")}
+                    className={
+                      "px-3 py-1.5 rounded-md transition-colors " +
+                      (source === "upload"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700")
+                    }
+                    data-testid="tab-gallery-source-upload"
+                  >
+                    Upload file
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSourceChange("url")}
+                    className={
+                      "px-3 py-1.5 rounded-md transition-colors " +
+                      (source === "url"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700")
+                    }
+                    data-testid="tab-gallery-source-url"
+                  >
+                    Paste a link
+                  </button>
+                </div>
+
+                {source === "upload" ? (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragActive(true);
+                    }}
+                    onDragLeave={() => setDragActive(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragActive(false);
+                      if (e.dataTransfer.files?.[0])
+                        handlePickFile(e.dataTransfer.files[0]);
+                    }}
+                    disabled={uploadingImage}
+                    className={
+                      "w-full block aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-colors disabled:opacity-50 " +
+                      (dragActive
+                        ? "border-[var(--brand-blue)] bg-blue-50"
+                        : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300")
+                    }
+                    data-testid="button-gallery-dropzone"
+                  >
+                    {uploadingImage ? (
+                      <>
+                        <Spinner className="w-7 h-7 text-[var(--brand-blue)] animate-spin mb-3" />
+                        <p className="text-sm font-medium text-slate-700">
+                          Uploading…
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <ImagePlus
+                          className={
+                            "w-8 h-8 mb-3 transition-colors " +
+                            (dragActive ? "text-[var(--brand-blue)]" : "text-slate-400")
+                          }
+                          strokeWidth={1.75}
+                        />
+                        <p className="text-sm font-medium text-slate-700">
+                          Drop an image here, or click to browse
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Square · 1200×1200 px recommended · JPG, PNG, WebP, or GIF
+                        </p>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <div className="w-full aspect-square rounded-xl border border-slate-200 bg-slate-50 flex flex-col items-center justify-center p-6">
+                    {uploadingImage ? (
+                      <>
+                        <Spinner className="w-7 h-7 text-[var(--brand-blue)] animate-spin mb-3" />
+                        <p className="text-sm font-medium text-slate-700">
+                          Fetching…
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="w-7 h-7 text-slate-400 mb-3"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M9 17H7A5 5 0 0 1 7 7h2" />
+                          <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
+                          <line x1="8" y1="12" x2="16" y2="12" />
+                        </svg>
+                        <p className="text-sm font-medium text-slate-700 mb-3">
+                          Paste an image link
+                        </p>
+                        <input
+                          type="url"
+                          autoFocus
+                          placeholder="https://www.dropbox.com/scl/fi/… or https://…/image.jpg"
+                          value={importUrl}
+                          onChange={(e) => setImportUrl(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleImportUrl();
+                            }
+                          }}
+                          className="w-full max-w-md text-sm bg-white border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)]/30"
+                          data-testid="input-gallery-import-url"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleImportUrl}
+                          disabled={!importUrl.trim() || uploadingImage}
+                          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--brand-blue)] text-white text-xs font-semibold hover:bg-[var(--brand-blue)]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                          data-testid="button-gallery-import-url-submit"
+                        >
+                          Fetch image
+                        </button>
+                        <p className="text-[11px] text-slate-400 mt-2 text-center">
+                          JPG, PNG, WebP, GIF, or AVIF · up to 8 MB. Dropbox links work too.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.[0]) handlePickFile(e.target.files[0]);
+              }}
+            />
+          </div>
+
+          <div className="px-5 pb-2 space-y-4">
+            <div>
+              <label
+                htmlFor="gallery-caption"
+                className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide"
+              >
+                Caption
+                <span className="ml-2 normal-case tracking-normal text-slate-400 text-[11px] font-normal">
+                  optional
+                </span>
+              </label>
+              <input
+                id="gallery-caption"
+                type="text"
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="e.g. Hand-numbered certificate of ownership"
+                className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)]/30"
+                data-testid="input-gallery-caption"
+              />
+            </div>
+
+            {err && (
+              <div
+                role="alert"
+                className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-[13px] leading-snug"
+                data-testid="banner-gallery-error"
+              >
+                {err}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="px-5 py-3 border-t border-slate-100 flex items-center !justify-between bg-slate-50/50 flex-shrink-0 gap-2 sm:gap-2">
+          <div>
+            {isEdit && existing && (
+              <button
+                type="button"
+                onClick={() => onRequestDelete(existing)}
+                disabled={busy || uploadingImage}
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-red-600 transition-colors disabled:opacity-50"
+                data-testid="button-delete-gallery-from-sheet"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete image
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy || uploadingImage}
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              data-testid="button-cancel-gallery-sheet"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className="px-4 py-2 text-sm font-medium text-white bg-[var(--brand-blue)] hover:bg-[#2a8ac0] disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              data-testid="button-submit-gallery-sheet"
+            >
+              {busy ? (
+                <>
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
+                  {isEdit ? "Saving…" : "Adding…"}
+                </>
+              ) : (
+                <>{isEdit ? "Save" : "Add image"}</>
               )}
             </button>
           </div>

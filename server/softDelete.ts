@@ -20,6 +20,7 @@ export type TrashEntityType =
   | "song"
   | "album_video"
   | "album_photo"
+  | "campaign_gallery_item"
   | "album_credit"
   | "person"
   | "band_member"
@@ -37,6 +38,7 @@ export const TRASH_ENTITY_TYPES: TrashEntityType[] = [
   "song",
   "album_video",
   "album_photo",
+  "campaign_gallery_item",
   "album_credit",
   "person",
   "band_member",
@@ -59,6 +61,7 @@ const TABLE_NAMES: Record<TrashEntityType, string> = {
   song: "songs",
   album_video: "album_videos",
   album_photo: "album_photos",
+  campaign_gallery_item: "campaign_gallery_items",
   album_credit: "album_credits",
   person: "people",
   band_member: "band_members",
@@ -81,6 +84,7 @@ const LABEL_COL: Record<TrashEntityType, string> = {
   song: "title",
   album_video: "title",
   album_photo: "caption",
+  campaign_gallery_item: "caption",
   album_credit: "name",
   person: "name",
   band_member: "id",
@@ -110,6 +114,7 @@ const CHILDREN: Partial<Record<TrashEntityType, { table: string; fk: string }[]>
     { table: "songs", fk: "album_id" },
     { table: "album_videos", fk: "album_id" },
     { table: "album_photos", fk: "album_id" },
+    { table: "campaign_gallery_items", fk: "album_id" },
     { table: "album_credits", fk: "album_id" },
   ],
   song: [

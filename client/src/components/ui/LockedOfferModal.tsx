@@ -301,13 +301,14 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
 function OverviewStep({
   c,
   heroSrc,
+  gallery,
   onGalleryOpen,
 }: {
   c: ReleaseContent;
   heroSrc: string;
+  gallery: { url: string; caption: string }[];
   onGalleryOpen: (i: number) => void;
 }) {
-  const gallery = c.gallery ?? [];
   const hasGallery = gallery.length > 0;
 
   return (
@@ -329,7 +330,7 @@ function OverviewStep({
                 style={{ boxShadow: "0 6px 18px rgba(0,0,0,0.35)" }}
               >
                 <img
-                  src={`${c.imageBase}/${item.src}`}
+                  src={item.url}
                   alt={item.caption}
                   className="w-full h-full object-contain p-1.5"
                   draggable={false}
@@ -804,6 +805,23 @@ export function LockedOfferModal({
     staleTime: 60_000,
   });
 
+  // Task #2283 — the campaign overview gallery is now operator-editable.
+  // When the admin CMS has uploaded one or more gallery images for this
+  // album we use those (full object-storage URLs); otherwise we fall back
+  // to the static registry gallery baked into Hope.tsx so existing
+  // campaigns keep their built-in images until Bill overrides them.
+  const { data: dbGallery = [] } = useQuery<
+    { id: string; imageUrl: string; caption: string; position: number }[]
+  >({
+    queryKey: ["/api/albums", albumId, "gallery"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", `/api/albums/${albumId}/gallery`);
+      return r.json();
+    },
+    enabled: open && richBuy && !!albumId,
+    staleTime: 60_000,
+  });
+
   // Reset to the first step whenever the modal is (re)opened, and seed the
   // email field from the signed-in fan when we have it.
   // Task #1850 — when opened from the Buy CTA (startAtBundle), land directly
@@ -941,10 +959,24 @@ export function LockedOfferModal({
     const idx = ORDER.indexOf(step);
     const go = (s: Step) => setStep(s);
 
-    // Build the lightbox photo list from the campaign gallery entries.
-    const galleryPhotos: LightboxPhoto[] = (campaign.gallery ?? []).map((g, i) => ({
+    // Resolve the overview gallery: operator-uploaded DB images win, else
+    // fall back to the static registry baked into Hope.tsx. Both collapse
+    // to a uniform { url, caption } shape the OverviewStep + lightbox share.
+    const resolvedGallery: { url: string; caption: string }[] =
+      dbGallery.length > 0
+        ? dbGallery
+            .slice()
+            .sort((a, b) => a.position - b.position)
+            .map((g) => ({ url: g.imageUrl, caption: g.caption }))
+        : (campaign.gallery ?? []).map((g) => ({
+            url: `${campaign.imageBase}/${g.src}`,
+            caption: g.caption,
+          }));
+
+    // Build the lightbox photo list from the resolved gallery entries.
+    const galleryPhotos: LightboxPhoto[] = resolvedGallery.map((g, i) => ({
       id: String(i),
-      photoUrl: `${campaign.imageBase}/${g.src}`,
+      photoUrl: g.url,
       caption: g.caption,
     }));
 
@@ -1091,11 +1123,11 @@ export function LockedOfferModal({
                   )}
                 </div>
               ) : (
-                <OverviewStep c={campaign} heroSrc={heroSrc} onGalleryOpen={setGalleryOpen} />
+                <OverviewStep c={campaign} heroSrc={heroSrc} gallery={resolvedGallery} onGalleryOpen={setGalleryOpen} />
               )
             ) : (
               <>
-                {step === "overview" && <OverviewStep c={campaign} heroSrc={heroSrc} onGalleryOpen={setGalleryOpen} />}
+                {step === "overview" && <OverviewStep c={campaign} heroSrc={heroSrc} gallery={resolvedGallery} onGalleryOpen={setGalleryOpen} />}
                 {step === "buy" && (
                   <BundleStep
                     c={campaign}
