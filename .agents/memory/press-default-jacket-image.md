@@ -16,3 +16,9 @@ The per-press default catalog image is `manufacturers.vinyl_placeholder_url` (re
 **Why:** "new press-created albums should start branded" is a cross-path requirement, but the GLOBAL (non-press) create flows (AdminAlbums, AdminPerson, Admin "+ Add") are intentionally left on `/album-placeholder.svg` — only press-homed creates seed.
 
 **How to apply:** any new "create album under a press" path must seed from `vinylPlaceholderUrl`; any new global create path must NOT. The per-album art editor always overrides the seeded value afterward.
+
+3. **Logo CHANGES propagate to riding albums (post-creation).** When `PUT /api/admin/manufacturers/:id` actually changes `vinylPlaceholderUrl` (both the operator detail page and the press-portal catalog editor go through this ONE chokepoint via the shared `PressLogoEditorDialog`), a best-effort helper repoints every album whose `artwork` still equals the *previous* default URL onto the new value — or onto the `/album-placeholder.svg` sentinel if the logo is cleared (strOrNull stores cleared as `""`, treat empty AND null as cleared, never leave a dead URL). The route captures the old value with a `getManufacturerById` BEFORE the update.
+
+   **Why:** a press that re-brands expects its branded jacket to refresh everywhere at once, but albums with REAL custom covers must never be clobbered. Matching on `artwork = oldUrl` already spares custom covers (the hosted-object URL is unique); the helper additionally requires the album to be homed to THIS press (pressing-order snapshot `package_snapshot->>'pressId'`, OR primary artist's / label's `default_press_id`) as a collision guard, and filters `deleted_at IS NULL`.
+
+   **How to apply:** this is propagation of an EXISTING default, distinct from creation-time seeding (job 2) — don't conflate them. Regression coverage: `server/pressMasterLogoPropagate.db.test.ts`.

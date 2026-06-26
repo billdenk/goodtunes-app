@@ -574,6 +574,65 @@ async function resolvePressPlaceholderLogoUrl(
   return null;
 }
 
+// Task #2237 — when a press updates (or clears) its master logo
+// (manufacturers.vinyl_placeholder_url, the default vinyl jacket image),
+// propagate that change to every album still riding the press's PREVIOUS
+// branded default so the new logo shows everywhere at once. Albums with a
+// real custom cover are never touched: we only repoint rows whose `artwork`
+// still equals the exact previous default URL. When the press CLEARS its
+// logo we repoint those rows to the standard placeholder sentinel rather
+// than leaving a dead URL behind.
+//
+// The previous-default URL is a unique hosted-object URL, so `artwork =
+// oldUrl` is already precise; as a belt-and-suspenders guard against URL
+// collisions we additionally require the album to be homed to THIS press —
+// via its pressing-order snapshot, or its primary artist's / label's
+// default press. Soft-deleted albums are left alone (deleted_at IS NULL).
+// New-album seeding at creation time is unaffected (separate code path).
+// Best-effort: never throws; returns the number of rows repointed.
+const PRESS_LOGO_PLACEHOLDER_SENTINEL = "/album-placeholder.svg";
+
+async function propagatePressMasterLogoChange(
+  pressId: string,
+  oldUrl: string,
+  newUrl: string | null,
+): Promise<number> {
+  // Nothing to do if there was no previous branded default to migrate off of.
+  if (!oldUrl || !oldUrl.trim()) return 0;
+  const target =
+    newUrl && newUrl.trim() ? newUrl.trim() : PRESS_LOGO_PLACEHOLDER_SENTINEL;
+  if (target === oldUrl) return 0;
+  try {
+    const r = await db.execute(sql`
+      UPDATE albums a
+         SET artwork = ${target}
+       WHERE a.artwork = ${oldUrl}
+         AND a.deleted_at IS NULL
+         AND (
+           EXISTS (
+             SELECT 1 FROM pressing_order_requests por
+              WHERE por.album_id = a.id
+                AND (por.package_snapshot->>'pressId') = ${pressId}
+           )
+           OR EXISTS (
+             SELECT 1 FROM people p
+              WHERE p.id = a.primary_artist_id
+                AND p.default_press_id = ${pressId}
+           )
+           OR EXISTS (
+             SELECT 1 FROM labels l
+              WHERE l.id = a.label_id
+                AND l.default_press_id = ${pressId}
+           )
+         )
+    `);
+    return (r as any)?.rowCount ?? 0;
+  } catch (e) {
+    console.error("[press-logo-propagate] failed", { pressId, error: e });
+    return 0;
+  }
+}
+
 // Enriches a batch of albums with their primary artist photo URL in one
 // parallel pass, deduplicating person lookups so a shared artist only
 // fetches once. Used by the /api/albums list route.
@@ -18248,7 +18307,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.coverUrl !== undefined) u.coverUrl = strOrNull(b.coverUrl);
     // Operator/press-editable override for the catalog VinylPreview jacket
     // art. Null clears it back to the hard-coded per-domain placeholder.
-    if (b.vinylPlaceholderUrl !== undefined) u.vinylPlaceholderUrl = strOrNull(b.vinylPlaceholderUrl);
+    // Task #2237 — capture the PREVIOUS value before the write so we can
+    // propagate the change to albums still riding this press's old default.
+    let prevVinylPlaceholder: string | null | undefined;
+    if (b.vinylPlaceholderUrl !== undefined) {
+      u.vinylPlaceholderUrl = strOrNull(b.vinylPlaceholderUrl);
+      const before = await storage.getManufacturerById(String(req.params.id));
+      prevVinylPlaceholder = (before as any)?.vinylPlaceholderUrl ?? null;
+    }
     if (b.bio !== undefined) u.bio = strOrNull(b.bio);
     // Task #625 — short operational note (quote conditions, overrun
     // tolerance, pricing rules). Free text; no validation beyond
@@ -18321,6 +18387,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const m = await storage.updateManufacturer(String(req.params.id), u);
     if (!m) return res.status(404).json({ message: "Manufacturer not found" });
+    // Task #2237 — if the master logo actually changed, migrate albums still
+    // riding the press's previous branded default onto the new value (or back
+    // to the placeholder sentinel when the logo is cleared). Best-effort: a
+    // failure here must not fail the save.
+    if (b.vinylPlaceholderUrl !== undefined && prevVinylPlaceholder) {
+      const nextVal = (u.vinylPlaceholderUrl as string | null) ?? null;
+      await propagatePressMasterLogoChange(String(req.params.id), prevVinylPlaceholder, nextVal);
+    }
     return res.json(m);
   });
   app.delete("/api/admin/manufacturers/:id", requireAdmin, async (req, res) => {
