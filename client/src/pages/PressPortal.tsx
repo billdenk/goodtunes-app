@@ -700,51 +700,54 @@ function PressDashboardTab({
       >
         {isLoading && allKpis.length === 0
           ? Array.from({ length: 5 }).map((_, i) => (
-              <DashboardPanel key={i} className="h-[96px] animate-pulse" />
+              <div key={i} className="rounded-xl border border-slate-200 bg-white h-[120px] animate-pulse" />
             ))
-          : allKpis.map((k) => (
-              <DashboardPanel
-                key={k.id}
-                data-testid={`kpi-press-${k.id}`}
-                className="transition-colors duration-200 hover:ring-slate-300 hover:bg-slate-50"
-              >
-                <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
-                  {k.label}
-                </p>
-                <p
-                  className={`mt-1 text-2xl sm:text-[28px] font-bold tabular-nums ${k.comingSoon ? "text-slate-400" : ""}`}
-                  data-testid={`kpi-press-${k.id}-value`}
+          : allKpis.map((k) => {
+              const showDelta = !k.comingSoon && k.value !== null && k.prior != null;
+              const positive = showDelta && (k.value ?? 0) >= (k.prior as number);
+              const deltaStr = showDelta
+                ? k.prior === 0
+                  ? (k.value ?? 0) > 0 ? "+∞" : "—"
+                  : `${(((k.value ?? 0) - (k.prior as number)) / (k.prior as number)) >= 0 ? "+" : ""}${((((k.value ?? 0) - (k.prior as number)) / (k.prior as number)) * 100).toFixed(1)}%`
+                : null;
+              return (
+                <div
+                  key={k.id}
+                  data-testid={`kpi-press-${k.id}`}
+                  className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between min-h-[120px] transition-shadow duration-200 hover:shadow-sm hover:border-slate-300"
                 >
-                  {formatValue(k.value, k.format)}
-                </p>
-                <div className="mt-1 flex items-center gap-2 text-[11px]">
-                  {!k.comingSoon && k.prior != null ? (
-                    <>
-                      <span className="text-slate-500">vs prior</span>
-                      <span
-                        className={`px-1.5 py-0.5 rounded-full font-semibold ${
-                          (k.value ?? 0) >= k.prior
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-rose-50 text-rose-700"
-                        }`}
-                        data-testid={`kpi-press-${k.id}-delta`}
-                      >
-                        {k.prior === 0
-                          ? (k.value ?? 0) > 0 ? "+∞" : "—"
-                          : `${((k.value ?? 0) - k.prior) / k.prior >= 0 ? "+" : ""}${(
-                              (((k.value ?? 0) - k.prior) / k.prior) * 100
-                            ).toFixed(1)}%`}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-slate-400">vs prior: —</span>
-                  )}
-                  {k.note && !k.comingSoon && (
-                    <span className="text-slate-400 truncate">{k.note}</span>
-                  )}
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+                      {k.label}
+                    </p>
+                    <p
+                      className={`mt-1 text-[22px] font-semibold tabular-nums ${k.comingSoon ? "text-slate-400" : "text-slate-900"}`}
+                      data-testid={`kpi-press-${k.id}-value`}
+                    >
+                      {formatValue(k.value, k.format)}
+                    </p>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 text-[11px]">
+                    {showDelta ? (
+                      <>
+                        <span className="text-slate-500">vs prior</span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded-full font-semibold ${positive ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}
+                          data-testid={`kpi-press-${k.id}-delta`}
+                        >
+                          {deltaStr}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-slate-400">vs prior: —</span>
+                    )}
+                    {k.note && !k.comingSoon && (
+                      <span className="text-slate-400 truncate">{k.note}</span>
+                    )}
+                  </div>
                 </div>
-              </DashboardPanel>
-            ))}
+              );
+            })}
       </section>
 
       {/* Albums by stage — compact pill strip.
@@ -767,26 +770,27 @@ function PressDashboardTab({
         </DashboardPanel>
       )}
 
-      {/* Trend chart */}
-      <DashboardPanel data-testid="trend-press">
-        <div className="flex items-baseline justify-between mb-3">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-700">Trend</h3>
-            <p className="text-[11px] text-slate-400">Daily activity over the selected window</p>
+      {/* Trend chart + Recent activity — side by side on wide screens */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <DashboardPanel data-testid="trend-press" className="lg:col-span-2">
+          <div className="flex items-baseline justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-700">Trend</h3>
+              <p className="text-[11px] text-slate-400">Daily activity over the selected window</p>
+            </div>
           </div>
-        </div>
-        <TrendChart
-          series={dash?.series ?? []}
-          metrics={dash?.chartMetrics ?? []}
-          loading={dashLoading}
-        />
-      </DashboardPanel>
+          <TrendChart
+            series={dash?.series ?? []}
+            metrics={dash?.chartMetrics ?? []}
+            loading={dashLoading}
+          />
+        </DashboardPanel>
 
-      {/* Recent activity */}
-      <DashboardPanel data-testid="activity-press">
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">Recent activity</h3>
-        <ActivityList items={dash?.activity ?? []} loading={dashLoading} />
-      </DashboardPanel>
+        <DashboardPanel data-testid="activity-press">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3">Recent activity</h3>
+          <ActivityList items={dash?.activity ?? []} loading={dashLoading} />
+        </DashboardPanel>
+      </div>
     </div>
   );
 }

@@ -150,24 +150,26 @@ export function PartnerDashboard({
 
       <KpiGrid kpis={data?.kpis ?? []} loading={isLoading} scope={scope} />
 
-      <DashboardPanel data-testid={`trend-${scope}`}>
-        <div className="flex items-baseline justify-between mb-3">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-700">Trend</h3>
-            <p className="text-[11px] text-slate-400">Daily activity over the selected window</p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <DashboardPanel data-testid={`trend-${scope}`} className="lg:col-span-2">
+          <div className="flex items-baseline justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-700">Trend</h3>
+              <p className="text-[11px] text-slate-400">Daily activity over the selected window</p>
+            </div>
           </div>
-        </div>
-        <TrendChart
-          series={data?.series ?? []}
-          metrics={data?.chartMetrics ?? []}
-          loading={isLoading}
-        />
-      </DashboardPanel>
+          <TrendChart
+            series={data?.series ?? []}
+            metrics={data?.chartMetrics ?? []}
+            loading={isLoading}
+          />
+        </DashboardPanel>
 
-      <DashboardPanel data-testid={`activity-${scope}`}>
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">Recent activity</h3>
-        <ActivityList items={data?.activity ?? []} loading={isLoading} />
-      </DashboardPanel>
+        <DashboardPanel data-testid={`activity-${scope}`}>
+          <h3 className="text-sm font-semibold text-slate-700 mb-3">Recent activity</h3>
+          <ActivityList items={data?.activity ?? []} loading={isLoading} />
+        </DashboardPanel>
+      </div>
     </div>
   );
 }
@@ -198,18 +200,20 @@ function KpiTile({ k, scope }: { k: DashboardKpi; scope: PartnerScopeKind }) {
   const delta = showDelta ? deltaPct(k.value as number, k.prior as number) : null;
   const positive = showDelta && (k.value as number) >= (k.prior as number);
   return (
-    <DashboardPanel
+    <div
       data-testid={testId}
-      className="transition-colors duration-200 hover:ring-slate-300 hover:bg-slate-50"
+      className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between min-h-[120px] transition-shadow duration-200 hover:shadow-sm hover:border-slate-300"
     >
-      <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">{k.label}</p>
-      <p
-        className={`mt-1 text-2xl sm:text-[28px] font-bold tabular-nums ${k.comingSoon ? "text-slate-400" : ""}`}
-        data-testid={`${testId}-value`}
-      >
-        {value}
-      </p>
-      <div className="mt-1 flex items-center gap-2 text-[11px]">
+      <div>
+        <p className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">{k.label}</p>
+        <p
+          className={`mt-1 text-[22px] font-semibold tabular-nums ${k.comingSoon ? "text-slate-400" : "text-slate-900"}`}
+          data-testid={`${testId}-value`}
+        >
+          {value}
+        </p>
+      </div>
+      <div className="mt-2 flex items-center gap-2 text-[11px]">
         {showDelta ? (
           <>
             <span className="text-slate-500">vs prior</span>
@@ -250,7 +254,7 @@ function KpiTile({ k, scope }: { k: DashboardKpi; scope: PartnerScopeKind }) {
           ))}
         </dl>
       )}
-    </DashboardPanel>
+    </div>
   );
 }
 

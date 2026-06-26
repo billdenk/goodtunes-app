@@ -9405,9 +9405,29 @@
     "snippet": "<Link href={href} className=\"group block cursor-pointer\" data-testid={`${testId}-link`}>"
   },
   {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminPartnerDashboard.tsx",
+    "snippet": "<p className=\"text-[11px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminPartnerDashboard.tsx",
+    "snippet": "\"mt-1 text-[22px] font-semibold tabular-nums text-slate-900\","
+  },
+  {
     "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/components/admin/AdminSectionDashboard.tsx",
     "snippet": "<Link href={href} className=\"group block cursor-pointer\" data-testid={`${testId}-link`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminSectionDashboard.tsx",
+    "snippet": "<p className=\"text-[11px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminSectionDashboard.tsx",
+    "snippet": "\"mt-1 text-[22px] font-semibold tabular-nums text-slate-900\","
   },
   {
     "rule": "hardcoded-font-size",
@@ -12306,6 +12326,11 @@
   },
   {
     "rule": "hardcoded-font-size",
+    "file": "client/src/components/partner/dashboard-controls.tsx",
+    "snippet": "\"h-8 px-3 inline-flex items-center justify-center rounded text-[12.5px] font-semibold transition-colors\","
+  },
+  {
+    "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
     "snippet": "<p className=\"text-slate-500 text-[12px] uppercase tracking-wider font-semibold\">Dashboard</p>"
   },
@@ -12322,17 +12347,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
-    "snippet": "<p className=\"text-[11px] uppercase tracking-wider text-slate-500 font-semibold\">{k.label}</p>"
+    "snippet": "<p className=\"text-[11px] uppercase tracking-wider text-slate-500 font-bold\">{k.label}</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
-    "snippet": "className={`mt-1 text-2xl sm:text-[28px] font-bold tabular-nums ${k.comingSoon ? \"text-slate-400\" : \"\"}`}"
+    "snippet": "className={`mt-1 text-[22px] font-semibold tabular-nums ${k.comingSoon ? \"text-slate-400\" : \"text-slate-900\"}`}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
-    "snippet": "<div className=\"mt-1 flex items-center gap-2 text-[11px]\">"
+    "snippet": "<div className=\"mt-2 flex items-center gap-2 text-[11px]\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -20802,17 +20827,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "<p className=\"text-[11px] uppercase tracking-wider text-slate-500 font-semibold\">"
+    "snippet": "<p className=\"text-[11px] uppercase tracking-wider text-slate-500 font-bold\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "className={`mt-1 text-2xl sm:text-[28px] font-bold tabular-nums ${k.comingSoon ? \"text-slate-400\" : \"\"}`}"
+    "snippet": "className={`mt-1 text-[22px] font-semibold tabular-nums ${k.comingSoon ? \"text-slate-400\" : \"text-slate-900\"}`}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "<div className=\"mt-1 flex items-center gap-2 text-[11px]\">"
+    "snippet": "<div className=\"mt-2 flex items-center gap-2 text-[11px]\">"
   },
   {
     "rule": "hardcoded-font-size",

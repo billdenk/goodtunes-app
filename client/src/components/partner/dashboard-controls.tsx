@@ -1,6 +1,5 @@
 import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -18,30 +17,33 @@ export function RangePicker<T extends string>({
   testId?: string;
 }) {
   return (
-    <ToggleGroup
-      type="single"
-      value={value}
-      onValueChange={(v) => v && onChange(v as T)}
-      className="rounded-full bg-slate-100 p-1 ring-1 ring-slate-200 gap-0 justify-start"
+    <div
+      className="inline-flex items-center bg-slate-100 rounded-md p-0.5"
+      role="group"
+      aria-label="Date range"
       data-testid={testId}
     >
-      {presets.map((p) => (
-        <ToggleGroupItem
-          key={p.id}
-          value={p.id}
-          aria-label={p.label}
-          className={cn(
-            "h-11 min-w-[44px] px-4 rounded-full font-semibold transition-colors",
-            "text-slate-600 hover:text-slate-900 hover:bg-white",
-            "data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-sm data-[state=on]:hover:bg-white",
-            "focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]",
-          )}
-          data-testid={`button-range-${p.id}`}
-        >
-          {p.label}
-        </ToggleGroupItem>
-      ))}
-    </ToggleGroup>
+      {presets.map((p) => {
+        const active = value === p.id;
+        return (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => onChange(p.id as T)}
+            aria-pressed={active}
+            className={cn(
+              "h-8 px-3 inline-flex items-center justify-center rounded text-[12.5px] font-semibold transition-colors",
+              active
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-900",
+            )}
+            data-testid={`button-range-${p.id}`}
+          >
+            {p.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

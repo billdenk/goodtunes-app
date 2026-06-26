@@ -168,30 +168,32 @@ export function AdminPartnerDashboard({
         }
       />
 
-      <Card data-testid={`trend-${scope}`}>
-        <CardContent className="p-4">
-          <div className="flex items-baseline justify-between mb-3">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">Trend</h3>
-              <p className="text-xs text-slate-500">
-                Daily activity over the selected window
-              </p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <Card data-testid={`trend-${scope}`} className="lg:col-span-2">
+          <CardContent className="p-4">
+            <div className="flex items-baseline justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">Trend</h3>
+                <p className="text-xs text-slate-500">
+                  Daily activity over the selected window
+                </p>
+              </div>
             </div>
-          </div>
-          <TrendChart
-            series={data?.series ?? []}
-            metrics={data?.chartMetrics ?? []}
-            loading={isLoading}
-          />
-        </CardContent>
-      </Card>
+            <TrendChart
+              series={data?.series ?? []}
+              metrics={data?.chartMetrics ?? []}
+              loading={isLoading}
+            />
+          </CardContent>
+        </Card>
 
-      <Card data-testid={`activity-${scope}`}>
-        <CardContent className="p-4">
-          <h3 className="text-sm font-semibold text-slate-900 mb-3">Recent activity</h3>
-          <ActivityList items={data?.activity ?? []} loading={isLoading} />
-        </CardContent>
-      </Card>
+        <Card data-testid={`activity-${scope}`}>
+          <CardContent className="p-4">
+            <h3 className="text-sm font-semibold text-slate-900 mb-3">Recent activity</h3>
+            <ActivityList items={data?.activity ?? []} loading={isLoading} />
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -351,7 +353,7 @@ function KpiTile({
       className="transition-shadow duration-200 hover:shadow-md hover:border-slate-300"
     >
       <CardContent className="p-4">
-        <p className="text-xs uppercase tracking-wider text-slate-500 font-semibold flex items-center gap-1">
+        <p className="text-[11px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-1">
           {k.label}
           {href && (
             <ArrowUpRight className="w-3 h-3 text-slate-300 group-hover:text-[color:var(--brand-blue)] transition-colors" />
@@ -359,7 +361,7 @@ function KpiTile({
         </p>
         <p
           className={cn(
-            "mt-1 text-2xl font-semibold tabular-nums text-slate-900",
+            "mt-1 text-[22px] font-semibold tabular-nums text-slate-900",
             k.comingSoon && "text-slate-400",
           )}
           data-testid={`${testId}-value`}
