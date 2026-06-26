@@ -3633,19 +3633,19 @@ function CatalogEditor({
               press's own admins, and applies across every format's preview. */}
           <div className="flex flex-col items-start gap-1.5 md:pl-2">
             <VinylPreview
-              /* Task #2117 — the operator/press-uploaded logo
-                 (manufacturers.logoUrl) is the source of truth for the
-                 branded jacket placeholder, so it WINS over the bundled
-                 domain-keyed art. When a logo is set we hand it to
-                 placeholderLogoUrl (centered + contained, the branded-
-                 placeholder treatment); only presses with no uploaded
-                 logo fall back to the bundled full-jacket domain art. */
-              artworkUrl={pressLogoUrl ? null : placeholderArt}
+              /* The dedicated "Jacket placeholder image" (vinylPlaceholderUrl,
+                 edited via the dialog below) is the source of truth, falling
+                 back to the bundled per-domain jacket art — both render as the
+                 full-bleed jacket (placeholderArt). The press PROFILE logo
+                 (manufacturers.logoUrl, the small "icon") must NOT override the
+                 jacket placeholder — it's a last-resort branded fallback only
+                 for presses that have neither a placeholder nor bundled art. */
+              artworkUrl={placeholderArt}
               color={previewColor}
               jacketUpgrade={DEFAULT_JACKET_UPGRADE}
               format={fmt}
               size="2xl"
-              placeholderLogoUrl={pressLogoUrl ?? null}
+              placeholderLogoUrl={placeholderArt ? null : (pressLogoUrl ?? null)}
               jacketOverlay={
                 <button
                   type="button"
