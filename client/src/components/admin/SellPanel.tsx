@@ -1666,7 +1666,7 @@ function computePressChips(
       : [];
 }
 
-function PrinterAndPressPanel({
+export function PrinterAndPressPanel({
   invited,
   allPresses,
   pressFormatsByPress,
