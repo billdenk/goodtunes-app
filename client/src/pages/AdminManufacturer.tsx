@@ -3699,32 +3699,9 @@ function CatalogEditor({
             />
           )}
         </div>
-        {/* Product segmented — mirrors the top Format selector. */}
-        {offeredFormats.length > 1 && (
-          <div className="flex flex-wrap items-center gap-1.5" data-testid={`pricing-product-${fmt}`}>
-            {offeredFormats.map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => setActiveFormat(f)}
-                aria-pressed={f === fmt}
-                className={[
-                  "px-2.5 h-7 rounded-full text-xs font-medium transition-colors",
-                  f === fmt
-                    ? "bg-[color:var(--brand-blue-soft)] text-[color:var(--brand-blue)]"
-                    : "text-slate-600 hover:bg-slate-100",
-                ].join(" ")}
-                data-testid={`pill-product-${f}`}
-              >
-                {ALBUM_FORMAT_LABEL[f]}
-              </button>
-            ))}
-          </div>
-        )}
-        {/* Pricing color group — for 12" Double LP / non-vinyl this is
-            where groups are added/removed; canonical vinyl sizes manage
-            groups up in Color Options. */}
-        {priceTiers.length === 0 ? (
+        {/* Pricing tier/group — vinyl color-group selection lives in Color
+            Options above (shared state); only non-vinyl needs it here. */}
+        {!isVinyl && (priceTiers.length === 0 ? (
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-500">No price groups yet for this product.</span>
             {editing && canManagePriceGroups &&
@@ -3743,9 +3720,6 @@ function CatalogEditor({
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
-            {isVinyl && (
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Color group</span>
-            )}
             <select
               value={selectedPriceTierId ?? ""}
               onChange={(e) => setSelectedPriceTierId(e.target.value || null)}
@@ -3779,7 +3753,7 @@ function CatalogEditor({
                 groupAdder
               ))}
           </div>
-        )}
+        ))}
         {selectedPriceTier && (
           <div className="space-y-2">
             <span className="text-xs text-slate-500">
