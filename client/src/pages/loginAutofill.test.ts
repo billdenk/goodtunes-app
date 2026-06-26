@@ -1,4 +1,7 @@
-// Regression guard for the Chrome autofill bug on the admin login page.
+// Regression guard for the Chrome autofill bug on the login page — both
+// the admin shell (admin.goodtunes.music/admin/login) AND the customer
+// (fan) shell (my.goodtunes.music/login), which render the same shared
+// login form, refs, and native `change` listener.
 //
 // Chrome's password manager often writes autofilled values directly into
 // the DOM input without firing React's `onChange`, leaving the controlled
@@ -6,15 +9,18 @@
 // The fix reads the actual DOM value via a ref on submit, so the POSTed
 // payload matches what is in the field regardless of how it got there.
 //
-// This test simulates that scenario: after mounting the admin Login page
-// we set the input's `.value` property directly (the native way Chrome
-// autofill works) without dispatching any React synthetic event, then
-// submit the form (via a direct `submit` event, which is what happens when
-// the user presses Enter) and assert that the captured fetch body carries
-// the actual field contents, NOT the empty React state.
+// This test simulates that scenario: after mounting the Login page we set
+// the input's `.value` property directly (the native way Chrome autofill
+// works) without dispatching any React synthetic event, then submit the
+// form (via a direct `submit` event, which is what happens when the user
+// presses Enter) and assert that the captured fetch body carries the
+// actual field contents, NOT the empty React state.
 //
-// A second test covers normally typed credentials to ensure the fix
-// doesn't regress the happy path.
+// Each scenario is exercised twice — once in admin mode (mounted under
+// `/admin/login`) and once in customer mode (mounted under `/login`),
+// since `detectAuthKind` falls back to the pathname on the non-production
+// test host. A typed-credentials case ensures the fix doesn't regress the
+// happy path.
 //
 // Runs under Node's built-in runner via tsx:
 //   TSX_TSCONFIG_PATH=tsconfig.test.json \
@@ -188,10 +194,10 @@ function makeClient() {
   });
 }
 
-async function mount() {
+async function mount(path: string = "/admin/login") {
   const container = document.createElement("div");
   document.body.appendChild(container);
-  window.history.replaceState(null, "", "/admin/login");
+  window.history.replaceState(null, "", path);
   loginRequests.length = 0;
 
   let root: any;
@@ -219,151 +225,162 @@ async function mount() {
   return { q, settle, teardown };
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Test 1: autofilled value (no onChange) reaches the login POST body.
-//
-// Chrome autofill sets .value directly and does NOT fire React's onChange
-// (React listens on the `input` event; Chrome fires a native `change`
-// event). The user then presses Enter to submit — even with the button
-// disabled from empty React state, pressing Enter dispatches a `submit`
-// event on the form. The fix reads the ref's current DOM value, so the
-// correct credential is POSTed.
-// ─────────────────────────────────────────────────────────────────────
-test("autofill simulation: value written to DOM without onChange is POSTed correctly", async () => {
-  const { q, settle, teardown } = await mount();
-  try {
-    const usernameInput = q("input-login-username") as HTMLInputElement;
-    const passwordInput = q("input-login-password") as HTMLInputElement;
-    const form = usernameInput?.closest("form") as HTMLFormElement | null;
+// Both shells render the exact same login form (refs + native `change`
+// listener), so the autofill protection must hold identically on each.
+// `detectAuthKind` falls back to the pathname on the non-production test
+// host: `/admin/login` → admin, `/login` → customer (fan).
+const MODES: Array<{ label: string; path: string }> = [
+  { label: "admin", path: "/admin/login" },
+  { label: "customer", path: "/login" },
+];
 
-    assert.ok(usernameInput, "username input must be present");
-    assert.ok(passwordInput, "password input must be present");
-    assert.ok(form, "login form must be present");
+for (const { label, path } of MODES) {
+  // ───────────────────────────────────────────────────────────────────
+  // Test 1: autofilled value (no onChange) reaches the login POST body.
+  //
+  // Chrome autofill sets .value directly and does NOT fire React's
+  // onChange (React listens on the `input` event; Chrome fires a native
+  // `change` event). The user then presses Enter to submit — even with the
+  // button disabled from empty React state, pressing Enter dispatches a
+  // `submit` event on the form. The fix reads the ref's current DOM value,
+  // so the correct credential is POSTed.
+  // ───────────────────────────────────────────────────────────────────
+  test(`[${label}] autofill simulation: value written to DOM without onChange is POSTed correctly`, async () => {
+    const { q, settle, teardown } = await mount(path);
+    try {
+      const usernameInput = q("input-login-username") as HTMLInputElement;
+      const passwordInput = q("input-login-password") as HTMLInputElement;
+      const form = usernameInput?.closest("form") as HTMLFormElement | null;
 
-    // Simulate Chrome autofill: write the value into the DOM without firing
-    // any React synthetic event. Chrome uses the native value setter and
-    // dispatches a `change` event (not `input`), which React's onChange
-    // misses entirely. Here we go even stricter — no event at all — to
-    // prove the ref-based submit fallback catches it regardless.
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!
-      .set!.call(usernameInput, "andrew@gogoods.com");
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!
-      .set!.call(passwordInput, "CorrectPassword123!");
+      assert.ok(usernameInput, "username input must be present");
+      assert.ok(passwordInput, "password input must be present");
+      assert.ok(form, "login form must be present");
 
-    // Submit the form directly — same as the user pressing Enter while the
-    // form is focused. This works even when the submit button is `disabled`
-    // (which it is when React state is empty from the missing onChange).
-    await act(async () => {
-      form.dispatchEvent(
-        new window.Event("submit", { bubbles: true, cancelable: true })
-      );
-    });
-    await settle();
-
-    assert.equal(loginRequests.length, 1, "exactly one /api/login call was made");
-    const body = loginRequests[0];
-    assert.equal(
-      body.username,
-      "andrew@gogoods.com",
-      "username must equal the autofilled DOM value, not empty React state",
-    );
-    assert.equal(
-      body.password,
-      "CorrectPassword123!",
-      "password must equal the autofilled DOM value, not empty React state",
-    );
-  } finally {
-    await teardown();
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────
-// Test 2: Chrome-style native `change` event syncs into React state so
-// the submit button becomes enabled and a normal click also works.
-// ─────────────────────────────────────────────────────────────────────
-test("native change event (Chrome autofill style) syncs state and enables button", async () => {
-  const { q, settle, teardown } = await mount();
-  try {
-    const usernameInput = q("input-login-username") as HTMLInputElement;
-    const passwordInput = q("input-login-password") as HTMLInputElement;
-    const submitBtn    = q("button-submit-login") as HTMLButtonElement;
-
-    assert.ok(usernameInput, "username input must be present");
-    assert.ok(passwordInput, "password input must be present");
-    assert.ok(submitBtn,     "submit button must be present");
-
-    // Write value + fire native `change` (what Chrome autofill does).
-    const fireChange = (el: HTMLInputElement, value: string) => {
+      // Simulate Chrome autofill: write the value into the DOM without
+      // firing any React synthetic event. Chrome uses the native value
+      // setter and dispatches a `change` event (not `input`), which React's
+      // onChange misses entirely. Here we go even stricter — no event at
+      // all — to prove the ref-based submit fallback catches it regardless.
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!
-        .set!.call(el, value);
-      el.dispatchEvent(new window.Event("change", { bubbles: true }));
-    };
-
-    await act(async () => { fireChange(usernameInput, "andrew@gogoods.com"); });
-    await act(async () => { fireChange(passwordInput, "CorrectPassword123!"); });
-    await settle();
-
-    // After the native `change` listeners sync state, the button should
-    // be enabled and clickable.
-    assert.equal(
-      submitBtn.hasAttribute("disabled"),
-      false,
-      "submit button must be enabled after native change events sync state",
-    );
-
-    await act(async () => {
-      submitBtn.dispatchEvent(
-        new window.MouseEvent("click", { bubbles: true, cancelable: true })
-      );
-    });
-    await settle();
-
-    assert.equal(loginRequests.length, 1, "exactly one /api/login call was made");
-    assert.equal(loginRequests[0].username, "andrew@gogoods.com");
-    assert.equal(loginRequests[0].password, "CorrectPassword123!");
-  } finally {
-    await teardown();
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────
-// Test 3: normally typed credentials (onChange fires) still work.
-// ─────────────────────────────────────────────────────────────────────
-test("typed credentials (onChange fires) are also POSTed correctly", async () => {
-  const { q, settle, teardown } = await mount();
-  try {
-    const usernameInput = q("input-login-username") as HTMLInputElement;
-    const passwordInput = q("input-login-password") as HTMLInputElement;
-    const submitBtn    = q("button-submit-login") as HTMLButtonElement;
-
-    // Simulate typing via real input events so React state updates.
-    const fireInput = (el: HTMLInputElement, value: string) => {
+        .set!.call(usernameInput, "andrew@gogoods.com");
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!
-        .set!.call(el, value);
-      el.dispatchEvent(new window.Event("input", { bubbles: true }));
-    };
+        .set!.call(passwordInput, "CorrectPassword123!");
 
-    await act(async () => { fireInput(usernameInput, "bill@goodtunes.com"); });
-    await act(async () => { fireInput(passwordInput, "TypedPassword456!"); });
-    await settle();
+      // Submit the form directly — same as the user pressing Enter while the
+      // form is focused. This works even when the submit button is `disabled`
+      // (which it is when React state is empty from the missing onChange).
+      await act(async () => {
+        form.dispatchEvent(
+          new window.Event("submit", { bubbles: true, cancelable: true })
+        );
+      });
+      await settle();
 
-    assert.equal(
-      submitBtn.hasAttribute("disabled"),
-      false,
-      "submit button must be enabled after typing",
-    );
-
-    await act(async () => {
-      submitBtn.dispatchEvent(
-        new window.MouseEvent("click", { bubbles: true, cancelable: true })
+      assert.equal(loginRequests.length, 1, "exactly one /api/login call was made");
+      const body = loginRequests[0];
+      assert.equal(
+        body.username,
+        "andrew@gogoods.com",
+        "username must equal the autofilled DOM value, not empty React state",
       );
-    });
-    await settle();
+      assert.equal(
+        body.password,
+        "CorrectPassword123!",
+        "password must equal the autofilled DOM value, not empty React state",
+      );
+    } finally {
+      await teardown();
+    }
+  });
 
-    assert.equal(loginRequests.length, 1, "exactly one /api/login call was made");
-    assert.equal(loginRequests[0].username, "bill@goodtunes.com");
-    assert.equal(loginRequests[0].password, "TypedPassword456!");
-  } finally {
-    await teardown();
-  }
-});
+  // ───────────────────────────────────────────────────────────────────
+  // Test 2: Chrome-style native `change` event syncs into React state so
+  // the submit button becomes enabled and a normal click also works.
+  // ───────────────────────────────────────────────────────────────────
+  test(`[${label}] native change event (Chrome autofill style) syncs state and enables button`, async () => {
+    const { q, settle, teardown } = await mount(path);
+    try {
+      const usernameInput = q("input-login-username") as HTMLInputElement;
+      const passwordInput = q("input-login-password") as HTMLInputElement;
+      const submitBtn    = q("button-submit-login") as HTMLButtonElement;
+
+      assert.ok(usernameInput, "username input must be present");
+      assert.ok(passwordInput, "password input must be present");
+      assert.ok(submitBtn,     "submit button must be present");
+
+      // Write value + fire native `change` (what Chrome autofill does).
+      const fireChange = (el: HTMLInputElement, value: string) => {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!
+          .set!.call(el, value);
+        el.dispatchEvent(new window.Event("change", { bubbles: true }));
+      };
+
+      await act(async () => { fireChange(usernameInput, "andrew@gogoods.com"); });
+      await act(async () => { fireChange(passwordInput, "CorrectPassword123!"); });
+      await settle();
+
+      // After the native `change` listeners sync state, the button should
+      // be enabled and clickable.
+      assert.equal(
+        submitBtn.hasAttribute("disabled"),
+        false,
+        "submit button must be enabled after native change events sync state",
+      );
+
+      await act(async () => {
+        submitBtn.dispatchEvent(
+          new window.MouseEvent("click", { bubbles: true, cancelable: true })
+        );
+      });
+      await settle();
+
+      assert.equal(loginRequests.length, 1, "exactly one /api/login call was made");
+      assert.equal(loginRequests[0].username, "andrew@gogoods.com");
+      assert.equal(loginRequests[0].password, "CorrectPassword123!");
+    } finally {
+      await teardown();
+    }
+  });
+
+  // ───────────────────────────────────────────────────────────────────
+  // Test 3: normally typed credentials (onChange fires) still work.
+  // ───────────────────────────────────────────────────────────────────
+  test(`[${label}] typed credentials (onChange fires) are also POSTed correctly`, async () => {
+    const { q, settle, teardown } = await mount(path);
+    try {
+      const usernameInput = q("input-login-username") as HTMLInputElement;
+      const passwordInput = q("input-login-password") as HTMLInputElement;
+      const submitBtn    = q("button-submit-login") as HTMLButtonElement;
+
+      // Simulate typing via real input events so React state updates.
+      const fireInput = (el: HTMLInputElement, value: string) => {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!
+          .set!.call(el, value);
+        el.dispatchEvent(new window.Event("input", { bubbles: true }));
+      };
+
+      await act(async () => { fireInput(usernameInput, "bill@goodtunes.com"); });
+      await act(async () => { fireInput(passwordInput, "TypedPassword456!"); });
+      await settle();
+
+      assert.equal(
+        submitBtn.hasAttribute("disabled"),
+        false,
+        "submit button must be enabled after typing",
+      );
+
+      await act(async () => {
+        submitBtn.dispatchEvent(
+          new window.MouseEvent("click", { bubbles: true, cancelable: true })
+        );
+      });
+      await settle();
+
+      assert.equal(loginRequests.length, 1, "exactly one /api/login call was made");
+      assert.equal(loginRequests[0].username, "bill@goodtunes.com");
+      assert.equal(loginRequests[0].password, "TypedPassword456!");
+    } finally {
+      await teardown();
+    }
+  });
+}
