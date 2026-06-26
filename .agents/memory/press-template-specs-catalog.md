@@ -23,6 +23,18 @@ BOTH artboard dims must be set to override sizing (one dim alone is ignored), a
 jacket `variant_key` match wins over the `""` fallback, an exact `disc_count` wins
 over the generic `0`, and `expected_pages`/`color` override individually.
 
+**Press self-serve, already shipped:** presses edit their OWN template specs from
+`/vendor?tab=catalog` (PressPortal → `PressCatalogPanel` → `CatalogEditor` →
+`PressTemplateSpecsCard`, per vinyl format) incl. paste-URL / upload of the real
+print-ready file. Server `GET/PUT/DELETE /api/admin/manufacturers/:id/template-specs`
+admit a scoped manufacturer membership (`requirePressManager`, keyed on
+`req.params.id` → no cross-press). This matches the WHOLE press catalog gate: every
+catalog mutation (formats/tiers/colors/jackets/ladders in `server/pressCatalog.ts` +
+gooddeed-printing) uses **scope-only** `requirePressScope`/`requirePressManager`, NOT
+the editor-level `pressUserCanEdit`/`requirePressEditorRoute` (that stricter gate is
+reserved for press People mgmt + `/api/press/:id/*` portal ops). So read-only Staff
+can currently edit the catalog — consistent, by-pattern, not a per-feature gap.
+
 **How to apply:**
 - The album and the completed-template check carry a `vendorId`, NOT a `pressId`.
   The vendor→press bridge is by **name** (mirror of `matchInvitedPressToVendor`
