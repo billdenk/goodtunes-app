@@ -4032,6 +4032,14 @@ export const manufacturers = pgTable("manufacturers", {
   // flipped it (audit trail only).
   autoTriggerConsentAt: timestamp("auto_trigger_consent_at"),
   autoTriggerConsentBy: varchar("auto_trigger_consent_by"),
+  // Task #2194 — per-press GoodDeed printing price ladder. Stored as
+  // { active: boolean; tiers: Array<{ qty: number; perUnitCents: number }> }
+  // so the press can record its own printing costs without needing a
+  // vendors.id. Distinct from vendor_good_deed_services (vendor-FK-keyed).
+  gooddeedPrintingJson: jsonb("gooddeed_printing_json").$type<{
+    active: boolean;
+    tiers: Array<{ qty: number; perUnitCents: number }>;
+  }>(),
   createdAt: timestamp("created_at").defaultNow(),
   ...softDeleteCols,
 }, (table) => ({

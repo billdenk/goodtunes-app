@@ -7976,3 +7976,27 @@ migrate_manufacturers_nav_logo_url dev  "${DATABASE_URL:-}"
 migrate_manufacturers_nav_logo_url prod "${PROD_DATABASE_URL:-}"
 
 sync_github_build_mirror
+
+# Task #2194 — per-press GoodDeed printing price ladder column.
+# manufacturers gains gooddeed_printing_json (jsonb, nullable) so a press
+# can record its printing cost tiers independently of vendor_good_deed_services.
+migrate_manufacturers_gooddeed_printing_json() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping manufacturers gooddeed_printing_json migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE IF EXISTS manufacturers
+  ADD COLUMN IF NOT EXISTS gooddeed_printing_json jsonb;
+COMMIT;
+SQL
+  then
+    echo "post-merge: manufacturers gooddeed_printing_json migration ok on $label"
+  else
+    echo "post-merge: WARNING — manufacturers gooddeed_printing_json migration failed on $label (continuing)"
+  fi
+}
+migrate_manufacturers_gooddeed_printing_json dev  "${DATABASE_URL:-}"
+migrate_manufacturers_gooddeed_printing_json prod "${PROD_DATABASE_URL:-}"

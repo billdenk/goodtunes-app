@@ -29905,6 +29905,60 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
+  // ─── Task #2194 — per-press GoodDeed printing price ladder ───────────────
+  // Reads/writes the press's own printing cost tiers (qty → perUnitCents)
+  // stored in manufacturers.gooddeed_printing_json. Separate from the
+  // vendor_good_deed_services table (which is keyed by vendors.id).
+  app.get(
+    "/api/admin/manufacturers/:id/gooddeed-printing",
+    requireAdminBearer,
+    async (req, res) => {
+      if (!(await requirePressManager(req, res, req.params.id))) return;
+      const press = await storage.getManufacturerById(req.params.id);
+      if (!press) return res.status(404).json({ message: "Press not found" });
+      const raw = (press as any).gooddeedPrintingJson as
+        | { active: boolean; tiers: Array<{ qty: number; perUnitCents: number }> }
+        | null
+        | undefined;
+      return res.json({ active: raw?.active ?? false, tiers: raw?.tiers ?? [] });
+    },
+  );
+
+  app.put(
+    "/api/admin/manufacturers/:id/gooddeed-printing",
+    requireAdminBearer,
+    async (req, res) => {
+      if (!(await requirePressManager(req, res, req.params.id))) return;
+      const press = await storage.getManufacturerById(req.params.id);
+      if (!press) return res.status(404).json({ message: "Press not found" });
+      const { active, tiers } = req.body as { active: unknown; tiers: unknown };
+      if (typeof active !== "boolean")
+        return res.status(400).json({ message: "'active' must be boolean" });
+      if (!Array.isArray(tiers))
+        return res.status(400).json({ message: "'tiers' must be an array" });
+      const seen = new Set<number>();
+      const cleaned: Array<{ qty: number; perUnitCents: number }> = [];
+      for (const t of tiers) {
+        const qty = Number(t?.qty);
+        const puc = Number(t?.perUnitCents);
+        if (!Number.isFinite(qty) || qty <= 0)
+          return res.status(400).json({ message: "Each tier needs a positive qty" });
+        if (!Number.isFinite(puc) || puc < 0)
+          return res.status(400).json({ message: "Each tier perUnitCents must be ≥ 0" });
+        if (seen.has(qty))
+          return res.status(400).json({ message: `Duplicate tier qty ${qty}` });
+        seen.add(qty);
+        cleaned.push({ qty, perUnitCents: Math.round(puc) });
+      }
+      cleaned.sort((a, b) => a.qty - b.qty);
+      await db
+        .update(manufacturers)
+        .set({ gooddeedPrintingJson: { active, tiers: cleaned } } as any)
+        .where(eq(manufacturers.id, req.params.id));
+      return res.json({ active, tiers: cleaned });
+    },
+  );
+
   // ─── Task #225 — Pressing-order requests (artist → GoodTunes review) ──
   // The bridge between "I've made my Sell-tab choices" and "GoodTunes
   // has something to push to the press." Snapshot-based: pickedSku +

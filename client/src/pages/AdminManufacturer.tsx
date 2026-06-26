@@ -3,6 +3,7 @@ import { formatUsdCents } from "@shared/money";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
+  Award,
   BadgeCheck,
   ChevronDown,
   ChevronRight,
@@ -14,6 +15,7 @@ import {
   ExternalLink,
   Factory,
   FileText,
+  GripVertical,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -56,6 +58,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
@@ -78,6 +81,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ALBUM_FORMATS, ALBUM_FORMAT_LABEL, type AlbumFormat, type Manufacturer, type FulfillmentPartner } from "@shared/schema";
+
+// Virtual catalog tab type — physical AlbumFormat or the GoodDeeds printing editor.
+type CatalogTab = AlbumFormat | "gooddeeds";
 
 /**
  * Admin · Single manufacturer. Editable profile + specialties chips +
@@ -2491,20 +2497,25 @@ export function PressCatalogPanel({
   // Hooks must run unconditionally — declare state before any early
   // return so a role flip from undefined → unauthorized doesn't trip
   // React's "rendered fewer hooks" guard.
-  // Task #2114 — the redesigned editor edits ONE format at a time. The
-  // Format selector up top (mirrored by the Pricing "Product" control)
-  // drives both Color Options and Pricing below.
-  const [activeFormat, setActiveFormat] = useState<AlbumFormat | null>(null);
+  // Task #2114 — the redesigned editor edits ONE format at a time.
+  // Task #2194 — activeTab also accepts "gooddeeds" for the printing
+  // price editor; gooddeeds is always available regardless of offered formats.
+  const [activeTab, setActiveTab] = useState<CatalogTab | null>(null);
   useEffect(() => {
-    const offeredList = (data?.formats ?? []).map((f) => f.format);
-    if (offeredList.length === 0) {
-      if (activeFormat !== null) setActiveFormat(null);
+    if (!data) return;
+    const offeredList = (data?.formats ?? []).map((f) => f.format) as AlbumFormat[];
+    // Initial state: pick the first physical format, or gooddeeds if none offered.
+    if (activeTab === null) {
+      if (offeredList.length === 0) setActiveTab("gooddeeds");
+      else setActiveTab(ALBUM_FORMATS.find((f) => offeredList.includes(f)) ?? offeredList[0]);
       return;
     }
-    if (!activeFormat || !offeredList.includes(activeFormat)) {
-      setActiveFormat(ALBUM_FORMATS.find((f) => offeredList.includes(f)) ?? offeredList[0]);
+    // If the currently selected physical format was removed, fall back.
+    if (activeTab !== "gooddeeds" && !offeredList.includes(activeTab as AlbumFormat)) {
+      if (offeredList.length === 0) setActiveTab("gooddeeds");
+      else setActiveTab(ALBUM_FORMATS.find((f) => offeredList.includes(f)) ?? offeredList[0]);
     }
-  }, [data, activeFormat]);
+  }, [data, activeTab]);
 
   if (roleInfo && !canEdit) return null;
 
@@ -2534,140 +2545,210 @@ export function PressCatalogPanel({
       </div>
       {isLoading || !data ? (
         <div className="text-slate-500 text-sm py-4">Loading…</div>
-      ) : offered.size === 0 ? (
-        <div className="rounded-md border border-dashed border-slate-200 bg-slate-50/60 p-6 text-center">
-          <p className="text-sm text-slate-500 mb-3">
-            No formats yet. Pick one this press runs to start its catalog.
-          </p>
-          <AddFormatPicker
-            offered={offered}
-            offeredVinyl={[]}
-            onPick={(fmt) => {
-              setActiveFormat(fmt);
-              toggleFormat.mutate({ format: fmt, enabled: true });
-            }}
-            disabled={toggleFormat.isPending}
-          />
-        </div>
       ) : (
         <div className="space-y-5">
-          {/* FORMAT — category pills: Vinyl / CD / Cassette */}
-          <FormatCategorySelector
+          {/* FORMAT DROPDOWN — Vinyl / CD / Cassette / GoodDeeds */}
+          <FormatDropdown
             offered={offered}
-            activeFormat={activeFormat}
-            onSetFormat={setActiveFormat}
+            activeTab={activeTab}
+            onSetTab={setActiveTab}
             onAddFormat={(fmt) => {
-              setActiveFormat(fmt);
+              setActiveTab(fmt);
               toggleFormat.mutate({ format: fmt, enabled: true });
             }}
+            onRemoveFormat={(fmt) => {
+              // After removing the active format, fall back to next offered or gooddeeds.
+              const remaining = ALBUM_FORMATS.filter((f) => offered.has(f) && f !== fmt);
+              setActiveTab(remaining.length > 0 ? remaining[0] : "gooddeeds");
+              toggleFormat.mutate({ format: fmt, enabled: false });
+            }}
             addBusy={toggleFormat.isPending}
+            removeBusy={toggleFormat.isPending}
           />
-          {activeFormat && (
+          {activeTab === "gooddeeds" ? (
+            <GoodDeedPrintingEditor pressId={pressId} />
+          ) : activeTab ? (
             <CatalogEditor
               pressId={pressId}
               pressDomain={pressDomain}
               placeholderUrl={placeholderUrl}
               pressLogoUrl={pressLogoUrl ?? null}
               catalog={data}
-              activeFormat={activeFormat}
-              setActiveFormat={setActiveFormat}
+              activeFormat={activeTab as AlbumFormat}
+              setActiveFormat={(f) => setActiveTab(f)}
               offeredFormats={offeredFormats}
               onChanged={invalidate}
-              onRemoveFormat={() => toggleFormat.mutate({ format: activeFormat, enabled: false })}
+              onRemoveFormat={() => toggleFormat.mutate({ format: activeTab as AlbumFormat, enabled: false })}
               removeBusy={toggleFormat.isPending}
-              isFormatHidden={!!(data?.formats.find((f) => f.format === activeFormat)?.hidden)}
-              onHideFormat={(hidden) => hideFormat.mutate({ format: activeFormat, hidden })}
+              isFormatHidden={!!(data?.formats.find((f) => f.format === activeTab)?.hidden)}
+              onHideFormat={(hidden) => hideFormat.mutate({ format: activeTab as AlbumFormat, hidden })}
               hideBusy={hideFormat.isPending}
             />
-          )}
+          ) : null}
         </div>
       )}
     </div>
   );
 }
 
-// ─── Format category selector ────────────────────────────────────────────────
-// Shows Vinyl / CD / Cassette as top-level pill buttons. Vinyl is the umbrella
-// for 7"/12"/12"DLP; when >1 vinyl size is offered a secondary size-picker row
-// appears below. "Add format" and "Add size" are category-aware.
-function FormatCategorySelector({
+// ─── Format dropdown ─────────────────────────────────────────────────────────
+// A dropdown that switches between Vinyl / CD / Cassette / GoodDeeds, with
+// "Add format" items at the bottom. GoodDeeds is always available; physical
+// formats only appear when offered. Vinyl keeps its secondary size-picker row.
+function FormatDropdown({
   offered,
-  activeFormat,
-  onSetFormat,
+  activeTab,
+  onSetTab,
   onAddFormat,
+  onRemoveFormat,
   addBusy,
+  removeBusy,
 }: {
   offered: Set<string>;
-  activeFormat: AlbumFormat | null;
-  onSetFormat: (f: AlbumFormat) => void;
-  onAddFormat: (f: AlbumFormat) => void;
+  activeTab: CatalogTab | null;
+  onSetTab: (tab: CatalogTab) => void;
+  onAddFormat: (fmt: AlbumFormat) => void;
+  onRemoveFormat?: (fmt: AlbumFormat) => void;
   addBusy?: boolean;
+  removeBusy?: boolean;
 }) {
   const offeredVinyl = VINYL_FORMATS.filter((f) => offered.has(f));
-  const vinylActive = !!activeFormat && isVinylFormat(activeFormat);
+  const vinylActive = !!activeTab && activeTab !== "gooddeeds" && isVinylFormat(activeTab as AlbumFormat);
 
-  const pillBase =
-    "inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium transition-colors border";
-  const pillActive = "bg-slate-900 text-white border-slate-900";
-  const pillIdle =
-    "bg-white text-slate-700 border-slate-300 hover:border-slate-400 hover:bg-slate-50";
+  const canAddVinyl = offeredVinyl.length === 0;
+  const canAddCD = !offered.has("cd");
+  const canAddCassette = !offered.has("cassette");
+  const hasAddable = canAddVinyl || canAddCD || canAddCassette;
+
+  const activeLabel =
+    activeTab === "gooddeeds"
+      ? "GoodDeeds"
+      : activeTab && isVinylFormat(activeTab as AlbumFormat)
+      ? "Vinyl"
+      : activeTab
+      ? ALBUM_FORMAT_LABEL[activeTab as AlbumFormat]
+      : "Select format";
 
   return (
     <div className="space-y-2" data-testid="catalog-format-selector">
       <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Format</span>
-      {/* Top-level category pills */}
-      <div className="flex flex-wrap items-center gap-2">
-        {offeredVinyl.length > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              const target =
-                offeredVinyl.includes(activeFormat as AlbumFormat)
-                  ? (activeFormat as AlbumFormat)
-                  : offeredVinyl[0];
-              onSetFormat(target);
-            }}
-            className={[pillBase, vinylActive ? pillActive : pillIdle].join(" ")}
-            data-testid="pill-format-vinyl"
-          >
-            <Disc3 className="w-3.5 h-3.5" />
-            Vinyl
-            {vinylActive && offeredVinyl.length > 1 && (
-              <ChevronDown className="w-3 h-3 opacity-70" />
+      <div className="flex flex-wrap items-center gap-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-slate-300 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]"
+              data-testid="button-format-dropdown"
+            >
+              {activeLabel}
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-52">
+            {/* Offered physical formats */}
+            {offeredVinyl.length > 0 && (
+              <DropdownMenuItem
+                className="gap-2"
+                onSelect={() => {
+                  const target = vinylActive ? (activeTab as AlbumFormat) : offeredVinyl[0];
+                  onSetTab(target);
+                }}
+                data-testid="option-format-vinyl"
+              >
+                <Disc3 className="w-3.5 h-3.5 text-slate-400" />
+                Vinyl
+                {vinylActive && <span className="ml-auto text-[color:var(--brand-blue)] text-xs">✓</span>}
+              </DropdownMenuItem>
             )}
-          </button>
-        )}
-        {offered.has("cd") && (
-          <button
-            type="button"
-            onClick={() => onSetFormat("cd")}
-            className={[pillBase, activeFormat === "cd" ? pillActive : pillIdle].join(" ")}
-            data-testid="pill-format-cd"
-          >
-            <Disc className="w-3.5 h-3.5" />
-            CD
-          </button>
-        )}
-        {offered.has("cassette") && (
-          <button
-            type="button"
-            onClick={() => onSetFormat("cassette")}
-            className={[
-              pillBase,
-              activeFormat === "cassette" ? pillActive : pillIdle,
-            ].join(" ")}
-            data-testid="pill-format-cassette"
-          >
-            <CassetteIcon className="w-3.5 h-3.5" />
-            Cassette
-          </button>
-        )}
-        <AddFormatPicker
-          offered={offered}
-          offeredVinyl={offeredVinyl}
-          onPick={onAddFormat}
-          disabled={addBusy}
-        />
+            {offered.has("cd") && (
+              <DropdownMenuItem
+                className="gap-2"
+                onSelect={() => onSetTab("cd")}
+                data-testid="option-format-cd"
+              >
+                <Disc className="w-3.5 h-3.5 text-slate-400" />
+                CD
+                {activeTab === "cd" && <span className="ml-auto text-[color:var(--brand-blue)] text-xs">✓</span>}
+              </DropdownMenuItem>
+            )}
+            {offered.has("cassette") && (
+              <DropdownMenuItem
+                className="gap-2"
+                onSelect={() => onSetTab("cassette")}
+                data-testid="option-format-cassette"
+              >
+                <CassetteIcon className="w-3.5 h-3.5 text-slate-400" />
+                Cassette
+                {activeTab === "cassette" && <span className="ml-auto text-[color:var(--brand-blue)] text-xs">✓</span>}
+              </DropdownMenuItem>
+            )}
+            {/* GoodDeeds — always available */}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="gap-2"
+              onSelect={() => onSetTab("gooddeeds")}
+              data-testid="option-format-gooddeeds"
+            >
+              <Award className="w-3.5 h-3.5 text-slate-400" />
+              GoodDeeds
+              {activeTab === "gooddeeds" && <span className="ml-auto text-[color:var(--brand-blue)] text-xs">✓</span>}
+            </DropdownMenuItem>
+            {/* Add physical format options */}
+            {hasAddable && (
+              <>
+                <DropdownMenuSeparator />
+                {canAddVinyl && (
+                  <DropdownMenuItem
+                    className="gap-2 text-[color:var(--brand-blue)]"
+                    disabled={addBusy}
+                    onSelect={() => onAddFormat("7_inch")}
+                    data-testid="option-add-format-7_inch"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Vinyl
+                  </DropdownMenuItem>
+                )}
+                {canAddCD && (
+                  <DropdownMenuItem
+                    className="gap-2 text-[color:var(--brand-blue)]"
+                    disabled={addBusy}
+                    onSelect={() => onAddFormat("cd")}
+                    data-testid="option-add-format-cd"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add CD
+                  </DropdownMenuItem>
+                )}
+                {canAddCassette && (
+                  <DropdownMenuItem
+                    className="gap-2 text-[color:var(--brand-blue)]"
+                    disabled={addBusy}
+                    onSelect={() => onAddFormat("cassette")}
+                    data-testid="option-add-format-cassette"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Cassette
+                  </DropdownMenuItem>
+                )}
+              </>
+            )}
+            {/* Remove the currently active physical format */}
+            {onRemoveFormat && activeTab && activeTab !== "gooddeeds" && offered.has(activeTab) && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="gap-2 text-rose-600 focus:text-rose-600"
+                  disabled={removeBusy}
+                  onSelect={() => onRemoveFormat(activeTab as AlbumFormat)}
+                  data-testid={`option-remove-format-${activeTab}`}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Remove {activeTab === "7_inch" || activeTab === "12_lp" || activeTab === "12_dlp" ? "Vinyl" : ALBUM_FORMAT_LABEL[activeTab as AlbumFormat]}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Secondary: vinyl size picker — only when vinyl is active */}
@@ -2677,10 +2758,10 @@ function FormatCategorySelector({
             <button
               key={f}
               type="button"
-              onClick={() => onSetFormat(f)}
+              onClick={() => onSetTab(f)}
               className={[
                 "inline-flex items-center h-7 px-2.5 rounded-md text-xs font-medium transition-colors border",
-                activeFormat === f
+                activeTab === f
                   ? "bg-slate-100 text-slate-900 border-slate-400"
                   : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700",
               ].join(" ")}
@@ -2699,6 +2780,185 @@ function FormatCategorySelector({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── GoodDeed printing price editor ──────────────────────────────────────────
+// Per-press price ladder for GoodDeed certificate printing runs.
+// Stored in manufacturers.gooddeed_printing_json.
+const GOODDEED_RUNGS = [25, 50, 100, 200, 300, 500, 1000] as const;
+
+function GoodDeedPrintingEditor({ pressId }: { pressId: string }) {
+  const { toast } = useToast();
+  const qk = ["/api/admin/manufacturers", pressId, "gooddeed-printing"];
+  const { data, isLoading } = useQuery<{
+    active: boolean;
+    tiers: Array<{ qty: number; perUnitCents: number }>;
+  }>({ queryKey: qk });
+
+  const [active, setActive] = useState(false);
+  const [offeredQtys, setOfferedQtys] = useState<Set<number>>(new Set());
+  const [prices, setPrices] = useState<Record<number, string>>({});
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (!data || initialized) return;
+    setInitialized(true);
+    setActive(data.active);
+    const offered = new Set(data.tiers.map((t) => t.qty));
+    setOfferedQtys(offered);
+    const p: Record<number, string> = {};
+    for (const t of data.tiers) {
+      p[t.qty] = String((t.perUnitCents / 100).toFixed(2));
+    }
+    setPrices(p);
+  }, [data, initialized]);
+
+  const dirty =
+    initialized &&
+    data &&
+    (active !== data.active ||
+      JSON.stringify(
+        GOODDEED_RUNGS.filter((q) => offeredQtys.has(q)).map((q) => ({
+          qty: q,
+          perUnitCents: Math.round((parseFloat(prices[q] ?? "0") || 0) * 100),
+        })),
+      ) !==
+        JSON.stringify(data.tiers));
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const tiers = GOODDEED_RUNGS.filter((q) => offeredQtys.has(q)).map((q) => ({
+        qty: q,
+        perUnitCents: Math.round((parseFloat(prices[q] ?? "0") || 0) * 100),
+      }));
+      const r = await apiRequest("PUT", `/api/admin/manufacturers/${pressId}/gooddeed-printing`, {
+        active,
+        tiers,
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message ?? "Save failed");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk });
+      toast({ title: "GoodDeed printing pricing saved" });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Couldn't save", description: e.message, variant: "destructive" }),
+  });
+
+  if (isLoading) return <div className="text-slate-500 text-sm py-4">Loading…</div>;
+
+  return (
+    <div className="space-y-4" data-testid="gooddeed-printing-editor">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <Award className="w-4 h-4 text-slate-500" />
+            <span className="text-sm font-semibold text-slate-800">GoodDeed printing pricing</span>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Per-unit costs for printing GoodDeed certificates at this press. Toggle each quantity
+            tier on or off and enter the per-certificate cost in USD.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs text-slate-500">{active ? "Active" : "Inactive"}</span>
+          <button
+            type="button"
+            onClick={() => setActive((v) => !v)}
+            className={[
+              "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200",
+              active ? "bg-[color:var(--brand-blue)]" : "bg-slate-200",
+            ].join(" ")}
+            data-testid="toggle-gooddeed-active"
+          >
+            <span
+              className={[
+                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200",
+                active ? "translate-x-4" : "translate-x-0",
+              ].join(" ")}
+            />
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 overflow-hidden">
+        <table className="w-full text-sm" data-testid="table-gooddeed-tiers">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 w-8">On</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">
+                Min qty
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">
+                Per cert (USD)
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {GOODDEED_RUNGS.map((qty) => {
+              const on = offeredQtys.has(qty);
+              return (
+                <tr
+                  key={qty}
+                  className={on ? "bg-white" : "bg-slate-50/60"}
+                  data-testid={`row-gooddeed-tier-${qty}`}
+                >
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOfferedQtys((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(qty)) next.delete(qty);
+                          else next.add(qty);
+                          return next;
+                        });
+                      }}
+                      className="text-slate-400 hover:text-slate-700 transition-colors"
+                      data-testid={`toggle-gooddeed-qty-${qty}`}
+                    >
+                      {on ? <Eye className="w-4 h-4 text-[color:var(--brand-blue)]" /> : <EyeOff className="w-4 h-4" />}
+                    </button>
+                  </td>
+                  <td className="px-3 py-2 text-slate-700">{qty.toLocaleString()}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1">
+                      <span className="text-slate-400 text-xs">$</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={prices[qty] ?? ""}
+                        onChange={(e) =>
+                          setPrices((prev) => ({ ...prev, [qty]: e.target.value }))
+                        }
+                        disabled={!on}
+                        placeholder="0.00"
+                        className={
+                          INPUT +
+                          " w-24 h-7 py-0 text-xs disabled:opacity-40"
+                        }
+                        data-testid={`input-gooddeed-price-${qty}`}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex justify-end">
+        <SaveLink
+          dirty={!!dirty}
+          busy={save.isPending}
+          onClick={() => save.mutate()}
+          testId="button-save-gooddeed-printing"
+        />
+      </div>
     </div>
   );
 }
@@ -3758,6 +4018,148 @@ function PressTemplateSpecsCard({ pressId, fmt }: { pressId: string; fmt: AlbumF
   );
 }
 
+// ─── Template file preview panel ─────────────────────────────────────────────
+// Floating fixed-position panel that previews an uploaded template file.
+// Resizable by dragging the top-left handle.
+function TemplatePreviewPanel({
+  url,
+  title,
+  onClose,
+}: {
+  url: string;
+  title: string;
+  onClose: () => void;
+}) {
+  const [size, setSize] = useState({ w: 440, h: 560 });
+  const isDragging = useRef(false);
+  const startRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+
+  const isImage = /\.(png|jpg|jpeg|gif|webp|svg)(\?|$)/i.test(url);
+
+  const onResizeDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    isDragging.current = true;
+    startRef.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onResizeMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging.current || !startRef.current) return;
+    const dx = startRef.current.x - e.clientX;
+    const dy = startRef.current.y - e.clientY;
+    setSize({
+      w: Math.max(320, Math.min(900, startRef.current.w + dx)),
+      h: Math.max(280, Math.min(840, startRef.current.h + dy)),
+    });
+  };
+  const onResizeUp = () => {
+    isDragging.current = false;
+    startRef.current = null;
+  };
+
+  return (
+    <div
+      className="fixed z-50 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col"
+      style={{ bottom: "5rem", right: "1.5rem", width: size.w, height: size.h }}
+      data-testid="panel-template-preview"
+    >
+      {/* Resize handle — drag toward top-left to enlarge */}
+      <div
+        className="absolute top-0 left-0 w-8 h-8 cursor-nw-resize z-10 flex items-end justify-end p-1"
+        onPointerDown={onResizeDown}
+        onPointerMove={onResizeMove}
+        onPointerUp={onResizeUp}
+        onPointerCancel={onResizeUp}
+        title="Drag to resize"
+      >
+        <GripVertical className="w-3.5 h-3.5 text-slate-300 rotate-45" />
+      </div>
+
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 bg-slate-50 shrink-0">
+        <div className="flex items-center gap-2 min-w-0 pl-4">
+          <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <span className="text-xs font-medium text-slate-700 truncate">{title}</span>
+        </div>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <a
+            href={url}
+            download
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-1.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors"
+            title="Download"
+            data-testid="button-preview-download"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </a>
+          <IconButton
+            label="Close preview"
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="text-slate-500 hover:text-slate-800"
+            data-testid="button-close-template-preview"
+          >
+            <X />
+          </IconButton>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-h-0 overflow-hidden bg-slate-100">
+        {isImage ? (
+          <img
+            src={url}
+            alt={title}
+            className="w-full h-full object-contain"
+            data-testid="img-template-preview"
+          />
+        ) : /\.pdf(\?|$)/i.test(url) ? (
+          <object
+            data={url}
+            type="application/pdf"
+            className="w-full h-full border-none"
+            data-testid="object-template-preview"
+          >
+            {/* Fallback for browsers that block embedded PDF */}
+            <div className="flex flex-col items-center justify-center h-full gap-3 p-6 text-center">
+              <FileText className="w-10 h-10 text-slate-300" />
+              <p className="text-sm text-slate-500">Your browser can't embed this PDF.</p>
+              <a
+                href={url}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm text-[var(--brand-blue)] hover:underline underline-offset-2"
+                data-testid="link-template-preview-download-fallback"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download to view
+              </a>
+            </div>
+          </object>
+        ) : (
+          /* Unsupported file type — download fallback */
+          <div className="flex flex-col items-center justify-center h-full gap-3 p-6 text-center">
+            <FileText className="w-10 h-10 text-slate-300" />
+            <p className="text-sm text-slate-500">Preview not available for this file type.</p>
+            <a
+              href={url}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm text-[var(--brand-blue)] hover:underline underline-offset-2"
+              data-testid="link-template-preview-download-fallback"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download to view
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TemplateComponentRow({
   label,
   hint,
@@ -3778,6 +4180,7 @@ function TemplateComponentRow({
   const [urlDraft, setUrlDraft] = useState("");
   const [uploading, setUploading] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // Optional check-dims. These refine the finished-file check baseline
   // (preferred over the measured fallback when set; left blank = fallback).
@@ -3837,29 +4240,59 @@ function TemplateComponentRow({
     setUrlDraft("");
   };
 
+  const fileUrl = spec?.templateFileUrl ?? null;
+  const fileName = fileUrl ? fileUrl.split("/").pop() ?? "template" : null;
+  const isImageFile = !!fileUrl && /\.(png|jpg|jpeg|gif|webp|svg)(\?|$)/i.test(fileUrl);
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
       <div className="flex items-center gap-3">
+        {/* Thumbnail — clickable to open preview panel */}
+        {fileUrl && (
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(true)}
+            className="w-10 h-10 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-colors flex items-center justify-center overflow-hidden shrink-0 group"
+            title="Preview template"
+            data-testid={`button-template-thumbnail-${spec?.componentKey ?? label}`}
+          >
+            {isImageFile ? (
+              <img src={fileUrl} alt="Template preview" className="w-full h-full object-cover" />
+            ) : (
+              <FileText className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+            )}
+          </button>
+        )}
+
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-slate-800">{label}</div>
-          {spec?.templateFileUrl ? (
-            <a
-              href={spec.templateFileUrl}
-              download
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-0.5 inline-flex items-center gap-1.5 text-xs text-[var(--brand-blue)] hover:underline underline-offset-2"
-              data-testid={`link-press-template-${spec.componentKey}`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              {spec.templateFileUrl.split("/").pop()}
-              <Download className="w-3.5 h-3.5" />
-            </a>
+          {fileUrl ? (
+            <div className="mt-0.5 flex items-center gap-2 min-w-0">
+              <span
+                className="text-xs text-slate-500 truncate"
+                data-testid={`text-template-filename-${spec?.componentKey ?? label}`}
+              >
+                {fileName}
+              </span>
+              <a
+                href={fileUrl}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 inline-flex items-center gap-1 text-xs text-[var(--brand-blue)] hover:underline underline-offset-2"
+                data-testid={`link-press-template-${spec?.componentKey ?? label}`}
+                title="Download template"
+              >
+                <Download className="w-3 h-3" />
+                Download
+              </a>
+            </div>
           ) : (
             <div className="mt-0.5 text-xs text-slate-400">{hint}</div>
           )}
         </div>
-        {spec?.templateFileUrl ? (
+
+        {fileUrl ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <IconButton
@@ -3868,16 +4301,21 @@ function TemplateComponentRow({
                 size="md"
                 disabled={busy || uploading}
                 className="text-slate-500 hover:text-slate-800"
-                data-testid={`button-template-menu-${spec.componentKey}`}
+                data-testid={`button-template-menu-${spec?.componentKey ?? label}`}
               >
                 <MoreHorizontal />
               </IconButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setPreviewOpen(true)}>
+                <Eye className="w-4 h-4 mr-2" />
+                Preview
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => fileRef.current?.click()}>
                 <Upload className="w-4 h-4 mr-2" />
                 Replace file
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-rose-600 focus:text-rose-600"
                 onSelect={() => setConfirmRemove(true)}
@@ -3889,6 +4327,15 @@ function TemplateComponentRow({
           </DropdownMenu>
         ) : null}
       </div>
+
+      {/* Template preview panel — floating, resizable */}
+      {previewOpen && fileUrl && (
+        <TemplatePreviewPanel
+          url={fileUrl}
+          title={label}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
 
       {!spec?.templateFileUrl && (
         <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
