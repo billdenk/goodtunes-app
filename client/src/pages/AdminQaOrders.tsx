@@ -41,6 +41,8 @@ function AdminQaOrdersInner() {
     queryKey: ["/api/admin/qa-orders"],
   });
 
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const r = await apiRequest("DELETE", `/api/admin/qa-orders/${id}`);
@@ -60,11 +62,31 @@ function AdminQaOrdersInner() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("DELETE", "/api/admin/qa-orders");
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error((j as any)?.message ?? "Bulk delete failed");
+      }
+      return (await r.json().catch(() => ({}))) as { deleted?: number };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/qa-orders"] });
+      toast({ title: `Removed ${data?.deleted ?? 0} QA test order${(data?.deleted ?? 0) === 1 ? "" : "s"}` });
+      setBulkDeleteOpen(false);
+    },
+    onError: (e: any) => {
+      toast({ title: "Bulk delete failed", description: e?.message, variant: "destructive" });
+      setBulkDeleteOpen(false);
+    },
+  });
+
   return (
     <AdminFrame title="QA Test Orders">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center gap-3 mb-6">
-          <div>
+        <div className="flex items-start gap-3 mb-6">
+          <div className="flex-1">
             <h1 className="text-xl font-bold text-slate-900">QA Test Orders</h1>
             <p className="text-sm text-slate-500 mt-0.5">
               Orders placed in Stripe test mode (origin = <code className="bg-slate-100 px-1 rounded">qa:test</code>).
@@ -72,6 +94,43 @@ function AdminQaOrdersInner() {
               Hard-delete them here to keep the database clean.
             </p>
           </div>
+          {orders.length > 0 && (
+            <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+              <AlertDialogTrigger asChild>
+                <button
+                  type="button"
+                  className="shrink-0 text-sm font-medium px-3.5 py-2 rounded-lg text-white bg-red-600 hover:bg-red-700 transition-colors"
+                  data-testid="button-delete-all-qa-orders"
+                >
+                  Remove all ({orders.length})
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remove all QA test orders?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently hard-delete{" "}
+                    <strong>{orders.length} QA test order{orders.length === 1 ? "" : "s"}</strong>{" "}
+                    and all their child records (items, copies, certs). This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={(e) => {
+                      e.preventDefault();
+                      bulkDeleteMutation.mutate();
+                    }}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                    disabled={bulkDeleteMutation.isPending}
+                    data-testid="button-confirm-delete-all-qa-orders"
+                  >
+                    {bulkDeleteMutation.isPending ? "Removing…" : "Remove all permanently"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
 
         {isLoading && (

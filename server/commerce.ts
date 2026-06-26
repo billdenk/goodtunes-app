@@ -3166,6 +3166,27 @@ export function registerCommerceRoutes(app: Express) {
     }
   });
 
+  // Task #2280 — bulk-delete every qa:test order in one click. No :id path.
+  // Same FK-respecting child cleanup as the single delete, but scoped to all
+  // rows whose order belongs to a qa:test order (subquery), so a round of
+  // testing can be cleared without removing rows one at a time.
+  app.delete("/api/admin/qa-orders", requireAdmin, async (req, res) => {
+    try {
+      const qaIds = sql`(SELECT id FROM orders WHERE origin = 'qa:test')`;
+      await db.execute(sql`DELETE FROM order_copies WHERE order_id IN ${qaIds}`);
+      await db.execute(sql`DELETE FROM order_items WHERE order_id IN ${qaIds}`);
+      await db.execute(sql`DELETE FROM signed_cert_reservations WHERE order_id IN ${qaIds}`);
+      await db.execute(sql`DELETE FROM signed_cert_certificates WHERE order_id IN ${qaIds}`);
+      await db.execute(sql`DELETE FROM referral_credits WHERE order_id IN ${qaIds}`);
+      await db.execute(sql`DELETE FROM custom_addon_gift_boxes WHERE order_id IN ${qaIds}`);
+      const result = await db.execute(sql`DELETE FROM orders WHERE origin = 'qa:test'`);
+      const deleted = (result as any).rowCount ?? 0;
+      res.json({ ok: true, deleted });
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Failed to delete QA orders" });
+    }
+  });
+
   app.get("/api/admin/orders", requireAdmin, async (req, res) => {
     const status = (req.query.status as string | undefined)?.trim();
 
