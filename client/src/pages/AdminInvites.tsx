@@ -1042,38 +1042,82 @@ function ReviewQueuePanel() {
 // for non-super, so this hides itself). Per-instance + per-environment:
 // dev and prod keep separate Resend records, so this reflects only what
 // THIS running process tried to send. Read-only; no mutation.
+type MailFailureRow = { ts: string; template: string; recipientDomain: string; reason: string };
+type MailHealthData = {
+  status: "ok" | "degraded" | "down" | "unconfigured";
+  resendConfigured: boolean;
+  totalAttempts: number;
+  totalFailures: number;
+  consecutiveFailures: number;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  recentFailureCount: number;
+  windowMinutes: number;
+  recentFailures: MailFailureRow[];
+};
+
+const MAIL_STATUS_BANNER: Record<MailHealthData["status"], { label: string; cls: string }> = {
+  ok: { label: "Email delivery healthy", cls: "bg-emerald-50 text-emerald-800 border-emerald-200" },
+  degraded: { label: "Email delivery degraded", cls: "bg-amber-50 text-amber-800 border-amber-200" },
+  down: { label: "Email delivery is DOWN", cls: "bg-rose-50 text-rose-800 border-rose-200" },
+  unconfigured: { label: "Email not configured (dev)", cls: "bg-slate-50 text-slate-600 border-slate-200" },
+};
+
 function MailFailuresPanel() {
-  const q = useQuery<Array<{ ts: string; template: string; recipientDomain: string; reason: string }>>({
-    queryKey: ["/api/admin/mail-failures"],
+  const q = useQuery<MailHealthData>({
+    queryKey: ["/api/admin/mail-health"],
     retry: false,
     refetchInterval: 30_000,
   });
   if (q.isError || q.isLoading || !q.data) return null;
+  const h = q.data;
+  const failures = h.recentFailures;
+  const banner = MAIL_STATUS_BANNER[h.status];
   return (
     <div className="mt-8 bg-white border border-slate-200 rounded-2xl p-5" data-testid="panel-mail-failures">
       <div className="flex items-center justify-between gap-3 mb-1">
-        <h2 className="text-sm font-semibold text-slate-900">Recent email failures ({q.data.length})</h2>
+        <h2 className="text-sm font-semibold text-slate-900">Email delivery</h2>
         <button
           type="button"
           onClick={() => q.refetch()}
           disabled={q.isFetching}
           className="p-2 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 transition-colors"
           title="Refresh"
-          aria-label="Refresh email failures"
+          aria-label="Refresh email health"
           data-testid="button-refresh-mail-failures"
         >
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
+      <div
+        className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 mb-3 ${banner.cls}`}
+        data-testid="banner-mail-health"
+        data-status={h.status}
+      >
+        <span className="text-sm font-semibold">{banner.label}</span>
+        <span className="text-xs opacity-80">
+          {h.lastSuccessAt
+            ? `Last sent ${new Date(h.lastSuccessAt).toLocaleString()}`
+            : "No successful send this session"}
+        </span>
+      </div>
       <p className="text-xs text-slate-500 mb-3">
-        Transactional emails (invites, codes, receipts) this server tried and failed to send, newest first. Use the reason to fix the cause
-        (e.g. verify the from-address / domain in Resend). This list lives in memory for this environment only and clears on restart.
+        Transactional emails (invites, sign-in codes, receipts) this server tried and failed to send, newest first. Use the reason to fix the
+        cause (e.g. verify the from-address / domain in Resend, or check that RESEND_API_KEY is set on the live host). A sustained outage also
+        logs a <code className="text-slate-600">[mail-health]</code> line you can alert on. This data lives in memory for this environment only
+        and clears on restart.
       </p>
-      {q.data.length === 0 ? (
+      {h.consecutiveFailures > 0 && (
+        <p className="text-xs text-rose-700 mb-3" data-testid="text-mail-consecutive-failures">
+          {h.consecutiveFailures} send{h.consecutiveFailures === 1 ? "" : "s"} failed in a row · {h.recentFailureCount} in the last{" "}
+          {h.windowMinutes} min.
+        </p>
+      )}
+      {failures.length === 0 ? (
         <div className="text-sm text-slate-500" data-testid="empty-mail-failures">No send failures recorded.</div>
       ) : (
         <ul className="divide-y divide-slate-100">
-          {q.data.slice().reverse().map((f, i) => (
+          {failures.slice().reverse().map((f, i) => (
             <li key={`${f.ts}-${i}`} className="py-2.5" data-testid={`row-mail-failure-${i}`}>
               <div className="flex items-center justify-between gap-3">
                 <div className="font-medium text-slate-900 text-sm truncate">

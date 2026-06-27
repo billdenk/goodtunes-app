@@ -53,9 +53,17 @@ app.get("/api/health", async (_req, res) => {
 
   try {
     await Promise.race([probe, deadline]);
+    // Coarse transactional-email health (status only — no PII, no reasons)
+    // so an external uptime monitor can watch the JSON body for a mail
+    // outage. Deliberately a NON-email signal (the ops-alert channel rides
+    // the same dead email path) and informational only: a degraded/down
+    // mail status does NOT flip the HTTP code, so it can't trip a monitor
+    // into falsely restarting an otherwise-healthy app. See server/mail.ts.
+    const { getMailHealth } = await import("./mail");
     res.status(200).json({
       status: "ok",
       db: "ok",
+      mail: getMailHealth().status,
       uptimeSec: Math.round(process.uptime()),
       checkMs: Date.now() - startedAt,
       ts: new Date().toISOString(),

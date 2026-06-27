@@ -26117,6 +26117,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(getRecentMailFailures());
   });
 
+  // Task #2333 — Mail deliverability HEALTH summary (status + counters +
+  // the recent-failure list in one payload) for the operator panel. Same
+  // per-instance/per-environment caveat as /api/admin/mail-failures: it
+  // reflects only what THIS process tried to send. Non-email surface so a
+  // mail outage (which also kills ops-alert email) is still visible.
+  app.get("/api/admin/mail-health", requireAdmin, requireRole("super_admin"), async (_req, res) => {
+    const { getMailHealth } = await import("./mail");
+    res.json(getMailHealth());
+  });
+
   // Task #351 — Per-(artist scope, user) permission overrides matrix.
   // GET returns the team (users with role=artist + scope=:id) and any
   // per-user override rows so the God-View matrix UI can render the

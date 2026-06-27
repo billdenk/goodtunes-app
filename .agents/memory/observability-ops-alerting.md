@@ -38,6 +38,30 @@ just for this otherwise.
 `alertOps` directly) — the net is status-code-driven, not route-list-driven, so it
 won't silently miss a new route the way the old admin-only alarm did.
 
+## Mail deliverability health (`server/mail.ts`)
+Admin 2FA sign-in codes are the primary login channel, so a silent transactional-email
+outage = admin lockout. **`alertOps` is useless here — it pages over the SAME dead email
+channel.** So mail health surfaces over NON-email signals ONLY: a throttled loud
+`[mail-health] SUSTAINED MAIL FAILURE` log line (greppable/infra-alertable), an
+authenticated panel (`GET /api/admin/mail-health`, super-admin, renders the same
+in-memory ring buffer + status/counters), and a coarse `mail` field on `GET /api/health`
+(status string only — informational, must NOT flip the HTTP code or a monitor false-restarts
+a healthy app).
+
+**The two formerly-invisible failure modes (both returned ok:false silently):**
+- **Missing `RESEND_API_KEY`** — record as a real failure **only in prod** (`NODE_ENV==="production"`).
+  Off-prod it stays silent: an unset key is an expected dev state, and the OTP code is echoed
+  to the workflow log anyway. In prod it's a TOTAL outage and `getMailHealth().status==="down"`.
+- **Synthetic-recipient skip** (IANA-reserved test domains like `example.com`/`.test`) — push to
+  the buffer (tagged `skipped:true`) so it's *visible*, but do NOT route through `recordFailure`
+  and EXCLUDE it from the impairment window: transport is healthy, so a synthetic skip must never
+  bump `consecutiveFailures`, inflate `recentFailureCount`, or flip status to degraded/down.
+
+**Status logic:** down = no key in prod OR `consecutiveFailures >= 3`; degraded = any failure in
+the 15-min window but mail still partly flowing; ok = recent success, no streak; unconfigured =
+no key off-prod. State is per-instance/per-environment in memory (dev↔prod separate Resend
+records), resets on restart — same caveat as the failure ring buffer.
+
 ## Sentry error tracking (`server/instrument.ts`)
 Replit has **no Sentry integration** — it runs on a manual `SENTRY_DSN` secret.
 `instrument.ts` is imported as the **first** line of `server/index.ts` (before express)

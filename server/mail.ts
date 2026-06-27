@@ -95,6 +95,10 @@ export type MailFailure = {
   template: string;
   recipientDomain: string;
   reason: string;
+  // True for entries that are NOT a transport failure (e.g. the synthetic-
+  // recipient skip). They stay visible in the buffer but must not count
+  // toward the impairment window or flip health to "degraded".
+  skipped?: boolean;
 };
 const recentMailFailures: MailFailure[] = [];
 const MAX_RECENT_FAILURES = 50;
@@ -104,6 +108,119 @@ function pushFailure(f: MailFailure): void {
 }
 export function getRecentMailFailures(): MailFailure[] {
   return [...recentMailFailures];
+}
+
+// --- Mail deliverability health (Task #2333) ----------------------------
+// Now that admin 2FA sign-in codes are the primary login channel, a silent
+// transactional-email outage locks operators out. The ops-alert system
+// (server/opsAlert.ts) can't help here because it pages over the SAME
+// email channel that's down — so mail health is surfaced over NON-email
+// signals only: a throttled loud `[mail-health]` log line (greppable /
+// infra-alertable), an authenticated admin panel (GET /api/admin/mail-
+// health), and a coarse field on the public /api/health probe an external
+// uptime monitor can watch. All state is per-instance + per-environment in
+// memory (dev and prod keep separate Resend records), matching the failure
+// ring buffer above; it resets on restart.
+const OUTAGE_WINDOW_MS = 15 * 60 * 1000;
+const SUSTAINED_FAILURE_THRESHOLD = 3; // consecutive real-send failures => "down"
+const HEALTH_ALARM_COOLDOWN_MS = 15 * 60 * 1000;
+const mailStats = {
+  totalAttempts: 0,
+  totalFailures: 0,
+  consecutiveFailures: 0,
+  lastSuccessAt: null as string | null,
+  lastFailureAt: null as string | null,
+};
+let lastHealthAlarmAt = 0;
+
+export type MailHealth = {
+  // ok = recent success and no failure streak; degraded = some recent
+  // failures but mail is still partly flowing; down = a sustained streak of
+  // real-send failures (or RESEND_API_KEY missing on the live host);
+  // unconfigured = no key off-prod (an expected dev state, not an incident).
+  status: "ok" | "degraded" | "down" | "unconfigured";
+  resendConfigured: boolean;
+  totalAttempts: number;
+  totalFailures: number;
+  consecutiveFailures: number;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  recentFailureCount: number;
+  windowMinutes: number;
+  recentFailures: MailFailure[];
+};
+
+function recentFailureCount(now: number): number {
+  const cutoff = now - OUTAGE_WINDOW_MS;
+  let n = 0;
+  for (const f of recentMailFailures) {
+    if (f.skipped) continue; // synthetic skips aren't transport impairment
+    if (new Date(f.ts).getTime() >= cutoff) n += 1;
+  }
+  return n;
+}
+
+export function getMailHealth(): MailHealth {
+  const now = Date.now();
+  const resendConfigured = !!process.env.RESEND_API_KEY;
+  const recent = recentFailureCount(now);
+  let status: MailHealth["status"];
+  if (!resendConfigured && process.env.NODE_ENV === "production") {
+    status = "down"; // no key on the live host = nothing can send
+  } else if (!resendConfigured) {
+    status = "unconfigured"; // expected dev state
+  } else if (mailStats.consecutiveFailures >= SUSTAINED_FAILURE_THRESHOLD) {
+    status = "down";
+  } else if (recent > 0) {
+    status = "degraded";
+  } else {
+    status = "ok";
+  }
+  return {
+    status,
+    resendConfigured,
+    totalAttempts: mailStats.totalAttempts,
+    totalFailures: mailStats.totalFailures,
+    consecutiveFailures: mailStats.consecutiveFailures,
+    lastSuccessAt: mailStats.lastSuccessAt,
+    lastFailureAt: mailStats.lastFailureAt,
+    recentFailureCount: recent,
+    windowMinutes: Math.round(OUTAGE_WINDOW_MS / 60000),
+    recentFailures: [...recentMailFailures],
+  };
+}
+
+// Loud, throttled, NON-email alarm for a sustained outage. Email alerting
+// is deliberately NOT used here (it rides the dead channel) — this is a log
+// line an operator greps or an infra log-alert watches.
+function maybeAlarmSustainedFailure(reason: string): void {
+  const now = Date.now();
+  if (mailStats.consecutiveFailures < SUSTAINED_FAILURE_THRESHOLD) return;
+  if (now - lastHealthAlarmAt < HEALTH_ALARM_COOLDOWN_MS) return;
+  lastHealthAlarmAt = now;
+  console.error(
+    `[mail-health] SUSTAINED MAIL FAILURE — ${mailStats.consecutiveFailures} transactional emails failed in a row ` +
+      `(latest: ${JSON.stringify(reason)}). Transactional email (admin sign-in codes, receipts, invites) is likely DOWN. ` +
+      `Check RESEND_API_KEY and the Resend sending domain. This alarm is log-only on purpose: email alerting can't reach you when email itself is down.`,
+  );
+}
+
+function recordSuccess(): void {
+  mailStats.totalAttempts += 1;
+  mailStats.consecutiveFailures = 0;
+  mailStats.lastSuccessAt = new Date().toISOString();
+}
+
+// Record a real send failure (transport error, non-2xx, or a missing key
+// on the live host). Logs [mail-failure], pushes to the ring buffer, bumps
+// the outage streak, and fires the sustained-failure alarm when warranted.
+function recordFailure(template: string, to: string, reason: string): void {
+  mailStats.totalAttempts += 1;
+  mailStats.totalFailures += 1;
+  mailStats.consecutiveFailures += 1;
+  mailStats.lastFailureAt = new Date().toISOString();
+  logFailure(template, to, reason);
+  maybeAlarmSustainedFailure(reason);
 }
 
 function logFailure(template: string, to: string, reason: string): void {
@@ -133,13 +250,30 @@ async function sendViaResend(
     console.log(
       `[mail-skip] template=${templateName} recipient_domain=${recipientDomain(to)} reason=synthetic-recipient`,
     );
+    // Record it so an operator can actually SEE the skip in the mail panel
+    // (Task #2333 — a synthetic recipient reaching this path in prod is a
+    // real bug), but DON'T route it through recordFailure: the transport is
+    // healthy, so it must not count toward the deliverability outage streak.
+    pushFailure({
+      ts: new Date().toISOString(),
+      template: templateName,
+      recipientDomain: recipientDomain(to),
+      reason: "synthetic recipient (skipped)",
+      skipped: true,
+    });
     return { ok: false, reason: "synthetic recipient (skipped)" };
   }
   const key = process.env.RESEND_API_KEY;
   if (!key) {
     const reason = "RESEND_API_KEY not set";
-    // Don't push to the failure buffer — this is an expected dev state,
-    // not a deliverability incident worth flagging in an operator UI.
+    // Off-prod this is an expected, quiet state (the code is echoed to the
+    // workflow log) and we stay silent. On the LIVE host, though, a missing
+    // key is a TOTAL mail outage that was previously invisible (Task #2333)
+    // — record it loudly so the panel, /api/health, and the sustained-
+    // failure alarm all light up.
+    if (process.env.NODE_ENV === "production") {
+      recordFailure(templateName, to, reason);
+    }
     return { ok: false, reason };
   }
   try {
@@ -154,13 +288,14 @@ async function sendViaResend(
     if (!r.ok) {
       const body = await r.text().catch(() => "");
       const reason = `resend ${r.status}: ${body.slice(0, 200)}`;
-      logFailure(templateName, to, reason);
+      recordFailure(templateName, to, reason);
       return { ok: false, reason };
     }
+    recordSuccess();
     return { ok: true };
   } catch (e) {
     const reason = `resend fetch threw: ${(e as Error).message}`;
-    logFailure(templateName, to, reason);
+    recordFailure(templateName, to, reason);
     return { ok: false, reason };
   }
 }
