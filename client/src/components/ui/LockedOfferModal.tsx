@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import {
   Lock,
   Bell,
@@ -298,6 +298,44 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
 
 /* ── campaign steps ───────────────────────────────────────────────── */
 
+function GalleryThumb({
+  item,
+  index,
+  onGalleryOpen,
+  className,
+  style,
+}: {
+  item: { url: string; caption: string };
+  index: number;
+  onGalleryOpen: (i: number) => void;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={item.caption}
+      onClick={() => onGalleryOpen(index)}
+      data-testid={`button-gallery-thumb-${index}`}
+      className={`group relative rounded-xl overflow-hidden bg-black cursor-zoom-in ${className ?? ""}`}
+      style={{ boxShadow: "0 6px 18px rgba(0,0,0,0.35)", ...style }}
+    >
+      <img
+        src={item.url}
+        alt={item.caption}
+        className="w-full h-full object-cover"
+        draggable={false}
+      />
+      <span
+        className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-md inline-flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{ background: "rgba(0,0,0,0.55)" }}
+      >
+        <Expand className="w-2.5 h-2.5" strokeWidth={2.4} />
+      </span>
+    </button>
+  );
+}
+
 function OverviewStep({
   c,
   heroSrc,
@@ -310,59 +348,104 @@ function OverviewStep({
   onGalleryOpen: (i: number) => void;
 }) {
   const hasGallery = gallery.length > 0;
+  const hasParagraphs = c.overview.paragraphs.length > 0;
+
+  // Full-width asymmetric 4-tile grid: large square left, two small squares
+  // stacked top-right, one wide landscape rectangle bottom-right.
+  const showAsymmetricGrid = hasGallery && gallery.length >= 4 && !hasParagraphs;
 
   return (
     <div data-testid="step-overview">
       <h1 className="text-fan-primary text-2xl font-bold tracking-tight mb-5">
         {c.overview.heading}
       </h1>
-      <div className="flex flex-col sm:flex-row gap-5">
-        {hasGallery ? (
-          <div className="flex-shrink-0 mx-auto sm:mx-0 grid grid-cols-2 gap-1.5 w-44">
-            {gallery.map((item, i) => (
-              <button
-                key={i}
-                type="button"
-                aria-label={item.caption}
-                onClick={() => onGalleryOpen(i)}
-                data-testid={`button-gallery-thumb-${i}`}
-                className="group relative aspect-square rounded-xl overflow-hidden bg-white cursor-zoom-in"
-                style={{ boxShadow: "0 6px 18px rgba(0,0,0,0.35)" }}
-              >
-                <img
-                  src={item.url}
-                  alt={item.caption}
-                  className="w-full h-full object-contain p-1.5"
-                  draggable={false}
+
+      {showAsymmetricGrid ? (
+        /*
+         * ── asymmetric gallery (4-column CSS grid) ───────────────────
+         *   Col layout:  [ col1 | col2 | col3 | col4 ]
+         *   Row layout:  [ row1 ] smalls
+         *                [ row2 ] wide rect
+         *
+         *   [0] Large square  → cols 1-2 × rows 1-2 (≈ square from grid geometry)
+         *   [1] Small square  → col  3   × row  1
+         *   [2] Small square  → col  4   × row  1
+         *   [3] Wide rect     → cols 3-4 × row  2   (aspect-[2/1])
+         *
+         * Row 1 height = sm aspect-square height = W/4
+         * Row 2 height = wide height = (W/2) / 2   = W/4
+         * Large height = W/4 + gap + W/4           ≈ W/2 = large width  ✓ square
+         */
+        <div
+          className="grid gap-1.5 w-full"
+          style={{ gridTemplateColumns: "repeat(4, 1fr)" }}
+        >
+          {/* [0] Large square — left half, spans both rows */}
+          <GalleryThumb
+            item={gallery[0]}
+            index={0}
+            onGalleryOpen={onGalleryOpen}
+            className="aspect-square"
+            style={{ gridColumn: "1 / 3", gridRow: "1 / 3" }}
+          />
+          {/* [1] Small square — top-right, col 3 */}
+          <GalleryThumb
+            item={gallery[1]}
+            index={1}
+            onGalleryOpen={onGalleryOpen}
+            className="aspect-square"
+          />
+          {/* [2] Small square — top-right, col 4 */}
+          <GalleryThumb
+            item={gallery[2]}
+            index={2}
+            onGalleryOpen={onGalleryOpen}
+            className="aspect-square"
+          />
+          {/* [3] Wide landscape rectangle — bottom-right, spans cols 3-4 */}
+          <GalleryThumb
+            item={gallery[3]}
+            index={3}
+            onGalleryOpen={onGalleryOpen}
+            className="aspect-[2/1]"
+            style={{ gridColumn: "3 / 5" }}
+          />
+        </div>
+      ) : (
+        /* ── legacy layout: small thumbnail grid + intro text ── */
+        <div className="flex flex-col sm:flex-row gap-5">
+          {hasGallery ? (
+            <div className="flex-shrink-0 mx-auto sm:mx-0 grid grid-cols-2 gap-1.5 w-44">
+              {gallery.map((item, i) => (
+                <GalleryThumb
+                  key={i}
+                  item={item}
+                  index={i}
+                  onGalleryOpen={onGalleryOpen}
+                  className="aspect-square"
                 />
-                <span
-                  className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-md inline-flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{ background: "rgba(0,0,0,0.55)" }}
-                >
-                  <Expand className="w-2.5 h-2.5" strokeWidth={2.4} />
-                </span>
-              </button>
+              ))}
+            </div>
+          ) : (
+            <div
+              className="flex-shrink-0 mx-auto sm:mx-0 w-44 h-44 rounded-2xl overflow-hidden bg-white"
+              style={{ boxShadow: "0 12px 36px rgba(0,0,0,0.4)" }}
+            >
+              <img
+                src={heroSrc}
+                alt={`${c.artistName} — ${c.releaseName}`}
+                className="w-full h-full object-cover"
+                data-testid="img-overview-hero"
+              />
+            </div>
+          )}
+          <div className="flex-1 min-w-0 text-fan-secondary text-sm leading-relaxed flex flex-col gap-3">
+            {c.overview.paragraphs.map((p, i) => (
+              <p key={i}>{p}</p>
             ))}
           </div>
-        ) : (
-          <div
-            className="flex-shrink-0 mx-auto sm:mx-0 w-44 h-44 rounded-2xl overflow-hidden bg-white"
-            style={{ boxShadow: "0 12px 36px rgba(0,0,0,0.4)" }}
-          >
-            <img
-              src={heroSrc}
-              alt={`${c.artistName} — ${c.releaseName}`}
-              className="w-full h-full object-cover"
-              data-testid="img-overview-hero"
-            />
-          </div>
-        )}
-        <div className="flex-1 min-w-0 text-fan-secondary text-sm leading-relaxed flex flex-col gap-3">
-          {c.overview.paragraphs.map((p, i) => (
-            <p key={i}>{p}</p>
-          ))}
         </div>
-      </div>
+      )}
 
       <div className="mt-6 rounded-2xl p-5 sm:p-6" style={{ background: PANEL }}>
         <h2 className="text-fan-primary text-xl font-bold tracking-tight">

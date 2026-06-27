@@ -73,26 +73,20 @@ const RELEASES: Record<string, ReleaseContent> = {
     },
     gallery: [
       {
-        src: "hope-mockup-phone.png",
-        caption: "Instant access to the music with the free GoodTunes® Player.",
+        src: "hope-new-album-phone.png",
+        caption: "Hope — the full Digital + Physical Collector Edition.",
       },
       {
-        src: "hope-mockup-vinyl.png",
-        caption: "7\" vinyl tracks \u201CGold\u201D & \u201CBetter Days\u201D.",
+        src: "hope-new-vinyl.png",
+        caption: "7\" vinyl featuring \"Gold\" & \"Better Days\".",
       },
       {
-        src: "hope-mockup-album.png",
-        caption: "Album Artwork",
+        src: "hope-new-gooddeed.png",
+        caption: "A numbered, personalized GoodDeed® Certificate suitable for framing.",
       },
       {
-        src: "hope-mockup-cert.png",
-        caption:
-          "A numbered, personalized printable PDF GoodDeed® Certificate suitable for framing.",
-      },
-      {
-        src: "hope-mockup-booklet.jpg",
-        caption:
-          "Special-edition companion booklet featuring lyrics, Jane's poems, exclusive photos and more.",
+        src: "hope-new-booklet.png",
+        caption: "Special-edition companion booklet featuring lyrics, Jane's poems, exclusive photos and more.",
       },
     ],
     org: "Nightbirde Foundation",
@@ -107,23 +101,7 @@ const RELEASES: Record<string, ReleaseContent> = {
     ],
     overview: {
       heading: "Get Hope. Gift Hope.",
-      paragraphs: [
-        <>
-          It's been five years since <strong className="text-white">Nightbirde</strong> (Jane
-          Marczewski) appeared on <strong className="text-white">America's Got Talent</strong> (AGT)
-          and received the <strong className="text-white">Golden Buzzer</strong> from{" "}
-          <strong className="text-white">Simon Cowell.</strong>
-        </>,
-        <>
-          Before she passed, Jane provided her family with all of her journals, photos, artwork, and
-          music and gave them a mission — use whatever you can to help women with breast cancer.
-        </>,
-        <>
-          The "Get Hope. Gift Hope." campaign was built to do just that — proceeds from every
-          purchase go to Nightbirde Foundation. You can also donate a "Gift of Hope" box to someone
-          you know with cancer, or let us choose someone in need on your behalf.
-        </>,
-      ],
+      paragraphs: [],
       panelTitle: "Here's what you'll get",
       panelBody:
         "This package has been hand curated by Jane's family for you. Digital arrives instantly. Physical ships 8–10 weeks after ordering.",
