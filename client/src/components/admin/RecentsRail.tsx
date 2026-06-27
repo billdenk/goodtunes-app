@@ -1,4 +1,5 @@
 import { Plus } from "lucide-react";
+import { getInitials } from "@/lib/initials";
 import type { RecentPerson } from "@/hooks/usePersonCreditRecents";
 
 type Props = {
@@ -32,7 +33,7 @@ export function RecentsRail({ recents, onPick, testIdPrefix = "recent-person" }:
                   className="h-full w-full object-cover"
                 />
               ) : (
-                p.name.charAt(0).toUpperCase()
+                getInitials(p.name, "?")
               )}
             </span>
             <span className="whitespace-nowrap">{p.name}</span>

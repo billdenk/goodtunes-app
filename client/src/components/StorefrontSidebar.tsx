@@ -1,4 +1,5 @@
 import { useLocation } from "wouter";
+import { getInitials } from "@/lib/initials";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Settings, LogOut } from "lucide-react";
@@ -81,12 +82,7 @@ export function StorefrontSidebar() {
 
   const railActive = computeRailActive(location);
 
-  const avatarInitials = (user?.displayName || user?.username || "?")
-    .split(" ")
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const avatarInitials = getInitials(user?.displayName || user?.username, "?");
 
   const accountName = user?.displayName || user?.username || "Account";
 

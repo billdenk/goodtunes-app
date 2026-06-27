@@ -10962,11 +10962,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className=\"text-[9.5px] uppercase tracking-wider font-semibold text-slate-500 bg-slate-100 border border-slate-200 rounded-sm px-1 py-[1px] shrink-0\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "className=\"text-[11px] rounded-full bg-slate-100 text-slate-700 px-2 py-0.5\""
   },
   {
@@ -12112,7 +12107,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/gear/GearDetailBody.tsx",
-    "snippet": "<span className=\"w-full h-full flex items-center justify-center text-white text-[30px] font-bold\">{maker.name.charAt(0)}</span>"
+    "snippet": "<span className=\"w-full h-full flex items-center justify-center text-white text-[30px] font-bold\">{getInitials(maker.name, \"?\")}</span>"
   },
   {
     "rule": "hardcoded-font-size",

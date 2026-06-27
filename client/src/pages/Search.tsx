@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { getInitials } from "@/lib/initials";
 import { useLocation } from "wouter";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { FanScreen } from "@/components/ui/FanScreen";
@@ -90,8 +91,7 @@ function MobileSearchPage() {
   // the two pages read as one shell. Lives in FanScreen's `trailing`
   // slot with `fadeTrailing` so it fades + scales out on scroll exactly
   // like Home / Collection / Recents.
-  const avatarInitials = (user?.displayName || user?.username || "?")
-    .split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+  const avatarInitials = getInitials(user?.displayName || user?.username, "?");
 
   const accountAvatar = (
     <button

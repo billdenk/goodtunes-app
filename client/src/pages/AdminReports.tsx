@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { getInitials } from "@/lib/initials";
 import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import {
@@ -292,12 +293,7 @@ function PartnerThumb({
   size?: number;
 }) {
   const rounded = kind === "artist" ? "rounded-full" : "rounded-md";
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("") || "?";
+  const initials = getInitials(name, "?");
   const style = { width: size, height: size };
   if (imageUrl) {
     return (

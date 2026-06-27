@@ -1,4 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { getInitials } from "@/lib/initials";
 import { createPortal } from "react-dom";
 import { Link } from "wouter";
 import { ExpandedPanelHeaderSlotContext } from "@/pages/AdminAlbum";
@@ -109,13 +110,7 @@ function bucketFor(kind: "writer" | "performer", role: string): Bucket {
 }
 
 function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((s) => s[0])
-    .join("")
-    .toUpperCase();
+  return getInitials(name, "");
 }
 
 /* ─── Person card (one per credited person inside a section) ──────── */

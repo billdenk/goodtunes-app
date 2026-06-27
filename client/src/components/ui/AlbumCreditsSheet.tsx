@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { getInitials } from "@/lib/initials";
 import { isDisplayRole } from "@/lib/creditSubtitle";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
@@ -132,12 +133,7 @@ export type CreditsPersonView = {
 };
 
 function initialsOf(name: string) {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
+  return getInitials(name, "");
 }
 
 /* Collapse a flat list of credit rows into one entry per person, collecting

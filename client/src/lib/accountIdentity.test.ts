@@ -32,14 +32,14 @@ test("'Bill Denk' yields two-letter uppercase initials 'BD'", () => {
   assert.equal(id.initials, "BD");
 });
 
-test("a single-word name gives a single initial", () => {
+test("a single-word name gives first-cap, second-lowercase initials", () => {
   const id = deriveAccountIdentity({ realName: "Bill" });
-  assert.equal(id.initials, "B");
+  assert.equal(id.initials, "Bi");
 });
 
-test("three-or-more words cap at the first two initials", () => {
+test("three-or-more words use the first and last initials", () => {
   const id = deriveAccountIdentity({ realName: "Mary Jane Watson" });
-  assert.equal(id.initials, "MJ");
+  assert.equal(id.initials, "MW");
 });
 
 test("extra whitespace between names doesn't create empty initials", () => {
@@ -69,7 +69,7 @@ test("handle falls back to username", () => {
   const id = deriveAccountIdentity({ username: "legacyname" });
   assert.equal(id.handle, "legacyname");
   assert.equal(id.nameLine, "@legacyname");
-  assert.equal(id.initials, "LE");
+  assert.equal(id.initials, "Le");
 });
 
 test("email is never used for the identity line or initials", () => {

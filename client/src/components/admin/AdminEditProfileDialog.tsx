@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { getInitials } from "@/lib/initials";
 import { Camera, Upload, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { fileToUploadDataUrl, friendlyPhotoError, isSupportedPhotoFile } from "@/lib/photoUpload";
@@ -21,13 +22,8 @@ import {
 const MAX_BYTES = 5 * 1024 * 1024;
 
 function initialsFor(name: string | undefined, email: string | undefined): string {
-  const source = (name || "").trim();
-  if (source) {
-    const parts = source.split(/\s+/).filter(Boolean);
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  }
-  if (email) return email.slice(0, 2).toUpperCase();
+  if ((name || "").trim()) return getInitials(name, "?");
+  if (email) return getInitials(email, "?");
   return "?";
 }
 

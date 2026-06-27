@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getInitials } from "@/lib/initials";
 import { normalizeAudioUrl } from "@shared/audioUrl";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -6097,7 +6098,7 @@ function VendorPaneEditor({
                       className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[12px] font-semibold"
                       style={{ background: "var(--brand-blue)" }}
                     >
-                      {p.name.charAt(0).toUpperCase()}
+                      {getInitials(p.name, "?")}
                     </div>
                   )}
                   <span className="flex-1 text-sm text-slate-700 truncate">{p.name}</span>
@@ -7007,7 +7008,7 @@ function VendorPreviewCard({
                       className="text-[26px] font-bold"
                       style={{ color: "#00062B" }}
                     >
-                      {(vendor.name || "?").charAt(0).toUpperCase()}
+                      {getInitials(vendor.name, "?")}
                     </span>
                   )}
                 </div>
@@ -7483,7 +7484,7 @@ function LabelPreviewCard({
                       className="text-[26px] font-bold"
                       style={{ color: "#00062B" }}
                     >
-                      {(label.name || "?").charAt(0).toUpperCase()}
+                      {getInitials(label.name, "?")}
                     </span>
                   )}
                 </div>
@@ -7678,13 +7679,7 @@ function LabelPreviewCard({
                   // artists read as a stable of people, not a list row.
                   <div className="grid grid-cols-2 gap-3">
                     {artistRows.map((p) => {
-                      const initials =
-                        p.name
-                          .split(" ")
-                          .filter(Boolean)
-                          .slice(0, 2)
-                          .map((w) => w[0]?.toUpperCase() ?? "")
-                          .join("") || "•";
+                      const initials = getInitials(p.name, "•");
                       return (
                         <div
                           key={p.id}
@@ -8297,7 +8292,7 @@ function AlbumArtistPicker({
                     className="w-7 h-7 rounded-full bg-slate-200 shrink-0 grid place-items-center text-[11px] font-semibold text-slate-500"
                     style={{ background: "var(--brand-blue)", color: "white" }}
                   >
-                    {linked.name.charAt(0).toUpperCase()}
+                    {getInitials(linked.name, "?")}
                   </span>
                 )}
                 <span className="flex-1 min-w-0 truncate text-sm text-slate-900">
@@ -8378,7 +8373,7 @@ function AlbumArtistPicker({
                       className="w-6 h-6 rounded-full bg-slate-200 shrink-0 grid place-items-center text-[10px] font-semibold text-slate-500"
                       style={{ background: "var(--brand-blue)", color: "white" }}
                     >
-                      {p.name.charAt(0).toUpperCase()}
+                      {getInitials(p.name, "?")}
                     </span>
                   )}
                   <span className="flex-1 min-w-0 truncate text-sm text-slate-800">
@@ -8593,7 +8588,7 @@ function AlbumLabelPicker({
                 <img src={linked.logoUrl} alt="" className="w-7 h-7 rounded object-cover shrink-0" />
               ) : (
                 <span className="w-7 h-7 rounded bg-slate-200 shrink-0 grid place-items-center text-[11px] font-semibold text-slate-500">
-                  {linked.name.charAt(0).toUpperCase()}
+                  {getInitials(linked.name, "?")}
                 </span>
               )}
               <span className="flex-1 min-w-0 truncate text-sm text-slate-900">{linked.name}</span>
@@ -8654,7 +8649,7 @@ function AlbumLabelPicker({
                     <img src={l.logoUrl} alt="" className="w-6 h-6 rounded object-cover shrink-0" />
                   ) : (
                     <span className="w-6 h-6 rounded bg-slate-200 shrink-0 grid place-items-center text-[10px] font-semibold text-slate-500">
-                      {l.name.charAt(0).toUpperCase()}
+                      {getInitials(l.name, "?")}
                     </span>
                   )}
                   <span className="flex-1 min-w-0 truncate text-sm text-slate-800">{l.name}</span>
@@ -9668,7 +9663,7 @@ export function Admin() {
                         className="w-10 h-10 rounded bg-slate-100 shrink-0 flex items-center justify-center text-slate-500 text-sm font-semibold"
                         aria-hidden
                       >
-                        {(l.name || "?").charAt(0).toUpperCase()}
+                        {getInitials(l.name, "?")}
                       </div>
                     )}
                     <div className="min-w-0">

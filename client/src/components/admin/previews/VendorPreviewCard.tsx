@@ -1,4 +1,5 @@
 import { MapPin, Globe, Guitar } from "lucide-react";
+import { getInitials } from "@/lib/initials";
 import { PhoneBezel } from "./PhoneBezel";
 
 export interface VendorPreviewVendor {
@@ -94,7 +95,7 @@ export function VendorPreviewCard({
             />
           ) : (
             <span className="text-[26px] font-bold" style={{ color: "#00062B" }}>
-              {(vendor.name || "?").charAt(0).toUpperCase()}
+              {getInitials(vendor.name, "?")}
             </span>
           )}
         </div>

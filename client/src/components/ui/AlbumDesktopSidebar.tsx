@@ -1,4 +1,5 @@
 import { useLocation } from "wouter";
+import { getInitials } from "@/lib/initials";
 import { Settings, LogOut } from "lucide-react";
 import { FanRailNav } from "@/components/ui/FanRailNav";
 import { useAuth } from "@/hooks/useAuth";
@@ -82,12 +83,7 @@ export function AlbumDesktopSidebar({
   const loggedIn = !!user;
 
   const accountName = user?.displayName || user?.email || "Account";
-  const avatarInitials = (user?.displayName || user?.email || "?")
-    .split(" ")
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const avatarInitials = getInitials(user?.displayName || user?.email, "?");
 
   const handleSignOut = async () => {
     try {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getInitials } from "@/lib/initials";
 import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
@@ -219,7 +220,7 @@ export function GearDetailBody({
             {maker.logoUrl ? (
               <img src={maker.logoUrl} alt="" aria-hidden="true" className="w-full h-full object-contain p-2.5" draggable={false} />
             ) : (
-              <span className="w-full h-full flex items-center justify-center text-white text-[30px] font-bold">{maker.name.charAt(0)}</span>
+              <span className="w-full h-full flex items-center justify-center text-white text-[30px] font-bold">{getInitials(maker.name, "?")}</span>
             )}
           </button>
         )}
@@ -339,7 +340,7 @@ export function GearDetailBody({
                   data-testid={`button-gear-vendor-${i}`}
                 >
                   <span className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-[#00062B] text-[14px] font-bold flex-shrink-0 overflow-hidden">
-                    {v.logoUrl ? <img src={v.logoUrl} alt="" className="w-full h-full object-cover" /> : v.name.charAt(0)}
+                    {v.logoUrl ? <img src={v.logoUrl} alt="" className="w-full h-full object-cover" /> : getInitials(v.name, "?")}
                   </span>
                   <span className="flex flex-col min-w-0">
                     <span className="text-fan-primary text-[13px] font-semibold leading-tight truncate">{v.name}</span>
@@ -393,7 +394,7 @@ function GearAvatar({ name, photoUrl, size = 72 }: { name: string; photoUrl?: st
       className="rounded-full flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0"
       style={{ width: size, height: size, background: tintFor(name, true), fontSize: size * 0.36, boxShadow: "0 4px 14px rgba(0,0,0,0.35)" }}
     >
-      {photoUrl ? <img src={photoUrl} alt={name} className="w-full h-full object-cover" draggable={false} /> : name.charAt(0)}
+      {photoUrl ? <img src={photoUrl} alt={name} className="w-full h-full object-cover" draggable={false} /> : getInitials(name, "?")}
     </div>
   );
 }

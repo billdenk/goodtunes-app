@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getInitials } from "@/lib/initials";
 import { useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Search, X, User as UserIcon, Check } from "lucide-react";
@@ -801,7 +802,5 @@ export function EmptyState({ searching }: { searching: boolean }) {
 
 
 export function initialFor(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return "?";
-  return trimmed.charAt(0).toUpperCase();
+  return getInitials(name, "?");
 }

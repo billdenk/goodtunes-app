@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getInitials } from "@/lib/initials";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -2491,7 +2492,7 @@ function PeoplePanel({ instrument }: { instrument: InstrumentFull }) {
                             className="h-full w-full object-cover"
                           />
                         ) : (
-                          p.name.charAt(0).toUpperCase()
+                          getInitials(p.name, "?")
                         )}
                       </span>
                       {p.name}
@@ -2530,7 +2531,7 @@ function PeoplePanel({ instrument }: { instrument: InstrumentFull }) {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  pickedPerson.name.charAt(0).toUpperCase()
+                  getInitials(pickedPerson.name, "?")
                 )}
               </span>
               <span className="flex-1 text-[13px] font-semibold text-slate-800">
@@ -2730,7 +2731,7 @@ function PeoplePanel({ instrument }: { instrument: InstrumentFull }) {
                     />
                   ) : (
                     <span className="text-[12px] font-bold text-slate-400">
-                      {a.name.charAt(0).toUpperCase()}
+                      {getInitials(a.name, "?")}
                     </span>
                   )}
                 </div>

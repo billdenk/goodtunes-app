@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { getInitials } from "@/lib/initials";
 import { useLocation } from "wouter";
 import { Camera, Check, X } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -50,9 +51,7 @@ export function EditAccount() {
     username !== (user?.username || "") ||
     realName !== (user?.realName || "");
 
-  const initials = user?.displayName
-    ? user.displayName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
-    : "?";
+  const initials = getInitials(user?.displayName, "?");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Photo lives on the server now (DB-backed, survives restarts + device switches).

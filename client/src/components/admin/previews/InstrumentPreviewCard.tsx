@@ -1,4 +1,5 @@
 import { ExternalLink, Guitar } from "lucide-react";
+import { getInitials } from "@/lib/initials";
 import { PhoneBezel } from "./PhoneBezel";
 
 export interface InstrumentPreviewVendor {
@@ -183,7 +184,7 @@ export function InstrumentPreviewCard({
                       />
                     ) : (
                       <span className="text-[11px] font-bold" style={{ color: "#00062B" }}>
-                        {(v.name || "?").charAt(0).toUpperCase()}
+                        {getInitials(v.name, "?")}
                       </span>
                     )}
                   </div>

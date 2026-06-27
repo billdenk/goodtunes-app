@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getInitials } from "@/lib/initials";
 import { formatUsdCents } from "@shared/money";
 import { Link, useRoute, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1257,7 +1258,7 @@ function PersonAvatar({
             className="text-white font-bold"
             style={{ fontSize: size * 0.4 }}
           >
-            {(name.trim().charAt(0) || "?").toUpperCase()}
+            {getInitials(name, "?")}
           </span>
         </div>
       )}
@@ -2493,7 +2494,7 @@ function ImageUploadPanel({
           ) : (
             <div className="w-full h-full bg-[var(--brand-blue)] flex items-center justify-center">
               <span className="text-white text-5xl font-bold">
-                {(person.name.trim().charAt(0) || "?").toUpperCase()}
+                {getInitials(person.name, "?")}
               </span>
             </div>
           )}

@@ -4,6 +4,7 @@ import {
   useEffect,
 } from "react";
 import { useLocation } from "wouter";
+import { getInitials } from "@/lib/initials";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { usePlayer } from "@/context/PlayerContext";
@@ -175,12 +176,7 @@ function AccountAvatar() {
   const [, setUnreadTick] = useState(0);
   useEffect(() => subscribeChats(() => setUnreadTick((n) => n + 1)), []);
   const unread = chatEnabled ? totalUnread() : 0;
-  const avatarInitials = (user?.displayName || user?.username || "?")
-    .split(" ")
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const avatarInitials = getInitials(user?.displayName || user?.username, "?");
   return (
     <button
       type="button"

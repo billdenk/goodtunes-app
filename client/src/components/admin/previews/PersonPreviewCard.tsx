@@ -1,4 +1,5 @@
 import { Star, Disc3 } from "lucide-react";
+import { getInitials } from "@/lib/initials";
 import { SiApplemusic, SiSpotify, SiInstagram, SiTiktok, SiFacebook, SiX } from "react-icons/si";
 import { PhoneBezel } from "./PhoneBezel";
 
@@ -71,13 +72,7 @@ export function PersonPreviewCard({
   if (person.facebookUrl)
     socials.push({ key: "fb", href: person.facebookUrl, Icon: SiFacebook, label: "Facebook" });
 
-  const initials =
-    (person.name || "?")
-      .split(" ")
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0]?.toUpperCase() ?? "")
-      .join("") || "?";
+  const initials = getInitials(person.name, "?");
 
   return (
     <PhoneBezel

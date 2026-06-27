@@ -5,6 +5,8 @@
 // rules (real-name preference, two-letter initials, @handle-only-with-name,
 // email never used) can be unit-tested without standing up the page.
 
+import { getInitials } from "./initials";
+
 export type AccountIdentityUser = {
   realName?: string | null;
   displayName?: string | null;
@@ -30,15 +32,9 @@ export function deriveAccountIdentity(user: AccountIdentityUser): AccountIdentit
   const fullName = (user?.realName || "").trim() || (user?.displayName || "").trim();
   const handle = user?.handle || user?.username || "";
   const initials = fullName
-    ? fullName
-        .split(/\s+/)
-        .filter(Boolean)
-        .map((w) => w[0])
-        .slice(0, 2)
-        .join("")
-        .toUpperCase()
+    ? getInitials(fullName, "?")
     : handle
-      ? handle.slice(0, 2).toUpperCase()
+      ? getInitials(handle, "?")
       : "?";
   const nameLine = fullName || (handle ? `@${handle}` : "Your account");
   const showHandleLine = Boolean(fullName && handle);

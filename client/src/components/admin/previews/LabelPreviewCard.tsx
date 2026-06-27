@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getInitials } from "@/lib/initials";
 
 /**
  * Fan-side LabelSheet preview — graduated out of the monolithic Admin.tsx
@@ -250,7 +251,7 @@ export function LabelPreviewCard({
                       className="text-[26px] font-bold"
                       style={{ color: "#00062B" }}
                     >
-                      {(label.name || "?").charAt(0).toUpperCase()}
+                      {getInitials(label.name, "?")}
                     </span>
                   )}
                 </div>
@@ -445,13 +446,7 @@ export function LabelPreviewCard({
                 ) : (
                   <div className="grid grid-cols-2 gap-3">
                     {artistRows.map((p) => {
-                      const initials =
-                        p.name
-                          .split(" ")
-                          .filter(Boolean)
-                          .slice(0, 2)
-                          .map((w) => w[0]?.toUpperCase() ?? "")
-                          .join("") || "•";
+                      const initials = getInitials(p.name, "•");
                       return (
                         <div
                           key={p.id}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getInitials } from "@/lib/initials";
 import { useLocation, useRoute } from "wouter";
 import { BottomNav, NAV_CLEARANCE } from "@/components/BottomNav";
 import { chatEnabled } from "@/lib/platform";
@@ -66,7 +67,7 @@ function VendorAvatar({ logoUrl, name, size = 44 }: { logoUrl?: string; name: st
         <img src={logoUrl} alt="" className="object-contain" style={{ width: size * 0.62, height: size * 0.62 }} />
       ) : (
         <span className="text-[#00062B] font-bold" style={{ fontSize: size * 0.36 }}>
-          {name.charAt(0)}
+          {getInitials(name, "?")}
         </span>
       )}
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getInitials } from "@/lib/initials";
 import { Link, useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Users, ArrowUp, ArrowDown, X, MapPin } from "lucide-react";
@@ -64,9 +65,7 @@ function formatMoney(cents: number): string {
 }
 
 function initialFor(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return "?";
-  return trimmed.charAt(0).toUpperCase();
+  return getInitials(name, "?");
 }
 
 function formatDate(iso: string | null): string {

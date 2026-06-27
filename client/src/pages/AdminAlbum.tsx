@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { getInitials } from "@/lib/initials";
 import { normalizeAudioUrl } from "@shared/audioUrl";
 import { normalizeShareSlug, validateShareSlug, shareUrlForSlugs, SHARE_LINK_HOST } from "@shared/shareSlug";
 import type { AlbumPhysicalFormat } from "@shared/schema";
@@ -12056,7 +12057,7 @@ function PersonAvatar({
   name: string;
   photoUrl: string | null;
 }) {
-  const initial = name.trim().charAt(0).toUpperCase() || "?";
+  const initial = getInitials(name, "?");
   if (photoUrl) {
     return (
       <img

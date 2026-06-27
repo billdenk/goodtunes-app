@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { getInitials } from "@/lib/initials";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { BottomNav } from "@/components/BottomNav";
@@ -37,7 +38,7 @@ function ArtistAvatar({
         }}
         aria-hidden="true"
       >
-        {name.charAt(0).toUpperCase()}
+        {getInitials(name, "?")}
       </div>
     );
   }

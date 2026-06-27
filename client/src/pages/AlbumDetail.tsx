@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { getInitials } from "@/lib/initials";
 import { AlbumDetailMobileSurface } from "@/components/ui/AlbumDetailMobileSurface";
 import { AlbumDetailMobileSkeleton, AlbumNotFound } from "@/components/ui/AlbumDetailSkeleton";
 import { AlbumCreditsSheet, SongCreditsSheet, buildAlbumCreditGroups } from "@/components/ui/AlbumCreditsSheet";
@@ -1921,12 +1922,7 @@ function SongActionPopover({
 // ──────────────────────────── SuperCredits™ ────────────────────────────
 
 function PersonAvatar({ person, size = 44 }: { person: Person; size?: number }) {
-  const initials = person.name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
+  const initials = getInitials(person.name, "");
   if (person.photoUrl) {
     return (
       <img
@@ -3737,7 +3733,7 @@ function VendorSheet({
                 <img src={vendor.logoUrl} alt="" className="w-full h-full object-cover" />
               ) : (
                 <span className="text-[32px] font-bold" style={{ color: "#00062B" }}>
-                  {vendor.name.charAt(0).toUpperCase()}
+                  {getInitials(vendor.name, "?")}
                 </span>
               )}
             </div>
