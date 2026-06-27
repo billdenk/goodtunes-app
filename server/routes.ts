@@ -780,7 +780,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         secure: true,
         httpOnly: true,
         maxAge: 30 * 24 * 60 * 60 * 1000,
-        sameSite: "none",
+        sameSite: "lax",
       },
     })
   );
@@ -1938,23 +1938,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ─── OAuth: Google + Apple ─────────────────────────────────────────
   // Start endpoints redirect to the provider; callback endpoints come
   // back here. The `kind` (admin | customer) is taken from the host on
-  // both legs — the OAuth state token is signed/random so it survives
-  // the round-trip without us having to encode anything in the URL.
-  // OAuth STATE is stored on the session (`oauthState`) with the kind
-  // and an optional `linkToUserId` for the "link from profile" flow.
+  // both legs.
+  //
+  // STATELESS OAuth state: the nonce + kind + linkToUserId + inviteToken
+  // bag is HMAC-SHA256 signed and round-tripped in the OAuth `state`
+  // parameter itself — not stored in the session. This is required now
+  // that the session cookie is SameSite=Lax: Apple's form_post callback
+  // is a cross-site POST so the session cookie would not be sent on it,
+  // breaking state lookup. Google's redirect-style callback is a
+  // top-level GET (fine under Lax), but the same stateless approach
+  // covers both providers uniformly. The OAuth-related session key
+  // `totpEnroll` is cast via `as any` since it isn't part of the typed
+  // SessionData declared up top.
   const {
     GOOGLE_CONFIGURED, APPLE_CONFIGURED,
     randomState, buildGoogleAuthUrl, exchangeGoogleCode,
     buildAppleAuthUrl, exchangeAppleCode,
+    signOAuthState, verifyOAuthState,
   } = await import("./auth/oauth");
   const { callbackOrigin } = await import("./auth/host");
-
-  // We piggyback on express-session for the OAuth state so callbacks
-  // can verify it. The session may already have an admin/customer
-  // userId; that's fine — we treat `oauthState` as orthogonal. The
-  // OAuth-related session keys (oauthState, totpEnroll) are cast via
-  // `as any` since they aren't part of the typed SessionData declared
-  // up top.
 
   function startProvider(provider: "google" | "apple") {
     return async (req: Request, res: Response) => {
@@ -1965,18 +1967,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (provider === "apple" && !APPLE_CONFIGURED) {
         return res.status(503).send("Apple sign-in is not configured yet (Apple secrets missing or APPLE_PRIVATE_KEY still a placeholder).");
       }
-      const state = randomState();
+      const nonce = randomState();
       const linkToUserId = req.query.link === "1" ? (await getAuthFromRequest(req))?.userId : undefined;
       // Task #78 — invite-bound sign-in. Carrying the token through OAuth
       // state lets the recipient accept their partner invite by signing
       // in with Google/Apple instead of setting a password. The token is
       // re-validated on callback so a stale state bag can't grant access.
       const inviteToken = typeof req.query.invite === "string" ? req.query.invite : undefined;
-      (req.session as any).oauthState = { state, kind, provider, linkToUserId, inviteToken };
+      // Sign the whole state bag and send it as the OAuth `state` param.
+      // No session storage — the HMAC proves the bag is server-minted.
+      const signedState = signOAuthState({ nonce, kind, provider, linkToUserId, inviteToken });
       const redirectUri = `${callbackOrigin(req, kind)}/api/auth/${provider}/callback`;
       const url = provider === "google"
-        ? buildGoogleAuthUrl(redirectUri, state)
-        : buildAppleAuthUrl(redirectUri, state);
+        ? buildGoogleAuthUrl(redirectUri, signedState)
+        : buildAppleAuthUrl(redirectUri, signedState);
       res.redirect(url);
     };
   }
@@ -2043,9 +2047,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }
 
   async function handleProviderCallback(provider: "google" | "apple", req: Request, res: Response) {
-    const stateBag = (req.session as any).oauthState as
-      | { state: string; kind: "admin" | "customer"; provider: string; linkToUserId?: string; inviteToken?: string }
-      | undefined;
+    // Verify the signed state bag from the OAuth `state` parameter.
+    // No session lookup — the HMAC signature proves the bag is server-minted
+    // and hasn't been tampered with. This works for both Google (top-level
+    // GET redirect, fine under SameSite=Lax) and Apple (form_post cross-site
+    // POST — session cookie would NOT be sent under Lax, which is why we
+    // moved to stateless state).
+    const incomingState = (req.body?.state as string) || (req.query.state as string);
+    const stateBag = incomingState ? verifyOAuthState(incomingState) : null;
     // Task #2128 — Google refuses OAuth inside embedded/in-app browsers
     // and (in the flows where it bounces back rather than rendering its
     // own 403) returns `error=disallowed_useragent`. Map that to the
@@ -2056,11 +2065,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (oauthError === "disallowed_useragent") {
       const kind = stateBag?.kind ?? "customer";
       const loginPath = kind === "admin" ? "/admin/login" : "/login";
-      (req.session as any).oauthState = undefined;
       return res.redirect(`${loginPath}?prompt=embedded_browser&provider=${provider}`);
     }
-    const incomingState = (req.body?.state as string) || (req.query.state as string);
-    if (!stateBag || stateBag.provider !== provider || stateBag.state !== incomingState) {
+    if (!stateBag || stateBag.provider !== provider) {
       const params = new URLSearchParams({
         source: "oauth",
         provider,
@@ -2069,7 +2076,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       return res.redirect(`/error?${params.toString()}`);
     }
-    (req.session as any).oauthState = undefined;
     const code = (req.body?.code as string) || (req.query.code as string);
     if (!code) {
       const params = new URLSearchParams({
@@ -2383,7 +2389,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             name: identity.name ?? null,
             picture: identity.picture ?? null,
           };
-          return res.redirect(`/login?prompt=claim&provider=${provider}`);
+          // Explicitly save the session before redirecting so that
+          // pendingOauthClaim is persisted to the store and readable on
+          // the follow-up claim/start request. The redirect fires in the
+          // save callback to guarantee the session write completes first.
+          return req.session.save((saveErr) => {
+            if (saveErr) console.error("[oauth] session save failed before claim redirect", saveErr);
+            res.redirect(`/login?prompt=claim&provider=${provider}`);
+          });
         }
       }
     }
@@ -3048,11 +3061,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Mutating the second-factor preference is a security-sensitive write.
-  // Session cookies are `sameSite: "none"` for the OAuth pop-up flow, so
-  // a cross-site POST could otherwise ride a logged-in admin's session
-  // and silently downgrade their 2FA. requireAdminBearer forces an
-  // `Authorization: Bearer …` header that lives in localStorage and is
-  // unreadable cross-origin — matches the hardening on the rest of
+  // The session cookie is SameSite=Lax, which blocks cross-site POSTs,
+  // but we still gate these routes behind a Bearer header as defence-in-
+  // depth: the `Authorization: Bearer …` header lives in localStorage and
+  // is unreachable cross-origin, matching the hardening on the rest of
   // /api/admin/*.
   app.post("/api/auth/factor-preference", requireAdminBearer, async (req, res) => {
     const factor = String(req.body?.factor ?? "");
@@ -3082,12 +3094,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── Admin self-serve password change (Task #261) ─────────────────
-  // Both endpoints are bearer-gated (same CSRF reasoning as factor-
-  // preference above — sameSite:"none" session cookies would otherwise
-  // let a cross-site POST silently rotate an admin's password). The
-  // status probe lets /admin/security disable the card for admins who
-  // signed in via Google/Apple and only carry the `!oauth-only:` shaped
-  // placeholder password (see the customer→admin promotion path).
+  // Both endpoints are bearer-gated (same CSRF defence-in-depth as
+  // factor-preference above — Bearer headers live in localStorage and
+  // are unreachable cross-origin). The status probe lets /admin/security
+  // disable the card for admins who signed in via Google/Apple and only
+  // carry the `!oauth-only:` shaped placeholder password (see the
+  // customer→admin promotion path).
   app.get("/api/auth/password/status", requireAdminBearer, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -3521,12 +3533,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.status(403).json({ message: "An admin already exists. Ask an existing admin to promote you." });
   });
 
-  // CSRF guard for the new admin mutation endpoints. Session cookies are
-  // sameSite:"none" so a cross-site form POST could ride an admin's
-  // session — requiring a Bearer header that lives in localStorage (and
-  // is therefore unreachable cross-origin) closes that path. Bootstrap
-  // and the older /api/admin/* mutations remain on the existing
-  // requireAdmin contract; we only harden the routes added here.
+  // CSRF guard for the new admin mutation endpoints. Requiring a Bearer
+  // header that lives in localStorage (and is therefore unreachable
+  // cross-origin) closes the cross-site mutation path as defence-in-
+  // depth alongside SameSite=Lax. Bootstrap and the older /api/admin/*
+  // mutations remain on the existing requireAdmin contract; we only
+  // harden the routes added here.
   function requireAdminBearer(req: Request, res: Response, next: Function) {
     const auth = req.headers.authorization;
     if (!auth || !auth.startsWith("Bearer ")) {
@@ -15107,8 +15119,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Reads mirror the album-detail visibility model: requireAuth + an admin
   // check unlocks hidden albums, fans get a 404 for hidden/nonexistent ids
   // so bonus media can't leak via direct ID guessing. Writes use the
-  // bearer-only admin guard to match `/api/admin/upload` and dodge the
-  // CSRF risk that `sameSite: "none"` session cookies otherwise carry.
+  // bearer-only admin guard to match `/api/admin/upload` (defence-in-
+  // depth alongside SameSite=Lax on the session cookie).
   // Zod insert schemas validate bodies up front so unknown albumIds /
   // malformed payloads surface as deterministic 4xx.
   async function loadAlbumForBonusRead(req: Request, res: Response) {

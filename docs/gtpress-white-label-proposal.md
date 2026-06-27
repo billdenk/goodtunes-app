@@ -65,8 +65,8 @@ The repo **already does host-based dual-shell routing and per-host OAuth** — t
 ### Today (grounding)
 - `server/auth/host.ts` `kindFromRequest` maps host → auth kind: `admin.goodtunes.music`→admin, `my./store./get.goodtunes.music`→customer. Unknown hosts fall back to path-based detection.
 - `canonicalHostRedirect` 301s non-canonical `goodtunes.music` hosts to the canonical admin/customer host (exempts `/.well-known/*`).
-- Session cookie is **host-only** (`sameSite=none`, no `domain`), so each subdomain is its own auth island; cross-host handoff rides a bearer token in the URL **fragment**.
-- `callbackOrigin` returns OAuth to the **exact** host the user started on, because OAuth state lives in that host-only cookie. New customer hosts must be registered as allowed redirect URIs with Google/Apple (documented in `auth-and-dual-shell.md`).
+- Session cookie is **host-only** (`sameSite=lax`, no `domain`), so each subdomain is its own auth island; cross-host handoff rides a bearer token in the URL **fragment**.
+- `callbackOrigin` returns OAuth to the **exact** host the user started on so the `redirect_uri` matches registration; OAuth state is now a signed bag in the `state` param (stateless, no session cookie). New customer hosts must be registered as allowed redirect URIs with Google/Apple (documented in `auth-and-dual-shell.md`).
 
 ### Proposed
 - Umbrella domain **`gtpress.com`** (GoodTunes-owned, neutral). Per-press subdomains: `mrp.gtpress.com`, later `pmp.gtpress.com`, etc.

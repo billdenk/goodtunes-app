@@ -92,13 +92,31 @@ before(async () => {
     (req.session as any).pendingOauthClaim = req.body?.pending ?? undefined;
     req.session.save(() => res.json({ ok: true }));
   });
-  // Companion seam for the OAuth-callback tests: park the `oauthState` bag the
-  // callback validates against, the same way buildGoogleAuthUrl would. Paired
-  // with __setTestOauthExchange (below) this lets a test drive the real
-  // handleProviderCallback offline.
-  app.post("/__test/seed-oauth-state", (req, res) => {
-    (req.session as any).oauthState = req.body?.state ?? undefined;
-    req.session.save(() => res.json({ ok: true }));
+  // Companion seam for the OAuth-callback tests: sign the state bag the
+  // callback validates against, the same way startProvider would. Returns
+  // { signedState } — the test passes it as the `state` param on the
+  // callback request. Paired with __setTestOauthExchange (below) this
+  // lets a test drive the real handleProviderCallback offline without
+  // needing a live session cookie (stateless signed state — no session
+  // storage required since the session cookie is SameSite=Lax).
+  app.post("/__test/sign-oauth-state", async (req, res) => {
+    const { signOAuthState } = await import("./oauth");
+    const bag = req.body?.state ?? {};
+    // Map the legacy `state` nonce field → `nonce` so test callers that
+    // still pass `{ state, kind, provider }` work without changes.
+    const { state: nonce, ...rest } = bag;
+    const signedState = signOAuthState({ nonce: nonce ?? "testnonce", ...rest });
+    // Initialize the session so the client receives a Set-Cookie header here.
+    // Without this, sign-oauth-state (stateless — no session write) would return
+    // no cookie, and the Apple form_post callback (which stores pendingOauthClaim
+    // on the session) would create a fresh session whose cookie may not reach the
+    // client via an opaque-redirect response. Establishing the session here keeps
+    // the same cookie alive across sign-oauth-state → callback → claim/start.
+    (req.session as any).__testSeam = true;
+    await new Promise<void>((resolve, reject) =>
+      req.session.save((err: unknown) => (err ? reject(err) : resolve())),
+    );
+    res.json({ ok: true, signedState });
   });
   // The OAuth callback's token exchange is stubbed to return whatever the
   // current test parked in `nextOauthIdentity`. Cleared in the after hook.
@@ -154,7 +172,7 @@ let nextOauthIdentity:
   | null = null;
 
 // A cookie-jar POST helper for the multi-request claim flow. The session
-// cookie is `secure: true` + `sameSite: none`, so we send
+// cookie is `secure: true` + `sameSite: lax`, so we send
 // `x-forwarded-proto: https` (with `trust proxy` already on the harness app)
 // or express-session refuses to set it; we then echo `connect.sid` back on
 // every follow-up so `pendingOauthClaim` survives across requests.
@@ -855,8 +873,8 @@ test("claim/confirm: with no parked claim on the session ⇒ 400 (nothing to cla
 // (non-relay) sign-in where the provider's verified email already belongs to
 // an account. The route auto-links ONLY when BOTH halves hold:
 //   isUnclaimedCustomer(existing) === true  AND  providerVerifiedEmail.
-// We drive the REAL callback offline via two seams: /__test/seed-oauth-state
-// parks the state bag the callback validates, and __setTestOauthExchange
+// We drive the REAL callback offline via two seams: /__test/sign-oauth-state
+// signs the state bag the callback validates, and __setTestOauthExchange
 // (installed in the before hook) returns the canned identity instead of
 // hitting Google. The three cases below pin the conjunction: flipping either
 // half off must fall back to the ?prompt=link guard, not auto-link.
@@ -869,10 +887,10 @@ async function driveGoogleCollision(opts: {
   sub: string;
 }): Promise<{ status: number; location: string | null }> {
   const client = makeSessionClient();
-  const state = "st_" + opts.sub;
-  await client.post("/__test/seed-oauth-state", {
-    state: { state, kind: "customer", provider: "google" },
+  const { json } = await client.post("/__test/sign-oauth-state", {
+    state: { state: "st_" + opts.sub, kind: "customer", provider: "google" },
   });
+  const signedState: string = json.signedState;
   nextOauthIdentity = {
     sub: opts.sub,
     email: opts.email,
@@ -882,7 +900,7 @@ async function driveGoogleCollision(opts: {
   };
   try {
     return await client.getNoFollow(
-      `/api/auth/google/callback?state=${encodeURIComponent(state)}&code=testcode`,
+      `/api/auth/google/callback?state=${encodeURIComponent(signedState)}&code=testcode`,
     );
   } finally {
     nextOauthIdentity = null;
@@ -993,7 +1011,7 @@ test("callback collision: account that ALREADY has a social login + VERIFIED ema
 // /__test/seed-claim seam). This drives the OTHER half end-to-end: the REAL
 // POST /api/auth/apple/callback form_post entry point that does the PARKING.
 // We reuse __setTestOauthExchange (returns a canned relay identity instead of
-// hitting Apple) + /__test/seed-oauth-state (parks the state bag the callback
+// hitting Apple) + /__test/sign-oauth-state (signs the state bag the callback
 // validates). We then PROVE the park actually happened by consuming it on the
 // SAME session: the parked Apple sub is what claim/confirm attaches.
 
@@ -1004,10 +1022,10 @@ async function driveAppleRelayCallback(
   client: ReturnType<typeof makeSessionClient>,
   opts: { relayEmail: string; sub: string },
 ): Promise<{ status: number; location: string | null }> {
-  const state = "st_" + opts.sub;
-  await client.post("/__test/seed-oauth-state", {
-    state: { state, kind: "customer", provider: "apple" },
+  const { json } = await client.post("/__test/sign-oauth-state", {
+    state: { state: "st_" + opts.sub, kind: "customer", provider: "apple" },
   });
+  const signedState: string = json.signedState;
   nextOauthIdentity = {
     sub: opts.sub,
     email: opts.relayEmail,
@@ -1017,7 +1035,7 @@ async function driveAppleRelayCallback(
   };
   try {
     return await client.postFormNoFollow("/api/auth/apple/callback", {
-      state,
+      state: signedState,
       code: "testcode",
     });
   } finally {

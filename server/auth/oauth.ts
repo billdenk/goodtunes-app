@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto";
+import { randomBytes, createHmac, timingSafeEqual } from "crypto";
 import { SignJWT, importPKCS8, jwtVerify, createRemoteJWKSet } from "jose";
 
 export const GOOGLE_CONFIGURED = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
@@ -33,6 +33,52 @@ export const APPLE_CONFIGURED = !!(
 
 export function randomState(): string {
   return randomBytes(24).toString("base64url");
+}
+
+// ── Stateless OAuth state (signed bag) ──────────────────────────────────────
+// Apple's form_post callback is a cross-site POST. With SameSite=Lax the
+// session cookie is not sent on that POST, so we cannot store the OAuth
+// nonce/kind/etc. in the session and read it back on the callback. Instead
+// we HMAC-sign a JSON bag and round-trip it inside the OAuth `state`
+// parameter itself. The signature is verified on the callback with a
+// timing-safe comparison before any bag field is trusted.
+
+export type OAuthStateBag = {
+  nonce: string;
+  kind: "admin" | "customer";
+  provider: string;
+  linkToUserId?: string;
+  inviteToken?: string;
+};
+
+function oauthHmacKey(): string {
+  return process.env.SESSION_SECRET || "goodtunes-dev-only-secret";
+}
+
+export function signOAuthState(bag: OAuthStateBag): string {
+  const payload = Buffer.from(JSON.stringify(bag)).toString("base64url");
+  const sig = createHmac("sha256", oauthHmacKey()).update(payload).digest("base64url");
+  return `${payload}.${sig}`;
+}
+
+export function verifyOAuthState(token: string): OAuthStateBag | null {
+  const dot = token.lastIndexOf(".");
+  if (dot < 0) return null;
+  const payload = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = createHmac("sha256", oauthHmacKey()).update(payload).digest("base64url");
+  try {
+    const sigBuf = Buffer.from(sig, "base64url");
+    const expBuf = Buffer.from(expected, "base64url");
+    if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) return null;
+  } catch {
+    return null;
+  }
+  try {
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf-8")) as OAuthStateBag;
+  } catch {
+    return null;
+  }
 }
 
 // ---------- Google ---------------------------------------------------------

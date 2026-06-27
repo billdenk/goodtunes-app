@@ -135,7 +135,7 @@ async function getWithToken(path: string, token: string): Promise<{ status: numb
 }
 
 // A cookie-jar client that authenticates via a real express-session cookie
-// (secure + sameSite:none → needs x-forwarded-proto:https with trust proxy on).
+// (secure + sameSite:lax → needs x-forwarded-proto:https with trust proxy on).
 async function makeSessionClient(userId: string) {
   let cookie = "";
   async function get(path: string): Promise<{ status: number; json: any }> {

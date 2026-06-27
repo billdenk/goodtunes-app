@@ -188,7 +188,7 @@ For the first submission, a clean simulator capture of the Library tab, an album
 
 The app is a Capacitor WebView wrapping the same SPA that ships at `goodtunes.music`. API calls originate from `capacitor://localhost` (iOS) or `http://localhost` (Android) to `https://my.goodtunes.music` — a cross-origin pair. Two layers ensure the session always reaches the server:
 
-**Layer 1 — Session cookie.** Express session is configured with `sameSite: "none"` and `secure: true` (`server/routes.ts` line 389). `SameSite=None` is the correct setting for a cross-origin Capacitor WebView; without it iOS WKWebView silently drops every cookie.
+**Layer 1 — Session cookie.** Express session is configured with `sameSite: "lax"` and `secure: true`. `SameSite=Lax` cookies are not sent on cross-origin WebView requests from `capacitor://localhost`, but that is acceptable: the Bearer token (Layer 2) is the authoritative auth mechanism for native and survives iOS ITP. The session cookie re-hydrates on the first same-origin navigation or can be refreshed from the Bearer token on the server side.
 
 **Layer 2 — Bearer token (iOS ITP bypass).** On login the server returns a token that the client stores in `localStorage` under `goodtunes_auth_token` (`client/src/lib/queryClient.ts`). Every `apiRequest` call attaches `Authorization: Bearer <token>`. If the cookie session is absent (e.g. after iOS ITP partitions it), the server resolves auth from the Bearer header and re-hydrates the session — so the user stays signed in even when iOS has eaten the cookie.
 
@@ -209,14 +209,14 @@ export const chatEnabled  = !isNative;                                  // hidde
 
 ### 4 — Capacitor config ✅
 
-`capacitor.config.ts` has no `server.url` override, which is correct for a production archive — the bundled `dist/public` SPA is loaded by the WebView and all API calls go to `my.goodtunes.music` over the network. `android.allowMixedContent: false` enforces HTTPS-only (required for the `SameSite=None; Secure` cookie to be sent). Splash and status-bar colors are set to `#00062B`.
+`capacitor.config.ts` has no `server.url` override, which is correct for a production archive — the bundled `dist/public` SPA is loaded by the WebView and all API calls go to `my.goodtunes.music` over the network. `android.allowMixedContent: false` enforces HTTPS-only. Splash and status-bar colors are set to `#00062B`.
 
 ### 5 — What still needs a real device
 
 | Check | Why it can't be done from the workspace |
 |---|---|
 | Password Bill rotated for this submission signs in | The plaintext is only in App Store Connect / Play Console, not in the repo |
-| WKWebView (iOS 17+) actually sends the `SameSite=None` cookie + Bearer token | Cookie behavior on a real WKWebView vs. a desktop browser can differ |
+| WKWebView (iOS 17+) sends the Bearer token + re-hydrates session | Cookie behavior on a real WKWebView vs. a desktop browser can differ |
 | All three Sampler tracks stream to completion | Mux HLS signing requires a live network round-trip to `my.goodtunes.music` |
 | No Buy button or Chat tab appears anywhere in the native shell | Requires a native binary (Capacitor build), not the web preview |
 

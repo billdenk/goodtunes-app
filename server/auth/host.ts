@@ -15,9 +15,9 @@ const STORE_HOST = "store.goodtunes.music";
 // round-trip + ?buy=1 bounce-back land back on the get host.
 const GET_HOST = "get.goodtunes.music";
 // Hosts that resolve to the "customer" auth kind. OAuth callbacks must come
-// back to the *same* one of these the fan started on because the session
-// cookie is host-only (sameSite=none, no domain), so a cross-subdomain
-// callback would drop the `oauthState` and fail with a state mismatch.
+// back to the *same* one of these the fan started on because the redirect_uri
+// must exactly match what was registered with the IdP (Google/Apple), and the
+// signed OAuth state in the `state` parameter encodes the originating host.
 const CUSTOMER_HOSTS = new Set([CUSTOMER_HOST, STORE_HOST, GET_HOST]);
 
 declare global {
@@ -115,9 +115,8 @@ export function originForKind(kind: AuthKind, req: Request): string {
 export function callbackOrigin(req: Request, kind: AuthKind): string {
   if (process.env.NODE_ENV === "production") {
     // Customer-family OAuth must round-trip back to the exact host the fan
-    // started on (store vs. my), or the host-only session cookie carrying
-    // `oauthState` won't be sent to the callback and the flow 403s on a state
-    // mismatch. Admin always uses its canonical host.
+    // started on (store vs. my) so the redirect_uri matches the IdP
+    // registration. Admin always uses its canonical host.
     if (kind === "customer") {
       const host = (req.headers.host || "").toLowerCase().split(":")[0];
       if (CUSTOMER_HOSTS.has(host)) return `https://${host}`;
