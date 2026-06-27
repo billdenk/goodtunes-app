@@ -30,10 +30,25 @@ const createdIntervals = new Set<ReturnType<typeof setInterval>>();
   createdIntervals.add(id);
   return id;
 };
+// The save/clear mutations toast on success, which arms shadcn's 1,000,000ms
+// auto-dismiss setTimeout that jsdom never fires. Capture every timer so we can
+// clear them on teardown and the tsx --test process exits instead of hanging
+// ~1000s after the assertions already passed (cross-file isolation hygiene; the
+// runner's --test-force-exit is the load-bearing guarantee).
+const realSetTimeout = globalThis.setTimeout;
+const createdTimeouts = new Set<ReturnType<typeof setTimeout>>();
+(globalThis as any).setTimeout = (...args: any[]) => {
+  const id = (realSetTimeout as any)(...args);
+  createdTimeouts.add(id);
+  return id;
+};
 after(() => {
   for (const id of createdIntervals) clearInterval(id);
   createdIntervals.clear();
   (globalThis as any).setInterval = realSetInterval;
+  for (const id of createdTimeouts) clearTimeout(id);
+  createdTimeouts.clear();
+  (globalThis as any).setTimeout = realSetTimeout;
 });
 // The loader rewrites `import.meta.env` (Vite-only) to this global.
 (globalThis as any).__VITE_ENV__ = { DEV: false, PROD: true, MODE: "test", SSR: false };
@@ -89,10 +104,25 @@ g.matchMedia = window.matchMedia;
 (window as any).scrollTo = () => {};
 (window.HTMLElement.prototype as any).scrollTo = () => {};
 (window.HTMLElement.prototype as any).scrollIntoView = () => {};
-// No query should hit the network; if one slips past the seeded cache, fail
-// loud-but-harmless instead of opening a real socket.
-g.fetch = async () =>
-  ({ ok: false, status: 404, text: async () => "not found", json: async () => ({}) }) as any;
+// Capture every fetch the component makes. Reads are seeded into the
+// QueryClient so they never hit here; the only calls that reach this stub are
+// the save (PUT) / clear (DELETE) mutations' `apiRequest`, which we record and
+// answer OK so the mutation resolves into its onSuccess (invalidate + toast).
+type FetchCall = { method: string; url: string; body: any };
+const fetchCalls: FetchCall[] = [];
+g.fetch = async (url: any, init?: any) => {
+  fetchCalls.push({
+    method: (init?.method ?? "GET").toUpperCase(),
+    url: String(url),
+    body: init?.body ? JSON.parse(init.body) : undefined,
+  });
+  return {
+    ok: true,
+    status: 200,
+    text: async () => "{}",
+    json: async () => ({ spec: null }),
+  } as any;
+};
 // Radix DropdownMenu / AlertDialog (the catalog editor's format menu + delete
 // confirm) mount a FocusScope + DismissableLayer that reach for
 // MutationObserver / ResizeObserver and the pointer-capture API — none of which
@@ -187,7 +217,7 @@ function makeCatalog() {
 // Seed a QueryClient so the panel renders without touching the network. The
 // default queryFn returns [] so any unseeded array-shaped sidebar query
 // resolves empty instead of null.
-function makeClient(roleScopeId: string | null) {
+function makeClient(roleScopeId: string | null, audioSpec: any = null) {
   const qc = new QueryClient({
     defaultOptions: {
       queries: {
@@ -203,12 +233,12 @@ function makeClient(roleScopeId: string | null) {
   // scope equals the press being rendered.
   qc.setQueryData(["/api/me/role"], { role: "manufacturer", roleScopeId });
   qc.setQueryData(["/api/admin/manufacturers", PRESS_ID, "catalog"], makeCatalog());
-  qc.setQueryData(["/api/admin/manufacturers", PRESS_ID, "audio-spec"], { spec: null });
+  qc.setQueryData(["/api/admin/manufacturers", PRESS_ID, "audio-spec"], { spec: audioSpec });
   qc.setQueryData(["/api/admin/manufacturers", PRESS_ID, "template-specs"], { specs: [] });
   return qc;
 }
 
-async function mount(roleScopeId: string | null) {
+async function mount(roleScopeId: string | null, audioSpec: any = null) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   window.history.replaceState(null, "", `/admin/manufacturers/${PRESS_ID}`);
@@ -218,7 +248,7 @@ async function mount(roleScopeId: string | null) {
     root.render(
       h(
         QueryClientProvider,
-        { client: makeClient(roleScopeId) },
+        { client: makeClient(roleScopeId, audioSpec) },
         h(PressCatalogPanel, { pressId: PRESS_ID, pressDomain: null }),
       ),
     );
@@ -278,6 +308,98 @@ test("a press scoped to a DIFFERENT plant gets no panel and no audio card", asyn
       q("input-audio-bit-depth"),
       null,
       "the audio spec card is hidden right alongside the rest of the editor",
+    );
+  } finally {
+    await teardown();
+  }
+});
+
+// Set a controlled input's value the way React expects: write through the
+// native value setter (so React's value tracker sees the change) then dispatch
+// a bubbling input event to fire onChange.
+function type(el: HTMLElement, value: string) {
+  const proto = Object.getPrototypeOf(el);
+  const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+  setter?.call(el, value);
+  el.dispatchEvent(new (window as any).Event("input", { bubbles: true }));
+}
+
+// ── Save fires the PUT with the typed values ─────────────────────────
+test("typing a bit depth + a side length and clicking Save fires the PUT with those values", async () => {
+  const { q, settle, teardown } = await mount(PRESS_ID);
+  try {
+    const bitDepth = q("input-audio-bit-depth") as HTMLInputElement | null;
+    // 12" side at 33 RPM — testid drops the non-digits from the size label.
+    const side = q("input-audio-side-12-33") as HTMLInputElement | null;
+    assert.ok(bitDepth && side, "the editable bit-depth + side-length cells render");
+
+    await act(async () => {
+      type(bitDepth!, "24");
+      type(side!, "20"); // minutes — the card converts to seconds on save
+    });
+
+    fetchCalls.length = 0;
+    const saveBtn = q("button-save-audio-spec");
+    assert.ok(saveBtn, "the Save action renders");
+    await act(async () => {
+      saveBtn!.click();
+    });
+    await settle();
+
+    const put = fetchCalls.find((c) => c.method === "PUT");
+    assert.ok(
+      put,
+      "clicking Save fires a PUT (the button is actually wired to the save mutation)",
+    );
+    assert.equal(
+      put!.url,
+      `/api/admin/manufacturers/${PRESS_ID}/audio-spec`,
+      "the PUT targets this plant's audio-spec endpoint",
+    );
+    assert.equal(
+      put!.body.requiredBitDepth,
+      24,
+      "the typed bit depth is sent in the PUT body",
+    );
+    // 20 minutes → 1200 seconds, keyed by size then RPM.
+    assert.equal(
+      put!.body.maxSideSeconds?.['12"']?.["33"],
+      1200,
+      "the typed side length is converted to seconds and sent in the PUT body",
+    );
+  } finally {
+    await teardown();
+  }
+});
+
+// ── Clear fires the DELETE ───────────────────────────────────────────
+test("clicking Clear override fires the DELETE for this plant's audio spec", async () => {
+  // The Clear control only renders when a saved spec exists, so seed one.
+  const { q, settle, teardown } = await mount(PRESS_ID, {
+    id: "audio-1",
+    requiredBitDepth: 24,
+    requiredSampleRateHz: 96000,
+    maxSideSeconds: { '12"': { "33": 1200 } },
+    notes: null,
+  });
+  try {
+    fetchCalls.length = 0;
+    const clearBtn = q("button-clear-audio-spec");
+    assert.ok(clearBtn, "the Clear override action renders once a spec is saved");
+    await act(async () => {
+      clearBtn!.click();
+    });
+    await settle();
+
+    const del = fetchCalls.find((c) => c.method === "DELETE");
+    assert.ok(
+      del,
+      "clicking Clear fires a DELETE (the button is actually wired to the remove mutation)",
+    );
+    assert.equal(
+      del!.url,
+      `/api/admin/manufacturers/${PRESS_ID}/audio-spec`,
+      "the DELETE targets this plant's audio-spec endpoint",
     );
   } finally {
     await teardown();
