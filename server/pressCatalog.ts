@@ -2154,6 +2154,9 @@ export function registerPressCatalogRoutes(
   app: Express,
   requireAdmin: any,
   requirePressScope: any,
+  // Task #2335 — Owner/Admin-only gate for catalog/price mutations. Reads
+  // stay on requirePressScope so read-only Staff can still view the catalog.
+  requirePressEditor: any,
 ) {
   // GET full catalog for a press.
   app.get("/api/admin/manufacturers/:id/catalog", requireAdmin, requirePressScope, async (req, res) => {
@@ -2176,7 +2179,17 @@ export function registerPressCatalogRoutes(
     } else if (press.domain === PMP_DOMAIN) {
       await seedPmpCatalog();
     }
-    res.json(await getPressCatalog(pressId));
+    // Task #2335 — surface whether THIS caller may edit so the client can
+    // render the catalog read-only for Staff without speculatively POSTing
+    // and parsing a 403. Operators / press Owner-Admins → true; Staff →
+    // false (read-only view).
+    const userId = (req as any).adminUserId as string | undefined;
+    let canEdit = false;
+    if (userId) {
+      const { pressUserCanEdit } = await import("./auth/partnerPermissions");
+      canEdit = await pressUserCanEdit(userId, pressId);
+    }
+    res.json({ ...(await getPressCatalog(pressId)), canEdit });
   });
 
   // ─── Task #2116 — Catalog CSV: Upload & Export ─────────────────────
@@ -2207,7 +2220,7 @@ export function registerPressCatalogRoutes(
 
   // Apply an uploaded CSV transactionally. Refuses if any row failed
   // validation so a bad file is never partially applied.
-  app.post("/api/admin/manufacturers/:id/catalog/csv/apply", requireAdmin, requirePressScope, async (req, res) => {
+  app.post("/api/admin/manufacturers/:id/catalog/csv/apply", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const press = await storage.getManufacturerById(pressId);
     if (!press) return res.status(404).json({ message: "Manufacturer not found" });
@@ -2223,7 +2236,7 @@ export function registerPressCatalogRoutes(
   });
 
   // Toggle a format on/off for this press.
-  app.put("/api/admin/manufacturers/:id/catalog/formats/:format", requireAdmin, requirePressScope, async (req, res) => {
+  app.put("/api/admin/manufacturers/:id/catalog/formats/:format", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const format = String(req.params.format);
     if (!ALBUM_FORMATS.includes(format as AlbumFormat)) return res.status(400).json({ message: "Unknown format" });
@@ -2252,7 +2265,7 @@ export function registerPressCatalogRoutes(
   });
 
   // Create tier.
-  app.post("/api/admin/manufacturers/:id/catalog/formats/:format/tiers", requireAdmin, requirePressScope, async (req, res) => {
+  app.post("/api/admin/manufacturers/:id/catalog/formats/:format/tiers", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const format = String(req.params.format);
     if (!ALBUM_FORMATS.includes(format as AlbumFormat)) return res.status(400).json({ message: "Unknown format" });
@@ -2268,7 +2281,7 @@ export function registerPressCatalogRoutes(
   });
 
   // Update tier (name/position only — ladders live on combo rows now).
-  app.patch("/api/admin/manufacturers/:id/catalog/tiers/:tierId", requireAdmin, requirePressScope, async (req, res) => {
+  app.patch("/api/admin/manufacturers/:id/catalog/tiers/:tierId", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const tierId = String(req.params.tierId);
     const parsed = tierBodySchema.partial().safeParse(req.body);
@@ -2289,7 +2302,7 @@ export function registerPressCatalogRoutes(
   });
 
   // Delete tier.
-  app.delete("/api/admin/manufacturers/:id/catalog/tiers/:tierId", requireAdmin, requirePressScope, async (req, res) => {
+  app.delete("/api/admin/manufacturers/:id/catalog/tiers/:tierId", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const tierId = String(req.params.tierId);
     await db.delete(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
@@ -2297,7 +2310,7 @@ export function registerPressCatalogRoutes(
   });
 
   // Create color under a tier.
-  app.post("/api/admin/manufacturers/:id/catalog/tiers/:tierId/colors", requireAdmin, requirePressScope, async (req, res) => {
+  app.post("/api/admin/manufacturers/:id/catalog/tiers/:tierId/colors", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const tierId = String(req.params.tierId);
     const [tier] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
@@ -2322,7 +2335,7 @@ export function registerPressCatalogRoutes(
   // Update color (name / hex / thumbnail URL / position). The
   // thumbnail upload itself goes through the shared
   // /api/admin/upload endpoint; this PATCH just stores the URL.
-  app.patch("/api/admin/manufacturers/:id/catalog/colors/:colorId", requireAdmin, requirePressScope, async (req, res) => {
+  app.patch("/api/admin/manufacturers/:id/catalog/colors/:colorId", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const colorId = String(req.params.colorId);
     const [color] = await db.select().from(pressColors).where(eq(pressColors.id, colorId));
@@ -2341,7 +2354,7 @@ export function registerPressCatalogRoutes(
   });
 
   // Delete color.
-  app.delete("/api/admin/manufacturers/:id/catalog/colors/:colorId", requireAdmin, requirePressScope, async (req, res) => {
+  app.delete("/api/admin/manufacturers/:id/catalog/colors/:colorId", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const colorId = String(req.params.colorId);
     const [color] = await db.select().from(pressColors).where(eq(pressColors.id, colorId));
@@ -2354,7 +2367,7 @@ export function registerPressCatalogRoutes(
 
   // ─── Jackets ───────────────────────────────────────────────────────
 
-  app.post("/api/admin/manufacturers/:id/catalog/jackets", requireAdmin, requirePressScope, async (req, res) => {
+  app.post("/api/admin/manufacturers/:id/catalog/jackets", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const parsed = jacketBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid jacket" });
@@ -2391,7 +2404,7 @@ export function registerPressCatalogRoutes(
     res.json(row);
   });
 
-  app.patch("/api/admin/manufacturers/:id/catalog/jackets/:jacketId", requireAdmin, requirePressScope, async (req, res) => {
+  app.patch("/api/admin/manufacturers/:id/catalog/jackets/:jacketId", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const jacketId = String(req.params.jacketId);
     const [existing] = await db.select().from(pressJackets).where(and(eq(pressJackets.id, jacketId), eq(pressJackets.pressId, pressId)));
@@ -2415,7 +2428,7 @@ export function registerPressCatalogRoutes(
     res.json(row);
   });
 
-  app.delete("/api/admin/manufacturers/:id/catalog/jackets/:jacketId", requireAdmin, requirePressScope, async (req, res) => {
+  app.delete("/api/admin/manufacturers/:id/catalog/jackets/:jacketId", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const jacketId = String(req.params.jacketId);
     const [existing] = await db.select().from(pressJackets).where(and(eq(pressJackets.id, jacketId), eq(pressJackets.pressId, pressId)));
@@ -2462,6 +2475,7 @@ export function registerPressCatalogRoutes(
     "/api/admin/manufacturers/:id/pricing-sync/hellbender/commit",
     requireAdmin,
     requirePressScope,
+    requirePressEditor,
     async (req, res) => {
       const pressId = String(req.params.id);
       const press = await storage.getManufacturerById(pressId);
@@ -2501,7 +2515,7 @@ export function registerPressCatalogRoutes(
     },
   );
 
-  app.put("/api/admin/manufacturers/:id/catalog/tiers/:tierId/jackets/:jacketId/ladder", requireAdmin, requirePressScope, async (req, res) => {
+  app.put("/api/admin/manufacturers/:id/catalog/tiers/:tierId/jackets/:jacketId/ladder", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const tierId = String(req.params.tierId);
     const jacketId = String(req.params.jacketId);

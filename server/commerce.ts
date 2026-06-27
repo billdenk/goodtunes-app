@@ -1346,9 +1346,31 @@ export function registerCommerceRoutes(app: Express) {
     return res.status(403).json({ message: "Forbidden" });
   };
 
+  // Task #2335 — stricter EDIT gate for catalog/price mutations. A
+  // read-only press "Staff" teammate holds a manufacturer membership (so
+  // requirePressScope passes) but must NOT change the catalog, prices, or
+  // specs — same read-only intent already enforced on the press profile,
+  // People, and pipeline. pressUserCanEdit returns true for super_admin /
+  // admin and press Owner/Admin, false for Staff (edit_metadata=false
+  // override). Chain this AFTER requirePressScope on every mutation so a
+  // non-member still gets the scope "Forbidden" and only an in-scope Staff
+  // hits this clearer message.
+  const requirePressEditor = async (req: Request, res: Response, next: () => void) => {
+    const userId = (req as any).adminUserId as string | undefined;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const { pressUserCanEdit } = await import("./auth/partnerPermissions");
+    if (await pressUserCanEdit(userId, String(req.params.id))) return next();
+    return res.status(403).json({
+      message:
+        "Staff accounts can view the press and invite artists, but only an Owner/Admin can change the catalog or prices.",
+    });
+  };
+
   // Task #218 — mount the press catalog routes (formats/tiers/colors)
   // under the same requirePressScope as the legacy format-cost routes.
-  registerPressCatalogRoutes(app, requireAdmin, requirePressScope);
+  // Task #2335 — also pass the editor gate so the catalog mutation routes
+  // can additionally require Owner/Admin (reads stay scope-only).
+  registerPressCatalogRoutes(app, requireAdmin, requirePressScope, requirePressEditor);
 
   // Task #522 — Press portal endpoints (customers/pipeline/invite/etc.)
   // share the same press-scope gate.
@@ -1398,7 +1420,7 @@ export function registerCommerceRoutes(app: Express) {
     paymentProcessingCents: z.number().int().min(0),
     goodtunesCents: z.number().int().min(0),
   });
-  app.put("/api/admin/manufacturers/:id/format-costs/:format", requireAdmin, requirePressScope, async (req, res) => {
+  app.put("/api/admin/manufacturers/:id/format-costs/:format", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const format = String(req.params.format);
     if (!ALBUM_FORMATS.includes(format as AlbumFormat)) {
@@ -1421,7 +1443,7 @@ export function registerCommerceRoutes(app: Express) {
     res.json({ ...row, isOverride: true });
   });
 
-  app.delete("/api/admin/manufacturers/:id/format-costs/:format", requireAdmin, requirePressScope, async (req, res) => {
+  app.delete("/api/admin/manufacturers/:id/format-costs/:format", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const format = String(req.params.format);
     await db

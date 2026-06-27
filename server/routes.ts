@@ -30409,23 +30409,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // So the template-specs read/write/delete must admit a manufacturer
   // membership for THIS press, not just super_admin/admin. Operational
   // routing/pricing parity with the rest of the catalog.
+  // Task #2335 — `requireEdit` additionally demands Owner/Admin rights:
+  // a read-only press "Staff" teammate holds a manufacturer membership
+  // (so the read path passes) but must NOT change catalog specs/prices.
+  // pressUserCanEdit is the canonical editor check (super_admin/admin and
+  // press Owner/Admin → true; Staff edit_metadata=false override → false).
   async function requirePressManager(
     req: Request,
     res: Response,
     pressId: string,
+    opts: { requireEdit?: boolean } = {},
   ): Promise<boolean> {
     const info = await getUserRole(req.session.userId!);
     if (!info) {
       res.status(403).json({ message: "Forbidden" });
       return false;
     }
-    if (info.role === "super_admin" || info.role === "admin") return true;
-    const { findMembershipForScope } = await import("./auth/roles");
-    if (await findMembershipForScope(req.session.userId!, "manufacturer", pressId)) {
-      return true;
+    const isOperator = info.role === "super_admin" || info.role === "admin";
+    if (!isOperator) {
+      const { findMembershipForScope } = await import("./auth/roles");
+      if (!(await findMembershipForScope(req.session.userId!, "manufacturer", pressId))) {
+        res.status(403).json({ message: "Forbidden" });
+        return false;
+      }
     }
-    res.status(403).json({ message: "Forbidden" });
-    return false;
+    if (opts.requireEdit && !isOperator) {
+      const { pressUserCanEdit } = await import("./auth/partnerPermissions");
+      if (!(await pressUserCanEdit(req.session.userId!, pressId))) {
+        res.status(403).json({
+          message:
+            "Staff accounts can view the press and invite artists, but only an Owner/Admin can change the catalog or prices.",
+        });
+        return false;
+      }
+    }
+    return true;
   }
 
   // Re-tag the presence of every stored (file-bearing) component against
@@ -30725,7 +30743,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.put("/api/admin/manufacturers/:id/template-specs", requireAdminBearer, async (req, res) => {
-    if (!(await requirePressManager(req, res, req.params.id))) return;
+    if (!(await requirePressManager(req, res, req.params.id, { requireEdit: true }))) return;
     const press = await storage.getManufacturerById(req.params.id);
     if (!press) return res.status(404).json({ message: "Press not found" });
     const body = templateSpecBodySchema.safeParse(req.body);
@@ -30757,7 +30775,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "/api/admin/manufacturers/:id/template-specs/:specId",
     requireAdminBearer,
     async (req, res) => {
-      if (!(await requirePressManager(req, res, req.params.id))) return;
+      if (!(await requirePressManager(req, res, req.params.id, { requireEdit: true }))) return;
       await storage.deletePressTemplateSpec(req.params.id, req.params.specId);
       res.json({ ok: true });
     },
@@ -30806,7 +30824,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "/api/admin/manufacturers/:id/audio-spec",
     requireAdminBearer,
     async (req, res) => {
-      if (!(await requirePressManager(req, res, req.params.id))) return;
+      if (!(await requirePressManager(req, res, req.params.id, { requireEdit: true }))) return;
       const press = await storage.getManufacturerById(req.params.id);
       if (!press) return res.status(404).json({ message: "Press not found" });
       const body = audioSpecBodySchema.safeParse(req.body);
@@ -30845,7 +30863,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "/api/admin/manufacturers/:id/audio-spec",
     requireAdminBearer,
     async (req, res) => {
-      if (!(await requirePressManager(req, res, req.params.id))) return;
+      if (!(await requirePressManager(req, res, req.params.id, { requireEdit: true }))) return;
       await storage.deletePressAudioSpec(req.params.id);
       res.json({ ok: true });
     },
@@ -30874,7 +30892,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "/api/admin/manufacturers/:id/gooddeed-printing",
     requireAdminBearer,
     async (req, res) => {
-      if (!(await requirePressManager(req, res, req.params.id))) return;
+      if (!(await requirePressManager(req, res, req.params.id, { requireEdit: true }))) return;
       const press = await storage.getManufacturerById(req.params.id);
       if (!press) return res.status(404).json({ message: "Press not found" });
       const { active, tiers } = req.body as { active: unknown; tiers: unknown };

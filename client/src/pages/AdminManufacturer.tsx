@@ -1048,6 +1048,10 @@ type Catalog = {
   formats: CatalogFormat[];
   jackets: CatalogJacket[];
   defaultJacketId: string | null;
+  // Task #2335 — server-computed editor flag (pressUserCanEdit). Read-only
+  // press "Staff" teammates get `false`; absent/undefined is treated as
+  // editable (operators + Owner/Admin) so older payloads don't lock out.
+  canEdit?: boolean;
 };
 
 const parseDollars = (v: string): number | null => {
@@ -1970,10 +1974,14 @@ function CatalogCsvButtons({
   pressId,
   pressName,
   onApplied,
+  canEdit = true,
 }: {
   pressId: string;
   pressName: string | null;
   onApplied: () => void;
+  // Task #2335 — Export stays available to read-only Staff; Upload (which
+  // writes the catalog) is hidden for non-editors.
+  canEdit?: boolean;
 }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -2101,13 +2109,15 @@ function CatalogCsvButtons({
             <Download className="w-4 h-4 mr-2" />
             {exporting ? "Exporting…" : "Export CSV"}
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => setOpen(true)}
-            data-testid="button-catalog-csv-upload"
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Upload CSV
-          </DropdownMenuItem>
+          {canEdit && (
+            <DropdownMenuItem
+              onSelect={() => setOpen(true)}
+              data-testid="button-catalog-csv-upload"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Upload CSV
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -2466,14 +2476,19 @@ export function PressCatalogPanel({
   const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
     queryKey: ["/api/me/role"],
   });
-  const canEdit =
+  // canView gates whether the panel renders at all (scope-level access).
+  // Task #2335 — editing is a stricter check resolved server-side and
+  // surfaced as `data.canEdit`; read-only press "Staff" can VIEW the
+  // catalog but not change formats/colors/prices/specs.
+  const canView =
     roleInfo?.role === "super_admin" ||
     roleInfo?.role === "admin" ||
     (roleInfo?.role === "manufacturer" && roleInfo?.roleScopeId === pressId);
   const { data, isLoading } = useQuery<Catalog>({
     queryKey: ["/api/admin/manufacturers", pressId, "catalog"],
-    enabled: !!pressId && !!canEdit,
+    enabled: !!pressId && !!canView,
   });
+  const canEdit = data?.canEdit !== false;
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["/api/admin/manufacturers", pressId, "catalog"] });
@@ -2525,7 +2540,7 @@ export function PressCatalogPanel({
     }
   }, [data, activeTab]);
 
-  if (roleInfo && !canEdit) return null;
+  if (roleInfo && !canView) return null;
 
   const offered = new Set((data?.formats ?? []).map((f) => f.format));
   const offeredFormats = ALBUM_FORMATS.filter((f) => offered.has(f));
@@ -2540,8 +2555,13 @@ export function PressCatalogPanel({
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <CatalogCsvButtons pressId={pressId} pressName={pressDomain} onApplied={invalidate} />
-          {pressDomain === "hellbendervinyl.com" && (
+          <CatalogCsvButtons
+            pressId={pressId}
+            pressName={pressDomain}
+            onApplied={invalidate}
+            canEdit={canEdit}
+          />
+          {canEdit && pressDomain === "hellbendervinyl.com" && (
             <>
               <HellbenderImportButton pressId={pressId} catalog={data ?? null} onImported={invalidate} />
               <HellbenderPricingSyncButton pressId={pressId} onSynced={invalidate} />
@@ -2549,6 +2569,15 @@ export function PressCatalogPanel({
           )}
         </div>
       </div>
+      {!canEdit && (
+        <div
+          className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600"
+          data-testid="banner-catalog-readonly"
+        >
+          You have view-only access to this catalog. Only an Owner or Admin can change formats,
+          colors, prices, or specs.
+        </div>
+      )}
       {isLoading || !data ? (
         <div className="text-slate-500 text-sm py-4">Loading…</div>
       ) : (
@@ -2570,33 +2599,44 @@ export function PressCatalogPanel({
             }}
             addBusy={toggleFormat.isPending}
             removeBusy={toggleFormat.isPending}
+            canEdit={canEdit}
           />
-          {activeTab === "gooddeeds" ? (
-            <GoodDeedPrintingEditor pressId={pressId} />
-          ) : activeTab ? (
-            <CatalogEditor
-              pressId={pressId}
-              pressDomain={pressDomain}
-              placeholderUrl={placeholderUrl}
-              pressLogoUrl={pressLogoUrl ?? null}
-              catalog={data}
-              activeFormat={activeTab as AlbumFormat}
-              setActiveFormat={(f) => setActiveTab(f)}
-              offeredFormats={offeredFormats}
-              offered={offered}
-              onChanged={invalidate}
-              onAddVinylSize={(fmt) => {
-                setActiveTab(fmt);
-                toggleFormat.mutate({ format: fmt, enabled: true });
-              }}
-              addBusy={toggleFormat.isPending}
-              onRemoveFormat={() => toggleFormat.mutate({ format: activeTab as AlbumFormat, enabled: false })}
-              removeBusy={toggleFormat.isPending}
-              isFormatHidden={!!(data?.formats.find((f) => f.format === activeTab)?.hidden)}
-              onHideFormat={(hidden) => hideFormat.mutate({ format: activeTab as AlbumFormat, hidden })}
-              hideBusy={hideFormat.isPending}
-            />
-          ) : null}
+          {/* Task #2335 — FormatDropdown stays OUTSIDE the fieldset so
+              read-only Staff can still switch formats to view them; the
+              editor block below is disabled wholesale for non-editors. A
+              native disabled fieldset also disables every nested button /
+              input / Radix trigger, so the spec cards lock too. */}
+          <fieldset
+            disabled={!canEdit}
+            className={canEdit ? "contents" : "min-w-0 space-y-5 opacity-100"}
+          >
+            {activeTab === "gooddeeds" ? (
+              <GoodDeedPrintingEditor pressId={pressId} />
+            ) : activeTab ? (
+              <CatalogEditor
+                pressId={pressId}
+                pressDomain={pressDomain}
+                placeholderUrl={placeholderUrl}
+                pressLogoUrl={pressLogoUrl ?? null}
+                catalog={data}
+                activeFormat={activeTab as AlbumFormat}
+                setActiveFormat={(f) => setActiveTab(f)}
+                offeredFormats={offeredFormats}
+                offered={offered}
+                onChanged={invalidate}
+                onAddVinylSize={(fmt) => {
+                  setActiveTab(fmt);
+                  toggleFormat.mutate({ format: fmt, enabled: true });
+                }}
+                addBusy={toggleFormat.isPending}
+                onRemoveFormat={() => toggleFormat.mutate({ format: activeTab as AlbumFormat, enabled: false })}
+                removeBusy={toggleFormat.isPending}
+                isFormatHidden={!!(data?.formats.find((f) => f.format === activeTab)?.hidden)}
+                onHideFormat={(hidden) => hideFormat.mutate({ format: activeTab as AlbumFormat, hidden })}
+                hideBusy={hideFormat.isPending}
+              />
+            ) : null}
+          </fieldset>
         </div>
       )}
     </div>
@@ -2615,6 +2655,7 @@ function FormatDropdown({
   onRemoveFormat,
   addBusy,
   removeBusy,
+  canEdit = true,
 }: {
   offered: Set<string>;
   activeTab: CatalogTab | null;
@@ -2623,13 +2664,16 @@ function FormatDropdown({
   onRemoveFormat?: (fmt: AlbumFormat) => void;
   addBusy?: boolean;
   removeBusy?: boolean;
+  // Task #2335 — read-only Staff can switch between formats to VIEW them
+  // but cannot add or remove formats.
+  canEdit?: boolean;
 }) {
   const offeredVinyl = VINYL_FORMATS.filter((f) => offered.has(f));
   const vinylActive = !!activeTab && activeTab !== "gooddeeds" && isVinylFormat(activeTab as AlbumFormat);
 
-  const canAddVinyl = offeredVinyl.length === 0;
-  const canAddCD = !offered.has("cd");
-  const canAddCassette = !offered.has("cassette");
+  const canAddVinyl = canEdit && offeredVinyl.length === 0;
+  const canAddCD = canEdit && !offered.has("cd");
+  const canAddCassette = canEdit && !offered.has("cassette");
   const hasAddable = canAddVinyl || canAddCD || canAddCassette;
 
   const activeLabel =
@@ -2746,7 +2790,7 @@ function FormatDropdown({
               </>
             )}
             {/* Remove the currently active physical format */}
-            {onRemoveFormat && activeTab && activeTab !== "gooddeeds" && offered.has(activeTab) && (
+            {canEdit && onRemoveFormat && activeTab && activeTab !== "gooddeeds" && offered.has(activeTab) && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
