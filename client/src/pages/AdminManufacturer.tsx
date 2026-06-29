@@ -2608,7 +2608,7 @@ export function PressCatalogPanel({
               input / Radix trigger, so the spec cards lock too. */}
           <fieldset
             disabled={!canEdit}
-            className={canEdit ? "contents" : "min-w-0 space-y-5 opacity-100"}
+            className={canEdit ? "min-w-0" : "min-w-0 space-y-5 opacity-100"}
           >
             {activeTab === "gooddeeds" ? (
               <GoodDeedPrintingEditor pressId={pressId} />
