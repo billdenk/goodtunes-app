@@ -547,6 +547,33 @@ SQL
 migrate_shipping_rates dev  "${DATABASE_URL:-}"
 migrate_shipping_rates prod "${PROD_DATABASE_URL:-}"
 
+# Per-format turnaround override — press_formats.turnaround_weeks_min/max let
+# the operator say a specific product (7", 12" LP, CD…) presses faster or
+# slower than the plant's standard, falling back to the press-level default
+# (manufacturers.turnaround_weeks_*) when null. Declared in shared/schema.ts;
+# hand-apply the additive DDL on BOTH dev and prod so the schema-drift guard
+# stays green on a freshly-cloned dev and the publish dev→prod diff stays
+# empty. Idempotent (IF NOT EXISTS).
+migrate_press_formats_turnaround() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press_formats turnaround migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE IF EXISTS press_formats
+  ADD COLUMN IF NOT EXISTS turnaround_weeks_min integer,
+  ADD COLUMN IF NOT EXISTS turnaround_weeks_max integer;
+SQL
+  then
+    echo "post-merge: press_formats turnaround migration ok on $label"
+  else
+    echo "post-merge: WARNING — press_formats turnaround migration failed on $label (continuing)"
+  fi
+}
+migrate_press_formats_turnaround dev  "${DATABASE_URL:-}"
+migrate_press_formats_turnaround prod "${PROD_DATABASE_URL:-}"
+
 # Digital GoodDeed cert paper size — orders.cert_paper_size lets a digital
 # (synthetic-cert) owner flip US Letter ↔ A4 from the cert viewer. NULL =
 # country-derived default. Declared in shared/schema.ts; hand-apply the

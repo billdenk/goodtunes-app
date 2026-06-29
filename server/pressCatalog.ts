@@ -119,6 +119,10 @@ export type CatalogFormat = {
   // Task #2168 — non-destructive hide: format is still in the DB (color
   // groups + ladder intact) but excluded from the artist-facing picker.
   hidden: boolean;
+  // Per-format turnaround override (week range). Null = inherit the
+  // press-level default (manufacturers.turnaround_weeks_*).
+  turnaroundWeeksMin: number | null;
+  turnaroundWeeksMax: number | null;
 };
 export type CatalogJacket = {
   id: string;
@@ -256,6 +260,8 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
       tiers: tiersByFormat.get(f.format) ?? [],
       defaultJacketId: getFormatDefaultJacketId(jRows, f.format),
       hidden: f.hiddenAt !== null,
+      turnaroundWeeksMin: f.turnaroundWeeksMin ?? null,
+      turnaroundWeeksMax: f.turnaroundWeeksMax ?? null,
     })),
     jackets: jRows.map((j) => ({
       id: j.id,
@@ -2249,6 +2255,28 @@ export function registerPressCatalogRoutes(
       await db
         .update(pressFormats)
         .set({ hiddenAt: body.hidden ? new Date() : null })
+        .where(and(eq(pressFormats.pressId, pressId), eq(pressFormats.format, format)));
+      return res.json(await getPressCatalog(pressId));
+    }
+
+    // Per-format turnaround override. Null (or blank) clears the override so
+    // this product falls back to the press-level default. Editing turnaround
+    // never toggles the format on/off, so it's resolved before `enabled`.
+    if ("turnaroundWeeksMin" in body || "turnaroundWeeksMax" in body) {
+      const parseWk = (v: unknown): number | null => {
+        if (v === null || v === undefined || v === "") return null;
+        const n = Number(v);
+        if (!Number.isInteger(n) || n <= 0 || n > 520) return null;
+        return n;
+      };
+      const tMin = parseWk(body.turnaroundWeeksMin);
+      const tMax = parseWk(body.turnaroundWeeksMax);
+      if (tMin != null && tMax != null && tMin > tMax) {
+        return res.status(400).json({ message: "Min weeks can't be more than max weeks." });
+      }
+      await db
+        .update(pressFormats)
+        .set({ turnaroundWeeksMin: tMin, turnaroundWeeksMax: tMax })
         .where(and(eq(pressFormats.pressId, pressId), eq(pressFormats.format, format)));
       return res.json(await getPressCatalog(pressId));
     }

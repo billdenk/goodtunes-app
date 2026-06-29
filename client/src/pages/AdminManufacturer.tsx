@@ -1035,6 +1035,12 @@ type CatalogFormat = {
   tiers: CatalogTier[];
   // Task #1998 — format-specific default jacket resolved by the server.
   defaultJacketId: string | null;
+  // Task #2168 — non-destructive hide flag (excluded from artist picker).
+  hidden?: boolean;
+  // Per-format turnaround override (week range). Null = inherit the
+  // press-level default (manufacturers.turnaround_weeks_*).
+  turnaroundWeeksMin?: number | null;
+  turnaroundWeeksMax?: number | null;
 };
 type CatalogJacket = {
   id: string;
@@ -3104,6 +3110,169 @@ function AddVinylSizePicker({
   );
 }
 
+// Per-product turnaround override. The press-level "Standard turnaround"
+// (manufacturers.turnaround_weeks_*) is the default; this lets the operator
+// say a specific product presses faster or slower (e.g. a 7" turns around
+// quicker than a gatefold double LP). Blank inputs inherit the press default.
+// Saves through the same formats PUT the hide/enable toggles use.
+function FormatTurnaroundEditor({
+  pressId,
+  format,
+  initialMin,
+  initialMax,
+  onChanged,
+}: {
+  pressId: string;
+  format: AlbumFormat;
+  initialMin: number | null;
+  initialMax: number | null;
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const { data: press } = useQuery<Manufacturer>({
+    queryKey: ["/api/manufacturers", pressId],
+  });
+  const [min, setMin] = useState(initialMin != null ? String(initialMin) : "");
+  const [max, setMax] = useState(initialMax != null ? String(initialMax) : "");
+  // Resync when the operator switches products (or a save refetches the
+  // catalog) so the inputs always mirror the saved values.
+  useEffect(() => {
+    setMin(initialMin != null ? String(initialMin) : "");
+    setMax(initialMax != null ? String(initialMax) : "");
+  }, [format, initialMin, initialMax]);
+
+  const rangeLabel = (lo: number | null, hi: number | null): string | null => {
+    if (lo != null && hi != null) return `${lo}–${hi} weeks`;
+    if (lo != null) return `${lo}+ weeks`;
+    if (hi != null) return `up to ${hi} weeks`;
+    return null;
+  };
+  const pressMin = press?.turnaroundWeeksMin ?? null;
+  const pressMax = press?.turnaroundWeeksMax ?? null;
+  const pressLabel = rangeLabel(pressMin, pressMax);
+  // A blank side inherits the press default per-field — matching the "leave
+  // blank to use the press default" copy and the input placeholders. So a 7"
+  // with min 6 and a blank max resolves to 6–<press default max>, not "6+".
+  const resolvedMin = initialMin ?? pressMin;
+  const resolvedMax = initialMax ?? pressMax;
+  const resolvedLabel = rangeLabel(resolvedMin, resolvedMax);
+
+  const parse = (s: string): number | null => {
+    const t = s.trim();
+    if (t === "") return null;
+    const n = Number(t);
+    return Number.isInteger(n) && n > 0 && n <= 520 ? n : null;
+  };
+  const parsedMin = parse(min);
+  const parsedMax = parse(max);
+  const minBad = min.trim() !== "" && parsedMin === null;
+  const maxBad = max.trim() !== "" && parsedMax === null;
+  const rangeBad = parsedMin != null && parsedMax != null && parsedMin > parsedMax;
+  const dirty = parsedMin !== (initialMin ?? null) || parsedMax !== (initialMax ?? null);
+  const hasOverride = initialMin != null || initialMax != null;
+
+  const save = useMutation({
+    mutationFn: async (payload: {
+      turnaroundWeeksMin: number | null;
+      turnaroundWeeksMax: number | null;
+    }) => {
+      const r = await apiRequest(
+        "PUT",
+        `/api/admin/manufacturers/${pressId}/catalog/formats/${format}`,
+        payload,
+      );
+      return r.json();
+    },
+    onSuccess: () => {
+      onChanged();
+      toast({ title: "Turnaround saved" });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't save turnaround",
+        description: e?.message ?? "",
+        variant: "destructive",
+      }),
+  });
+
+  const inputCls =
+    "w-16 h-8 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]";
+
+  return (
+    <div
+      className="border-t border-slate-100 px-5 py-4"
+      data-testid={`format-turnaround-${format}`}
+    >
+      <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+        Turnaround
+      </span>
+      <p className="text-sm text-slate-500 mt-1">
+        How long this product takes to press.{" "}
+        {pressLabel
+          ? `Leave blank to use the press default (${pressLabel}).`
+          : "Leave blank to use the press default."}
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          inputMode="numeric"
+          value={min}
+          onChange={(e) => setMin(e.target.value)}
+          placeholder={pressMin != null ? String(pressMin) : "min"}
+          aria-label="Minimum weeks"
+          className={inputCls}
+          data-testid={`input-format-turnaround-min-${format}`}
+        />
+        <span className="text-sm text-slate-400">–</span>
+        <input
+          inputMode="numeric"
+          value={max}
+          onChange={(e) => setMax(e.target.value)}
+          placeholder={pressMax != null ? String(pressMax) : "max"}
+          aria-label="Maximum weeks"
+          className={inputCls}
+          data-testid={`input-format-turnaround-max-${format}`}
+        />
+        <span className="text-sm text-slate-500">weeks</span>
+        <button
+          type="button"
+          onClick={() =>
+            save.mutate({ turnaroundWeeksMin: parsedMin, turnaroundWeeksMax: parsedMax })
+          }
+          disabled={!dirty || rangeBad || minBad || maxBad || save.isPending}
+          className="inline-flex items-center h-8 px-3 rounded-md bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-40 disabled:cursor-not-allowed"
+          data-testid={`button-save-format-turnaround-${format}`}
+        >
+          {save.isPending ? "Saving…" : "Save"}
+        </button>
+        {hasOverride && (
+          <button
+            type="button"
+            onClick={() => save.mutate({ turnaroundWeeksMin: null, turnaroundWeeksMax: null })}
+            disabled={save.isPending}
+            className="text-xs text-slate-500 hover:underline underline-offset-2"
+            data-testid={`button-clear-format-turnaround-${format}`}
+          >
+            Use press default
+          </button>
+        )}
+      </div>
+      {rangeBad && (
+        <p className="mt-2 text-xs text-rose-600">Min weeks can't be more than max weeks.</p>
+      )}
+      <p
+        className="mt-2 text-xs text-slate-400"
+        data-testid={`text-format-turnaround-resolved-${format}`}
+      >
+        {hasOverride
+          ? `This product: ${resolvedLabel ?? "—"}`
+          : pressLabel
+          ? `Using press default: ${pressLabel}`
+          : "No turnaround set yet."}
+      </p>
+    </div>
+  );
+}
+
 function CatalogEditor({
   pressId,
   pressDomain,
@@ -3639,6 +3808,15 @@ function CatalogEditor({
             </div>
           </div>
         )}
+
+        {/* TURNAROUND — per-product override (falls back to press default) */}
+        <FormatTurnaroundEditor
+          pressId={pressId}
+          format={fmt}
+          initialMin={fmtRow?.turnaroundWeeksMin ?? null}
+          initialMax={fmtRow?.turnaroundWeeksMax ?? null}
+          onChanged={onChanged}
+        />
 
         {/* COLOR OPTIONS — vinyl only */}
         {isVinyl && (

@@ -2377,6 +2377,13 @@ export const pressFormats = pgTable(
     format: text("format").notNull(),
     position: integer("position").notNull().default(0),
     hiddenAt: timestamp("hidden_at"),
+    // Per-format turnaround override (inclusive week range). Some products
+    // press faster or slower than the plant's standard — e.g. a 7" turns
+    // around quicker than a gatefold double LP. Null on either column =
+    // inherit the press-level default (manufacturers.turnaround_weeks_*),
+    // which still drives the catalog summary header.
+    turnaroundWeeksMin: integer("turnaround_weeks_min"),
+    turnaroundWeeksMax: integer("turnaround_weeks_max"),
   },
   (t) => ({
     pressFormatUniq: unique("press_formats_press_format_uniq").on(t.pressId, t.format),
