@@ -757,7 +757,16 @@ export function __setTestOauthExchange(fn: OauthExchangeFn | null): void {
   __testOauthExchange = fn;
 }
 
-export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+export async function registerRoutes(
+  httpServer: Server,
+  app: Express,
+  opts?: { forceProductionAuth?: boolean },
+): Promise<Server> {
+  // When true the request-time dev-bypass in /api/login is closed for this
+  // server instance regardless of process.env.NODE_ENV. Used by test harnesses
+  // that need deterministic production-mode auth on a per-server basis without
+  // racing against other test files that may restore NODE_ENV concurrently.
+  const _forceProductionAuth = opts?.forceProductionAuth ?? false;
   const PgSession = connectPgSimple(session);
   const sessionSecret = process.env.SESSION_SECRET;
   if (!sessionSecret) {
@@ -1313,7 +1322,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Dev-only TOTP bypass. Production (NODE_ENV=production) always
       // enforces 2FA; this branch only fires locally so we can iterate
       // without the authenticator dance every session.
-      if (process.env.NODE_ENV !== "production") {
+      if (!_forceProductionAuth && process.env.NODE_ENV !== "production") {
         req.session.userId = user.id;
         req.session.kind = "admin";
         const token = generateToken();
@@ -1344,6 +1353,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const landingPath = await landingPathForUser(user.id);
           return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath, kind: "admin" });
         }
+        // Cookie was present but the bypass did not fire. Log a warning so
+        // production auth issues can be diagnosed without guessing whether the
+        // browser actually sent the cookie (it did — we saw it above).
+        const bypassReason = !trusted
+          ? "no-db-row (expired, pruned, or never stored)"
+          : "user-id-mismatch";
+        console.warn(`[auth] gt_trusted_device cookie present but bypass rejected (${bypassReason}) for user ${user.id}`);
       }
       req.session.pendingTotpUserId = user.id;
       const totp = await storage.getAdminTotp(user.id);

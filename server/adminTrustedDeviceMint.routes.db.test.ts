@@ -16,11 +16,13 @@
 //   2. a hash-only row is actually written to admin_trusted_devices.
 //
 // Harness notes (mirrors adminTrustedDevice.routes.db.test.ts):
-//  - We mount the full route tree over a loopback socket and force
-//    NODE_ENV=production *after* registerRoutes() — registration in production
-//    mounts serveStaticAssets (__dirname, throws under tsx ESM), but the routes
-//    we exercise read NODE_ENV at request time and the password leg's dev-only
-//    2FA bypass must be closed so the second-factor flow actually runs.
+//  - We mount the full route tree over a loopback socket and pass
+//    `forceProductionAuth: true` to registerRoutes(). This closes the
+//    dev-only 2FA bypass at the server-instance level (a closure variable
+//    inside registerRoutes), avoiding any flip of process.env.NODE_ENV.
+//    The old pattern (flip after registerRoutes, restore in after()) caused
+//    a race when another test file's after() restored NODE_ENV to a non-
+//    production value while this file's TOTP verify test was still in flight.
 //  - The verify endpoints need `req.session.pendingTotpUserId`, which only the
 //    password leg of /api/login sets. So each test drives the password leg
 //    first, captures the session cookie, and replays it on the verify call.
@@ -46,7 +48,7 @@ import { promisify } from "node:util";
 import { createServer, type Server as HttpServer } from "node:http";
 import { sql } from "drizzle-orm";
 import express from "express";
-import { db, pool } from "./db";
+import { db } from "./db";
 import { authKindMiddleware } from "./auth/host";
 import { registerRoutes } from "./routes";
 import { storage } from "./storage";
@@ -68,7 +70,6 @@ const created = {
 
 let baseUrl = "";
 let httpServer: HttpServer | undefined;
-const priorNodeEnv = process.env.NODE_ENV;
 
 // Mirror server/routes.ts hashPassword so the seeded admin's stored hash
 // verifies against the plaintext we POST.
@@ -87,15 +88,23 @@ before(async () => {
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: false }));
   httpServer = createServer(app);
-  await registerRoutes(httpServer, app);
+  // forceProductionAuth: true closes the dev-bypass at the server-instance
+  // level — no process.env.NODE_ENV flip needed, which eliminates the race
+  // condition where another test file's after() restores NODE_ENV to a
+  // non-production value while this file's tests are still running.
+  await registerRoutes(httpServer, app, { forceProductionAuth: true });
   await new Promise<void>((resolve) => httpServer!.listen(0, "127.0.0.1", resolve));
   const addr = httpServer!.address();
   const port = typeof addr === "object" && addr ? addr.port : 0;
   baseUrl = `http://127.0.0.1:${port}`;
-
-  // Flip to production AFTER registration so the request-time dev-bypass gate
-  // in /api/login is closed and the real second-factor flow runs.
-  process.env.NODE_ENV = "production";
+  // Warm up the DB pool before any test runs. connect-pg-simple fires an async
+  // CREATE TABLE IF NOT EXISTS query when instantiated; if the pool is under
+  // pressure (e.g. from a preceding test file's connections that haven't yet
+  // been GC'd by PostgreSQL), the first test's storage calls can race against
+  // that init query and see a temporarily saturated pool. Awaiting a simple
+  // SELECT here blocks until at least one pool connection is free and the pool
+  // is confirmed live, so subsequent tests don't hit a cold-pool timeout.
+  await db.execute(sql`SELECT 1`);
 });
 
 after(async () => {
@@ -117,10 +126,9 @@ after(async () => {
     }
   } finally {
     if (httpServer) await new Promise<void>((r) => httpServer!.close(() => r()));
-    await pool.end();
-    // Restore the env we flipped in `before`.
-    if (priorNodeEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = priorNodeEnv;
+    // pool.end() intentionally omitted: closing the shared drizzle/pg pool here
+    // would kill it for any other test file running concurrently in the same
+    // worker. --test-force-exit closes all connections when the process exits.
   }
 });
 
@@ -155,6 +163,13 @@ async function passwordLeg(email: string): Promise<string> {
     headers: { "content-type": "application/json", "x-forwarded-proto": "https" },
     body: JSON.stringify({ username: email, password: PASSWORD, kind: "admin" }),
   });
+  // Fail loudly if the login itself errors — a 500 here (e.g. from a cold pool)
+  // would produce a bare session cookie with no pendingTotpUserId, causing a
+  // confusing 401 on the follow-up verify call instead of a clear root cause.
+  assert.ok(
+    res.status < 300,
+    `password leg must succeed (got ${res.status}; body: ${await res.text()})`,
+  );
   // We never bypass here (no trusted-device cookie), so the password leg must
   // hand back a session cookie carrying pendingTotpUserId.
   const cookie = cookieHeaderFrom(res);
@@ -240,6 +255,56 @@ test("email-OTP verify with rememberDevice mints the trusted-device cookie + DB 
 
   const rawToken = assertTrustedDeviceCookie(setCookieLine(res, "gt_trusted_device"));
   await assertDeviceRow(admin.id, rawToken);
+});
+
+test("email-OTP mint + re-login uses trusted-device bypass end-to-end", async () => {
+  const admin = await seedAdmin("email");
+
+  // Step 1: password leg → session cookie (no trusted-device cookie yet)
+  const sessionCookie = await passwordLeg(admin.email);
+
+  // Step 2: overwrite the server-issued OTP with a code we control so we can
+  // drive the verify endpoint without needing the emailed value.
+  const code = "737373";
+  await storage.setAdminEmailOtp(admin.id, await hashCode(code), new Date(Date.now() + 10 * 60_000));
+
+  // Step 3: verify the code with rememberDevice=true → mints the trusted-device
+  // cookie and writes the SHA-256 hash row to admin_trusted_devices.
+  const verifyRes = await fetch(`${baseUrl}/api/auth/email-otp/verify`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-forwarded-proto": "https", cookie: sessionCookie },
+    body: JSON.stringify({ code, rememberDevice: true }),
+  });
+  assert.equal(verifyRes.status, 200, "email-OTP verify must succeed");
+  const verifyJson: any = await verifyRes.json().catch(() => null);
+  if (verifyJson?.token) created.tokens.add(verifyJson.token);
+
+  const deviceCookieLine = setCookieLine(verifyRes, "gt_trusted_device");
+  const rawToken = assertTrustedDeviceCookie(deviceCookieLine);
+  await assertDeviceRow(admin.id, rawToken);
+
+  // Step 4: re-login WITHOUT the session cookie (simulates a fresh browser
+  // visit after logout) but WITH the trusted-device cookie. The bypass branch
+  // in /api/login must fire and return a bearer token without asking for a
+  // second factor. This is the end-to-end path that the existing isolated
+  // tests (bypass-side seeds the DB directly; mint-side checks cookie attrs)
+  // do not cover together.
+  const reLoginRes = await fetch(`${baseUrl}/api/login`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-forwarded-proto": "https",
+      cookie: `gt_trusted_device=${encodeURIComponent(rawToken)}`,
+    },
+    body: JSON.stringify({ username: admin.email, password: PASSWORD, kind: "admin" }),
+  });
+  const reLoginJson: any = await reLoginRes.json().catch(() => null);
+  assert.equal(reLoginRes.status, 200, "re-login with a valid trusted-device cookie must return 200");
+  assert.ok(reLoginJson?.token, "re-login bypass must issue a bearer token");
+  assert.equal(reLoginJson?.requiresEmailCode, undefined, "email code must NOT be requested (bypass taken)");
+  assert.equal(reLoginJson?.requiresEnrollment, undefined, "TOTP enrollment must NOT be requested");
+  assert.equal(reLoginJson?.requires2fa, undefined, "TOTP verify must NOT be requested");
+  if (reLoginJson?.token) created.tokens.add(reLoginJson.token);
 });
 
 test("email-OTP verify without rememberDevice mints NO cookie and NO row", async () => {

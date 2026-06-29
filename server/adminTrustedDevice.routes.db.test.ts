@@ -12,9 +12,10 @@
 //
 // We mount the full route tree over a loopback socket exactly like
 // server/previewPass.routes.db.test.ts. The dev-only TOTP bypass in /api/login
-// only fires when NODE_ENV !== "production", so we force production for this
-// process (and supply a SESSION_SECRET, required at registration in prod) to
-// exercise the real trusted-device branch. 127.0.0.1 is an unknown host, so the
+// must be closed to exercise the real trusted-device branch. We do this by
+// passing `{ forceProductionAuth: true }` to registerRoutes(), which sets a
+// closure-scoped flag inside the route tree for THIS server instance — no
+// process.env.NODE_ENV flip needed. 127.0.0.1 is an unknown host, so the
 // host/kind boundary is skipped and we drive the admin side via `kind` in the
 // body. The trusted-device row is created directly via storage (the cookie mint
 // itself is covered implicitly — we feed the same SHA-256(token) the verify
@@ -24,12 +25,12 @@
 //
 //   npx tsx --test server/adminTrustedDevice.routes.db.test.ts
 //
-// NOTE on NODE_ENV: the /api/login route reads process.env.NODE_ENV at REQUEST
-// time (the dev-only 2FA bypass only fires when it's not "production"). We must
-// flip it to "production" to reach the trusted-device branch — but only AFTER
-// registerRoutes(), because registration in production mounts serveStaticAssets
-// (server/static.ts) which uses __dirname and throws under tsx (ESM). So we
-// register in the default env and flip the flag at the end of `before`.
+// NOTE on forceProductionAuth: the old approach flipped process.env.NODE_ENV to
+// "production" in before() and restored it in after(). This caused a race when
+// two test files ran in the same suite — one file's after() could restore
+// NODE_ENV while the other file's TOTP verify was still in flight, so
+// pendingTotpUserId was never set → 401. The forceProductionAuth closure flag
+// is per-server-instance and eliminates that race entirely.
 //
 // Every row seeded here is tracked and torn down in the `after` hook.
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || "t2231-test-session-secret";
@@ -41,7 +42,7 @@ import { promisify } from "node:util";
 import { createServer, type Server as HttpServer } from "node:http";
 import { sql } from "drizzle-orm";
 import express from "express";
-import { db, pool } from "./db";
+import { db } from "./db";
 import { authKindMiddleware } from "./auth/host";
 import { registerRoutes } from "./routes";
 import { storage } from "./storage";
@@ -57,7 +58,6 @@ const created = {
 
 let baseUrl = "";
 let httpServer: HttpServer | undefined;
-const priorNodeEnv = process.env.NODE_ENV;
 
 // Mirror server/routes.ts hashPassword so the seeded admin's stored hash
 // verifies against the plaintext we POST.
@@ -78,7 +78,11 @@ before(async () => {
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: false }));
   httpServer = createServer(app);
-  await registerRoutes(httpServer, app);
+  // forceProductionAuth: true closes the dev-bypass at the server-instance
+  // level — no process.env.NODE_ENV flip needed, which eliminates the race
+  // condition where another test file's after() restores NODE_ENV to a
+  // non-production value while this file's tests are still running.
+  await registerRoutes(httpServer, app, { forceProductionAuth: true });
   await new Promise<void>((resolve) => httpServer!.listen(0, "127.0.0.1", resolve));
   const addr = httpServer!.address();
   const port = typeof addr === "object" && addr ? addr.port : 0;
@@ -96,10 +100,6 @@ before(async () => {
             ${adminEmail}, true, ${"totp"})
   `);
   created.users.add(adminId);
-
-  // Flip to production AFTER registration so the request-time dev-bypass gate
-  // is closed and the trusted-device branch actually runs.
-  process.env.NODE_ENV = "production";
 });
 
 after(async () => {
@@ -117,11 +117,9 @@ after(async () => {
     }
   } finally {
     if (httpServer) await new Promise<void>((r) => httpServer!.close(() => r()));
-    await pool.end();
-    // Restore the env we flipped in `before` so nothing leaks if the runner
-    // ever shares a process across files.
-    if (priorNodeEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = priorNodeEnv;
+    // pool.end() intentionally omitted: closing the shared drizzle/pg pool here
+    // would kill it for any other test file running concurrently in the same
+    // worker. --test-force-exit closes all connections when the process exits.
   }
 });
 

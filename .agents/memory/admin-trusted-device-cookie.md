@@ -1,6 +1,6 @@
 ---
 name: Admin trusted-device cookie SameSite + route-test prod gate
-description: Why the admin "remember this device" cookie must be SameSite=Lax, and how to route-test a request-time NODE_ENV=production gate under tsx.
+description: Why the admin "remember this device" cookie must be SameSite=Lax, and how to route-test the production-only trusted-device bypass without a NODE_ENV flip.
 ---
 
 # Admin "remember this device" trusted-device cookie
@@ -18,20 +18,29 @@ so Lax is both correct and sufficient; nothing here needs the cross-site None.
 endpoints) — keep them in lockstep. Read/bypass, storage expiry filtering, and
 revocation were already correct; only the cookie attribute mattered.
 
-# Route-testing a request-time dev-bypass that keys off NODE_ENV
+# Route-testing the production-only trusted-device bypass
 
-The admin `/api/login` branch has a dev-only 2FA bypass that fires when
-`NODE_ENV !== "production"`, evaluated at REQUEST time. To exercise the
-production-only trusted-device branch in a route test, run the request under
-`NODE_ENV=production`.
+`registerRoutes()` now accepts `opts?: { forceProductionAuth?: boolean }`. When
+`forceProductionAuth: true` is passed, the dev-only 2FA bypass in `/api/login`
+is closed for that server INSTANCE via a closure-scoped flag — without touching
+`process.env.NODE_ENV`.
 
-**Gotcha:** do NOT set `NODE_ENV=production` before `registerRoutes()`. The route
-graph transitively imports `server/index.ts`, whose top-level bootstrap mounts
-the static-asset handler in production; that handler relies on `__dirname`, which
-is undefined under tsx/ESM, so registration throws.
+**Why this replaced the old NODE_ENV flip:** the old pattern (`before()` sets
+`NODE_ENV="production"`, `after()` restores it) caused a race when two test files
+run in the same worker: one file's `after()` could restore NODE_ENV to a non-
+production value while the other file's TOTP verify test was still in flight,
+causing `pendingTotpUserId` to never be set → 401.
 
-**Pattern:** register in the default env, then flip to production at the END of
-the `before()` hook (after registration) and restore it in `after()`. Like every
-db route test, the file still trips the shared port-5000 `listen()` EADDRINUSE
-async noise — harness-tolerated; trust per-assertion pass/fail, not the
-file-level mark.
+**Pattern:** pass `{ forceProductionAuth: true }` as the third arg to
+`registerRoutes()`. Do NOT flip `process.env.NODE_ENV` in test files.
+
+**Warmup note:** the mint test's `before()` hook calls `await db.execute(sql\`SELECT 1\`)`
+after `listen()`. This drains any residual pool contention left by a preceding
+test file's connections before tests run — without it, the TOTP test can see a
+cold-pool timeout that produces a bare session cookie with no `pendingTotpUserId`,
+causing a confusing 401 on the verify call.
+
+**pool.end() note:** do NOT call `pool.end()` in an `after()` hook. Each test file
+runs in its own child process, but the shared drizzle `db` + `pool` export is
+module-local to that process; closing it in `after()` kills all DB access for
+the rest of that file's teardown. `--test-force-exit` handles the process exit.
