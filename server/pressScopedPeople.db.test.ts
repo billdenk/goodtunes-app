@@ -272,6 +272,34 @@ test("person detail 404s an out-of-scope person", async () => {
   assert.equal(res.status, 404, "a press can't read another press's artist");
 });
 
+// Task #2364 — the bug this guards: a manufacturer-role session opening a
+// person page was bounced off the portal. The bounce was the requirePressScope
+// wall mis-firing. Prove the two halves stay correct for the person-detail
+// endpoint: a press scoped to its OWN press reaches its OWN artist (200 — the
+// page they should be able to see, no redirect), but is hard-walled (403) the
+// instant it asks for ANOTHER press's portal endpoint — before scope-within-
+// press even matters. (The 404 case above is the in-press scope check; this is
+// the cross-press portal wall.)
+test("a press reaches its OWN artist (200) but is 403'd on another press's endpoint", async () => {
+  // A second admin whose only hat is manufacturer scoped to otherPress.
+  const otherUserId = await seedManufacturerUser(otherPressId);
+  const otherToken = await tokenFor(otherUserId);
+  const otherPress = async (path: string) => {
+    const res = await fetch(`${baseUrl}${path}`, {
+      headers: { authorization: `Bearer ${otherToken}` },
+    });
+    return { status: res.status };
+  };
+
+  // The page they SHOULD see: otherPress reading an artist homed to otherPress.
+  const own = await otherPress(`/api/press/${otherPressId}/people/${outOfScopeId}`);
+  assert.equal(own.status, 200, "a press stays on its portal for its OWN artist (no bounce)");
+
+  // The wall: otherPress asking for THIS press's portal person endpoint.
+  const cross = await otherPress(`/api/press/${ownPressId}/people/${homedHereId}`);
+  assert.equal(cross.status, 403, "a press can never reach another press's person endpoint");
+});
+
 test("person detail strips shippingAddress + another press's invite stamp", async () => {
   const res = await getJson(`/api/press/${ownPressId}/people/${homedHereId}`);
   assert.equal(res.status, 200, "in-scope artist is readable");
