@@ -24,7 +24,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch, useLocation } from "wouter";
-import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign, BookOpen, Contact, Search as SearchIcon } from "lucide-react";
+import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign, BookOpen, Contact, Search as SearchIcon, ChevronLeft, Disc3 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -99,6 +99,39 @@ interface PressMe {
   vinylPlaceholderUrl?: string | null;
 }
 
+// ─── Scoped person types (press portal only) ──────────────────────────
+// Matches the shape returned by GET /api/press/:id/people/:personId
+// and GET /api/press/:id/people/:personId/albums (cross-press PII stripped).
+interface ScopedPersonFull {
+  id: string;
+  name: string;
+  photoUrl: string | null;
+  coverUrl: string | null;
+  bio: string | null;
+  labelId: string | null;
+  appleMusicUrl: string | null;
+  spotifyUrl: string | null;
+  tidalUrl: string | null;
+  qobuzUrl: string | null;
+  deezerUrl: string | null;
+  pandoraUrl: string | null;
+  roles: string[];
+  derivedRoles: string[];
+  shape: "artist" | "contact";
+  invitedByPressId: string | null;
+}
+interface ScopedPersonAlbum {
+  id: string;
+  title: string;
+  artist: string | null;
+  artwork: string | null;
+  year: number | null;
+  type: string;
+  isHidden: boolean;
+  isGoodTunesRelease: boolean;
+  editableByThisPress: boolean;
+}
+
 const STAGE_DEFS: { id: string; label: string }[] = [
   { id: "invited",            label: "Invited" },
   { id: "accepted",           label: "Accepted" },
@@ -121,6 +154,10 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   const params = new URLSearchParams(search);
   const tabFromUrl = params.get("tab");
   const settingsSubFromUrl = params.get("settings");
+  // Task #2363 — in-portal person detail. `?person=:id` opens the scoped
+  // person detail view inside the portal (People tab content area), avoiding
+  // the /admin/people/:id deny-wall redirect. Cleared when changing tabs.
+  const personFromUrl = params.get("person");
 
   const resolveTab = (t: string | null, sub: string | null): TabId => {
     if (t === "settings" && sub === "catalog") return "catalog";
@@ -135,9 +172,14 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   };
 
   const [tab, setTab] = useState<TabId>(() => resolveTab(tabFromUrl, settingsSubFromUrl));
+  const [openPersonId, setOpenPersonId] = useState<string | null>(() => personFromUrl ?? null);
+
   useEffect(() => {
     setTab(resolveTab(tabFromUrl, settingsSubFromUrl));
   }, [tabFromUrl, settingsSubFromUrl]);
+  useEffect(() => {
+    setOpenPersonId(personFromUrl ?? null);
+  }, [personFromUrl]);
   const { data: me, isLoading } = useQuery<PressMe>({
     queryKey: [`/api/press/${pressId}/me`],
   });
@@ -161,10 +203,32 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
 
   // Write the active tab back to the URL (history replace, not push) so that
   // window.location.href captured by FeedbackLauncher carries the real sub-page.
+  // Switching tabs always closes any open person detail.
   const handleTabChange = (newTab: TabId) => {
     setTab(newTab);
+    setOpenPersonId(null);
     const sp = new URLSearchParams(window.location.search);
     sp.set("tab", newTab);
+    sp.delete("person");
+    history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+  };
+
+  // Task #2363 — open a person detail inside the portal (People tab area).
+  // Writes `?tab=people&person=:id` to the URL for deep-link / FeedbackLauncher.
+  const openPerson = (personId: string) => {
+    setTab("people");
+    setOpenPersonId(personId);
+    const sp = new URLSearchParams(window.location.search);
+    sp.set("tab", "people");
+    sp.set("person", personId);
+    history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+  };
+
+  // Close the person detail and return to the People list.
+  const closePerson = () => {
+    setOpenPersonId(null);
+    const sp = new URLSearchParams(window.location.search);
+    sp.delete("person");
     history.replaceState(null, "", `${window.location.pathname}?${sp}`);
   };
 
@@ -200,8 +264,17 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       {tab === "dashboard" && (
         <PressDashboardTab pressId={pressId} isSuperAdminView={isSuperAdminView} />
       )}
-      {tab === "customers" && <CustomersTab pressId={pressId} />}
-      {tab === "people" && <PressPeopleTab pressId={pressId} />}
+      {tab === "customers" && <CustomersTab pressId={pressId} onOpenPerson={openPerson} />}
+      {tab === "people" && openPersonId ? (
+        <PressScopedPersonDetail
+          pressId={pressId}
+          personId={openPersonId}
+          canEdit={me?.canEdit !== false}
+          onBack={closePerson}
+        />
+      ) : tab === "people" && (
+        <PressPeopleTab pressId={pressId} onOpenPerson={openPerson} />
+      )}
       {tab === "catalog" && (
         <div className="space-y-4" data-testid="press-catalog-tab">
           <AdminPageHeader
@@ -261,7 +334,7 @@ const STAGE_LABEL: Record<string, string> = {
   shipped: "Shipped",
 };
 
-function CustomersTab({ pressId }: { pressId: string }) {
+function CustomersTab({ pressId, onOpenPerson }: { pressId: string; onOpenPerson: (id: string) => void }) {
   const { data, isLoading } = useQuery<{ active: CustomerRow[]; switching: SwitchingRow[] }>({
     queryKey: [`/api/press/${pressId}/customers`],
   });
@@ -322,16 +395,16 @@ function CustomersTab({ pressId }: { pressId: string }) {
                       inviteId={c.inviteId}
                       acceptUrl={c.acceptUrl}
                     />
-                  ) : (
-                    <Link
-                      href={c.kind === "artist" ? `/admin/people/${c.id}` : `/admin/labels/${c.id}`}
-                      onClick={(e) => e.stopPropagation()}
+                  ) : c.kind === "artist" ? (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onOpenPerson(c.id); }}
                       className="text-[color:var(--brand-blue)] text-xs font-semibold hover:underline"
                       data-testid={`link-customer-${c.id}`}
                     >
                       Open <ArrowRight className="inline w-3 h-3" />
-                    </Link>
-                  )}
+                    </button>
+                  ) : null}
                 </li>
               );
             })}
@@ -436,8 +509,7 @@ function CustomerDrawer({ pressId, cust, onClose }: { pressId: string; cust: Cus
 // Opening a card deep-links to /admin/people/:id, which renders its own
 // press-scoped mode (tabs trimmed, remove-from-press, etc.).
 
-function PressPeopleTab({ pressId }: { pressId: string }) {
-  const [, setLocation] = useLocation();
+function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPerson: (id: string) => void }) {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [view, setView] = useViewMode("press-people");
@@ -580,7 +652,7 @@ function PressPeopleTab({ pressId }: { pressId: string }) {
               key={p.id}
               person={p}
               labelName={p.affiliation?.name ?? null}
-              onOpen={() => setLocation(`/admin/people/${p.id}`)}
+              onOpen={() => onOpenPerson(p.id)}
             />
           ))}
         </div>
@@ -594,7 +666,7 @@ function PressPeopleTab({ pressId }: { pressId: string }) {
               key={p.id}
               person={p}
               labelName={p.affiliation?.name ?? null}
-              onOpen={() => setLocation(`/admin/people/${p.id}`)}
+              onOpen={() => onOpenPerson(p.id)}
             />
           ))}
         </div>
@@ -612,9 +684,345 @@ function PressPeopleTab({ pressId }: { pressId: string }) {
           onSelect={({ id }) => {
             setAddOpen(false);
             queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/people`] });
-            if (id) setLocation(`/admin/people/${id}`);
+            if (id) onOpenPerson(id);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+// ─── In-portal scoped person detail ───────────────────────────────────
+//
+// Task #2363 — renders inside the portal's People tab content area when
+// `?person=:id` is set. Uses only the press-scoped endpoints so no
+// /api/admin/* calls are ever made (those 403 for manufacturers).
+// Read-only profile + albums; "Remove from press" for editors only.
+
+type PersonDetailTab = "overview" | "cover" | "releases" | "streaming";
+const PERSON_DETAIL_TABS: { key: PersonDetailTab; label: string }[] = [
+  { key: "overview",  label: "Overview" },
+  { key: "cover",     label: "Cover" },
+  { key: "releases",  label: "Releases" },
+  { key: "streaming", label: "Streaming" },
+];
+
+function PressScopedPersonDetail({
+  pressId,
+  personId,
+  canEdit,
+  onBack,
+}: {
+  pressId: string;
+  personId: string;
+  canEdit: boolean;
+  onBack: () => void;
+}) {
+  const { toast } = useToast();
+  const [tab, setTab] = useState<PersonDetailTab>("overview");
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
+
+  const { data: person, isLoading, error } = useQuery<ScopedPersonFull>({
+    queryKey: [`/api/press/${pressId}/people/${personId}`],
+  });
+  const { data: albums = [], isLoading: albumsLoading } = useQuery<ScopedPersonAlbum[]>({
+    queryKey: [`/api/press/${pressId}/people/${personId}/albums`],
+  });
+
+  const removeFromPress = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/press/${pressId}/people/${personId}/remove`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/people`] });
+      toast({ title: "Removed from your press." });
+      setRemoveConfirmOpen(false);
+      onBack();
+    },
+    onError: (e: any) => {
+      toast({ title: "Couldn't remove from press", description: e?.message ?? "", variant: "destructive" });
+    },
+  });
+
+  if (isLoading) return <PanelLoading />;
+
+  if (error || !person) {
+    return (
+      <div className="py-16 text-center space-y-3" data-testid="press-person-not-found">
+        <p className="text-slate-500 text-sm">Person not found or not in your press scope.</p>
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1 text-[color:var(--brand-blue)] text-sm hover:underline"
+          data-testid="button-back-to-people"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" /> Back to People
+        </button>
+      </div>
+    );
+  }
+
+  const credits = Array.from(
+    new Map(
+      [...(person.roles ?? []), ...(person.derivedRoles ?? [])]
+        .map((r) => (r ?? "").trim())
+        .filter(Boolean)
+        .map((c) => [c.toLowerCase(), c]),
+    ).values(),
+  );
+
+  const streamingLinks = [
+    { label: "Apple Music", url: person.appleMusicUrl },
+    { label: "Spotify",     url: person.spotifyUrl },
+    { label: "Tidal",       url: person.tidalUrl },
+    { label: "Qobuz",       url: person.qobuzUrl },
+    { label: "Deezer",      url: person.deezerUrl },
+    { label: "Pandora",     url: person.pandoraUrl },
+  ].filter((l): l is { label: string; url: string } => !!l.url);
+
+  const gtReleases = albums.filter((a) => a.isGoodTunesRelease);
+  const hiddenCount = gtReleases.filter((a) => a.isHidden).length;
+
+  return (
+    <div className="space-y-5" data-testid={`press-person-detail-${personId}`}>
+      {/* Breadcrumb / back */}
+      <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
+        <button
+          type="button"
+          onClick={onBack}
+          className="hover:text-[color:var(--brand-blue)] transition-colors"
+          data-testid="link-back-to-people"
+        >
+          People
+        </button>
+        <ChevronLeft className="w-3 h-3 rotate-180 flex-shrink-0" />
+        <span className="text-slate-700 font-semibold truncate max-w-[420px]">{person.name}</span>
+      </div>
+
+      {/* Header */}
+      <div className="flex items-start gap-5">
+        <div
+          className="rounded-full overflow-hidden flex-shrink-0 bg-[color:var(--brand-blue)] ring-1 ring-slate-200"
+          style={{ width: 80, height: 80 }}
+          data-testid="img-person-photo"
+        >
+          {person.photoUrl ? (
+            <img src={person.photoUrl} alt={person.name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-white text-2xl font-bold">
+              {person.name.slice(0, 1).toUpperCase()}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
+            {person.shape === "artist" ? "Artist" : "Contact"}
+          </div>
+          <h1 className="text-slate-900 text-[24px] font-bold tracking-tight mt-0.5 truncate" data-testid="heading-person-name">
+            {person.name}
+          </h1>
+          {person.bio && (
+            <p className="text-slate-500 text-[13px] mt-1 line-clamp-2 max-w-xl">{person.bio}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs + Remove action */}
+      <div className="flex items-end justify-between gap-5 border-b border-slate-200" data-testid="tabs-press-person">
+        <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
+          {PERSON_DETAIL_TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={[
+                "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
+                tab === t.key ? "text-slate-900" : "text-slate-400 hover:text-slate-700",
+              ].join(" ")}
+              data-testid={`tab-person-${t.key}`}
+            >
+              {t.label}
+              {tab === t.key && (
+                <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[color:var(--brand-blue)] rounded-full" />
+              )}
+            </button>
+          ))}
+        </div>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => setRemoveConfirmOpen(true)}
+            disabled={removeFromPress.isPending}
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 mb-1 rounded-md text-xs font-medium text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-800 disabled:opacity-50"
+            data-testid="button-remove-from-press"
+          >
+            Remove from press
+          </button>
+        )}
+      </div>
+
+      {/* Tab content */}
+      {tab === "overview" && (
+        <div className="space-y-4" data-testid="panel-press-person-overview">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+            {person.bio && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Bio</div>
+                <p className="text-slate-600 text-sm mt-1 whitespace-pre-line">{person.bio}</p>
+              </div>
+            )}
+            {credits.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Credits</div>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {credits.map((c) => (
+                    <span key={c} className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium">{c}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {!person.bio && credits.length === 0 && (
+              <p className="text-slate-500 text-sm">No profile details on file.</p>
+            )}
+          </div>
+          <p className="text-slate-400 text-xs px-1">
+            Artist profile details are managed by GoodTunes. Use the Releases tab to manage the albums associated with your press.
+          </p>
+        </div>
+      )}
+
+      {tab === "cover" && (
+        <div className="space-y-3" data-testid="panel-press-person-cover">
+          <div className="aspect-[3/1] w-full rounded-2xl overflow-hidden bg-slate-100 ring-1 ring-slate-200">
+            {person.coverUrl ? (
+              <img src={person.coverUrl} alt={`${person.name} cover`} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">
+                No cover image
+              </div>
+            )}
+          </div>
+          <p className="text-slate-400 text-xs px-1">The artist's cover image is managed by GoodTunes.</p>
+        </div>
+      )}
+
+      {tab === "releases" && (
+        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden" data-testid="panel-press-person-releases">
+          <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
+            <div className="min-w-0">
+              <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
+                <Disc3 className="w-4 h-4 text-slate-400" />
+                GoodTunes® Releases
+              </h2>
+              <p className="text-slate-400 text-[11.5px]">
+                {gtReleases.length === 0
+                  ? "No GoodTunes® releases for this artist yet."
+                  : `${gtReleases.length - hiddenCount} release${gtReleases.length - hiddenCount === 1 ? "" : "s"} fans can play in-app${hiddenCount ? ` · ${hiddenCount} hidden` : ""}`}
+              </p>
+            </div>
+          </div>
+          {albumsLoading ? (
+            <div className="p-8 flex items-center justify-center">
+              <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+            </div>
+          ) : gtReleases.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 text-sm">No GoodTunes® releases yet.</div>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {gtReleases.map((a) => (
+                <li
+                  key={a.id}
+                  className={[
+                    "flex items-center gap-3 px-5 py-3",
+                    !a.editableByThisPress ? "opacity-50" : "",
+                  ].join(" ")}
+                  data-testid={`row-release-${a.id}`}
+                  title={!a.editableByThisPress ? "Homed to another press" : undefined}
+                >
+                  <div className="w-10 h-10 rounded bg-slate-100 overflow-hidden flex-shrink-0">
+                    {a.artwork && (
+                      <img src={a.artwork} alt={a.title} className="w-full h-full object-cover" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-slate-900 text-sm font-semibold truncate">{a.title}</div>
+                    <div className="text-slate-400 text-xs">
+                      {a.type}{a.year ? ` · ${a.year}` : ""}
+                      {a.isHidden ? " · Hidden" : ""}
+                      {!a.editableByThisPress ? " · Another press" : ""}
+                    </div>
+                  </div>
+                  {a.editableByThisPress && (
+                    <Link
+                      href={`/admin/albums/${a.id}`}
+                      className="text-[color:var(--brand-blue)] text-xs hover:underline flex-shrink-0"
+                      data-testid={`link-release-${a.id}`}
+                    >
+                      Open
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {tab === "streaming" && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-press-person-streaming">
+          <h2 className="text-slate-900 text-sm font-bold">Streaming</h2>
+          {streamingLinks.length === 0 ? (
+            <p className="text-slate-500 text-xs">No streaming links on file.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {streamingLinks.map((l) => (
+                <li key={l.label}>
+                  <a
+                    href={l.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[color:var(--brand-blue)] text-sm hover:underline"
+                    data-testid={`link-streaming-${l.label.toLowerCase().replace(/\s+/g, "-")}`}
+                  >
+                    {l.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Remove confirm dialog */}
+      {removeConfirmOpen && (
+        <Dialog open={true} onOpenChange={(o) => !o && setRemoveConfirmOpen(false)}>
+          <DialogContent className="bg-white text-slate-900 border border-slate-200 max-w-sm" data-testid="dialog-remove-from-press">
+            <DialogHeader>
+              <DialogTitle>Remove {person.name} from your press?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-slate-600">
+              This unhomes the artist from your press. Their profile and releases remain on GoodTunes — they can be re-invited later.
+            </p>
+            <DialogFooter className="flex gap-2 justify-end pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRemoveConfirmOpen(false)}
+                disabled={removeFromPress.isPending}
+                data-testid="button-cancel-remove"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => removeFromPress.mutate()}
+                disabled={removeFromPress.isPending}
+                className="bg-rose-600 text-white hover:bg-rose-700"
+                data-testid="button-confirm-remove"
+              >
+                {removeFromPress.isPending ? "Removing…" : "Remove from press"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

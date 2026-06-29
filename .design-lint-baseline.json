@@ -20817,6 +20817,41 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<div className=\"flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<div className=\"text-slate-400 text-[11px] font-semibold uppercase tracking-wider\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<h1 className=\"text-slate-900 text-[24px] font-bold tracking-tight mt-0.5 truncate\" data-testid=\"heading-person-name\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<p className=\"text-slate-500 text-[13px] mt-1 line-clamp-2 max-w-xl\">{person.bio}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "\"relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<h2 className=\"text-slate-900 text-[14px] font-bold inline-flex items-center gap-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[11.5px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
     "snippet": "<p className=\"text-[11px] uppercase tracking-wider text-slate-500 font-bold\">"
   },
   {
