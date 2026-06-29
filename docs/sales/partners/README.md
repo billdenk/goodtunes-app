@@ -13,6 +13,10 @@ These are sales documents Bill (and an advisor) can hand to a prospective partne
 - **[non-profits.md](./non-profits.md)** — non-profits: $1 (or $1.50) per-unit referral credit on referred artists, an ambassador invite tree, and monthly Stripe Connect payouts.
 - **[fulfillment.md](./fulfillment.md)** — fulfillment partners: fully-stamped order handoffs, signed status webhooks, production heads-up notifications. (The partner surface with the most still in flight — see its Coming next.)
 
+## Internal program doc
+
+The full white-label partner program — tier ladder, fairness model, cost+ economics, and a per-partner deal page for MRP, PMP, Vyril, Pressing Business, and Hellbender — lives at **[`../whitelabel-partner-program.md`](../whitelabel-partner-program.md)**. Read that before negotiating terms with any pressing plant. The sheets below are the outward-facing version; the program doc is the internal negotiation framework.
+
 ## Keeping these current
 
 When a task ships a customer-visible capability that changes what a specific partner type gets, refresh that partner's sheet in the **same change-set** — alongside [`../../capabilities.md`](../../capabilities.md) and [`../investor-one-pager.md`](../investor-one-pager.md). Keep the line between shipped (the body) and roadmap (Coming next) honest: a sell sheet that pitches unshipped work as live is worse than no sheet.
