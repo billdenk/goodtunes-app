@@ -1,26 +1,31 @@
-// Regression guard for the Chrome autofill bug on the login page — both
-// the admin shell (admin.goodtunes.music/admin/login) AND the customer
-// (fan) shell (my.goodtunes.music/login), which render the same shared
-// login form, refs, and native `change` listener.
+// Regression guard for browser autofill on the login page — both the
+// admin shell (admin.goodtunes.music/admin/login) AND the customer (fan)
+// shell (my.goodtunes.music/login), which render the same shared login
+// form, refs, and native `change` listener.
 //
-// Chrome's password manager often writes autofilled values directly into
-// the DOM input without firing React's `onChange`, leaving the controlled
-// `password` state empty while the input visually shows the credential.
-// The fix reads the actual DOM value via a ref on submit, so the POSTed
-// payload matches what is in the field regardless of how it got there.
+// Two browser families behave differently at submit time:
 //
-// This test simulates that scenario: after mounting the Login page we set
-// the input's `.value` property directly (the native way Chrome autofill
-// works) without dispatching any React synthetic event, then submit the
-// form (via a direct `submit` event, which is what happens when the user
-// presses Enter) and assert that the captured fetch body carries the
-// actual field contents, NOT the empty React state.
+//   Chrome/Edge: the password manager fires a native `change` event (not
+//   `input`) when it fills a field, leaving React state empty.  The ref
+//   approach captures the real value via ref.current.value, and our native
+//   `change` listener syncs it into state so the submit button enables.
 //
-// Each scenario is exercised twice — once in admin mode (mounted under
-// `/admin/login`) and once in customer mode (mounted under `/login`),
-// since `detectAuthKind` falls back to the pathname on the non-production
-// test host. A typed-credentials case ensures the fix doesn't regress the
-// happy path.
+//   Safari/WebKit: iCloud Keychain visually fills the field but WITHHOLDS
+//   the value from scripted .value reads until the user manually interacts
+//   with the field.  A Sign In button click is not such an interaction, so
+//   ref.current.value returns "" on Safari.  All browsers DO include
+//   autofilled values in FormData on submit, so reading `new FormData(form)`
+//   is the only reliable cross-browser source.
+//
+// The fix in handleLogin reads from three sources in priority order:
+//   FormData (all browsers, incl. Safari) → ref.value (Chrome) → React state
+// whichever carries a non-empty credential wins.
+//
+// This test exercises four scenarios per shell (admin + customer):
+//   1. Value in DOM (no onChange) — Chrome ref path, also covers FormData
+//   2. Native `change` event — Chrome sync-state path
+//   3. Typed credentials (onChange fires) — happy path regression
+//   4. FormData only, ref/.value empty — Safari/WebKit autofill simulation
 //
 // Runs under Node's built-in runner via tsx:
 //   TSX_TSCONFIG_PATH=tsconfig.test.json \
@@ -379,6 +384,79 @@ for (const { label, path } of MODES) {
       assert.equal(loginRequests.length, 1, "exactly one /api/login call was made");
       assert.equal(loginRequests[0].username, "bill@goodtunes.com");
       assert.equal(loginRequests[0].password, "TypedPassword456!");
+    } finally {
+      await teardown();
+    }
+  });
+
+  // ───────────────────────────────────────────────────────────────────
+  // Test 4: Safari/WebKit autofill path — FormData carries the value
+  // but scripted .value reads (and React state) are both empty.
+  //
+  // WebKit's ITP withholds autofilled values from JS .value reads until
+  // the user physically touches the field. A Sign In button click does
+  // NOT count as such an interaction. The fix reads `new FormData(form)`
+  // first, which all browsers populate with autofilled values at submit
+  // time — even when .value is blocked. This test simulates that by
+  // replacing globalThis.FormData with a mock that returns the autofilled
+  // credentials while the DOM inputs' .value properties remain empty
+  // (no native setter, no React event — exactly what WebKit does).
+  // ───────────────────────────────────────────────────────────────────
+  test(`[${label}] Safari/WebKit autofill: FormData carries value while .value is empty`, async () => {
+    const { q, settle, teardown } = await mount(path);
+    try {
+      const usernameInput = q("input-login-username") as HTMLInputElement;
+      const passwordInput = q("input-login-password") as HTMLInputElement;
+      const form = usernameInput?.closest("form") as HTMLFormElement | null;
+
+      assert.ok(usernameInput, "username input must be present");
+      assert.ok(passwordInput, "password input must be present");
+      assert.ok(form, "login form must be present");
+
+      // Verify the inputs are genuinely empty before the test (no stale state).
+      assert.equal(usernameInput.value, "", "username must start empty");
+      assert.equal(passwordInput.value, "", "password must start empty");
+
+      // Install a FormData stub that returns autofilled values — exactly
+      // what Safari's form submission provides even when .value is blocked.
+      const OriginalFormData = (globalThis as any).FormData;
+      const safariAutofilled: Record<string, string> = {
+        username: "andrew@gogoods.com",
+        password: "SafariAutofill99!",
+      };
+      (globalThis as any).FormData = class MockFormData {
+        // handleLogin only calls .get(); implement just that.
+        get(key: string): string | null {
+          return safariAutofilled[key] ?? null;
+        }
+      };
+
+      try {
+        // Submit via a form `submit` event — same as the user pressing Enter
+        // or clicking Sign In. DOM inputs' .value remains "" throughout.
+        await act(async () => {
+          form.dispatchEvent(
+            new window.Event("submit", { bubbles: true, cancelable: true })
+          );
+        });
+        await settle();
+      } finally {
+        // Always restore the real FormData so other tests are unaffected.
+        (globalThis as any).FormData = OriginalFormData;
+      }
+
+      assert.equal(loginRequests.length, 1, "exactly one /api/login call was made");
+      const body = loginRequests[0];
+      assert.equal(
+        body.username,
+        "andrew@gogoods.com",
+        "username must come from FormData (Safari path), not empty .value",
+      );
+      assert.equal(
+        body.password,
+        "SafariAutofill99!",
+        "password must come from FormData (Safari path), not empty .value",
+      );
     } finally {
       await teardown();
     }

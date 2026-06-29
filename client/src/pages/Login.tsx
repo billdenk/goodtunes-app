@@ -1007,12 +1007,42 @@ export function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Chrome's password manager writes autofill values into the DOM
-    // without firing React's onChange, leaving controlled state empty.
-    // Read the real DOM value from the ref when available; fall back to
-    // React state for browsers that do fire onChange (Safari, Firefox).
-    const actualIdent = (loginIdentRef.current?.value ?? loginIdent).trim();
-    const actualPassword = loginPasswordRef.current?.value ?? password;
+    // Three-source autofill capture — required because browsers differ in
+    // what they expose at submit time:
+    //
+    //   Chrome/Edge: password manager fires a native `change` event (not
+    //   `input`) so React state stays empty, but ref.current.value is
+    //   populated. Our native `change` listener (below) also syncs state.
+    //
+    //   Safari/WebKit: iCloud Keychain visually fills the field but
+    //   WITHHOLDS the value from scripted `.value` reads until the user
+    //   manually interacts with the field. A Sign In button click is not
+    //   such an interaction, so ref.current.value returns "" on Safari.
+    //   All browsers DO, however, include autofilled values in FormData
+    //   when the form is submitted, making `new FormData(form)` the only
+    //   reliable cross-browser capture for autofill.
+    //
+    // Precedence: FormData (works in all browsers) → ref.value (Chrome
+    // fallback; also non-empty when user typed) → React state (Firefox /
+    // browsers that fire onChange; also covers typed input).
+    const form = e.currentTarget as HTMLFormElement;
+    // FormData from a real HTMLFormElement includes autofilled values that
+    // WebKit blocks from scripted .value reads. Wrapped in try/catch because
+    // non-browser environments (Node/jsdom) don't support this constructor
+    // form — the fallback chain (ref → React state) handles those cases.
+    let fdIdent    = "";
+    let fdPassword = "";
+    try {
+      const fd = new FormData(form);
+      fdIdent    = (fd.get("username") as string | null) ?? "";
+      fdPassword = (fd.get("password") as string | null) ?? "";
+    } catch {
+      // FormData(HTMLFormElement) unsupported — fall through to ref + state.
+    }
+    const refIdent    = loginIdentRef.current?.value   ?? "";
+    const refPassword = loginPasswordRef.current?.value ?? "";
+    const actualIdent    = (fdIdent    || refIdent    || loginIdent).trim();
+    const actualPassword =  fdPassword || refPassword || password;
     try {
       const result: any = await login({ username: actualIdent, password: actualPassword });
       if (result?.requiresEnrollment) {
