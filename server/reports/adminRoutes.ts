@@ -167,7 +167,12 @@ export function registerAdminReportRoutes(app: Express) {
   // releases short of complete in at least one production dimension.
   app.get("/api/admin/reports/incomplete-albums", adminGuard, wrap(async (_req, res) => {
     const data = await incompleteAlbums();
-    res.json(data);
+    // Task #2372 — enrich each art-less row with its effective press logo +
+    // jacket art so the Attention tab shows the press placeholder, matching the
+    // grid/list views. Admin-only route, so these fields never leak to fans.
+    const { batchEnrichWithPressPlaceholders } = await import("../routes");
+    const rows = await batchEnrichWithPressPlaceholders(data.rows);
+    res.json({ rows });
   }));
 
   // ─── Payout reconciliation (super-admin) ─────────────────────────

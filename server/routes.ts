@@ -661,7 +661,7 @@ async function batchEnrichWithArtistPhotos<T extends { primaryArtistId?: string 
 // order: homed press via artist/label `default_press_id`, then effective
 // press via the first saved SKU's `press_id`. Fan-facing call sites must
 // never receive these fields (kept in the admin-only enrichment path).
-async function batchEnrichWithPressPlaceholders<
+export async function batchEnrichWithPressPlaceholders<
   T extends { id: string; primaryArtistId?: string | null; labelId?: string | null },
 >(
   albums: T[],

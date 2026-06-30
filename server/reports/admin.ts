@@ -634,6 +634,7 @@ export interface IncompleteAlbumRow {
   artist: string;
   artwork: string;
   primaryArtistId: string | null;
+  labelId: string | null;
   // Raw lifecycle inputs so the client can reuse the shared `albumStage`
   // helper rather than re-deriving the bucket server-side.
   isPrepping: boolean;
@@ -644,6 +645,12 @@ export interface IncompleteAlbumRow {
   mastersReady: number;
   lyricsSatisfied: number;
   creditsComplete: number;
+  // Task #2372 — admin-only effective press placeholder (logo + jacket art),
+  // populated in the route handler via batchEnrichWithPressPlaceholders so the
+  // Attention tab shows the press placeholder for art-less albums, matching
+  // the grid/list views. Never sent to fan-facing surfaces.
+  pressLogoUrl?: string | null;
+  pressJacketUrl?: string | null;
 }
 
 export async function incompleteAlbums(): Promise<{ rows: IncompleteAlbumRow[] }> {
@@ -653,6 +660,7 @@ export async function incompleteAlbums(): Promise<{ rows: IncompleteAlbumRow[] }
     artist: string;
     artwork: string;
     primary_artist_id: string | null;
+    label_id: string | null;
     is_prepping: boolean;
     is_hidden: boolean;
     good_tunes_release_date: string | null;
@@ -668,6 +676,7 @@ export async function incompleteAlbums(): Promise<{ rows: IncompleteAlbumRow[] }
       a.artist,
       a.artwork,
       a.primary_artist_id,
+      a.label_id,
       a.is_prepping,
       a.is_hidden,
       a.good_tunes_release_date,
@@ -720,6 +729,7 @@ export async function incompleteAlbums(): Promise<{ rows: IncompleteAlbumRow[] }
     artist: r.artist,
     artwork: r.artwork,
     primaryArtistId: r.primary_artist_id ?? null,
+    labelId: r.label_id ?? null,
     isPrepping: r.is_prepping === true,
     isHidden: r.is_hidden === true,
     goodTunesReleaseDate: r.good_tunes_release_date ?? null,

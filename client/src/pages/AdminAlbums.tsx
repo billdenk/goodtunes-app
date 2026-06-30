@@ -119,6 +119,8 @@ interface IncompleteAlbumRow {
   mastersReady: number;
   lyricsSatisfied: number;
   creditsComplete: number;
+  pressLogoUrl?: string | null;
+  pressJacketUrl?: string | null;
 }
 
 // Task #1007 / #1008 — build the link into an album, carrying the entire
@@ -1281,6 +1283,8 @@ function NeedsAttentionTable({
                         artwork={realArtwork(r.artwork)}
                         title={r.title}
                         showName={false}
+                        pressJacketUrl={r.pressJacketUrl ?? null}
+                        pressLogoUrl={r.pressLogoUrl ?? null}
                       />
                     </div>
                     <span className="min-w-0">
