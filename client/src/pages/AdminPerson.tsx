@@ -1599,10 +1599,10 @@ function ContactOverviewPanel({ person }: { person: PersonFull }) {
   const promote = useMutation({
     mutationFn: async () => apiRequest("POST", `/api/admin/people/${person.id}/promote-artist`),
     onSuccess: () => {
-      toast({ title: `${person.name} is now an artist`, description: "Artist-only tabs (Discography, Gear, Splits, Payouts) are now live on this Person." });
+      toast({ title: `Artist profile added for ${person.name}`, description: "Discography, Gear, Splits, and Payouts tabs are now live. Contact and affiliation details are unchanged." });
       invalidate.forEach((k) => qc.invalidateQueries({ queryKey: k }));
     },
-    onError: (e: any) => toast({ title: "Couldn't promote", description: e?.message ?? "Try again in a moment.", variant: "destructive" }),
+    onError: (e: any) => toast({ title: "Couldn't add artist profile", description: e?.message ?? "Try again in a moment.", variant: "destructive" }),
   });
   return (
     <div className="space-y-5">
@@ -1627,15 +1627,13 @@ function ContactOverviewPanel({ person }: { person: PersonFull }) {
 
       <AffiliationPanel person={person} />
 
-      <RolesPanel person={person} />
-
       <IntroductionsPanel person={person} />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-overview-promote">
         <div>
-          <h2 className="text-sm font-bold text-slate-900">Is this person actually an artist?</h2>
+          <h2 className="text-sm font-bold text-slate-900">This person is also an artist</h2>
           <p className="text-xs text-slate-500">
-            Flip this Person from a partner contact into a full artist record. Unlocks Discography, Gear, Splits, and Payouts tabs.
+            Add an artist profile to this contact. Their contact details and partner affiliations stay intact — this just adds the Discography, Gear, Splits, and Payouts tabs.
           </p>
         </div>
         <Button
@@ -1644,7 +1642,7 @@ function ContactOverviewPanel({ person }: { person: PersonFull }) {
           disabled={promote.isPending}
           data-testid="button-promote-to-artist"
         >
-          {promote.isPending ? "Promoting…" : "Promote to artist"}
+          {promote.isPending ? "Adding…" : "Add artist profile"}
         </Button>
       </section>
     </div>
