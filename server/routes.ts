@@ -89,6 +89,8 @@ import {
   resolveFinishedComponents,
   completedTemplateConfigToAlbumFormat,
   matchInvitedPressToVendor,
+  resolveVendorIdForPress,
+  resolveAudioSpec,
   defaultCompletedTemplateConfig,
   VENDOR_IDS,
   type VendorId,
@@ -30844,7 +30846,18 @@ export async function registerRoutes(
       if (!(await requirePressManager(req, res, req.params.id))) return;
       const press = await storage.getManufacturerById(req.params.id);
       if (!press) return res.status(404).json({ message: "Press not found" });
-      res.json({ spec: await storage.getPressAudioSpec(req.params.id) });
+      // Resolve the measured baseline this press inherits when a field is left
+      // blank (press → VendorSpec by name, same mapping the preflight validator
+      // uses) so the editor can show operators the default beside each input.
+      const base = resolveAudioSpec(resolveVendorIdForPress(press.name), null);
+      const baseline = base
+        ? {
+            requiredBitDepth: base.requiredBitDepth ?? null,
+            requiredSampleRateHz: base.requiredSampleRateHz ?? null,
+            maxSideSeconds: base.maxSideSecondsBySizeRpm ?? null,
+          }
+        : null;
+      res.json({ spec: await storage.getPressAudioSpec(req.params.id), baseline });
     },
   );
 

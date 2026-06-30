@@ -4290,11 +4290,24 @@ type PressAudioSpec = {
 const AUDIO_SIZES = ['7"', '10"', '12"'] as const;
 const AUDIO_RPMS = ["33", "45"] as const;
 
+// The inherited measured-baseline this press resolves to when a field is left
+// blank (server-resolved per press in GET …/audio-spec). Surfaced beside each
+// input so operators can see the default at a glance.
+type AudioBaseline = {
+  requiredBitDepth: number | null;
+  requiredSampleRateHz: number | null;
+  maxSideSeconds: Record<string, Record<string, number>> | null;
+};
+
 function PressAudioSpecCard({ pressId }: { pressId: string }) {
   const { toast } = useToast();
   const qk = ["/api/admin/manufacturers", pressId, "audio-spec"];
-  const { data, isLoading } = useQuery<{ spec: PressAudioSpec | null }>({ queryKey: qk });
+  const { data, isLoading } = useQuery<{
+    spec: PressAudioSpec | null;
+    baseline: AudioBaseline | null;
+  }>({ queryKey: qk });
   const spec = data?.spec ?? null;
+  const baseline = data?.baseline ?? null;
 
   const [bitDepth, setBitDepth] = useState("");
   const [sampleKhz, setSampleKhz] = useState("");
@@ -4366,6 +4379,20 @@ function PressAudioSpecCard({ pressId }: { pressId: string }) {
   const setCell = (size: string, rpm: string, v: string) =>
     setGrid((g) => ({ ...g, [size]: { ...(g[size] ?? {}), [rpm]: v } }));
 
+  // Inherited defaults shown beside each field so a blank input's resolved
+  // value is never a mystery. Bit depth / sample rate can be "no minimum"
+  // (e.g. MRP states no number); side-length defaults render greyed in-cell.
+  const bitDefault =
+    baseline?.requiredBitDepth != null ? `${baseline.requiredBitDepth}-bit` : "no minimum";
+  const rateDefault =
+    baseline?.requiredSampleRateHz != null
+      ? `${baseline.requiredSampleRateHz / 1000} kHz`
+      : "no minimum";
+  const sideDefault = (size: string, rpm: string): string => {
+    const secs = baseline?.maxSideSeconds?.[size]?.[rpm];
+    return typeof secs === "number" ? String(Math.round((secs / 60) * 10) / 10) : "";
+  };
+
   return (
     <div className="border-t border-slate-100 px-5 py-4">
       <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">
@@ -4391,6 +4418,9 @@ function PressAudioSpecCard({ pressId }: { pressId: string }) {
             className="w-28 rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-800 focus:border-slate-400 focus:outline-none disabled:opacity-50"
             data-testid="input-audio-bit-depth"
           />
+          <span className="text-xs text-slate-400" data-testid="text-audio-bit-depth-default">
+            Default: {bitDefault}
+          </span>
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-slate-600">Min sample rate (kHz)</span>
@@ -4406,6 +4436,9 @@ function PressAudioSpecCard({ pressId }: { pressId: string }) {
             className="w-32 rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-800 focus:border-slate-400 focus:outline-none disabled:opacity-50"
             data-testid="input-audio-sample-rate"
           />
+          <span className="text-xs text-slate-400" data-testid="text-audio-sample-rate-default">
+            Default: {rateDefault}
+          </span>
         </label>
       </div>
 
@@ -4439,7 +4472,7 @@ function PressAudioSpecCard({ pressId }: { pressId: string }) {
                         value={grid[size]?.[rpm] ?? ""}
                         disabled={busy}
                         onChange={(e) => setCell(size, rpm, e.target.value)}
-                        placeholder="inherit"
+                        placeholder={sideDefault(size, rpm) || "inherit"}
                         className="w-24 rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-800 focus:border-slate-400 focus:outline-none disabled:opacity-50"
                         data-testid={`input-audio-side-${size.replace(/\D/g, "")}-${rpm}`}
                       />
@@ -4450,6 +4483,9 @@ function PressAudioSpecCard({ pressId }: { pressId: string }) {
             </tbody>
           </table>
         </div>
+        <p className="mt-1.5 text-xs text-slate-400" data-testid="text-audio-side-defaults-note">
+          Grey numbers are the inherited defaults (minutes) — leave a cell blank to use them.
+        </p>
       </div>
 
       <label className="mt-4 flex flex-col gap-1">
