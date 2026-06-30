@@ -282,6 +282,11 @@ export function AdminManufacturer() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/manufacturers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/manufacturers", id] });
+      // A press logo / vinyl_placeholder_url change re-resolves the press art
+      // shown on album cards (batchEnrichWithPressPlaceholders), but that's
+      // computed per-request and never cached in the DB — so the staleTime:Infinity
+      // album list keeps the old art until a hard refresh. Invalidate it here.
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
       toast({ title: "Saved" });
     },
     onError: (e: any) =>
@@ -340,6 +345,9 @@ export function AdminManufacturer() {
     onSuccess: (row) => {
       queryClient.invalidateQueries({ queryKey: ["/api/manufacturers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/manufacturers", id] });
+      // Re-scrape can replace logoUrl, which feeds album-card press art — keep
+      // the cached album list in sync (see save mutation note above).
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
       toast({
         title: row ? "Refreshed from website" : "Nothing new to update",
       });
