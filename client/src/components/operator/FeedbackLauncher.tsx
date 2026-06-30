@@ -203,7 +203,7 @@ export function FeedbackLauncher({ className }: { className?: string }) {
         >
           {/* Header: title + quiet "My requests" secondary link */}
           <DialogHeader>
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start justify-between gap-4 pr-7">
               <div className="min-w-0">
                 <DialogTitle>
                   {view === "mine" ? "My requests" : "Help & feedback"}
