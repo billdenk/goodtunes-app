@@ -1237,7 +1237,7 @@ export function Login() {
             data-testid="input-email-otp"
           />
           {emailOtpError && <p className={s.totpErr}>{emailOtpError}</p>}
-          <label className="flex items-center gap-2 mb-4 cursor-pointer select-none">
+          <label className="flex items-center gap-2 mt-3 mb-4 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={rememberDevice}
@@ -1317,7 +1317,7 @@ export function Login() {
             />
           )}
           {totpError && <p className={s.totpErr}>{totpError}</p>}
-          <label className="flex items-center gap-2 mb-4 cursor-pointer select-none">
+          <label className="flex items-center gap-2 mt-3 mb-4 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={rememberDevice}
