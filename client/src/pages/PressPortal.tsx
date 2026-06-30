@@ -707,7 +707,7 @@ const PERSON_DETAIL_TABS: { key: PersonDetailTab; label: string }[] = [
   { key: "streaming", label: "Streaming" },
 ];
 
-function PressScopedPersonDetail({
+export function PressScopedPersonDetail({
   pressId,
   personId,
   canEdit,
