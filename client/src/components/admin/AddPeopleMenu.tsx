@@ -18,7 +18,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { RolePicker, type AccessRoleOption } from "@/components/admin/RolePicker";
 import { apiRequest, queryClient, apiErrorBody, apiErrorStatus } from "@/lib/queryClient";
 
 // Task #421 — unified "+ Add ▾" trigger for partner-detail People
@@ -57,14 +56,6 @@ const ENTITY_LABEL: Record<AddPeopleMenuEntityKind, string> = {
   vendor: "vendor",
 };
 
-const ENTITY_ROLE: Record<AddPeopleMenuEntityKind, string> = {
-  non_profit: "non_profit",
-  manufacturer: "manufacturer",
-  fulfillment: "fulfillment",
-  label: "label",
-  manager: "manager",
-  vendor: "vendor",
-};
 
 export interface AddPeopleMenuProps {
   /** Entity this People panel belongs to. Drives ambassador visibility, role grant, and invite referrer attribution. */
@@ -116,10 +107,18 @@ function errorStatus(err: unknown): number | null {
   return apiErrorStatus(err) ?? null;
 }
 
+// Payload carried when the operator switches between Add Admin and
+// Invite Artist mid-dialog so already-entered details pre-fill the
+// destination dialog.
+type SwitchPayload = { picked: PersonLite | null; name: string; email: string };
+
 export function AddPeopleMenu(props: AddPeopleMenuProps) {
   const [openDialog, setOpenDialog] = useState<
     null | "admin" | "ambassador" | "invite"
   >(null);
+  // Carries picked person + typed name/email across the Admin ↔ Artist
+  // switch so the operator doesn't retype anything.
+  const [switchPayload, setSwitchPayload] = useState<SwitchPayload | null>(null);
 
   const showAmbassador = props.entityKind === "non_profit";
 
@@ -145,7 +144,7 @@ export function AddPeopleMenu(props: AddPeopleMenuProps) {
         <DropdownMenuContent align="end" className="w-48">
           {props.canAddAdmins !== false && (
             <DropdownMenuItem
-              onSelect={() => setOpenDialog("admin")}
+              onSelect={() => { setSwitchPayload(null); setOpenDialog("admin"); }}
               data-testid={`menu-${props.testIdPrefix}-add-admin`}
             >
               Add Admin
@@ -153,14 +152,14 @@ export function AddPeopleMenu(props: AddPeopleMenuProps) {
           )}
           {showAmbassador && (
             <DropdownMenuItem
-              onSelect={() => setOpenDialog("ambassador")}
+              onSelect={() => { setSwitchPayload(null); setOpenDialog("ambassador"); }}
               data-testid={`menu-${props.testIdPrefix}-add-ambassador`}
             >
               Add Ambassador
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
-            onSelect={() => setOpenDialog("invite")}
+            onSelect={() => { setSwitchPayload(null); setOpenDialog("invite"); }}
             data-testid={`menu-${props.testIdPrefix}-invite-artist`}
           >
             Invite Artist
@@ -170,11 +169,16 @@ export function AddPeopleMenu(props: AddPeopleMenuProps) {
 
       <AttachContactDialog
         open={openDialog === "admin"}
-        onOpenChange={(v) => !v && setOpenDialog(null)}
+        onOpenChange={(v) => { if (!v) { setSwitchPayload(null); setOpenDialog(null); } }}
         title="Add Admin"
         description={`Pick a Person to attach to ${props.entityName} as a Contact, and grant them the partner-scoped admin role.`}
         submitLabel="Add admin"
         kind="admin"
+        switchPayload={switchPayload}
+        onSwitchToInvite={(payload) => {
+          setSwitchPayload(payload);
+          setOpenDialog("invite");
+        }}
         {...props}
       />
       {showAmbassador && (
@@ -190,7 +194,12 @@ export function AddPeopleMenu(props: AddPeopleMenuProps) {
       )}
       <InviteArtistDialog
         open={openDialog === "invite"}
-        onOpenChange={(v) => !v && setOpenDialog(null)}
+        onOpenChange={(v) => { if (!v) { setSwitchPayload(null); setOpenDialog(null); } }}
+        switchPayload={switchPayload}
+        onSwitchToAdmin={props.canAddAdmins !== false ? (payload) => {
+          setSwitchPayload(payload);
+          setOpenDialog("admin");
+        } : undefined}
         {...props}
       />
     </>
@@ -804,6 +813,10 @@ function AttachContactDialog(
     kind: "admin" | "ambassador";
     /** When set, opens straight into the "Invite ready" copy-link state. */
     initialInvite?: AttachContactInitialInvite | null;
+    /** Pre-fill state when switching from Invite Artist → Add Admin. */
+    switchPayload?: SwitchPayload | null;
+    /** Called when operator clicks "Invite an artist instead". Carries current state. */
+    onSwitchToInvite?: (payload: SwitchPayload) => void;
   },
 ) {
   const { toast } = useToast();
@@ -837,6 +850,20 @@ function AttachContactDialog(
   );
   const [copied, setCopied] = useState(false);
 
+  // Pre-fill from switchPayload when the dialog opens (switching from
+  // Invite Artist → Add Admin carries the already-entered person + name/email).
+  // Hydration is authoritative: always overwrite the transferred fields so
+  // repeated Admin → Invite → Admin toggles don't strand stale values.
+  useEffect(() => {
+    if (!props.open || !props.switchPayload) return;
+    const p = props.switchPayload;
+    if (p.picked) { setPicked(p.picked); setTypedName(""); }
+    else if (p.name) { setPicked(null); setTypedName(p.name); }
+    else { setPicked(null); setTypedName(""); }
+    setEmail(p.email);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.open]);
+
   function reset() {
     setPicked(null);
     setTypedName("");
@@ -848,20 +875,6 @@ function AttachContactDialog(
     setCopied(false);
   }
 
-  // Task #824 — the access role this dialog grants, expressed as a single
-  // locked Apple-style card so the operator sees exactly what access is
-  // being granted alongside the optional creative credits. Value is
-  // informational; the server derives the real grant from entityKind.
-  const accessRole: AccessRoleOption = useMemo(() => {
-    if (props.kind === "ambassador") {
-      return { value: "ambassador", label: "Ambassador", hint: `Invites on behalf of ${props.entityName}` };
-    }
-    return {
-      value: ENTITY_ROLE[props.entityKind],
-      label: `${ENTITY_LABEL[props.entityKind]} admin`,
-      hint: `Admin access to ${props.entityName}`,
-    };
-  }, [props.kind, props.entityKind, props.entityName]);
 
   // Task #699 — non-blocking warning when the invitee's email domain
   // doesn't match the press's website domain (e.g. inviting a personal
@@ -1240,24 +1253,26 @@ function AttachContactDialog(
                 </div>
               </div>
             )}
-            {/* Task #824 — one coherent role step: a locked card showing
-                the access being granted.
-                Task #1051 / #2037 — the creative-credits chip rail read as
-                overwhelming noise in the "Add Admin" dialog, so it's omitted
-                for every partner kind (label and other business contacts
-                first, then the press case too). We don't pass the creative
-                props at all; RolePicker hides the whole section when
-                `onCreativeChange` is absent. The creative state is kept in
-                place so a picked person's existing tags are preserved on
-                save. Creative tagging now lives in the People editor and the
-                album-artist dialog, where it's genuinely the point. */}
-            <RolePicker
-              testIdPrefix={`${props.testIdPrefix}-${props.kind}`}
-              accessOptions={[accessRole]}
-              accessValue={accessRole.value}
-              accessLocked
-              accessLabel="Grants access as"
-            />
+            {props.kind === "admin" && props.onSwitchToInvite && (
+              <p
+                className="text-xs text-slate-500 leading-snug"
+                data-testid={`text-${props.testIdPrefix}-${props.kind}-mode-switcher`}
+              >
+                Adding an admin ·{" "}
+                <button
+                  type="button"
+                  onClick={() => props.onSwitchToInvite!({
+                    picked,
+                    name: picked?.name ?? typedName,
+                    email,
+                  })}
+                  className="font-semibold text-[var(--brand-blue)] hover:underline"
+                  data-testid={`button-${props.testIdPrefix}-${props.kind}-switch-to-invite`}
+                >
+                  Invite an artist instead
+                </button>
+              </p>
+            )}
           </div>
         )}
         <DialogFooter>
@@ -1306,6 +1321,11 @@ function InviteArtistDialog(
   props: AddPeopleMenuProps & {
     open: boolean;
     onOpenChange: (v: boolean) => void;
+    /** Pre-fill state when switching from Add Admin → Invite Artist. */
+    switchPayload?: SwitchPayload | null;
+    /** Called when operator clicks "Add as admin instead". Carries current state.
+     *  Absent when the operator lacks canAddAdmins. */
+    onSwitchToAdmin?: (payload: SwitchPayload) => void;
   },
 ) {
   const { toast } = useToast();
@@ -1323,6 +1343,20 @@ function InviteArtistDialog(
   const [lastUrl, setLastUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [duplicate, setDuplicate] = useState<string | null>(null);
+
+  // Pre-fill from switchPayload when the dialog opens (switching from
+  // Add Admin → Invite Artist carries the already-entered person + name/email).
+  // Hydration is authoritative: always overwrite transferred fields so
+  // repeated Invite → Admin → Invite toggles don't strand stale values.
+  useEffect(() => {
+    if (!props.open || !props.switchPayload) return;
+    const p = props.switchPayload;
+    if (p.picked) { setPicked(p.picked); setManualName(""); setStep("contact"); }
+    else if (p.name) { setPicked(null); setManualName(p.name); setStep("contact"); }
+    else { setPicked(null); setManualName(""); }
+    setEmail(p.email);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.open]);
 
   function reset() {
     setStep("pick");
@@ -1521,6 +1555,26 @@ function InviteArtistDialog(
               enableSpotify
               pasteSecondary
             />
+            {props.onSwitchToAdmin && (
+              <p
+                className="text-xs text-slate-500 leading-snug"
+                data-testid={`text-${props.testIdPrefix}-invite-mode-switcher`}
+              >
+                Inviting an artist ·{" "}
+                <button
+                  type="button"
+                  onClick={() => props.onSwitchToAdmin!({
+                    picked,
+                    name: picked?.name ?? manualName,
+                    email,
+                  })}
+                  className="font-semibold text-[var(--brand-blue)] hover:underline"
+                  data-testid={`button-${props.testIdPrefix}-invite-switch-to-admin`}
+                >
+                  Add as admin instead
+                </button>
+              </p>
+            )}
             <DialogFooter className="flex-row justify-between sm:justify-between">
               <Button
                 type="button"
@@ -1643,6 +1697,27 @@ function InviteArtistDialog(
                 emailed.
               </p>
             </div>
+
+            {props.onSwitchToAdmin && (
+              <p
+                className="text-xs text-slate-500 leading-snug"
+                data-testid={`text-${props.testIdPrefix}-invite-mode-switcher`}
+              >
+                Inviting an artist ·{" "}
+                <button
+                  type="button"
+                  onClick={() => props.onSwitchToAdmin!({
+                    picked,
+                    name: picked?.name ?? manualName,
+                    email,
+                  })}
+                  className="font-semibold text-[var(--brand-blue)] hover:underline"
+                  data-testid={`button-${props.testIdPrefix}-invite-switch-to-admin`}
+                >
+                  Add as admin instead
+                </button>
+              </p>
+            )}
 
             {duplicate && (
               <div
