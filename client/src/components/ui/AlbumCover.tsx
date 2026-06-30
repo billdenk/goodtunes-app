@@ -43,6 +43,20 @@ export interface AlbumCoverProps {
   /** Inline style applied to the real-artwork <img> element.
    *  Used for cases that need non-standard img layout (e.g. cert portrait mask). */
   imgStyle?: React.CSSProperties;
+  /**
+   * Task #2369 — admin-only: the album's effective press's uploaded jacket-art
+   * (manufacturers.vinyl_placeholder_url). When present and the album has no real
+   * artwork, renders full-bleed as the cover placeholder — wins over pressLogoUrl.
+   * Must never be passed on fan-facing surfaces.
+   */
+  pressJacketUrl?: string | null;
+  /**
+   * Task #2369 — admin-only: the album's effective press's light logo
+   * (manufacturers.logo_url). When present and there is no real art or press jacket,
+   * renders the logo centred on a dark/brand-toned tile. Must never be passed on
+   * fan-facing surfaces.
+   */
+  pressLogoUrl?: string | null;
 }
 
 // Brand-toned fallback tile (no artist photo): navy base lit by faint blue
@@ -56,6 +70,12 @@ const BRAND_TILE_BACKGROUND =
 const GHOST_SCRIM =
   "linear-gradient(to bottom, rgba(var(--brand-bg-rgb), 0.30) 0%, rgba(var(--brand-bg-rgb), 0.78) 100%)";
 
+// Dark tile background for press logo — navy base with subtle blue glow,
+// matching the brand palette so a white/light press logo reads clearly.
+const PRESS_LOGO_TILE_BACKGROUND =
+  "radial-gradient(circle at 30% 20%, rgba(49,158,216,0.25), transparent 55%)," +
+  "var(--brand-bg)";
+
 export function AlbumCover({
   artwork,
   artistPhoto,
@@ -65,13 +85,19 @@ export function AlbumCover({
   decorative = false,
   loading = "lazy",
   imgStyle,
+  pressJacketUrl,
+  pressLogoUrl,
 }: AlbumCoverProps) {
   // Track load failures so a dead artwork/photo URL falls through to the next
   // tier instead of showing the broken glyph. Reset when the URL changes so
   // adding real art (or a new photo) re-attempts the image immediately.
   const [artFailed, setArtFailed] = useState(false);
+  const [pressJacketFailed, setPressJacketFailed] = useState(false);
+  const [pressLogoFailed, setPressLogoFailed] = useState(false);
   const [photoFailed, setPhotoFailed] = useState(false);
   useEffect(() => setArtFailed(false), [artwork]);
+  useEffect(() => setPressJacketFailed(false), [pressJacketUrl]);
+  useEffect(() => setPressLogoFailed(false), [pressLogoUrl]);
   useEffect(() => setPhotoFailed(false), [artistPhoto]);
 
   const hasArt = !!artwork && !artFailed;
@@ -89,6 +115,66 @@ export function AlbumCover({
         style={imgStyle}
         data-testid="album-cover-art"
       />
+    );
+  }
+
+  // Task #2369 — press jacket art (full-bleed, like real art).
+  const hasPressJacket = !!pressJacketUrl && !pressJacketFailed;
+  if (hasPressJacket) {
+    return (
+      <img
+        src={pressJacketUrl as string}
+        alt={decorative ? "" : title}
+        aria-hidden={decorative || undefined}
+        crossOrigin="anonymous"
+        loading={loading}
+        decoding="async"
+        onError={() => setPressJacketFailed(true)}
+        className={`w-full h-full object-cover ${className}`}
+        data-testid="album-cover-press-jacket"
+      />
+    );
+  }
+
+  // Task #2369 — press logo on a dark/brand-toned tile. A light (white) logo
+  // reads against the dark navy backing; the album name overlaid keeps the
+  // tile scannable in the list.
+  const hasPressLogo = !!pressLogoUrl && !pressLogoFailed;
+  if (hasPressLogo) {
+    return (
+      <div
+        className={`relative w-full h-full overflow-hidden ${className}`}
+        style={{ containerType: "size", background: PRESS_LOGO_TILE_BACKGROUND }}
+        data-testid="album-cover-press-logo"
+      >
+        <div className="absolute inset-0 flex items-center justify-center p-[20%]">
+          <img
+            src={pressLogoUrl as string}
+            alt=""
+            aria-hidden
+            crossOrigin="anonymous"
+            loading={loading}
+            decoding="async"
+            onError={() => setPressLogoFailed(true)}
+            className="max-w-full max-h-full object-contain opacity-85"
+          />
+        </div>
+        {(showName && !decorative) && (
+          <div className="absolute inset-x-0 bottom-0 flex items-end justify-center px-[8%] pb-[8%]">
+            <span
+              className="font-semibold leading-tight text-center line-clamp-2"
+              style={{
+                color: "rgba(255,255,255,0.9)",
+                fontSize: "clamp(9px, 10cqw, 26px)",
+                textShadow: "0 1px 6px rgba(0,0,0,0.7)",
+              }}
+              data-testid="album-cover-name"
+            >
+              {title}
+            </span>
+          </div>
+        )}
+      </div>
     );
   }
 

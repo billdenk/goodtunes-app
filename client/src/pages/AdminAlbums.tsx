@@ -84,6 +84,11 @@ interface AlbumLite {
   isSpinPromo?: boolean;
   genre: string | null;
   createdAt: string | null;
+  // Task #2369 — per-album effective press logo + jacket-art URL for the
+  // Albums list placeholder. Populated admin-only by the GET /api/albums
+  // enrichment pass; undefined on cached results from before this shipped.
+  pressLogoUrl?: string | null;
+  pressJacketUrl?: string | null;
 }
 
 // Task #1967 — "attention" is the cross-stage incomplete-albums audit. It's
@@ -1344,7 +1349,12 @@ function AlbumTile({ album, href }: { album: AlbumLite; href: string }) {
       data-testid={`tile-album-${album.id}`}
     >
       <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 shadow-sm group-hover:shadow-md transition-shadow ring-1 ring-slate-200/60">
-        <AlbumCover artwork={realArtwork(album.artwork)} title={album.title} />
+        <AlbumCover
+          artwork={realArtwork(album.artwork)}
+          title={album.title}
+          pressJacketUrl={album.pressJacketUrl ?? null}
+          pressLogoUrl={album.pressLogoUrl ?? null}
+        />
         {album.isHidden && (
           <div
             className="absolute top-2 left-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/65 text-white text-[10px] font-bold uppercase tracking-wide backdrop-blur-sm"
@@ -1427,6 +1437,8 @@ function AlbumRow({
           artwork={realArtwork(album.artwork)}
           title={album.title}
           showName={false}
+          pressJacketUrl={album.pressJacketUrl ?? null}
+          pressLogoUrl={album.pressLogoUrl ?? null}
         />
       </div>
       <div className="min-w-0 flex-1">

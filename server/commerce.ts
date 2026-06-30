@@ -1572,20 +1572,45 @@ export function registerCommerceRoutes(app: Express) {
       // roles see the chosen manufacturer instead of "No plant set". Keep
       // `press: null` so the MRP cost-math fallback, the picker lock, and
       // the format picker all stay on their no-press code paths.
-      let effectivePress: { id: string; name: string; logoUrl: string | null } | null = null;
+      // Task #2369 — extend resolution to artist/label default_press_id first
+      // (mirrors batchEnrichWithPressPlaceholders in routes.ts), so albums
+      // homed to a press but with no saved SKU still show the press placeholder
+      // in the Package designer jacket thumb and VinylPreview.
+      let effectivePress: { id: string; name: string; logoUrl: string | null; vinylPlaceholderUrl: string | null } | null = null;
       try {
-        const skuPressRows = await db
-          .select({ pressId: albumSkus.pressId })
-          .from(albumSkus)
-          .where(eq(albumSkus.albumId, String(req.params.id)));
-        const firstPressId =
-          skuPressRows
-            .map((s) => (s.pressId ? String(s.pressId) : null))
-            .find((id): id is string => !!id) ?? null;
-        if (firstPressId) {
-          const p = await storage.getManufacturerById(firstPressId);
+        const albumId = String(req.params.id);
+        let resolvedPressId: string | null = null;
+
+        // Step 1: artist default_press_id
+        if (!resolvedPressId && album.primaryArtistId) {
+          const person = await storage.getPersonById(album.primaryArtistId);
+          const dp = (person as any)?.defaultPressId ?? null;
+          if (dp) resolvedPressId = String(dp);
+        }
+
+        // Step 2: label default_press_id
+        if (!resolvedPressId && album.labelId) {
+          const label = await storage.getLabelById(album.labelId);
+          const dp = (label as any)?.defaultPressId ?? null;
+          if (dp) resolvedPressId = String(dp);
+        }
+
+        // Step 3: first saved SKU press
+        if (!resolvedPressId) {
+          const skuPressRows = await db
+            .select({ pressId: albumSkus.pressId })
+            .from(albumSkus)
+            .where(eq(albumSkus.albumId, albumId));
+          resolvedPressId =
+            skuPressRows
+              .map((s) => (s.pressId ? String(s.pressId) : null))
+              .find((id): id is string => !!id) ?? null;
+        }
+
+        if (resolvedPressId) {
+          const p = await storage.getManufacturerById(resolvedPressId);
           if (p) {
-            effectivePress = { id: p.id, name: p.name, logoUrl: (p as any).logoUrl ?? null };
+            effectivePress = { id: p.id, name: p.name, logoUrl: (p as any).logoUrl ?? null, vinylPlaceholderUrl: (p as any).vinylPlaceholderUrl ?? null };
           }
         }
       } catch {}

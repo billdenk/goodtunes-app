@@ -209,7 +209,10 @@ type InvitedPressResponse = {
   // Task #1837 — plant chosen per-SKU when no invited-by-press stamp
   // exists. `press` stays null (keeps MRP cost-math fallback intact);
   // partner/artist-admin roles read this field for a read-only display.
-  effectivePress?: { id: string; name: string; logoUrl?: string | null } | null;
+  // Task #2369 — vinylPlaceholderUrl added so the package designer and
+  // album list can show the effective press's jacket/logo placeholder when
+  // no invited press is stamped.
+  effectivePress?: { id: string; name: string; logoUrl?: string | null; vinylPlaceholderUrl?: string | null } | null;
   // Task #2115 — the invited press's uploaded print templates, embedded
   // here so the artist-readable Package tab can offer template downloads.
   templates?: PressTemplate[];
@@ -1407,6 +1410,7 @@ export function SellPanel({
                           onAfterBump={handleAfterBump}
                           allPresses={allPresses ?? null}
                           invitedPressItself={invitedPress?.press ?? null}
+                          effectivePressItself={invitedPress?.press ? null : (invitedPress?.effectivePress ?? null)}
                           pressLoading={invitedPressLoading}
                           pressFormatsByPress={pressFormatsByPress}
                           allPlannedQuantities={data.skus
@@ -1478,6 +1482,7 @@ export function SellPanel({
                         onAfterBump={handleAfterBump}
                         allPresses={allPresses ?? null}
                         invitedPressItself={invitedPress?.press ?? null}
+                        effectivePressItself={invitedPress?.press ? null : (invitedPress?.effectivePress ?? null)}
                         pressLoading={invitedPressLoading}
                         pressFormatsByPress={pressFormatsByPress}
                         allPlannedQuantities={data.skus
@@ -2406,6 +2411,7 @@ function SkuRow({
   onAfterBump,
   allPresses,
   invitedPressItself,
+  effectivePressItself,
   pressLoading = false,
   pressFormatsByPress,
   allPlannedQuantities,
@@ -2567,6 +2573,11 @@ function SkuRow({
   // this format with a "Currently quoting" pill on the invited one.
   allPresses?: Manufacturer[] | null;
   invitedPressItself?: Manufacturer | null;
+  // Task #2369 — when no press is invited, the effective press (derived
+  // from the first saved SKU's press_id) is threaded here so the jacket
+  // placeholder and thumb can fall back to it. Only the logo + jacket
+  // fields are used; all other Manufacturer members default to null.
+  effectivePressItself?: { id: string; name: string; logoUrl?: string | null; vinylPlaceholderUrl?: string | null } | null;
   // Task #2314 — true while the album's invited-press query is still
   // loading, so the jacket preview tiles can show a pulsing skeleton and
   // crossfade the branded placeholder in once it resolves (instead of the
@@ -4667,8 +4678,8 @@ function SkuRow({
                 + placeholderLogoUrl mirror the big preview exactly. */}
             <JacketArtFill
               artworkUrl={artworkUrl}
-              placeholderArtworkUrl={invitedPressItself?.vinylPlaceholderUrl ?? null}
-              placeholderLogoUrl={invitedPressItself?.logoUrl ?? null}
+              placeholderArtworkUrl={(invitedPressItself ?? effectivePressItself)?.vinylPlaceholderUrl ?? null}
+              placeholderLogoUrl={(invitedPressItself ?? effectivePressItself)?.logoUrl ?? null}
               loading={pressLoading}
             />
           </button>
@@ -5721,8 +5732,8 @@ function SkuRow({
                      catalog editor), then fall back to the quoting press's
                      logo, then the generic placeholder. Real art always wins
                      (VinylPreview only uses these when artworkUrl is empty). */
-                  placeholderArtworkUrl={invitedPressItself?.vinylPlaceholderUrl ?? null}
-                  placeholderLogoUrl={invitedPressItself?.logoUrl ?? null}
+                  placeholderArtworkUrl={(invitedPressItself ?? effectivePressItself)?.vinylPlaceholderUrl ?? null}
+                  placeholderLogoUrl={(invitedPressItself ?? effectivePressItself)?.logoUrl ?? null}
                   loading={pressLoading}
                   jacketOverlay={(onEditArtwork || canChangeFormat) ? (
                     <>

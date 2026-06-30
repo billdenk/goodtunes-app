@@ -656,6 +656,104 @@ async function batchEnrichWithArtistPhotos<T extends { primaryArtistId?: string 
   }));
 }
 
+// Task #2369 — Batch-resolve each album's effective press logo + jacket-art
+// URL for the admin Albums list card. Mirrors the printer-chip resolution
+// order: homed press via artist/label `default_press_id`, then effective
+// press via the first saved SKU's `press_id`. Fan-facing call sites must
+// never receive these fields (kept in the admin-only enrichment path).
+async function batchEnrichWithPressPlaceholders<
+  T extends { id: string; primaryArtistId?: string | null; labelId?: string | null },
+>(
+  albums: T[],
+): Promise<Array<T & { pressLogoUrl: string | null; pressJacketUrl: string | null }>> {
+  if (!albums.length) return albums.map((a) => ({ ...a, pressLogoUrl: null, pressJacketUrl: null }));
+  try {
+    // --- Step 1: homed press via artist defaultPressId ---
+    const artistIds = [...new Set(albums.map((a) => a.primaryArtistId).filter((id): id is string => !!id))];
+    const artistPressMap = new Map<string, string>(); // artistId → pressId
+    if (artistIds.length) {
+      const rows = await db.execute<{ id: string; default_press_id: string }>(sql`
+        SELECT id, default_press_id FROM people
+        WHERE id = ANY(${pgArray(artistIds)}::text[])
+          AND default_press_id IS NOT NULL
+      `);
+      for (const r of ((rows as any).rows ?? [])) {
+        artistPressMap.set(r.id, r.default_press_id);
+      }
+    }
+
+    // --- Step 2: homed press via label defaultPressId ---
+    const labelIds = [...new Set(albums.map((a) => a.labelId).filter((id): id is string => !!id))];
+    const labelPressMap = new Map<string, string>(); // labelId → pressId
+    if (labelIds.length) {
+      const rows = await db.execute<{ id: string; default_press_id: string }>(sql`
+        SELECT id, default_press_id FROM labels
+        WHERE id = ANY(${pgArray(labelIds)}::text[])
+          AND default_press_id IS NOT NULL
+      `);
+      for (const r of ((rows as any).rows ?? [])) {
+        labelPressMap.set(r.id, r.default_press_id);
+      }
+    }
+
+    // --- Step 3: effective press via first saved SKU for albums still without a homed press ---
+    const noHomedPressIds = albums
+      .filter((a) => {
+        const via = (a.primaryArtistId ? artistPressMap.get(a.primaryArtistId) : null)
+          ?? (a.labelId ? labelPressMap.get(a.labelId) : null);
+        return !via;
+      })
+      .map((a) => a.id);
+    const skuPressMap = new Map<string, string>(); // albumId → pressId
+    if (noHomedPressIds.length) {
+      const rows = await db.execute<{ album_id: string; press_id: string }>(sql`
+        SELECT DISTINCT ON (album_id) album_id, press_id
+        FROM album_skus
+        WHERE album_id = ANY(${pgArray(noHomedPressIds)}::text[])
+          AND press_id IS NOT NULL
+        ORDER BY album_id, created_at
+      `);
+      for (const r of ((rows as any).rows ?? [])) {
+        skuPressMap.set(r.album_id, r.press_id);
+      }
+    }
+
+    // --- Step 4: batch-load manufacturer logo + jacket-art ---
+    const allPressIds = [...new Set([
+      ...artistPressMap.values(),
+      ...labelPressMap.values(),
+      ...skuPressMap.values(),
+    ])];
+    const pressInfoMap = new Map<string, { logoUrl: string | null; vinylPlaceholderUrl: string | null }>();
+    if (allPressIds.length) {
+      const rows = await db.execute<{ id: string; logo_url: string | null; vinyl_placeholder_url: string | null }>(sql`
+        SELECT id, logo_url, vinyl_placeholder_url FROM manufacturers
+        WHERE id = ANY(${pgArray(allPressIds)}::text[])
+      `);
+      for (const r of ((rows as any).rows ?? [])) {
+        pressInfoMap.set(r.id, { logoUrl: r.logo_url, vinylPlaceholderUrl: r.vinyl_placeholder_url });
+      }
+    }
+
+    return albums.map((a) => {
+      const pressId =
+        (a.primaryArtistId ? artistPressMap.get(a.primaryArtistId) : null)
+        ?? (a.labelId ? labelPressMap.get(a.labelId) : null)
+        ?? skuPressMap.get(a.id)
+        ?? null;
+      const info = pressId ? (pressInfoMap.get(pressId) ?? null) : null;
+      return {
+        ...a,
+        pressLogoUrl: info?.logoUrl ?? null,
+        pressJacketUrl: info?.vinylPlaceholderUrl ?? null,
+      };
+    });
+  } catch {
+    // Best-effort: don't let press-resolution failures break the album list.
+    return albums.map((a) => ({ ...a, pressLogoUrl: null, pressJacketUrl: null }));
+  }
+}
+
 // Resolves a primaryArtistId payload: null / empty → null, otherwise looks
 // up the People row to confirm it exists. Unknown ids are silently dropped
 // to null so the admin save can't 500 on a stale picker selection.
@@ -21156,6 +21254,11 @@ export async function registerRoutes(
     // so album-cover placeholders are available on every surface that reads
     // from this list endpoint.
     const enrichedWithPhotos = await batchEnrichWithArtistPhotos(enriched);
+    // Task #2369 — admin-only: resolve each album's effective press logo + jacket-art
+    // URL so the Albums list card can show the press placeholder for art-less albums.
+    // Fan-facing endpoints (GET /api/albums/:id, /api/public/*) deliberately skip
+    // this enrichment so press branding never leaks to the fan player.
+    const enrichedWithPress = await batchEnrichWithPressPlaceholders(enrichedWithPhotos);
     // Task #1873 — fail-closed partner scoping.  Every partner-admin role
     // is scoped to its own entity and returns nothing when unattached.
     // Only operators (super_admin/admin) fall through to the full catalog.
@@ -21178,12 +21281,12 @@ export async function registerRoutes(
             ((rosterRows as any).rows || []).map((r: any) => r.id as string),
           );
         }
-        const scoped = filterAlbumsForPartnerRole(enrichedWithPhotos, info, managerRoster);
+        const scoped = filterAlbumsForPartnerRole(enrichedWithPress, info, managerRoster);
         if (scoped !== null) return res.json(scoped);
         // scoped===null means operator → fall through to full catalog below.
       }
     }
-    return res.json(enrichedWithPhotos);
+    return res.json(enrichedWithPress);
   });
 
   // Task #965 — PUBLIC per-release resolver for clean share links
