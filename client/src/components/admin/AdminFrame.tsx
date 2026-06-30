@@ -557,20 +557,20 @@ export function AdminFrame({
                   onToggle={() => toggleSection("catalog")}
                 >
                   <SidebarLink
-                    icon={Disc3}
-                    label="Albums"
-                    count={albumCount}
-                    active={active === "albums"}
-                    onClick={() => navigate("/admin/albums")}
-                    testId="nav-albums"
-                  />
-                  <SidebarLink
                     icon={User}
                     label="People"
                     count={people.length}
                     active={active === "people"}
                     onClick={() => navigate("/admin/people")}
                     testId="nav-people"
+                  />
+                  <SidebarLink
+                    icon={Disc3}
+                    label="Albums"
+                    count={albumCount}
+                    active={active === "albums"}
+                    onClick={() => navigate("/admin/albums")}
+                    testId="nav-albums"
                   />
                   <SidebarLink
                     icon={Guitar}
@@ -808,20 +808,20 @@ export function AdminFrame({
               onToggle={() => toggleSection("catalog")}
             >
               <SidebarLink
-                icon={Disc3}
-                label="Albums"
-                count={albumCount}
-                active={active === "albums"}
-                onClick={() => navigate("/admin/albums")}
-                testId="nav-albums"
-              />
-              <SidebarLink
                 icon={User}
                 label="People"
                 count={people.length}
                 active={active === "people"}
                 onClick={() => navigate("/admin/people")}
                 testId="nav-people"
+              />
+              <SidebarLink
+                icon={Disc3}
+                label="Albums"
+                count={albumCount}
+                active={active === "albums"}
+                onClick={() => navigate("/admin/albums")}
+                testId="nav-albums"
               />
               <SidebarLink
                 icon={Guitar}
