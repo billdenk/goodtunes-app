@@ -17,6 +17,7 @@ import {
   acquisitionFunnel,
   type AdminReportContext,
 } from "./admin";
+import { partnerActivity, partnerActivityTimelineByInviteId } from "./partnerActivity";
 import { toCsv, dollarsFromCents } from "./csv";
 
 function parseRange(req: Request): { from: Date; to: Date } {
@@ -227,6 +228,17 @@ export function registerAdminReportRoutes(app: Express) {
   // ─── PostHog embed config ────────────────────────────────────────
   app.get("/api/admin/reports/posthog", adminGuard, wrap(async (_req, res) => {
     res.json(posthogEmbeds());
+  }));
+
+  // ─── Partner activity report (super-admin) ───────────────────────
+  app.get("/api/admin/reports/partner-activity", superGuard, wrap(async (_req, res) => {
+    res.json(await partnerActivity());
+  }));
+
+  // Per-partner timeline — fetched on row-expand to avoid N+1 in the list.
+  app.get("/api/admin/reports/partner-activity/:inviteId/timeline", superGuard, wrap(async (req, res) => {
+    const timeline = await partnerActivityTimelineByInviteId(req.params.inviteId);
+    res.json({ timeline });
   }));
 
   // ─── Release acquisition funnel (Task #2127) ─────────────────────

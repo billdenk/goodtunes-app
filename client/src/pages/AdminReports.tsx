@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { getInitials } from "@/lib/initials";
 import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -38,7 +38,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Download, MapPin, TrendingUp } from "lucide-react";
+import { Download, MapPin, TrendingUp, ChevronDown, ChevronRight, Clock, LogIn, FileEdit, RefreshCw, Package, ShoppingCart, Users } from "lucide-react";
 import { CampaignLinkBuilder } from "@/components/operator/CampaignLinkBuilder";
 
 const BLUE = "#319ED8";
@@ -174,9 +174,15 @@ export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) 
     const allowed = new Set([
       "sales", "plays", "payouts", "redemption", "fans", "map",
       "referrals", "overview", "revenue", "engagement", "funnels",
-      "ops", "recon", "events",
+      "ops",
     ]);
-    return t && allowed.has(t) ? t : "sales";
+    // Super-only tabs are allowed to be the initial tab — but TabsContent is
+    // already gated by {isSuper && ...} so non-super users see an empty panel.
+    // Keeping them out of the general set means a non-super user who tweaks the
+    // URL param still gets "sales" as the safe fallback.
+    const superOnlyTabs = new Set(["recon", "events", "partner-activity"]);
+    if (t && (allowed.has(t) || superOnlyTabs.has(t))) return t;
+    return "sales";
   }, []);
 
   const body = (
@@ -233,6 +239,7 @@ export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) 
               {isAdmin && <ReportTab value="ops" testId="tab-ops">Ops health</ReportTab>}
               {isSuper && <ReportTab value="recon" testId="tab-reconciliation">Payout reconciliation</ReportTab>}
               {isSuper && <ReportTab value="events" testId="tab-events">Raw events</ReportTab>}
+              {isSuper && <ReportTab value="partner-activity" testId="tab-partner-activity">Partner activity</ReportTab>}
             </TabsList>
           </div>
 
@@ -250,6 +257,7 @@ export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) 
           {isAdmin && <TabsContent value="ops"><OpsTab qs={qs} /></TabsContent>}
           {isSuper && <TabsContent value="recon"><ReconciliationTab qs={qs} /></TabsContent>}
           {isSuper && <TabsContent value="events"><RawEventsTab qs={qs} /></TabsContent>}
+          {isSuper && <TabsContent value="partner-activity"><PartnerActivityTab /></TabsContent>}
         </Tabs>
         </AdminErrorBoundary>
       </div>
@@ -1604,6 +1612,353 @@ function ReconciliationTab({ qs }: { qs: string }) {
         Δ Delta = computed (snapshot at ship) − transferred via Stripe Connect. Non-zero deltas surface owners with skipped/failed transfers that need a retry from the Payouts admin.
       </p>
     </Card>
+  );
+}
+
+// ─── Partner activity tab (super-admin only) ──────────────────────────────
+
+type PartnerActivityStatus = "invited" | "expired_or_revoked" | "idle" | "active" | "stalled";
+
+interface PartnerActivityRow {
+  inviteId: string;
+  role: string;
+  roleScopeId: string | null;
+  scopeName: string;
+  scopeThumbUrl: string | null;
+  inviteeEmail: string | null;
+  inviterDisplayName: string | null;
+  inviterEmail: string | null;
+  invitedAt: string;
+  acceptedAt: string | null;
+  acceptedUserId: string | null;
+  status: PartnerActivityStatus;
+  lastSeenAt: string | null;
+  albumCount: number;
+  rosterCount: number;
+  pendingChangesCount: number;
+  pricingSyncsCount: number;
+  importsCount: number;
+  recentSalesCount: number;
+  catalogItemsCount: number;
+}
+
+interface ActivityTimelineItem {
+  kind: "login" | "edit" | "pricing_sync" | "import" | "sale";
+  ts: string;
+  detail: string;
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  artist: "Artist",
+  label: "Label",
+  manufacturer: "Press",
+  non_profit: "NPO",
+  fulfillment: "Fulfillment",
+  vendor: "Vendor",
+  manager: "Manager",
+};
+
+const STATUS_META: Record<PartnerActivityStatus, { label: string; className: string }> = {
+  invited:           { label: "Invite sent",      className: "bg-blue-50 text-blue-700" },
+  expired_or_revoked:{ label: "Expired / Revoked", className: "bg-slate-100 text-slate-500" },
+  idle:              { label: "Joined · idle",    className: "bg-amber-50 text-amber-700" },
+  active:            { label: "Active",            className: "bg-green-50 text-green-700" },
+  stalled:           { label: "Stalled",           className: "bg-orange-50 text-orange-700" },
+};
+
+function StatusPill({ status }: { status: PartnerActivityStatus }) {
+  const { label, className } = STATUS_META[status] ?? { label: status, className: "bg-slate-100 text-slate-500" };
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${className}`}>
+      {label}
+    </span>
+  );
+}
+
+function fmtRelative(iso: string | null): string {
+  if (!iso) return "—";
+  const diff = (Date.now() - new Date(iso).getTime()) / 86400_000;
+  if (diff < 1) return "today";
+  if (diff < 2) return "yesterday";
+  if (diff < 30) return `${Math.floor(diff)}d ago`;
+  if (diff < 365) return `${Math.floor(diff / 30)}mo ago`;
+  return `${Math.floor(diff / 365)}y ago`;
+}
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function TimelineIcon({ kind }: { kind: ActivityTimelineItem["kind"] }) {
+  if (kind === "login") return <LogIn className="w-3.5 h-3.5 shrink-0 text-slate-400" />;
+  if (kind === "edit") return <FileEdit className="w-3.5 h-3.5 shrink-0 text-slate-400" />;
+  if (kind === "import") return <Package className="w-3.5 h-3.5 shrink-0 text-slate-400" />;
+  if (kind === "sale") return <ShoppingCart className="w-3.5 h-3.5 shrink-0 text-slate-400" />;
+  return <RefreshCw className="w-3.5 h-3.5 shrink-0 text-slate-400" />;
+}
+
+function PartnerTimeline({ inviteId }: { inviteId: string }) {
+  const { data, isLoading } = useQuery<{ timeline: ActivityTimelineItem[] }>({
+    queryKey: ["/api/admin/reports/partner-activity", inviteId, "timeline"],
+    queryFn: () => fetchJson(`/api/admin/reports/partner-activity/${inviteId}/timeline`),
+  });
+
+  if (isLoading) {
+    return <div className="py-3 text-xs text-slate-400">Loading activity…</div>;
+  }
+
+  const items = data?.timeline ?? [];
+  if (items.length === 0) {
+    return (
+      <div className="py-3 text-xs text-slate-400 italic">
+        No dated activity recorded yet — counts above are snapshot totals only.
+      </div>
+    );
+  }
+
+  return (
+    <ul className="space-y-1.5 py-2" data-testid="list-partner-timeline">
+      {items.map((item, i) => (
+        <li key={i} className="flex items-start gap-2 text-[12px] text-slate-600">
+          <TimelineIcon kind={item.kind} />
+          <span className="text-slate-400 shrink-0 tabular-nums">{fmtDate(item.ts)}</span>
+          <span>{item.detail}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const ALL_STATUSES: PartnerActivityStatus[] = [
+  "active", "stalled", "idle", "invited", "expired_or_revoked",
+];
+
+function PartnerActivityTab() {
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const { data, isLoading, isError, error, refetch } = useQuery<{
+    partners: PartnerActivityRow[];
+    activeWithinDays: number;
+  }>({
+    queryKey: ["/api/admin/reports/partner-activity"],
+    queryFn: () => fetchJson("/api/admin/reports/partner-activity"),
+    staleTime: 60_000,
+  });
+
+  const toggleRow = useCallback((id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!data) return [];
+    const q = search.toLowerCase().trim();
+    return data.partners.filter((p) => {
+      if (statusFilter !== "all" && p.status !== statusFilter) return false;
+      if (typeFilter !== "all" && p.role !== typeFilter) return false;
+      if (q) {
+        const haystack = [p.scopeName, p.inviterDisplayName ?? "", p.inviterEmail ?? ""].join(" ").toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [data, statusFilter, typeFilter, search]);
+
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
+  if (isLoading || !data) return <LoadingState />;
+
+  const activeWithinDays = data.activeWithinDays ?? 30;
+
+  return (
+    <div className="space-y-4" data-testid="section-partner-activity">
+      <Card>
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <div className="relative flex-1 min-w-[180px] max-w-[280px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search partners…"
+              className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+              data-testid="input-partner-search"
+            />
+          </div>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="h-8 px-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30 bg-white"
+            data-testid="select-partner-type"
+          >
+            <option value="all">All types</option>
+            {Object.entries(ROLE_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              onClick={() => setStatusFilter("all")}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-full transition-colors ${statusFilter === "all" ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+              data-testid="filter-status-all"
+            >
+              All
+            </button>
+            {ALL_STATUSES.map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded-full transition-colors ${statusFilter === s ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                data-testid={`filter-status-${s}`}
+              >
+                {STATUS_META[s].label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {filtered.length === 0 ? (
+          <EmptyState message="No partners match these filters." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="table-partner-activity">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                  <th className="py-2 font-bold w-6"></th>
+                  <th className="py-2 font-bold">Partner</th>
+                  <th className="py-2 font-bold">Status</th>
+                  <th className="py-2 font-bold">Last seen</th>
+                  <th className="py-2 font-bold text-right">Albums</th>
+                  <th className="py-2 font-bold text-right">Roster</th>
+                  <th className="py-2 font-bold text-right">Edits</th>
+                  <th className="py-2 font-bold text-right">Imports</th>
+                  <th className="py-2 font-bold text-right">Sales (30d)</th>
+                  <th className="py-2 font-bold text-right">Syncs</th>
+                  <th className="py-2 font-bold text-right">Catalog</th>
+                  <th className="py-2 font-bold">Invited by</th>
+                  <th className="py-2 font-bold">Joined</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((p) => {
+                  const isExpanded = expandedId === p.inviteId;
+                  return [
+                    <tr
+                      key={p.inviteId}
+                      className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
+                      onClick={() => toggleRow(p.inviteId)}
+                      data-testid={`row-partner-${p.inviteId}`}
+                    >
+                      <td className="py-2.5 pl-1 text-slate-400">
+                        {isExpanded
+                          ? <ChevronDown className="w-3.5 h-3.5" />
+                          : <ChevronRight className="w-3.5 h-3.5" />
+                        }
+                      </td>
+                      <td className="py-2.5 pr-4">
+                        <div className="flex items-center gap-2">
+                          {p.scopeThumbUrl ? (
+                            <img src={p.scopeThumbUrl} alt="" className="w-6 h-6 rounded object-cover shrink-0" />
+                          ) : (
+                            <div className="w-6 h-6 rounded bg-slate-100 flex items-center justify-center text-[10px] text-slate-400 shrink-0">
+                              {p.scopeName.slice(0, 1).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <div className="text-slate-900 font-medium leading-tight">{p.scopeName}</div>
+                            <div className="text-[11px] text-slate-400">{ROLE_LABELS[p.role] ?? p.role}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-2.5">
+                        <StatusPill status={p.status} />
+                      </td>
+                      <td className="py-2.5 text-slate-600 whitespace-nowrap">
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span title={p.lastSeenAt ? new Date(p.lastSeenAt).toLocaleString() : undefined}>
+                            {fmtRelative(p.lastSeenAt)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-2.5 text-right tabular-nums text-slate-700">
+                        {p.albumCount > 0 ? p.albumCount : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="py-2.5 text-right tabular-nums text-slate-700">
+                        {p.rosterCount > 0 ? (
+                          <span className="inline-flex items-center gap-0.5">
+                            <Users className="w-3 h-3 text-slate-400" />
+                            {p.rosterCount}
+                          </span>
+                        ) : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="py-2.5 text-right tabular-nums text-slate-700">
+                        {p.pendingChangesCount > 0 ? p.pendingChangesCount : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="py-2.5 text-right tabular-nums text-slate-700">
+                        {p.importsCount > 0 ? p.importsCount : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="py-2.5 text-right tabular-nums text-slate-700">
+                        {p.recentSalesCount > 0 ? p.recentSalesCount : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="py-2.5 text-right tabular-nums text-slate-700">
+                        {p.pricingSyncsCount > 0 ? p.pricingSyncsCount : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="py-2.5 text-right tabular-nums text-slate-700">
+                        {p.catalogItemsCount > 0 ? (
+                          <span title="press_format_costs + press_color_tiers rows configured">
+                            {p.catalogItemsCount}
+                          </span>
+                        ) : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="py-2.5 text-slate-500 text-[12px]">
+                        {p.inviterDisplayName ?? p.inviterEmail ?? "—"}
+                      </td>
+                      <td className="py-2.5 text-slate-500 text-[12px] whitespace-nowrap">
+                        {p.acceptedAt ? fmtDate(p.acceptedAt) : <span className="text-slate-300">Not yet</span>}
+                      </td>
+                    </tr>,
+                    isExpanded && (
+                      <tr key={`${p.inviteId}:timeline`} className="border-b border-slate-100 bg-slate-50/60">
+                        <td></td>
+                        <td colSpan={12} className="px-3 pb-3">
+                          <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider pt-2 mb-1">
+                            Recent activity
+                          </div>
+                          {p.acceptedAt ? (
+                            <PartnerTimeline inviteId={p.inviteId} />
+                          ) : (
+                            <div className="py-2 text-xs text-slate-400 italic">
+                              Partner hasn't accepted their invite yet.
+                            </div>
+                          )}
+                          <div className="mt-2 text-[11px] text-slate-400">
+                            Invited {fmtDate(p.invitedAt)}
+                            {p.inviteeEmail && ` · ${p.inviteeEmail}`}
+                            {p.pricingSyncsCount > 0 && ` · ${p.pricingSyncsCount} pricing sync${p.pricingSyncsCount !== 1 ? "s" : ""} total`}
+                            {p.albumCount > 0 && ` · ${p.albumCount} album${p.albumCount !== 1 ? "s" : ""} in scope`}
+                          </div>
+                        </td>
+                      </tr>
+                    ),
+                  ];
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <p className="text-[11px] text-slate-400 mt-3">
+          {filtered.length} of {data.partners.length} partners shown.
+          {" "}<span className="font-medium">Active</span> = any signal within {activeWithinDays} days (logins · edits · imports · orders · pricing syncs).
+          {" "}<span className="font-medium">Albums / Roster</span> are snapshot totals (no created_at).
+          {" "}<span className="font-medium">Sales (30d)</span> = paid orders in the last 30 days.
+          {" "}<span className="font-medium">Catalog</span> = format-cost rows + color/tier rows configured (manufacturers only).
+          Expand a row for the full dated activity timeline.
+        </p>
+      </Card>
+    </div>
   );
 }
 
