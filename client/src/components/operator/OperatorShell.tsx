@@ -210,7 +210,8 @@ export function OperatorShell<TabId extends string>({
               h-14 logo band. When a full-size navLogoUrl is set (press
               whitelabel, Task #2191), render it height-constrained so the
               h-14 band never grows; otherwise fall back to the small square
-              avatar + truncated name. */}
+              avatar + name, which wraps to up to two lines inside the band so
+              a long press name shows in full instead of truncating. */}
           <div className="h-14 flex-shrink-0 flex items-center gap-2.5 px-3 border-b border-slate-200 overflow-hidden">
             {navLogoUrl ? (
               <img
@@ -234,7 +235,7 @@ export function OperatorShell<TabId extends string>({
                     <FallbackIcon className="w-3.5 h-3.5 text-slate-400" />
                   )}
                 </div>
-                <span className="text-sm font-semibold text-slate-800 truncate" data-testid="text-operator-rail-name">
+                <span className="text-sm font-semibold text-slate-800 leading-tight line-clamp-2 min-w-0" data-testid="text-operator-rail-name">
                   {name}
                 </span>
               </>
