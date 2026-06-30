@@ -17,7 +17,8 @@
 // Task #2081 — `layout` prop. The standalone partner portals (label,
 // manager, non_profit, publisher) opt into `layout="leftnav"` so their
 // whole experience rides the same LEFT-nav chrome as the rest of the
-// admin (matching AdminFrame's 220px white rail) instead of a tab-only
+// admin (a white left rail like AdminFrame's, a touch wider at 256px to
+// fit long partner names on one line) instead of a tab-only
 // header that flips to a left-nav layout the moment they click a shared
 // tool. The default stays `"tabs"` so the artist/press/vendor/printer
 // shells that already use OperatorShell are byte-for-byte unchanged.
@@ -87,7 +88,7 @@ export type OperatorShellProps<TabId extends string> = {
   /**
    * Chrome layout. `"tabs"` (default) keeps the legacy header + sticky
    * horizontal tab bar used by the artist/press/vendor/printer shells.
-   * `"leftnav"` renders a 220px white left rail (GoodTunes logo, the
+   * `"leftnav"` renders a 256px white left rail (GoodTunes logo, the
    * same tabs as vertical nav items, optional `navExtras`, account menu
    * at the foot) with the identity header + content in the main column —
    * the unified scoped left-nav for the standalone partner portals.
@@ -201,17 +202,18 @@ export function OperatorShell<TabId extends string>({
         className="h-screen overflow-hidden flex bg-slate-50 text-slate-900"
         data-testid={testId ?? "operator-shell"}
       >
-        {/* Left rail — 220px white column. Partner logo + name in the top
+        {/* Left rail — 256px white column. Partner logo + name in the top
             header band (replacing the GoodTunes logo). Vertical nav in the
             middle. "Powered by GoodTunes" pinned to the foot.
             Hidden on phones, which fall back to the horizontal tab bar. */}
-        <aside className="w-[220px] flex-shrink-0 bg-white hidden md:flex md:flex-col">
-          {/* Partner logo + name — top-left rail header, mirrors AdminFrame's
-              h-14 logo band. When a full-size navLogoUrl is set (press
-              whitelabel, Task #2191), render it height-constrained so the
-              h-14 band never grows; otherwise fall back to the small square
-              avatar + name, which wraps to up to two lines inside the band so
-              a long press name shows in full instead of truncating. */}
+        <aside className="w-64 flex-shrink-0 bg-white hidden md:flex md:flex-col">
+          {/* Partner logo + name — top-left rail header (h-14 band). When a
+              full-size navLogoUrl is set (press whitelabel), render it
+              height-constrained so the band never grows; otherwise fall back to
+              the small square avatar + the partner name on a single line. The
+              partner rail is widened (w-64, vs AdminFrame's 220px) so a long
+              press name like "Memphis Record Pressing" fits on one line;
+              truncate is only a safety net for unusually long names. */}
           <div className="h-14 flex-shrink-0 flex items-center gap-2.5 px-3 border-b border-slate-200 overflow-hidden">
             {navLogoUrl ? (
               <img
@@ -235,7 +237,7 @@ export function OperatorShell<TabId extends string>({
                     <FallbackIcon className="w-3.5 h-3.5 text-slate-400" />
                   )}
                 </div>
-                <span className="text-sm font-semibold text-slate-800 leading-tight line-clamp-2 min-w-0" data-testid="text-operator-rail-name">
+                <span className="text-sm font-semibold text-slate-800 truncate min-w-0" data-testid="text-operator-rail-name">
                   {name}
                 </span>
               </>
