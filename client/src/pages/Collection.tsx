@@ -788,6 +788,53 @@ export function CollectionSongs() {
   );
 }
 
+// Artist avatar that prefers the resolved artist photo and only falls back to
+// album artwork once `/api/people` has loaded — while it's loading we show a
+// gradient-initial placeholder rather than flashing the album cover (which is
+// the exact wrong-image Bill reported for Nightbirde). Mirrors FavoriteArtists.
+function CollectionArtistAvatar({
+  name,
+  photo,
+  fallback,
+  className,
+}: {
+  name: string;
+  photo: string | undefined;
+  fallback: string | undefined;
+  className: string;
+}) {
+  const [errored, setErrored] = useState(false);
+  const src = !errored ? photo ?? fallback : undefined;
+  if (!src) {
+    return (
+      <div
+        className={`${className} rounded-full flex items-center justify-center text-fan-secondary font-bold`}
+        style={{
+          background: "linear-gradient(135deg, #1D5E8F, #4A1E8F)",
+          border: "1px solid rgba(255,255,255,0.1)",
+        }}
+        aria-hidden="true"
+      >
+        {getInitials(name, "?")}
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={name}
+      onError={() => setErrored(true)}
+      loading="lazy"
+      decoding="async"
+      className={`${className} rounded-full object-cover`}
+      style={{
+        border: "1px solid rgba(255,255,255,0.1)",
+        ...(photo && !errored ? { objectPosition: "50% 20%" } : {}),
+      }}
+    />
+  );
+}
+
 // ===========================================================================
 // COLLECTION → ARTISTS — artists from owned albums; sort (A–Z / Z–A) in the
 // top-right popover. Tapping a row opens the artist page. (Task #1376.)
@@ -795,6 +842,20 @@ export function CollectionSongs() {
 export function CollectionArtists() {
   const { myAlbumsLoading, artists, openArtist } = useFanLibrary();
   const favArtists = useFavoriteArtists();
+  // Prefer the admin-uploaded Person photo (same source ArtistDetail and
+  // FavoriteArtists use) over the static fallback map, so artists like
+  // Nightbirde show their real photo instead of their album cover. Shared
+  // queryKey with ArtistDetail → a free read when already cached.
+  const { data: people, isLoading: peopleLoading } = useQuery<Array<{ name: string; photoUrl: string | null }>>({
+    queryKey: ["/api/people"],
+  });
+  const peoplePhotoByName = useMemo(() => {
+    const map = new Map<string, string>();
+    (people ?? []).forEach((p) => {
+      if (p.photoUrl) map.set(p.name.trim().toLowerCase(), p.photoUrl);
+    });
+    return map;
+  }, [people]);
   const [sortBy, setSortBy] = useState("name-asc");
   const [visibleCount, setVisibleCount] = useState(60);
   // TD (lg+) defaults to the artwork grid; the toggle only renders at lg+, so
@@ -853,7 +914,9 @@ export function CollectionArtists() {
         <div className={`flex flex-col ${view === "grid" ? "lg:hidden" : ""}`}>
           {sorted.slice(0, visibleCount).map((artist, idx, visibleArtists) => {
             const isFav = favArtists.has(artist.name);
-            const photo = ARTIST_PHOTOS[artist.name];
+            const personPhoto = peoplePhotoByName.get(artist.name.trim().toLowerCase());
+            const photo = peopleLoading ? undefined : personPhoto ?? ARTIST_PHOTOS[artist.name];
+            const fallbackArt = peopleLoading ? undefined : artist.albums[0]?.artwork;
             return (
               <button
                 key={artist.name}
@@ -864,16 +927,11 @@ export function CollectionArtists() {
                 data-testid={`row-artist-${artist.name}`}
               >
                 <div className="relative flex-shrink-0">
-                  <img
-                    src={photo ?? artist.albums[0].artwork}
-                    alt={artist.name}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-12 h-12 rounded-full object-cover"
-                    style={{
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      ...(photo ? { objectPosition: "50% 20%" } : {}),
-                    }}
+                  <CollectionArtistAvatar
+                    name={artist.name}
+                    photo={photo}
+                    fallback={fallbackArt}
+                    className="w-12 h-12"
                   />
                   {isFav && (
                     <span
@@ -904,7 +962,9 @@ export function CollectionArtists() {
         <div className={`hidden ${view === "grid" ? "lg:grid" : ""} lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-4 gap-y-6`}>
           {sorted.slice(0, visibleCount).map((artist) => {
             const isFav = favArtists.has(artist.name);
-            const photo = ARTIST_PHOTOS[artist.name];
+            const personPhoto = peoplePhotoByName.get(artist.name.trim().toLowerCase());
+            const photo = peopleLoading ? undefined : personPhoto ?? ARTIST_PHOTOS[artist.name];
+            const fallbackArt = peopleLoading ? undefined : artist.albums[0]?.artwork;
             return (
               <button
                 key={artist.name}
@@ -914,16 +974,11 @@ export function CollectionArtists() {
                 data-testid={`card-artist-${artist.name}`}
               >
                 <div className="relative w-full">
-                  <img
-                    src={photo ?? artist.albums[0].artwork}
-                    alt={artist.name}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full aspect-square rounded-full object-cover"
-                    style={{
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      ...(photo ? { objectPosition: "50% 20%" } : {}),
-                    }}
+                  <CollectionArtistAvatar
+                    name={artist.name}
+                    photo={photo}
+                    fallback={fallbackArt}
+                    className="w-full aspect-square"
                   />
                   {isFav && (
                     <svg
