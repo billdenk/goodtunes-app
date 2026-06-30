@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, ExternalLink, Link2, Music2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ExternalLink, Link2, Music2, X } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import {
@@ -830,6 +830,33 @@ export function NewAlbumArtistDialog({
                           </button>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Duplicate-name warning — shown when the typed name
+                      exactly matches an existing catalog person (case-
+                      insensitive). Non-blocking: the operator can select the
+                      existing row above OR click "add anyway" to create a
+                      genuinely separate same-name entry. */}
+                  {trimmed && hasExactLocal && !isPastedUrl && (
+                    <div
+                      className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2.5 flex items-start gap-2"
+                      data-testid="banner-duplicate-name"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-amber-800 leading-snug">
+                        This name already exists in your catalog. Select from the list above, or{" "}
+                        <button
+                          type="button"
+                          onClick={handleManual}
+                          disabled={busy}
+                          className="font-semibold underline underline-offset-2 hover:no-underline disabled:opacity-60"
+                          data-testid="button-add-anyway"
+                        >
+                          add anyway
+                        </button>{" "}
+                        to create a separate entry.
+                      </p>
                     </div>
                   )}
 

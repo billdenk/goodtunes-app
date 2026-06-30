@@ -8193,3 +8193,102 @@ SQL
 }
 backfill_task_2305_pressing_business_jacket dev  "${DATABASE_URL:-}"
 backfill_task_2305_pressing_business_jacket prod "${PROD_DATABASE_URL:-}"
+
+# Task #2374 — Remove orphan Mary Shelley duplicate.
+# The duplicate person record (id adf9dc8d-a4e3-4c32-92ba-1c900c79cc40)
+# is a hand-created empty entry with no legacy_gogoods_id and zero
+# references across any people-referencing table. The real Mary Shelley
+# record (401bd164-9b5d-4dc3-a570-f7697d49b88f) is the primary artist on
+# two albums and is unchanged by this block.
+#
+# Guard logic (all must pass, or skip + warn):
+#   • Row still exists and deleted_at IS NULL
+#   • name still matches 'Mary Shelley' (case-insensitive)
+#   • legacy_gogoods_id IS NULL (confirms it's the orphan, not the real one)
+#   • Zero references across all people-referencing tables
+#
+# Dev DB has no such row — will be a clean no-op there.
+# Marker-guarded so it only runs once per DB.
+remove_orphan_mary_shelley() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2374 orphan-mary-shelley on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_id   text := 'adf9dc8d-a4e3-4c32-92ba-1c900c79cc40';
+  v_refs integer;
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2374_remove_orphan_mary_shelley'
+  ) THEN
+    RAISE NOTICE 'task-2374 already applied — skipping';
+    RETURN;
+  END IF;
+
+  -- Guard: row must exist, not yet soft-deleted, name still matches, no legacy id
+  IF NOT EXISTS (
+    SELECT 1 FROM people
+     WHERE id = v_id
+       AND deleted_at IS NULL
+       AND lower(trim(name)) = 'mary shelley'
+       AND legacy_gogoods_id IS NULL
+  ) THEN
+    RAISE NOTICE 'task-2374 orphan guard failed (row missing, already deleted, name changed, or has legacy_gogoods_id) — skipping';
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_2374_remove_orphan_mary_shelley');
+    RETURN;
+  END IF;
+
+  -- Guard: count all references across every people-referencing table
+  SELECT (
+    (SELECT count(*) FROM albums              WHERE primary_artist_id = v_id) +
+    (SELECT count(*) FROM album_credits       WHERE person_id = v_id AND deleted_at IS NULL) +
+    (SELECT count(*) FROM album_lineup        WHERE person_id = v_id) +
+    (SELECT count(*) FROM band_members        WHERE person_id = v_id) +
+    (SELECT count(*) FROM custom_addon_artists WHERE person_id = v_id) +
+    (SELECT count(*) FROM entity_contacts     WHERE person_id = v_id AND deleted_at IS NULL) +
+    (SELECT count(*) FROM organization_people WHERE person_id = v_id AND deleted_at IS NULL) +
+    (SELECT count(*) FROM person_aliases      WHERE person_id = v_id AND deleted_at IS NULL) +
+    (SELECT count(*) FROM person_discography  WHERE person_id = v_id) +
+    (SELECT count(*) FROM track_mechanical_splits WHERE person_id = v_id AND deleted_at IS NULL) +
+    (SELECT count(*) FROM track_performers    WHERE person_id = v_id AND deleted_at IS NULL) +
+    (SELECT count(*) FROM track_publishing_splits WHERE person_id = v_id AND deleted_at IS NULL) +
+    (SELECT count(*) FROM track_writers       WHERE person_id = v_id AND deleted_at IS NULL)
+  ) INTO v_refs;
+
+  IF v_refs > 0 THEN
+    RAISE NOTICE 'task-2374 orphan has % live reference(s) — SKIPPING soft-delete (manual investigation needed)', v_refs;
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_2374_remove_orphan_mary_shelley');
+    RETURN;
+  END IF;
+
+  -- All guards passed: soft-delete the orphan
+  UPDATE people
+     SET deleted_at = now()
+   WHERE id = v_id
+     AND deleted_at IS NULL;
+
+  INSERT INTO post_merge_data_backfills (name) VALUES ('task_2374_remove_orphan_mary_shelley');
+  RAISE NOTICE 'task-2374 applied: orphan Mary Shelley (%) soft-deleted', v_id;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2374 orphan-mary-shelley ok on $label"
+    echo "$out" | grep -i 'task-2374' || true
+  else
+    echo "post-merge: WARNING — task-2374 orphan-mary-shelley failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+remove_orphan_mary_shelley dev  "${DATABASE_URL:-}"
+remove_orphan_mary_shelley prod "${PROD_DATABASE_URL:-}"

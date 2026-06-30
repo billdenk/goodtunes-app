@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
+  AlertTriangle,
   Check,
   ChevronsUpDown,
   Plus,
@@ -103,6 +104,10 @@ export function ArtistPickerField({
     (p) => p.name.trim().toLowerCase() === trimmed.toLowerCase(),
   );
   const showCreate = trimmed.length > 0 && !hasExact;
+  // When a name already exists exactly, show a non-blocking warning + "Add
+  // anyway" option so the operator can still create a genuine second entry
+  // with the same name without being silently blocked.
+  const showCreateDespiteMatch = trimmed.length > 0 && hasExact;
 
   const createMut = useMutation({
     mutationFn: async (body: Record<string, unknown>): Promise<PersonLite> => {
@@ -431,6 +436,34 @@ export function ArtistPickerField({
                             )}
                             <span className="flex-1 truncate">
                               Create "{trimmed}" (name only)
+                            </span>
+                          </CommandItem>
+                        </CommandGroup>
+                      </>
+                    )}
+                    {showCreateDespiteMatch && (
+                      <>
+                        <CommandSeparator />
+                        <CommandGroup>
+                          <div className="px-2 py-1.5 flex items-start gap-1.5">
+                            <AlertTriangle className="w-3 h-3 text-amber-500 mt-0.5 flex-shrink-0" />
+                            <p className="text-xs text-amber-700 leading-snug">
+                              A person with this name already exists above.
+                            </p>
+                          </div>
+                          <CommandItem
+                            value={`__create_anyway__${trimmed}`}
+                            onSelect={handleCreateFromName}
+                            data-testid="button-create-artist-anyway"
+                            className="flex items-center gap-2"
+                          >
+                            {busy ? (
+                              <Spinner className="w-3.5 h-3.5 animate-spin text-slate-400 flex-shrink-0" />
+                            ) : (
+                              <Plus className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                            )}
+                            <span className="flex-1 truncate">
+                              Add "{trimmed}" anyway (new entry)
                             </span>
                           </CommandItem>
                         </CommandGroup>
