@@ -5,7 +5,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { Link } from "wouter";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Copy, Check, X, ChevronDown, RefreshCw, Heart, Factory, HeartHandshake, Star, SlidersHorizontal, ArrowLeft, Plus, Building2, Truck, Wrench, UserCog, Lock } from "lucide-react";
+import { Trash2, Copy, Check, X, ChevronDown, RefreshCw, Heart, Factory, HeartHandshake, Star, SlidersHorizontal, ArrowLeft, Plus, Building2, Truck, Wrench, UserCog, Lock, Users, Music2, ExternalLink } from "lucide-react";
 import {
   ROLE_OPTIONS,
   ROLE_LABEL,
@@ -861,10 +861,304 @@ export function AdminInvites() {
             crowd the create form; the GET endpoint 403s for non-super
             admins which simply hides the panel. */}
         <ReviewQueuePanel />
+        <ArtistApplicationsPanel />
         <MailFailuresPanel />
         <ReferralFundingPanel />
       </div>
     </AdminFrame>
+  );
+}
+
+// ─── Task #2399 — Artist application review queue ─────────────────────────────
+// Super-admin only (403 hides the whole panel for other roles).
+// Shows pending applications from /join/:code referral links and lets
+// an operator approve (fires an invite email) or reject them.
+function ArtistApplicationsPanel() {
+  const { toast } = useToast();
+  const [statusFilter, setStatusFilter] = useState<"pending" | "all">("pending");
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+  const [failedApprove, setFailedApprove] = useState<{ email: string; acceptUrl: string } | null>(null);
+  const [copiedApprove, setCopiedApprove] = useState(false);
+
+  const q = useQuery<
+    Array<{
+      id: string;
+      referrerKind: string;
+      referrerName: string | null;
+      referrerPhotoUrl: string | null;
+      applicantEmail: string;
+      applicantName: string;
+      spotifyArtistName: string | null;
+      spotifyArtistUrl: string | null;
+      spotifyPhotoUrl: string | null;
+      status: string;
+      reviewNote: string | null;
+      linkedInviteId: string | null;
+      createdAt: string;
+      reviewedAt: string | null;
+    }>
+  >({
+    queryKey: ["/api/admin/artist-applications", statusFilter],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/admin/artist-applications?status=${statusFilter}`,
+        { credentials: "include" },
+      );
+      if (!r.ok) {
+        if (r.status === 403) return [];
+        throw new Error("Could not load applications");
+      }
+      return r.json();
+    },
+    retry: false,
+  });
+
+  const approve = useMutation({
+    mutationFn: async ({ id, reviewNote }: { id: string; reviewNote: string }) => {
+      const r = await apiRequest("POST", `/api/admin/artist-applications/${id}/approve`, {
+        reviewNote: reviewNote || null,
+      });
+      return r.json() as Promise<{ ok: boolean; acceptUrl: string; emailDelivered: boolean }>;
+    },
+    onSuccess: (data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/artist-applications"] });
+      setReviewNotes((p) => { const n = { ...p }; delete n[id]; return n; });
+      if (data.emailDelivered) {
+        setFailedApprove(null);
+        toast({ title: "Application approved — invite emailed" });
+      } else {
+        const appl = q.data?.find((a) => a.id === id);
+        setFailedApprove({ email: appl?.applicantEmail ?? "the applicant", acceptUrl: data.acceptUrl });
+        setCopiedApprove(false);
+        toast({
+          title: "Approved — email failed, copy link",
+          description: "Couldn't send the invite email. Copy the link and share it manually.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (e: Error) =>
+      toast({ title: "Couldn't approve", description: e.message, variant: "destructive" }),
+  });
+
+  const reject = useMutation({
+    mutationFn: async ({ id, reviewNote }: { id: string; reviewNote: string }) => {
+      await apiRequest("POST", `/api/admin/artist-applications/${id}/reject`, {
+        reviewNote: reviewNote || null,
+      });
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/artist-applications"] });
+      setReviewNotes((p) => { const n = { ...p }; delete n[id]; return n; });
+      toast({ title: "Application rejected" });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Couldn't reject", description: e.message, variant: "destructive" }),
+  });
+
+  // 403 → silently hide (non-super admin).
+  if (q.isError) return null;
+
+  const items = q.data ?? [];
+  const pendingCount = statusFilter === "pending" ? items.length : "?";
+
+  const failedBanner = failedApprove ? (
+    <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 mb-3" data-testid="banner-approve-failed-app">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs font-semibold text-rose-800">
+          Approved {failedApprove.email} — invite email failed
+        </div>
+        <button
+          type="button"
+          onClick={async () => {
+            await navigator.clipboard.writeText(failedApprove.acceptUrl).catch(() => {});
+            setCopiedApprove(true);
+            setTimeout(() => setCopiedApprove(false), 1500);
+          }}
+          className="text-xs font-semibold text-[var(--brand-blue)] hover:underline flex items-center gap-1"
+          data-testid="button-copy-approve-url-app"
+        >
+          {copiedApprove ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+          {copiedApprove ? "Copied" : "Copy link"}
+        </button>
+      </div>
+      <div className="mt-1 text-xs font-mono text-slate-700 break-all">{failedApprove.acceptUrl}</div>
+    </div>
+  ) : null;
+
+  if (!q.isLoading && items.length === 0 && !failedApprove) return null;
+
+  return (
+    <div
+      className="mt-8 bg-white border border-slate-200 rounded-2xl p-5"
+      data-testid="panel-artist-applications"
+    >
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+          <Users className="w-4 h-4 text-[var(--brand-blue)]" />
+          Artist applications
+          {statusFilter === "pending" && items.length > 0 && (
+            <span className="ml-1 inline-flex items-center justify-center rounded-full bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5">
+              {items.length}
+            </span>
+          )}
+        </h2>
+        <div className="flex gap-1">
+          {(["pending", "all"] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setStatusFilter(s)}
+              className={[
+                "text-xs px-2.5 py-1 rounded-lg border transition-colors font-medium",
+                statusFilter === s
+                  ? "bg-[var(--brand-blue)] border-[var(--brand-blue)] text-white"
+                  : "bg-white border-slate-200 text-slate-600 hover:border-slate-300",
+              ].join(" ")}
+              data-testid={`button-app-filter-${s}`}
+            >
+              {s === "pending" ? "Pending" : "All"}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="text-xs text-slate-500 mb-4">
+        Applications submitted via reusable artist referral links. Approve to send
+        the standard invite email; reject to decline without emailing.
+      </p>
+
+      {failedBanner}
+
+      {q.isLoading ? (
+        <p className="text-sm text-slate-400 py-4 text-center">Loading…</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-slate-500 py-4 text-center" data-testid="empty-artist-applications">
+          {statusFilter === "pending" ? "No pending applications." : "No applications yet."}
+        </p>
+      ) : (
+        <ul className="divide-y divide-slate-100" data-testid="list-artist-applications">
+          {items.map((appl) => (
+            <li key={appl.id} className="py-4 flex gap-3" data-testid={`row-application-${appl.id}`}>
+              {/* Spotify photo or initials */}
+              <div className="flex-shrink-0">
+                {appl.spotifyPhotoUrl ? (
+                  <img
+                    src={appl.spotifyPhotoUrl}
+                    alt=""
+                    className="w-10 h-10 rounded-full object-cover bg-slate-200"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center">
+                    <Music2 className="w-5 h-5 text-slate-400" />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-medium text-slate-900 text-sm" data-testid={`text-appl-name-${appl.id}`}>
+                      {appl.applicantName}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5" data-testid={`text-appl-email-${appl.id}`}>
+                      {appl.applicantEmail}
+                    </div>
+                    {appl.spotifyArtistName && (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-xs text-slate-400">Spotify:</span>
+                        {appl.spotifyArtistUrl ? (
+                          <a
+                            href={appl.spotifyArtistUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-[var(--brand-blue)] hover:underline inline-flex items-center gap-0.5"
+                            data-testid={`link-appl-spotify-${appl.id}`}
+                          >
+                            {appl.spotifyArtistName}
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : (
+                          <span className="text-xs text-slate-600">{appl.spotifyArtistName}</span>
+                        )}
+                      </div>
+                    )}
+                    {appl.referrerName && (
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        Referred by {appl.referrerName}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-shrink-0">
+                    {appl.status === "approved" && (
+                      <span className="text-xs font-medium bg-green-100 text-green-700 rounded-full px-2 py-0.5">Approved</span>
+                    )}
+                    {appl.status === "rejected" && (
+                      <span className="text-xs font-medium bg-rose-100 text-rose-700 rounded-full px-2 py-0.5">Rejected</span>
+                    )}
+                    {appl.status === "pending" && (
+                      <span className="text-xs font-medium bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">Pending</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Review note input + action buttons for pending */}
+                {appl.status === "pending" && (
+                  <div className="mt-2 space-y-2">
+                    <input
+                      type="text"
+                      placeholder="Review note (optional)"
+                      value={reviewNotes[appl.id] ?? ""}
+                      onChange={(e) =>
+                        setReviewNotes((p) => ({ ...p, [appl.id]: e.target.value }))
+                      }
+                      className="w-full text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:border-[var(--brand-blue)] focus:outline-none"
+                      data-testid={`input-review-note-${appl.id}`}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          approve.mutate({ id: appl.id, reviewNote: reviewNotes[appl.id] ?? "" })
+                        }
+                        disabled={approve.isPending || reject.isPending}
+                        className="flex-1 rounded-lg bg-[var(--brand-blue)] text-white text-xs font-semibold px-3 py-1.5 hover:opacity-90 disabled:opacity-50 transition-opacity"
+                        data-testid={`button-approve-${appl.id}`}
+                      >
+                        Approve &amp; send invite
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          reject.mutate({ id: appl.id, reviewNote: reviewNotes[appl.id] ?? "" })
+                        }
+                        disabled={approve.isPending || reject.isPending}
+                        className="rounded-lg border border-slate-200 text-slate-600 text-xs font-semibold px-3 py-1.5 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-700 disabled:opacity-50 transition-colors"
+                        data-testid={`button-reject-${appl.id}`}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Reviewed note display */}
+                {appl.status !== "pending" && appl.reviewNote && (
+                  <p className="text-xs text-slate-500 mt-1 italic">
+                    Note: {appl.reviewNote}
+                  </p>
+                )}
+                {appl.status === "approved" && appl.linkedInviteId && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    Invite sent —{" "}
+                    <span className="font-mono">{appl.linkedInviteId.slice(0, 8)}…</span>
+                  </p>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

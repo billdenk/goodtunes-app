@@ -105,6 +105,7 @@ import { AdminInviteDirectory } from "@/pages/AdminInviteDirectory";
 import { AdminReview } from "@/pages/AdminReview";
 import { AdminPressingOrders } from "@/pages/AdminPressingOrders";
 import AcceptInvite from "@/pages/AcceptInvite";
+import JoinReferralLink from "@/pages/JoinReferralLink";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import { GiftClaim } from "@/pages/GiftClaim";
@@ -866,6 +867,10 @@ function Router() {
         {/* Public invite-accept page — recipient sets username + password
             using a token-bound email + role. No auth required. */}
         <Route path="/invite/:token" component={AcceptInvite} />
+        {/* Task #2399 — Public branded landing page for reusable referral
+            links. Anyone can open /join/:code to submit an artist
+            application; no auth required. */}
+        <Route path="/join/:code" component={JoinReferralLink} />
         <Route path="/home">
           <ProtectedRoute component={Home} />
         </Route>

@@ -44,6 +44,7 @@ import {
   ActivityList,
 } from "@/components/partner/PartnerDashboard";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { ReferralLinkWidget } from "@/components/admin/ReferralLinkWidget";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
 import { AdminReports } from "@/pages/AdminReports";
@@ -399,6 +400,11 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
 
   return (
     <div className="space-y-5">
+      {/* Reusable referral link — press owners/admins can share this URL
+          on socials or via email to recruit artists without sending individual
+          invites. Staff teammates (canEdit=false) see the widget read-only. */}
+      <ReferralLinkWidget kind="manufacturer" scopeId={pressId} canEdit={canEdit} />
+
       <AdminPageHeader
         title="People"
         subtitle="Artists homed to your press, plus anyone leading an album you're pressing."

@@ -25,6 +25,7 @@ import {
 // visual cue for what a count means (favorites vs roster size).
 import { Heart, Star, Building2, LayoutDashboard, BarChart3, Users, Disc3, ShoppingBag, FileBarChart, Megaphone } from "lucide-react";
 import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
+import { ReferralLinkWidget } from "@/components/admin/ReferralLinkWidget";
 import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
@@ -350,6 +351,13 @@ function OverviewTab({ qs, labelId, labelName }: { qs: string; labelId: string |
           artist OR a fresh label, mirroring the artist dashboard. The
           server pins referrer_kind='label' so the chain is recorded for
           provenance (labels carry no per-unit referral column). */}
+      {/* Reusable referral link — label admins with invite_subusers can
+          share this URL on socials or in their email signature to funnel
+          artists into a review queue without sending per-person invites. */}
+      {labelId && (
+        <ReferralLinkWidget kind="label" scopeId={labelId} canEdit />
+      )}
+
       <LabelInvitePanel />
     </>
   );

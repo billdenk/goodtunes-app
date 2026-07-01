@@ -231,6 +231,8 @@ The admin tooling and operational process that lets a tiny team run the whole bu
 - **Cloudflare.** Fast, secure content delivery and image optimization.
 - **Backblaze B2.** Secure, scalable object storage for masters and assets.
 
+- **Reusable artist referral links.** Each entity — pressing plant, non-profit, label, artist, or ambassador — can generate a durable, shareable `/join/:code` URL they can post anywhere (socials, email signature, bio). Anyone who opens the link lands on a branded landing page showing the referrer's name and photo; they fill in their name, email, and optional Spotify self-identification and submit. Applications land in the GoodTunes super-admin review queue (visible under Invites → Artist applications) with pending/approved/rejected status and a review note field. Approving an application fires the standard invite email with the referrer attribution already stamped, so `applyAdminInviteGrant` runs at accept time exactly as it does for directly-sent invites — attribution flows into referral credits, press homing, and partner dashboards with no extra work. The link can be deactivated (stop accepting new applications) or regenerated (old URL immediately 404s) from the partner's own portal. Non-profit dashboards already surface the widget under their Invites tab.
+
 ---
 
 # Coming next / In-flight

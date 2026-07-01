@@ -2751,6 +2751,10 @@ export async function registerRoutes(
   const { registerNpoPortalRoutes } = await import("./npoPortal");
   registerNpoPortalRoutes(app, requireAdmin);
 
+  // Task #2399 — Reusable artist referral links.
+  const { registerReferralLinkRoutes } = await import("./referralLinks");
+  registerReferralLinkRoutes(app, requireAdmin);
+
   // ─── Task #536 — "What's New" welcome-back sheet ───────────────────
   // Recognition gate: returns whether the current customer should see
   // the sheet, their library count, and the current `WHATS_NEW_VERSION`

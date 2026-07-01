@@ -3,6 +3,7 @@ import { formatUsdCents } from "@shared/money";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Heart, Music as MusicIcon, Mail, Clock, UserPlus, Users, Trash2, Send, Copy, Check, ChevronDown, LayoutDashboard, ShoppingBag, ScrollText, Network, Megaphone } from "lucide-react";
+import { ReferralLinkWidget } from "@/components/admin/ReferralLinkWidget";
 import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { DashboardPanel } from "@/components/partner/dashboard-controls";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
@@ -311,6 +312,19 @@ function InvitesTab({ npoId, caps }: { npoId: string | undefined; caps: CallerCa
 
   return (
     <section>
+      {/* Reusable referral link — NPO admins and ambassadors with the
+          invite_subusers verb can see and copy this link to recruit
+          artists without sending individual email invites. */}
+      {caps.ok && npoId && (
+        <div className="mb-5">
+          <ReferralLinkWidget
+            kind="non_profit"
+            scopeId={npoId}
+            canEdit={caps.isAdmin}
+          />
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2 mb-4">
         {ctas.map((c) => (
           <button

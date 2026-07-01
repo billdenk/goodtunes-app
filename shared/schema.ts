@@ -5448,3 +5448,48 @@ export const fanRecentSearches = pgTable(
 );
 
 export type FanRecentSearch = typeof fanRecentSearches.$inferSelect;
+
+// ─── Task #2399 — Reusable artist referral links ───────────────────────────
+// Each entity (press, NPO, label, artist/ambassador) gets one durable,
+// reusable referral link they can post anywhere. Opening /join/:code lands
+// on a branded gated-signup page; the applicant's info is queued for
+// super-admin review before an invite email goes out.
+//
+// referral_links: one row per entity. `code` is the short public slug
+// (10 lowercase chars, URL-safe base64). Regenerating mints a new code
+// on the same row — old URLs immediately 404.
+export const referralLinks = pgTable("referral_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  referrerKind: text("referrer_kind").notNull(), // "artist"|"non_profit"|"manufacturer"|"label"|"ambassador"
+  referrerScopeId: varchar("referrer_scope_id").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdByUserId: varchar("created_by_user_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type ReferralLink = typeof referralLinks.$inferSelect;
+
+// artist_applications: one row per applicant per referral link submission.
+// status: pending → approved (invite email sent) | rejected.
+// linkedInviteId is stamped at approval time so the admin queue can link
+// through to the resulting admin_invites row.
+export const artistApplications = pgTable("artist_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  referralLinkId: varchar("referral_link_id").notNull(),
+  referrerKind: text("referrer_kind").notNull(),
+  referrerScopeId: varchar("referrer_scope_id").notNull(),
+  applicantEmail: text("applicant_email").notNull(),
+  applicantName: text("applicant_name").notNull(),
+  spotifyArtistId: text("spotify_artist_id"),
+  spotifyArtistName: text("spotify_artist_name"),
+  spotifyArtistUrl: text("spotify_artist_url"),
+  spotifyPhotoUrl: text("spotify_photo_url"),
+  status: text("status").notNull().default("pending"), // "pending"|"approved"|"rejected"
+  reviewedByUserId: varchar("reviewed_by_user_id"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNote: text("review_note"),
+  linkedPersonId: varchar("linked_person_id"),
+  linkedInviteId: varchar("linked_invite_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type ArtistApplication = typeof artistApplications.$inferSelect;

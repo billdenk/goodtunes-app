@@ -8429,3 +8429,54 @@ SQL
 }
 remove_orphan_mary_shelley dev  "${DATABASE_URL:-}"
 remove_orphan_mary_shelley prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #2399 — Reusable artist referral links ──────────────────────────────
+# Creates referral_links and artist_applications tables on both DBs.
+# Idempotent: all statements use CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS.
+create_referral_link_tables() {
+  local label="$1" db_url="$2"
+  [ -z "$db_url" ] && { echo "post-merge: skip task-2399 tables ($label — no URL)"; return; }
+  local out
+  if out=$(psql "$db_url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1); then
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS referral_links (
+  id               varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  code             text    NOT NULL UNIQUE,
+  referrer_kind    text    NOT NULL,
+  referrer_scope_id varchar NOT NULL,
+  active           boolean NOT NULL DEFAULT TRUE,
+  created_by_user_id varchar NOT NULL,
+  created_at       timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS artist_applications (
+  id                  varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  referral_link_id    varchar NOT NULL,
+  referrer_kind       text    NOT NULL,
+  referrer_scope_id   varchar NOT NULL,
+  applicant_email     text    NOT NULL,
+  applicant_name      text    NOT NULL,
+  spotify_artist_id   text,
+  spotify_artist_name text,
+  spotify_artist_url  text,
+  spotify_photo_url   text,
+  status              text    NOT NULL DEFAULT 'pending',
+  reviewed_by_user_id varchar,
+  reviewed_at         timestamptz,
+  review_note         text,
+  linked_person_id    varchar,
+  linked_invite_id    varchar,
+  created_at          timestamptz NOT NULL DEFAULT now()
+);
+
+COMMIT;
+SQL
+    echo "post-merge: task-2399 referral tables ok on $label"
+  else
+    echo "post-merge: WARNING — task-2399 referral tables failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+create_referral_link_tables dev  "${DATABASE_URL:-}"
+create_referral_link_tables prod "${PROD_DATABASE_URL:-}"
