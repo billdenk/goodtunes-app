@@ -30,4 +30,14 @@ Drizzle-kit `db:push` is pickier than the publish flow. It complains about:
 
 ## Why we never write to prod directly
 
-Targeted prod fixups live in `scripts/prod-schema-fixups/<date>-<task>.sql` and run at the next deploy. We never `psql $PROD_DATABASE_URL` from the agent. Same goes for "fix dev to match prod" — those stay dev-only.
+Targeted prod fixups live in `scripts/prod-schema-fixups/<date>-<task>.sql` and run at the next deploy. We never `psql $PROD_DATABASE_URL` from the agent. Same goes for "fix dev to match prod" — those stay dev-only. (Read-only `SELECT`s against prod to *diagnose* drift are fine.)
+
+## Runtime lazy-created tables trigger the same DROP — and the drift guard can't see them
+
+Some tables are NOT in `shared/schema.ts` at all: app code creates them lazily with `CREATE TABLE IF NOT EXISTS` on first use (e.g. `view_as_audit_log` in `server/auth/viewAsToken.ts`, the admin "view as"/impersonation audit trail). Consequence: prod has the table (someone used the feature there) but a fresh/unused dev clone does NOT (the code path never fired), so the publish dev→prod diff proposes a destructive `DROP TABLE ... CASCADE` with real prod rows.
+
+Two things make this class sneaky:
+- The `schema-drift-smoke` guard reflects `pgTable` definitions and won't flag these — there's no pgTable to reflect, so nothing warns you before the publish banner does.
+- "Only N items" in the banner is still real data (an audit record here); the app would silently recreate an empty table after the drop, hiding the loss.
+
+**Fix (this is the durable pattern):** add an idempotent `migrate_<table>()` block to `scripts/post-merge.sh` — `CREATE TABLE IF NOT EXISTS` matching the runtime DDL verbatim — and call it for BOTH dev and prod (mirrors every other `migrate_*` in that file), so a fresh clone always has the table and the diff stays empty. Also create it in dev now so the *current* publish stops proposing the drop (the already-staged migration won't regenerate until you Cancel + Republish). Keep the DDL in lockstep with the runtime `CREATE TABLE` in the source file.

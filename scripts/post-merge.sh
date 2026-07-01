@@ -194,6 +194,43 @@ SQL
 migrate_rig_quote_requests dev  "${DATABASE_URL:-}"
 migrate_rig_quote_requests prod "${PROD_DATABASE_URL:-}"
 
+# view_as_audit_log — audit trail of admin "view as" (impersonation) actions.
+# This table is NOT declared in shared/schema.ts; server/auth/viewAsToken.ts
+# creates it lazily with CREATE TABLE IF NOT EXISTS on first "view as" use. That
+# lazy create means a DB where nobody has used "view as" (e.g. a fresh dev clone)
+# lacks the table while prod has it — so the publish dev→prod diff proposes a
+# destructive `DROP TABLE view_as_audit_log CASCADE`, deleting real prod audit
+# rows. Hand-apply the canonical CREATE on BOTH dev and prod so the diff stays
+# empty and no audit history is ever dropped. Keep this DDL in lockstep with
+# logViewAsAudit() in server/auth/viewAsToken.ts. Idempotent.
+migrate_view_as_audit_log() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping view_as_audit_log migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS view_as_audit_log (
+  id                BIGSERIAL PRIMARY KEY,
+  initiated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  initiator_id      TEXT        NOT NULL,
+  target_role       TEXT        NOT NULL,
+  target_scope_kind TEXT,
+  target_scope_id   TEXT,
+  target_label      TEXT        NOT NULL
+);
+COMMIT;
+SQL
+  then
+    echo "post-merge: view_as_audit_log migration ok on $label"
+  else
+    echo "post-merge: WARNING — view_as_audit_log migration failed on $label (continuing)"
+  fi
+}
+migrate_view_as_audit_log dev  "${DATABASE_URL:-}"
+migrate_view_as_audit_log prod "${PROD_DATABASE_URL:-}"
+
 # Task #2283 — CMS-editable overview gallery for the locked Preview & Purchase
 # modal. shared/schema.ts declares campaign_gallery_items; hand-apply the
 # canonical CREATE TABLE on BOTH dev and prod to keep the schema-drift guard
