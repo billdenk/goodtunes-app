@@ -665,8 +665,8 @@ export async function batchEnrichWithPressPlaceholders<
   T extends { id: string; primaryArtistId?: string | null; labelId?: string | null },
 >(
   albums: T[],
-): Promise<Array<T & { pressLogoUrl: string | null; pressJacketUrl: string | null }>> {
-  if (!albums.length) return albums.map((a) => ({ ...a, pressLogoUrl: null, pressJacketUrl: null }));
+): Promise<Array<T & { pressLogoUrl: string | null; pressJacketUrl: string | null; pressDomain: string | null }>> {
+  if (!albums.length) return albums.map((a) => ({ ...a, pressLogoUrl: null, pressJacketUrl: null, pressDomain: null }));
   try {
     // --- Step 1: homed press via artist defaultPressId ---
     const artistIds = [...new Set(albums.map((a) => a.primaryArtistId).filter((id): id is string => !!id))];
@@ -724,14 +724,14 @@ export async function batchEnrichWithPressPlaceholders<
       ...labelPressMap.values(),
       ...skuPressMap.values(),
     ])];
-    const pressInfoMap = new Map<string, { logoUrl: string | null; vinylPlaceholderUrl: string | null }>();
+    const pressInfoMap = new Map<string, { logoUrl: string | null; vinylPlaceholderUrl: string | null; domain: string | null }>();
     if (allPressIds.length) {
-      const rows = await db.execute<{ id: string; logo_url: string | null; vinyl_placeholder_url: string | null }>(sql`
-        SELECT id, logo_url, vinyl_placeholder_url FROM manufacturers
+      const rows = await db.execute<{ id: string; logo_url: string | null; vinyl_placeholder_url: string | null; domain: string | null }>(sql`
+        SELECT id, logo_url, vinyl_placeholder_url, domain FROM manufacturers
         WHERE id = ANY(${pgArray(allPressIds)}::text[])
       `);
       for (const r of ((rows as any).rows ?? [])) {
-        pressInfoMap.set(r.id, { logoUrl: r.logo_url, vinylPlaceholderUrl: r.vinyl_placeholder_url });
+        pressInfoMap.set(r.id, { logoUrl: r.logo_url, vinylPlaceholderUrl: r.vinyl_placeholder_url, domain: r.domain });
       }
     }
 
@@ -746,11 +746,12 @@ export async function batchEnrichWithPressPlaceholders<
         ...a,
         pressLogoUrl: info?.logoUrl ?? null,
         pressJacketUrl: info?.vinylPlaceholderUrl ?? null,
+        pressDomain: info?.domain ?? null,
       };
     });
   } catch {
     // Best-effort: don't let press-resolution failures break the album list.
-    return albums.map((a) => ({ ...a, pressLogoUrl: null, pressJacketUrl: null }));
+    return albums.map((a) => ({ ...a, pressLogoUrl: null, pressJacketUrl: null, pressDomain: null }));
   }
 }
 

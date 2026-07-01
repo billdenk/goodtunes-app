@@ -89,6 +89,9 @@ interface AlbumLite {
   // enrichment pass; undefined on cached results from before this shipped.
   pressLogoUrl?: string | null;
   pressJacketUrl?: string | null;
+  // Task #2388 — press domain drives the bundled per-domain jacket art lookup
+  // in AlbumCover, mirroring the press Catalog editor's fallback chain.
+  pressDomain?: string | null;
 }
 
 // Task #1967 — "attention" is the cross-stage incomplete-albums audit. It's
@@ -121,6 +124,7 @@ interface IncompleteAlbumRow {
   creditsComplete: number;
   pressLogoUrl?: string | null;
   pressJacketUrl?: string | null;
+  pressDomain?: string | null;
 }
 
 // Task #1007 / #1008 — build the link into an album, carrying the entire
@@ -1284,6 +1288,7 @@ function NeedsAttentionTable({
                         title={r.title}
                         showName={false}
                         pressJacketUrl={r.pressJacketUrl ?? null}
+                        pressDomain={r.pressDomain ?? null}
                         pressLogoUrl={r.pressLogoUrl ?? null}
                       />
                     </div>
@@ -1357,6 +1362,7 @@ function AlbumTile({ album, href }: { album: AlbumLite; href: string }) {
           artwork={realArtwork(album.artwork)}
           title={album.title}
           pressJacketUrl={album.pressJacketUrl ?? null}
+          pressDomain={album.pressDomain ?? null}
           pressLogoUrl={album.pressLogoUrl ?? null}
         />
         {album.isHidden && (
@@ -1442,6 +1448,7 @@ function AlbumRow({
           title={album.title}
           showName={false}
           pressJacketUrl={album.pressJacketUrl ?? null}
+          pressDomain={album.pressDomain ?? null}
           pressLogoUrl={album.pressLogoUrl ?? null}
         />
       </div>

@@ -30,10 +30,7 @@ import {
 } from "lucide-react";
 import { VinylPreview } from "@/components/VinylPreview";
 import { resolveVinylColor, DEFAULT_JACKET_UPGRADE, type VinylColorOption } from "@shared/pressing";
-import hellbenderPlaceholder from "@assets/Hellbender_1782351633843.svg";
-import memphisPlaceholder from "@assets/Memphis_Record_Pressing_1782406023011.svg";
-import virylPlaceholder from "@assets/Viryl_1782351633843.svg";
-import pmpPlaceholder from "@assets/Pressing_Music_Business_1782351633843.svg";
+import { resolvePressPlaceholderArt as _resolvePressPlaceholderArt } from "@/lib/pressPlaceholderArt";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { postAdminImage } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
@@ -1575,15 +1572,8 @@ const MRP_DOMAIN_CLIENT = "memphisrecordpressing.com";
 // preview jacket art in the Catalog editor's Color Options. Keyed by
 // the press's primary domain; falls back to null (VinylPreview's own
 // gray jacket) for presses without a supplied placeholder.
-const PRESS_PLACEHOLDER_BY_DOMAIN: Record<string, string> = {
-  "hellbendervinyl.com": hellbenderPlaceholder,
-  "memphisrecordpressing.com": memphisPlaceholder,
-  "viryl.ca": virylPlaceholder,
-  "physicalmusicproducts.com": pmpPlaceholder,
-};
 function pressPlaceholderArt(domain: string | null): string | null {
-  if (!domain) return null;
-  return PRESS_PLACEHOLDER_BY_DOMAIN[domain.toLowerCase().replace(/^www\./, "")] ?? null;
+  return _resolvePressPlaceholderArt(domain);
 }
 
 // Task #2114 — vinyl formats carry the Color Options section; CD and

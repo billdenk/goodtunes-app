@@ -17,6 +17,7 @@
 // goes exactly where the old `<img>` lived. Callers keep their own sized,
 // rounded, overflow-hidden wrapper plus any overlays (play button, badges).
 import { useEffect, useState } from "react";
+import { resolvePressPlaceholderArt } from "@/lib/pressPlaceholderArt";
 
 export interface AlbumCoverProps {
   /** The album's chosen artwork URL. Empty/null/dead → placeholder. */
@@ -51,10 +52,18 @@ export interface AlbumCoverProps {
    */
   pressJacketUrl?: string | null;
   /**
+   * Task #2369 — admin-only: the album's effective press's domain
+   * (manufacturers.domain). Used to resolve a bundled per-domain jacket art
+   * asset as a fallback between pressJacketUrl and pressLogoUrl, matching the
+   * treatment in the press Catalog editor. Must never be passed on fan-facing surfaces.
+   */
+  pressDomain?: string | null;
+  /**
    * Task #2369 — admin-only: the album's effective press's light logo
-   * (manufacturers.logo_url). When present and there is no real art or press jacket,
-   * renders the logo centred on a dark/brand-toned tile. Must never be passed on
-   * fan-facing surfaces.
+   * (manufacturers.logo_url). When present and there is no real art, press jacket,
+   * or domain-bundled art, renders the logo centred on a white tile with reduced
+   * opacity — matching the press Catalog editor's JacketArtFill treatment.
+   * Must never be passed on fan-facing surfaces.
    */
   pressLogoUrl?: string | null;
 }
@@ -70,12 +79,6 @@ const BRAND_TILE_BACKGROUND =
 const GHOST_SCRIM =
   "linear-gradient(to bottom, rgba(var(--brand-bg-rgb), 0.30) 0%, rgba(var(--brand-bg-rgb), 0.78) 100%)";
 
-// Dark tile background for press logo — navy base with subtle blue glow,
-// matching the brand palette so a white/light press logo reads clearly.
-const PRESS_LOGO_TILE_BACKGROUND =
-  "radial-gradient(circle at 30% 20%, rgba(49,158,216,0.25), transparent 55%)," +
-  "var(--brand-bg)";
-
 export function AlbumCover({
   artwork,
   artistPhoto,
@@ -86,6 +89,7 @@ export function AlbumCover({
   loading = "lazy",
   imgStyle,
   pressJacketUrl,
+  pressDomain,
   pressLogoUrl,
 }: AlbumCoverProps) {
   // Track load failures so a dead artwork/photo URL falls through to the next
@@ -93,12 +97,20 @@ export function AlbumCover({
   // adding real art (or a new photo) re-attempts the image immediately.
   const [artFailed, setArtFailed] = useState(false);
   const [pressJacketFailed, setPressJacketFailed] = useState(false);
+  const [pressDomainArtFailed, setPressDomainArtFailed] = useState(false);
   const [pressLogoFailed, setPressLogoFailed] = useState(false);
   const [photoFailed, setPhotoFailed] = useState(false);
   useEffect(() => setArtFailed(false), [artwork]);
   useEffect(() => setPressJacketFailed(false), [pressJacketUrl]);
+  useEffect(() => setPressDomainArtFailed(false), [pressDomain]);
   useEffect(() => setPressLogoFailed(false), [pressLogoUrl]);
   useEffect(() => setPhotoFailed(false), [artistPhoto]);
+
+  // Resolve the bundled per-domain jacket art (same lookup the press Catalog
+  // editor uses). This fills the gap between a stored vinyl_placeholder_url
+  // and the press profile logo, so album covers don't drop to the small logo
+  // whenever the catalog would show a proper jacket.
+  const domainArtUrl = resolvePressPlaceholderArt(pressDomain);
 
   const hasArt = !!artwork && !artFailed;
   if (hasArt) {
@@ -136,18 +148,38 @@ export function AlbumCover({
     );
   }
 
-  // Task #2369 — press logo on a dark/brand-toned tile. A light (white) logo
-  // reads against the dark navy backing; the album name overlaid keeps the
-  // tile scannable in the list.
+  // Task #2388 — bundled per-domain jacket art (full-bleed). Mirrors the
+  // press Catalog editor's fallback chain: stored vinyl_placeholder_url wins,
+  // then the hard-coded per-domain asset, then the press profile logo.
+  const hasDomainArt = !!domainArtUrl && !pressDomainArtFailed;
+  if (hasDomainArt) {
+    return (
+      <img
+        src={domainArtUrl as string}
+        alt={decorative ? "" : title}
+        aria-hidden={decorative || undefined}
+        crossOrigin="anonymous"
+        loading={loading}
+        decoding="async"
+        onError={() => setPressDomainArtFailed(true)}
+        className={`w-full h-full object-cover ${className}`}
+        data-testid="album-cover-press-domain-art"
+      />
+    );
+  }
+
+  // Task #2388 — press logo on a white tile, light/faded, with no album title
+  // text overlaid. Matches the press Catalog editor's JacketArtFill treatment
+  // (bg-white, centered, opacity-80). Previously used a dark navy tile with
+  // the album name overlaid — that's replaced entirely.
   const hasPressLogo = !!pressLogoUrl && !pressLogoFailed;
   if (hasPressLogo) {
     return (
       <div
-        className={`relative w-full h-full overflow-hidden ${className}`}
-        style={{ containerType: "size", background: PRESS_LOGO_TILE_BACKGROUND }}
+        className={`relative w-full h-full overflow-hidden bg-white ${className}`}
         data-testid="album-cover-press-logo"
       >
-        <div className="absolute inset-0 flex items-center justify-center p-[20%]">
+        <div className="absolute inset-0 flex items-center justify-center p-[16%]">
           <img
             src={pressLogoUrl as string}
             alt=""
@@ -156,24 +188,9 @@ export function AlbumCover({
             loading={loading}
             decoding="async"
             onError={() => setPressLogoFailed(true)}
-            className="max-w-full max-h-full object-contain opacity-85"
+            className="max-w-full max-h-full object-contain opacity-80"
           />
         </div>
-        {(showName && !decorative) && (
-          <div className="absolute inset-x-0 bottom-0 flex items-end justify-center px-[8%] pb-[8%]">
-            <span
-              className="font-semibold leading-tight text-center line-clamp-2"
-              style={{
-                color: "rgba(255,255,255,0.9)",
-                fontSize: "clamp(9px, 10cqw, 26px)",
-                textShadow: "0 1px 6px rgba(0,0,0,0.7)",
-              }}
-              data-testid="album-cover-name"
-            >
-              {title}
-            </span>
-          </div>
-        )}
       </div>
     );
   }
