@@ -1595,16 +1595,29 @@ export function registerCommerceRoutes(app: Express) {
           if (dp) resolvedPressId = String(dp);
         }
 
-        // Step 3: first saved SKU press
+        // Step 3: derive from saved SKUs, but ONLY when they unambiguously
+        // agree on a single press (Task #2371). If the album's SKUs span two
+        // or more different presses there's no single plant to credit, so we
+        // leave effectivePress null and let the operator/partner Package
+        // designer fall back to the GoodTunes brand mark instead of arbitrarily
+        // crediting whichever SKU happened to sort first. Steps 1 & 2
+        // (artist/label default press) stay as-is — those are explicit single
+        // choices, so they're unambiguous by construction.
         if (!resolvedPressId) {
           const skuPressRows = await db
             .select({ pressId: albumSkus.pressId })
             .from(albumSkus)
             .where(eq(albumSkus.albumId, albumId));
-          resolvedPressId =
-            skuPressRows
-              .map((s) => (s.pressId ? String(s.pressId) : null))
-              .find((id): id is string => !!id) ?? null;
+          const distinctSkuPresses = [
+            ...new Set(
+              skuPressRows
+                .map((s) => (s.pressId ? String(s.pressId) : null))
+                .filter((id): id is string => !!id),
+            ),
+          ];
+          if (distinctSkuPresses.length === 1) {
+            resolvedPressId = distinctSkuPresses[0];
+          }
         }
 
         if (resolvedPressId) {

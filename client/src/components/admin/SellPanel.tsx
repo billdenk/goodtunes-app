@@ -4680,6 +4680,7 @@ function SkuRow({
               artworkUrl={artworkUrl}
               placeholderArtworkUrl={(invitedPressItself ?? effectivePressItself)?.vinylPlaceholderUrl ?? null}
               placeholderLogoUrl={(invitedPressItself ?? effectivePressItself)?.logoUrl ?? null}
+              brandFallback
               loading={pressLoading}
             />
           </button>
@@ -5734,6 +5735,7 @@ function SkuRow({
                      (VinylPreview only uses these when artworkUrl is empty). */
                   placeholderArtworkUrl={(invitedPressItself ?? effectivePressItself)?.vinylPlaceholderUrl ?? null}
                   placeholderLogoUrl={(invitedPressItself ?? effectivePressItself)?.logoUrl ?? null}
+                  brandFallback
                   loading={pressLoading}
                   jacketOverlay={(onEditArtwork || canChangeFormat) ? (
                     <>

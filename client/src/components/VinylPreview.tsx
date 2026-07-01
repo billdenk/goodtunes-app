@@ -31,6 +31,16 @@ function resolveArtwork(url: string | null | undefined): string | null {
   return NO_ART_SENTINELS.has(v) ? null : v;
 }
 
+// Brand fallback for operator/partner Package-designer surfaces. When an
+// art-less album resolves NO single press to credit (no earmarked press, no
+// artist/label default, and its SKUs don't agree on one plant), we show our
+// own mark instead of the generic vinyl line-art so the cover stays on-brand
+// and never implies a press relationship that doesn't exist. Rendered grayscale
+// (CSS filter on the color logo) to sit in the same muted family as the press
+// logo placeholders. Only used when a call site opts in via `brandFallback` —
+// fan surfaces never set it, so the GoodTunes mark never leaks onto a fan cover.
+const GOODTUNES_FALLBACK_LOGO = "/goodtunes-logo-color.png";
+
 // Shared jacket-art fill resolution: the single source of truth for what a
 // "no real art yet" album shows inside a square cover slot. Real art →
 // press's uploaded default jacket art (full-bleed) → press-logo on a white
@@ -49,11 +59,16 @@ export function JacketArtFill({
   artworkUrl,
   placeholderArtworkUrl,
   placeholderLogoUrl,
+  brandFallback,
   loading,
 }: {
   artworkUrl: string | null | undefined;
   placeholderArtworkUrl?: string | null;
   placeholderLogoUrl?: string | null;
+  // Task #2371 — opt-in (operator/partner Package designer): when no real art
+  // and no press placeholder resolve, render the grayscale GoodTunes mark
+  // instead of the generic vinyl line-art. Omitted on fan surfaces.
+  brandFallback?: boolean;
   // Task #2314 — while the invited-press data is still loading we don't
   // yet know which branded placeholder to show, so render a pulsing
   // skeleton over the (opacity-0) fallback and crossfade the resolved
@@ -92,6 +107,18 @@ export function JacketArtFill({
           className="max-w-full max-h-full object-contain opacity-80"
           draggable={false}
           data-testid="img-press-logo-placeholder"
+        />
+      </div>
+    );
+  } else if (brandFallback) {
+    content = (
+      <div className="w-full h-full bg-white flex items-center justify-center p-[16%]">
+        <img
+          src={GOODTUNES_FALLBACK_LOGO}
+          alt=""
+          className="max-w-full max-h-full object-contain grayscale opacity-80"
+          draggable={false}
+          data-testid="img-goodtunes-logo-placeholder"
         />
       </div>
     );
@@ -141,6 +168,7 @@ export function VinylPreview({
   format,
   placeholderArtworkUrl,
   placeholderLogoUrl,
+  brandFallback,
   loading,
 }: {
   artworkUrl: string | null | undefined;
@@ -163,6 +191,9 @@ export function VinylPreview({
   // the logo/gradient fallback, so press jacket art never leaks onto a fan
   // album cover.
   placeholderArtworkUrl?: string | null;
+  // Task #2371 — opt-in brand fallback (see JacketArtFill): grayscale GoodTunes
+  // mark when no real art and no single press resolve. Omitted on fan surfaces.
+  brandFallback?: boolean;
   // Task #393 — optional ReactNode rendered absolutely-positioned
   // INSIDE the jacket div, so a hover-pencil from the SellPanel format
   // card can sit on the jacket itself (top-right) without overlapping
@@ -242,6 +273,16 @@ export function VinylPreview({
                 className="max-w-full max-h-full object-contain opacity-80"
                 draggable={false}
                 data-testid="img-press-logo-placeholder"
+              />
+            </div>
+          ) : brandFallback ? (
+            <div className="w-full h-full bg-white flex items-center justify-center p-[18%]">
+              <img
+                src={GOODTUNES_FALLBACK_LOGO}
+                alt=""
+                className="max-w-full max-h-full object-contain grayscale opacity-80"
+                draggable={false}
+                data-testid="img-goodtunes-logo-placeholder"
               />
             </div>
           ) : (
@@ -395,7 +436,7 @@ export function VinylPreview({
           className="absolute inset-0 bg-slate-200 overflow-hidden shadow-sm border border-black/10"
           data-testid="vinyl-preview-jacket"
         >
-          <JacketArtFill artworkUrl={artworkUrl} placeholderArtworkUrl={placeholderArtworkUrl} placeholderLogoUrl={placeholderLogoUrl} loading={loading} />
+          <JacketArtFill artworkUrl={artworkUrl} placeholderArtworkUrl={placeholderArtworkUrl} placeholderLogoUrl={placeholderLogoUrl} brandFallback={brandFallback} loading={loading} />
           {/* Gatefold cue — thin centered fold seam, so a gatefold
               reads as two-panel even before you notice the wider
               footprint. */}
