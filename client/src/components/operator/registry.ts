@@ -96,6 +96,7 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "dashboard", label: "Dashboard",        roles: ["press"] },
   { id: "people",    label: "People",           roles: ["press"] },
   { id: "catalog",   label: "Catalog",          roles: ["press"] },
+  { id: "albums",    label: "Albums",           roles: ["press"] },
   { id: "pricing",   label: "GoodDeed pricing", roles: ["press"] },
   { id: "settings",  label: "Settings",         roles: ["press"] },
 

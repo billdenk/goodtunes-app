@@ -170,6 +170,15 @@ export interface NewAlbumArtistDialogProps {
    * match is a plain navigation with nothing to (re-)associate.
    */
   localPeopleApiBase?: string;
+  /**
+   * Optional server-side search base URL. When provided, `?q=<term>` is
+   * appended and fetched (debounced by TanStack Query's cache key) whenever
+   * `trimmed.length >= 2`; results replace the client-side `localMatches`
+   * list so the typeahead searches the full catalog without loading all of it
+   * at once. Used by the Press portal to search the global GoodTunes people
+   * DB server-side instead of pre-loading the entire catalog client-side.
+   */
+  globalSearchApiBase?: string;
 }
 
 type Stage = "intro" | "streaming" | "confirm";
@@ -242,6 +251,7 @@ export function NewAlbumArtistDialog({
   personApiBase = "/api/admin",
   invalidateOnCreate,
   localPeopleApiBase = "/api/people",
+  globalSearchApiBase,
 }: NewAlbumArtistDialogProps) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -322,7 +332,26 @@ export function NewAlbumArtistDialog({
   const { data: people = [] } = useQuery<PersonLite[]>({
     queryKey: [localPeopleApiBase],
   });
+
+  // Optional server-side global search. When `globalSearchApiBase` is
+  // provided and the user has typed ≥ 2 chars, fetch
+  // `${base}?q=<term>` (TanStack deduplicates identical keys so each
+  // unique term fetches only once). Results replace the client-side
+  // localMatches list for the typeahead dropdown.
+  const globalSearchUrl =
+    globalSearchApiBase && trimmed.length >= 2
+      ? `${globalSearchApiBase}?q=${encodeURIComponent(trimmed)}`
+      : null;
+  const { data: globalSearchResults = [] } = useQuery<PersonLite[]>({
+    queryKey: [globalSearchUrl ?? "__noop_global_search"],
+    enabled: Boolean(globalSearchUrl),
+  });
+
   const localMatches = useMemo(() => {
+    // When server-side global search is active, use those results.
+    if (globalSearchApiBase && trimmed.length >= 2) {
+      return globalSearchResults.slice(0, 6);
+    }
     if (!trimmed) return [];
     const q = trimmed.toLowerCase();
     return people
@@ -335,11 +364,12 @@ export function NewAlbumArtistDialog({
         return a.name.localeCompare(b.name);
       })
       .slice(0, 6);
-  }, [people, trimmed]);
-  const hasExactLocal = useMemo(
-    () => people.some((p) => p.name.trim().toLowerCase() === trimmed.toLowerCase()),
-    [people, trimmed],
-  );
+  }, [globalSearchApiBase, globalSearchResults, people, trimmed]);
+  const hasExactLocal = useMemo(() => {
+    const pool =
+      globalSearchApiBase && trimmed.length >= 2 ? globalSearchResults : people;
+    return pool.some((p) => p.name.trim().toLowerCase() === trimmed.toLowerCase());
+  }, [globalSearchApiBase, globalSearchResults, people, trimmed]);
 
   // ---------- Spotify candidate search ----------
   // Manual fetch (not useQuery) because we want to differentiate

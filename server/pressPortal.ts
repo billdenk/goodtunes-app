@@ -900,6 +900,85 @@ export function registerPressPortalRoutes(
     )
   `;
 
+  // GET /api/press/:id/albums — GoodTunes releases pressed by this plant,
+  // with lifecycle-stage fields so the client can run albumStage(). Only
+  // albums that have at least one non-cancelled pressing_order_request
+  // scoped to this press are returned. Uses a DISTINCT CTE so an album
+  // with multiple pressing requests (revisions, re-orders) appears once.
+  // Cross-press isolation enforced by requirePressScope.
+  app.get("/api/press/:id/albums", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const rows = await db.execute<any>(sql`
+      WITH scoped_albums AS (
+        SELECT DISTINCT album_id
+          FROM pressing_order_requests
+         WHERE status <> 'cancelled'
+           AND package_snapshot ->> 'pressId' = ${pressId}
+      )
+      SELECT a.id, a.title, a.artwork,
+             a.is_prepping                AS "isPrepping",
+             a.is_hidden                  AS "isHidden",
+             a.good_tunes_release_date    AS "goodTunesReleaseDate",
+             a.streaming_release_date     AS "streamingReleaseDate",
+             COALESCE(p.name, l.name)     AS artist
+        FROM albums a
+        JOIN scoped_albums sa ON sa.album_id = a.id
+        LEFT JOIN people p ON p.id = a.primary_artist_id
+        LEFT JOIN labels l ON l.id = a.label_id
+       WHERE a.deleted_at IS NULL
+         AND a.is_goodtunes_release = true
+       ORDER BY a.title ASC
+    `);
+    res.json(
+      ((rows as any).rows ?? []).map((a: any) => ({
+        id: a.id as string,
+        title: a.title as string,
+        artwork: (a.artwork as string | null) ?? null,
+        artist: (a.artist as string | null) ?? null,
+        isPrepping: Boolean(a.isPrepping),
+        isHidden: Boolean(a.isHidden),
+        goodTunesReleaseDate: (a.goodTunesReleaseDate as string | null) ?? null,
+        streamingReleaseDate: (a.streamingReleaseDate as string | null) ?? null,
+      })),
+    );
+  });
+
+  // GET /api/press/:id/people/search?q= — server-side name search for the
+  // NewAlbumArtistDialog globalSearchApiBase typeahead. Requires a non-empty
+  // `q` param; returns up to 8 PersonLite matches (ILIKE, prefix-ranked)
+  // from the full GoodTunes people catalog so a press partner can find any
+  // GoodTunes artist by name — not just the ones already in their roster.
+  // Because only matching rows are returned (never the full catalog), a press
+  // partner cannot enumerate all people by loading this endpoint.
+  // Gated by requirePressScope so only this press's authenticated users can
+  // query it.
+  app.get("/api/press/:id/people/search", requireAdmin, requirePressScope, async (req, res) => {
+    const q = String(req.query.q ?? "").trim();
+    if (!q) return res.status(400).json({ error: "q is required" });
+    const like = `%${q}%`;
+    const prefix = `${q}%`;
+    const rows = await db.execute<any>(sql`
+      SELECT id, name,
+             photo_url        AS "photoUrl",
+             itunes_artist_id AS "itunesArtistId"
+        FROM people
+       WHERE deleted_at IS NULL
+         AND name ILIKE ${like}
+       ORDER BY
+         CASE WHEN name ILIKE ${prefix} THEN 0 ELSE 1 END,
+         name ASC
+       LIMIT 8
+    `);
+    res.json(
+      ((rows as any).rows ?? []).map((r: any) => ({
+        id: r.id as string,
+        name: r.name as string,
+        photoUrl: (r.photoUrl as string | null) ?? null,
+        itunesArtistId: (r.itunesArtistId as string | null) ?? null,
+      })),
+    );
+  });
+
   // GET /api/press/:id/people — the press's artist roster, shaped for
   // the AdminPeople grid/list (PersonLite + derivedRoles + affiliation).
   app.get("/api/press/:id/people", requireAdmin, requirePressScope, async (req, res) => {

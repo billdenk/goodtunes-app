@@ -24,7 +24,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch, useLocation } from "wouter";
-import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign, BookOpen, Contact, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Mail } from "lucide-react";
+import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign, BookOpen, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Mail } from "lucide-react";
+import { albumStage, type AlbumStage } from "@shared/albumStage";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -70,9 +71,9 @@ import { PRIMARY_CREATIVE_CREDITS } from "@/components/admin/RolePicker";
 
 // pipeline + reports stay in the union so direct ?tab= URLs still render
 // their content (they're just hidden from the nav per Task #2188).
-type TabId = "dashboard" | "people" | "catalog" | "pipeline" | "reports" | "pricing" | "settings";
+type TabId = "dashboard" | "people" | "catalog" | "albums" | "pipeline" | "reports" | "pricing" | "settings";
 
-const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "catalog", "pipeline", "reports", "pricing", "settings"];
+const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "catalog", "albums", "pipeline", "reports", "pricing", "settings"];
 
 interface MeRole { role: string; roleScopeId: string | null; }
 interface PressMe {
@@ -253,8 +254,9 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       layout="leftnav"
       navIcons={{
         dashboard: LayoutDashboard,
-        people: Contact,
+        people: Users,
         catalog: BookOpen,
+        albums: Disc3,
         pipeline: GitBranch,
         reports: FileBarChart,
         pricing: CircleDollarSign,
@@ -288,6 +290,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       ) : tab === "people" && (
         <PressPeopleTab pressId={pressId} onOpenPerson={openPerson} />
       )}
+      {tab === "albums" && <PressAlbumsTab pressId={pressId} />}
       {tab === "catalog" && (
         <div className="space-y-4" data-testid="press-catalog-tab">
           <AdminPageHeader
@@ -320,6 +323,153 @@ const STAGE_LABEL: Record<string, string> = {
   in_production: "In production",
   shipped: "Shipped",
 };
+
+// ─── Albums tab (press-scoped) ─────────────────────────────────────────
+//
+// Lifecycle view of every GoodTunes release this press is pressing,
+// grouped by the four admin stage tabs (Prepping / Staged / Released /
+// Sunset). Backed by GET /api/press/:id/albums which scopes by
+// pressing_order_requests.package_snapshot->>'pressId'. Clicking a row
+// opens the full album editor at /admin/albums/:id.
+
+interface PressAlbumLite {
+  id: string;
+  title: string;
+  artwork: string | null;
+  artist: string | null;
+  isPrepping: boolean;
+  isHidden: boolean;
+  goodTunesReleaseDate: string | null;
+  streamingReleaseDate: string | null;
+}
+
+const PRESS_ALBUM_STAGE_TABS: { key: AlbumStage; label: string }[] = [
+  { key: "prepping",  label: "Prepping"  },
+  { key: "staged",    label: "Staged"    },
+  { key: "released",  label: "Released"  },
+  { key: "sunset",    label: "Sunset"    },
+];
+
+function PressAlbumsTab({ pressId }: { pressId: string }) {
+  const [stageTab, setStageTab] = useState<AlbumStage>("prepping");
+  const [view, setView] = useViewMode("press-albums");
+
+  const { data: albums = [], isLoading } = useQuery<PressAlbumLite[]>({
+    queryKey: [`/api/press/${pressId}/albums`],
+  });
+
+  const byStage = useMemo(() => {
+    const map: Record<AlbumStage, PressAlbumLite[]> = {
+      prepping: [], staged: [], released: [], sunset: [],
+    };
+    for (const a of albums) map[albumStage(a)].push(a);
+    return map;
+  }, [albums]);
+
+  const visible = byStage[stageTab];
+
+  if (isLoading) return <PanelLoading />;
+
+  return (
+    <div className="space-y-4" data-testid="press-albums-tab">
+      <AdminPageHeader
+        title="Albums"
+        subtitle="GoodTunes releases pressed by your plant, grouped by lifecycle stage."
+        testId="heading-press-albums"
+      />
+
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-0 rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
+          {PRESS_ALBUM_STAGE_TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setStageTab(t.key)}
+              className={[
+                "inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap",
+                stageTab === t.key
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-50",
+              ].join(" ")}
+              data-testid={`tab-press-albums-${t.key}`}
+            >
+              {t.label}
+              {byStage[t.key].length > 0 && (
+                <span className={[
+                  "text-xs font-semibold tabular-nums",
+                  stageTab === t.key ? "opacity-70" : "opacity-50",
+                ].join(" ")}>
+                  {byStage[t.key].length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        <ViewModeToggle view={view} onToggle={setView} />
+      </div>
+
+      {visible.length === 0 ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-400 text-sm" data-testid="empty-press-albums">
+          No {stageTab} albums.
+        </div>
+      ) : view === "grid" ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3" data-testid="grid-press-albums">
+          {visible.map((a) => (
+            <Link
+              key={a.id}
+              href={`/admin/albums/${a.id}`}
+              data-testid={`card-press-album-${a.id}`}
+              className="group rounded-2xl border border-slate-200 bg-white overflow-hidden hover:border-slate-300 hover:shadow-sm transition-all"
+            >
+              <div className="aspect-square bg-slate-100 overflow-hidden">
+                {a.artwork ? (
+                  <img src={a.artwork} alt={a.title} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Disc3 className="w-8 h-8 text-slate-300" />
+                  </div>
+                )}
+              </div>
+              <div className="p-2.5">
+                <div className="text-slate-900 text-xs font-semibold truncate">{a.title}</div>
+                {a.artist && <div className="text-slate-400 text-xs truncate mt-0.5">{a.artist}</div>}
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden" data-testid="list-press-albums">
+          <ul className="divide-y divide-slate-100">
+            {visible.map((a) => (
+              <li key={a.id}>
+                <Link
+                  href={`/admin/albums/${a.id}`}
+                  data-testid={`row-press-album-${a.id}`}
+                  className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
+                    {a.artwork ? (
+                      <img src={a.artwork} alt={a.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Disc3 className="w-4 h-4 text-slate-300" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-slate-900 text-sm font-semibold truncate">{a.title}</div>
+                    {a.artist && <div className="text-slate-400 text-xs truncate">{a.artist}</div>}
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── People tab (press-scoped) ─────────────────────────────────────────
 //
@@ -521,7 +671,7 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
           onOpenChange={setAddOpen}
           mode="person"
           personApiBase={`/api/press/${pressId}`}
-          localPeopleApiBase={`/api/press/${pressId}/people`}
+          globalSearchApiBase={`/api/press/${pressId}/people/search`}
           invalidateOnCreate={[[`/api/press/${pressId}/people`]]}
           onSkip={() => setAddOpen(false)}
           onSelect={({ id }) => {
