@@ -1,9 +1,11 @@
 /**
  * Shared admin persona definitions.
  *
- * Used by both the in-app "View As" switcher (ViewAsSwitcher.tsx) and the
- * dev-login role dropdown on the admin login page (Login.tsx) so the two
- * surfaces stay in lock-step without duplicating the list.
+ * Used by the dev-login role dropdown on the admin login page (Login.tsx),
+ * and by the retained-but-dormant header "View As" switcher
+ * (ViewAsSwitcher.tsx) — currently not mounted in the admin shell (Task
+ * #2397) but kept intact for easy restore. Both share this list so they
+ * stay in lock-step without duplicating it.
  *
  * Icons are lucide-react component refs — anything importing this module from
  * a non-React context should only use the non-icon fields (key, label,

@@ -40,7 +40,6 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
-import { ViewAsSwitcher } from "@/components/admin/ViewAsSwitcher";
 import { AutoSyncAlertBanner } from "@/components/admin/AutoSyncAlertBanner";
 import { MuxStatusBanner } from "@/components/admin/MuxStatusBanner";
 import { PlacesBanner as PlacesBannerSlot } from "@/components/admin/AddressAutocompleteField";
@@ -1167,10 +1166,8 @@ export function AdminFrame({
           {/* Task #1794 — Hard-pin the avatar group to the right with
               ml-auto. justify-between collapsed a lone avatar to the left
               whenever its left-side siblings rendered nothing (mobile
-              search is md:hidden; ViewAsSwitcher returns null for
-              non-super-admins), so the right group must own its anchor. */}
+              search is md:hidden), so the right group must own its anchor. */}
           <div className="ml-auto flex items-center gap-3">
-            <ViewAsSwitcher />
             <AdminUserMenu />
           </div>
         </div>
