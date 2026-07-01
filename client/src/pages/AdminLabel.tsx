@@ -56,6 +56,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { uploadImageFile } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
+import { ViewAsPartnerButton } from "@/components/admin/ViewAsPartnerButton";
 
 /**
  * Admin · Single label (Phase 6f).
@@ -335,18 +336,21 @@ export function AdminLabel() {
     >
       <div className="space-y-6">
         {/* BREADCRUMB */}
-        <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
-          <Link
-            href="/admin/labels"
-            className="hover:text-slate-700"
-            data-testid="link-breadcrumb-labels"
-          >
-            Labels
-          </Link>
-          <ChevronRight className="w-3 h-3" />
-          <span className="text-slate-700 font-semibold truncate max-w-[420px]">
-            {label.name}
-          </span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium min-w-0">
+            <Link
+              href="/admin/labels"
+              className="hover:text-slate-700 flex-shrink-0"
+              data-testid="link-breadcrumb-labels"
+            >
+              Labels
+            </Link>
+            <ChevronRight className="w-3 h-3 flex-shrink-0" />
+            <span className="text-slate-700 font-semibold truncate max-w-[420px]">
+              {label.name}
+            </span>
+          </div>
+          <ViewAsPartnerButton role="label" scopeId={labelId} label={label.name} />
         </div>
 
         {/* HEADER */}

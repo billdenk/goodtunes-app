@@ -12,6 +12,7 @@ import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog"
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { Button } from "@/components/ui/button";
+import { ViewAsPartnerButton } from "@/components/admin/ViewAsPartnerButton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -157,12 +158,15 @@ export function AdminFulfillmentPartner() {
   return (
     <AdminFrame active="fulfillment" contentWidth="narrow">
       <div className="space-y-5">
-        <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
-          <Link href="/admin/fulfillment-partners" className="hover:text-slate-700">
-            Fulfillment
-          </Link>
-          <ChevronRight className="w-3 h-3" />
-          <span className="text-slate-700 font-semibold truncate max-w-[420px]">{f.name}</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium min-w-0">
+            <Link href="/admin/fulfillment-partners" className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors flex-shrink-0">
+              Fulfillment
+            </Link>
+            <ChevronRight className="w-3 h-3 flex-shrink-0" />
+            <span className="text-slate-700 font-semibold truncate max-w-[420px]">{f.name}</span>
+          </div>
+          <ViewAsPartnerButton role="fulfillment" scopeId={id} label={f.name} />
         </div>
 
         <div className="flex items-start gap-4">

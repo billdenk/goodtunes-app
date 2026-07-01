@@ -22,7 +22,7 @@ import {
   type AdminRole,
   type MembershipScopeKind,
 } from "@shared/schema";
-import { getActiveMembershipKey, getDevImpersonationHat, membershipKey } from "./activeMembership";
+import { getActiveMembershipKey, getDevImpersonationHat, getViewAsHat, membershipKey } from "./activeMembership";
 import { isFullAccessEmail } from "@shared/fullAccess";
 
 export type { AdminRole };
@@ -183,6 +183,22 @@ export async function getAllUserMemberships(userId: string): Promise<ResolvedMem
 // that no longer matches) fall straight through to the full set, keeping
 // behavior byte-for-byte identical to before the switcher existed.
 export async function getUserMemberships(userId: string): Promise<ResolvedMembership[]> {
+  // Production-safe view-as hat: a super-admin opened a partner portal tab
+  // via POST /api/admin/view-as/mint. The token is validated by
+  // activeMembershipContext and stored in ALS. Checked first — if present,
+  // ALL role/scope resolution in this request reflects the partner's hat.
+  const viewAsHat = getViewAsHat();
+  if (viewAsHat) {
+    return [{
+      role: normalizeRole(viewAsHat.role),
+      scopeKind: (MEMBERSHIP_SCOPE_KINDS as readonly string[]).includes(viewAsHat.scopeKind ?? "")
+        ? (viewAsHat.scopeKind as MembershipScopeKind)
+        : null,
+      scopeId: viewAsHat.scopeId,
+      subRole: null,
+    }];
+  }
+
   // Dev-only impersonation hat: returns a synthetic single-hat membership
   // for the chosen persona. Hard-gated on NODE_ENV so it can NEVER fire
   // in production (the write endpoint 404s there too, making the session

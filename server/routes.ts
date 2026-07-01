@@ -3636,6 +3636,42 @@ export async function registerRoutes(
     return res.json({ ok: true });
   });
 
+  // ─── Production view-as impersonation ─────────────────────────────────────
+  // Mints a short-lived HMAC-signed view-as token. Super-admin only.
+  // The token is carried by the new browser tab via X-View-As-Token header
+  // and validated per-request by activeMembershipContext — no session mutation,
+  // no other-tab impact. Original god-view tab is completely unaffected.
+  app.post("/api/admin/view-as/mint", requireAdmin, async (req, res) => {
+    const a = await getAuthFromRequest(req);
+    if (!a) return res.status(401).json({ message: "Unauthorized" });
+    const callerRole = await getUserRole(a.userId);
+    if (!callerRole || callerRole.role !== "super_admin") {
+      return res.status(403).json({ message: "Super-admin only" });
+    }
+    const { role, scopeKind, scopeId, label } = req.body as {
+      role: string;
+      scopeKind?: string | null;
+      scopeId?: string | null;
+      label: string;
+    };
+    if (!role || !label) {
+      return res.status(400).json({ message: "role and label required" });
+    }
+    if (role === "super_admin" || role === "admin") {
+      return res.status(400).json({ message: "Cannot view-as a god-role" });
+    }
+    const { mintViewAsToken, logViewAsAudit } = await import("./auth/viewAsToken");
+    const token = mintViewAsToken({
+      sub: a.userId,
+      role,
+      scopeKind: scopeKind ?? null,
+      scopeId: scopeId ?? null,
+      label,
+    });
+    await logViewAsAudit(a.userId, role, scopeKind ?? null, scopeId ?? null, label);
+    return res.json({ token, label });
+  });
+
   // ----- Admin bootstrap + CMS -------------------------------------------
   // First authenticated caller becomes admin if no admin exists yet. After
   // that, only existing admins can promote (or you set is_admin=true in DB

@@ -18,12 +18,20 @@
 // without creating real membership rows. This path is completely inert in
 // production — the endpoints that write devImpersonationHat 404 there.
 //
+// Production view-as: a super-admin can mint a short-lived HMAC token that
+// lets a NEW browser tab show any partner's genuine restricted portal.
+// The X-View-As-Token header is sent by the new tab on every request;
+// this middleware validates the token and injects a synthetic hat so all
+// downstream role gates see the partner scope. The original god-view tab
+// is completely unaffected (it never sends the header).
+//
 // This module deliberately imports nothing from roles.ts so roles.ts can
 // import from here without a cycle. `membershipKey` takes a structural
 // shape rather than the ResolvedMembership type for the same reason.
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Request, Response, NextFunction } from "express";
+import { verifyViewAsToken } from "./viewAsToken";
 
 export interface DevImpersonationHat {
   role: string;
@@ -35,18 +43,20 @@ export interface DevImpersonationHat {
 interface ActiveMembershipStore {
   key: string | undefined;
   devHat: DevImpersonationHat | null;
+  viewAsHat: DevImpersonationHat | null;
 }
 
 const als = new AsyncLocalStorage<ActiveMembershipStore>();
 
 // Run `fn` (and any async continuation it spawns) with `key` as the
-// request's active-membership key and an optional dev impersonation hat.
+// request's active-membership key and optional dev/view-as hats.
 export function runWithActiveMembership<T>(
   key: string | undefined,
   devHat: DevImpersonationHat | null,
   fn: () => T,
+  viewAsHat?: DevImpersonationHat | null,
 ): T {
-  return als.run({ key, devHat }, fn);
+  return als.run({ key, devHat, viewAsHat: viewAsHat ?? null }, fn);
 }
 
 // The active-membership key for the current request, or undefined when
@@ -59,6 +69,12 @@ export function getActiveMembershipKey(): string | undefined {
 // not impersonating (always null in production — the endpoint 404s there).
 export function getDevImpersonationHat(): DevImpersonationHat | null {
   return als.getStore()?.devHat ?? null;
+}
+
+// The production-safe view-as hat injected by a validated X-View-As-Token
+// header. Present only in the new-tab view-as session; null everywhere else.
+export function getViewAsHat(): DevImpersonationHat | null {
+  return als.getStore()?.viewAsHat ?? null;
 }
 
 // Stable identity for one hat: role|scopeKind|scopeId. The client names
@@ -74,12 +90,36 @@ export function membershipKey(m: {
 
 // Express middleware: lift the session's chosen hat into ALS for the
 // request. Also lifts any dev impersonation hat (null in production
-// because the write endpoint 404s there). Mounted right after
-// express-session so every downstream handler + role lookup sees it.
-// Calling next() inside als.run keeps the context alive across the
-// whole (async) middleware/handler chain.
-export function activeMembershipContext(req: Request, _res: Response, next: NextFunction) {
+// because the write endpoint 404s there). For requests carrying a valid
+// X-View-As-Token header the production-safe view-as hat is injected
+// instead, completely scoping the request to the target partner role.
+// Mounted right after express-session so every downstream handler + role
+// lookup sees it.
+export async function activeMembershipContext(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
   const key = (req.session as any)?.activeMembershipKey as string | undefined;
   const devHat = ((req.session as any)?.devImpersonationHat ?? null) as DevImpersonationHat | null;
-  runWithActiveMembership(key, devHat, () => next());
+
+  // Production-safe view-as: validate X-View-As-Token when present.
+  let viewAsHat: DevImpersonationHat | null = null;
+  const viewAsTokenStr = req.headers["x-view-as-token"] as string | undefined;
+  if (viewAsTokenStr) {
+    const callerId = (req.session as any)?.userId as string | undefined;
+    if (callerId) {
+      const payload = await verifyViewAsToken(viewAsTokenStr, callerId);
+      if (payload) {
+        viewAsHat = {
+          role: payload.role,
+          scopeKind: payload.scopeKind,
+          scopeId: payload.scopeId,
+          label: payload.label,
+        };
+      }
+    }
+  }
+
+  runWithActiveMembership(key, devHat, () => next(), viewAsHat);
 }

@@ -1,0 +1,92 @@
+// "View as this partner" entry-point button — shown only to super-admins on
+// partner detail pages (AdminManufacturer, AdminLabel, AdminNonProfit, etc.).
+// Mints a short-lived HMAC token via POST /api/admin/view-as/mint and opens
+// the partner's genuine restricted portal in a NEW tab. The current god-view
+// tab is completely unaffected. Fetches meRole from the query cache (already
+// loaded by the parent page) — renders null for non-super-admin callers.
+
+import { useState } from "react";
+import { Eye } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+
+export type PartnerRoleKind =
+  | "manufacturer"
+  | "label"
+  | "artist"
+  | "non_profit"
+  | "vendor"
+  | "fulfillment"
+  | "manager";
+
+const PORTAL_PATH: Record<PartnerRoleKind, string> = {
+  manufacturer: "/vendor",
+  label: "/label",
+  artist: "/artist",
+  non_profit: "/non-profit",
+  vendor: "/vendor",
+  fulfillment: "/vendor",
+  manager: "/manager",
+};
+
+export interface ViewAsPartnerButtonProps {
+  role: PartnerRoleKind;
+  /** defaults to role when omitted */
+  scopeKind?: string | null;
+  scopeId: string;
+  label: string;
+}
+
+export function ViewAsPartnerButton({
+  role,
+  scopeKind,
+  scopeId,
+  label,
+}: ViewAsPartnerButtonProps) {
+  const { data: meRole } = useQuery<{ role: string }>({ queryKey: ["/api/me/role"] });
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+
+  if (meRole?.role !== "super_admin") return null;
+
+  async function handleViewAs() {
+    setLoading(true);
+    try {
+      const r = await apiRequest("POST", "/api/admin/view-as/mint", {
+        role,
+        scopeKind: scopeKind ?? role,
+        scopeId,
+        label,
+      });
+      const { token } = (await r.json()) as { token: string; label: string };
+      const portalPath = PORTAL_PATH[role];
+      const hash = `viewas=${encodeURIComponent(token)}&viewaslabel=${encodeURIComponent(label)}`;
+      window.open(`${portalPath}#${hash}`, "_blank", "noopener,noreferrer");
+    } catch (e: any) {
+      toast({
+        title: "Couldn't open partner view",
+        description: e?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={handleViewAs}
+      disabled={loading}
+      className="flex items-center gap-1.5 text-xs h-7 px-2.5 border-slate-200 text-slate-600 hover:text-[var(--brand-blue)] hover:border-[var(--brand-blue)]"
+      data-testid="button-view-as-partner"
+    >
+      <Eye className="w-3.5 h-3.5" />
+      View as this partner
+    </Button>
+  );
+}

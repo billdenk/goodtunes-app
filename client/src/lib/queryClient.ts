@@ -14,6 +14,41 @@ export function setAuthToken(token: string | null) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+// sessionStorage key used by the view-as tab (set by main.tsx on fragment pickup,
+// consumed here on every request, cleared by ViewAsBanner "Exit view" button).
+const VIEW_AS_TOKEN_KEY = "gt:viewAsToken";
+const VIEW_AS_LABEL_KEY = "gt:viewAsLabel";
+
+export function getViewAsToken(): string | null {
+  try {
+    return window.sessionStorage?.getItem(VIEW_AS_TOKEN_KEY) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function getViewAsLabel(): string | null {
+  try {
+    return window.sessionStorage?.getItem(VIEW_AS_LABEL_KEY) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function setViewAsSession(token: string, label: string) {
+  try {
+    window.sessionStorage?.setItem(VIEW_AS_TOKEN_KEY, token);
+    window.sessionStorage?.setItem(VIEW_AS_LABEL_KEY, label);
+  } catch {}
+}
+
+export function clearViewAsSession() {
+  try {
+    window.sessionStorage?.removeItem(VIEW_AS_TOKEN_KEY);
+    window.sessionStorage?.removeItem(VIEW_AS_LABEL_KEY);
+  } catch {}
+}
+
 function authHeaders(): Record<string, string> {
   const token = getAuthToken();
   const headers: Record<string, string> = token
@@ -25,6 +60,10 @@ function authHeaders(): Record<string, string> {
   // charge, so this is read-only by construction.
   const pass = getPreviewPass();
   if (pass) headers["X-Preview-Pass"] = pass;
+  // View-as impersonation: the new partner-portal tab carries its HMAC token
+  // on every request so the server injects the synthetic partner hat.
+  const viewAsToken = getViewAsToken();
+  if (viewAsToken) headers["X-View-As-Token"] = viewAsToken;
   return headers;
 }
 

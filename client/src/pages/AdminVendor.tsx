@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ViewAsPartnerButton } from "@/components/admin/ViewAsPartnerButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
@@ -383,28 +384,31 @@ export function AdminVendor() {
     >
       <div className="space-y-6">
         {/* BREADCRUMB */}
-        <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
-          {backCrumb ? (
-            <Link
-              href={backCrumb.href}
-              className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate max-w-[420px]"
-              data-testid={backCrumb.testId}
-            >
-              {backCrumb.name}
-            </Link>
-          ) : (
-            <Link
-              href={listRoute}
-              className="hover:text-slate-700"
-              data-testid="link-breadcrumb-vendors"
-            >
-              {listLabel}
-            </Link>
-          )}
-          <ChevronRight className="w-3 h-3 flex-shrink-0" />
-          <span className="text-slate-700 font-semibold truncate max-w-[420px]">
-            {vendor.name}
-          </span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium min-w-0">
+            {backCrumb ? (
+              <Link
+                href={backCrumb.href}
+                className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate max-w-[420px]"
+                data-testid={backCrumb.testId}
+              >
+                {backCrumb.name}
+              </Link>
+            ) : (
+              <Link
+                href={listRoute}
+                className="hover:text-slate-700 flex-shrink-0"
+                data-testid="link-breadcrumb-vendors"
+              >
+                {listLabel}
+              </Link>
+            )}
+            <ChevronRight className="w-3 h-3 flex-shrink-0" />
+            <span className="text-slate-700 font-semibold truncate max-w-[420px]">
+              {vendor.name}
+            </span>
+          </div>
+          <ViewAsPartnerButton role="vendor" scopeId={vendorId} label={vendor.name} />
         </div>
 
         {/* HEADER */}

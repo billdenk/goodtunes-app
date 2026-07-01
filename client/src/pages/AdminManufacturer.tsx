@@ -35,6 +35,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { postAdminImage } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
+import { ViewAsPartnerButton } from "@/components/admin/ViewAsPartnerButton";
 import { useAuth } from "@/hooks/useAuth";
 import { AddressAutocompleteField } from "@/components/admin/AddressAutocompleteField";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -397,12 +398,15 @@ export function AdminManufacturer() {
     <AdminFrame active="manufacturers" contentWidth="narrow">
       <div className="space-y-6">
         {/* BREADCRUMB */}
-        <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
-          <Link href="/admin/manufacturers" className="hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors" data-testid="link-breadcrumb-presses">
-            Presses
-          </Link>
-          <ChevronRight className="w-3 h-3 flex-shrink-0" />
-          <span className="text-slate-700 font-semibold truncate max-w-[420px]">{m.name}</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium min-w-0">
+            <Link href="/admin/manufacturers" className="hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors flex-shrink-0" data-testid="link-breadcrumb-presses">
+              Presses
+            </Link>
+            <ChevronRight className="w-3 h-3 flex-shrink-0" />
+            <span className="text-slate-700 font-semibold truncate max-w-[420px]">{m.name}</span>
+          </div>
+          <ViewAsPartnerButton role="manufacturer" scopeId={id} label={m.name} />
         </div>
 
         {/* HEADER — logo tile + domain eyebrow + name + Visit link */}

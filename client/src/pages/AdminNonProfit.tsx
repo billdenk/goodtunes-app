@@ -13,6 +13,7 @@ import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { queryClient } from "@/lib/queryClient";
+import { ViewAsPartnerButton } from "@/components/admin/ViewAsPartnerButton";
 import type { PartnerAddressSnapshot } from "@shared/schema";
 
 // Task #78 — Super-admin detail page for a non-profit partner.
@@ -95,14 +96,17 @@ export default function AdminNonProfit() {
   return (
     <AdminFrame active="nonprofits" contentWidth="narrow">
       <div className="space-y-5" data-testid="page-admin-non-profit">
-        <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
-          <Link href="/admin/non-profits" className="hover:text-slate-700 hover:underline underline-offset-2">
-            NPOs
-          </Link>
-          <ChevronRight className="w-3 h-3" />
-          <span className="text-slate-700 font-semibold truncate max-w-[420px]">
-            {npo.name}
-          </span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium min-w-0">
+            <Link href="/admin/non-profits" className="hover:text-slate-700 hover:underline underline-offset-2 flex-shrink-0">
+              NPOs
+            </Link>
+            <ChevronRight className="w-3 h-3 flex-shrink-0" />
+            <span className="text-slate-700 font-semibold truncate max-w-[420px]">
+              {npo.name}
+            </span>
+          </div>
+          <ViewAsPartnerButton role="non_profit" scopeId={id} label={npo.name} />
         </div>
 
         <div className="flex items-start gap-4">

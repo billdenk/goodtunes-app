@@ -51,6 +51,27 @@ try {
   }
 } catch {}
 
+// View-as impersonation fragment pickup. A super-admin opens a new tab at
+// /<portal>#viewas=<token>&viewaslabel=<enc> via the "View as this partner"
+// button. Pick up the token + label BEFORE React mounts, stash in
+// sessionStorage (tab-scoped — other tabs are unaffected), and scrub the
+// fragment so the token never appears in access logs or the URL bar.
+try {
+  const hash = window.location.hash;
+  if (hash.includes("viewas=")) {
+    const params = new URLSearchParams(hash.slice(1));
+    const vat = params.get("viewas");
+    const val = params.get("viewaslabel");
+    if (vat) {
+      sessionStorage.setItem("gt:viewAsToken", vat);
+      sessionStorage.setItem("gt:viewAsLabel", decodeURIComponent(val ?? "Partner portal"));
+      const url = new URL(window.location.href);
+      url.hash = "";
+      window.history.replaceState({}, "", url.toString());
+    }
+  }
+} catch {}
+
 // Task #424 — Apply the admin light-theme body class BEFORE React mounts.
 // Previously this lived in AdminFrame's useEffect, so any delay or
 // failure in AdminFrame's render/commit left the fan-player's dark

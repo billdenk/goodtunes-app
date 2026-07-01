@@ -29,6 +29,7 @@ import { Circle, Eye, type LucideIcon } from "lucide-react";
 import { DashboardTabs, type TabDef } from "@/components/partner/dashboard-controls";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
 import { FeedbackLauncher } from "@/components/operator/FeedbackLauncher";
+import { ViewAsBanner } from "@/components/admin/ViewAsBanner";
 import { cn } from "@/lib/utils";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 
@@ -198,10 +199,13 @@ export function OperatorShell<TabId extends string>({
       // h-screen + overflow-hidden on the outer shell means only the main
       // content column scrolls; the left rail stays fixed in place — matching
       // AdminFrame's h-screen layout so the nav never scrolls away.
-      <div
-        className="h-screen overflow-hidden flex bg-slate-50 text-slate-900"
-        data-testid={testId ?? "operator-shell"}
-      >
+      // The view-as banner sits ABOVE the h-screen shell so it doesn't
+      // disturb the fixed-height layout (the shell shrinks to fill the rest).
+      <div className="flex flex-col" style={{ height: "100dvh" }} data-testid={testId ?? "operator-shell"}>
+        <ViewAsBanner />
+        <div
+          className="flex-1 min-h-0 overflow-hidden flex bg-slate-50 text-slate-900"
+        >
         {/* Left rail — 256px white column. Partner logo + name in the top
             header band (replacing the GoodTunes logo). Vertical nav in the
             middle. "Powered by GoodTunes" pinned to the foot.
@@ -379,14 +383,17 @@ export function OperatorShell<TabId extends string>({
           </div>
         </div>
       </div>
+      </div>
     );
   }
 
   return (
-    <main
-      className="min-h-screen bg-slate-50 text-slate-900 pb-20"
-      data-testid={testId ?? "operator-shell"}
-    >
+    <>
+      <ViewAsBanner />
+      <main
+        className="min-h-screen bg-slate-50 text-slate-900 pb-20"
+        data-testid={testId ?? "operator-shell"}
+      >
       <header className="border-b border-slate-200 bg-white">
         <div className={cn(maxW, "mx-auto px-4 sm:px-6 py-6")}>
           <div className={cn("flex items-center gap-4", (headerExtras || headerActions) && "mb-6")}>
@@ -412,5 +419,6 @@ export function OperatorShell<TabId extends string>({
         {children}
       </div>
     </main>
+    </>
   );
 }
