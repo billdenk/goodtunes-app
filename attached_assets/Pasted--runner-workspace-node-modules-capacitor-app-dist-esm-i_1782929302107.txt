@@ -1,0 +1,59 @@
+/runner/workspace/node_modules/@capacitor/app/dist/esm/index.js, /home/runner/workspace/node_modules/@capacitor/app/dist/esm/web.js, /home/runner/workspace/node_modules/@capacitor/filesystem/dist/esm/index.js, /home/runner/workspace/node_modules/@capacitor/filesystem/dist/esm/web.js, /home/runner/workspace/node_modules/@capacitor/push-notifications/dist/esm/index.js, dynamic import will not move module into another chunk.
+
+
+computing gzip size...
+
+../dist/public/assets/Viryl_1782351633843-JBoZPNaf.svg                                                  4.18 kB │ gzip:     1.85 kB
+../dist/public/assets/deezer-Dpi7I0Hn.svg                                                               4.35 kB │ gzip:     1.97 kB
+../dist/public/assets/Hellbender_1782351633843-CFAD1lyj.svg                                             5.22 kB │ gzip:     2.38 kB
+../dist/public/assets/fender-p-BUSIi7NQ.jpg                                                             5.75 kB
+../dist/public/assets/296480923_990510464955559_4835927508089831312_n_1778733043794-DoMHe-Kp.jpg       12.33 kB
+../dist/public/assets/lp-congas-bVYptvZ1.jpg                                                           12.35 kB
+../dist/public/index.html                                                                              15.55 kB │ gzip:     3.09 kB
+../dist/public/assets/489126077_677900001854920_6115099447711243943_n_1778732825168-DIcQIV0n.jpg       18.71 kB
+../dist/public/assets/Memphis_Record_Pressing_1782406023011-Ddcr-czA.svg                               20.61 kB │ gzip:     8.35 kB
+../dist/public/assets/461125233_1058013002493273_1591653497522534890_n_1778732472335-B9r8N0vo.jpg      23.83 kB
+../dist/public/assets/491440339_1219621203075331_1388987368263062983_n_1778733063798-C0ag5I1Y.jpg      41.87 kB
+../dist/public/assets/40601513_297256864334777_6021362072443420672_n_1778732967447-CST5pxpV.jpg        47.87 kB
+../dist/public/assets/476244395_1665981424127038_1061684299279554240_n_1778732759333-BllX1Asf.jpg      50.73 kB
+../dist/public/assets/49857260_217283972556499_8769671160792088576_n-2_1778732933481-6-mfc2HZ.jpg      62.61 kB
+../dist/public/assets/275563945_531328368414479_4350121964457415153_n_1778732859335-wI799MIb.jpg       64.69 kB
+../dist/public/assets/685006621_18582612778000748_3694874442677560108_n_1778733016560-Wxy3kvH9.jpg     65.85 kB
+../dist/public/assets/317491717_240990641664216_6413553804796243039_n_1778732477205-5i5kO4UK.jpg       65.85 kB
+../dist/public/assets/nick_carter_compressed-C9G2VT_8.jpg                                              70.98 kB
+../dist/public/assets/martin-d28-XoLg7u5t.jpg                                                          87.33 kB
+../dist/public/assets/55778932_330879441110144_6072972594200444928_n_1778733121471-BxXmG9Dm.jpg        88.94 kB
+../dist/public/assets/gretsch-6071-bjd1_jQW.jpg                                                        91.24 kB
+../dist/public/assets/447880907_328086196999345_3196707581570307705_n_1778732794265-CJgHV-DG.jpg      199.37 kB
+../dist/public/assets/nick_carter_album_cover-C-MXjVv6.jpg                                            208.49 kB
+../dist/public/assets/255891541_412002907097842_7782375590964949093_n_1778732681632-DEwcQjA5.jpg      215.29 kB
+../dist/public/assets/violin-BU3ZqoAj.jpg                                                             302.64 kB
+../dist/public/assets/image_1778731986270-D-BWJ4U6.png                                                407.85 kB
+../dist/public/assets/gretsch-kit-C20T2ngL.jpg                                                        455.54 kB
+../dist/public/assets/2025_GoodTunes_Logo-dark.1_1778271422870-D4YBecl_.png                           692.10 kB
+../dist/public/assets/pdf.worker.min-qwK7q_zL.mjs                                                   1,046.21 kB
+../dist/public/assets/index-1Gtlz4H-.css                                                              193.79 kB │ gzip:    30.74 kB
+../dist/public/assets/pdf.worker.min-Df6PwoEb.js                                                        0.07 kB │ gzip:     0.09 kB
+../dist/public/assets/index-CYzHUCP1.js                                                                 0.11 kB │ gzip:     0.11 kB
+../dist/public/assets/web-C8tISwvu.js                                                                   0.78 kB │ gzip:     0.40 kB
+../dist/public/assets/vttParser-_cemuENC.js                                                             1.33 kB │ gzip:     0.74 kB
+../dist/public/assets/web-BB4JnE9w.js                                                   
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+
+  dist/index.cjs  3.5mb ⚠️
+
+⚡ Done in 906ms
+
+2026-07-01T17:56:17Z info: Pushing pid1 binary layer...
+2026-07-01T17:56:19Z info: Created pid1 binary layer
+2026-07-01T17:56:23Z info: Pushing hosting layer...
+2026-07-01T17:56:23Z info: Pushing Repl layer...
+2026-07-01T17:56:23Z info: Retrieved cached nix layer
+2026-07-01T17:56:23Z info: Created hosting layer
+2026-07-01T18:00:15Z fatal: failed to push layers: failed to push repl layer: io.Copy("/home/runner/workspace/node_modules/@napi-rs/canvas-linux-x64-gnu/skia.linux-x64-gnu.node"): io: read/write on closed pipe
+2026-07-01T18:00:26Z warn: Security scan skipped: connection lost
