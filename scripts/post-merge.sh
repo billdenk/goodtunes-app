@@ -537,6 +537,106 @@ SQL
 reconcile_task_2076_legacy_oauth dev  "${DATABASE_URL:-}"
 reconcile_task_2076_legacy_oauth prod "${PROD_DATABASE_URL:-}"
 
+# ONE-TIME cleanup — clear the bogus Memphis Record Pressing (MRP) press
+# homings. A person/label appears in a press's Customers/People/Pipeline
+# surfaces when its default_press_id points at that press (see
+# sqlPressCustomers: "default_press_id = pressId OR has a non-cancelled
+# pressing order"); invited_by_press_id ALSO drives Sell-panel press/pricing
+# and admin album attribution (often BEFORE default press), so leaving it
+# would keep hidden MRP routing even after the customer list is fixed. Prod's
+# MRP portal was showing ~129 artists/labels (Adele, Beyoncé, Springsteen, …)
+# as "ACCEPTED / 0 albums / 0 units" purely because an early bulk stamp set
+# their default_press_id (and, for 122, invited_by_press_id) = MRP — none
+# have any pressing order for MRP and MRP has zero invites, so they are NOT
+# real customers. This clears default_press_id — and invited_by_press_id ONLY
+# where it too equals MRP (a differently-invited value is preserved) — for
+# rows that have NEITHER a real MRP pressing order NOR any admin_invite tying
+# them to MRP, so genuinely invited/pressing customers stay put. Scoped to MRP
+# by stable manufacturer name (dev↔prod press ids drift, so no hardcoded id)
+# and marker-guarded so a later press-portal "add artist under press" (which
+# sets default_press_id before any invite/order exists) is never clobbered on
+# a subsequent merge. Dev clones carry no MRP homings so this no-ops there;
+# the real work lands once on prod.
+clear_phantom_press_default_homings() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping phantom-press-homing cleanup on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_people integer := 0;
+  v_labels integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'clear_phantom_press_default_homings'
+  ) THEN
+    UPDATE people p SET
+      default_press_id = NULL,
+      invited_by_press_id = CASE
+        WHEN p.invited_by_press_id IN (SELECT id FROM manufacturers WHERE name ILIKE '%Memphis Record Pressing%')
+        THEN NULL ELSE p.invited_by_press_id END
+    WHERE p.default_press_id IN (SELECT id FROM manufacturers WHERE name ILIKE '%Memphis Record Pressing%')
+      AND p.deleted_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM pressing_order_requests por
+        JOIN albums a ON a.id = por.album_id AND a.deleted_at IS NULL
+        WHERE por.status <> 'cancelled'
+          AND por.package_snapshot ->> 'pressId' = p.default_press_id
+          AND a.primary_artist_id = p.id)
+      AND NOT EXISTS (
+        SELECT 1 FROM admin_invites ai
+        WHERE ai.default_press_id = p.default_press_id
+          AND (ai.role_scope_id = p.id OR lower(ai.email) = lower(p.contact_email)));
+    GET DIAGNOSTICS v_people = ROW_COUNT;
+
+    UPDATE labels l SET
+      default_press_id = NULL,
+      invited_by_press_id = CASE
+        WHEN l.invited_by_press_id IN (SELECT id FROM manufacturers WHERE name ILIKE '%Memphis Record Pressing%')
+        THEN NULL ELSE l.invited_by_press_id END
+    WHERE l.default_press_id IN (SELECT id FROM manufacturers WHERE name ILIKE '%Memphis Record Pressing%')
+      AND l.deleted_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM pressing_order_requests por
+        JOIN albums a ON a.id = por.album_id AND a.deleted_at IS NULL
+        WHERE por.status <> 'cancelled'
+          AND por.package_snapshot ->> 'pressId' = l.default_press_id
+          AND a.label_id = l.id)
+      AND NOT EXISTS (
+        SELECT 1 FROM admin_invites ai
+        WHERE ai.default_press_id = l.default_press_id
+          AND ai.role_scope_id = l.id);
+    GET DIAGNOSTICS v_labels = ROW_COUNT;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('clear_phantom_press_default_homings');
+
+    RAISE NOTICE 'phantom-press-homing cleanup applied: % people, % labels cleared', v_people, v_labels;
+  ELSE
+    RAISE NOTICE 'phantom-press-homing cleanup already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: phantom-press-homing cleanup ok on $label"
+    echo "$out" | grep -i 'phantom-press-homing' || true
+  else
+    echo "post-merge: WARNING — phantom-press-homing cleanup failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+clear_phantom_press_default_homings dev  "${DATABASE_URL:-}"
+clear_phantom_press_default_homings prod "${PROD_DATABASE_URL:-}"
+
 # Real fan shipping — schema. orders gains a base/markup/charged/band
 # breakdown and a new shipping_rates rate-card table (one row per
 # partner × destination × band). shared/schema.ts declares both; we
