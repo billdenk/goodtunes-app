@@ -24,7 +24,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch, useLocation } from "wouter";
-import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign, BookOpen, Contact, Search as SearchIcon, ChevronLeft, Disc3 } from "lucide-react";
+import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign, BookOpen, Contact, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Mail } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -55,7 +55,7 @@ import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { PartnerCapabilitiesCard, PRESS_CAPABILITIES } from "@/components/admin/PartnerCapabilitiesCard";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import {
   PersonCard,
@@ -69,9 +69,9 @@ import { PRIMARY_CREATIVE_CREDITS } from "@/components/admin/RolePicker";
 
 // pipeline + reports stay in the union so direct ?tab= URLs still render
 // their content (they're just hidden from the nav per Task #2188).
-type TabId = "dashboard" | "customers" | "people" | "catalog" | "pipeline" | "reports" | "pricing" | "settings";
+type TabId = "dashboard" | "people" | "catalog" | "pipeline" | "reports" | "pricing" | "settings";
 
-const PRESS_TAB_IDS: TabId[] = ["dashboard", "customers", "people", "catalog", "pipeline", "reports", "pricing", "settings"];
+const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "catalog", "pipeline", "reports", "pricing", "settings"];
 
 interface MeRole { role: string; roleScopeId: string | null; }
 interface PressMe {
@@ -119,6 +119,17 @@ interface ScopedPersonFull {
   derivedRoles: string[];
   shape: "artist" | "contact";
   invitedByPressId: string | null;
+  // Invite state — the scoped person-detail endpoint enriches the row so the
+  // profile can render the right affordance (Invite / pending / accepted)
+  // without a second round-trip. All optional/null-safe for older payloads.
+  homed?: boolean;
+  accepted?: boolean;
+  pendingInvite?: {
+    inviteId: string;
+    acceptUrl: string;
+    expiresAt: string | null;
+    reviewStatus: string | null;
+  } | null;
 }
 interface ScopedPersonAlbum {
   id: string;
@@ -167,6 +178,9 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
     // hitting ?tab=pricing directly degrades to the dashboard rather than
     // landing on a now-hidden section.
     if (t === "pricing" && !isSuperAdminView) return "dashboard";
+    // The Customers tab was folded into People (People is now the single
+    // directory). Old ?tab=customers deep-links degrade to People.
+    if (t === "customers") return "people";
     if (t && (PRESS_TAB_IDS as string[]).includes(t)) return t as TabId;
     return "dashboard";
   };
@@ -238,7 +252,6 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       layout="leftnav"
       navIcons={{
         dashboard: LayoutDashboard,
-        customers: Users,
         people: Contact,
         catalog: BookOpen,
         pipeline: GitBranch,
@@ -264,7 +277,6 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       {tab === "dashboard" && (
         <PressDashboardTab pressId={pressId} isSuperAdminView={isSuperAdminView} />
       )}
-      {tab === "customers" && <CustomersTab pressId={pressId} onOpenPerson={openPerson} />}
       {tab === "people" && openPersonId ? (
         <PressScopedPersonDetail
           pressId={pressId}
@@ -298,33 +310,6 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   );
 }
 
-// ─── Customers tab ──────────────────────────────────────────────────
-
-interface CustomerRow {
-  kind: "artist" | "label";
-  id: string;
-  name: string;
-  photo: string | null;
-  email?: string | null;
-  joinedAt?: string | null;
-  albumCount: number;
-  lifetimeUnits: number;
-  latestStage: string | null;
-  state: "invited" | "accepted" | "active";
-  // Only set on `state === "invited"` rows so the row can render
-  // Resend / Revoke / Copy-link affordances.
-  inviteId?: string;
-  acceptUrl?: string;
-  expiresAt?: string | null;
-}
-interface SwitchingRow { kind: "artist" | "label"; id: string; name: string; photo: string | null; switched_at: string; }
-
-const STATE_PILL: Record<CustomerRow["state"], { label: string; cls: string }> = {
-  invited:  { label: "Invited",  cls: "bg-slate-100 text-slate-700" },
-  accepted: { label: "Accepted", cls: "bg-blue-50 text-blue-700 ring-1 ring-blue-200" },
-  active:   { label: "Active",   cls: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" },
-};
-
 const STAGE_LABEL: Record<string, string> = {
   design: "Design",
   sunrise_set: "Sunrise set",
@@ -335,168 +320,6 @@ const STAGE_LABEL: Record<string, string> = {
   shipped: "Shipped",
 };
 
-function CustomersTab({ pressId, onOpenPerson }: { pressId: string; onOpenPerson: (id: string) => void }) {
-  const { data, isLoading } = useQuery<{ active: CustomerRow[]; switching: SwitchingRow[] }>({
-    queryKey: [`/api/press/${pressId}/customers`],
-  });
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [drawerCust, setDrawerCust] = useState<CustomerRow | null>(null);
-  if (isLoading) return <PanelLoading />;
-  const active = data?.active ?? [];
-  const switching = data?.switching ?? [];
-  return (
-    <div className="space-y-4">
-      <DashboardPanel padding="md">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">Customers</h2>
-            <p className="text-slate-500 text-sm mt-1">
-              {active.length} artist{active.length === 1 ? "" : "s"} and labels —
-              invited, accepted, and shipping.
-            </p>
-          </div>
-          <Button
-            type="button"
-            onClick={() => setInviteOpen(true)}
-            className="h-10 rounded-full bg-slate-900 text-white hover:bg-slate-800 font-semibold"
-            data-testid="button-invite-artist"
-          >
-            <Sparkles className="w-4 h-4 mr-2" /> Invite an artist
-          </Button>
-        </div>
-        {active.length === 0 ? (
-          <EmptyHint text="No customers yet. Invite your first artist to get them onto GoodTunes." />
-        ) : (
-          <ul className="mt-4 divide-y divide-slate-100" data-testid="list-customers-active">
-            {active.map((c) => {
-              const pill = STATE_PILL[c.state];
-              return (
-                <li
-                  key={`${c.kind}-${c.id}-${c.state}`}
-                  className="flex items-center gap-3 py-3 cursor-pointer hover:bg-slate-50 -mx-2 px-2 rounded-lg"
-                  onClick={() => c.state !== "invited" && setDrawerCust(c)}
-                  data-testid={`row-customer-${c.id}`}
-                >
-                  <Avatar src={c.photo} fallback={c.name} />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold truncate flex items-center gap-2" data-testid={`text-customer-${c.id}`}>
-                      {c.name}
-                      <span className={`text-xs uppercase tracking-wide rounded-full px-2 py-0.5 ${pill.cls}`} data-testid={`pill-state-${c.id}`}>
-                        {pill.label}
-                      </span>
-                    </div>
-                    <div className="text-slate-500 text-xs">
-                      {c.kind} · {c.albumCount} album{c.albumCount === 1 ? "" : "s"} · {c.lifetimeUnits} units lifetime
-                      {c.latestStage && ` · ${STAGE_LABEL[c.latestStage] ?? c.latestStage}`}
-                    </div>
-                  </div>
-                  {c.state === "invited" && c.inviteId && c.acceptUrl ? (
-                    <InviteActions
-                      pressId={pressId}
-                      inviteId={c.inviteId}
-                      acceptUrl={c.acceptUrl}
-                    />
-                  ) : c.kind === "artist" ? (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onOpenPerson(c.id); }}
-                      className="text-[color:var(--brand-blue)] text-xs font-semibold hover:underline"
-                      data-testid={`link-customer-${c.id}`}
-                    >
-                      Open <ArrowRight className="inline w-3 h-3" />
-                    </button>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </DashboardPanel>
-
-      {switching.length > 0 && (
-        <DashboardPanel padding="md">
-          <h3 className="text-base font-semibold">Switching away</h3>
-          <p className="text-slate-500 text-sm mt-1">Recently re-homed to another press. Greyed out for 90 days, then they drop off.</p>
-          <ul className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2" data-testid="list-customers-switching">
-            {switching.map((c) => (
-              <li key={`${c.kind}-${c.id}-${c.switched_at}`} className="flex items-center gap-3 rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3 opacity-60">
-                <Avatar src={c.photo} fallback={c.name} />
-                <div className="min-w-0 flex-1">
-                  <div className="font-semibold truncate">{c.name}</div>
-                  <div className="text-slate-500 text-xs">Switched {new Date(c.switched_at).toLocaleDateString()}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </DashboardPanel>
-      )}
-
-      <InviteDialog open={inviteOpen} onOpenChange={setInviteOpen} pressId={pressId} />
-      {drawerCust && (
-        <CustomerDrawer
-          pressId={pressId}
-          cust={drawerCust}
-          onClose={() => setDrawerCust(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-function CustomerDrawer({ pressId, cust, onClose }: { pressId: string; cust: CustomerRow; onClose: () => void }) {
-  const { data } = useQuery<{ albums: any[]; switchHistory: any[] }>({
-    queryKey: [`/api/press/${pressId}/customers`, cust.kind, cust.id],
-  });
-  return (
-    <Dialog open={true} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="bg-white text-slate-900 border border-slate-200 max-w-lg" data-testid={`drawer-customer-${cust.id}`}>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <Avatar src={cust.photo} fallback={cust.name} />
-            <span className="truncate">{cust.name}</span>
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-          <div>
-            <h4 className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Albums on this press</h4>
-            {(data?.albums ?? []).length === 0 ? (
-              <p className="text-sm text-slate-500">No albums yet.</p>
-            ) : (
-              <ul className="space-y-2" data-testid="list-drawer-albums">
-                {(data?.albums ?? []).map((a) => (
-                  <li key={a.id} className="flex items-center gap-3 rounded-lg bg-slate-50 ring-1 ring-slate-200 p-2">
-                    <div className="w-10 h-10 rounded bg-slate-100 overflow-hidden flex-shrink-0">
-                      {a.coverUrl && <img src={a.coverUrl} className="w-full h-full object-cover" alt="" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-semibold truncate text-sm">{a.title}</div>
-                      <div className="text-xs text-slate-500">{STAGE_LABEL[a.stage] ?? a.stage}</div>
-                    </div>
-                    <Link href={`/admin/albums/${a.id}`} className="text-[color:var(--brand-blue)] text-xs hover:underline">Open</Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          {(data?.switchHistory ?? []).length > 0 && (
-            <div>
-              <h4 className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Press-switch history</h4>
-              <ul className="space-y-1 text-sm">
-                {(data?.switchHistory ?? []).map((h, i) => (
-                  <li key={i} className="text-slate-600">
-                    {new Date(h.switched_at).toLocaleDateString()} — moved {h.from_press_id === pressId ? "away from us" : "to us"}
-                    {h.reason ? ` · ${h.reason}` : ""}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // ─── People tab (press-scoped) ─────────────────────────────────────────
 //
 // A scoped mirror of God-View AdminPeople: the same grid/list cards, credit
@@ -505,10 +328,11 @@ function CustomerDrawer({ pressId, cust, onClose }: { pressId: string; cust: Cus
 // requirePressScope), so a press only ever sees artists homed to it or
 // primary-artist on one of its albums. Cross-press isolation is enforced
 // server-side; this surface never touches /api/admin/people (the deny wall
-// 403s presses there). "Add an artist" reuses the same invite dialog the
-// Customers tab uses — inviting homes the artist to this press on accept.
-// Opening a card deep-links to /admin/people/:id, which renders its own
-// press-scoped mode (tabs trimmed, remove-from-press, etc.).
+// 403s presses there). "Add an artist" creates or links the person and lands
+// on their in-portal profile, where the artist invite lives (an elegant
+// popup, no streaming search — identity is already known). "Invite a label"
+// is a separate slim header dialog. Opening a card opens that same scoped
+// profile (remove-from-press, invite, releases, etc.).
 
 function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPerson: (id: string) => void }) {
   const [search, setSearch] = useState("");
@@ -516,6 +340,7 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
   const [view, setView] = useViewMode("press-people");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState(false);
+  const [labelInviteOpen, setLabelInviteOpen] = useState(false);
 
   const { data: people = [], isLoading } = useQuery<PersonLite[]>({
     queryKey: [`/api/press/${pressId}/people`],
@@ -617,14 +442,25 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
             )}
             <ViewModeToggle value={view} onChange={setView} testIdPrefix="view-mode-press-people" />
             {canEdit && (
-              <Button
-                type="button"
-                onClick={() => setAddOpen(true)}
-                className="h-9 rounded-full bg-slate-900 text-white hover:bg-slate-800 font-semibold text-sm px-4"
-                data-testid="button-add-press-person"
-              >
-                <Sparkles className="w-4 h-4 mr-2" /> Add an artist
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setLabelInviteOpen(true)}
+                  className="h-9 rounded-full border-slate-300 text-slate-700 hover:bg-slate-100 font-semibold text-sm px-4"
+                  data-testid="button-invite-label"
+                >
+                  <Mail className="w-4 h-4 mr-2" /> Invite a label
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setAddOpen(true)}
+                  className="h-9 rounded-full bg-slate-900 text-white hover:bg-slate-800 font-semibold text-sm px-4"
+                  data-testid="button-add-press-person"
+                >
+                  <Sparkles className="w-4 h-4 mr-2" /> Add an artist
+                </Button>
+              </>
             )}
           </>
         }
@@ -689,6 +525,10 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
           }}
         />
       )}
+
+      {canEdit && (
+        <LabelInviteDialog open={labelInviteOpen} onOpenChange={setLabelInviteOpen} pressId={pressId} />
+      )}
     </div>
   );
 }
@@ -722,6 +562,7 @@ export function PressScopedPersonDetail({
   const { toast } = useToast();
   const [tab, setTab] = useState<PersonDetailTab>("overview");
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const { data: person, isLoading, error } = useQuery<ScopedPersonFull>({
     queryKey: [`/api/press/${pressId}/people/${personId}`],
@@ -823,6 +664,41 @@ export function PressScopedPersonDetail({
           {person.bio && (
             <p className="text-slate-500 text-[13px] mt-1 line-clamp-2 max-w-xl">{person.bio}</p>
           )}
+        </div>
+        {/* Invite affordance — pending state shows a status chip + resend/
+            revoke; accepted shows a subtle chip; otherwise an elegant on-brand
+            Invite button (identity is known, so the popup skips search). */}
+        <div className="flex-shrink-0 self-center">
+          {person.pendingInvite ? (
+            <div className="flex items-center gap-2" data-testid="press-person-invite-pending">
+              <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200 text-xs font-semibold">
+                <Clock3 className="w-3.5 h-3.5" />
+                {person.pendingInvite.reviewStatus === "pending_review" ? "Pending review" : "Invited"}
+              </span>
+              {canEdit && (
+                <InviteActions
+                  pressId={pressId}
+                  inviteId={person.pendingInvite.inviteId}
+                  acceptUrl={person.pendingInvite.acceptUrl}
+                  onChanged={() => queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/people/${personId}`] })}
+                />
+              )}
+            </div>
+          ) : person.accepted ? (
+            <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 text-xs font-semibold" data-testid="press-person-invite-accepted">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              On GoodTunes
+            </span>
+          ) : canEdit ? (
+            <Button
+              type="button"
+              onClick={() => setInviteOpen(true)}
+              className="h-9 rounded-full px-4 border-0 font-semibold text-sm text-white shadow-sm bg-gradient-to-r from-[color:var(--brand-blue)] to-[color:var(--brand-purple)] hover:opacity-95"
+              data-testid="button-invite-person"
+            >
+              <Send className="w-4 h-4 mr-2" /> Invite
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -1025,6 +901,14 @@ export function PressScopedPersonDetail({
           </DialogContent>
         </Dialog>
       )}
+
+      <InvitePersonDialog
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        pressId={pressId}
+        personId={personId}
+        personName={person.name}
+      />
     </div>
   );
 }
@@ -1209,313 +1093,142 @@ function PressDashboardTab({
 // operator's New-Album dialog uses) and NEVER browses our local People
 // roster — pressing a candidate fills the artist's name + profile so the
 // held draft starts with real metadata.
-interface StreamCandidate {
-  id: string;
-  name: string;
-  source: "spotify" | "apple";
-  spotifyUrl?: string;
-  appleMusicUrl?: string;
-  itunesArtistId?: string;
-  photoUrl: string | null;
-}
+// ─── Invite dialogs (press-scoped) ─────────────────────────────────────
+//
+// Two slim, identity-known invite popups (no streaming search). The
+// artist/person invite lives on the person's profile (InvitePersonDialog);
+// the label invite is a header action on the People tab (LabelInviteDialog).
+// Both fire the invite email immediately on submit.
 
-function InviteDialog({ open, onOpenChange, pressId }: { open: boolean; onOpenChange: (o: boolean) => void; pressId: string }) {
-  const [email, setEmail] = useState("");
+function LabelInviteDialog({
+  open,
+  onOpenChange,
+  pressId,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  pressId: string;
+}) {
   const [name, setName] = useState("");
-  const [role, setRole] = useState<"artist" | "label">("artist");
+  const [email, setEmail] = useState("");
   const [welcomeNote, setWelcomeNote] = useState("");
-  const [albumTitle, setAlbumTitle] = useState("");
-  // Streaming search/prefill state (artist path only).
-  const [query, setQuery] = useState("");
-  const [searching, setSearching] = useState(false);
-  const [candidates, setCandidates] = useState<StreamCandidate[]>([]);
-  const [searched, setSearched] = useState(false);
-  const [picked, setPicked] = useState<StreamCandidate | null>(null);
-  // Task #2239 — paste-a-Spotify-artist-link error surface (artist path).
-  const [linkError, setLinkError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const reset = () => {
-    setEmail(""); setName(""); setWelcomeNote(""); setAlbumTitle("");
-    setQuery(""); setCandidates([]); setSearched(false); setPicked(null);
-    setSearching(false); setRole("artist"); setLinkError(null);
-  };
+  const reset = () => { setName(""); setEmail(""); setWelcomeNote(""); };
 
-  // Task #2239 — when the press pastes a Spotify artist URL into the search
-  // box, resolve it directly to a candidate instead of running a name
-  // search. Accepts the web URL and the spotify:artist: URI forms.
-  const isSpotifyArtistUrl = (s: string) =>
-    /open\.spotify\.com\/artist\/[A-Za-z0-9]/.test(s) || /spotify:artist:[A-Za-z0-9]/.test(s);
-
-  const resolveSpotifyLink = async (url: string) => {
-    setSearching(true);
-    setSearched(true);
-    setCandidates([]);
-    setLinkError(null);
-    const token = getAuthToken();
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-    try {
-      const res = await fetch(`/api/admin/spotify/artist-lookup`, {
-        method: "POST",
-        credentials: "include",
-        headers,
-        body: JSON.stringify({ url }),
-      });
-      if (!res.ok) {
-        // Surface the server's specific reason when it gives one (e.g.
-        // "Spotify is not configured." on a 503) instead of collapsing
-        // every failure to the generic resolve error.
-        let msg = "Couldn't resolve that Spotify link.";
-        try {
-          const body = (await res.json()) as { message?: string };
-          if (res.status === 503 && body?.message) msg = body.message;
-        } catch { /* keep the generic message */ }
-        setLinkError(msg);
-        setSearching(false);
-        return;
-      }
-      const json = (await res.json()) as { name: string; photoUrl: string | null; spotifyUrl: string };
-      const candidate: StreamCandidate = {
-        id: `spotify-link-${json.spotifyUrl}`,
-        name: json.name,
-        source: "spotify",
-        spotifyUrl: json.spotifyUrl,
-        photoUrl: json.photoUrl,
-      };
-      setCandidates([candidate]);
-      pickCandidate(candidate);
-    } catch {
-      setLinkError("Couldn't resolve that Spotify link.");
-    }
-    setSearching(false);
-  };
-
-  // Spotify search with Apple fallback — mirrors NewAlbumArtistDialog.
-  // A pasted Spotify artist link is resolved directly instead.
-  const runSearch = async () => {
-    const q = query.trim();
-    if (!q) return;
-    if (isSpotifyArtistUrl(q)) {
-      await resolveSpotifyLink(q);
-      return;
-    }
-    setLinkError(null);
-    setSearching(true);
-    setSearched(true);
-    setCandidates([]);
-    const token = getAuthToken();
-    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-    let list: StreamCandidate[] = [];
-    try {
-      const res = await fetch(`/api/admin/spotify/artist-search?q=${encodeURIComponent(q)}`, { credentials: "include", headers });
-      if (res.ok) {
-        const json = (await res.json()) as { candidates: Array<{ id: string; name: string; spotifyUrl?: string; photoUrl: string | null }> };
-        list = (json.candidates ?? []).map((c) => ({ id: `spotify-${c.id}`, name: c.name, source: "spotify" as const, spotifyUrl: c.spotifyUrl, photoUrl: c.photoUrl }));
-      }
-    } catch { /* fall through to Apple */ }
-    if (list.length === 0) {
-      try {
-        const res = await fetch(`/api/admin/apple/artist-search?q=${encodeURIComponent(q)}`, { credentials: "include", headers });
-        if (res.ok) {
-          const json = (await res.json()) as { candidates: Array<{ artistId: string; name: string; appleMusicUrl: string }> };
-          list = (json.candidates ?? []).map((a) => ({ id: `apple-${a.artistId}`, name: a.name, source: "apple" as const, appleMusicUrl: a.appleMusicUrl, itunesArtistId: a.artistId, photoUrl: null }));
-        }
-      } catch { /* leave empty */ }
-    }
-    setCandidates(list);
-    setSearching(false);
-  };
-
-  const pickCandidate = (c: StreamCandidate) => {
-    setPicked(c);
-    setName(c.name);
-  };
-
-  // Label path → existing /invite (fires email immediately).
-  const labelInvite = useMutation({
-    mutationFn: async () => apiRequest("POST", `/api/press/${pressId}/invite`, { email, name, role: "label", welcomeNote: welcomeNote || null }),
+  const invite = useMutation({
+    mutationFn: async () =>
+      apiRequest("POST", `/api/press/${pressId}/invite`, {
+        email,
+        name,
+        role: "label",
+        welcomeNote: welcomeNote || null,
+      }),
     onSuccess: () => {
-      toast({ title: "Invite sent", description: `${email} will land in your Customers list when they accept.` });
-      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/customers`] });
+      toast({ title: "Invite sent", description: `${email} will join your People directory when they accept.` });
+      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/people`] });
       queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/pipeline`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/summary`] });
       onOpenChange(false);
       reset();
     },
     onError: (e: any) => toast({ title: "Invite failed", description: e?.message ?? "Try again.", variant: "destructive" }),
   });
 
-  // Artist path → /start-album (held for operator approval, no email yet).
-  const startAlbum = useMutation({
-    mutationFn: async () => apiRequest("POST", `/api/press/${pressId}/start-album`, {
-      email,
-      name,
-      title: albumTitle || null,
-      welcomeNote: welcomeNote || null,
-      photoUrl: picked?.photoUrl ?? null,
-      spotifyUrl: picked?.spotifyUrl ?? null,
-      appleMusicUrl: picked?.appleMusicUrl ?? null,
-      itunesArtistId: picked?.itunesArtistId ?? null,
-    }),
-    onSuccess: () => {
-      toast({ title: "Sent for approval", description: `We'll email ${email} to start their album once a GoodTunes operator approves it.` });
-      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/customers`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/pipeline`] });
-      onOpenChange(false);
-      reset();
-    },
-    onError: (e: any) => toast({ title: "Couldn't start album", description: e?.message ?? "Try again.", variant: "destructive" }),
-  });
-
-  const busy = labelInvite.isPending || startAlbum.isPending;
-
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (busy && !o) return; onOpenChange(o); if (!o) reset(); }}>
-      <DialogContent className="bg-white text-slate-900" data-testid="dialog-invite-artist">
+    <Dialog open={open} onOpenChange={(o) => { if (invite.isPending && !o) return; onOpenChange(o); if (!o) reset(); }}>
+      <DialogContent className="bg-white text-slate-900 sm:max-w-md" data-testid="dialog-invite-label">
         <DialogHeader>
-          <DialogTitle>{role === "artist" ? "Start an album with an artist" : "Invite a label"}</DialogTitle>
+          <DialogTitle>Invite a label</DialogTitle>
+          <DialogDescription className="text-slate-500">
+            Send a label an invite to join your press. They'll appear in your People directory once they accept.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setRole("artist")}
-              className={`flex-1 h-9 rounded-md font-semibold text-sm ${role === "artist" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
-              data-testid="button-role-artist"
-            >Artist</button>
-            <button
-              type="button"
-              onClick={() => setRole("label")}
-              className={`flex-1 h-9 rounded-md font-semibold text-sm ${role === "label" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
-              data-testid="button-role-label"
-            >Label</button>
-          </div>
-
-          {role === "artist" ? (
-            <>
-              {/* Streaming search — find the artist on Spotify / Apple so the
-                  draft starts with their real name + photo. */}
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Search by name or paste a Spotify artist link"
-                  value={query}
-                  onChange={(e) => { setQuery(e.target.value); if (linkError) setLinkError(null); }}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); runSearch(); } }}
-                  data-testid="input-invite-streaming-search"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={runSearch}
-                  disabled={searching || !query.trim()}
-                  className="h-9 shrink-0"
-                  data-testid="button-invite-streaming-search"
-                >
-                  {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : (isSpotifyArtistUrl(query.trim()) ? "Resolve" : "Search")}
-                </Button>
-              </div>
-              {linkError && (
-                <p className="text-xs text-rose-600" data-testid="text-invite-link-error">
-                  {linkError}
-                </p>
-              )}
-              {searched && !searching && !linkError && candidates.length === 0 && (
-                <p className="text-xs text-slate-500" data-testid="text-invite-no-candidates">
-                  No streaming matches. Pick again or type the artist name below.
-                </p>
-              )}
-              {candidates.length > 0 && (
-                <ul className="max-h-48 overflow-y-auto rounded-md border border-slate-200 divide-y divide-slate-100" data-testid="list-invite-candidates">
-                  {candidates.map((c) => (
-                    <li key={c.id}>
-                      <button
-                        type="button"
-                        onClick={() => pickCandidate(c)}
-                        className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 ${picked?.id === c.id ? "bg-slate-100" : ""}`}
-                        data-testid={`button-pick-candidate-${c.id}`}
-                      >
-                        {c.photoUrl ? (
-                          <img src={c.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover bg-slate-100 shrink-0" />
-                        ) : (
-                          <span className="w-9 h-9 rounded-full bg-[var(--brand-blue)] text-white text-sm font-semibold inline-flex items-center justify-center shrink-0">
-                            {c.name.slice(0, 1).toUpperCase()}
-                          </span>
-                        )}
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-sm font-semibold text-slate-900 truncate">{c.name}</span>
-                          <span className="block text-[11px] uppercase tracking-wide text-slate-400">{c.source}</span>
-                        </span>
-                        {picked?.id === c.id && <span className="text-[var(--brand-blue)] text-xs font-semibold">Selected</span>}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <Input
-                placeholder="Artist name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                data-testid="input-invite-name"
-              />
-              <Input
-                placeholder="Album title (optional)"
-                value={albumTitle}
-                onChange={(e) => setAlbumTitle(e.target.value)}
-                data-testid="input-invite-album-title"
-              />
-            </>
-          ) : (
-            <Input
-              placeholder="Label name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              data-testid="input-invite-name"
-            />
-          )}
-
-          <Input
-            placeholder="email@example.com"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            data-testid="input-invite-email"
-          />
-          <Textarea
-            placeholder="Optional welcome note"
-            value={welcomeNote}
-            onChange={(e) => setWelcomeNote(e.target.value)}
-            rows={3}
-            data-testid="input-invite-note"
-          />
-          {role === "artist" && (
-            <p className="text-xs text-slate-500" data-testid="text-invite-approval-hint">
-              A GoodTunes operator reviews this before the artist is emailed.
-            </p>
-          )}
+          <Input placeholder="Label name" value={name} onChange={(e) => setName(e.target.value)} data-testid="input-invite-label-name" />
+          <Input placeholder="email@example.com" type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="input-invite-label-email" />
+          <Textarea placeholder="Optional welcome note" value={welcomeNote} onChange={(e) => setWelcomeNote(e.target.value)} rows={3} data-testid="input-invite-label-note" />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="h-9">Cancel</Button>
-          {role === "artist" ? (
-            <Button
-              onClick={() => startAlbum.mutate()}
-              disabled={busy || !email || !name}
-              className="h-9 bg-slate-900 text-white hover:bg-slate-800"
-              data-testid="button-send-invite"
-            >
-              {startAlbum.isPending ? "Sending…" : "Send for approval"}
-            </Button>
-          ) : (
-            <Button
-              onClick={() => labelInvite.mutate()}
-              disabled={busy || !email || !name}
-              className="h-9 bg-slate-900 text-white hover:bg-slate-800"
-              data-testid="button-send-invite"
-            >
-              {labelInvite.isPending ? "Sending…" : "Send invite"}
-            </Button>
-          )}
+          <Button
+            onClick={() => invite.mutate()}
+            disabled={invite.isPending || !email || !name}
+            className="h-9 bg-slate-900 text-white hover:bg-slate-800"
+            data-testid="button-send-label-invite"
+          >
+            {invite.isPending ? "Sending…" : "Send invite"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function InvitePersonDialog({
+  open,
+  onOpenChange,
+  pressId,
+  personId,
+  personName,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  pressId: string;
+  personId: string;
+  personName: string;
+}) {
+  const [email, setEmail] = useState("");
+  const [welcomeNote, setWelcomeNote] = useState("");
+  const { toast } = useToast();
+
+  const reset = () => { setEmail(""); setWelcomeNote(""); };
+
+  const invite = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/press/${pressId}/people/${personId}/invite`, {
+        email,
+        welcomeNote: welcomeNote || null,
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data?.alreadyPending) {
+        toast({ title: "Already invited", description: `${personName} has a pending invite.` });
+      } else {
+        toast({ title: "Invite sent", description: `We emailed ${email} a link to claim their profile.` });
+      }
+      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/people/${personId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/people`] });
+      onOpenChange(false);
+      reset();
+    },
+    onError: (e: any) => toast({ title: "Invite failed", description: e?.message ?? "Try again.", variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (invite.isPending && !o) return; onOpenChange(o); if (!o) reset(); }}>
+      <DialogContent className="bg-white text-slate-900 sm:max-w-md" data-testid="dialog-invite-person">
+        <DialogHeader>
+          <DialogTitle>Invite {personName}</DialogTitle>
+          <DialogDescription className="text-slate-500">
+            Send {personName} a private link to claim their profile and manage their releases with your press.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <Input placeholder="email@example.com" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus data-testid="input-invite-person-email" />
+          <Textarea placeholder="Optional welcome note" value={welcomeNote} onChange={(e) => setWelcomeNote(e.target.value)} rows={3} data-testid="input-invite-person-note" />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="h-9">Cancel</Button>
+          <Button
+            onClick={() => invite.mutate()}
+            disabled={invite.isPending || !email}
+            className="h-9 rounded-full px-4 border-0 font-semibold text-sm text-white shadow-sm bg-gradient-to-r from-[color:var(--brand-blue)] to-[color:var(--brand-purple)] hover:opacity-95"
+            data-testid="button-send-person-invite"
+          >
+            {invite.isPending ? "Sending…" : "Send invite"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1572,20 +1285,21 @@ function timeAgo(iso: string | null): string {
 }
 interface PipelineInvited { id: string; email: string; role: string; createdAt: string; expiresAt: string; acceptUrl: string; }
 
-// Shared Resend / Revoke / Copy-link controls. Used by both the
-// Customers tab (inline on "Invited" rows) and the Pipeline tab
-// (inside the Invited-column cards). All mutations invalidate the
-// two press-scoped lists that surface invites.
+// Shared Resend / Revoke / Copy-link controls. Used by the Pipeline tab
+// (inside the Invited-column cards) and the scoped person profile (next to
+// a pending invite). Mutations invalidate the press-scoped lists that
+// surface invites; callers can pass `onChanged` to refetch their own view.
 function InviteActions({
   pressId,
   inviteId,
   acceptUrl,
-}: { pressId: string; inviteId: string; acceptUrl: string }) {
+  onChanged,
+}: { pressId: string; inviteId: string; acceptUrl: string; onChanged?: () => void }) {
   const { toast } = useToast();
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/customers`] });
     queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/pipeline`] });
     queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/summary`] });
+    onChanged?.();
   };
   const resend = useMutation({
     mutationFn: () => apiRequest("POST", `/api/press/${pressId}/invites/${inviteId}/resend`),

@@ -1007,6 +1007,53 @@ export function registerPressPortalRoutes(
       hasArtistCatalogSignal: isArtistSignal,
     });
     if (isArtist && !derived.some((r) => r.toLowerCase() === "artist")) derived.unshift("Artist");
+
+    // Invite state for the profile's Invite affordance. The Invite button
+    // shows only when there's no live invite AND the person hasn't claimed
+    // an account yet; a pending invite surfaces status + resend/revoke/copy;
+    // an accepted/claimed person shows a chip. Everything is keyed on the
+    // known personId (role_scope_id) — never on email — so two people who
+    // share an address are never conflated. try/catch guarded so a lookup
+    // failure degrades to "no invite state" rather than 500ing the profile.
+    let homed = false;
+    let accepted = false;
+    let pendingInvite:
+      | { inviteId: string; acceptUrl: string; expiresAt: string | null; reviewStatus: string | null }
+      | null = null;
+    try {
+      const st = await db.execute<any>(sql`
+        SELECT
+          COALESCE((SELECT default_press_id = ${pressId} FROM people WHERE id = ${personId}), false) AS homed,
+          EXISTS (SELECT 1 FROM users WHERE role = 'artist' AND role_scope_id = ${personId}) AS has_account,
+          EXISTS (SELECT 1 FROM admin_invites WHERE role_scope_id = ${personId} AND used_at IS NOT NULL) AS has_used_invite
+      `);
+      const strow = ((st as any).rows ?? [])[0] ?? {};
+      homed = !!strow.homed;
+      accepted = !!(strow.has_account || strow.has_used_invite);
+      const inv = await db.execute<any>(sql`
+        SELECT id, token, expires_at, review_status
+        FROM admin_invites
+        WHERE role_scope_id = ${personId}
+          AND default_press_id = ${pressId}
+          AND role = 'artist'
+          AND used_at IS NULL AND revoked_at IS NULL
+          AND expires_at > NOW()
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+      const irow = ((inv as any).rows ?? [])[0];
+      if (irow) {
+        pendingInvite = {
+          inviteId: irow.id,
+          acceptUrl: `${pressInviteAcceptBase(req)}/invite/${irow.token}`,
+          expiresAt: irow.expires_at ? new Date(irow.expires_at).toISOString() : null,
+          reviewStatus: irow.review_status ?? null,
+        };
+      }
+    } catch (e: any) {
+      console.warn(`[press:${pressId} person:${personId}] invite-state lookup failed: ${e?.message}`);
+    }
+
     res.json({
       id: p.id,
       name: p.name,
@@ -1042,6 +1089,10 @@ export function registerPressPortalRoutes(
       isArtistPromoted: !!p.isArtistPromoted,
       roles: storedRoles,
       derivedRoles: derived,
+      // Invite affordance state (see block above).
+      homed,
+      accepted,
+      pendingInvite,
     });
   });
 
@@ -1135,6 +1186,116 @@ export function registerPressPortalRoutes(
     name: z.string().min(1).max(200),
     welcomeNote: z.string().max(1000).optional().nullable(),
   });
+  // POST /api/press/:id/people/:personId/invite — invite an EXISTING person
+  // (already in this press's People roster) to claim their profile / join
+  // GoodTunes. Unlike POST /invite (which is email-keyed and can mint a NEW
+  // person), this pins the invite to the known personId so no duplicate
+  // Person is ever created. It homes the person to this press and emails
+  // immediately — the artist counterpart of the label invite, with no
+  // streaming search since the identity is already known. (start-album's
+  // approval-hold flow is unchanged and still used for draft-album invites.)
+  const personInviteBodySchema = z.object({
+    email: z.string().email(),
+    welcomeNote: z.string().max(1000).optional().nullable(),
+  });
+  app.post(
+    "/api/press/:id/people/:personId/invite",
+    requireAdmin,
+    requirePressScope,
+    requirePressEditor,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const personId = String(req.params.personId);
+      const scope = await db.execute<{ ok: boolean }>(
+        sql`SELECT ${sqlPersonInPressScope(pressId, personId)} AS ok`,
+      );
+      if (!((scope as any).rows?.[0]?.ok)) return res.status(404).json({ message: "Person not found" });
+      const parsed = personInviteBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid invite" });
+      }
+      const { email, welcomeNote } = parsed.data;
+      const lower = email.toLowerCase();
+
+      const person: any = await storage.getPersonById(personId);
+      if (!person) return res.status(404).json({ message: "Person not found" });
+
+      // Re-query for a live pending invite for THIS person + press so a
+      // double-click / race can't mint two invites. If one exists, return it.
+      const existing = await db.execute<any>(sql`
+        SELECT id, token FROM admin_invites
+        WHERE role_scope_id = ${personId}
+          AND default_press_id = ${pressId}
+          AND role = 'artist'
+          AND used_at IS NULL AND revoked_at IS NULL
+          AND expires_at > NOW()
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+      const existingRow = ((existing as any).rows ?? [])[0];
+      if (existingRow) {
+        return res.status(200).json({
+          id: existingRow.id,
+          email: lower,
+          acceptUrl: `${pressInviteAcceptBase(req)}/invite/${existingRow.token}`,
+          emailDelivered: false,
+          alreadyPending: true,
+        });
+      }
+
+      // Home the person to this press (only if not already homed elsewhere)
+      // and stamp provenance. Backfill the email when we don't have one so
+      // the invite record and future email-keyed lookups agree.
+      await db.execute(sql`
+        UPDATE people
+           SET default_press_id = COALESCE(default_press_id, ${pressId}),
+               invited_by_press_id = COALESCE(invited_by_press_id, ${pressId})
+         WHERE id = ${personId}
+      `);
+      await db.execute(sql`
+        UPDATE people SET email = ${lower}
+         WHERE id = ${personId} AND (email IS NULL OR email = '')
+      `);
+
+      const { sendAdminInviteEmail } = await import("./mail");
+      const crypto = await import("crypto");
+      const token = crypto.randomBytes(32).toString("base64url");
+      const INVITE_TTL_DAYS = 14;
+      const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+      const invite = await storage.createAdminInvite({
+        email: lower,
+        role: "artist",
+        roleScopeId: personId,
+        token,
+        expiresAt,
+        createdByUserId: (req.session as any).userId,
+        referrerKind: "manufacturer",
+        referrerScopeId: pressId,
+        welcomeNote: welcomeNote ?? null,
+        // identity-invite → the invitee claims THIS existing Person on
+        // accept rather than spawning a new profile.
+        inviteRole: "identity",
+        targetPersonId: personId,
+      } as any);
+      await db.execute(sql`
+        UPDATE admin_invites SET default_press_id = ${pressId} WHERE id = ${invite.id}
+      `);
+
+      const acceptUrl = `${pressInviteAcceptBase(req)}/invite/${token}`;
+      const press = await storage.getManufacturerById(pressId);
+      const inviterName = press?.name ?? "Your press partner";
+      const result = await sendAdminInviteEmail(
+        lower,
+        acceptUrl,
+        inviterName,
+        "Artist",
+        INVITE_TTL_DAYS,
+        press?.logoUrl ?? null,
+      );
+      res.json({ id: invite.id, email: invite.email, acceptUrl, emailDelivered: result.ok });
+    },
+  );
+
   app.post("/api/press/:id/invite", requireAdmin, requirePressScope, async (req, res) => {
     const pressId = String(req.params.id);
     const parsed = inviteBodySchema.safeParse(req.body);
