@@ -918,7 +918,7 @@ async function demoteRungToPlaceholder(
 
 export const HELLBENDER_DOMAIN = "hellbendervinyl.com";
 const HELLBENDER_STANDARD_JACKET = "Standard Full-Color Jacket";
-let hellbenderSeedRan = false;
+let hellbenderSeedP: Promise<void> | null = null;
 
 // Task #624 — Hellbender's May 2026 quote consolidated their tier menu
 // down to Black / Color / Splatter for the 1LP and 2LP runs they care
@@ -1166,14 +1166,26 @@ const HELLBENDER_EXTRA_JACKETS: ReadonlyArray<{
   { name: "Single Pocket Wide-Spine Jacket", formats: ["12_double"] },
 ];
 
-export async function seedHellbenderCatalog() {
-  if (hellbenderSeedRan) return;
-  hellbenderSeedRan = true;
+/** Returns a memoized promise that resolves when Hellbender's catalog is
+ *  seeded (or already exists). Safe to call concurrently — all callers
+ *  share the same in-flight promise and unblock together when it settles. */
+export function seedHellbenderCatalog(): Promise<void> {
+  if (!hellbenderSeedP) hellbenderSeedP = _doSeedHellbender();
+  return hellbenderSeedP;
+}
+async function _doSeedHellbender(): Promise<void> {
   try {
     const press = await storage.getManufacturerByDomain(HELLBENDER_DOMAIN);
     if (!press) {
-      hellbenderSeedRan = false;
+      hellbenderSeedP = null;
       return;
+    }
+    // Fast-path for fresh deployment instances: if the DB already has catalog
+    // rows the full N+1 seed pass is unnecessary. A single probe exits cheaply;
+    // a genuinely empty catalog (no rows) still falls through to the full seed.
+    {
+      const probe = await db.execute(sql`SELECT 1 FROM press_formats WHERE press_id = ${press.id} LIMIT 1`);
+      if (((probe as any).rows ?? []).length > 0) return;
     }
 
     // Task #624 — Hellbender's quoted broker arrangement is a 10%
@@ -1356,7 +1368,7 @@ export async function seedHellbenderCatalog() {
     await backfillColorHexesByName(press.id, hellbenderHexByName);
   } catch (e) {
     console.warn("[pressCatalog] Hellbender seed failed:", (e as Error).message);
-    hellbenderSeedRan = false;
+    hellbenderSeedP = null;
   }
 }
 
@@ -1487,7 +1499,7 @@ export function lookupBookletUnitCents(
 // ─── MRP seed (Task #625) ────────────────────────────────────────────
 
 const MRP_STANDARD_JACKET = "Standard Full-Color Jacket";
-let mrpSeedRan = false;
+let mrpSeedP: Promise<void> | null = null;
 
 // MRP's May 2026 quote (valid through 6/26/26): 1LP + 2LP each get a
 // Black / Color / Splatter tier and 7" gets the same three. Color and
@@ -1707,14 +1719,23 @@ const MRP_CASSETTE_LADDER: MrpRungSpec[] = [
   { qty: 3000, unitCents: 335, confirmed: true },
 ];
 
-export async function seedMrpCatalog() {
-  if (mrpSeedRan) return;
-  mrpSeedRan = true;
+/** Returns a memoized promise that resolves when MRP's catalog is seeded
+ *  (or already exists). Safe to call concurrently. */
+export function seedMrpCatalog(): Promise<void> {
+  if (!mrpSeedP) mrpSeedP = _doSeedMrp();
+  return mrpSeedP;
+}
+async function _doSeedMrp(): Promise<void> {
   try {
     const press = await storage.getManufacturerByDomain(MRP_DOMAIN);
     if (!press) {
-      mrpSeedRan = false;
+      mrpSeedP = null;
       return;
+    }
+    // Fast-path: if the DB already has catalog rows, skip the full seed.
+    {
+      const probe = await db.execute(sql`SELECT 1 FROM press_formats WHERE press_id = ${press.id} LIMIT 1`);
+      if (((probe as any).rows ?? []).length > 0) return;
     }
 
     // Task #631 — investor-matrix summary + 8–10-week turnaround.
@@ -1843,7 +1864,7 @@ export async function seedMrpCatalog() {
     await backfillColorHexes(press.id, mrpColorHexByTier());
   } catch (e) {
     console.warn("[pressCatalog] MRP seed failed:", (e as Error).message);
-    mrpSeedRan = false;
+    mrpSeedP = null;
   }
 }
 
@@ -1869,7 +1890,7 @@ function mrpColorHexByTier(): Record<string, Record<string, string>> {
 
 const PMP_DEFAULT_JACKET = "Standard Full-Color Jacket";
 const PMP_TIER_NAMES = ["Black", "Color", "Splatter"] as const;
-let pmpSeedRan = false;
+let pmpSeedP: Promise<void> | null = null;
 
 // Task #685 — PMP's confirmed quotes price the *records* separately
 // from jackets / inserts / booklets, so every per-unit cent below is
@@ -2019,14 +2040,23 @@ function pmpColorHexByTier(): Record<string, Record<string, string>> {
   return out;
 }
 
-export async function seedPmpCatalog() {
-  if (pmpSeedRan) return;
-  pmpSeedRan = true;
+/** Returns a memoized promise that resolves when PMP's catalog is seeded
+ *  (or already exists). Safe to call concurrently. */
+export function seedPmpCatalog(): Promise<void> {
+  if (!pmpSeedP) pmpSeedP = _doSeedPmp();
+  return pmpSeedP;
+}
+async function _doSeedPmp(): Promise<void> {
   try {
     const press = await storage.getManufacturerByDomain(PMP_DOMAIN);
     if (!press) {
-      pmpSeedRan = false;
+      pmpSeedP = null;
       return;
+    }
+    // Fast-path: if the DB already has catalog rows, skip the full seed.
+    {
+      const probe = await db.execute(sql`SELECT 1 FROM press_formats WHERE press_id = ${press.id} LIMIT 1`);
+      if (((probe as any).rows ?? []).length > 0) return;
     }
 
     // Task #685 — PMP's broker arrangement is a 10% GoodTunes discount
@@ -2107,7 +2137,7 @@ export async function seedPmpCatalog() {
     await backfillColorHexes(press.id, pmpColorHexByTier());
   } catch (e) {
     console.warn("[pressCatalog] PMP seed failed:", (e as Error).message);
-    pmpSeedRan = false;
+    pmpSeedP = null;
   }
 }
 
@@ -2169,22 +2199,12 @@ export function registerPressCatalogRoutes(
     const pressId = String(req.params.id);
     const press = await storage.getManufacturerById(pressId);
     if (!press) return res.status(404).json({ message: "Manufacturer not found" });
-    // Task #625 — cold-start safety. Each founding press carries a
-    // hand-curated quote ladder that we ship in code (see
-    // seedHellbenderCatalog / seedMrpCatalog). Both seeds are guarded
-    // by a module-level "did we run" flag, so calling them on every
-    // catalog read costs one boolean check after the first hit — but
-    // it guarantees that opening Presses → Hellbender or Presses → MRP
-    // on a fresh deploy always shows the seeded formats / tiers /
-    // ladders without waiting for an album-specific invited-press call
-    // to fire the seed first.
-    if (press.domain === HELLBENDER_DOMAIN) {
-      await seedHellbenderCatalog();
-    } else if (press.domain === MRP_DOMAIN) {
-      await seedMrpCatalog();
-    } else if (press.domain === PMP_DOMAIN) {
-      await seedPmpCatalog();
-    }
+    // Ensure this founding press's catalog is seeded. The seed functions are
+    // memoized promises — instant on a warm instance, correctly blocking on a
+    // cold instance whose background boot seed is still in flight.
+    if (press.domain === HELLBENDER_DOMAIN) await seedHellbenderCatalog();
+    else if (press.domain === MRP_DOMAIN) await seedMrpCatalog();
+    else if (press.domain === PMP_DOMAIN) await seedPmpCatalog();
     // Task #2335 — surface whether THIS caller may edit so the client can
     // render the catalog read-only for Staff without speculatively POSTing
     // and parsing a 403. Operators / press Owner-Admins → true; Staff →

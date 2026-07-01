@@ -69,7 +69,9 @@ import {
   seedHellbenderCatalog,
   seedMrpCatalog,
   seedPmpCatalog,
+  HELLBENDER_DOMAIN,
   MRP_DOMAIN,
+  PMP_DOMAIN,
 } from "./pressCatalog";
 import { registerPressPortalRoutes } from "./pressPortal";
 import { registerPrinterPortalRoutes } from "./printerPortal";
@@ -1562,7 +1564,7 @@ export function registerCommerceRoutes(app: Express) {
       try {
         const mrp = await storage.getManufacturerByDomain(MRP_DOMAIN);
         if (mrp) {
-          await seedMrpCatalog();
+          await seedMrpCatalog(); // memoized — instant if already seeded
           mrpDefaults = await getPressCatalog(mrp.id);
         }
       } catch {
@@ -1647,13 +1649,13 @@ export function registerCommerceRoutes(app: Express) {
     if (!press) {
       return res.json({ press: null, hasShippedFirst: false, formatCosts: await listFormatCosts(), catalog: { formats: [] }, pressMode, demo: demoKind });
     }
-    // Task #218 — make sure Hellbender's catalog rows exist on first
-    // read so an existing dev/prod DB with the Hellbender press but
-    // no catalog yet doesn't show an empty picker.
-    // Task #625 — same idempotent seed pass for MRP.
-    await seedHellbenderCatalog();
-    await seedMrpCatalog();
-    await seedPmpCatalog();
+    // Ensure the founding-press catalog is seeded. The seed functions are
+    // memoized promises — on a warm instance this returns the already-resolved
+    // promise instantly (O(1)). On a cold instance whose background boot seed
+    // is still in flight, this awaits it so the read below sees populated rows.
+    if ((press as any).domain === HELLBENDER_DOMAIN) await seedHellbenderCatalog();
+    else if ((press as any).domain === MRP_DOMAIN) await seedMrpCatalog();
+    else if ((press as any).domain === PMP_DOMAIN) await seedPmpCatalog();
 
     // Has-shipped check: any shipped paid order on any album whose
     // primary_artist (or label) matches our locked scope.

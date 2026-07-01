@@ -345,6 +345,22 @@ async function bootstrapAccessGuard() {
   await registerRoutes(httpServer, app);
   await bootstrapAccessGuard();
 
+  // Seed the founding press catalogs (Hellbender, MRP, PMP) in the
+  // background so every deployment instance has the catalog rows before
+  // the first admin pricing screen request arrives. Each seed is fast
+  // (one DB probe) when the DB is already populated; the full N+1 pass
+  // only runs on a genuinely empty catalog. Fire-and-forget so startup
+  // is not blocked — the promise is logged if it errors.
+  void (async () => {
+    try {
+      const { seedHellbenderCatalog, seedMrpCatalog, seedPmpCatalog } = await import("./pressCatalog");
+      await Promise.all([seedHellbenderCatalog(), seedMrpCatalog(), seedPmpCatalog()]);
+      log("press catalog seed complete (Hellbender + MRP + PMP)", "press-catalog");
+    } catch (e: any) {
+      log(`press catalog seed failed: ${e?.message ?? e}`, "press-catalog");
+    }
+  })();
+
   // Task #246 — Signed-cert sale-window scheduler. In-process tick every
   // 5 minutes promotes `scheduled` → `open` and closes any window whose
   // `closesAt` has passed (min-check, refund pass, or production flip).
