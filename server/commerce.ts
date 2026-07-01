@@ -1578,7 +1578,7 @@ export function registerCommerceRoutes(app: Express) {
       // (mirrors batchEnrichWithPressPlaceholders in routes.ts), so albums
       // homed to a press but with no saved SKU still show the press placeholder
       // in the Package designer jacket thumb and VinylPreview.
-      let effectivePress: { id: string; name: string; logoUrl: string | null; vinylPlaceholderUrl: string | null } | null = null;
+      let effectivePress: { id: string; name: string; domain: string | null; logoUrl: string | null; vinylPlaceholderUrl: string | null } | null = null;
       try {
         const albumId = String(req.params.id);
         let resolvedPressId: string | null = null;
@@ -1625,7 +1625,7 @@ export function registerCommerceRoutes(app: Express) {
         if (resolvedPressId) {
           const p = await storage.getManufacturerById(resolvedPressId);
           if (p) {
-            effectivePress = { id: p.id, name: p.name, logoUrl: (p as any).logoUrl ?? null, vinylPlaceholderUrl: (p as any).vinylPlaceholderUrl ?? null };
+            effectivePress = { id: p.id, name: p.name, domain: (p as any).domain ?? null, logoUrl: (p as any).logoUrl ?? null, vinylPlaceholderUrl: (p as any).vinylPlaceholderUrl ?? null };
           }
         }
       } catch {}
@@ -1694,6 +1694,11 @@ export function registerCommerceRoutes(app: Express) {
       press: {
         id: press.id,
         name: press.name,
+        // Task #2371 — the press's domain lets admin cover surfaces resolve the
+        // bundled grayscale placeholder SVG (pressPlaceholderArt.ts) so the
+        // package designer / GoodDeed cert match the grayed logo the Albums
+        // list shows. Operator-only payload; never reaches a fan cover.
+        domain: (press as any).domain ?? null,
         logoUrl: (press as any).logoUrl ?? null,
         // Task #2261 — the press's uploaded default jacket image, so the
         // admin package designer can show the same branded jacket art the

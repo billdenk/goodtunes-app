@@ -29,3 +29,15 @@ that mirrors `getAuthFromRequest`+`isAdminUser`: session-or-Bearer → kind must
 token on a customer host in prod is rejected) → `storage.getUser().isAdmin`. Request
 params/body can never flip includeHidden. Consider centralizing into a shared auth
 util to stop routes.ts/commerce.ts drift.
+
+**Sibling trap — admin-only ENRICHMENT on a shared list endpoint leaks in the raw
+JSON.** `GET /api/albums` uses `requireAuth`, which admits `kind === "customer"`
+(fans), not just admins — it is a SHARED list endpoint, not admin-only. So any
+admin-only enrichment attached there (e.g. `batchEnrichWithPressPlaceholders` →
+`pressLogoUrl`/`pressJacketUrl`/`pressDomain`) ships to fan sessions in the JSON even
+if the fan UI never renders those keys. An aspirational `// admin-only` comment does
+NOT enforce anything. **Rule:** gate the enrichment itself on the same
+`isAdmin = await isAdminUser(req)` you use for `includeHidden` (`isAdmin ? enrich :
+baseRows`), so non-admins get rows with no admin-only fields at all. **Why:** press
+branding must never reach a fan surface (Task #2371); "fan doesn't render it" is not
+the same as "fan can't receive it" — the leak is the payload, not the pixels.

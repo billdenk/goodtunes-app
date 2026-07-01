@@ -20,6 +20,7 @@
 // width and any size variant.
 import type { VinylColorOption, JacketUpgrade } from "@shared/pressing";
 import type { AlbumFormat } from "@shared/schema";
+import { resolvePressPlaceholderArt } from "@/lib/pressPlaceholderArt";
 
 // Sentinel values that mean "no real art" — the server stamps
 // "/album-placeholder.svg" as the default; treat it the same as null so the
@@ -58,12 +59,18 @@ const GOODTUNES_FALLBACK_LOGO = "/goodtunes-logo-color.png";
 export function JacketArtFill({
   artworkUrl,
   placeholderArtworkUrl,
+  placeholderDomain,
   placeholderLogoUrl,
   brandFallback,
   loading,
 }: {
   artworkUrl: string | null | undefined;
   placeholderArtworkUrl?: string | null;
+  // Task #2371 — the effective press's domain (manufacturers.domain). Resolves
+  // the bundled grayscale placeholder SVG (pressPlaceholderArt.ts) between the
+  // uploaded jacket art and the corporate logo, matching the press Catalog
+  // editor. Omitted on fan surfaces so press branding never leaks.
+  placeholderDomain?: string | null;
   placeholderLogoUrl?: string | null;
   // Task #2371 — opt-in (operator/partner Package designer): when no real art
   // and no press placeholder resolve, render the grayscale GoodTunes mark
@@ -78,6 +85,7 @@ export function JacketArtFill({
 }) {
   const artwork = resolveArtwork(artworkUrl);
   const placeholderArt = resolveArtwork(placeholderArtworkUrl);
+  const domainArt = resolvePressPlaceholderArt(placeholderDomain);
   let content: React.ReactNode;
   if (artwork) {
     content = (
@@ -98,13 +106,23 @@ export function JacketArtFill({
         data-testid="img-press-jacket-placeholder"
       />
     );
+  } else if (domainArt) {
+    content = (
+      <img
+        src={domainArt}
+        alt=""
+        className="w-full h-full object-cover"
+        draggable={false}
+        data-testid="img-press-domain-art-placeholder"
+      />
+    );
   } else if (placeholderLogoUrl) {
     content = (
       <div className="w-full h-full bg-white flex items-center justify-center p-[16%]">
         <img
           src={placeholderLogoUrl}
           alt=""
-          className="max-w-full max-h-full object-contain opacity-80"
+          className="max-w-full max-h-full object-contain grayscale opacity-80"
           draggable={false}
           data-testid="img-press-logo-placeholder"
         />
@@ -167,6 +185,7 @@ export function VinylPreview({
   jacketOverlay,
   format,
   placeholderArtworkUrl,
+  placeholderDomain,
   placeholderLogoUrl,
   brandFallback,
   loading,
@@ -191,6 +210,10 @@ export function VinylPreview({
   // the logo/gradient fallback, so press jacket art never leaks onto a fan
   // album cover.
   placeholderArtworkUrl?: string | null;
+  // Task #2371 — the effective press's domain (manufacturers.domain), used to
+  // resolve the bundled grayscale placeholder SVG when no uploaded jacket art
+  // exists. Omitted on fan surfaces so press branding never leaks.
+  placeholderDomain?: string | null;
   // Task #2371 — opt-in brand fallback (see JacketArtFill): grayscale GoodTunes
   // mark when no real art and no single press resolve. Omitted on fan surfaces.
   brandFallback?: boolean;
@@ -215,6 +238,7 @@ export function VinylPreview({
   // Strip legacy sentinel values ("/album-placeholder.svg", etc.) so they
   // are treated as "no real art" and the white-background placeholder wins.
   const artwork = resolveArtwork(artworkUrl);
+  const domainArt = resolvePressPlaceholderArt(placeholderDomain);
   // Task #1310 — cassette renders as a tall J-card case, not a vinyl
   // disc. The J-card is printed both sides with the album cover, so we
   // show the art in a portrait cassette-case frame with a folded spine
@@ -265,12 +289,20 @@ export function VinylPreview({
               draggable={false}
               data-testid="img-press-jacket-placeholder"
             />
+          ) : domainArt ? (
+            <img
+              src={domainArt}
+              alt=""
+              className="w-full h-full object-cover"
+              draggable={false}
+              data-testid="img-press-domain-art-placeholder"
+            />
           ) : placeholderLogoUrl ? (
             <div className="w-full h-full bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center p-[18%]">
               <img
                 src={placeholderLogoUrl}
                 alt=""
-                className="max-w-full max-h-full object-contain opacity-80"
+                className="max-w-full max-h-full object-contain grayscale opacity-80"
                 draggable={false}
                 data-testid="img-press-logo-placeholder"
               />
@@ -436,7 +468,7 @@ export function VinylPreview({
           className="absolute inset-0 bg-slate-200 overflow-hidden shadow-sm border border-black/10"
           data-testid="vinyl-preview-jacket"
         >
-          <JacketArtFill artworkUrl={artworkUrl} placeholderArtworkUrl={placeholderArtworkUrl} placeholderLogoUrl={placeholderLogoUrl} brandFallback={brandFallback} loading={loading} />
+          <JacketArtFill artworkUrl={artworkUrl} placeholderArtworkUrl={placeholderArtworkUrl} placeholderDomain={placeholderDomain} placeholderLogoUrl={placeholderLogoUrl} brandFallback={brandFallback} loading={loading} />
           {/* Gatefold cue — thin centered fold seam, so a gatefold
               reads as two-panel even before you notice the wider
               footprint. */}

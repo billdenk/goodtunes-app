@@ -642,6 +642,22 @@ export function AdminAlbum() {
     },
   });
 
+  // Task #2371 — admin-only invited-press lookup so the header cover thumbnail
+  // falls back to the SAME grayscale press jacket/domain-art/logo the Albums
+  // list, package designer, and GoodDeed cert show for an art-less album. This
+  // reads the admin endpoint (which carries the press placeholder inputs) and
+  // NEVER touches the shared ["/api/albums", albumId] payload, so press
+  // branding can't leak onto a fan cover.
+  const { data: invitedPress } = useQuery<{
+    press?: { id: string; name: string; domain?: string | null; logoUrl?: string | null; vinylPlaceholderUrl?: string | null } | null;
+    effectivePress?: { id: string; name: string; domain?: string | null; logoUrl?: string | null; vinylPlaceholderUrl?: string | null } | null;
+  }>({
+    queryKey: ["/api/admin/albums", albumId, "invited-press"],
+    enabled: !!user?.isAdmin && !!albumId,
+  });
+  // Prefer the invited press; fall back to the resolved effective press.
+  const headerPress = invitedPress?.press ?? invitedPress?.effectivePress ?? null;
+
   const deleteAlbum = useMutation({
     mutationFn: async () => {
       await apiRequest("DELETE", `/api/admin/albums/${albumId}`);
@@ -1139,6 +1155,11 @@ export function AdminAlbum() {
                 artwork={realArtwork(album.artwork)}
                 artistPhoto={album.artistPhoto}
                 title={album.title}
+                showName={false}
+                pressJacketUrl={headerPress?.vinylPlaceholderUrl ?? null}
+                pressDomain={headerPress?.domain ?? null}
+                pressLogoUrl={headerPress?.logoUrl ?? null}
+                brandFallback
               />
             </div>
             {/* Dim scrim + pencil chip on hover. Gray chip (slate-200)

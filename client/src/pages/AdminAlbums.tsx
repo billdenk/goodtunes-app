@@ -1290,6 +1290,7 @@ function NeedsAttentionTable({
                         pressJacketUrl={r.pressJacketUrl ?? null}
                         pressDomain={r.pressDomain ?? null}
                         pressLogoUrl={r.pressLogoUrl ?? null}
+                        brandFallback
                       />
                     </div>
                     <span className="min-w-0">
@@ -1364,6 +1365,7 @@ function AlbumTile({ album, href }: { album: AlbumLite; href: string }) {
           pressJacketUrl={album.pressJacketUrl ?? null}
           pressDomain={album.pressDomain ?? null}
           pressLogoUrl={album.pressLogoUrl ?? null}
+          brandFallback
         />
         {album.isHidden && (
           <div
@@ -1450,6 +1452,7 @@ function AlbumRow({
           pressJacketUrl={album.pressJacketUrl ?? null}
           pressDomain={album.pressDomain ?? null}
           pressLogoUrl={album.pressLogoUrl ?? null}
+          brandFallback
         />
       </div>
       <div className="min-w-0 flex-1">

@@ -33,6 +33,7 @@ import {
   revokePlaceholderIfUnused,
 } from "./partnerInvites";
 import { pgArray } from "./lib/pgArray";
+import { resolvePressIdFromCandidates } from "./lib/pressPlaceholders";
 import { findChorusStartMs, findChorusCueIndex } from "./lib/chorusFinder";
 import { planAutoGoodSyncUpdates, decideInstrumental } from "./lib/autoGoodSyncPolicy";
 import { detectExplicitLyrics } from "./lib/explicitLyrics";
@@ -668,50 +669,63 @@ export async function batchEnrichWithPressPlaceholders<
 ): Promise<Array<T & { pressLogoUrl: string | null; pressJacketUrl: string | null; pressDomain: string | null }>> {
   if (!albums.length) return albums.map((a) => ({ ...a, pressLogoUrl: null, pressJacketUrl: null, pressDomain: null }));
   try {
-    // --- Step 1: homed press via artist defaultPressId ---
+    // --- Steps 1-2: artist/label invited + default press (one query each) ---
+    // Task #2371 — resolve the SAME press the album DETAIL credits so the list
+    // logo matches the detail header / package designer / GoodDeed cert. That
+    // means reading `invited_by_press_id` FIRST (the referral stamp the detail's
+    // top-level `press` uses), THEN `default_press_id`. The final precedence is
+    // applied by resolvePressIdFromCandidates (shared with commerce.ts).
     const artistIds = [...new Set(albums.map((a) => a.primaryArtistId).filter((id): id is string => !!id))];
-    const artistPressMap = new Map<string, string>(); // artistId → pressId
+    const artistInvitedMap = new Map<string, string>(); // artistId → invited pressId
+    const artistPressMap = new Map<string, string>(); // artistId → default pressId
     if (artistIds.length) {
-      const rows = await db.execute<{ id: string; default_press_id: string }>(sql`
-        SELECT id, default_press_id FROM people
+      const rows = await db.execute<{ id: string; invited_by_press_id: string | null; default_press_id: string | null }>(sql`
+        SELECT id, invited_by_press_id, default_press_id FROM people
         WHERE id = ANY(${pgArray(artistIds)}::text[])
-          AND default_press_id IS NOT NULL
+          AND (invited_by_press_id IS NOT NULL OR default_press_id IS NOT NULL)
       `);
       for (const r of ((rows as any).rows ?? [])) {
-        artistPressMap.set(r.id, r.default_press_id);
+        if (r.invited_by_press_id) artistInvitedMap.set(r.id, r.invited_by_press_id);
+        if (r.default_press_id) artistPressMap.set(r.id, r.default_press_id);
       }
     }
 
-    // --- Step 2: homed press via label defaultPressId ---
     const labelIds = [...new Set(albums.map((a) => a.labelId).filter((id): id is string => !!id))];
-    const labelPressMap = new Map<string, string>(); // labelId → pressId
+    const labelInvitedMap = new Map<string, string>(); // labelId → invited pressId
+    const labelPressMap = new Map<string, string>(); // labelId → default pressId
     if (labelIds.length) {
-      const rows = await db.execute<{ id: string; default_press_id: string }>(sql`
-        SELECT id, default_press_id FROM labels
+      const rows = await db.execute<{ id: string; invited_by_press_id: string | null; default_press_id: string | null }>(sql`
+        SELECT id, invited_by_press_id, default_press_id FROM labels
         WHERE id = ANY(${pgArray(labelIds)}::text[])
-          AND default_press_id IS NOT NULL
+          AND (invited_by_press_id IS NOT NULL OR default_press_id IS NOT NULL)
       `);
       for (const r of ((rows as any).rows ?? [])) {
-        labelPressMap.set(r.id, r.default_press_id);
+        if (r.invited_by_press_id) labelInvitedMap.set(r.id, r.invited_by_press_id);
+        if (r.default_press_id) labelPressMap.set(r.id, r.default_press_id);
       }
     }
 
-    // --- Step 3: effective press via first saved SKU for albums still without a homed press ---
+    // --- Step 3: effective press via SKUs — ONLY when they unambiguously agree
+    // on ONE press. Albums whose SKUs span 2+ presses have no single plant to
+    // credit (mirrors commerce.ts effectivePress), so we skip them and let the
+    // surface fall back to the brand mark rather than crediting an arbitrary
+    // first SKU. Only compute this for albums with no invited/default press. ---
     const noHomedPressIds = albums
       .filter((a) => {
-        const via = (a.primaryArtistId ? artistPressMap.get(a.primaryArtistId) : null)
-          ?? (a.labelId ? labelPressMap.get(a.labelId) : null);
+        const via = (a.primaryArtistId ? (artistInvitedMap.get(a.primaryArtistId) ?? artistPressMap.get(a.primaryArtistId)) : null)
+          ?? (a.labelId ? (labelInvitedMap.get(a.labelId) ?? labelPressMap.get(a.labelId)) : null);
         return !via;
       })
       .map((a) => a.id);
-    const skuPressMap = new Map<string, string>(); // albumId → pressId
+    const skuPressMap = new Map<string, string>(); // albumId → unambiguous pressId
     if (noHomedPressIds.length) {
       const rows = await db.execute<{ album_id: string; press_id: string }>(sql`
-        SELECT DISTINCT ON (album_id) album_id, press_id
+        SELECT album_id, MIN(press_id) AS press_id
         FROM album_skus
         WHERE album_id = ANY(${pgArray(noHomedPressIds)}::text[])
           AND press_id IS NOT NULL
-        ORDER BY album_id, created_at
+        GROUP BY album_id
+        HAVING COUNT(DISTINCT press_id) = 1
       `);
       for (const r of ((rows as any).rows ?? [])) {
         skuPressMap.set(r.album_id, r.press_id);
@@ -720,6 +734,8 @@ export async function batchEnrichWithPressPlaceholders<
 
     // --- Step 4: batch-load manufacturer logo + jacket-art ---
     const allPressIds = [...new Set([
+      ...artistInvitedMap.values(),
+      ...labelInvitedMap.values(),
       ...artistPressMap.values(),
       ...labelPressMap.values(),
       ...skuPressMap.values(),
@@ -736,11 +752,13 @@ export async function batchEnrichWithPressPlaceholders<
     }
 
     return albums.map((a) => {
-      const pressId =
-        (a.primaryArtistId ? artistPressMap.get(a.primaryArtistId) : null)
-        ?? (a.labelId ? labelPressMap.get(a.labelId) : null)
-        ?? skuPressMap.get(a.id)
-        ?? null;
+      const pressId = resolvePressIdFromCandidates({
+        artistInvitedPressId: a.primaryArtistId ? artistInvitedMap.get(a.primaryArtistId) : null,
+        labelInvitedPressId: a.labelId ? labelInvitedMap.get(a.labelId) : null,
+        artistDefaultPressId: a.primaryArtistId ? artistPressMap.get(a.primaryArtistId) : null,
+        labelDefaultPressId: a.labelId ? labelPressMap.get(a.labelId) : null,
+        distinctSkuPressIds: skuPressMap.has(a.id) ? [skuPressMap.get(a.id)!] : [],
+      });
       const info = pressId ? (pressInfoMap.get(pressId) ?? null) : null;
       return {
         ...a,
@@ -21276,7 +21294,8 @@ export async function registerRoutes(
 
   app.get("/api/albums", requireAuth, async (req, res) => {
     // Admins see hidden albums so the CMS list stays complete; fans don't.
-    const includeHidden = await isAdminUser(req);
+    const isAdmin = await isAdminUser(req);
+    const includeHidden = isAdmin;
     const albums = await storage.getAlbums({ includeHidden });
     // Derive album-level explicit from per-song flags so the consumer
     // "E" badge lights up automatically when any song on the record is
@@ -21291,11 +21310,15 @@ export async function registerRoutes(
     // so album-cover placeholders are available on every surface that reads
     // from this list endpoint.
     const enrichedWithPhotos = await batchEnrichWithArtistPhotos(enriched);
-    // Task #2369 — admin-only: resolve each album's effective press logo + jacket-art
-    // URL so the Albums list card can show the press placeholder for art-less albums.
-    // Fan-facing endpoints (GET /api/albums/:id, /api/public/*) deliberately skip
-    // this enrichment so press branding never leaks to the fan player.
-    const enrichedWithPress = await batchEnrichWithPressPlaceholders(enrichedWithPhotos);
+    // Task #2369/#2371 — admin/partner-only: resolve each album's effective press
+    // logo + jacket-art URL so the Albums list card can show the press placeholder
+    // for art-less albums. This is gated on isAdminUser: a customer/fan session
+    // hitting this shared endpoint gets the base rows with NO press* fields, so
+    // press branding never leaks to a fan surface even in the raw JSON. Fan-facing
+    // endpoints (GET /api/albums/:id, /api/public/*) skip this enrichment entirely.
+    const enrichedWithPress = isAdmin
+      ? await batchEnrichWithPressPlaceholders(enrichedWithPhotos)
+      : enrichedWithPhotos;
     // Task #1873 — fail-closed partner scoping.  Every partner-admin role
     // is scoped to its own entity and returns nothing when unattached.
     // Only operators (super_admin/admin) fall through to the full catalog.

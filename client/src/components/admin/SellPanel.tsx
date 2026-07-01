@@ -91,6 +91,7 @@ import {
   type VinylColorOption,
 } from "@shared/pressing";
 import { VinylPreview, JacketArtFill } from "@/components/VinylPreview";
+import { AlbumCover } from "@/components/ui/AlbumCover";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import { CertSaleWindowPanel } from "@/components/admin/CertSaleWindowPanel";
 import { ChangeFormatDialog } from "@/components/admin/ChangeFormatDialog";
@@ -131,6 +132,10 @@ type SellResponse = { skus: AlbumSku[]; addons: AlbumAddon[] };
 type Manufacturer = {
   id: string;
   name: string;
+  // Task #2371 — the press's domain, used to resolve the bundled grayscale
+  // placeholder SVG so the package designer / GoodDeed cert match the grayed
+  // logo the Albums list shows. Operator-only; never on a fan cover.
+  domain?: string | null;
   logoUrl: string | null;
   // Task #2261 — the press's uploaded default jacket image
   // (`manufacturers.vinyl_placeholder_url`). Drives the admin package
@@ -212,7 +217,7 @@ type InvitedPressResponse = {
   // Task #2369 — vinylPlaceholderUrl added so the package designer and
   // album list can show the effective press's jacket/logo placeholder when
   // no invited press is stamped.
-  effectivePress?: { id: string; name: string; logoUrl?: string | null; vinylPlaceholderUrl?: string | null } | null;
+  effectivePress?: { id: string; name: string; domain?: string | null; logoUrl?: string | null; vinylPlaceholderUrl?: string | null } | null;
   // Task #2115 — the invited press's uploaded print templates, embedded
   // here so the artist-readable Package tab can offer template downloads.
   templates?: PressTemplate[];
@@ -4679,6 +4684,7 @@ function SkuRow({
             <JacketArtFill
               artworkUrl={artworkUrl}
               placeholderArtworkUrl={(invitedPressItself ?? effectivePressItself)?.vinylPlaceholderUrl ?? null}
+              placeholderDomain={(invitedPressItself ?? effectivePressItself)?.domain ?? null}
               placeholderLogoUrl={(invitedPressItself ?? effectivePressItself)?.logoUrl ?? null}
               brandFallback
               loading={pressLoading}
@@ -5734,6 +5740,7 @@ function SkuRow({
                      logo, then the generic placeholder. Real art always wins
                      (VinylPreview only uses these when artworkUrl is empty). */
                   placeholderArtworkUrl={(invitedPressItself ?? effectivePressItself)?.vinylPlaceholderUrl ?? null}
+                  placeholderDomain={(invitedPressItself ?? effectivePressItself)?.domain ?? null}
                   placeholderLogoUrl={(invitedPressItself ?? effectivePressItself)?.logoUrl ?? null}
                   brandFallback
                   loading={pressLoading}
@@ -6721,6 +6728,9 @@ function SkuRow({
             albumTitle={(displayNameStr.trim() || albumTitle) ?? ""}
             artistName={artistName ?? ""}
             artistPhotoUrl={artistPhotoUrl ?? null}
+            pressJacketUrl={(invitedPressItself ?? effectivePressItself)?.vinylPlaceholderUrl ?? null}
+            pressDomain={(invitedPressItself ?? effectivePressItself)?.domain ?? null}
+            pressLogoUrl={(invitedPressItself ?? effectivePressItself)?.logoUrl ?? null}
             vinylQty={parsedQty}
             existing={signedAddon ?? null}
             livePlatformCostCents={livePlatformCostCents ?? null}
@@ -8844,6 +8854,9 @@ function GoodDeedPill({
   albumTitle,
   artistName,
   artistPhotoUrl,
+  pressJacketUrl,
+  pressDomain,
+  pressLogoUrl,
   vinylQty,
   existing,
   livePlatformCostCents,
@@ -8862,6 +8875,13 @@ function GoodDeedPill({
   albumTitle: string;
   artistName: string;
   artistPhotoUrl: string | null;
+  // Task #2371 — the effective press's placeholder inputs, threaded so the
+  // cert cover falls back to the SAME grayscale press jacket/domain-art/logo
+  // the Albums list and package designer show when the album has no real art.
+  // Operator-only; never rendered on a fan surface.
+  pressJacketUrl?: string | null;
+  pressDomain?: string | null;
+  pressLogoUrl?: string | null;
   vinylQty: number;
   existing: AlbumAddon | null;
   livePlatformCostCents: number | null;
@@ -9193,18 +9213,15 @@ function GoodDeedPill({
                   className="group relative block w-full aspect-square bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40"
                   data-testid="button-gooddeed-edit-artwork"
                 >
-                  {artworkUrl ? (
-                    <img
-                      src={artworkUrl}
-                      alt=""
-                      className="w-full h-full object-cover"
-                      data-testid="img-gooddeed-preview"
-                    />
-                  ) : (
-                    <span className="absolute inset-0 inline-flex items-center justify-center text-xs text-slate-400">
-                      No art
-                    </span>
-                  )}
+                  <AlbumCover
+                    artwork={artworkUrl}
+                    title={albumTitle}
+                    showName={false}
+                    pressJacketUrl={pressJacketUrl}
+                    pressDomain={pressDomain}
+                    pressLogoUrl={pressLogoUrl}
+                    brandFallback
+                  />
                   <span
                     className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 [@media(hover:none)]:bg-black/30 transition-colors pointer-events-none"
                     aria-hidden
@@ -9220,18 +9237,15 @@ function GoodDeedPill({
                 </button>
               ) : (
                 <div className="relative w-full aspect-square bg-slate-50">
-                  {artworkUrl ? (
-                    <img
-                      src={artworkUrl}
-                      alt=""
-                      className="w-full h-full object-cover"
-                      data-testid="img-gooddeed-preview"
-                    />
-                  ) : (
-                    <span className="absolute inset-0 inline-flex items-center justify-center text-xs text-slate-400">
-                      No art
-                    </span>
-                  )}
+                  <AlbumCover
+                    artwork={artworkUrl}
+                    title={albumTitle}
+                    showName={false}
+                    pressJacketUrl={pressJacketUrl}
+                    pressDomain={pressDomain}
+                    pressLogoUrl={pressLogoUrl}
+                    brandFallback
+                  />
                 </div>
               )}
               {/* Task #510 follow-up — band matches Bill's wireframe

@@ -66,6 +66,15 @@ export interface AlbumCoverProps {
    * Must never be passed on fan-facing surfaces.
    */
   pressLogoUrl?: string | null;
+  /**
+   * Task #2371 — admin-only opt-in. When there is no real art AND no press
+   * placeholder resolves, render a grayscale GoodTunes mark on a white tile
+   * instead of the ghosted artist photo / dark brand tile. Matches the
+   * package designer (VinylPreview/JacketArtFill) so an art-less, press-less
+   * album shows the SAME light placeholder on every admin surface. Wins over
+   * the ghosted artist photo. Fan surfaces never set it.
+   */
+  brandFallback?: boolean;
 }
 
 // Brand-toned fallback tile (no artist photo): navy base lit by faint blue
@@ -74,6 +83,10 @@ const BRAND_TILE_BACKGROUND =
   "radial-gradient(circle at 28% 18%, rgba(49,158,216,0.40), transparent 58%)," +
   "radial-gradient(circle at 82% 88%, rgba(127,16,167,0.40), transparent 55%)," +
   "var(--brand-bg)";
+
+// Task #2371 — the GoodTunes brand mark used for the admin-only brandFallback
+// tier. Rendered grayscale on a white tile to match VinylPreview/JacketArtFill.
+const GOODTUNES_FALLBACK_LOGO = "/goodtunes-logo-color.png";
 
 // Navy scrim over the ghosted artist photo so the overlaid name always reads.
 const GHOST_SCRIM =
@@ -91,6 +104,7 @@ export function AlbumCover({
   pressJacketUrl,
   pressDomain,
   pressLogoUrl,
+  brandFallback = false,
 }: AlbumCoverProps) {
   // Track load failures so a dead artwork/photo URL falls through to the next
   // tier instead of showing the broken glyph. Reset when the URL changes so
@@ -188,7 +202,32 @@ export function AlbumCover({
             loading={loading}
             decoding="async"
             onError={() => setPressLogoFailed(true)}
-            className="max-w-full max-h-full object-contain opacity-80"
+            className="max-w-full max-h-full object-contain grayscale opacity-80"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Task #2371 — admin opt-in brand fallback: grayscale GoodTunes mark on a
+  // white tile, matching VinylPreview/JacketArtFill so an art-less, press-less
+  // album shows the SAME light placeholder in the Albums list, detail header,
+  // package designer, and GoodDeed cert (instead of the dark ghost/brand tile).
+  // Wins over the ghosted artist photo. Fan surfaces never opt in.
+  if (brandFallback) {
+    return (
+      <div
+        className={`relative w-full h-full overflow-hidden bg-white ${className}`}
+        data-testid="album-cover-brand-fallback"
+      >
+        <div className="absolute inset-0 flex items-center justify-center p-[16%]">
+          <img
+            src={GOODTUNES_FALLBACK_LOGO}
+            alt=""
+            aria-hidden
+            loading={loading}
+            decoding="async"
+            className="max-w-full max-h-full object-contain grayscale opacity-80"
           />
         </div>
       </div>
