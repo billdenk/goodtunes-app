@@ -286,6 +286,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
             pressId={pressId}
             pressDomain={pressDomain}
             placeholderUrl={me?.vinylPlaceholderUrl ?? null}
+            hideHeading
           />
         </div>
       )}

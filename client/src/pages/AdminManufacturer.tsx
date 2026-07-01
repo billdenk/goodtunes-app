@@ -2473,11 +2473,18 @@ export function PressCatalogPanel({
   pressDomain,
   placeholderUrl = null,
   pressLogoUrl = null,
+  hideHeading = false,
 }: {
   pressId: string;
   pressDomain: string | null;
   placeholderUrl?: string | null;
   pressLogoUrl?: string | null;
+  // When the surface already renders a page-level "Catalog" header
+  // (e.g. the press portal's AdminPageHeader), suppress this card's
+  // own title + blurb to avoid "Catalog / Catalog" duplication. The
+  // action buttons still render. The admin manufacturer page has no
+  // page header, so it leaves this false and keeps the card title.
+  hideHeading?: boolean;
 }) {
   // Role gate — server is authoritative; we hide the panel for admins
   // who would just see a 403 either way.
@@ -2556,11 +2563,15 @@ export function PressCatalogPanel({
     <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-press-catalog">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
-          <h2 className="text-[15px] font-semibold text-slate-900">Catalog</h2>
-          <p className="text-[13px] text-slate-500 mt-1">
-            The products you offer in one place. Here you can adjust or add color options, upload
-            vinyl swatch images, and dial in prices for each quantity.
-          </p>
+          {!hideHeading && (
+            <>
+              <h2 className="text-[15px] font-semibold text-slate-900">Catalog</h2>
+              <p className="text-[13px] text-slate-500 mt-1">
+                The products you offer in one place. Here you can adjust or add color options, upload
+                vinyl swatch images, and dial in prices for each quantity.
+              </p>
+            </>
+          )}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <CatalogCsvButtons
