@@ -1,7 +1,62 @@
 ---
-name: Shopify+ fulfillment-only orders + physicalFormat keyspace
-description: How sellMode='shopify_plus' orders stay payout/revenue-safe, and the albums.physicalFormat vs shipping/SKU format keyspace mismatch.
+name: Shopify+ prepaid manufacturing mode (fulfillment-only orders, ACH pay endpoint, payer access, physicalFormat keyspace)
+description: How sellMode='shopify_plus' orders stay payout/revenue-safe; the single-flight ACH pay claim that stops double bank-debits; who may pay the ledger; and the albums.physicalFormat vs shipping/SKU format keyspace mismatch.
 ---
+
+# Shopify+ prepaid manufacturing ledger — who may pay
+
+The staged ACH manufacturing ledger is payable by ANYONE holding **album-level
+`manage_payouts`** (label, manager, or artist), NOT operators only. So the
+album-editor **Payments** tab must surface for those partners even when the
+operator-only **Physical** tab and **Customers** roster stay hidden
+(`visibleTabsFor`'s `hidePress` branch: for `shopify_plus` + `canManagePayouts`
+it returns base + Payments).
+
+**Why:** the customer prepays their own manufacturing; gating payment behind an
+operator hat would strand the person who actually owns the money.
+
+**How to apply:** the UI reads `canManagePayouts` off
+`GET /api/admin/albums/:id/edit-access` (`getAlbumEditAccess` in
+partnerPermissions.ts returns it in ALL branches: super_admin/admin=true,
+out_of_scope=false, in-scope=`!!perms.managePayouts`). It threads two levels
+deep: the album editor shows the Payments TAB (`visibleTabsFor`), and inside
+ShopifyPlusPanel the Pay BUTTON gates on a `canPay` prop = `canManagePayouts`
+(the ledger's add-step / remove-step / toggles stay on `canEdit` =
+`edit_metadata`). Gating only the tab is NOT enough — a `manage_payouts`-only
+partner would then see a read-only ledger with no Pay button. Any new
+payer-facing surface should reuse `canManagePayouts`, not re-derive from role.
+Server pay route still gates independently (don't trust the client).
+
+# ACH manufacturing pay endpoint — single-flight atomic claim
+
+`POST /api/admin/albums/:albumId/manufacturing-ledger/steps/:stepId/pay` must
+**atomically claim** the step (UPDATE ... SET status='processing' WHERE id=? AND
+status='unpaid' RETURNING) BEFORE minting the Stripe Checkout Session. If no row
+comes back, another attempt already owns it → 409.
+
+**Why:** webhook idempotency stops a double *earmark* but NOT two real ACH debits
+settling. Without the claim, two concurrent (or double-clicked) POSTs each mint a
+live us_bank_account Checkout URL for the same money and both can settle. A
+fast-path 409 on already paid/processing handles the common sequential case but
+does NOT close the true concurrent race — only the conditional UPDATE does.
+
+**How to apply:**
+- On Stripe-create failure, roll the claim back to `unpaid` (with `lastError`) so
+  a retry works instead of the step being stranded in `processing`.
+- Set `expires_at` on the session to ~35 min (Stripe's 30-min floor + padding)
+  so an abandoned attempt frees fast, not after Stripe's 24h default.
+- Release the claim on `checkout.session.expired` (helper `releaseAbandonedStep`
+  resets processing→unpaid only if the sessionId matches AND there's no
+  `stripePaymentIntentId`) and on `async_payment_failed`.
+- Stamp `paidByUserId` in the claim so the ledger records who initiated.
+
+**Known narrow strand (accepted, not blocking):** if the process dies AFTER the
+claim but BEFORE the `stripeCheckoutSessionId` write, the step sits in
+`processing` with a null sessionId. `releaseAbandonedStep`'s sessionId-match
+guard can't free it, and if the crash was before the Stripe session was even
+created no `checkout.session.expired` webhook ever fires. Extremely rare (death
+inside a ~ms window); recover by manually resetting that step to `unpaid`. A
+future sweep could release long-`processing` rows with a null sessionId.
 
 # Shopify+ fulfillment-only orders
 

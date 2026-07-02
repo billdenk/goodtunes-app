@@ -778,6 +778,7 @@ export async function getAlbumEditAccess(userId: string, albumId: string) {
     return {
       role: role?.role ?? null,
       canEdit: true,
+      canManagePayouts: true,
       locked,
       hasActiveOverride: false,
       requiresApproval: false,
@@ -793,6 +794,7 @@ export async function getAlbumEditAccess(userId: string, albumId: string) {
     return {
       role: role.role,
       canEdit: false,
+      canManagePayouts: false,
       locked,
       hasActiveOverride: false,
       requiresApproval: false,
@@ -826,6 +828,9 @@ export async function getAlbumEditAccess(userId: string, albumId: string) {
   return {
     role: role.role,
     canEdit,
+    // Task #2428 — anyone in scope holding `manage_payouts` can pay the
+    // Shopify+ manufacturing ledger, independent of the edit_metadata lock.
+    canManagePayouts: !!perms?.managePayouts,
     locked,
     hasActiveOverride,
     requiresApproval: !!perms?.metadataEditsRequireApproval,

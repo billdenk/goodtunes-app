@@ -42,6 +42,13 @@ interface Props {
   fulfillmentPartnerId: string | null;
   /** When false, switches + select render disabled (read-only teammates). */
   canEdit?: boolean;
+  /**
+   * Task #2428 — paying the prepaid manufacturing ledger is gated on album-level
+   * `manage_payouts`, NOT `edit_metadata`. A label/manager/artist who can pay but
+   * can't edit metadata still gets the Pay button; add/remove-step + toggles stay
+   * on `canEdit`.
+   */
+  canPay?: boolean;
 }
 
 interface FulfillmentPartner {
@@ -56,6 +63,7 @@ export function ShopifyPlusPanel({
   fulfillment,
   fulfillmentPartnerId,
   canEdit = true,
+  canPay = true,
 }: Props) {
   const { toast } = useToast();
   const [saving, setSaving] = useState<string | null>(null);
@@ -250,7 +258,7 @@ export function ShopifyPlusPanel({
         )}
       </div>
 
-      <ManufacturingLedger albumId={albumId} canEdit={canEdit} />
+      <ManufacturingLedger albumId={albumId} canEdit={canEdit} canPay={canPay} />
     </div>
   );
 }
@@ -307,9 +315,11 @@ const STATUS_LABELS: Record<LedgerStep["status"], string> = {
 function ManufacturingLedger({
   albumId,
   canEdit,
+  canPay,
 }: {
   albumId: string;
   canEdit: boolean;
+  canPay: boolean;
 }) {
   const { toast } = useToast();
   const ledgerKey = ["/api/admin/albums", albumId, "manufacturing-ledger"];
@@ -592,32 +602,33 @@ function ManufacturingLedger({
                       >
                         {STATUS_LABELS[step.status]}
                       </span>
+                      {canPay &&
+                        (step.status === "unpaid" || step.status === "failed") && (
+                          <button
+                            onClick={() => pay(step)}
+                            disabled={busy === `pay-${step.id}` || !manufacturer}
+                            className="h-9 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                            data-testid={`button-pay-step-${step.id}`}
+                          >
+                            {busy === `pay-${step.id}` ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <CreditCard className="w-3.5 h-3.5" />
+                            )}
+                            Pay
+                          </button>
+                        )}
                       {canEdit &&
                         (step.status === "unpaid" || step.status === "failed") && (
-                          <>
-                            <button
-                              onClick={() => pay(step)}
-                              disabled={busy === `pay-${step.id}` || !manufacturer}
-                              className="h-9 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                              data-testid={`button-pay-step-${step.id}`}
-                            >
-                              {busy === `pay-${step.id}` ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <CreditCard className="w-3.5 h-3.5" />
-                              )}
-                              Pay
-                            </button>
-                            <button
-                              onClick={() => removeStep(step)}
-                              disabled={busy === `del-${step.id}`}
-                              aria-label="Remove step"
-                              className="h-9 inline-flex items-center justify-center rounded-lg px-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                              data-testid={`button-remove-step-${step.id}`}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </>
+                          <button
+                            onClick={() => removeStep(step)}
+                            disabled={busy === `del-${step.id}`}
+                            aria-label="Remove step"
+                            className="h-9 inline-flex items-center justify-center rounded-lg px-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                            data-testid={`button-remove-step-${step.id}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         )}
                     </div>
                   </div>

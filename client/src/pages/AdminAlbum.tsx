@@ -350,7 +350,7 @@ export function visibleTabsFor(
     isPrepping?: boolean;
     isSpinPromo?: boolean;
   },
-  opts?: { hidePress?: boolean; hideCustomers?: boolean },
+  opts?: { hidePress?: boolean; hideCustomers?: boolean; canManagePayouts?: boolean },
 ): { key: Tab; label: string }[] {
   // SPIN Promo albums are digital-only legacy releases. The Package /
   // Physical / Shopify manufacturing surfaces are irrelevant and are
@@ -406,7 +406,16 @@ export function visibleTabsFor(
   if (album.sellMode === "direct" || album.sellMode === "shopify_plus") {
     // Artist and label partners don't manage manufacturing, so the Physical
     // tab (pressing plant + master preflight) is hidden for them for now.
-    if (opts?.hidePress) return base;
+    if (opts?.hidePress) {
+      // Task #2428 — but the prepaid Shopify+ manufacturing ledger is payable
+      // by ANYONE holding album-level `manage_payouts` (label, manager, or
+      // artist), so surface just the Payments tab for those partners even
+      // though the operator-only Physical tab + Customers roster stay hidden.
+      if (album.sellMode === "shopify_plus" && opts?.canManagePayouts) {
+        return [...base, { key: "payments" as Tab, label: "Payments" }];
+      }
+      return base;
+    }
     const extra: { key: Tab; label: string }[] = [{ key: "press", label: "Physical" }];
     if (album.sellMode === "shopify_plus") extra.push({ key: "payments", label: "Payments" });
     return withCustomers([...base, ...extra]);
@@ -962,6 +971,7 @@ export function AdminAlbum() {
   // dims for out-of-scope partners or unrelaxed lock states.
   const { data: albumEditAccess } = useQuery<{
     canEdit: boolean;
+    canManagePayouts: boolean;
     locked: boolean;
     hasActiveOverride: boolean;
     requiresApproval: boolean;
@@ -1025,9 +1035,9 @@ export function AdminAlbum() {
   // avoid TDZ on `album` in the dependency array.
   useEffect(() => {
     if (!album) return;
-    const allowed = visibleTabsFor(album, { hidePress: hidePressSection, hideCustomers: isPress }).map((t) => t.key);
+    const allowed = visibleTabsFor(album, { hidePress: hidePressSection, hideCustomers: isPress, canManagePayouts: albumEditAccess?.canManagePayouts }).map((t) => t.key);
     if (!allowed.includes(tab)) setTab("dashboard");
-  }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, album?.isSpinPromo, tab, album, hidePressSection, isPress]);
+  }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, album?.isSpinPromo, tab, album, hidePressSection, isPress, albumEditAccess?.canManagePayouts]);
 
   // Task #674 — Mirror the active tab into the URL (`?tab=`) so a refresh
   // reopens the same tab. Uses `replace` so repeated tab clicks don't
@@ -1320,7 +1330,7 @@ export function AdminAlbum() {
           data-testid="tabs-admin-album"
         >
           <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
-            {visibleTabsFor(album, { hidePress: hidePressSection, hideCustomers: isPress }).map((t) => {
+            {visibleTabsFor(album, { hidePress: hidePressSection, hideCustomers: isPress, canManagePayouts: albumEditAccess?.canManagePayouts }).map((t) => {
               const status = (completeness as any)?.[t.key] as
                 | SectionStatus
                 | undefined;
@@ -1549,7 +1559,7 @@ export function AdminAlbum() {
             `tab` back to "sell" whenever the current tab leaves the
             allowed set. */}
         {(() => {
-          const allowed = new Set(visibleTabsFor(album, { hidePress: hidePressSection, hideCustomers: isPress }).map((t) => t.key));
+          const allowed = new Set(visibleTabsFor(album, { hidePress: hidePressSection, hideCustomers: isPress, canManagePayouts: albumEditAccess?.canManagePayouts }).map((t) => t.key));
           const safeTab: Tab = allowed.has(tab) ? tab : "dashboard";
           return (
             <>
@@ -1633,6 +1643,7 @@ export function AdminAlbum() {
                   fulfillment={album.shopifyPlusFulfillment ?? false}
                   fulfillmentPartnerId={album.fulfillmentPartnerId ?? null}
                   canEdit={!modeChangeBlocked}
+                  canPay={albumEditAccess?.canManagePayouts ?? false}
                 />
               )}
               {safeTab === "customers" && allowed.has("customers") && (

@@ -29,7 +29,7 @@
 // authenticates with a Bearer token.
 
 import type { Express, Request, Response } from "express";
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db";
 import {
@@ -171,6 +171,30 @@ async function markStepFailed(stepId: string, reason: string) {
   console.log(`[shopify-plus] step ${step.id} → unpaid (failed: ${reason})`);
 }
 
+// Free a step that was claimed for a Checkout attempt the customer then
+// abandoned (closed the tab / never submitted the bank debit). Stripe fires
+// checkout.session.expired only for sessions that were NEVER completed, so a
+// match here is always a dead attempt — but we still guard on the session id
+// and a null payment intent so we can never clobber a real in-flight debit.
+async function releaseAbandonedStep(stepId: string, sessionId: string) {
+  const [step] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, stepId));
+  if (!step) return;
+  if (
+    step.status === "processing" &&
+    step.stripeCheckoutSessionId === sessionId &&
+    !step.stripePaymentIntentId
+  ) {
+    await db
+      .update(manufacturerPaymentSteps)
+      .set({ status: "unpaid", lastError: null })
+      .where(eq(manufacturerPaymentSteps.id, step.id));
+    console.log(`[shopify-plus] step ${step.id} → unpaid (checkout expired)`);
+  }
+}
+
 // Called from the commerce.ts Stripe webhook BEFORE materializeOrderFromSession.
 // Returns true when the event was a Shopify+ step event and was handled
 // (so the caller skips the fan-order materialization path). ACH is always
@@ -222,6 +246,12 @@ export async function handleShopifyPlusWebhookEvent(event: {
           "The bank debit failed. Ask the customer to retry or use a different account.",
         );
       }
+      return true;
+    }
+    case "checkout.session.expired": {
+      if (!isStep) return false;
+      const stepId = String(meta.gt_step_id ?? "");
+      if (stepId) await releaseAbandonedStep(stepId, String(obj.id ?? ""));
       return true;
     }
     default:
@@ -640,6 +670,39 @@ export function registerShopifyPlusRoutes(app: Express) {
 
       const album = await storage.getAlbumById(albumId, { includeHidden: true });
       const totalCents = step.amountCents + step.marginCents;
+
+      // Atomically claim the step before minting a Checkout Session. Only ONE
+      // in-flight ACH attempt is allowed per step: a second concurrent (or
+      // double-clicked) POST finds the status already flipped off "unpaid" and
+      // is rejected, so we never hand out two live bank-debit URLs for the same
+      // money (webhook idempotency stops a double earmark, but NOT two real
+      // debits settling). An abandoned attempt is released back to "unpaid" by
+      // checkout.session.expired (the padded 30-min expires_at below bounds
+      // that), and a failed debit is reset by async_payment_failed — so a
+      // legitimate retry still works. The fast-path 409 above covers the common
+      // sequential case; this closes the true concurrent race.
+      const [claimed] = await db
+        .update(manufacturerPaymentSteps)
+        .set({
+          status: "processing",
+          manufacturerId: manufacturer.id,
+          paidByUserId: userId,
+          lastError: null,
+        })
+        .where(
+          and(
+            eq(manufacturerPaymentSteps.id, step.id),
+            eq(manufacturerPaymentSteps.status, "unpaid"),
+          ),
+        )
+        .returning();
+      if (!claimed) {
+        return res.status(409).json({
+          message:
+            "A payment for this step is already in progress. Refresh to see its status.",
+        });
+      }
+
       const origin = absoluteOrigin(req);
       const returnBase = `${origin}/admin/albums/${albumId}?tab=payments`;
 
@@ -672,21 +735,28 @@ export function registerShopifyPlusRoutes(app: Express) {
           ],
           metadata,
           payment_intent_data: { metadata },
+          // Expire the hosted page fast so a misclicked / abandoned attempt
+          // frees the step (back to "unpaid" via checkout.session.expired) in
+          // minutes, not Stripe's 24h default. 30 min is the Stripe minimum;
+          // pad slightly so request latency can't trip the floor.
+          expires_at: Math.floor(Date.now() / 1000) + 35 * 60,
           success_url: `${returnBase}&paid=1`,
           cancel_url: returnBase,
         });
 
         await db
           .update(manufacturerPaymentSteps)
-          .set({
-            manufacturerId: manufacturer.id,
-            stripeCheckoutSessionId: session.id,
-            lastError: null,
-          })
+          .set({ stripeCheckoutSessionId: session.id })
           .where(eq(manufacturerPaymentSteps.id, step.id));
 
         res.json({ url: session.url });
       } catch (e) {
+        // Roll the claim back so the operator (or another payer) can retry
+        // immediately instead of the step being stranded in "processing".
+        await db
+          .update(manufacturerPaymentSteps)
+          .set({ status: "unpaid", lastError: "Could not start the bank payment." })
+          .where(eq(manufacturerPaymentSteps.id, step.id));
         console.error(
           `[shopify-plus] checkout create failed for step ${step.id}:`,
           (e as Error)?.message ?? e,
