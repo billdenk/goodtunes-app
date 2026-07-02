@@ -25,7 +25,15 @@ ShopifyPlusPanel the Pay BUTTON gates on a `canPay` prop = `canManagePayouts`
 `edit_metadata`). Gating only the tab is NOT enough — a `manage_payouts`-only
 partner would then see a read-only ledger with no Pay button. Any new
 payer-facing surface should reuse `canManagePayouts`, not re-derive from role.
-Server pay route still gates independently (don't trust the client).
+
+**Server enforces two INDEPENDENT tiers (don't trust the client):** paying a
+step requires `manage_payouts`; mutating the ledger STRUCTURE — what's owed
+(quotes + staged step amounts) — requires `edit_metadata`. A payer-only partner
+must be able to pay but must NEVER be able to change owed amounts. The pay route
+reads the amount from the DB step row, never the request body. So the read routes
++ the pay route gate on `manage_payouts`, but every structure-mutation route
+gates on `edit_metadata` — a common mistake is gating the whole ledger module on
+one verb, which either strands payers or lets them rewrite what they owe.
 
 # ACH manufacturing pay endpoint — single-flight atomic claim
 

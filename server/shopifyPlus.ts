@@ -311,6 +311,43 @@ export function registerShopifyPlusRoutes(app: Express) {
     return ctx.userId;
   };
 
+  // Enforce that the caller may EDIT this album's metadata. The ledger
+  // STRUCTURE — quotes and staged step amounts — is operator territory:
+  // it's hand-keyed against the manufacturer's real quote, so mutating it
+  // must require `edit_metadata`, NOT `manage_payouts`. A payer-only
+  // partner (manage_payouts but not edit_metadata) can pay a step but must
+  // not be able to alter what's owed. Mirrors getAlbumEditAccess.canEdit,
+  // including the post-sale lock (inert for shopify_plus, which has no
+  // GoodTunes sale to lock on, but kept for correctness/consistency).
+  const gateEditMetadata = async (
+    req: Request,
+    res: Response,
+    albumId: string,
+  ): Promise<string | null> => {
+    const ctx = await resolveAdmin(req, res);
+    if (!ctx) return null;
+    const scope = await resolveAlbumScope(albumId);
+    if (!scope) {
+      res.status(404).json({ message: "Album not found" });
+      return null;
+    }
+    if (scope.scope) {
+      const err = await checkPartnerVerbForScope(
+        ctx.userId,
+        "edit_metadata",
+        scope.scope,
+        { req, albumIdForLock: albumId },
+      );
+      if (err) {
+        res.status(err.status).json(err.body);
+        return null;
+      }
+    }
+    // Unscoped album → no partner owner; Bearer admin check above already
+    // confirmed operator access.
+    return ctx.userId;
+  };
+
   // GET the whole ledger for an album: resolved manufacturer, quotes,
   // steps, and rolled-up totals.
   app.get(
@@ -419,7 +456,7 @@ export function registerShopifyPlusRoutes(app: Express) {
     "/api/admin/albums/:albumId/manufacturing-ledger/quotes/upload-url",
     async (req, res) => {
       const albumId = String(req.params.albumId);
-      const userId = await gatePayouts(req, res, albumId);
+      const userId = await gateEditMetadata(req, res, albumId);
       if (!userId) return;
 
       const crypto = await import("crypto");
@@ -465,7 +502,7 @@ export function registerShopifyPlusRoutes(app: Express) {
     "/api/admin/albums/:albumId/manufacturing-ledger/quotes",
     async (req, res) => {
       const albumId = String(req.params.albumId);
-      const userId = await gatePayouts(req, res, albumId);
+      const userId = await gateEditMetadata(req, res, albumId);
       if (!userId) return;
 
       const schema = z.object({
@@ -504,7 +541,7 @@ export function registerShopifyPlusRoutes(app: Express) {
     async (req, res) => {
       const albumId = String(req.params.albumId);
       const quoteId = String(req.params.quoteId);
-      const userId = await gatePayouts(req, res, albumId);
+      const userId = await gateEditMetadata(req, res, albumId);
       if (!userId) return;
       const [row] = await db
         .select()
@@ -525,7 +562,7 @@ export function registerShopifyPlusRoutes(app: Express) {
     "/api/admin/albums/:albumId/manufacturing-ledger/steps",
     async (req, res) => {
       const albumId = String(req.params.albumId);
-      const userId = await gatePayouts(req, res, albumId);
+      const userId = await gateEditMetadata(req, res, albumId);
       if (!userId) return;
 
       const schema = z.object({
@@ -561,7 +598,7 @@ export function registerShopifyPlusRoutes(app: Express) {
     async (req, res) => {
       const albumId = String(req.params.albumId);
       const stepId = String(req.params.stepId);
-      const userId = await gatePayouts(req, res, albumId);
+      const userId = await gateEditMetadata(req, res, albumId);
       if (!userId) return;
 
       const [step] = await db
@@ -615,7 +652,7 @@ export function registerShopifyPlusRoutes(app: Express) {
     async (req, res) => {
       const albumId = String(req.params.albumId);
       const stepId = String(req.params.stepId);
-      const userId = await gatePayouts(req, res, albumId);
+      const userId = await gateEditMetadata(req, res, albumId);
       if (!userId) return;
       const [step] = await db
         .select()
