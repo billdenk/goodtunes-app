@@ -364,6 +364,13 @@ export function PressPanel({
     press: { name: string | null } | null;
     // Task #1837 — effective plant from saved SKUs when no invited-by-press stamp.
     effectivePress?: { id: string; name: string } | null;
+    // Origin of the resolved plant: "invited" = invitedByPressId explicitly set
+    // on the artist/label; "artist_default" / "label_default" = homed via
+    // default_press_id; "sku_derived" = derived from this album's vinyl SKUs.
+    effectivePressSource?: "invited" | "artist_default" | "label_default" | "sku_derived" | null;
+    // Scope (artist or label) for the "change plant" deep-link.
+    scopeKind?: "artist" | "label" | null;
+    scopeId?: string | null;
     // Task #2115 — the invited press's uploaded print templates, offered
     // here as operator-facing downloads in the Physical tab.
     templates?: PressTemplate[];
@@ -390,6 +397,17 @@ export function PressPanel({
     [resolvedPressName],
   );
   const vendorId: VendorId = defaultVendor;
+
+  // Derive the plant origin category for the "Pressing plant" section's
+  // description + link. "explicit" = set on the artist/label via invitedByPressId
+  // or default_press_id. "sku_derived" = unambiguously derived from this album's
+  // vinyl SKUs (no artist/label plant set). "default" = nothing points anywhere.
+  const pressOrigin: "explicit" | "sku_derived" | "default" = useMemo(() => {
+    const src = invitedPress?.effectivePressSource;
+    if (src === "invited" || src === "artist_default" || src === "label_default") return "explicit";
+    if (src === "sku_derived") return "sku_derived";
+    return "default";
+  }, [invitedPress]);
 
   const [vinylSize, setVinylSize] = useState<'7"' | '10"' | '12"'>('12"');
   const [rpm, setRpm] = useState<33 | 45>(33);
@@ -712,18 +730,67 @@ export function PressPanel({
         <div className="mb-10" data-testid="section-press-vendor-picker">
           <h2 className="text-base font-semibold text-slate-900 mb-1">Pressing plant</h2>
           <p className="text-xs text-slate-500 mb-4">
-            Drives preflight checks, the art uploader, and the print-ready PDF generator
-            below. Set on the artist&rsquo;s page — changes here automatically.
+            Drives preflight checks, the art uploader, and the print-ready PDF generator below.{" "}
+            {pressOrigin === "explicit" ? (
+              <>
+                Set on the {invitedPress?.scopeKind === "label" ? "label" : "artist"}&rsquo;s page.
+                {invitedPress?.scopeKind && invitedPress.scopeId && !pressMode && (
+                  <>
+                    {" "}
+                    <a
+                      href={`/admin/${invitedPress.scopeKind === "label" ? "labels" : "people"}/${invitedPress.scopeId}`}
+                      className="text-[color:var(--brand-blue)] hover:underline"
+                      data-testid="link-change-press-on-entity"
+                    >
+                      Change on the {invitedPress.scopeKind === "label" ? "label" : "artist"}&rsquo;s page &rarr;
+                    </a>
+                  </>
+                )}
+              </>
+            ) : pressOrigin === "sku_derived" ? (
+              <>
+                No plant is assigned to the{" "}
+                {invitedPress?.scopeKind === "label" ? "label" : "artist"} — resolving from this album&rsquo;s vinyl pricing.
+                {invitedPress?.scopeId && !pressMode && (
+                  <>
+                    {" "}
+                    <a
+                      href={`/admin/${invitedPress?.scopeKind === "label" ? "labels" : "people"}/${invitedPress.scopeId}`}
+                      className="text-[color:var(--brand-blue)] hover:underline"
+                      data-testid="link-assign-press-on-entity"
+                    >
+                      Assign a plant on the {invitedPress?.scopeKind === "label" ? "label" : "artist"}&rsquo;s page &rarr;
+                    </a>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                No plant assigned — using platform defaults.
+                {invitedPress?.scopeId && !pressMode && (
+                  <>
+                    {" "}
+                    <a
+                      href={`/admin/${invitedPress?.scopeKind === "label" ? "labels" : "people"}/${invitedPress.scopeId}`}
+                      className="text-[color:var(--brand-blue)] hover:underline"
+                      data-testid="link-assign-press-on-entity-default"
+                    >
+                      Assign a plant on the {invitedPress?.scopeKind === "label" ? "label" : "artist"}&rsquo;s page &rarr;
+                    </a>
+                  </>
+                )}
+              </>
+            )}
           </p>
           <div className="rounded-md border border-slate-200 bg-white p-4 flex items-center gap-3">
             <span className="text-sm font-medium text-slate-900" data-testid="press-vendor-label">
               {resolvedPressName ?? VENDOR_SPECS[vendorId]?.label ?? vendorId}
             </span>
-            <span className="text-xs text-slate-400">
-              {invitedPress?.press?.name
-                ? "artist's plant"
-                : invitedPress?.effectivePress?.name
-                  ? "chosen plant"
+            <span className="text-xs text-slate-400" data-testid="badge-press-origin">
+              {pressOrigin === "explicit"
+                ? (invitedPress?.scopeKind === "label" ? "label's plant" : "artist's plant")
+                : pressOrigin === "sku_derived"
+                  ? "from vinyl pricing"
                   : "platform default"}
             </span>
             {isGenericVendor(vendorId) && resolvedPressName && (

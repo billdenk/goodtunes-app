@@ -106,6 +106,15 @@ export function InvitedByPressPanel({
       toast({ title: "Couldn't update", description: e?.message, variant: "destructive" }),
   });
 
+  // When no explicit plant is set, check whether this entity's album SKUs
+  // unambiguously resolve to one press — if so, surface a reconciliation note
+  // so "No plant set" doesn't silently contradict the album Press panel.
+  const { data: skuSummary } = useQuery<{ skuDerivedPressName: string | null }>({
+    queryKey: [`/api/admin/${kind}/${id}/sku-press-summary`],
+    enabled: isSuperAdmin && !currentPressId,
+  });
+  const skuDerivedPressName = currentPressId ? null : (skuSummary?.skuDerivedPressName ?? null);
+
   // Non-super-admins only see the read-only line when a press is set;
   // hide entirely otherwise to keep the partner-side surface clean.
   if (!isSuperAdmin && !current) return null;
@@ -160,9 +169,18 @@ export function InvitedByPressPanel({
           </div>
         </div>
       ) : (
-        <p className="text-[12.5px] text-slate-500" data-testid="text-no-invited-press">
-          No plant set. Pricing and the Physical tab will use platform defaults.
-        </p>
+        <div>
+          <p className="text-[12.5px] text-slate-500" data-testid="text-no-invited-press">
+            {skuDerivedPressName
+              ? "No plant explicitly set — releases resolve via vinyl pricing (see note below)."
+              : "No plant set. Pricing and the Physical tab will use platform defaults."}
+          </p>
+          {skuDerivedPressName && (
+            <p className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5" data-testid="note-sku-derived-press">
+              Releases currently resolve to <span className="font-semibold">{skuDerivedPressName}</span> via their vinyl pricing — set a plant above to make this explicit.
+            </p>
+          )}
+        </div>
       )}
       {isSuperAdmin && (
         <div className="mt-4 pt-3 border-t border-slate-100" data-testid="row-press-mode">

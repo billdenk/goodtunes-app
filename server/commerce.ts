@@ -1579,6 +1579,12 @@ export function registerCommerceRoutes(app: Express) {
       // homed to a press but with no saved SKU still show the press placeholder
       // in the Package designer jacket thumb and VinylPreview.
       let effectivePress: { id: string; name: string; domain: string | null; logoUrl: string | null; vinylPlaceholderUrl: string | null } | null = null;
+      // Track where the effective press came from so the album Press panel
+      // can surface an accurate origin label rather than the misleading
+      // "Set on the artist's page" note.
+      let effectivePressSource: "artist_default" | "label_default" | "sku_derived" | null = null;
+      let effectiveScopeKind: "artist" | "label" | null = null;
+      let effectiveScopeId: string | null = null;
       try {
         const albumId = String(req.params.id);
         let resolvedPressId: string | null = null;
@@ -1587,14 +1593,24 @@ export function registerCommerceRoutes(app: Express) {
         if (!resolvedPressId && album.primaryArtistId) {
           const person = await storage.getPersonById(album.primaryArtistId);
           const dp = (person as any)?.defaultPressId ?? null;
-          if (dp) resolvedPressId = String(dp);
+          if (dp) {
+            resolvedPressId = String(dp);
+            effectivePressSource = "artist_default";
+            effectiveScopeKind = "artist";
+            effectiveScopeId = album.primaryArtistId;
+          }
         }
 
         // Step 2: label default_press_id
         if (!resolvedPressId && album.labelId) {
           const label = await storage.getLabelById(album.labelId);
           const dp = (label as any)?.defaultPressId ?? null;
-          if (dp) resolvedPressId = String(dp);
+          if (dp) {
+            resolvedPressId = String(dp);
+            effectivePressSource = "label_default";
+            effectiveScopeKind = "label";
+            effectiveScopeId = album.labelId;
+          }
         }
 
         // Step 3: derive from saved SKUs, but ONLY when they unambiguously
@@ -1619,6 +1635,15 @@ export function registerCommerceRoutes(app: Express) {
           ];
           if (distinctSkuPresses.length === 1) {
             resolvedPressId = distinctSkuPresses[0];
+            effectivePressSource = "sku_derived";
+            // Link target for "Assign plant" CTA: prefer artist, fall back to label.
+            if (album.primaryArtistId) {
+              effectiveScopeKind = "artist";
+              effectiveScopeId = album.primaryArtistId;
+            } else if (album.labelId) {
+              effectiveScopeKind = "label";
+              effectiveScopeId = album.labelId;
+            }
           }
         }
 
@@ -1629,6 +1654,17 @@ export function registerCommerceRoutes(app: Express) {
           }
         }
       } catch {}
+      // Even when no plant resolved, supply a scopeKind/scopeId so the
+      // Press tab can deep-link to the entity's plant assignment control.
+      if (!effectiveScopeKind) {
+        if (album.primaryArtistId) {
+          effectiveScopeKind = "artist";
+          effectiveScopeId = album.primaryArtistId;
+        } else if (album.labelId) {
+          effectiveScopeKind = "label";
+          effectiveScopeId = album.labelId;
+        }
+      }
       return res.json({
         press: null,
         hasShippedFirst: false,
@@ -1639,6 +1675,9 @@ export function registerCommerceRoutes(app: Express) {
         demo: demoKind,
         skuPressCatalogs,
         effectivePress,
+        effectivePressSource,
+        scopeKind: effectiveScopeKind,
+        scopeId: effectiveScopeId,
       });
     }
 
@@ -1722,6 +1761,7 @@ export function registerCommerceRoutes(app: Express) {
         // when unset) so the client renders consistently.
         brokerDiscountPct: Number((press as any).brokerDiscountPct ?? 0),
       },
+      effectivePressSource: "invited" as const,
       hasShippedFirst,
       scopeKind,
       scopeId,
@@ -1764,6 +1804,51 @@ export function registerCommerceRoutes(app: Express) {
         })),
     });
   });
+  // Sku-press summary for InvitedByPressPanel: when no explicit plant is
+  // assigned to an artist/label, these routes tell the panel whether any of
+  // the entity's album SKUs unambiguously resolve to one press (so the "No
+  // plant set" note can clarify the situation rather than flatly contradict
+  // what the album Press panel shows).
+  app.get("/api/admin/people/:id/sku-press-summary", requireAdmin, async (req, res) => {
+    try {
+      const personId = String(req.params.id);
+      const rows = await db.execute(sql`
+        SELECT DISTINCT s.press_id
+        FROM album_skus s
+        JOIN albums a ON a.id = s.album_id
+        WHERE a.primary_artist_id = ${personId}
+          AND a.deleted_at IS NULL
+          AND s.press_id IS NOT NULL
+      `);
+      const pressIds = [...new Set(((rows as any).rows ?? []).map((r: any) => String(r.press_id)))];
+      if (pressIds.length !== 1) return res.json({ skuDerivedPressName: null });
+      const press = await storage.getManufacturerById(pressIds[0]);
+      return res.json({ skuDerivedPressName: press?.name ?? null });
+    } catch {
+      return res.json({ skuDerivedPressName: null });
+    }
+  });
+
+  app.get("/api/admin/labels/:id/sku-press-summary", requireAdmin, async (req, res) => {
+    try {
+      const labelId = String(req.params.id);
+      const rows = await db.execute(sql`
+        SELECT DISTINCT s.press_id
+        FROM album_skus s
+        JOIN albums a ON a.id = s.album_id
+        WHERE a.label_id = ${labelId}
+          AND a.deleted_at IS NULL
+          AND s.press_id IS NOT NULL
+      `);
+      const pressIds = [...new Set(((rows as any).rows ?? []).map((r: any) => String(r.press_id)))];
+      if (pressIds.length !== 1) return res.json({ skuDerivedPressName: null });
+      const press = await storage.getManufacturerById(pressIds[0]);
+      return res.json({ skuDerivedPressName: press?.name ?? null });
+    } catch {
+      return res.json({ skuDerivedPressName: null });
+    }
+  });
+
   app.delete("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {
     await db
       .delete(albumSkus)
