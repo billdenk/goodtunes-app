@@ -263,3 +263,15 @@ id = "VUqxF6CRxsnaanTUWJg-_"
 uri = "file://attached_assets/GoodDeed-Hope-2_1781912691192.pdf"
 type = "pdf"
 title = "GoodDeed — Hope (Nightbirde)"
+
+[[outputs]]
+id = "sXdByM6RAgbpjkRoORsG_"
+uri = "file://.local/tasks/why-presses-chose-us-slide.md"
+type = "text"
+title = "Why Presses Chose Us — Slide Copy"
+
+[[outputs]]
+id = "hY405MpiGazHy9pqWQaR4"
+uri = "file://.local/tasks/investor-what-we-built.md"
+type = "text"
+title = "GoodTunes — What We've Built (Investor Summary)"
