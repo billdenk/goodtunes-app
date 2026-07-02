@@ -11,8 +11,7 @@ import { useState } from "react";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { z } from "zod";
-import { Loader2, Music2, Search, X, Check, ChevronRight } from "lucide-react";
-import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
+import { Loader2, Music2, Search, X, Check } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,40 +34,33 @@ interface SpotifyCandidate {
   genres: string[];
 }
 
-// ─── Spotify artist search via the existing admin endpoint ────────────────────
-// Uses the same Spotify search the admin uses for people; public endpoint
-// for simple artist search.
-async function searchSpotifyArtists(query: string): Promise<SpotifyCandidate[]> {
-  if (!query.trim()) return [];
+// ─── Spotify artist search via the public endpoint ────────────────────────────
+type SpotifySearchResult =
+  | { ok: true; candidates: SpotifyCandidate[] }
+  | { ok: false };
+
+async function searchSpotifyArtists(query: string): Promise<SpotifySearchResult> {
+  if (!query.trim()) return { ok: true, candidates: [] };
   try {
     const r = await fetch(
-      `/api/admin/spotify/artists?q=${encodeURIComponent(query)}&limit=6`,
-      { credentials: "include" },
+      `/api/public/referral/spotify/artist-search?q=${encodeURIComponent(query)}`,
     );
-    if (!r.ok) return [];
+    if (!r.ok) return { ok: false };
     const data = await r.json();
-    return (Array.isArray(data) ? data : data.artists ?? []).slice(0, 6).map((a: any) => ({
-      id: a.id ?? a.spotifyId ?? "",
-      name: a.name ?? "",
-      imageUrl: a.imageUrl ?? a.photoUrl ?? null,
-      followers: a.followers ?? null,
-      spotifyUrl: a.externalUrl ?? a.spotifyUrl ?? null,
-      genres: a.genres ?? [],
-    }));
+    const candidates = Array.isArray(data) ? data : data.candidates ?? [];
+    return {
+      ok: true,
+      candidates: candidates.slice(0, 6).map((a: any) => ({
+        id: a.id ?? "",
+        name: a.name ?? "",
+        imageUrl: a.photoUrl ?? a.imageUrl ?? null,
+        followers: a.followers ?? null,
+        spotifyUrl: a.spotifyUrl ?? null,
+        genres: a.genres ?? [],
+      })),
+    };
   } catch {
-    return [];
-  }
-}
-
-// ─── Helper: referrer kind → human label ─────────────────────────────────────
-function referrerKindLabel(kind: string): string {
-  switch (kind) {
-    case "artist": return "an artist";
-    case "non_profit": return "a non-profit";
-    case "manufacturer": return "a pressing plant";
-    case "label": return "a record label";
-    case "ambassador": return "an ambassador";
-    default: return "GoodTunes";
+    return { ok: false };
   }
 }
 
@@ -77,6 +69,15 @@ const formSchema = z.object({
   applicantName: z.string().min(1, "Enter your name").max(200),
   applicantEmail: z.string().email("Enter a valid email"),
 });
+
+// ─── Shared page shell ────────────────────────────────────────────────────────
+function PageShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-start px-4 py-12">
+      {children}
+    </div>
+  );
+}
 
 // ─── Submitted state ──────────────────────────────────────────────────────────
 function SubmittedState({
@@ -87,25 +88,22 @@ function SubmittedState({
   existing: boolean;
 }) {
   return (
-    <div className="min-h-screen bg-[var(--brand-bg)] flex flex-col items-center justify-center px-4">
+    <PageShell>
       <div className="w-full max-w-sm text-center space-y-5">
-        <div
-          className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border"
-          style={{ background: "rgba(74,255,202,0.12)", borderColor: "rgba(74,255,202,0.28)" }}
-        >
-          <Check className="w-8 h-8 text-[var(--brand-mint)]" />
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 ring-1 ring-emerald-200">
+          <Check className="w-8 h-8 text-emerald-600" />
         </div>
-        <h1 className="text-2xl font-bold text-white leading-snug">
+        <h1 className="text-2xl font-bold text-slate-900 leading-snug">
           {existing ? "Already received!" : "We got it!"}
         </h1>
-        <p className="text-[#8fa6c2] text-base leading-relaxed">
+        <p className="text-slate-500 text-base leading-relaxed">
           {existing
             ? "It looks like we already have your application — we'll be in touch soon."
             : `Thanks for applying. ${referrerName} referred you, and the GoodTunes team will review your application and send you a confirmation email shortly.`}
         </p>
-        <img src={gtLogo} alt="GoodTunes" className="w-28 mx-auto opacity-60 mt-4" />
+        <img src="/goodtunes-logo-color.png" alt="GoodTunes" className="w-28 mx-auto mt-4 opacity-70" />
       </div>
-    </div>
+    </PageShell>
   );
 }
 
@@ -124,6 +122,7 @@ export default function JoinReferralLink() {
   const [spotifyLoading, setSpotifyLoading] = useState(false);
   const [selectedArtist, setSelectedArtist] = useState<SpotifyCandidate | null>(null);
   const [spotifySearched, setSpotifySearched] = useState(false);
+  const [spotifyFetchError, setSpotifyFetchError] = useState(false);
 
   // Submitted
   const [submitted, setSubmitted] = useState(false);
@@ -171,8 +170,13 @@ export default function JoinReferralLink() {
     setSpotifyLoading(true);
     setSpotifyResults([]);
     setSpotifySearched(true);
-    const results = await searchSpotifyArtists(spotifyQuery);
-    setSpotifyResults(results);
+    setSpotifyFetchError(false);
+    const result = await searchSpotifyArtists(spotifyQuery);
+    if (result.ok) {
+      setSpotifyResults(result.candidates);
+    } else {
+      setSpotifyFetchError(true);
+    }
     setSpotifyLoading(false);
   }
 
@@ -214,28 +218,34 @@ export default function JoinReferralLink() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[var(--brand-bg)] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-fan-faint animate-spin" />
-      </div>
+      <PageShell>
+        <div className="flex items-center justify-center mt-32">
+          <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
+        </div>
+      </PageShell>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-[var(--brand-bg)] flex flex-col items-center justify-center px-4 text-center">
-        <Music2 className="w-10 h-10 text-fan-faint mb-4" />
-        <h1 className="text-xl font-bold text-white mb-2">
-          {(error as Error)?.message?.includes("no longer active")
-            ? "This referral link is no longer active"
-            : "Invalid referral link"}
-        </h1>
-        <p className="text-[#8fa6c2] text-sm">
-          {(error as Error)?.message?.includes("no longer active")
-            ? "The person who shared this link has deactivated it."
-            : "This link may have expired or been removed. Ask the person who sent it to share a fresh one."}
-        </p>
-        <img src={gtLogo} alt="GoodTunes" className="w-24 mx-auto mt-8 opacity-50" />
-      </div>
+      <PageShell>
+        <div className="w-full max-w-sm text-center space-y-3 mt-16">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 ring-1 ring-slate-200">
+            <Music2 className="w-7 h-7 text-slate-400" />
+          </div>
+          <h1 className="text-xl font-bold text-slate-900">
+            {(error as Error)?.message?.includes("no longer active")
+              ? "This referral link is no longer active"
+              : "Invalid referral link"}
+          </h1>
+          <p className="text-slate-500 text-sm">
+            {(error as Error)?.message?.includes("no longer active")
+              ? "The person who shared this link has deactivated it."
+              : "This link may have expired or been removed. Ask the person who sent it to share a fresh one."}
+          </p>
+          <img src="/goodtunes-logo-color.png" alt="GoodTunes" className="w-24 mx-auto mt-8 opacity-60" />
+        </div>
+      </PageShell>
     );
   }
 
@@ -244,11 +254,11 @@ export default function JoinReferralLink() {
   const referrerOrg = data.branding.orgName;
 
   return (
-    <div className="min-h-screen bg-[var(--brand-bg)] flex flex-col items-center justify-start px-4 py-12">
+    <PageShell>
       <div className="w-full max-w-sm space-y-6">
         {/* Logo */}
         <div className="text-center">
-          <img src={gtLogo} alt="GoodTunes" className="w-32 mx-auto mb-6" />
+          <img src="/goodtunes-logo-color.png" alt="GoodTunes" className="w-32 mx-auto mb-6" />
         </div>
 
         {/* Referrer hero */}
@@ -257,209 +267,209 @@ export default function JoinReferralLink() {
             <img
               src={referrerPhoto}
               alt={referrerName}
-              className="w-16 h-16 rounded-full object-cover bg-white/10 border border-white/20"
+              className="w-16 h-16 rounded-full object-cover bg-slate-100 ring-1 ring-slate-200"
             />
           ) : (
-            <div
-              className="w-16 h-16 rounded-full border flex items-center justify-center"
-              style={{ background: "rgba(49,158,216,0.15)", borderColor: "rgba(49,158,216,0.25)" }}
-            >
-              <Music2 className="w-7 h-7 text-[var(--brand-blue)]" />
+            <div className="w-16 h-16 rounded-full bg-blue-50 ring-1 ring-blue-200 flex items-center justify-center">
+              <Music2 className="w-7 h-7 text-blue-500" />
             </div>
           )}
           <div>
-            <h1 className="text-2xl font-bold text-white leading-snug">
+            <h1 className="text-2xl font-bold text-slate-900 leading-snug">
               {referrerOrg
                 ? `${referrerOrg} invited you to GoodTunes`
                 : `${referrerName} invited you to GoodTunes`}
             </h1>
-            <p className="text-[#8fa6c2] text-sm mt-1">
-              You've been referred by {referrerKindLabel(data.referrerKind)} to join the platform as an artist.
-              Fill in your info below — we'll review your application and send you an invite link.
-            </p>
           </div>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Name */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide text-[#8fa6c2] mb-1">
-              Your name
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Full name or artist name"
-              className={[
-                "w-full rounded-xl border px-4 py-3 bg-white/5 text-white placeholder-white/30",
-                "focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] text-sm",
-                errors.name ? "border-rose-500" : "border-white/10 focus:border-[var(--brand-blue)]",
-              ].join(" ")}
-              data-testid="input-applicant-name"
-            />
-            {errors.name && (
-              <p className="text-xs text-rose-400 mt-1" data-testid="error-name">{errors.name}</p>
-            )}
-          </div>
+        {/* Form card */}
+        <div className="bg-white ring-1 ring-slate-200 rounded-xl p-5 shadow-sm">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Name */}
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+                Your name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Full name or artist name"
+                className={[
+                  "gt-admin-autofill w-full rounded-md border px-3 py-2.5 bg-white text-slate-900",
+                  "placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm",
+                  errors.name ? "border-rose-400 focus:ring-rose-400" : "border-slate-200",
+                ].join(" ")}
+                data-testid="input-applicant-name"
+              />
+              {errors.name && (
+                <p className="text-xs text-rose-500 mt-1" data-testid="error-name">{errors.name}</p>
+              )}
+            </div>
 
-          {/* Email */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide text-[#8fa6c2] mb-1">
-              Email address
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className={[
-                "w-full rounded-xl border px-4 py-3 bg-white/5 text-white placeholder-white/30",
-                "focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] text-sm",
-                errors.email ? "border-rose-500" : "border-white/10 focus:border-[var(--brand-blue)]",
-              ].join(" ")}
-              data-testid="input-applicant-email"
-            />
-            {errors.email && (
-              <p className="text-xs text-rose-400 mt-1" data-testid="error-email">{errors.email}</p>
-            )}
-          </div>
+            {/* Email */}
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+                Email address
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className={[
+                  "gt-admin-autofill w-full rounded-md border px-3 py-2.5 bg-white text-slate-900",
+                  "placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm",
+                  errors.email ? "border-rose-400 focus:ring-rose-400" : "border-slate-200",
+                ].join(" ")}
+                data-testid="input-applicant-email"
+              />
+              {errors.email && (
+                <p className="text-xs text-rose-500 mt-1" data-testid="error-email">{errors.email}</p>
+              )}
+            </div>
 
-          {/* Spotify self-identification (optional) */}
-          <div className="pt-1">
-            <label className="block text-xs font-semibold uppercase tracking-wide text-[#8fa6c2] mb-1">
-              Your Spotify artist profile{" "}
-              <span className="normal-case font-normal text-fan-faint">(optional)</span>
-            </label>
+            {/* Spotify self-identification (optional) */}
+            <div className="pt-1">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+                Your Spotify artist profile{" "}
+                <span className="normal-case font-normal text-slate-400">(optional)</span>
+              </label>
 
-            {selectedArtist ? (
-              <div
-                className="flex items-center gap-3 rounded-xl border px-3 py-2.5"
-                style={{ borderColor: "rgba(74,255,202,0.28)", background: "rgba(74,255,202,0.05)" }}
-                data-testid="selected-spotify-artist"
-              >
-                {selectedArtist.imageUrl ? (
-                  <img src={selectedArtist.imageUrl} alt="" className="w-11 h-11 rounded-full object-cover flex-shrink-0" />
-                ) : (
-                  <div className="w-11 h-11 rounded-full bg-white/10 flex-shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-white truncate">{selectedArtist.name}</div>
-                  {selectedArtist.followers != null && (
-                    <div className="text-xs text-fan-secondary">
-                      {selectedArtist.followers.toLocaleString()} followers
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedArtist(null);
-                    setSpotifyResults([]);
-                    setSpotifySearched(false);
-                    setSpotifyQuery("");
-                  }}
-                  className="text-fan-faint hover:text-white transition-colors"
-                  data-testid="button-clear-spotify"
+              {selectedArtist ? (
+                <div
+                  className="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5"
+                  data-testid="selected-spotify-artist"
                 >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={spotifyQuery}
-                    onChange={(e) => setSpotifyQuery(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSpotifySearch(); } }}
-                    placeholder="Search by artist name…"
-                    className="flex-1 rounded-xl border border-white/10 px-4 py-2.5 bg-white/5 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] text-sm"
-                    data-testid="input-spotify-search"
-                  />
+                  {selectedArtist.imageUrl ? (
+                    <img src={selectedArtist.imageUrl} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0 ring-1 ring-slate-200" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-slate-100 flex-shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-slate-900 truncate">{selectedArtist.name}</div>
+                    {selectedArtist.followers != null && (
+                      <div className="text-xs text-slate-500">
+                        {selectedArtist.followers.toLocaleString()} followers
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="button"
-                    onClick={handleSpotifySearch}
-                    disabled={!spotifyQuery.trim() || spotifyLoading}
-                    style={{ background: "var(--brand-blue-soft)", borderColor: "rgba(49,158,216,0.2)", color: "var(--brand-blue)" }}
-                    className="rounded-xl border px-3 py-2.5 disabled:opacity-40 transition-colors hover:opacity-80"
-                    data-testid="button-spotify-search"
+                    onClick={() => {
+                      setSelectedArtist(null);
+                      setSpotifyResults([]);
+                      setSpotifySearched(false);
+                      setSpotifyFetchError(false);
+                      setSpotifyQuery("");
+                    }}
+                    className="text-slate-400 hover:text-slate-600 transition-colors"
+                    data-testid="button-clear-spotify"
                   >
-                    {spotifyLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Search className="w-4 h-4" />
-                    )}
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={spotifyQuery}
+                      onChange={(e) => setSpotifyQuery(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSpotifySearch(); } }}
+                      placeholder="Search by artist name…"
+                      className="gt-admin-autofill flex-1 rounded-md border border-slate-200 px-3 py-2.5 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      data-testid="input-spotify-search"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSpotifySearch}
+                      disabled={!spotifyQuery.trim() || spotifyLoading}
+                      className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-500 hover:bg-slate-100 disabled:opacity-40 transition-colors"
+                      data-testid="button-spotify-search"
+                    >
+                      {spotifyLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Search className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
 
-                {spotifyResults.length > 0 && (
-                  <ul className="rounded-xl border border-white/10 bg-[#040a24] divide-y divide-white/5 overflow-hidden"
-                    data-testid="list-spotify-results">
-                    {spotifyResults.map((a) => (
-                      <li key={a.id}>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedArtist(a)}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 transition-colors text-left"
-                          data-testid={`option-spotify-${a.id}`}
-                        >
-                          {a.imageUrl ? (
-                            <img src={a.imageUrl} alt="" className="w-11 h-11 rounded-full object-cover flex-shrink-0" />
-                          ) : (
-                            <div className="w-11 h-11 rounded-full bg-white/10 flex-shrink-0" />
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm font-medium text-white truncate">{a.name}</div>
-                            {a.followers != null && (
-                              <div className="text-xs text-fan-faint">{a.followers.toLocaleString()} followers</div>
+                  {spotifyResults.length > 0 && (
+                    <ul
+                      className="rounded-md border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden shadow-sm"
+                      data-testid="list-spotify-results"
+                    >
+                      {spotifyResults.map((a) => (
+                        <li key={a.id}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedArtist(a)}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                            data-testid={`option-spotify-${a.id}`}
+                          >
+                            {a.imageUrl ? (
+                              <img src={a.imageUrl} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0 ring-1 ring-slate-200" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-slate-100 flex-shrink-0" />
                             )}
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-fan-faint flex-shrink-0" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-medium text-slate-900 truncate">{a.name}</div>
+                              {a.followers != null && (
+                                <div className="text-xs text-slate-500">{a.followers.toLocaleString()} followers</div>
+                              )}
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
 
-                {spotifySearched && !spotifyLoading && spotifyResults.length === 0 && (
-                  <p className="text-xs text-fan-faint px-1" data-testid="text-spotify-no-results">
-                    No results — you can skip this and just submit your email.
-                  </p>
-                )}
-              </div>
+                  {spotifySearched && !spotifyLoading && spotifyFetchError && (
+                    <p className="text-xs text-slate-400 px-1" data-testid="text-spotify-error">
+                      Artist search unavailable — you can skip this and just submit your email.
+                    </p>
+                  )}
+                  {spotifySearched && !spotifyLoading && !spotifyFetchError && spotifyResults.length === 0 && (
+                    <p className="text-xs text-slate-400 px-1" data-testid="text-spotify-no-results">
+                      No results — you can skip this and just submit your email.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Submit error */}
+            {submitMutation.isError && (
+              <p className="text-sm text-rose-500" data-testid="error-submit">
+                {(submitMutation.error as Error)?.message ?? "Something went wrong. Try again."}
+              </p>
             )}
-          </div>
 
-          {/* Submit */}
-          {submitMutation.isError && (
-            <p className="text-sm text-rose-400" data-testid="error-submit">
-              {(submitMutation.error as Error)?.message ?? "Something went wrong. Try again."}
+            <button
+              type="submit"
+              disabled={submitMutation.isPending || !name.trim() || !email.trim()}
+              className="w-full rounded-md bg-[var(--brand-blue)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity px-4 py-2.5 text-sm font-semibold text-white"
+              data-testid="button-submit-application"
+            >
+              {submitMutation.isPending ? (
+                <span className="inline-flex items-center gap-2 justify-center">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Submitting…
+                </span>
+              ) : (
+                "Apply to join GoodTunes"
+              )}
+            </button>
+
+            <p className="text-xs text-center text-slate-400 leading-relaxed">
+              By applying you agree to GoodTunes' terms of service and privacy policy. Your application
+              will be reviewed — you won't have access until you receive your invite email.
             </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={submitMutation.isPending || !name.trim() || !email.trim()}
-            className="w-full rounded-xl bg-[var(--brand-blue)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity px-4 py-3.5 text-sm font-semibold text-white"
-            data-testid="button-submit-application"
-          >
-            {submitMutation.isPending ? (
-              <span className="inline-flex items-center gap-2 justify-center">
-                <Loader2 className="w-4 h-4 animate-spin" /> Submitting…
-              </span>
-            ) : (
-              "Apply to join GoodTunes"
-            )}
-          </button>
-
-          <p className="text-xs text-center text-fan-faint leading-relaxed">
-            By applying you agree to GoodTunes' terms of service and privacy policy. Your application
-            will be reviewed — you won't have access until you receive your invite email.
-          </p>
-        </form>
+          </form>
+        </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

@@ -11,6 +11,7 @@
 //   PATCH /api/referral-links/:kind/:scopeId          — active toggle
 //   GET  /api/public/referral/:code                   — public landing info
 //   POST /api/public/referral/:code/apply             — submit application
+//   GET  /api/public/referral/spotify/artist-search   — public Spotify search (no auth)
 //   GET  /api/admin/artist-applications               — operator review queue
 //   POST /api/admin/artist-applications/:id/approve
 //   POST /api/admin/artist-applications/:id/reject
@@ -20,6 +21,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db";
 import { randomBytes } from "crypto";
 import { z } from "zod";
+import { searchArtistCandidatesDetailed, spotifyConfigured } from "./lib/spotify";
 
 const REFERRAL_KINDS = ["artist", "non_profit", "manufacturer", "label", "ambassador"] as const;
 type ReferralKind = (typeof REFERRAL_KINDS)[number];
@@ -239,6 +241,24 @@ export function registerReferralLinkRoutes(
     }
     const branding = await resolveReferrerBranding(link.referrerKind, link.referrerScopeId);
     return res.json({ code, referrerKind: link.referrerKind, branding });
+  });
+
+  // ─── GET /api/public/referral/spotify/artist-search ─────────────────
+  // No auth. Public Spotify artist search for the /join/:code landing page.
+  // Reuses the same helper as the admin artist-search route but skips
+  // the requireAdmin guard so applicants can self-identify without an account.
+  // Rate-limited only by Spotify's own token budget; no applicant PII is stored.
+  app.get("/api/public/referral/spotify/artist-search", async (req, res) => {
+    if (!spotifyConfigured()) {
+      return res.status(503).json({ message: "Spotify is not configured." });
+    }
+    const q = String(req.query.q ?? "").trim();
+    if (!q) return res.json({ query: "", candidates: [] });
+    const result = await searchArtistCandidatesDetailed(q, 6, { withReleases: false });
+    if (!result.ok) {
+      return res.status(502).json({ message: "Spotify lookup failed.", reason: result.reason });
+    }
+    return res.json({ query: q, candidates: result.candidates });
   });
 
   // ─── POST /api/public/referral/:code/apply ───────────────────────────
