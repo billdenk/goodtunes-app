@@ -8527,3 +8527,82 @@ SQL
 }
 add_artist_identity_verification_columns dev  "${DATABASE_URL:-}"
 add_artist_identity_verification_columns prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #2428 — GoodTunes Shopify+ album toggles ────────────────────
+# Additive album-level on/off toggles for the third distribution mode
+# (sellMode = "shopify_plus"). Signed-GoodDeed default ON (the value-add);
+# fulfillment default OFF (we dropship the finished run unless the operator
+# turns on per-order partner fulfillment). Idempotent; safe on both DBs.
+add_shopify_plus_album_toggles() {
+  local label="$1" db_url="$2"
+  [ -z "$db_url" ] && { echo "post-merge: skip task-2428 shopify+ toggles ($label — no URL)"; return; }
+  local out
+  if out=$(psql "$db_url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1); then
+BEGIN;
+ALTER TABLE albums
+  ADD COLUMN IF NOT EXISTS shopify_plus_signed_gooddeed boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS shopify_plus_fulfillment     boolean NOT NULL DEFAULT false;
+COMMIT;
+SQL
+    echo "post-merge: task-2428 shopify+ toggles ok on $label"
+  else
+    echo "post-merge: WARNING — task-2428 shopify+ toggles failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+add_shopify_plus_album_toggles dev  "${DATABASE_URL:-}"
+add_shopify_plus_album_toggles prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #2428 — GoodTunes Shopify+ manufacturer payment ledger ──────
+# Two additive tables backing the prepaid-manufacturing ledger on a
+# shopify_plus album's Payments tab. Declared in shared/schema.ts; the
+# schema-drift guard fails if they're missing, so create them on both
+# DBs. Idempotent (CREATE TABLE / INDEX IF NOT EXISTS).
+migrate_shopify_plus_ledger() {
+  local label="$1" db_url="$2"
+  [ -z "$db_url" ] && { echo "post-merge: skip task-2428 shopify+ ledger ($label — no URL)"; return; }
+  local out
+  if out=$(psql "$db_url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1); then
+BEGIN;
+CREATE TABLE IF NOT EXISTS album_manufacturer_quotes (
+  id                  varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id            varchar NOT NULL,
+  file_url            text    NOT NULL,
+  file_name           text,
+  notes               text,
+  uploaded_by_user_id varchar,
+  created_at          timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS album_manufacturer_quotes_album_idx
+  ON album_manufacturer_quotes (album_id);
+CREATE TABLE IF NOT EXISTS manufacturer_payment_steps (
+  id                         varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id                   varchar NOT NULL,
+  manufacturer_id            varchar,
+  description                text    NOT NULL,
+  amount_cents               integer NOT NULL,
+  margin_cents               integer NOT NULL DEFAULT 0,
+  sort_order                 integer NOT NULL DEFAULT 0,
+  status                     text    NOT NULL DEFAULT 'unpaid',
+  stripe_checkout_session_id text,
+  stripe_payment_intent_id   text,
+  earmark_id                 varchar,
+  paid_at                    timestamp,
+  paid_by_user_id            varchar,
+  last_error                 text,
+  created_at                 timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS manufacturer_payment_steps_album_idx
+  ON manufacturer_payment_steps (album_id);
+CREATE INDEX IF NOT EXISTS manufacturer_payment_steps_session_idx
+  ON manufacturer_payment_steps (stripe_checkout_session_id);
+COMMIT;
+SQL
+    echo "post-merge: task-2428 shopify+ ledger ok on $label"
+  else
+    echo "post-merge: WARNING — task-2428 shopify+ ledger failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+migrate_shopify_plus_ledger dev  "${DATABASE_URL:-}"
+migrate_shopify_plus_ledger prod "${PROD_DATABASE_URL:-}"

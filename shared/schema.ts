@@ -440,6 +440,15 @@ export const albums = pgTable("albums", {
   sellMode: text("sell_mode"),
   physicalFormat: text("physical_format"),
   sellQuoteLockedAt: timestamp("sell_quote_locked_at"),
+  // Task #2428 — GoodTunes Shopify+ album-level toggles. Only meaningful
+  // when sellMode = "shopify_plus". `shopifyPlusSignedGooddeed` = the
+  // customer wants the printed+signed GoodDeed program run for this
+  // release (default on — it's the GoodTunes value-add). `shopifyPlusFulfillment`
+  // = GoodTunes fulfills finished goods per-order through the assigned
+  // `fulfillmentPartnerId`; when off (default) we dropship the finished
+  // run to the customer and they fulfill from Shopify themselves.
+  shopifyPlusSignedGooddeed: boolean("shopify_plus_signed_gooddeed").notNull().default(true),
+  shopifyPlusFulfillment: boolean("shopify_plus_fulfillment").notNull().default(false),
   // Task #429 — Anticipated track count used to drive the Sell-panel
   // Publishing estimate (`N × $0.254`) BEFORE any masters have been
   // uploaded. NULL means "fall back to the live song count" — the
@@ -549,7 +558,13 @@ export const albums = pgTable("albums", {
     .where(sql`${t.primaryArtistId} IS NOT NULL AND ${t.shareSlug} IS NOT NULL AND ${t.deletedAt} IS NULL`),
 }));
 
-export const ALBUM_SELL_MODES = ["direct", "shopify"] as const;
+// Task #2428 — "shopify_plus" (GoodTunes Shopify+) is a third mode: the
+// customer sells on their own Shopify (like `shopify`) BUT gets the full
+// Direct production pipeline (upload, preflight, print PDFs, press
+// routing, GoodDeed, fulfillment). Manufacturing is prepaid by the
+// customer via a staged ACH ledger (see manufacturer_payment_steps).
+// There is no GoodTunes fan checkout / fan-sale pool for these albums.
+export const ALBUM_SELL_MODES = ["direct", "shopify", "shopify_plus"] as const;
 export type AlbumSellMode = (typeof ALBUM_SELL_MODES)[number];
 export const ALBUM_PHYSICAL_FORMATS = [
   "single_lp",
@@ -3906,6 +3921,12 @@ export const PAYOUT_EARMARK_SOURCE_KINDS = [
   // pressing run, minted from track_publishing_splits at the statutory
   // rate × units pressed. sourceRef = `${albumId}:${payeeKey}`.
   "publishing_mechanical",
+  // Task #2428 — GoodTunes Shopify+ prepaid manufacturing. When the
+  // customer's ACH bank-debit for a manufacturer_payment_steps row
+  // settles into the platform balance, we mint a held earmark owed to
+  // the manufacturer (ownerKind "manufacturer"). Bill releases it to
+  // transfer the run's cost to the plant. sourceRef = the step id.
+  "shopify_plus_step",
 ] as const;
 export type PayoutEarmarkSourceKind = (typeof PAYOUT_EARMARK_SOURCE_KINDS)[number];
 export const PAYOUT_EARMARK_STATUSES = [
@@ -3957,6 +3978,106 @@ export const payoutEarmarks = pgTable(
 
 export type PayoutEarmark = typeof payoutEarmarks.$inferSelect;
 export type InsertPayoutEarmark = typeof payoutEarmarks.$inferInsert;
+
+// ─── Task #2428 — GoodTunes Shopify+ manufacturer payment ledger ────────
+// A Shopify+ album runs the full Direct production pipeline but the
+// customer prepays the manufacturer via a staged ACH ledger (no fan
+// checkout / fan-sale pool). Two tables:
+//   album_manufacturer_quotes  — the manufacturer's quote PDF(s), kept
+//                                for records (many per album).
+//   manufacturer_payment_steps — an open-ended series of hand-keyed
+//                                steps (test-pressing/setup, vinyl run,
+//                                overage & freight, fulfillment, GoodDeed
+//                                legs), each paid via a us_bank_account
+//                                Stripe Checkout that routes to the plant
+//                                through the existing held-earmark rail.
+export const MANUFACTURER_PAYMENT_STEP_STATUSES = [
+  "unpaid",
+  "processing",
+  "paid",
+  "failed",
+] as const;
+export type ManufacturerPaymentStepStatus =
+  (typeof MANUFACTURER_PAYMENT_STEP_STATUSES)[number];
+
+export const albumManufacturerQuotes = pgTable(
+  "album_manufacturer_quotes",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    albumId: varchar("album_id").notNull(),
+    // Canonical `/objects/manufacturer-quotes/<id>.pdf` path (or an
+    // https:// link the operator pasted). Served through the same
+    // /objects proxy + ACL as press invoices.
+    fileUrl: text("file_url").notNull(),
+    fileName: text("file_name"),
+    notes: text("notes"),
+    uploadedByUserId: varchar("uploaded_by_user_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    albumIdx: index("album_manufacturer_quotes_album_idx").on(t.albumId),
+  }),
+);
+export type AlbumManufacturerQuote = typeof albumManufacturerQuotes.$inferSelect;
+export const insertAlbumManufacturerQuoteSchema = createInsertSchema(
+  albumManufacturerQuotes,
+).omit({ id: true, createdAt: true });
+export type InsertAlbumManufacturerQuote = z.infer<
+  typeof insertAlbumManufacturerQuoteSchema
+>;
+
+export const manufacturerPaymentSteps = pgTable(
+  "manufacturer_payment_steps",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    albumId: varchar("album_id").notNull(),
+    // The plant this step pays. Snapshotted at pay time from the album's
+    // resolved press so the earmark owner stays stable if the album is
+    // later re-homed. Nullable until the first pay attempt.
+    manufacturerId: varchar("manufacturer_id"),
+    description: text("description").notNull(),
+    // Amount owed to the manufacturer for this step (cents). This is the
+    // amount the earmark transfers to the plant.
+    amountCents: integer("amount_cents").notNull(),
+    // Optional GoodTunes handling/margin line (cents). Default 0 =
+    // pass-through. Charged to the customer on top of amountCents; stays
+    // in the platform balance (never earmarked to the plant).
+    marginCents: integer("margin_cents").notNull().default(0),
+    sortOrder: integer("sort_order").notNull().default(0),
+    status: text("status").notNull().default("unpaid"),
+    stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    // The held payout_earmarks row minted when the ACH debit settles.
+    earmarkId: varchar("earmark_id"),
+    paidAt: timestamp("paid_at"),
+    paidByUserId: varchar("paid_by_user_id"),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    albumIdx: index("manufacturer_payment_steps_album_idx").on(t.albumId),
+    sessionIdx: index("manufacturer_payment_steps_session_idx").on(
+      t.stripeCheckoutSessionId,
+    ),
+  }),
+);
+export type ManufacturerPaymentStep = typeof manufacturerPaymentSteps.$inferSelect;
+export const insertManufacturerPaymentStepSchema = createInsertSchema(
+  manufacturerPaymentSteps,
+).omit({
+  id: true,
+  createdAt: true,
+  status: true,
+  stripeCheckoutSessionId: true,
+  stripePaymentIntentId: true,
+  earmarkId: true,
+  paidAt: true,
+  paidByUserId: true,
+  lastError: true,
+});
+export type InsertManufacturerPaymentStep = z.infer<
+  typeof insertManufacturerPaymentStepSchema
+>;
 
 export type EmailVerification = typeof emailVerifications.$inferSelect;
 

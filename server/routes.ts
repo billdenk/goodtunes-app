@@ -9011,6 +9011,11 @@ export async function registerRoutes(
       // routing config (which warehouse ships this album), not fan-facing
       // metadata, so it stays editable after first sale like vendor pricing.
       "fulfillmentPartnerId",
+      // Task #2428 — GoodTunes Shopify+ album toggles (signed-GoodDeed
+      // on/off, GoodTunes-fulfills on/off). Operational manufacturing
+      // config, editable after first sale like the routing override above.
+      "shopifyPlusSignedGooddeed",
+      "shopifyPlusFulfillment",
     ]);
     const bodyKeys = Object.keys(req.body ?? {}).filter((k) => k !== "__note");
     const operationalOnly =
@@ -9173,6 +9178,16 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Unknown physicalFormat" });
       }
       updates.physicalFormat = v;
+    }
+    // Task #2428 — GoodTunes Shopify+ album toggles. Plain booleans;
+    // operational manufacturing config (bypasses the post-sale lock via
+    // OPERATIONAL_FIELDS above). Only meaningful when sellMode="shopify_plus"
+    // but we accept them regardless so the mode can be flipped in any order.
+    if (req.body?.shopifyPlusSignedGooddeed !== undefined) {
+      updates.shopifyPlusSignedGooddeed = !!req.body.shopifyPlusSignedGooddeed;
+    }
+    if (req.body?.shopifyPlusFulfillment !== undefined) {
+      updates.shopifyPlusFulfillment = !!req.body.shopifyPlusFulfillment;
     }
     // Task #541 — vinyl press format. Validated against the shared
     // lookup so the UI and the route agree on the keyspace; null
@@ -23668,6 +23683,10 @@ export async function registerRoutes(
   registerReferralPayoutRoutes(app);
   const { registerPayoutEarmarkRoutes } = await import("./payoutEarmarks");
   registerPayoutEarmarkRoutes(app);
+
+  // Task #2428 — GoodTunes Shopify+ prepaid-manufacturing payment ledger.
+  const { registerShopifyPlusRoutes } = await import("./shopifyPlus");
+  registerShopifyPlusRoutes(app);
 
   // ─── Task #80 — Partner reporting v1 ───────────────────────────
   const { registerReportRoutes } = await import("./reports/routes");

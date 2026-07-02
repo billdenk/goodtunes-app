@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { ArrowLeft, Check, ShoppingBag, Store } from "lucide-react";
+import { ArrowLeft, Check, PackagePlus, ShoppingBag, Store } from "lucide-react";
 import {
   ALBUM_PHYSICAL_FORMATS,
   ALBUM_PHYSICAL_FORMAT_LABEL,
@@ -30,11 +30,16 @@ const ALBUM_PHYSICAL_FORMAT_BLURB: Record<AlbumPhysicalFormat, string> = {
  *     fulfills the physical product themselves. We only sell the
  *     digital album + optional GoodDeed addon. No press path; the
  *     Shopify tab handles the per-album product mapping.
+ *   - **Shopify+** (Task #2428) — the customer sells on their own
+ *     Shopify BUT gets the full Direct production pipeline (press,
+ *     GoodDeed, optional fulfillment), prepaid via a staged ACH
+ *     ledger. Uses the Direct-style Physical tabs, not the plain
+ *     Shopify mapping tab, and never sells on the GoodTunes fan surface.
  *
- * Stage 2 (Direct only): pick the PHYSICAL FORMAT up-front so the
+ * Stage 2 (Direct + Shopify+): pick the PHYSICAL FORMAT up-front so the
  * Sell-tab quote flow can scope the Hellbender catalog (colors, color
- * tiers, vinyl preview) to just that format. Shopify mode skips this
- * step — the label picks SKUs in Shopify, not here.
+ * tiers, vinyl preview) to just that format. Plain Shopify mode skips
+ * this step — the label picks SKUs in Shopify, not here.
  *
  * Returns `{ sellMode, physicalFormat | null }` to the opener, which
  * writes it back to the album via PUT /api/admin/albums/:id. The
@@ -123,7 +128,7 @@ export function NewAlbumModeDialog({
                 changes — nothing here is permanent until the run is at press.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <ModeCard
                 icon={<Store className="w-5 h-5" />}
                 title="GoodTunes Direct"
@@ -144,11 +149,23 @@ export function NewAlbumModeDialog({
                   onSubmit({ sellMode: "shopify", physicalFormat: null });
                 }}
               />
+              <ModeCard
+                icon={<PackagePlus className="w-5 h-5" />}
+                title="GoodTunes Shopify+"
+                blurb="They sell on Shopify. We press, run GoodDeed & (optionally) fulfill — prepaid."
+                testId="card-mode-shopify-plus"
+                onPick={() => {
+                  // Shopify+ uses the Direct production pipeline, which is
+                  // scoped by physical format — go to the format stage.
+                  setPickedMode("shopify_plus");
+                  setStage("format");
+                }}
+              />
             </div>
           </>
         )}
 
-        {stage === "format" && pickedMode === "direct" && (
+        {stage === "format" && (pickedMode === "direct" || pickedMode === "shopify_plus") && (
           <>
             <DialogHeader className="text-left space-y-1">
               <div className="flex items-center gap-2">
@@ -179,7 +196,7 @@ export function NewAlbumModeDialog({
                     key={f}
                     f={f}
                     busy={busy}
-                    onPick={() => onSubmit({ sellMode: "direct", physicalFormat: f })}
+                    onPick={() => onSubmit({ sellMode: pickedMode ?? "direct", physicalFormat: f })}
                   />
                 ))}
               </div>
@@ -189,7 +206,7 @@ export function NewAlbumModeDialog({
                     key={f}
                     f={f}
                     busy={busy}
-                    onPick={() => onSubmit({ sellMode: "direct", physicalFormat: f })}
+                    onPick={() => onSubmit({ sellMode: pickedMode ?? "direct", physicalFormat: f })}
                   />
                 ))}
               </div>

@@ -120,6 +120,7 @@ import { PlayerDock } from "@/components/ui/PlayerDock";
 import { SellPanel } from "@/components/admin/SellPanel";
 import { PressPanel } from "@/components/admin/PressPanel";
 import { ShopifyPanel } from "@/components/admin/ShopifyPanel";
+import { ShopifyPlusPanel } from "@/components/admin/ShopifyPlusPanel";
 import { AlbumCustomersPanel } from "@/components/admin/AlbumCustomersPanel";
 import { AlbumWaitlistPanel } from "@/components/admin/AlbumWaitlistPanel";
 import { NewMusicAnnouncePanel } from "@/components/admin/NewMusicAnnouncePanel";
@@ -237,7 +238,13 @@ interface AlbumFull {
   // picks. `sellQuoteLockedAt` non-null = the operator hit "Lock in
   // quote" on the Sell tab and the rest of the album tabs (Press,
   // Shopify, Bonus) unlock.
-  sellMode?: "direct" | "shopify" | null;
+  sellMode?: "direct" | "shopify" | "shopify_plus" | null;
+  // Task #2428 — GoodTunes Shopify+ manufacturing toggles. Only meaningful
+  // when sellMode="shopify_plus". Signed-GoodDeed defaults ON (the value-add);
+  // GoodTunes-fulfills defaults OFF (the customer dropships the finished run
+  // unless we turn on per-order fulfillment, routed via fulfillmentPartnerId).
+  shopifyPlusSignedGooddeed?: boolean | null;
+  shopifyPlusFulfillment?: boolean | null;
   physicalFormat?: AlbumPhysicalFormat | null;
   sellQuoteLockedAt?: string | null;
   // Task #541 — Vinyl cut format (12_33_single / 12_33_double / 12_45 /
@@ -321,7 +328,7 @@ type AirPlayAudioElement = HTMLAudioElement & {
   webkitShowPlaybackTargetPicker?: () => void;
 };
 
-type Tab = "dashboard" | "overview" | "tracks" | "sell" | "press" | "shopify" | "customers" | "waitlist";
+type Tab = "dashboard" | "overview" | "tracks" | "sell" | "press" | "shopify" | "payments" | "customers" | "waitlist";
 
 // Task #2005 — deep-link target from the Albums "Needs attention" audit. Each
 // per-dimension cell appends `?section=…`; masters/lyrics/credits (and tracks)
@@ -391,11 +398,18 @@ export function visibleTabsFor(
           { key: "customers" as Tab, label: "Customers" },
           { key: "waitlist" as Tab, label: "Early access" },
         ];
-  if (album.sellMode === "direct") {
+  // Task #2428 — GoodTunes Shopify+ reuses the Direct production pipeline, so
+  // it shows the same Physical (press + master preflight) tab plus a prepaid
+  // manufacturing "Payments" ledger. It NEVER shows the plain Shopify
+  // product-mapping tab — the customer maps SKUs on their own store, and we
+  // don't sell it on the GoodTunes fan surface.
+  if (album.sellMode === "direct" || album.sellMode === "shopify_plus") {
     // Artist and label partners don't manage manufacturing, so the Physical
     // tab (pressing plant + master preflight) is hidden for them for now.
     if (opts?.hidePress) return base;
-    return withCustomers([...base, { key: "press", label: "Physical" }]);
+    const extra: { key: Tab; label: string }[] = [{ key: "press", label: "Physical" }];
+    if (album.sellMode === "shopify_plus") extra.push({ key: "payments", label: "Payments" });
+    return withCustomers([...base, ...extra]);
   }
   if (album.sellMode === "shopify") {
     return withCustomers([...base, { key: "shopify", label: "Shopify" }]);
@@ -982,7 +996,7 @@ export function AdminAlbum() {
   // Lock/Unlock CTA at the bottom of the direct Sell panel.
   const updateAlbumMode = useMutation({
     mutationFn: async (patch: {
-      sellMode?: "direct" | "shopify";
+      sellMode?: "direct" | "shopify" | "shopify_plus";
       physicalFormat?: string | null;
       sellQuoteLockedAt?: boolean | null;
       anticipatedTrackCount?: number | null;
@@ -1610,6 +1624,15 @@ export function AdminAlbum() {
                     if (t === "overview") setArtworkEditorOpen(true);
                     else setTab(t as Tab);
                   }}
+                />
+              )}
+              {safeTab === "payments" && allowed.has("payments") && (
+                <ShopifyPlusPanel
+                  albumId={album.id}
+                  signedGooddeed={album.shopifyPlusSignedGooddeed ?? true}
+                  fulfillment={album.shopifyPlusFulfillment ?? false}
+                  fulfillmentPartnerId={album.fulfillmentPartnerId ?? null}
+                  canEdit={!modeChangeBlocked}
                 />
               )}
               {safeTab === "customers" && allowed.has("customers") && (

@@ -162,11 +162,25 @@ export async function resolveAlbumPressTier(
 // number of copies the order bought (per-copy fan-out happens elsewhere;
 // the earmark scales linearly with units). Safe to call for every paid
 // order — it no-ops when the album has no resolvable press tier.
+// Task #2428 — GoodTunes Shopify+ albums are manufactured via a prepaid
+// ACH ledger (manufacturer_payment_steps), NOT the Direct fan-sale pool.
+// Unlike plain `shopify` albums they DO have a real press order-of-record
+// so `resolveAlbumPressTier` would resolve a tier and wrongly accrue a
+// Shopify+ sale into the Direct funding pool. Guard the pool entry points
+// explicitly on sell_mode so that never happens.
+async function isShopifyPlusAlbum(albumId: string): Promise<boolean> {
+  const r = await db.execute<any>(sql`
+    SELECT sell_mode FROM albums WHERE id = ${albumId} LIMIT 1
+  `);
+  return ((r as any).rows ?? [])[0]?.sell_mode === "shopify_plus";
+}
+
 export async function accruePressPool(
   albumId: string,
   orderId: string,
   quantity: number,
 ): Promise<{ accruedCents: number } | null> {
+  if (await isShopifyPlusAlbum(albumId)) return null;
   const tier = await resolveAlbumPressTier(albumId);
   if (!tier) return null;
   const qty = Math.max(1, Math.floor(quantity) || 1);
@@ -327,6 +341,7 @@ export async function evaluateEarlyCut(albumId: string): Promise<EarlyCutEligibi
 // album isn't eligible. Returns true when a pending row exists after the
 // call.
 export async function syncEarlyCutQueue(albumId: string): Promise<boolean> {
+  if (await isShopifyPlusAlbum(albumId)) return false;
   const e = await evaluateEarlyCut(albumId);
   if (!e.eligible || !e.tier) return false;
   await db.execute(sql`

@@ -372,6 +372,107 @@ async function findOrCreateStubCustomer(email: string, name: string | null): Pro
   return row.id;
 }
 
+// Task #2428 — GoodTunes Shopify+ fulfillment-only ingest. The customer
+// sells on their own Shopify and GoodTunes runs the production/fulfillment
+// pipeline only. This mints NO GoodTunes sale: no GoodDeed number, unlock,
+// redemption code, cert reservation, or press-pool accrual. The order carries
+// a distinct status ("fulfillment_only") + origin ("shopify_plus:<store>") so
+// it is auto-excluded from every sales/revenue/payout read (those all filter
+// on status "paid"/"shipped") and can never trigger an artist/label payout
+// (the ship button that transfers funds requires status="paid"). Fulfillment
+// still runs off `fulfillmentStatus` (Order Desk push + status webhook +
+// shipping email), independent of `status`.
+async function materializeShopifyPlusFulfillmentOnly(args: {
+  store: ShopifyStore;
+  payload: ShopifyOrder;
+  album: typeof albums.$inferSelect;
+  matchedLine: ShopifyLineItem;
+  buyerEmail: string;
+  shopifyOrderId: string;
+}): Promise<void> {
+  const { store, payload, album, matchedLine, buyerEmail, shopifyOrderId } = args;
+
+  // Fulfillment OFF → we dropship the finished run to the customer in one
+  // shipment; there is nothing to route per consumer order.
+  if (!album.shopifyPlusFulfillment) {
+    console.log(
+      `[shopify-webhook] shopify_plus album ${album.id} has fulfillment OFF (dropship) — ignoring order ${shopifyOrderId}`,
+    );
+    return;
+  }
+
+  const { classifySkuKind, isPhysicalSkuKind, pushOrderToOrderDesk } = await import("./orderDesk");
+  const skuKind = classifySkuKind(
+    matchedLine.variant_id ? `shopify:${matchedLine.variant_id}` : `shopify:${matchedLine.product_id}`,
+  );
+  // Only a physical line needs a warehouse — a digital-only Shopify+ line has
+  // nothing to ship.
+  if (!isPhysicalSkuKind(skuKind)) {
+    console.log(
+      `[shopify-webhook] shopify_plus order ${shopifyOrderId} line is non-physical (${skuKind}) — nothing to fulfill`,
+    );
+    return;
+  }
+
+  const buyerName =
+    [payload.customer?.first_name, payload.customer?.last_name].filter(Boolean).join(" ") || null;
+  const customerId = await findOrCreateStubCustomer(buyerEmail, buyerName);
+
+  const [order] = await db
+    .insert(orders)
+    .values({
+      customerId,
+      albumId: album.id,
+      totalCents: dollarsToCents(payload.total_price),
+      currency: (payload.currency ?? "usd").toLowerCase(),
+      status: "fulfillment_only",
+      shippingAddress: snapshotAddress(payload.shipping_address) as any,
+      billingAddress: snapshotAddress(payload.billing_address) as any,
+      buyerEmail,
+      buyerName,
+      buyerPhone: payload.customer?.phone ?? null,
+      goodDeedNumber: null,
+      origin: `shopify_plus:${store.id}`,
+      shopifyStoreId: store.id,
+      shopifyOrderId,
+      shopifyOrderToken: payload.token ?? null,
+      skuKind,
+      artistSnapshotId: album.primaryArtistId ?? null,
+      labelSnapshotId: album.labelId ?? null,
+      fulfillmentPartnerId: album.fulfillmentPartnerId ?? null,
+      fulfillmentStatus: "pending",
+    })
+    .onConflictDoNothing({ target: orders.shopifyOrderId })
+    .returning();
+
+  // Lost the race with a concurrent webhook replay — the winner already
+  // routed it.
+  if (!order) return;
+
+  await db.insert(orderItems).values([
+    {
+      orderId: order.id,
+      kind: "format",
+      sku: matchedLine.variant_id
+        ? `shopify:${matchedLine.variant_id}`
+        : `shopify:${matchedLine.product_id}`,
+      label: matchedLine.title,
+      unitPriceCents: dollarsToCents(matchedLine.price),
+      quantity: matchedLine.quantity,
+    },
+  ]);
+
+  // Route the finished goods to the assigned fulfillment partner. Unlike the
+  // GoodTunes direct/shopify flow (which aggregates a press run before handing
+  // off, hence the ORDERDESK_AUTO_PUSH gate), a Shopify+ order is a real
+  // consumer sale that ships now — so we route each order as it lands.
+  // pushOrderToOrderDesk is internally try/caught and records any error on the
+  // order row for the admin retry button.
+  await pushOrderToOrderDesk(order.id).catch((e) =>
+    console.error(`[shopify] shopify_plus OD handoff threw for ${order.id}`, (e as Error)?.message),
+  );
+}
+
 // The heart of the Shopify flow: convert one paid Shopify order into one
 // GoodTunes order + line items + (maybe) album unlock + GoodDeed number
 // + redemption code. Idempotent by shopifyOrderId — a webhook replay
@@ -429,6 +530,26 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
     }
   }
   if (!albumId || !matchedMapping || !matchedLine) return null;
+
+  // Task #2428 — GoodTunes Shopify+ albums sell on the customer's OWN
+  // Shopify; GoodTunes is NOT the seller. We never mint a GoodTunes sale,
+  // digital unlock, redemption code, GoodDeed number, cert reservation, or
+  // press-pool accrual for these. When the album's fulfillment toggle is ON
+  // we ingest the order purely to route the finished goods through the
+  // assigned partner; when OFF we dropship the whole run and ignore
+  // per-order webhooks. Branch BEFORE the sale-mint below.
+  const [spAlbum] = await db.select().from(albums).where(eq(albums.id, albumId));
+  if (spAlbum?.sellMode === "shopify_plus") {
+    await materializeShopifyPlusFulfillmentOnly({
+      store,
+      payload,
+      album: spAlbum,
+      matchedLine,
+      buyerEmail,
+      shopifyOrderId,
+    });
+    return null;
+  }
 
   // Find-or-create the customer + reserve the GoodDeed number now so a
   // fan who never clicks the redeem button still has their slot.

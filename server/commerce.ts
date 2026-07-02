@@ -829,6 +829,27 @@ export function registerCommerceRoutes(app: Express) {
     }
     const album = await storage.getAlbumById(req.params.id, { includeHidden });
     if (!album) return res.status(404).json({ message: "Album not found" });
+    // Task #2428 — GoodTunes Shopify+ albums are sold on the customer's own
+    // Shopify store, never on the GoodTunes fan surface. Return an empty,
+    // non-buyable payload so the fan Buy sheet / album-page CTA never offers
+    // a purchase. The checkout endpoint hard-rejects too (defense in depth).
+    if ((album as any).sellMode === "shopify_plus") {
+      return res.json({
+        albumId: album.id,
+        title: album.title,
+        artist: album.artist,
+        artwork: album.artwork,
+        currency: "usd",
+        sunsetReached: false,
+        buyable: false,
+        skus: [],
+        addons: [],
+        signedCertSoldOut: false,
+        bookletEligible: false,
+        bookletBundlePriceCents: null,
+        customAddons: [],
+      });
+    }
     const [skus, addons] = await Promise.all([
       listActiveSkus(album.id),
       listActiveAddons(album.id),
@@ -914,6 +935,9 @@ export function registerCommerceRoutes(app: Express) {
       artwork: album.artwork,
       currency: "usd",
       sunsetReached,
+      // Task #2428 — direct/shopify albums are buyable on the GoodTunes
+      // fan surface; Shopify+ short-circuits above with buyable:false.
+      buyable: true,
       skus: mappedSkus,
       addons: visibleAddons.map((a) => ({
         id: a.id,
@@ -2342,6 +2366,13 @@ export function registerCommerceRoutes(app: Express) {
         return res.status(403).json({ message: "This release isn't on sale yet." });
       }
     }
+    // Task #2428 — GoodTunes Shopify+ releases never sell on the GoodTunes
+    // fan surface (the customer sells the physical run on their own Shopify).
+    // Hard-reject any charge before we touch SKUs/stock, same as the prepping
+    // gate above, so no fan surface can complete a purchase.
+    if ((album as any).sellMode === "shopify_plus") {
+      return res.status(403).json({ message: "This release isn't sold here." });
+    }
     // Task #1049 — the buy window closes the moment the sunset date arrives
     // (album moves to streaming). Reject before we touch SKUs/stock so no
     // surface that skipped the sold-out buy-options can still check out.
@@ -3154,6 +3185,17 @@ export function registerCommerceRoutes(app: Express) {
     }
 
     try {
+      // Task #2428 — GoodTunes Shopify+ prepaid-manufacturing steps ride
+      // the SAME Stripe webhook but are NOT fan orders. Handle them first
+      // (they mark the payment step processing/paid + mint the plant
+      // earmark) and short-circuit before materializeOrderFromSession so
+      // an ACH step-payment never gets mistaken for a fan checkout.
+      {
+        const { handleShopifyPlusWebhookEvent } = await import("./shopifyPlus");
+        if (await handleShopifyPlusWebhookEvent(event)) {
+          return res.json({ received: true });
+        }
+      }
       switch (event.type) {
         case "checkout.session.completed":
         case "checkout.session.async_payment_succeeded": {

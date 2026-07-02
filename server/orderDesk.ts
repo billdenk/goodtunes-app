@@ -287,6 +287,10 @@ export async function dispatchShippingEmail(
   tracking: { carrier: string | null; trackingNumber: string | null; trackingUrl: string | null },
 ): Promise<void> {
   if (!isPhysicalSkuKind(order.skuKind)) return; // digital — nothing ships
+  // Task #2428 — a Shopify+ order sells on the customer's OWN Shopify, which
+  // sends its own shipping notification. GoodTunes is not the seller, so we
+  // never send a GoodTunes-branded shipping email for these.
+  if (order.origin?.startsWith("shopify_plus:")) return;
 
   // Recipient: prefer the Stripe-collected buyer email, fall back to
   // the customer row's account email (same posture as the receipt).
