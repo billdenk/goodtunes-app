@@ -146,15 +146,16 @@ interface ScopedPersonAlbum {
 }
 
 const STAGE_DEFS: { id: string; label: string }[] = [
-  { id: "invited",            label: "Invited" },
-  { id: "accepted",           label: "Accepted" },
-  { id: "design",             label: "Design" },
-  { id: "sunrise_set",        label: "Sunrise set" },
-  { id: "selling",            label: "Selling" },
-  { id: "masters_triggered",  label: "Masters triggered" },
-  { id: "locked",             label: "Locked" },
-  { id: "in_production",      label: "In production" },
-  { id: "shipped",            label: "Shipped" },
+  { id: "invited",                  label: "Invited" },
+  { id: "accepted",                 label: "Accepted" },
+  { id: "awaiting_pressing_order",  label: "Awaiting pressing order" },
+  { id: "design",                   label: "Design" },
+  { id: "sunrise_set",              label: "Sunrise set" },
+  { id: "selling",                  label: "Selling" },
+  { id: "masters_triggered",        label: "Masters triggered" },
+  { id: "locked",                   label: "Locked" },
+  { id: "in_production",            label: "In production" },
+  { id: "shipped",                  label: "Shipped" },
 ];
 
 export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; isSuperAdminView: boolean }) {
@@ -315,6 +316,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
 }
 
 const STAGE_LABEL: Record<string, string> = {
+  awaiting_pressing_order: "Awaiting pressing order",
   design: "Design",
   sunrise_set: "Sunrise set",
   selling: "Selling",
@@ -341,6 +343,7 @@ interface PressAlbumLite {
   isHidden: boolean;
   goodTunesReleaseDate: string | null;
   streamingReleaseDate: string | null;
+  awaitingPressingOrder?: boolean;
 }
 
 const PRESS_ALBUM_STAGE_TABS: { key: AlbumStage; label: string }[] = [
@@ -421,7 +424,7 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
               data-testid={`card-press-album-${a.id}`}
               className="group rounded-2xl border border-slate-200 bg-white overflow-hidden hover:border-slate-300 hover:shadow-sm transition-all"
             >
-              <div className="aspect-square bg-slate-100 overflow-hidden">
+              <div className="aspect-square bg-slate-100 overflow-hidden relative">
                 {a.artwork ? (
                   <img src={a.artwork} alt={a.title} className="w-full h-full object-cover" />
                 ) : (
@@ -433,6 +436,14 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
               <div className="p-2.5">
                 <div className="text-slate-900 text-xs font-semibold truncate">{a.title}</div>
                 {a.artist && <div className="text-slate-400 text-xs truncate mt-0.5">{a.artist}</div>}
+                {a.awaitingPressingOrder && (
+                  <div
+                    className="mt-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                    data-testid={`badge-awaiting-pressing-${a.id}`}
+                  >
+                    Awaiting pressing order
+                  </div>
+                )}
               </div>
             </Link>
           ))}
@@ -459,6 +470,14 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
                   <div className="min-w-0 flex-1">
                     <div className="text-slate-900 text-sm font-semibold truncate">{a.title}</div>
                     {a.artist && <div className="text-slate-400 text-xs truncate">{a.artist}</div>}
+                    {a.awaitingPressingOrder && (
+                      <div
+                        className="mt-0.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                        data-testid={`badge-awaiting-pressing-${a.id}`}
+                      >
+                        Awaiting pressing order
+                      </div>
+                    )}
                   </div>
                   <ExternalLink className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
                 </Link>
@@ -1617,7 +1636,7 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
   // units-sold-to-date is the live signed-cert count during selling,
   // and locked qty is the press's commitment from Locked on.
   const showSunrise = ["sunrise_set","selling","masters_triggered"].includes(a.stage);
-  const showSold = ["selling","masters_triggered","locked","in_production","shipped"].includes(a.stage);
+  const showSold = ["awaiting_pressing_order","selling","masters_triggered","locked","in_production","shipped"].includes(a.stage);
   const showLockedQty = ["locked","in_production","shipped"].includes(a.stage);
 
   return (

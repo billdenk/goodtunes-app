@@ -38,15 +38,16 @@ import { hasArtistShape } from "./lib/personArtistShape";
 // inline in Selling and avoid re-notifying, but the stage transition is
 // gated on `mastersApprovedByArtistAt`.
 export const PRESS_STAGES = [
-  "invited",           // admin_invites pending (no album yet)
-  "accepted",          // partner exists, no album yet
-  "design",            // album exists, sellQuoteLockedAt is null
-  "sunrise_set",       // quote locked, signed_cert_window_opens_at in future
-  "selling",           // window open (may have threshold crossed, awaiting approval)
-  "masters_triggered", // artist approved early-start cut
-  "locked",            // preorder window closed, no press invoice yet
-  "in_production",     // locked + (invoice uploaded OR billed outside system)
-  "shipped",           // certBatchShippedToFulfillmentAt set
+  "invited",                   // admin_invites pending (no album yet)
+  "accepted",                  // partner exists, no album yet
+  "awaiting_pressing_order",   // album assigned to press (SKU stamp) but no pressing order yet
+  "design",                    // album exists, sellQuoteLockedAt is null
+  "sunrise_set",               // quote locked, signed_cert_window_opens_at in future
+  "selling",                   // window open (may have threshold crossed, awaiting approval)
+  "masters_triggered",         // artist approved early-start cut
+  "locked",                    // preorder window closed, no press invoice yet
+  "in_production",             // locked + (invoice uploaded OR billed outside system)
+  "shipped",                   // certBatchShippedToFulfillmentAt set
 ] as const;
 export type PressStage = (typeof PRESS_STAGES)[number];
 
@@ -237,6 +238,19 @@ export function sqlPressSummaryCounts(pressId: string): SQL {
         JOIN albums a ON a.id = por.album_id AND a.deleted_at IS NULL
         WHERE por.status <> 'cancelled'
           AND por.package_snapshot ->> 'pressId' = ${pressId}
+      ),
+      pre_pressing AS (
+        SELECT DISTINCT sku.album_id AS id
+        FROM album_skus sku
+        JOIN albums a ON a.id = sku.album_id AND a.deleted_at IS NULL
+        WHERE sku.press_id = ${pressId}
+          AND a.is_goodtunes_release = true
+          AND NOT EXISTS (
+            SELECT 1 FROM pressing_order_requests por
+            WHERE por.album_id = a.id
+              AND por.status <> 'cancelled'
+              AND por.package_snapshot ->> 'pressId' = ${pressId}
+          )
       )
       SELECT
         (SELECT COUNT(DISTINCT primary_artist_id) FROM press_albums WHERE primary_artist_id IS NOT NULL)::int
@@ -244,7 +258,7 @@ export function sqlPressSummaryCounts(pressId: string): SQL {
         (SELECT COUNT(*) FROM admin_invites
            WHERE default_press_id = ${pressId}
              AND used_at IS NULL AND revoked_at IS NULL AND expires_at > NOW())::int AS pending_invites,
-        (SELECT COUNT(*) FROM press_albums)::int AS total_albums,
+        ((SELECT COUNT(*) FROM press_albums) + (SELECT COUNT(*) FROM pre_pressing))::int AS total_albums,
         COALESCE((
           SELECT SUM(oi.quantity)
           FROM order_items oi
@@ -871,6 +885,75 @@ export function registerPressPortalRoutes(
         )
       ORDER BY "createdAt" DESC
     `);
+    // Pre-pressing albums: assigned to this press via SKU stamp but no
+    // pressing order yet. These get a synthetic stage "awaiting_pressing_order"
+    // so the Pipeline board can surface them in a leading column.
+    const prePressingRows = await db.execute<any>(sql`
+      SELECT DISTINCT ON (a.id)
+             a.id, a.title, a.artwork AS "coverUrl", a.physical_format AS format,
+             a.primary_artist_id, a.label_id,
+             COALESCE(p.name, l.name) AS owner_name,
+             COALESCE(a.primary_artist_id, a.label_id) AS owner_id,
+             CASE WHEN a.primary_artist_id IS NOT NULL THEN 'artist' ELSE 'label' END AS owner_kind,
+             COALESCE(sold.units_sold, 0) AS units_sold
+      FROM album_skus sku
+      JOIN albums a ON a.id = sku.album_id AND a.deleted_at IS NULL
+      LEFT JOIN people p ON p.id = a.primary_artist_id
+      LEFT JOIN labels l ON l.id = a.label_id
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(SUM(oi.quantity), 0)::int AS units_sold
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        WHERE oi.kind = 'format' AND o.album_id = a.id
+          AND o.status IN ('paid','shipped') AND o.refunded_at IS NULL
+      ) sold ON true
+      WHERE sku.press_id = ${pressId}
+        AND a.is_goodtunes_release = true
+        AND NOT EXISTS (
+          SELECT 1 FROM pressing_order_requests por
+          WHERE por.album_id = a.id
+            AND por.status <> 'cancelled'
+            AND por.package_snapshot ->> 'pressId' = ${pressId}
+        )
+      ORDER BY a.id, a.title
+    `);
+    for (const r of ((prePressingRows as any).rows ?? [])) {
+      albumsList.push({
+        id: r.id,
+        title: r.title,
+        coverUrl: r.coverUrl,
+        format: r.format,
+        ownerName: r.owner_name,
+        ownerId: r.owner_id,
+        ownerKind: r.owner_kind,
+        stage: "awaiting_pressing_order" as PressStage,
+        stageEnteredAt: null,
+        lockedAt: null,
+        sunriseDate: null,
+        windowOpensAt: null,
+        windowClosesAt: null,
+        mastersTriggeredAt: null,
+        mastersApprovedByArtistAt: null,
+        pressInvoiceUrl: null,
+        pressInvoiceTotalCents: null,
+        pressInvoiceUploadedAt: null,
+        pressInvoiceOutsideSystem: false,
+        pressInvoiceTransferId: null,
+        pressInvoiceTransferredAt: null,
+        pressInvoiceTransferAmountCents: null,
+        pressInvoiceTransferError: null,
+        invoiceVarianceCents: null,
+        invoiceVariancePct: null,
+        invoiceVarianceTier: null,
+        shippedAt: null,
+        fulfillmentHeadsUpSentAt: null,
+        fulfillmentHeadsUpQty: null,
+        lastNotifiedAt: null,
+        lockedQuantity: null,
+        lockedTotalCents: null,
+        unitsSoldToDate: r.units_sold ?? 0,
+      });
+    }
     res.json({
       albums: albumsList,
       invited: (invited as any).rows ?? [],
@@ -900,34 +983,63 @@ export function registerPressPortalRoutes(
     )
   `;
 
-  // GET /api/press/:id/albums — GoodTunes releases pressed by this plant,
-  // with lifecycle-stage fields so the client can run albumStage(). Only
-  // albums that have at least one non-cancelled pressing_order_request
-  // scoped to this press are returned. Uses a DISTINCT CTE so an album
-  // with multiple pressing requests (revisions, re-orders) appears once.
-  // Cross-press isolation enforced by requirePressScope.
+  // GET /api/press/:id/albums — GoodTunes releases assigned to this plant.
+  // Includes both:
+  //   (a) albums with a non-cancelled pressing order for this press, and
+  //   (b) albums assigned via SKU stamp (album_skus.press_id) but with no
+  //       pressing order yet — these get awaitingPressingOrder=true so the
+  //       client can badge them.
+  // Uses a DISTINCT CTE so an album with multiple pressing requests appears
+  // once. Cross-press isolation enforced by requirePressScope.
   app.get("/api/press/:id/albums", requireAdmin, requirePressScope, async (req, res) => {
     const pressId = String(req.params.id);
     const rows = await db.execute<any>(sql`
-      WITH scoped_albums AS (
+      WITH scoped_por AS (
         SELECT DISTINCT album_id
           FROM pressing_order_requests
          WHERE status <> 'cancelled'
            AND package_snapshot ->> 'pressId' = ${pressId}
+      ),
+      scoped_sku AS (
+        SELECT DISTINCT sku.album_id
+          FROM album_skus sku
+          JOIN albums a ON a.id = sku.album_id AND a.deleted_at IS NULL
+         WHERE sku.press_id = ${pressId}
+           AND a.is_goodtunes_release = true
+           AND NOT EXISTS (
+             SELECT 1 FROM pressing_order_requests por
+              WHERE por.album_id = a.id
+                AND por.status <> 'cancelled'
+                AND por.package_snapshot ->> 'pressId' = ${pressId}
+           )
       )
       SELECT a.id, a.title, a.artwork,
              a.is_prepping                AS "isPrepping",
              a.is_hidden                  AS "isHidden",
              a.good_tunes_release_date    AS "goodTunesReleaseDate",
              a.streaming_release_date     AS "streamingReleaseDate",
-             COALESCE(p.name, l.name)     AS artist
+             COALESCE(p.name, l.name)     AS artist,
+             false                        AS "awaitingPressingOrder"
         FROM albums a
-        JOIN scoped_albums sa ON sa.album_id = a.id
+        JOIN scoped_por sa ON sa.album_id = a.id
         LEFT JOIN people p ON p.id = a.primary_artist_id
         LEFT JOIN labels l ON l.id = a.label_id
        WHERE a.deleted_at IS NULL
          AND a.is_goodtunes_release = true
-       ORDER BY a.title ASC
+      UNION ALL
+      SELECT a.id, a.title, a.artwork,
+             a.is_prepping                AS "isPrepping",
+             a.is_hidden                  AS "isHidden",
+             a.good_tunes_release_date    AS "goodTunesReleaseDate",
+             a.streaming_release_date     AS "streamingReleaseDate",
+             COALESCE(p.name, l.name)     AS artist,
+             true                         AS "awaitingPressingOrder"
+        FROM albums a
+        JOIN scoped_sku sk ON sk.album_id = a.id
+        LEFT JOIN people p ON p.id = a.primary_artist_id
+        LEFT JOIN labels l ON l.id = a.label_id
+       WHERE a.deleted_at IS NULL
+       ORDER BY title ASC
     `);
     res.json(
       ((rows as any).rows ?? []).map((a: any) => ({
@@ -939,6 +1051,7 @@ export function registerPressPortalRoutes(
         isHidden: Boolean(a.isHidden),
         goodTunesReleaseDate: (a.goodTunesReleaseDate as string | null) ?? null,
         streamingReleaseDate: (a.streamingReleaseDate as string | null) ?? null,
+        awaitingPressingOrder: Boolean(a.awaitingPressingOrder),
       })),
     );
   });
