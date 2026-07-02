@@ -822,7 +822,10 @@ export function NewAlbumArtistDialog({
                         } else if (e.key === "Enter" && localMatches[0] && hasExactLocal) {
                           e.preventDefault();
                           pickLocal(localMatches[0]);
-                        } else if (e.key === "Enter" && trimmed && localMatches.length === 0) {
+                        } else if (e.key === "Enter" && trimmed && localMatches.length === 0 && !hasExactLocal) {
+                          e.preventDefault();
+                          handleSearchStreaming();
+                        } else if (e.key === "Enter" && trimmed && localMatches.length > 0 && !hasExactLocal) {
                           e.preventDefault();
                           handleSearchStreaming();
                         }
@@ -832,7 +835,7 @@ export function NewAlbumArtistDialog({
                       data-testid="input-artist-name"
                     />
                     <p className="text-[11.5px] text-slate-400 mt-1.5 leading-snug">
-                      Type a name to match your catalog, or paste a Spotify / Apple Music link.
+                      Type a name to search your catalog or Spotify, or paste a Spotify / Apple Music link.
                     </p>
                   </div>
 
@@ -960,6 +963,45 @@ export function NewAlbumArtistDialog({
                           Search <span className="font-bold">"{trimmed}"</span> on Spotify
                         </span>
                       </button>
+                    </div>
+                  )}
+
+                  {/* Escape hatch when catalog returns partial/substring matches
+                      but the typed name isn't an exact match — e.g. typing "Cher"
+                      surfaces "Sixpence None The Richer" but that's not what the
+                      operator wants. Show a compact "not who you're looking for?"
+                      row beneath the list so they can always reach Spotify. */}
+                  {trimmed && !isPastedUrl && localMatches.length > 0 && !hasExactLocal && (
+                    <div className="flex items-center justify-between gap-2 pt-0.5 border-t border-slate-100 mt-1">
+                      <p className="text-[11.5px] text-slate-400 leading-snug">
+                        Not who you're looking for?
+                      </p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleManual}
+                          disabled={busy}
+                          className="text-[12.5px] font-medium text-slate-400 hover:text-slate-700 underline-offset-2 hover:underline disabled:opacity-60 whitespace-nowrap"
+                          data-testid="button-enter-manually"
+                        >
+                          {createPersonMut.isPending ? (
+                            <Spinner className="inline w-3 h-3 animate-spin mr-1 -mt-0.5" />
+                          ) : null}
+                          Enter manually
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSearchStreaming}
+                          disabled={busy}
+                          className="h-7 px-2.5 rounded-md bg-[#1DB954] text-black text-[12.5px] font-semibold hover:bg-[#19a449] inline-flex items-center justify-center gap-1 disabled:opacity-60 whitespace-nowrap"
+                          data-testid="button-search-streaming"
+                        >
+                          <SiSpotify className="w-3 h-3 shrink-0" />
+                          <span className="truncate max-w-[160px]">
+                            Search <span className="font-bold">"{trimmed}"</span> on Spotify
+                          </span>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

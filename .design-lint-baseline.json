@@ -9882,6 +9882,16 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
+    "snippet": "className=\"text-[12.5px] font-medium text-slate-400 hover:text-slate-700 underline-offset-2 hover:underline disabled:opacity-60 whitespace-nowrap\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
+    "snippet": "className=\"h-7 px-2.5 rounded-md bg-[#1DB954] text-black text-[12.5px] font-semibold hover:bg-[#19a449] inline-flex items-center justify-center gap-1 disabled:opacity-60 whitespace-nowrap\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
     "snippet": "className=\"text-[11.5px] font-medium text-slate-500 hover:text-slate-900 disabled:opacity-60\""
   },
   {
@@ -15591,11 +15601,6 @@
   },
   {
     "rule": "admin-link-missing-shared-treatment",
-    "file": "client/src/pages/AdminFulfillmentPartner.tsx",
-    "snippet": "<Link href=\"/admin/fulfillment-partners\" className=\"hover:text-slate-700\">"
-  },
-  {
-    "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/pages/AdminFulfillmentPartners.tsx",
     "snippet": "<Link"
   },
@@ -16177,11 +16182,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabel.tsx",
-    "snippet": "<div className=\"flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminLabel.tsx",
     "snippet": "<div className=\"text-slate-400 text-[11px] font-semibold uppercase tracking-wider\">"
   },
   {
@@ -16673,11 +16673,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManagers.tsx",
     "snippet": "className=\"mt-4 inline-flex items-center justify-center h-9 px-3.5 rounded-md text-[12.5px] font-semibold bg-[var(--brand-blue)] text-white hover:bg-[#2789bf] transition-colors\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "<div className=\"flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -17953,11 +17948,6 @@
     "rule": "destructive-without-confirm",
     "file": "client/src/pages/AdminVendor.tsx",
     "snippet": "hover reveals a \"Delete\" label; opens a rose-tinted confirm"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminVendor.tsx",
-    "snippet": "<div className=\"flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -20933,21 +20923,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
     "snippet": "<p className=\"text-[11px] text-slate-400\">Daily activity over the selected window</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "<span className=\"block text-[11px] uppercase tracking-wide text-slate-400\">{c.source}</span>"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "<img src={c.photoUrl} alt=\"\" className=\"w-9 h-9 rounded-full object-cover bg-slate-100 shrink-0\" />"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "<span className=\"w-9 h-9 rounded-full bg-[var(--brand-blue)] text-white text-sm font-semibold inline-flex items-center justify-center shrink-0\">"
   },
   {
     "rule": "hardcoded-font-size",
