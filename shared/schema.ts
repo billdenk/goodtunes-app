@@ -5484,6 +5484,16 @@ export const artistApplications = pgTable("artist_applications", {
   spotifyArtistName: text("spotify_artist_name"),
   spotifyArtistUrl: text("spotify_artist_url"),
   spotifyPhotoUrl: text("spotify_photo_url"),
+  // Ownership proof fields (Task #2422)
+  proofKind: text("proof_kind"),           // "instagram"|"x"|"tiktok"|"domain"
+  proofChannel: text("proof_channel"),      // handle or domain
+  proofStatus: text("proof_status").notNull().default("none"), // "none"|"proven"
+  proofVerifiedAt: timestamp("proof_verified_at"),
+  // Evidence links: [{kind:"website"|"streaming"|"distributor", url:string}]
+  evidenceLinks: jsonb("evidence_links"),
+  // Impersonation guard (Task #2422)
+  impersonationFlag: boolean("impersonation_flag").notNull().default(false),
+  impersonationMatch: text("impersonation_match"),
   status: text("status").notNull().default("pending"), // "pending"|"approved"|"rejected"
   reviewedByUserId: varchar("reviewed_by_user_id"),
   reviewedAt: timestamp("reviewed_at"),
@@ -5493,3 +5503,20 @@ export const artistApplications = pgTable("artist_applications", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 export type ArtistApplication = typeof artistApplications.$inferSelect;
+
+// artist_application_proofs: tracks ownership-proof attempts BEFORE the
+// application is submitted so the join page can verify without creating
+// a duplicate pending application.  One row per (link, email, channel).
+export const artistApplicationProofs = pgTable("artist_application_proofs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  referralLinkId: varchar("referral_link_id").notNull(),
+  applicantEmail: text("applicant_email").notNull(),
+  proofKind: text("proof_kind").notNull(),    // "instagram"|"x"|"tiktok"|"domain"
+  proofChannel: text("proof_channel").notNull(),
+  proofCode: text("proof_code").notNull(),
+  status: text("status").notNull().default("pending"), // "pending"|"proven"|"failed"
+  failureReason: text("failure_reason"),
+  verifiedAt: timestamp("verified_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type ArtistApplicationProof = typeof artistApplicationProofs.$inferSelect;

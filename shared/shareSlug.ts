@@ -108,6 +108,9 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "error",
   // /find-gooddeed — QR-resolver fallback for legacy certs with no cert row
   "find-gooddeed",
+  // Task #2399 — /join/:code (reusable artist referral links).
+  // First segment must be reserved so an artist share slug can never shadow it.
+  "join",
 ]);
 
 export const SHARE_SLUG_MIN = 2;

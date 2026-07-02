@@ -8480,3 +8480,50 @@ SQL
 }
 create_referral_link_tables dev  "${DATABASE_URL:-}"
 create_referral_link_tables prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #2422 — Artist identity verification: proof + evidence + impersonation ─
+# Adds proof/evidence/impersonation columns to artist_applications,
+# and creates the artist_application_proofs pre-submit proof table.
+# Idempotent: ADD COLUMN IF NOT EXISTS / CREATE TABLE IF NOT EXISTS.
+add_artist_identity_verification_columns() {
+  local label="$1" db_url="$2"
+  [ -z "$db_url" ] && { echo "post-merge: skip task-2422 identity-verification ($label — no URL)"; return; }
+  local out
+  if out=$(psql "$db_url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1); then
+BEGIN;
+
+ALTER TABLE artist_applications
+  ADD COLUMN IF NOT EXISTS proof_kind         text,
+  ADD COLUMN IF NOT EXISTS proof_channel      text,
+  ADD COLUMN IF NOT EXISTS proof_status       text NOT NULL DEFAULT 'none',
+  ADD COLUMN IF NOT EXISTS proof_verified_at  timestamptz,
+  ADD COLUMN IF NOT EXISTS evidence_links     jsonb,
+  ADD COLUMN IF NOT EXISTS impersonation_flag boolean NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS impersonation_match text;
+
+CREATE TABLE IF NOT EXISTS artist_application_proofs (
+  id               varchar     PRIMARY KEY DEFAULT gen_random_uuid(),
+  referral_link_id varchar     NOT NULL,
+  applicant_email  text        NOT NULL,
+  proof_kind       text        NOT NULL,
+  proof_channel    text        NOT NULL,
+  proof_code       text        NOT NULL,
+  status           text        NOT NULL DEFAULT 'pending',
+  failure_reason   text,
+  verified_at      timestamptz,
+  created_at       timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_aap_lookup
+  ON artist_application_proofs (referral_link_id, applicant_email, proof_kind, proof_channel);
+
+COMMIT;
+SQL
+    echo "post-merge: task-2422 identity-verification ok on $label"
+  else
+    echo "post-merge: WARNING — task-2422 identity-verification failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+add_artist_identity_verification_columns dev  "${DATABASE_URL:-}"
+add_artist_identity_verification_columns prod "${PROD_DATABASE_URL:-}"

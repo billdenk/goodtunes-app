@@ -5,7 +5,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { Link } from "wouter";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Copy, Check, X, ChevronDown, RefreshCw, Heart, Factory, HeartHandshake, Star, SlidersHorizontal, ArrowLeft, Plus, Building2, Truck, Wrench, UserCog, Lock, Users, Music2, ExternalLink } from "lucide-react";
+import { Trash2, Copy, Check, X, ChevronDown, RefreshCw, Heart, Factory, HeartHandshake, Star, SlidersHorizontal, ArrowLeft, Plus, Building2, Truck, Wrench, UserCog, Lock, Users, Music2, ExternalLink, ShieldCheck, AlertTriangle, Globe, Link2 } from "lucide-react";
 import {
   ROLE_OPTIONS,
   ROLE_LABEL,
@@ -880,6 +880,8 @@ function ArtistApplicationsPanel() {
   const [failedApprove, setFailedApprove] = useState<{ email: string; acceptUrl: string } | null>(null);
   const [copiedApprove, setCopiedApprove] = useState(false);
 
+  const [confirmApproveId, setConfirmApproveId] = useState<string | null>(null);
+
   const q = useQuery<
     Array<{
       id: string;
@@ -891,6 +893,12 @@ function ArtistApplicationsPanel() {
       spotifyArtistName: string | null;
       spotifyArtistUrl: string | null;
       spotifyPhotoUrl: string | null;
+      proofKind: string | null;
+      proofChannel: string | null;
+      proofStatus: string;
+      evidenceLinks: Array<{ kind: string; url: string }> | null;
+      impersonationFlag: boolean;
+      impersonationMatch: string | null;
       status: string;
       reviewNote: string | null;
       linkedInviteId: string | null;
@@ -914,15 +922,17 @@ function ArtistApplicationsPanel() {
   });
 
   const approve = useMutation({
-    mutationFn: async ({ id, reviewNote }: { id: string; reviewNote: string }) => {
+    mutationFn: async ({ id, reviewNote, acknowledged }: { id: string; reviewNote: string; acknowledged: boolean }) => {
       const r = await apiRequest("POST", `/api/admin/artist-applications/${id}/approve`, {
         reviewNote: reviewNote || null,
+        acknowledged,
       });
       return r.json() as Promise<{ ok: boolean; acceptUrl: string; emailDelivered: boolean }>;
     },
     onSuccess: (data, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/artist-applications"] });
       setReviewNotes((p) => { const n = { ...p }; delete n[id]; return n; });
+      setConfirmApproveId(null);
       if (data.emailDelivered) {
         setFailedApprove(null);
         toast({ title: "Application approved — invite emailed" });
@@ -1101,6 +1111,75 @@ function ArtistApplicationsPanel() {
                   </div>
                 </div>
 
+                {/* Impersonation flag */}
+                {appl.impersonationFlag && (
+                  <div
+                    className="flex items-start gap-1.5 mt-1.5 rounded-md bg-rose-50 border border-rose-200 px-2.5 py-1.5"
+                    data-testid={`badge-impersonation-${appl.id}`}
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="text-xs font-semibold text-rose-700">Possible impersonation</div>
+                      {appl.impersonationMatch && (
+                        <div className="text-xs text-rose-600 mt-0.5">{appl.impersonationMatch}</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Ownership proof badge */}
+                {appl.proofStatus === "proven" ? (
+                  <div
+                    className="flex items-center gap-1.5 mt-1.5"
+                    data-testid={`badge-proof-proven-${appl.id}`}
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                    <span className="text-xs font-semibold text-emerald-700">
+                      Ownership proved
+                    </span>
+                    {appl.proofChannel && (
+                      <span className="text-xs text-emerald-600">— {appl.proofChannel}</span>
+                    )}
+                  </div>
+                ) : appl.status === "pending" ? (
+                  <div
+                    className="flex items-center gap-1.5 mt-1.5"
+                    data-testid={`badge-proof-none-${appl.id}`}
+                  >
+                    <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                      <AlertTriangle className="w-3 h-3" />
+                      No ownership proof
+                    </span>
+                  </div>
+                ) : null}
+
+                {/* Evidence links */}
+                {appl.evidenceLinks && appl.evidenceLinks.length > 0 && (
+                  <div
+                    className="flex flex-wrap gap-1.5 mt-1.5"
+                    data-testid={`evidence-links-${appl.id}`}
+                  >
+                    {appl.evidenceLinks.map((ev, i) => {
+                      const Icon = ev.kind === "website" ? Globe : ev.kind === "streaming" ? Music2 : Link2;
+                      const label = ev.kind === "website" ? "Website" : ev.kind === "streaming" ? "Streaming" : "Distributor";
+                      return (
+                        <a
+                          key={i}
+                          href={ev.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-[var(--brand-blue)] bg-blue-50 border border-blue-100 rounded-full px-2 py-0.5 hover:underline"
+                          data-testid={`link-evidence-${appl.id}-${i}`}
+                        >
+                          <Icon className="w-3 h-3" />
+                          {label}
+                          <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* Review note input + action buttons for pending */}
                 {appl.status === "pending" && (
                   <div className="mt-2 space-y-2">
@@ -1114,30 +1193,85 @@ function ArtistApplicationsPanel() {
                       className="w-full text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:border-[var(--brand-blue)] focus:outline-none"
                       data-testid={`input-review-note-${appl.id}`}
                     />
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          approve.mutate({ id: appl.id, reviewNote: reviewNotes[appl.id] ?? "" })
-                        }
-                        disabled={approve.isPending || reject.isPending}
-                        className="flex-1 rounded-lg bg-[var(--brand-blue)] text-white text-xs font-semibold px-3 py-1.5 hover:opacity-90 disabled:opacity-50 transition-opacity"
-                        data-testid={`button-approve-${appl.id}`}
+
+                    {/* Guarded approve: require confirm when unproven or flagged */}
+                    {confirmApproveId === appl.id ? (
+                      <div
+                        className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 space-y-2"
+                        data-testid={`confirm-approve-${appl.id}`}
                       >
-                        Approve &amp; send invite
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          reject.mutate({ id: appl.id, reviewNote: reviewNotes[appl.id] ?? "" })
-                        }
-                        disabled={approve.isPending || reject.isPending}
-                        className="rounded-lg border border-slate-200 text-slate-600 text-xs font-semibold px-3 py-1.5 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-700 disabled:opacity-50 transition-colors"
-                        data-testid={`button-reject-${appl.id}`}
-                      >
-                        Reject
-                      </button>
-                    </div>
+                        <div className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                          {appl.impersonationFlag && appl.proofStatus !== "proven"
+                            ? "This application is flagged for possible impersonation and has no ownership proof."
+                            : appl.impersonationFlag
+                            ? "This application is flagged for possible impersonation."
+                            : "This application has no ownership proof."}
+                        </div>
+                        <p className="text-xs text-amber-700">
+                          Approve anyway? This will send the invite email immediately.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              approve.mutate({
+                                id: appl.id,
+                                reviewNote: reviewNotes[appl.id] ?? "",
+                                acknowledged: true,
+                              })
+                            }
+                            disabled={approve.isPending}
+                            className="flex-1 rounded-lg bg-amber-600 text-white text-xs font-semibold px-3 py-1.5 hover:opacity-90 disabled:opacity-50 transition-opacity"
+                            data-testid={`button-confirm-approve-${appl.id}`}
+                          >
+                            {approve.isPending ? "Approving…" : "Approve anyway"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmApproveId(null)}
+                            className="rounded-lg border border-amber-300 text-amber-700 text-xs font-medium px-3 py-1.5 hover:bg-amber-100 transition-colors"
+                            data-testid={`button-cancel-approve-${appl.id}`}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const needsConfirm = appl.impersonationFlag || appl.proofStatus !== "proven";
+                            if (needsConfirm) {
+                              setConfirmApproveId(appl.id);
+                            } else {
+                              approve.mutate({
+                                id: appl.id,
+                                reviewNote: reviewNotes[appl.id] ?? "",
+                                acknowledged: false,
+                              });
+                            }
+                          }}
+                          disabled={approve.isPending || reject.isPending}
+                          className="flex-1 rounded-lg bg-[var(--brand-blue)] text-white text-xs font-semibold px-3 py-1.5 hover:opacity-90 disabled:opacity-50 transition-opacity"
+                          data-testid={`button-approve-${appl.id}`}
+                        >
+                          Approve &amp; send invite
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            reject.mutate({ id: appl.id, reviewNote: reviewNotes[appl.id] ?? "" })
+                          }
+                          disabled={approve.isPending || reject.isPending}
+                          className="rounded-lg border border-slate-200 text-slate-600 text-xs font-semibold px-3 py-1.5 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-700 disabled:opacity-50 transition-colors"
+                          data-testid={`button-reject-${appl.id}`}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 

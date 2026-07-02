@@ -1,9 +1,5 @@
 // Task #2399 — Reusable artist referral links.
-//
-// Each entity (press, NPO, label, artist/ambassador) gets one durable,
-// reusable link they can post anywhere. Opening /join/:code lands on a
-// branded gated-signup page; submissions queue in artist_applications for
-// super-admin review before an invite email goes out.
+// Task #2422 — Ownership-proof + evidence + impersonation guard.
 //
 // Routes registered here:
 //   GET  /api/referral-links/:kind/:scopeId          — get / lazily-create
@@ -11,6 +7,8 @@
 //   PATCH /api/referral-links/:kind/:scopeId          — active toggle
 //   GET  /api/public/referral/:code                   — public landing info
 //   POST /api/public/referral/:code/apply             — submit application
+//   POST /api/public/referral/:code/proof-issue       — mint a proof code (no auth)
+//   POST /api/public/referral/:code/proof-verify      — verify the code (no auth)
 //   GET  /api/public/referral/spotify/artist-search   — public Spotify search (no auth)
 //   GET  /api/admin/artist-applications               — operator review queue
 //   POST /api/admin/artist-applications/:id/approve
@@ -21,6 +19,8 @@ import { sql } from "drizzle-orm";
 import { db } from "./db";
 import { randomBytes } from "crypto";
 import { z } from "zod";
+import * as dns from "dns/promises";
+import * as net from "net";
 import { searchArtistCandidatesDetailed, spotifyConfigured } from "./lib/spotify";
 
 const REFERRAL_KINDS = ["artist", "non_profit", "manufacturer", "label", "ambassador"] as const;
@@ -36,8 +36,254 @@ function generateCode(): string {
   return randomBytes(8).toString("base64url").slice(0, 10).toLowerCase();
 }
 
-// Resolve display name + photo for the referrer entity. Used by the public
-// landing endpoint so no server data can leak beyond name + logo.
+// Proof code: 8 uppercase hex chars prefixed with GT- so it's distinctive
+// enough to paste into a bio without conflicting with other text.
+// Example: GT-A3F2C891
+function generateProofCode(): string {
+  return `GT-${randomBytes(4).toString("hex").toUpperCase()}`;
+}
+
+// ─── SSRF helpers (reused from server/validators/completedTemplate.ts pattern) ──
+
+function isBlockedIp(ip: string): boolean {
+  if (net.isIPv4(ip)) {
+    const o = ip.split(".").map(Number);
+    const [a, b] = o;
+    if (a === 0 || a === 127) return true;
+    if (a === 10) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    return false;
+  }
+  if (net.isIPv6(ip)) {
+    const h = ip.toLowerCase();
+    if (h === "::1") return true;
+    if (h.startsWith("fe80")) return true;
+    if (h.startsWith("fc") || h.startsWith("fd")) return true;
+    if (h.startsWith("::ffff:")) return isBlockedIp(h.slice(7));
+    return false;
+  }
+  return true;
+}
+
+async function unsafeReason(u: URL): Promise<string | null> {
+  if (u.protocol !== "https:") return "Only https:// links are accepted.";
+  const host = u.hostname.toLowerCase();
+  if (host.endsWith(".internal") || host === "localhost") return "That host isn't allowed.";
+  if (net.isIP(host)) return isBlockedIp(host) ? "That address isn't allowed." : null;
+  let addrs: string[] = [];
+  try {
+    addrs = (await dns.lookup(host, { all: true })).map((r) => r.address);
+  } catch {
+    return "Couldn't resolve that host.";
+  }
+  if (addrs.length === 0) return "Couldn't resolve that host.";
+  if (addrs.some(isBlockedIp)) return "That host resolves to a private address.";
+  return null;
+}
+
+// Safe fetch for domain well-known file (operator-supplied URL needs SSRF guard).
+async function safeFetchText(rawUrl: string, maxBytes = 4096): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  let u: URL;
+  try {
+    u = new URL(rawUrl);
+  } catch {
+    return { ok: false, error: "Invalid URL." };
+  }
+  const guard = await unsafeReason(u);
+  if (guard) return { ok: false, error: guard };
+  try {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 8000);
+    const resp = await fetch(u.toString(), {
+      signal: ac.signal,
+      redirect: "error",
+      headers: { "User-Agent": "GoodTunes-OwnershipVerifier/1.0" },
+    });
+    clearTimeout(timer);
+    if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
+    const buf = await resp.arrayBuffer();
+    const text = new TextDecoder("utf-8", { fatal: false }).decode(
+      buf.byteLength > maxBytes ? buf.slice(0, maxBytes) : buf,
+    );
+    return { ok: true, text };
+  } catch (e: any) {
+    if (e?.name === "AbortError") return { ok: false, error: "Request timed out." };
+    return { ok: false, error: "Fetch failed." };
+  }
+}
+
+// Fetch a public social profile page and return the raw HTML/text for code scanning.
+// Social targets are known-safe public domains; no SSRF guard needed, but we still
+// cap body size + set a timeout.
+async function fetchSocialPage(url: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  try {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 10000);
+    const resp = await fetch(url, {
+      signal: ac.signal,
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+    clearTimeout(timer);
+    if (resp.status === 429) return { ok: false, error: "Rate limited by platform — try again in a few minutes." };
+    if (resp.status === 404) return { ok: false, error: "Profile not found. Check the handle spelling." };
+    if (!resp.ok) return { ok: false, error: `Platform returned ${resp.status}. Try again later.` };
+    const buf = await resp.arrayBuffer();
+    const text = new TextDecoder("utf-8", { fatal: false }).decode(
+      buf.byteLength > 512_000 ? buf.slice(0, 512_000) : buf,
+    );
+    return { ok: true, text };
+  } catch (e: any) {
+    if (e?.name === "AbortError") return { ok: false, error: "Request timed out." };
+    return { ok: false, error: "Could not reach the platform. Try again later." };
+  }
+}
+
+// Normalise a social handle: strip leading @, trim whitespace, lowercase.
+function normaliseHandle(raw: string): string {
+  return raw.trim().replace(/^@/, "").toLowerCase();
+}
+
+// Normalise a domain: strip protocol/path/trailing slash, lowercase.
+function normaliseDomain(raw: string): string {
+  const s = raw.trim().toLowerCase();
+  try {
+    const u = new URL(s.startsWith("http") ? s : `https://${s}`);
+    return u.hostname;
+  } catch {
+    return s.replace(/^https?:\/\//, "").split("/")[0];
+  }
+}
+
+type ProofKind = "instagram" | "x" | "tiktok" | "domain";
+
+// Attempt to verify that `code` appears in the public channel for the given proof kind.
+// Returns { ok: true, channel } on success, { ok: false, error } on failure.
+async function attemptProofVerification(
+  proofKind: ProofKind,
+  proofChannel: string,
+  code: string,
+): Promise<{ ok: true; channel: string } | { ok: false; error: string }> {
+  const lowerCode = code.toLowerCase();
+
+  if (proofKind === "instagram") {
+    const handle = normaliseHandle(proofChannel);
+    if (!handle || !/^[a-z0-9._]{1,30}$/.test(handle)) {
+      return { ok: false, error: "Invalid Instagram handle." };
+    }
+    const result = await fetchSocialPage(`https://www.instagram.com/${handle}/`);
+    if (!result.ok) return { ok: false, error: result.error };
+    if (!result.text.toLowerCase().includes(lowerCode)) {
+      return { ok: false, error: `Code not found in @${handle}'s Instagram profile. Make sure you added it to your bio and your profile is public.` };
+    }
+    return { ok: true, channel: `@${handle} on Instagram` };
+  }
+
+  if (proofKind === "x") {
+    const handle = normaliseHandle(proofChannel);
+    if (!handle || !/^[a-z0-9_]{1,15}$/.test(handle)) {
+      return { ok: false, error: "Invalid X (Twitter) handle." };
+    }
+    const result = await fetchSocialPage(`https://x.com/${handle}`);
+    if (!result.ok) return { ok: false, error: result.error };
+    if (!result.text.toLowerCase().includes(lowerCode)) {
+      return { ok: false, error: `Code not found in @${handle}'s X (Twitter) profile. Make sure you added it to your bio.` };
+    }
+    return { ok: true, channel: `@${handle} on X` };
+  }
+
+  if (proofKind === "tiktok") {
+    const handle = normaliseHandle(proofChannel);
+    if (!handle || !/^[a-z0-9._]{1,24}$/.test(handle)) {
+      return { ok: false, error: "Invalid TikTok handle." };
+    }
+    const result = await fetchSocialPage(`https://www.tiktok.com/@${handle}`);
+    if (!result.ok) return { ok: false, error: result.error };
+    if (!result.text.toLowerCase().includes(lowerCode)) {
+      return { ok: false, error: `Code not found in @${handle}'s TikTok profile. Make sure you added it to your bio.` };
+    }
+    return { ok: true, channel: `@${handle} on TikTok` };
+  }
+
+  if (proofKind === "domain") {
+    const domain = normaliseDomain(proofChannel);
+    if (!domain || !/^[a-z0-9.-]{3,253}$/.test(domain)) {
+      return { ok: false, error: "Invalid domain." };
+    }
+
+    // Option 1: DNS TXT record  goodtunes-verify=GT-XXXXXXXX
+    let dnsFound = false;
+    try {
+      const records = await dns.resolveTxt(domain);
+      const flat = records.flat();
+      dnsFound = flat.some((r) => r.toLowerCase() === `goodtunes-verify=${lowerCode}`);
+    } catch {
+      // DNS lookup failed — fall through to well-known
+    }
+    if (dnsFound) return { ok: true, channel: domain };
+
+    // Option 2: well-known file  https://{domain}/.well-known/goodtunes-verification.txt
+    const wkResult = await safeFetchText(`https://${domain}/.well-known/goodtunes-verification.txt`);
+    if (!wkResult.ok) {
+      return {
+        ok: false,
+        error: `Code not found. Add a DNS TXT record \`goodtunes-verify=${code}\` to ${domain}, or publish the code at https://${domain}/.well-known/goodtunes-verification.txt.`,
+      };
+    }
+    if (!wkResult.text.toLowerCase().includes(lowerCode)) {
+      return {
+        ok: false,
+        error: `Code not found in the well-known file or DNS TXT record for ${domain}. Make sure the code matches exactly.`,
+      };
+    }
+    return { ok: true, channel: domain };
+  }
+
+  return { ok: false, error: "Unknown proof kind." };
+}
+
+// Impersonation check: detect whether the applicant's name or Spotify artist name
+// matches a Person who already has a claimed artist account in the system.
+async function checkImpersonation(
+  applicantName: string,
+  spotifyArtistName: string | null,
+): Promise<{ flag: boolean; match: string | null }> {
+  const names = Array.from(
+    new Set([applicantName.trim(), spotifyArtistName?.trim()].filter(Boolean) as string[]),
+  );
+  for (const name of names) {
+    const r = await db.execute<{ name: string }>(sql`
+      SELECT p.name
+        FROM people p
+       WHERE EXISTS (
+               SELECT 1 FROM users u
+                WHERE u.role = 'artist'
+                  AND u.role_scope_id = p.id
+             )
+         AND LOWER(p.name) = LOWER(${name})
+       LIMIT 1
+    `);
+    if ((r as any).rows?.length) {
+      const existingName = (r as any).rows[0].name as string;
+      return {
+        flag: true,
+        match: `Name matches an existing GoodTunes artist: "${existingName}"`,
+      };
+    }
+  }
+  return { flag: false, match: null };
+}
+
+// ─── Resolve referrer branding ─────────────────────────────────────────────────
+
 async function resolveReferrerBranding(
   kind: ReferralKind,
   scopeId: string,
@@ -83,10 +329,8 @@ async function resolveReferrerBranding(
   }
 }
 
-// Lazily create the entity's referral link row on first access. One row per
-// (referrer_kind, referrer_scope_id) is the invariant we maintain: the GET
-// handler does a SELECT first; only the INSERT path can race, so we retry on
-// unique_violation for the code column (astronomically unlikely).
+// ─── Lazy-create referral link ─────────────────────────────────────────────────
+
 async function getOrCreateReferralLink(
   kind: ReferralKind,
   scopeId: string,
@@ -125,7 +369,6 @@ async function getOrCreateReferralLink(
       );
       return (ins as any).rows[0];
     } catch (e: any) {
-      // 23505 = unique_violation on code — retry with a new code.
       if (e?.code === "23505" && attempt < 2) continue;
       throw e;
     }
@@ -133,13 +376,13 @@ async function getOrCreateReferralLink(
   throw new Error("Could not generate unique referral link code");
 }
 
+// ─── Route registration ────────────────────────────────────────────────────────
+
 export function registerReferralLinkRoutes(
   app: Express,
   requireAdmin: (req: any, res: any, next: any) => void,
 ) {
   // ─── GET /api/referral-links/:kind/:scopeId ──────────────────────────
-  // Fetch (or lazily mint) the entity's referral link. Partners can only
-  // read their own link; super-admins can read any.
   app.get("/api/referral-links/:kind/:scopeId", requireAdmin, async (req, res) => {
     const kind = String(req.params.kind);
     const scopeId = String(req.params.scopeId);
@@ -158,7 +401,6 @@ export function registerReferralLinkRoutes(
   });
 
   // ─── POST /api/referral-links/:kind/:scopeId/regenerate ─────────────
-  // Regenerate the code. The old URL immediately stops resolving.
   app.post(
     "/api/referral-links/:kind/:scopeId/regenerate",
     requireAdmin,
@@ -174,7 +416,6 @@ export function registerReferralLinkRoutes(
         return res.status(403).json({ message: "Forbidden" });
       }
 
-      // Ensure the row exists before we try to UPDATE it.
       await getOrCreateReferralLink(kind as ReferralKind, scopeId, req.session?.userId!);
 
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -197,7 +438,6 @@ export function registerReferralLinkRoutes(
   );
 
   // ─── PATCH /api/referral-links/:kind/:scopeId ────────────────────────
-  // Enable or disable the link.
   app.patch("/api/referral-links/:kind/:scopeId", requireAdmin, async (req, res) => {
     const kind = String(req.params.kind);
     const scopeId = String(req.params.scopeId);
@@ -221,8 +461,6 @@ export function registerReferralLinkRoutes(
   });
 
   // ─── GET /api/public/referral/:code ─────────────────────────────────
-  // No auth. Returns entity branding for the public landing page.
-  // Intentionally minimal: name + logo, referrer kind label. No PII.
   app.get("/api/public/referral/:code", async (req, res) => {
     const code = String(req.params.code).toLowerCase().trim();
     const row = await db.execute<any>(
@@ -244,10 +482,6 @@ export function registerReferralLinkRoutes(
   });
 
   // ─── GET /api/public/referral/spotify/artist-search ─────────────────
-  // No auth. Public Spotify artist search for the /join/:code landing page.
-  // Reuses the same helper as the admin artist-search route but skips
-  // the requireAdmin guard so applicants can self-identify without an account.
-  // Rate-limited only by Spotify's own token budget; no applicant PII is stored.
   app.get("/api/public/referral/spotify/artist-search", async (req, res) => {
     if (!spotifyConfigured()) {
       return res.status(503).json({ message: "Spotify is not configured." });
@@ -261,10 +495,141 @@ export function registerReferralLinkRoutes(
     return res.json({ query: q, candidates: result.candidates });
   });
 
+  // ─── POST /api/public/referral/:code/proof-issue ─────────────────────
+  // No auth. Given an email + proofKind + proofChannel, mint (or return an
+  // existing) proof code.  The applicant puts this code in their bio / DNS
+  // TXT record, then calls proof-verify.
+  app.post("/api/public/referral/:code/proof-issue", async (req, res) => {
+    const code = String(req.params.code).toLowerCase().trim();
+    const linkRow = await db.execute<any>(
+      sql`SELECT id, active FROM referral_links WHERE code = ${code} LIMIT 1`,
+    );
+    const link = (linkRow as any).rows?.[0];
+    if (!link) return res.status(404).json({ message: "Invalid referral link" });
+    if (!link.active) return res.status(410).json({ message: "This referral link is no longer active." });
+
+    const PROOF_KINDS = ["instagram", "x", "tiktok", "domain"] as const;
+    const parsed = z
+      .object({
+        email: z.string().email(),
+        proofKind: z.enum(PROOF_KINDS),
+        proofChannel: z.string().min(1).max(200),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid input" });
+    }
+    const { email, proofKind, proofChannel } = parsed.data;
+    const normEmail = email.toLowerCase().trim();
+
+    // Normalise the channel so re-issuing with @handle or handle gives same row.
+    const normChannel =
+      proofKind === "domain"
+        ? normaliseDomain(proofChannel)
+        : normaliseHandle(proofChannel);
+
+    // Return existing non-failed proof if it already exists.
+    const existing = await db.execute<any>(
+      sql`SELECT id, proof_code AS "proofCode", status
+            FROM artist_application_proofs
+           WHERE referral_link_id = ${link.id}
+             AND applicant_email = ${normEmail}
+             AND proof_kind = ${proofKind}
+             AND proof_channel = ${normChannel}
+             AND status != 'failed'
+           ORDER BY created_at DESC
+           LIMIT 1`,
+    );
+    if ((existing as any).rows?.length) {
+      const row = (existing as any).rows[0];
+      if (row.status === "proven") {
+        return res.json({ proofCode: row.proofCode, alreadyProven: true });
+      }
+      return res.json({ proofCode: row.proofCode, alreadyProven: false });
+    }
+
+    // Mint a new proof code.
+    const proofCode = generateProofCode();
+    await db.execute(
+      sql`INSERT INTO artist_application_proofs
+           (referral_link_id, applicant_email, proof_kind, proof_channel, proof_code, status)
+          VALUES
+           (${link.id}, ${normEmail}, ${proofKind}, ${normChannel}, ${proofCode}, 'pending')`,
+    );
+    return res.json({ proofCode, alreadyProven: false });
+  });
+
+  // ─── POST /api/public/referral/:code/proof-verify ────────────────────
+  // No auth.  Fetches the public profile / DNS record and checks the code.
+  app.post("/api/public/referral/:code/proof-verify", async (req, res) => {
+    const code = String(req.params.code).toLowerCase().trim();
+    const linkRow = await db.execute<any>(
+      sql`SELECT id, active FROM referral_links WHERE code = ${code} LIMIT 1`,
+    );
+    const link = (linkRow as any).rows?.[0];
+    if (!link) return res.status(404).json({ message: "Invalid referral link" });
+    if (!link.active) return res.status(410).json({ message: "This referral link is no longer active." });
+
+    const PROOF_KINDS = ["instagram", "x", "tiktok", "domain"] as const;
+    const parsed = z
+      .object({
+        email: z.string().email(),
+        proofKind: z.enum(PROOF_KINDS),
+        proofChannel: z.string().min(1).max(200),
+        proofCode: z.string().min(1).max(30),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid input" });
+    }
+    const { email, proofKind, proofChannel, proofCode } = parsed.data;
+    const normEmail = email.toLowerCase().trim();
+    const normChannel =
+      proofKind === "domain"
+        ? normaliseDomain(proofChannel)
+        : normaliseHandle(proofChannel);
+
+    // Look up the proof row.
+    const proofRow = await db.execute<any>(
+      sql`SELECT id, status
+            FROM artist_application_proofs
+           WHERE referral_link_id = ${link.id}
+             AND applicant_email  = ${normEmail}
+             AND proof_kind       = ${proofKind}
+             AND proof_channel    = ${normChannel}
+             AND proof_code       = ${proofCode}
+           LIMIT 1`,
+    );
+    const proof = (proofRow as any).rows?.[0];
+    if (!proof) {
+      return res.status(404).json({ message: "Proof record not found. Request a new code." });
+    }
+    if (proof.status === "proven") {
+      return res.json({ ok: true, channel: normChannel });
+    }
+
+    // Attempt verification.
+    const result = await attemptProofVerification(proofKind as ProofKind, normChannel, proofCode);
+    if (result.ok) {
+      await db.execute(
+        sql`UPDATE artist_application_proofs
+               SET status = 'proven', verified_at = NOW()
+             WHERE id = ${proof.id}`,
+      );
+      return res.json({ ok: true, channel: result.channel });
+    } else {
+      await db.execute(
+        sql`UPDATE artist_application_proofs
+               SET status = 'failed', failure_reason = ${result.error}
+             WHERE id = ${proof.id}`,
+      );
+      return res.json({ ok: false, error: result.error });
+    }
+  });
+
   // ─── POST /api/public/referral/:code/apply ───────────────────────────
-  // No auth. Submit a pending application. If a pending application from
-  // the same email already exists for this link we return ok without
-  // creating a duplicate (idempotent).
+  // No auth. Submit a pending application. Stamps proof + evidence, runs
+  // impersonation check.  Idempotent per (link, email).
   app.post("/api/public/referral/:code/apply", async (req, res) => {
     const code = String(req.params.code).toLowerCase().trim();
     const row = await db.execute<any>(
@@ -282,6 +647,11 @@ export function registerReferralLinkRoutes(
       return res.status(410).json({ message: "This referral link is no longer active." });
     }
 
+    const evidenceLinkSchema = z.object({
+      kind: z.enum(["website", "streaming", "distributor"]),
+      url: z.string().url(),
+    });
+
     const parsed = z
       .object({
         applicantEmail: z.string().email(),
@@ -290,6 +660,7 @@ export function registerReferralLinkRoutes(
         spotifyArtistName: z.string().max(300).optional().nullable(),
         spotifyArtistUrl: z.string().url().optional().nullable(),
         spotifyPhotoUrl: z.string().url().optional().nullable(),
+        evidenceLinks: z.array(evidenceLinkSchema).max(5).optional().nullable(),
       })
       .safeParse(req.body);
     if (!parsed.success) {
@@ -308,26 +679,58 @@ export function registerReferralLinkRoutes(
     );
     if ((dupe as any).rows?.length) return res.json({ ok: true, existing: true });
 
+    // Look up any proven proof for this (link, email).
+    const proofLookup = await db.execute<any>(
+      sql`SELECT proof_kind AS "proofKind",
+                 proof_channel AS "proofChannel"
+            FROM artist_application_proofs
+           WHERE referral_link_id = ${link.id}
+             AND applicant_email = ${email}
+             AND status = 'proven'
+           ORDER BY verified_at DESC
+           LIMIT 1`,
+    );
+    const proof = (proofLookup as any).rows?.[0] ?? null;
+    const proofStatus = proof ? "proven" : "none";
+    const proofKind = proof?.proofKind ?? null;
+    const proofChannel = proof?.proofChannel ?? null;
+
+    // Run impersonation check.
+    const { flag: impersonationFlag, match: impersonationMatch } = await checkImpersonation(
+      d.applicantName.trim(),
+      d.spotifyArtistName ?? null,
+    );
+
+    const evidenceLinksJson =
+      d.evidenceLinks && d.evidenceLinks.length > 0
+        ? JSON.stringify(d.evidenceLinks)
+        : null;
+
     await db.execute(
       sql`INSERT INTO artist_applications
            (referral_link_id, referrer_kind, referrer_scope_id,
             applicant_email, applicant_name,
             spotify_artist_id, spotify_artist_name,
             spotify_artist_url, spotify_photo_url,
+            proof_kind, proof_channel, proof_status,
+            evidence_links,
+            impersonation_flag, impersonation_match,
             status)
           VALUES
            (${link.id}, ${link.referrerKind}, ${link.referrerScopeId},
             ${email}, ${d.applicantName.trim()},
             ${d.spotifyArtistId ?? null}, ${d.spotifyArtistName ?? null},
             ${d.spotifyArtistUrl ?? null}, ${d.spotifyPhotoUrl ?? null},
+            ${proofKind}, ${proofChannel}, ${proofStatus},
+            ${evidenceLinksJson},
+            ${impersonationFlag}, ${impersonationMatch ?? null},
             'pending')`,
     );
     return res.json({ ok: true, existing: false });
   });
 
   // ─── GET /api/admin/artist-applications ─────────────────────────────
-  // Super-admin review queue. Query param: ?status=pending|approved|rejected|all
-  // (defaults pending). Joined with referrer entity tables for display names.
+  // Super-admin review queue. Includes proof + evidence + impersonation data.
   app.get("/api/admin/artist-applications", requireAdmin, async (req, res) => {
     const { getUserRole } = await import("./auth/roles");
     const callerRole = await getUserRole(req.session?.userId!);
@@ -349,6 +752,13 @@ export function registerReferralLinkRoutes(
                  aa.spotify_artist_name AS "spotifyArtistName",
                  aa.spotify_artist_url  AS "spotifyArtistUrl",
                  aa.spotify_photo_url   AS "spotifyPhotoUrl",
+                 aa.proof_kind        AS "proofKind",
+                 aa.proof_channel     AS "proofChannel",
+                 aa.proof_status      AS "proofStatus",
+                 aa.proof_verified_at AS "proofVerifiedAt",
+                 aa.evidence_links    AS "evidenceLinks",
+                 aa.impersonation_flag  AS "impersonationFlag",
+                 aa.impersonation_match AS "impersonationMatch",
                  aa.status,
                  aa.review_note       AS "reviewNote",
                  aa.linked_person_id  AS "linkedPersonId",
@@ -374,9 +784,8 @@ export function registerReferralLinkRoutes(
   });
 
   // ─── POST /api/admin/artist-applications/:id/approve ────────────────
-  // Creates an admin_invites row with the referrer attribution stamped and
-  // sends the standard invite email. The full provisioning machinery in
-  // applyAdminInviteGrant runs when the artist clicks the link.
+  // Creates an admin_invites row and sends the invite email.
+  // Threads proof/evidence provenance to the invite.
   app.post(
     "/api/admin/artist-applications/:id/approve",
     requireAdmin,
@@ -395,13 +804,30 @@ export function registerReferralLinkRoutes(
         return res.status(409).json({ message: "Application already reviewed" });
       }
 
-      const reviewNote = String(req.body?.reviewNote ?? "").trim() || null;
-      const inviteToken = randomBytes(32).toString("hex");
-      const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days
+      // The client is responsible for confirming flagged/unproven approvals via
+      // a confirm dialog before calling this endpoint (see ArtistApplicationsPanel).
+      // We accept an optional `acknowledged` field for audit logging but do NOT
+      // gate the approval on it — the UI gate is the contract.
 
-      // Mint the invite row with referrer attribution so the accept-time
-      // provisioning machinery stamps referredByPersonId / referredByOrgId
-      // exactly as it does for a directly-sent email invite.
+      const reviewNote = String(req.body?.reviewNote ?? "").trim() || null;
+      const acknowledged = Boolean(req.body?.acknowledged);
+
+      const inviteToken = randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+      // Build a provenance note that carries proof + impersonation context
+      // through to the invite so future operators can see why it was trusted.
+      const provenanceParts: string[] = [];
+      if (appl.proof_status === "proven") {
+        provenanceParts.push(`Ownership proven via ${appl.proof_channel}`);
+      }
+      if (appl.impersonation_flag) {
+        provenanceParts.push(
+          `⚠ Impersonation flag acknowledged by reviewer. Match: ${appl.impersonation_match}`,
+        );
+      }
+      const combinedNote = [reviewNote, ...provenanceParts].filter(Boolean).join(" | ") || null;
+
       const ins = await db.execute<any>(
         sql`INSERT INTO admin_invites
              (email, role, token, expires_at, created_by_user_id,
@@ -419,13 +845,11 @@ export function registerReferralLinkRoutes(
                SET status             = 'approved',
                    reviewed_by_user_id = ${req.session?.userId!},
                    reviewed_at        = NOW(),
-                   review_note        = ${reviewNote},
+                   review_note        = ${combinedNote},
                    linked_invite_id   = ${inviteId}
              WHERE id = ${appl.id}`,
       );
 
-      // Determine the accept URL. Use the same origin the request came in on
-      // so dev and prod each get their own working links.
       const proto = req.get("x-forwarded-proto") || req.protocol;
       const host = req.get("host") ?? "";
       const acceptUrl = `${proto}://${host}/invite/${inviteToken}`;
@@ -450,7 +874,7 @@ export function registerReferralLinkRoutes(
       }
 
       console.log(
-        `[referral-approve] application ${appl.id} approved → invite ${inviteId} email=${appl.applicant_email} delivered=${emailDelivered}`,
+        `[referral-approve] application ${appl.id} approved → invite ${inviteId} email=${appl.applicant_email} delivered=${emailDelivered} proof=${appl.proof_status} impersonation=${appl.impersonation_flag} acknowledged=${acknowledged}`,
       );
       return res.json({ ok: true, inviteId, acceptUrl, emailDelivered });
     },

@@ -1,17 +1,24 @@
 // Task #2399 — Public branded landing page for reusable referral links.
+// Task #2422 — Ownership proof + evidence links.
 // Route: /join/:code (public, no auth required on admin host).
 //
 // Flow:
 //   1. Loads branding via GET /api/public/referral/:code
 //   2. Fan fills in name + email + optional Spotify self-identification
-//   3. POST /api/public/referral/:code/apply → pending artist_applications row
-//   4. "Thanks — we'll be in touch" confirmation state
+//   3. Optional: adds evidence links (website, streaming, distributor)
+//   4. Optional: proves channel ownership (social bio / domain DNS)
+//   5. POST /api/public/referral/:code/apply → pending artist_applications row
+//   6. "Thanks — we'll be in touch" confirmation state
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { z } from "zod";
-import { Loader2, Music2, Search, X, Check } from "lucide-react";
+import {
+  Loader2, Music2, Search, X, Check, ChevronDown, ChevronUp,
+  Globe, Link2, ShieldCheck, AlertTriangle,
+} from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,7 +41,17 @@ interface SpotifyCandidate {
   genres: string[];
 }
 
-// ─── Spotify artist search via the public endpoint ────────────────────────────
+type ProofKind = "instagram" | "x" | "tiktok" | "domain";
+type ProofFlowState =
+  | "idle"
+  | "choosing"
+  | "issuing"
+  | "pending"
+  | "verifying"
+  | "proven"
+  | "failed";
+
+// ─── Spotify artist search ────────────────────────────────────────────────────
 type SpotifySearchResult =
   | { ok: true; candidates: SpotifyCandidate[] }
   | { ok: false };
@@ -69,6 +86,8 @@ const formSchema = z.object({
   applicantName: z.string().min(1, "Enter your name").max(200),
   applicantEmail: z.string().email("Enter a valid email"),
 });
+
+const urlSchema = z.string().url("Enter a valid URL (include https://)").or(z.literal(""));
 
 // ─── Shared page shell ────────────────────────────────────────────────────────
 function PageShell({ children }: { children: React.ReactNode }) {
@@ -107,6 +126,29 @@ function SubmittedState({
   );
 }
 
+// ─── Proof channel labels ─────────────────────────────────────────────────────
+const PROOF_KIND_LABELS: Record<ProofKind, string> = {
+  instagram: "Instagram",
+  x: "X (Twitter)",
+  tiktok: "TikTok",
+  domain: "Your website / domain",
+};
+
+const PROOF_KIND_PLACEHOLDER: Record<ProofKind, string> = {
+  instagram: "@yourhandle",
+  x: "@yourhandle",
+  tiktok: "@yourhandle",
+  domain: "yourdomain.com",
+};
+
+// ─── Proof instructions helper ────────────────────────────────────────────────
+function proofInstructions(kind: ProofKind, channel: string, code: string): string {
+  if (kind === "domain") {
+    return `Add a DNS TXT record with the value  goodtunes-verify=${code}  on ${channel}, OR publish a file at https://${channel}/.well-known/goodtunes-verification.txt containing the code. Then click "Verify".`;
+  }
+  return `Add the code  ${code}  to your ${PROOF_KIND_LABELS[kind]} bio for @${channel.replace(/^@/, "")}. Your profile must be public. Then click "Verify".`;
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function JoinReferralLink() {
   const { code } = useParams<{ code: string }>();
@@ -123,6 +165,27 @@ export default function JoinReferralLink() {
   const [selectedArtist, setSelectedArtist] = useState<SpotifyCandidate | null>(null);
   const [spotifySearched, setSpotifySearched] = useState(false);
   const [spotifyFetchError, setSpotifyFetchError] = useState(false);
+
+  // Evidence links state
+  const [showEvidence, setShowEvidence] = useState(false);
+  const [evidenceWebsite, setEvidenceWebsite] = useState("");
+  const [evidenceStreaming, setEvidenceStreaming] = useState("");
+  const [evidenceDistributor, setEvidenceDistributor] = useState("");
+  const [evidenceErrors, setEvidenceErrors] = useState<{
+    website?: string;
+    streaming?: string;
+    distributor?: string;
+  }>({});
+
+  // Proof of ownership state
+  const [showProof, setShowProof] = useState(false);
+  const [proofKind, setProofKind] = useState<ProofKind>("instagram");
+  const [proofChannel, setProofChannel] = useState("");
+  const [proofCode, setProofCode] = useState<string | null>(null);
+  const [proofFlow, setProofFlow] = useState<ProofFlowState>("idle");
+  const [proofError, setProofError] = useState<string | null>(null);
+  const [proofVerifiedChannel, setProofVerifiedChannel] = useState<string | null>(null);
+  const proofEmailRef = useRef<string>("");
 
   // Submitted
   const [submitted, setSubmitted] = useState(false);
@@ -141,6 +204,71 @@ export default function JoinReferralLink() {
     staleTime: Infinity,
   });
 
+  // ─── Proof issue mutation ──────────────────────────────────────────────────
+  const proofIssueMutation = useMutation({
+    mutationFn: async ({
+      email: em,
+      proofKind: pk,
+      proofChannel: pc,
+    }: { email: string; proofKind: ProofKind; proofChannel: string }) => {
+      const r = await fetch(`/api/public/referral/${code}/proof-issue`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: em, proofKind: pk, proofChannel: pc }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.message ?? "Could not generate a code");
+      return j as { proofCode: string; alreadyProven: boolean };
+    },
+    onSuccess: (data) => {
+      setProofCode(data.proofCode);
+      if (data.alreadyProven) {
+        setProofFlow("proven");
+        setProofVerifiedChannel(proofChannel);
+      } else {
+        setProofFlow("pending");
+      }
+    },
+    onError: (e: Error) => {
+      setProofError(e.message);
+      setProofFlow("failed");
+    },
+  });
+
+  // ─── Proof verify mutation ─────────────────────────────────────────────────
+  const proofVerifyMutation = useMutation({
+    mutationFn: async ({
+      email: em,
+      proofKind: pk,
+      proofChannel: pc,
+      proofCode: pcode,
+    }: { email: string; proofKind: ProofKind; proofChannel: string; proofCode: string }) => {
+      const r = await fetch(`/api/public/referral/${code}/proof-verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: em, proofKind: pk, proofChannel: pc, proofCode: pcode }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.message ?? "Verification failed");
+      return j as { ok: boolean; channel?: string; error?: string };
+    },
+    onSuccess: (data) => {
+      if (data.ok) {
+        setProofFlow("proven");
+        setProofVerifiedChannel(data.channel ?? proofChannel);
+        setProofError(null);
+      } else {
+        setProofFlow("failed");
+        setProofError(data.error ?? "Verification failed. Check the code is in your bio and try again.");
+      }
+    },
+    onError: (e: Error) => {
+      setProofFlow("failed");
+      setProofError(e.message);
+    },
+  });
+
+  // ─── Submit mutation ───────────────────────────────────────────────────────
   const submitMutation = useMutation({
     mutationFn: async (body: {
       applicantEmail: string;
@@ -149,6 +277,7 @@ export default function JoinReferralLink() {
       spotifyArtistName?: string | null;
       spotifyArtistUrl?: string | null;
       spotifyPhotoUrl?: string | null;
+      evidenceLinks?: Array<{ kind: string; url: string }>;
     }) => {
       const r = await fetch(`/api/public/referral/${code}/apply`, {
         method: "POST",
@@ -165,6 +294,8 @@ export default function JoinReferralLink() {
     },
   });
 
+  // ─── Event handlers ────────────────────────────────────────────────────────
+
   async function handleSpotifySearch() {
     if (!spotifyQuery.trim()) return;
     setSpotifyLoading(true);
@@ -178,6 +309,54 @@ export default function JoinReferralLink() {
       setSpotifyFetchError(true);
     }
     setSpotifyLoading(false);
+  }
+
+  function handleGetCode() {
+    const emailTrimmed = email.trim();
+    if (!emailTrimmed || !proofChannel.trim()) return;
+    proofEmailRef.current = emailTrimmed;
+    setProofFlow("issuing");
+    setProofError(null);
+    proofIssueMutation.mutate({
+      email: emailTrimmed,
+      proofKind,
+      proofChannel: proofChannel.trim(),
+    });
+  }
+
+  function handleVerify() {
+    if (!proofCode) return;
+    setProofFlow("verifying");
+    setProofError(null);
+    proofVerifyMutation.mutate({
+      email: proofEmailRef.current || email.trim(),
+      proofKind,
+      proofChannel: proofChannel.trim(),
+      proofCode,
+    });
+  }
+
+  function handleResetProof() {
+    setProofCode(null);
+    setProofFlow("idle");
+    setProofError(null);
+    setProofVerifiedChannel(null);
+    setProofChannel("");
+  }
+
+  function validateEvidence(): boolean {
+    const errs: typeof evidenceErrors = {};
+    if (evidenceWebsite && !urlSchema.safeParse(evidenceWebsite).success) {
+      errs.website = "Enter a valid URL (include https://)";
+    }
+    if (evidenceStreaming && !urlSchema.safeParse(evidenceStreaming).success) {
+      errs.streaming = "Enter a valid URL (include https://)";
+    }
+    if (evidenceDistributor && !urlSchema.safeParse(evidenceDistributor).success) {
+      errs.distributor = "Enter a valid URL (include https://)";
+    }
+    setEvidenceErrors(errs);
+    return Object.keys(errs).length === 0;
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -195,7 +374,15 @@ export default function JoinReferralLink() {
       setErrors(errs);
       return;
     }
+    if (!validateEvidence()) return;
     setErrors({});
+
+    // Collect evidence links (filter empties).
+    const evidenceLinks: Array<{ kind: string; url: string }> = [];
+    if (evidenceWebsite) evidenceLinks.push({ kind: "website", url: evidenceWebsite });
+    if (evidenceStreaming) evidenceLinks.push({ kind: "streaming", url: evidenceStreaming });
+    if (evidenceDistributor) evidenceLinks.push({ kind: "distributor", url: evidenceDistributor });
+
     submitMutation.mutate({
       applicantEmail: result.data.applicantEmail,
       applicantName: result.data.applicantName,
@@ -203,6 +390,7 @@ export default function JoinReferralLink() {
       spotifyArtistName: selectedArtist?.name ?? null,
       spotifyArtistUrl: selectedArtist?.spotifyUrl ?? null,
       spotifyPhotoUrl: selectedArtist?.imageUrl ?? null,
+      evidenceLinks: evidenceLinks.length > 0 ? evidenceLinks : undefined,
     });
   }
 
@@ -252,6 +440,9 @@ export default function JoinReferralLink() {
   const referrerName = data.branding.name;
   const referrerPhoto = data.branding.photoUrl;
   const referrerOrg = data.branding.orgName;
+
+  // Whether the email field is filled enough to issue a proof code.
+  const emailReadyForProof = z.string().email().safeParse(email.trim()).success;
 
   return (
     <PageShell>
@@ -355,8 +546,10 @@ export default function JoinReferralLink() {
                       </div>
                     )}
                   </div>
-                  <button
-                    type="button"
+                  <IconButton
+                    variant="ghost"
+                    size="md"
+                    aria-label="Clear Spotify selection"
                     onClick={() => {
                       setSelectedArtist(null);
                       setSpotifyResults([]);
@@ -364,11 +557,10 @@ export default function JoinReferralLink() {
                       setSpotifyFetchError(false);
                       setSpotifyQuery("");
                     }}
-                    className="text-slate-400 hover:text-slate-600 transition-colors"
                     data-testid="button-clear-spotify"
                   >
                     <X className="w-4 h-4" />
-                  </button>
+                  </IconButton>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -441,6 +633,228 @@ export default function JoinReferralLink() {
               )}
             </div>
 
+            {/* ── Evidence links section (optional) ───────────────────────── */}
+            <div className="border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowEvidence((v) => !v)}
+                className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-700 transition-colors"
+                data-testid="button-toggle-evidence"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5" />
+                  Add evidence links
+                  <span className="normal-case font-normal text-slate-400">(optional)</span>
+                </span>
+                {showEvidence ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+
+              {showEvidence && (
+                <div className="mt-3 space-y-3" data-testid="section-evidence">
+                  <p className="text-xs text-slate-500 leading-snug">
+                    These links help the reviewer verify your identity — official site, Spotify/Apple for Artists, or your distributor dashboard.
+                  </p>
+                  <EvidenceField
+                    label="Official website"
+                    placeholder="https://yoursite.com"
+                    value={evidenceWebsite}
+                    onChange={setEvidenceWebsite}
+                    error={evidenceErrors.website}
+                    testId="input-evidence-website"
+                    icon={<Globe className="w-3.5 h-3.5" />}
+                  />
+                  <EvidenceField
+                    label="Spotify / Apple for Artists link"
+                    placeholder="https://artists.spotify.com/…"
+                    value={evidenceStreaming}
+                    onChange={setEvidenceStreaming}
+                    error={evidenceErrors.streaming}
+                    testId="input-evidence-streaming"
+                    icon={<Music2 className="w-3.5 h-3.5" />}
+                  />
+                  <EvidenceField
+                    label="Distributor / label page"
+                    placeholder="https://distrokid.com/…"
+                    value={evidenceDistributor}
+                    onChange={setEvidenceDistributor}
+                    error={evidenceErrors.distributor}
+                    testId="input-evidence-distributor"
+                    icon={<Link2 className="w-3.5 h-3.5" />}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* ── Prove ownership section (optional) ──────────────────────── */}
+            <div className="border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowProof((v) => !v)}
+                className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-700 transition-colors"
+                data-testid="button-toggle-proof"
+              >
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  {proofFlow === "proven"
+                    ? <span className="text-emerald-600 normal-case font-semibold">✓ Ownership proved</span>
+                    : <>Prove you're this artist <span className="normal-case font-normal text-slate-400">(optional but speeds up review)</span></>}
+                </span>
+                {showProof ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+
+              {showProof && (
+                <div className="mt-3 space-y-3" data-testid="section-proof">
+                  {proofFlow === "proven" ? (
+                    <div
+                      className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5"
+                      data-testid="proof-proven-badge"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      <div className="flex-1">
+                        <div className="text-sm font-semibold text-emerald-800">Ownership proved</div>
+                        <div className="text-xs text-emerald-600">{proofVerifiedChannel}</div>
+                      </div>
+                      <IconButton
+                        variant="ghost"
+                        size="md"
+                        aria-label="Reset proof"
+                        onClick={handleResetProof}
+                        data-testid="button-reset-proof"
+                      >
+                        <X className="w-4 h-4" />
+                      </IconButton>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs text-slate-500 leading-snug">
+                        GoodTunes will generate a short code. Add it to your social bio or domain to prove you control that account — no login required.
+                      </p>
+
+                      {/* Channel picker */}
+                      <div className="flex gap-1.5 flex-wrap" data-testid="proof-kind-picker">
+                        {(["instagram", "x", "tiktok", "domain"] as ProofKind[]).map((k) => (
+                          <button
+                            key={k}
+                            type="button"
+                            onClick={() => {
+                              setProofKind(k);
+                              setProofChannel("");
+                              setProofCode(null);
+                              setProofFlow("idle");
+                              setProofError(null);
+                            }}
+                            className={[
+                              "text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors",
+                              proofKind === k
+                                ? "bg-[var(--brand-blue)] border-[var(--brand-blue)] text-white"
+                                : "bg-white border-slate-200 text-slate-600 hover:border-slate-300",
+                            ].join(" ")}
+                            data-testid={`button-proof-kind-${k}`}
+                          >
+                            {PROOF_KIND_LABELS[k]}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Channel input + get-code */}
+                      {proofFlow === "idle" && (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={proofChannel}
+                            onChange={(e) => setProofChannel(e.target.value)}
+                            placeholder={PROOF_KIND_PLACEHOLDER[proofKind]}
+                            className="gt-admin-autofill flex-1 rounded-md border border-slate-200 px-3 py-2 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            data-testid="input-proof-channel"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleGetCode}
+                            disabled={!proofChannel.trim() || !emailReadyForProof}
+                            title={!emailReadyForProof ? "Enter your email address first" : undefined}
+                            className="rounded-md bg-slate-900 text-white text-xs font-semibold px-3 py-2 hover:opacity-80 disabled:opacity-40 transition-opacity whitespace-nowrap"
+                            data-testid="button-get-proof-code"
+                          >
+                            Get code
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Issuing */}
+                      {proofFlow === "issuing" && (
+                        <div className="flex items-center gap-2 text-sm text-slate-500 py-1">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Generating code…
+                        </div>
+                      )}
+
+                      {/* Pending — show code + instructions */}
+                      {(proofFlow === "pending" || proofFlow === "failed") && proofCode && (
+                        <div className="space-y-3" data-testid="section-proof-code">
+                          <div className="rounded-md bg-slate-50 border border-slate-200 px-4 py-3 text-center">
+                            <div className="text-xs text-slate-400 mb-1">Your verification code</div>
+                            <div
+                              className="font-mono text-lg font-bold text-slate-900 tracking-widest"
+                              data-testid="text-proof-code"
+                            >
+                              {proofCode}
+                            </div>
+                          </div>
+                          <p className="text-xs text-slate-500 leading-relaxed">
+                            {proofInstructions(proofKind, proofChannel, proofCode)}
+                          </p>
+
+                          {proofFlow === "failed" && proofError && (
+                            <div
+                              className="flex items-start gap-2 rounded-md bg-rose-50 border border-rose-200 px-3 py-2"
+                              data-testid="proof-error-msg"
+                            >
+                              <AlertTriangle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
+                              <p className="text-xs text-rose-700 leading-snug">{proofError}</p>
+                            </div>
+                          )}
+
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={handleVerify}
+                              disabled={proofVerifyMutation.isPending}
+                              className="flex-1 rounded-md bg-[var(--brand-blue)] text-white text-xs font-semibold px-3 py-2 hover:opacity-90 disabled:opacity-50 transition-opacity"
+                              data-testid="button-verify-proof"
+                            >
+                              {proofVerifyMutation.isPending ? (
+                                <span className="inline-flex items-center gap-1.5 justify-center">
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Verifying…
+                                </span>
+                              ) : (
+                                "Verify"
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleResetProof}
+                              className="rounded-md border border-slate-200 text-slate-500 text-xs font-medium px-3 py-2 hover:bg-slate-50 transition-colors"
+                              data-testid="button-cancel-proof"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Verifying */}
+                      {proofFlow === "verifying" && (
+                        <div className="flex items-center gap-2 text-sm text-slate-500 py-1">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Checking your profile…
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Submit error */}
             {submitMutation.isError && (
               <p className="text-sm text-rose-500" data-testid="error-submit">
@@ -471,5 +885,46 @@ export default function JoinReferralLink() {
         </div>
       </div>
     </PageShell>
+  );
+}
+
+// ─── Evidence field sub-component ────────────────────────────────────────────
+function EvidenceField({
+  label,
+  placeholder,
+  value,
+  onChange,
+  error,
+  testId,
+  icon,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+  error?: string;
+  testId: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1">
+        {icon}
+        {label}
+      </label>
+      <input
+        type="url"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={[
+          "gt-admin-autofill w-full rounded-md border px-3 py-2 bg-white text-slate-900",
+          "placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm",
+          error ? "border-rose-400 focus:ring-rose-400" : "border-slate-200",
+        ].join(" ")}
+        data-testid={testId}
+      />
+      {error && <p className="text-xs text-rose-500 mt-1">{error}</p>}
+    </div>
   );
 }
