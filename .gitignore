@@ -6,6 +6,11 @@ vite.config.ts.*
 *.tar.gz
 artifacts/mockup-sandbox/src/.generated/
 
+# Throwaway backup snapshots written by importer scripts — git-ignored so
+# repeated runs can't flood the repo. The latest snapshot per script/env is
+# kept locally in scripts/backups/ for debugging but is never committed.
+scripts/backups/
+
 # Capacitor native projects — scaffolded on a Mac via `npx cap add ios/android`.
 # Build artifacts inside them are ignored; the project files themselves are
 # committed (Capacitor convention) once they exist.
