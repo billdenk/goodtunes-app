@@ -279,6 +279,19 @@ export function ShopifyPanel({
   return (
     <div className="py-6" data-testid="panel-shopify">
       <div className="max-w-3xl">
+        {isShopifyPlus && (
+          <div
+            className="rounded-lg border border-slate-200 bg-white p-4 mb-6 text-[13px] text-slate-600 leading-snug"
+            data-testid="shopify-plus-mapping-note"
+          >
+            This release sells on the customer's own Shopify. GoodTunes runs manufacturing
+            behind it — map each of their Shopify products to this album below so incoming
+            orders route here. A mapped product is fulfillment-only by default; tick “Also mint
+            the GoodTunes digital unlock + GoodDeed” to also hand buyers the app.
+          </div>
+        )}
+        {!isShopifyPlus && (
+        <>
         <ShopifyExplainer />
         {album && (
           <ShopifyContentChecklist album={album} onJumpToTab={onJumpToTab} />
@@ -494,15 +507,32 @@ export function ShopifyPanel({
             pushed (edition + optional cert variant ids on the row).
             Refresh pulls live retail past the 60s server cache. */}
         <ShopifySalesPanel albumId={albumId} />
+        </>
+        )}
 
-        <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Sell this album on Shopify</h2>
+        <h2 className="text-[15px] font-semibold text-slate-900 mb-1">
+          {isShopifyPlus ? "Map the customer's Shopify products" : "Sell this album on Shopify"}
+        </h2>
         <p className="text-[13px] text-slate-500 mb-4 leading-snug">
-          Paste a Shopify product URL from a connected store and we'll bundle GoodTunes digital access into every paid
-          order on that product. Manage connected stores at{" "}
-          <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
-            /admin/shopify
-          </a>
-          .
+          {isShopifyPlus ? (
+            <>
+              Link each product on the customer's connected Shopify store to this album so incoming
+              orders route to the right release. Manage connected stores at{" "}
+              <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
+                /admin/shopify
+              </a>
+              .
+            </>
+          ) : (
+            <>
+              Paste a Shopify product URL from a connected store and we'll bundle GoodTunes digital access into every paid
+              order on that product. Manage connected stores at{" "}
+              <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
+                /admin/shopify
+              </a>
+              .
+            </>
+          )}
         </p>
 
         {/* Existing mappings */}

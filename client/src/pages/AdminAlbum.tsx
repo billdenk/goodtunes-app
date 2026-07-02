@@ -400,9 +400,12 @@ export function visibleTabsFor(
         ];
   // Task #2428 — GoodTunes Shopify+ reuses the Direct production pipeline, so
   // it shows the same Physical (press + master preflight) tab plus a prepaid
-  // manufacturing "Payments" ledger. It NEVER shows the plain Shopify
-  // product-mapping tab — the customer maps SKUs on their own store, and we
-  // don't sell it on the GoodTunes fan surface.
+  // manufacturing "Payments" ledger. It ALSO shows a Shopify tab: the customer
+  // sells on their own store, but GoodTunes still needs each of their products
+  // mapped to this album so incoming order webhooks route here — and that same
+  // mapping row is where an operator opts a product in to also mint the digital
+  // unlock + GoodDeed. The panel hides the "push a draft to our store"
+  // affordances for Shopify+; only the mapping surface is relevant there.
   if (album.sellMode === "direct" || album.sellMode === "shopify_plus") {
     // Artist and label partners don't manage manufacturing, so the Physical
     // tab (pressing plant + master preflight) is hidden for them for now.
@@ -417,7 +420,10 @@ export function visibleTabsFor(
       return base;
     }
     const extra: { key: Tab; label: string }[] = [{ key: "press", label: "Physical" }];
-    if (album.sellMode === "shopify_plus") extra.push({ key: "payments", label: "Payments" });
+    if (album.sellMode === "shopify_plus") {
+      extra.push({ key: "shopify", label: "Shopify" });
+      extra.push({ key: "payments", label: "Payments" });
+    }
     return withCustomers([...base, ...extra]);
   }
   if (album.sellMode === "shopify") {
@@ -1628,6 +1634,7 @@ export function AdminAlbum() {
                 <ShopifyPanel
                   albumId={album.id}
                   album={album}
+                  sellMode={album.sellMode ?? null}
                   readyToPush={completeness?.shopifyReadyToPush ?? false}
                   pushBlockers={completeness?.shopify.missing ?? []}
                   onJumpToTab={(t) => {

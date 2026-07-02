@@ -62,3 +62,32 @@ test("hidePress (artist/label partner) drops Customers, Early access AND Physica
   assert.ok(!k.includes("waitlist"), "artist/label partner: no waitlist");
   assert.ok(!k.includes("press"), "artist/label partner: no Physical tab");
 });
+
+// Task #2428 — a shopify_plus album MUST expose the Shopify mapping tab to the
+// operator. Shopify+ sells on the customer's own store, but GoodTunes still
+// needs each product mapped to this album so incoming order webhooks route
+// here — and that same mapping row is where the operator opts a product in to
+// also mint the digital unlock + GoodDeed. If the tab is hidden, both mapping
+// creation AND the per-product unlock opt-in are unreachable.
+const SHOPIFY_PLUS_ALBUM = {
+  sellMode: "shopify_plus",
+  sellQuoteLockedAt: "2026-01-01T00:00:00.000Z",
+  isGoodTunesRelease: true,
+  isPrepping: false,
+};
+
+test("operator sees the Shopify mapping tab + Physical + Payments on a shopify_plus album", () => {
+  const k = visibleTabsFor(SHOPIFY_PLUS_ALBUM).map((t) => t.key);
+  assert.ok(k.includes("shopify"), "operator can reach the Shopify mapping surface (unlock opt-in)");
+  assert.ok(k.includes("press"), "operator still sees the Physical manufacturing tab");
+  assert.ok(k.includes("payments"), "operator still sees the prepaid Payments ledger");
+});
+
+test("manage_payouts partner on shopify_plus gets Payments but NOT the operator mapping tab", () => {
+  // The mapping surface is operator-only; a payer-partner (hidePress) only
+  // needs the Payments ledger, never the product mapping or Physical tabs.
+  const k = visibleTabsFor(SHOPIFY_PLUS_ALBUM, { hidePress: true, canManagePayouts: true }).map((t) => t.key);
+  assert.ok(k.includes("payments"), "payer-partner sees the Payments ledger");
+  assert.ok(!k.includes("shopify"), "payer-partner does NOT see the operator mapping tab");
+  assert.ok(!k.includes("press"), "payer-partner does NOT see the Physical tab");
+});

@@ -105,6 +105,18 @@ shopify_plus). drizzle-zod does NOT apply the schema `default(true)` when the
 key is omitted, so the route's `=== undefined` branch is what actually decides
 the default.
 
+**The mapping surface MUST stay reachable for shopify_plus.** The per-album
+Shopify tab (ShopifyPanel) is the ONLY place to create a product mapping, and a
+shopify_plus order can only resolve to an album via a mapping row — so hiding
+that tab (the intuitive "they sell on their own store, we don't need it"
+assumption) strands BOTH mapping creation AND the unlock opt-in. So
+`visibleTabsFor` shows the Shopify tab for shopify_plus too; the panel itself
+hides the push-a-draft-to-our-store affordances (irrelevant — the customer runs
+their own listings) and keeps only the mapping list + paste-URL add-form + the
+opt-in checkbox. AdminAlbum must ALSO pass `sellMode` into ShopifyPanel or
+`isShopifyPlus` stays false and the checkbox never renders even when the tab is
+shown.
+
 When TRUE the order falls through to the SHARED sale-mint (real unlock +
 redemption code + optional signed GoodDeed) but with shopify_plus deltas:
 - `status='external_paid'` — a THIRD live status. Auto-excluded from every

@@ -11102,6 +11102,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"rounded-lg border border-slate-200 bg-white p-4 mb-6 text-[13px] text-slate-600 leading-snug\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">Push to Shopify as a draft</h2>"
   },
   {
@@ -11207,7 +11212,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">Sell this album on Shopify</h2>"
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">"
   },
   {
     "rule": "hardcoded-font-size",
