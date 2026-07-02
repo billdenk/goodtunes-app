@@ -3617,7 +3617,7 @@ export function registerCommerceRoutes(app: Express) {
         const remaining = await db
           .select({ id: orders.id })
           .from(orders)
-          .where(and(eq(orders.customerId, o.customerId), eq(orders.albumId, o.albumId), eq(orders.status, "paid")));
+          .where(and(eq(orders.customerId, o.customerId), eq(orders.albumId, o.albumId), inArray(orders.status, ["paid", "external_paid"])));
         if (remaining.length === 0) {
           await db.delete(userAlbums).where(and(eq(userAlbums.userId, o.customerId), eq(userAlbums.albumId, o.albumId)));
         }
@@ -4649,7 +4649,9 @@ async function handleRefund(paymentIntentId: string): Promise<void> {
   // partial unique index + retry loop for concurrent assignment).
   // Return the album lock to its pre-purchase state. (Other orders for
   // this customer + album may still grant access; we only revoke when
-  // this is the *only* paid order for the pair.)
+  // this is the *only* live order for the pair. "Live" includes a Task
+  // #2428 shopify_plus "external_paid" unlock, not just a direct "paid"
+  // order — same rule the Shopify refund path uses.)
   const remaining = await db
     .select({ id: orders.id })
     .from(orders)
@@ -4657,7 +4659,7 @@ async function handleRefund(paymentIntentId: string): Promise<void> {
       and(
         eq(orders.customerId, order.customerId),
         eq(orders.albumId, order.albumId),
-        eq(orders.status, "paid"),
+        inArray(orders.status, ["paid", "external_paid"]),
       ),
     );
   if (remaining.length === 0) {

@@ -309,6 +309,7 @@ This table consolidates the capability claims above against what is actually shi
 | GoodTunes Shopify+ (partner sells on their own Shopify, GoodTunes runs the full production pipeline behind it) | **Live** | `docs/capabilities.md` — "GoodTunes Shopify+ — sell on your own Shopify, we run manufacturing" |
 | Prepaid staged manufacturing ledger (upload quote PDFs, hand-key steps, pay the plant by ACH ~$5 cap) | **Live** | `docs/capabilities.md` — "Prepaid manufacturing ledger (ACH, staged)" |
 | Fulfillment-only Shopify order feed (route the partner's own Shopify orders to fulfillment with no GoodTunes sale) | **Live** | `docs/capabilities.md` — "Fulfillment-only Shopify order feed" |
+| Shopify+ per-product digital-unlock opt-in (buyers still get the app unlock + GoodDeed, booked as external / revenue-excluded) | **Live** | `docs/capabilities.md` — "Shopify+ can still hand fans the app — as a per-product opt-in" |
 | Per-partner infra billing segregation (for cost+ pass-through) | **Not built** | Would require engineering work to segment Mux/storage costs per partner |
 | Custom partner domain (e.g. `redeem.theirplant.com`) | **[ROADMAP]** | Not yet built; requires white-label domain infra |
 | Themed player chrome (partner logo/colors on the player) | **[ROADMAP]** | Not yet built |

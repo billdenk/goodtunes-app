@@ -95,6 +95,34 @@ status filter or it will wrongly include these. Buyer-roster / audience reads
 count these as buyers, which is correct and not a revenue read. Any new payout
 trigger must gate on paid/shipped.
 
+# Shopify+ per-product digital-unlock opt-in
+
+A shopify_plus product mapping carries `offersDigitalUnlock`
+(`shopify_product_mappings`). The mapping-create route defaults it FALSE for
+shopify_plus albums (true otherwise), so shopify_plus stays fulfillment-only
+UNLESS the operator opts a product in (ShopifyPanel checkbox, shown only for
+shopify_plus). drizzle-zod does NOT apply the schema `default(true)` when the
+key is omitted, so the route's `=== undefined` branch is what actually decides
+the default.
+
+When TRUE the order falls through to the SHARED sale-mint (real unlock +
+redemption code + optional signed GoodDeed) but with shopify_plus deltas:
+- `status='external_paid'` — a THIRD live status. Auto-excluded from every
+  revenue/payout read (they whitelist paid/shipped/complete/completed/refunded;
+  external_paid is in none), so buyers still get the app but the sale never
+  enters GoodTunes revenue or artist/label payouts.
+- `origin='shopify_plus:<store>'`; NO press-pool accrual (accruePressPool
+  no-ops on `isShopifyPlusAlbum`).
+- fulfillment gated by `album.shopifyPlusFulfillment`; signed cert additionally
+  gated by `album.shopifyPlusSignedGooddeed`.
+
+**Refund lock-return must treat external_paid as LIVE.** Every "is this the only
+remaining order for this customer+album → revoke the album unlock" check must use
+`inArray(status, ["paid","external_paid"])`, not bare `="paid"`. Three sites:
+the Shopify refund path (server/shopify.ts) AND both Stripe refund lock-return
+sites (server/commerce.ts). Missing external_paid would wrongly revoke a fan who
+still holds an external_paid unlock when an unrelated direct order refunds.
+
 # albums.physicalFormat ≠ shipping/SKU format keyspace
 
 `albums.physicalFormat` uses `single_lp / double_lp / seven_inch / cassette / cd`.

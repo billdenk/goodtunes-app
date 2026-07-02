@@ -539,7 +539,16 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // assigned partner; when OFF we dropship the whole run and ignore
   // per-order webhooks. Branch BEFORE the sale-mint below.
   const [spAlbum] = await db.select().from(albums).where(eq(albums.id, albumId));
-  if (spAlbum?.sellMode === "shopify_plus") {
+  const isShopifyPlus = spAlbum?.sellMode === "shopify_plus";
+  // Task #2428 line 31 — a shopify_plus album may STILL opt a mapping in to
+  // mint the GoodTunes digital unlock + GoodDeed "exactly as today". Only a
+  // mapping with offersDigitalUnlock=false takes the pure fulfillment-only
+  // feed (Step 8 baseline — mints nothing). offersDigitalUnlock=true falls
+  // through to the shared sale-mint below, with shopify_plus deltas applied
+  // inline: external_paid status (kept out of GoodTunes revenue/payouts),
+  // no fan-sale pool / early-cut accrual, and fulfillment/cert gated by the
+  // album toggles.
+  if (isShopifyPlus && !matchedMapping.offersDigitalUnlock) {
     await materializeShopifyPlusFulfillmentOnly({
       store,
       payload,
@@ -567,7 +576,13 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   //              the price is at or above the album's min floor.
   const totalCents = dollarsToCents(payload.total_price);
   let signedCertCents = 0;
-  if (matchedMapping.offerSignedCert && matchedMapping.signedCertPriceCents != null) {
+  if (
+    matchedMapping.offerSignedCert &&
+    matchedMapping.signedCertPriceCents != null &&
+    // Task #2428 — on a shopify_plus album the signed GoodDeed is additionally
+    // gated by the album-level value-add toggle; plain shopify is unaffected.
+    (!isShopifyPlus || spAlbum?.shopifyPlusSignedGooddeed)
+  ) {
     const [floor] = await db
       .select()
       .from(albumAddons)
@@ -601,21 +616,31 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
         albumId,
         totalCents,
         currency: (payload.currency ?? "usd").toLowerCase(),
-        status: "paid",
+        // Task #2428 — a shopify_plus unlock order is NOT a GoodTunes sale
+        // (the label sold it on their own Shopify). external_paid grants the
+        // unlock + GoodDeed but is auto-excluded from every revenue/payout
+        // read (they whitelist paid/shipped/complete/completed/refunded).
+        status: isShopifyPlus ? "external_paid" : "paid",
         shippingAddress: shipping as any,
         billingAddress: billing as any,
         buyerEmail,
         buyerName,
         buyerPhone: payload.customer?.phone ?? null,
         goodDeedNumber,
-        origin: `shopify:${store.id}`,
+        origin: isShopifyPlus ? `shopify_plus:${store.id}` : `shopify:${store.id}`,
         shopifyStoreId: store.id,
         shopifyOrderId,
         shopifyOrderToken: payload.token ?? null,
         skuKind,
         artistSnapshotId,
         labelSnapshotId,
-        fulfillmentStatus: isPhysicalSkuKind(skuKind) ? "pending" : null,
+        // Physical orders flag "pending" fulfillment — but a shopify_plus
+        // album only routes per-order goods when its fulfillment toggle is
+        // on (otherwise the finished run is dropshipped, nothing per order).
+        fulfillmentStatus:
+          isPhysicalSkuKind(skuKind) && (!isShopifyPlus || spAlbum?.shopifyPlusFulfillment)
+            ? "pending"
+            : null,
       })
       .onConflictDoNothing({ target: orders.shopifyOrderId })
       .returning();
@@ -664,7 +689,10 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
 
   // Task #533 — accrue this paid Shopify sale's per-unit press earmark
   // into the album's early-cut funding pool. Idempotent per order.
-  {
+  // Task #2428 — shopify_plus bypasses the fan-sale pool / early-cut
+  // entirely: its manufacturing is prepaid via the ACH ledger, not funded
+  // out of per-sale earmarks.
+  if (!isShopifyPlus) {
     const { accruePressPool } = await import("./earlyCut");
     await accruePressPool(albumId, order.id, matchedLine.quantity).catch((e) =>
       console.error(`[shopify] press-pool accrual failed for ${order.id}`, (e as Error)?.message),
@@ -720,7 +748,14 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // before anything is printed. pushOrderToOrderDesk is internally try/caught
   // and records any error on the order row so the admin retry button surfaces
   // the reason.
-  if (isPhysicalSkuKind(skuKind) && orderDeskAutoPushEnabled()) {
+  // Task #2428 — a shopify_plus order whose album has fulfillment ON pushes
+  // to the partner immediately (the goods are prepaid and already exist),
+  // bypassing the deliberate auto-push gate that plain Shopify/direct orders
+  // wait on until the press-run quantity is confirmed.
+  const shouldPushToOrderDesk = isShopifyPlus
+    ? isPhysicalSkuKind(skuKind) && !!spAlbum?.shopifyPlusFulfillment
+    : isPhysicalSkuKind(skuKind) && orderDeskAutoPushEnabled();
+  if (shouldPushToOrderDesk) {
     await pushOrderToOrderDesk(order.id).catch((e) =>
       console.error(`[shopify] OD handoff unexpected throw for ${order.id}`, e?.message),
     );
@@ -852,13 +887,13 @@ async function handleShopifyRefund(payload: { order_id?: number; id?: number }):
     );
   }
   // Same lock-return logic as the Stripe refund path: only revoke the
-  // album unlock if this is the *only* paid order for the customer +
-  // album. Other paid orders (direct or another Shopify cart) still
-  // keep the unlock alive.
+  // album unlock if this is the *only* live order for the customer +
+  // album. Other live orders — a direct/Shopify "paid" order or a
+  // Task #2428 shopify_plus "external_paid" unlock — still keep it alive.
   const remaining = await db
     .select({ id: orders.id })
     .from(orders)
-    .where(and(eq(orders.customerId, order.customerId), eq(orders.albumId, order.albumId), eq(orders.status, "paid")));
+    .where(and(eq(orders.customerId, order.customerId), eq(orders.albumId, order.albumId), inArray(orders.status, ["paid", "external_paid"])));
   if (remaining.length === 0) {
     await db.delete(userAlbums).where(and(eq(userAlbums.userId, order.customerId), eq(userAlbums.albumId, order.albumId)));
   }
@@ -1579,6 +1614,19 @@ export function registerShopifyRoutes(app: Express) {
     // then-update-or-insert is simple, race-safe enough for an
     // admin-only endpoint, and avoids materializing two upsert paths.
     const d = parsed.data;
+    // Task #2428 — offers_digital_unlock: for a shopify_plus album the
+    // fulfillment-only feed is the baseline (Step 8), so a mapping only mints
+    // the GoodTunes unlock + GoodDeed when the operator explicitly opts in.
+    // Plain "shopify" albums always mint, so the flag is irrelevant there —
+    // leave it at its true default. If the client sent an explicit value (the
+    // mapping checkbox on a shopify_plus album), honor it.
+    if (d.offersDigitalUnlock === undefined) {
+      const [alb] = await db
+        .select({ sellMode: albums.sellMode })
+        .from(albums)
+        .where(eq(albums.id, albumId));
+      d.offersDigitalUnlock = alb?.sellMode === "shopify_plus" ? false : true;
+    }
     const variantId = d.shopifyVariantId ?? null;
     const [existing] = await db
       .select()
@@ -1599,6 +1647,7 @@ export function registerShopifyRoutes(app: Express) {
         .set({
           albumId: d.albumId,
           offerSignedCert: d.offerSignedCert ?? false,
+          offersDigitalUnlock: d.offersDigitalUnlock,
           signedCertPriceCents: d.signedCertPriceCents ?? null,
           shopifyProductTitle: d.shopifyProductTitle ?? null,
         })

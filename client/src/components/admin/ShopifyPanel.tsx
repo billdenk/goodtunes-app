@@ -57,6 +57,7 @@ type Mapping = {
   shopifyProductTitle: string | null;
   albumId: string;
   offerSignedCert: boolean;
+  offersDigitalUnlock: boolean;
   signedCertPriceCents: number | null;
   storeName: string | null;
   shopDomain: string | null;
@@ -110,12 +111,16 @@ type PushStatus = {
 export function ShopifyPanel({
   albumId,
   album,
+  sellMode = null,
   onJumpToTab,
   readyToPush = false,
   pushBlockers = [],
 }: {
   albumId: string;
   album?: ShopifyPanelAlbum;
+  // Task #2428 — drives the shopify_plus-only "also mint the digital unlock"
+  // mapping checkbox. Passed from AdminAlbum's album.sellMode.
+  sellMode?: "direct" | "shopify" | "shopify_plus" | null;
   onJumpToTab?: (tab: ShopifyJumpTab) => void;
   // Task #1530 — completeness gating for the push action. `readyToPush`
   // is true only when Overview + Digital read complete (masters on file);
@@ -141,6 +146,11 @@ export function ShopifyPanel({
   const [variantId, setVariantId] = useState<string | null>(null);
   const [offerCert, setOfferCert] = useState(false);
   const [certPrice, setCertPrice] = useState("9.99");
+  // Task #2428 — for a shopify_plus album the operator opts a mapping in to
+  // ALSO mint the GoodTunes digital unlock + GoodDeed (default OFF =
+  // fulfillment-only). Not shown for plain "shopify" (a mapping always mints).
+  const isShopifyPlus = sellMode === "shopify_plus";
+  const [offerUnlock, setOfferUnlock] = useState(false);
 
   // Push-to-Shopify (Task #242) — locally-edited fields. Initialized
   // from /shopify-push so the inputs reflect the persisted album row
@@ -229,6 +239,9 @@ export function ShopifyPanel({
         albumId,
         offerSignedCert: offerCert,
       };
+      // Task #2428 — only meaningful for shopify_plus; the server ignores it
+      // for plain shopify (a mapping always mints the unlock there).
+      if (isShopifyPlus) body.offersDigitalUnlock = offerUnlock;
       if (offerCert) {
         const cents = parseDollars(certPrice);
         if (cents == null) throw new Error("Enter a valid cert price");
@@ -243,6 +256,7 @@ export function ShopifyPanel({
       setResolved(null);
       setVariantId(null);
       setOfferCert(false);
+      setOfferUnlock(false);
       toast({ title: "Mapping saved" });
     },
     onError: (e: any) => toast({ title: "Couldn't save mapping", description: e?.message, variant: "destructive" }),
@@ -600,6 +614,23 @@ export function ShopifyPanel({
                   ))}
                 </select>
               </div>
+              {isShopifyPlus && (
+                <div>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={offerUnlock}
+                      onChange={(e) => setOfferUnlock(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
+                      data-testid="toggle-shopify-unlock"
+                    />
+                    <span className="text-sm text-slate-800">Also mint the GoodTunes digital unlock + GoodDeed</span>
+                  </label>
+                  <p className="text-xs text-slate-400 mt-1 ml-6">
+                    Off routes the order to fulfillment only. On also grants buyers the app unlock and a GoodDeed number — exactly like Shopify mode.
+                  </p>
+                </div>
+              )}
               <div>
                 <label className="inline-flex items-center gap-2">
                   <input

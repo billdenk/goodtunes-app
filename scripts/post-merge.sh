@@ -8606,3 +8606,29 @@ SQL
 }
 migrate_shopify_plus_ledger dev  "${DATABASE_URL:-}"
 migrate_shopify_plus_ledger prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #2428 — Shopify+ per-mapping "offer digital unlock" flag ─────
+# For a shopify_plus album the fulfillment-only feed is the baseline; the
+# operator opts a product mapping IN to also mint the GoodTunes digital
+# unlock + GoodDeed. Default true so plain "shopify" mappings (where the
+# flag is irrelevant — a mapping always mints) are semantically unchanged
+# with zero backfill. Declared in shared/schema.ts; the schema-drift guard
+# fails if it's missing, so add it on both DBs. Idempotent.
+add_shopify_plus_mapping_unlock_flag() {
+  local label="$1" db_url="$2"
+  [ -z "$db_url" ] && { echo "post-merge: skip task-2428 mapping unlock flag ($label — no URL)"; return; }
+  local out
+  if out=$(psql "$db_url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1); then
+BEGIN;
+ALTER TABLE shopify_product_mappings
+  ADD COLUMN IF NOT EXISTS offers_digital_unlock boolean NOT NULL DEFAULT true;
+COMMIT;
+SQL
+    echo "post-merge: task-2428 mapping unlock flag ok on $label"
+  else
+    echo "post-merge: WARNING — task-2428 mapping unlock flag failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+add_shopify_plus_mapping_unlock_flag dev  "${DATABASE_URL:-}"
+add_shopify_plus_mapping_unlock_flag prod "${PROD_DATABASE_URL:-}"

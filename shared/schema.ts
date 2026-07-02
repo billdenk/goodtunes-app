@@ -3025,6 +3025,14 @@ export const shopifyProductMappings = pgTable(
     shopifyProductTitle: text("shopify_product_title"),
     albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
     offerSignedCert: boolean("offer_signed_cert").notNull().default(false),
+    // Task #2428 — for a shopify_plus album this per-mapping flag decides
+    // whether an order on the customer's OWN Shopify ALSO mints the GoodTunes
+    // digital unlock + GoodDeed ("exactly as today", opt-in) or is routed
+    // fulfillment-only (Step 8 baseline — mints nothing). Ignored for plain
+    // "shopify" mode, where the mere existence of a mapping always mints the
+    // unlock, so DEFAULT true keeps every existing row semantically identical
+    // with zero backfill.
+    offersDigitalUnlock: boolean("offers_digital_unlock").notNull().default(true),
     // Price the label is selling the cert for inside the Shopify cart.
     // Subject to the album's min floor — webhook discards values below.
     signedCertPriceCents: integer("signed_cert_price_cents"),
