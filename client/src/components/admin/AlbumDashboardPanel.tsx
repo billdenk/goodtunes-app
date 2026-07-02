@@ -112,16 +112,12 @@ function StatCard({
 }) {
   return (
     <div
-      className="rounded-xl border border-slate-200 bg-white p-4 flex items-start gap-3"
+      className="relative rounded-xl border border-slate-200 bg-white p-4"
       data-testid={testId}
     >
-      <div className="w-9 h-9 rounded-lg bg-[var(--brand-blue)]/10 flex items-center justify-center flex-shrink-0">
-        <Icon className="w-4 h-4 text-[var(--brand-blue)]" strokeWidth={1.8} />
-      </div>
-      <div>
-        <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">{label}</div>
-        <div className="text-2xl font-bold text-slate-900 tabular-nums mt-0.5">{value}</div>
-      </div>
+      <Icon className="absolute top-4 right-4 w-4 h-4 text-slate-300" strokeWidth={1.6} />
+      <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">{label}</div>
+      <div className="text-2xl font-bold text-slate-900 tabular-nums mt-1">{value}</div>
     </div>
   );
 }
