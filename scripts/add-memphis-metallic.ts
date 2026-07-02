@@ -26,7 +26,8 @@
  * skips mirroring any color that already has a publicUrl in the manifest.
  *
  * BACKUP: dumps every Memphis tier/color/jacket-ladder for the target DB to
- * scripts/backups/memphis-catalog-<env>-<ts>.json before any write.
+ * scripts/backups/memphis-catalog-<env>-latest.json before any write
+ * (fixed filename, overwritten in place; git-ignored, never committed).
  *
  * Dev:   npx tsx scripts/add-memphis-metallic.ts
  * Prod:  DATABASE_URL="$PROD_DATABASE_URL" npx tsx scripts/add-memphis-metallic.ts
@@ -103,20 +104,33 @@ async function main() {
     process.env.DATABASE_URL === process.env.PROD_DATABASE_URL ? "prod" : "dev";
   console.log(`Target: ${envLabel} DB · press ${press.name} (${pressId})${DRY ? " · DRY RUN" : ""}`);
 
-  // ---- Backup ----
-  const backup = await db.execute(sql`
-    SELECT
-      (SELECT jsonb_agg(to_jsonb(t)) FROM press_color_tiers t WHERE t.press_id = ${pressId}) AS tiers,
-      (SELECT jsonb_agg(to_jsonb(c)) FROM press_colors c
-         JOIN press_color_tiers t ON t.id = c.tier_id WHERE t.press_id = ${pressId}) AS colors,
-      (SELECT jsonb_agg(to_jsonb(j)) FROM press_tier_jacket_ladders j
-         JOIN press_color_tiers t ON t.id = j.tier_id WHERE t.press_id = ${pressId}) AS jacket_ladders
-  `);
-  mkdirSync("scripts/backups", { recursive: true });
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupPath = `scripts/backups/memphis-catalog-${envLabel}-${ts}.json`;
-  writeFileSync(backupPath, JSON.stringify({ pressId, snapshot: backup.rows[0] }, null, 2));
-  console.log(`Backup written: ${backupPath}`);
+  // ---- No-op detection: exit early if all formats already have the tier ----
+  if (!DRY) {
+    const existing = await db.execute<{ fmt: string }>(sql`
+      SELECT format AS fmt FROM press_color_tiers
+      WHERE press_id = ${pressId} AND name = ${TIER_NAME}`);
+    const existingFmts = new Set(existing.rows.map((r) => r.fmt));
+    if (FORMATS.every((f) => existingFmts.has(f))) {
+      console.log(`add-memphis-metallic: all formats already have "${TIER_NAME}" — clean no-op.`);
+      return;
+    }
+  }
+
+  // ---- Backup (only when we're about to mutate the DB) ----
+  if (!DRY) {
+    const backup = await db.execute(sql`
+      SELECT
+        (SELECT jsonb_agg(to_jsonb(t)) FROM press_color_tiers t WHERE t.press_id = ${pressId}) AS tiers,
+        (SELECT jsonb_agg(to_jsonb(c)) FROM press_colors c
+           JOIN press_color_tiers t ON t.id = c.tier_id WHERE t.press_id = ${pressId}) AS colors,
+        (SELECT jsonb_agg(to_jsonb(j)) FROM press_tier_jacket_ladders j
+           JOIN press_color_tiers t ON t.id = j.tier_id WHERE t.press_id = ${pressId}) AS jacket_ladders
+    `);
+    mkdirSync("scripts/backups", { recursive: true });
+    const backupPath = `scripts/backups/memphis-catalog-${envLabel}-latest.json`;
+    writeFileSync(backupPath, JSON.stringify({ pressId, snapshot: backup.rows[0] }, null, 2));
+    console.log(`Backup written: ${backupPath}`);
+  }
 
   // ---- Phase 1: mirror images (idempotent via manifest publicUrl) ----
   const need = manifest.colors.filter((c) => !c.publicUrl);

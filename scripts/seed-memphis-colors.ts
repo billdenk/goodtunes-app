@@ -374,8 +374,7 @@ async function main() {
          JOIN press_color_tiers t ON t.id = j.tier_id WHERE t.press_id = ${pressId}) AS jacket_ladders
   `);
   mkdirSync("scripts/backups", { recursive: true });
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupPath = `scripts/backups/memphis-catalog-${envLabel}-${ts}.json`;
+  const backupPath = `scripts/backups/memphis-catalog-${envLabel}-latest.json`;
   writeFileSync(backupPath, JSON.stringify({ pressId, snapshot: backup.rows[0] }, null, 2));
   console.log(`Backup written: ${backupPath}`);
 

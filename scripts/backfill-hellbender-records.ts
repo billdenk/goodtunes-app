@@ -79,17 +79,6 @@ async function main() {
   const envLabel = process.env.DATABASE_URL === process.env.PROD_DATABASE_URL ? "prod" : "dev";
   console.log(`Target: ${envLabel} DB · press ${press.name} (${pressId})${DRY ? " · DRY RUN" : ""}`);
 
-  // ---- Backup ----
-  const backup = await db.execute(sql`
-    SELECT jsonb_agg(to_jsonb(c)) AS colors
-    FROM press_colors c JOIN press_color_tiers t ON t.id = c.tier_id
-    WHERE t.press_id = ${pressId}`);
-  mkdirSync("scripts/backups", { recursive: true });
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupPath = `scripts/backups/hellbender-records-${envLabel}-${ts}.json`;
-  writeFileSync(backupPath, JSON.stringify({ pressId, colors: backup.rows[0] }, null, 2));
-  console.log(`Backup written: ${backupPath}`);
-
   // ---- Build name set from target DB ----
   const dbNamesRes = await db.execute<{ name: string }>(sql`
     SELECT DISTINCT c.name FROM press_colors c
@@ -114,6 +103,27 @@ async function main() {
   // ---- Phase 1: upload (idempotent via manifest publicUrl) ----
   const targets = dbNames.map((n) => byName.get(norm(n))).filter((e): e is Entry => !!e);
   const need = targets.filter((e) => !e.publicUrl);
+
+  // ---- No-op detection: skip backup + all writes when nothing will change ----
+  if (!DRY && need.length === 0) {
+    // All disc images are already in Object Storage. Check whether any DB row
+    // still needs re-pointing to its manifest publicUrl.
+    let needsUpdate = false;
+    for (const e of targets) {
+      if (!e.publicUrl) continue;
+      const cnt = await db.execute<{ n: number }>(sql`
+        SELECT COUNT(*)::int AS n FROM press_colors c
+        JOIN press_color_tiers t ON t.id = c.tier_id
+        WHERE t.press_id = ${pressId} AND c.name = ${e.name}
+          AND c.swatch_image_url IS DISTINCT FROM ${e.publicUrl}`);
+      if ((cnt.rows[0]?.n ?? 0) > 0) { needsUpdate = true; break; }
+    }
+    if (!needsUpdate) {
+      console.log("backfill-hellbender-records: nothing to do — all DB rows already point to current disc images. Clean no-op.");
+      return;
+    }
+  }
+
   console.log(`\nResolved ${targets.length}/${dbNames.length} colors · ${need.length} discs to upload.`);
   if (!DRY) {
     let done = 0;
@@ -134,6 +144,18 @@ async function main() {
       const path = `${RECORDS_DIR}/${e.slug}.png`;
       console.log(`    ${e.name} <- ${path}${existsSync(path) ? "" : "  (MISSING!)"}`);
     }
+  }
+
+  // ---- Backup (only when we're about to mutate the DB) ----
+  if (!DRY) {
+    const backup = await db.execute(sql`
+      SELECT jsonb_agg(to_jsonb(c)) AS colors
+      FROM press_colors c JOIN press_color_tiers t ON t.id = c.tier_id
+      WHERE t.press_id = ${pressId}`);
+    mkdirSync("scripts/backups", { recursive: true });
+    const backupPath = `scripts/backups/hellbender-records-${envLabel}-latest.json`;
+    writeFileSync(backupPath, JSON.stringify({ pressId, colors: backup.rows[0] }, null, 2));
+    console.log(`Backup written: ${backupPath}`);
   }
 
   // ---- Phase 2: re-point every matched row at its disc image ----

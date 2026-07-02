@@ -31,7 +31,8 @@
  * Safe on a clean catalog (e.g. dev, which never had the "*" tiers).
  *
  * BACKUP: before any write, dumps every Memphis tier + color + jacket ladder
- * for the targeted DB to scripts/backups/memphis-catalog-<env>-<ts>.json.
+ * for the targeted DB to scripts/backups/memphis-catalog-<env>-latest.json
+ * (fixed filename, overwritten in place; git-ignored, never committed).
  *
  * Dev:   npx tsx scripts/cleanup-memphis-catalog.ts
  * Prod:  DATABASE_URL="$PROD_DATABASE_URL" npx tsx scripts/cleanup-memphis-catalog.ts
@@ -82,21 +83,6 @@ async function main() {
     process.env.DATABASE_URL === process.env.PROD_DATABASE_URL ? "prod" : "dev";
   console.log(`Target: ${envLabel} DB · press ${press.name} (${pressId})${DRY ? " · DRY RUN" : ""}`);
 
-  // ---- Backup every Memphis catalog row before touching anything ----
-  const backup = await db.execute(sql`
-    SELECT
-      (SELECT jsonb_agg(to_jsonb(t)) FROM press_color_tiers t WHERE t.press_id = ${pressId}) AS tiers,
-      (SELECT jsonb_agg(to_jsonb(c)) FROM press_colors c
-         JOIN press_color_tiers t ON t.id = c.tier_id WHERE t.press_id = ${pressId}) AS colors,
-      (SELECT jsonb_agg(to_jsonb(j)) FROM press_tier_jacket_ladders j
-         JOIN press_color_tiers t ON t.id = j.tier_id WHERE t.press_id = ${pressId}) AS jacket_ladders
-  `);
-  mkdirSync("scripts/backups", { recursive: true });
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupPath = `scripts/backups/memphis-catalog-${envLabel}-${ts}.json`;
-  writeFileSync(backupPath, JSON.stringify({ pressId, snapshot: backup.rows[0] }, null, 2));
-  console.log(`Backup written: ${backupPath}`);
-
   // ---- Show the "*" tiers currently present (the cleanup target) ----
   const starPresent = await db.execute<{ format: string; name: string; colors: number }>(sql`
     SELECT t.format, t.name, COUNT(c.id)::int AS colors
@@ -107,8 +93,24 @@ async function main() {
     ORDER BY t.format, t.name
   `);
   if (starPresent.rows.length === 0) {
-    console.log('No "*" tiers present — catalog already clean. No-op.');
+    console.log('No "*" tiers present — catalog already clean. Clean no-op.');
     return;
+  }
+
+  // ---- Backup (only when we're about to mutate the DB) ----
+  if (!DRY) {
+    const backup = await db.execute(sql`
+      SELECT
+        (SELECT jsonb_agg(to_jsonb(t)) FROM press_color_tiers t WHERE t.press_id = ${pressId}) AS tiers,
+        (SELECT jsonb_agg(to_jsonb(c)) FROM press_colors c
+           JOIN press_color_tiers t ON t.id = c.tier_id WHERE t.press_id = ${pressId}) AS colors,
+        (SELECT jsonb_agg(to_jsonb(j)) FROM press_tier_jacket_ladders j
+           JOIN press_color_tiers t ON t.id = j.tier_id WHERE t.press_id = ${pressId}) AS jacket_ladders
+    `);
+    mkdirSync("scripts/backups", { recursive: true });
+    const backupPath = `scripts/backups/memphis-catalog-${envLabel}-latest.json`;
+    writeFileSync(backupPath, JSON.stringify({ pressId, snapshot: backup.rows[0] }, null, 2));
+    console.log(`Backup written: ${backupPath}`);
   }
   console.log(`\n"*" tiers to remove (after folding photos in):`);
   for (const r of starPresent.rows) console.log(`  ${r.format}  ${r.name}  (${r.colors} colors)`);

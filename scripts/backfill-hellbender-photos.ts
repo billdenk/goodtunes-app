@@ -152,8 +152,7 @@ async function writeBackup(pressId: string, envLabel: string): Promise<void> {
     FROM press_colors c JOIN press_color_tiers t ON t.id = c.tier_id
     WHERE t.press_id = ${pressId}`);
   mkdirSync("scripts/backups", { recursive: true });
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupPath = `scripts/backups/hellbender-colors-${envLabel}-${ts}.json`;
+  const backupPath = `scripts/backups/hellbender-colors-${envLabel}-latest.json`;
   writeFileSync(backupPath, JSON.stringify({ pressId, colors: backup.rows[0] }, null, 2));
   console.log(`Backup written: ${backupPath}`);
 }
@@ -248,17 +247,6 @@ async function main() {
     return;
   }
 
-  // ---- Backup ----
-  const backup = await db.execute(sql`
-    SELECT jsonb_agg(to_jsonb(c)) AS colors
-    FROM press_colors c JOIN press_color_tiers t ON t.id = c.tier_id
-    WHERE t.press_id = ${pressId}`);
-  mkdirSync("scripts/backups", { recursive: true });
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupPath = `scripts/backups/hellbender-colors-${envLabel}-${ts}.json`;
-  writeFileSync(backupPath, JSON.stringify({ pressId, colors: backup.rows[0] }, null, 2));
-  console.log(`Backup written: ${backupPath}`);
-
   // ---- Build name set from target DB ----
   const dbNamesRes = await db.execute<{ name: string }>(sql`
     SELECT DISTINCT c.name FROM press_colors c
@@ -301,6 +289,30 @@ async function main() {
   // of re-mirroring — keeping dev and prod pointed at one image.
   const targets = dbNames.map((n) => byName.get(norm(n))).filter((e): e is Entry => !!e);
   const need = targets.filter((e) => !e.publicUrl || (REMASK && (e.maskVersion ?? 1) !== MASK_VERSION));
+
+  // ---- No-op detection: skip backup + all writes when nothing will change ----
+  if (!DRY && need.length === 0 && !REMASK) {
+    // All manifest entries already have a publicUrl. Phase 2 only fills NULL
+    // rows whose name matches one of our targets, so scope the check to those
+    // names — an unmatched/immutable NULL row elsewhere in the press must not
+    // force a needless backup + zero-row write on a clean re-run.
+    const targetNames = targets.map((e) => e.name);
+    const nullCount = targetNames.length === 0
+      ? 0
+      : (
+          await db.execute<{ n: number }>(sql`
+            SELECT COUNT(*)::int AS n
+            FROM press_colors c
+            JOIN press_color_tiers t ON t.id = c.tier_id
+            WHERE t.press_id = ${pressId} AND c.swatch_image_url IS NULL
+              AND c.name IN (${sql.join(targetNames.map((n) => sql`${n}`), sql`, `)})`)
+        ).rows[0]?.n ?? 0;
+    if (nullCount === 0) {
+      console.log("backfill-hellbender-photos: nothing to do — manifest complete and no NULL rows in DB. Clean no-op.");
+      await printTierSummary(pressId);
+      return;
+    }
+  }
   console.log(
     `\nMatched ${targets.length}/${dbNames.length} colors · ${need.length} images to ${REMASK ? "re-mask" : "mirror"}.`,
   );
@@ -318,6 +330,9 @@ async function main() {
   } else if (need.length) {
     console.log(`  [DRY] would ${REMASK ? "re-mask" : "mirror"} ${need.length} images.`);
   }
+
+  // ---- Backup (only when we're about to mutate the DB) ----
+  if (!DRY) await writeBackup(pressId, envLabel);
 
   // ---- Phase 2: backfill swatch_image_url where NULL ----
   let updated = 0;

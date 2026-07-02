@@ -39,7 +39,8 @@
  *   - Only writes the DEFAULT jacket's ladder (what the demo reads); the
  *     non-default jacket ladders are left as-is.
  *   - Backs up every Memphis default-jacket ladder to
- *     scripts/backups/memphis-pricing-<env>-<ts>.json before any write.
+ *     scripts/backups/memphis-pricing-<env>-latest.json before any write
+ *     (fixed filename, overwritten in place; git-ignored, never committed).
  *   - unitCents stays PER-UNIT cents (scaled from per-unit Color rungs) —
  *     no vendor-total / 100x trap.
  *
@@ -128,30 +129,6 @@ async function main() {
   const ladderByTier = new Map<string, Rung[]>();
   for (const l of ladders) ladderByTier.set(l.tierId, (l.priceLadder ?? []) as Rung[]);
 
-  // ── Backup ────────────────────────────────────────────────────────────
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  mkdirSync("scripts/backups", { recursive: true });
-  const backupPath = `scripts/backups/memphis-pricing-${ENV}-${ts}.json`;
-  writeFileSync(
-    backupPath,
-    JSON.stringify(
-      {
-        pressId,
-        jacketId,
-        jacketName: defJacket.name,
-        tiers: tiers.map((t) => ({
-          id: t.id,
-          format: t.format,
-          name: t.name,
-          priceLadder: ladderByTier.get(t.id) ?? [],
-        })),
-      },
-      null,
-      2,
-    ),
-  );
-  console.log(`backup → ${backupPath}`);
-
   // Build per-format Color baseline { qty -> confirmed unitCents }.
   const baselineByFormat = new Map<string, Map<number, number>>();
   for (const t of tiers) {
@@ -220,9 +197,32 @@ async function main() {
     return;
   }
   if (plan.length === 0) {
-    console.log("\nNothing to fill (all empty tiers already priced or no baseline).");
+    console.log("\nNothing to fill (all empty tiers already priced or no baseline). Clean no-op.");
     return;
   }
+
+  // ── Backup (only when we're about to mutate the DB) ──────────────────
+  mkdirSync("scripts/backups", { recursive: true });
+  const backupPath = `scripts/backups/memphis-pricing-${ENV}-latest.json`;
+  writeFileSync(
+    backupPath,
+    JSON.stringify(
+      {
+        pressId,
+        jacketId,
+        jacketName: defJacket.name,
+        tiers: tiers.map((t) => ({
+          id: t.id,
+          format: t.format,
+          name: t.name,
+          priceLadder: ladderByTier.get(t.id) ?? [],
+        })),
+      },
+      null,
+      2,
+    ),
+  );
+  console.log(`backup → ${backupPath}`);
 
   // ── Write (one transaction) ──────────────────────────────────────────
   const tierIdByKey = new Map<string, string>();
