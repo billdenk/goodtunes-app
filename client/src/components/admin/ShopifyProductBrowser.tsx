@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Search, RefreshCw, Image as ImageIcon } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -27,12 +27,17 @@ export function ShopifyProductBrowser({
   onPick,
   layout = "list",
   heightClass = "max-h-64",
+  helpNode,
 }: {
   storeId: string;
   selectedProductId?: string | null;
   onPick: (p: ShopifyBrowseProduct) => void;
   layout?: "list" | "grid";
   heightClass?: string;
+  // Optional "where to go next" pointer shown under the load-error and
+  // no-products-in-store states so those never read as a dead end. Callers
+  // that don't pass it get the plain message (unchanged).
+  helpNode?: ReactNode;
 }) {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -180,6 +185,11 @@ export function ShopifyProductBrowser({
                 : typeFilter
                   ? "No products of that type loaded yet"
                   : "No products found in this store"}
+            {helpNode && (error || (!debounced && !typeFilter)) && (
+              <div className="mt-1.5 text-slate-500" data-testid="text-browser-help">
+                {helpNode}
+              </div>
+            )}
           </div>
         )}
 

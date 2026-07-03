@@ -11217,7 +11217,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<div className=\"px-4 py-6 text-slate-400 text-[13px] text-center\" data-testid=\"shopify-mappings-empty\">"
+    "snippet": "<div className=\"px-4 py-6 text-slate-500 text-[13px] text-center leading-snug\" data-testid=\"shopify-mappings-empty\">"
   },
   {
     "rule": "hardcoded-font-size",

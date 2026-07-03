@@ -566,8 +566,20 @@ export function ShopifyPanel({
         <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 mb-6">
           {isLoading && <div className="px-4 py-3 text-slate-400 text-sm">Loading…</div>}
           {!isLoading && (mappings?.length ?? 0) === 0 && (
-            <div className="px-4 py-6 text-slate-400 text-[13px] text-center" data-testid="shopify-mappings-empty">
-              No Shopify products linked to this album yet.
+            <div className="px-4 py-6 text-slate-500 text-[13px] text-center leading-snug" data-testid="shopify-mappings-empty">
+              No Shopify products linked to this album yet.{" "}
+              {(pushStatus?.stores.length ?? 0) > 0 ? (
+                "Link one below to route its orders to this release."
+              ) : (
+                <>
+                  First connect {isShopifyPlus ? "the customer's" : "the artist's"} Shopify store on their
+                  profile's Overview tab, or at{" "}
+                  <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
+                    /admin/shopify
+                  </a>
+                  , then link a product below.
+                </>
+              )}
             </div>
           )}
           {(mappings ?? []).map((m) => {
@@ -656,6 +668,15 @@ export function ShopifyPanel({
                     resolved?.storeId === pickerStoreId ? resolved?.shopifyProductId : null
                   }
                   onPick={pickBrowsedProduct}
+                  helpNode={
+                    <>
+                      Manage connected stores at{" "}
+                      <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
+                        /admin/shopify
+                      </a>
+                      .
+                    </>
+                  }
                 />
               )}
             </div>
