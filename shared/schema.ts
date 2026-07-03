@@ -2991,6 +2991,15 @@ export const shopifyStores = pgTable("shopify_stores", {
   // from the global Shopify page (no label context) keep working; SET NULL
   // so deleting a label doesn't orphan the store row + its order history.
   labelId: varchar("label_id").references(() => labels.id, { onDelete: "set null" }),
+  // Task #2435 — the GoodTunes artist (Person) this store belongs to.
+  // Additive alongside labelId (independent axes — an independent artist
+  // can link their own store with or without a label; one store row may
+  // carry both a labelId and a personId). Stamped when the install is
+  // kicked off from the artist's Overview Shopify section (the personId
+  // rides through the signed OAuth `state`), or attached after the fact
+  // from that same section. Nullable + SET NULL so deleting a Person
+  // doesn't orphan the store row + its order history.
+  personId: varchar("person_id").references(() => people.id, { onDelete: "set null" }),
   // Set when the store calls app/uninstalled. We keep the row (for
   // historical order joins) but clear accessToken and stamp this column
   // so admin UI can render "Disconnected" without losing the linkage.

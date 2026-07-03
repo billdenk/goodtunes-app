@@ -21,6 +21,7 @@ import {
   albums,
   albumAddons,
   labels,
+  people,
   orders,
   orderItems,
   customerUsers,
@@ -127,6 +128,9 @@ async function upsertStore(input: {
   // (global Shopify page / legacy) — we leave any existing association
   // untouched rather than clobbering it to null on a re-install.
   labelId?: string;
+  // Task #2435 — same contract for the artist (Person) association when the
+  // install is kicked off from the artist's Overview Shopify section.
+  personId?: string;
 }): Promise<ShopifyStore> {
   const existing = await getStoreByDomain(input.shopDomain);
   const encrypted = encryptToken(input.accessToken);
@@ -138,6 +142,7 @@ async function upsertStore(input: {
         scopes: input.scopes,
         storeName: input.storeName ?? existing.storeName,
         labelId: input.labelId ?? existing.labelId,
+        personId: input.personId ?? existing.personId,
         installedAt: new Date(),
         uninstalledAt: null,
       })
@@ -153,6 +158,7 @@ async function upsertStore(input: {
       accessToken: encrypted,
       scopes: input.scopes,
       labelId: input.labelId ?? null,
+      personId: input.personId ?? null,
     })
     .returning();
   return created;
@@ -986,11 +992,25 @@ export function registerShopifyRoutes(app: Express) {
       const [labelRow] = await db.select({ id: labels.id }).from(labels).where(eq(labels.id, rawLabelId));
       if (labelRow) labelId = labelRow.id;
     }
+    // Task #2435 — optional artist (Person) context, same contract as the
+    // labelId above. A person page only ever sends personId; when present it
+    // wins over labelId so the two stay mutually exclusive for one install.
+    let personId = "";
+    const rawPersonId = String(req.query.personId ?? "").trim();
+    if (rawPersonId) {
+      const [personRow] = await db.select({ id: people.id }).from(people).where(eq(people.id, rawPersonId));
+      if (personRow) personId = personRow.id;
+    }
     const nonce = randomBytes(16).toString("hex");
-    // The signed payload is `nonce` (label-less) or `nonce:labelId`. labelId
-    // is a uuid (no `:`), nonce is hex, so split-on-`:` round-trips cleanly
-    // and old `nonce.sig` states stay valid (labelId parses as undefined).
-    const statePayload = labelId ? `${nonce}:${labelId}` : nonce;
+    // The signed payload is `nonce` (context-less), `nonce:labelId` (2-part,
+    // Task #2030), or `nonce:person:<personId>` (3-part, Task #2435). labelId
+    // and personId are uuids (no `:`) and nonce is hex, so split-on-`:`
+    // round-trips cleanly and old `nonce.sig` states stay valid.
+    const statePayload = personId
+      ? `${nonce}:person:${personId}`
+      : labelId
+        ? `${nonce}:${labelId}`
+        : nonce;
     const stateSig = createHmac("sha256", SHOPIFY_API_SECRET).update(statePayload).digest("hex").slice(0, 16);
     const state = `${statePayload}.${stateSig}`;
     const redirectUri = `${appOrigin(req)}/api/shopify/callback`;
@@ -1023,9 +1043,19 @@ export function registerShopifyRoutes(app: Express) {
     const expectedSig = createHmac("sha256", SHOPIFY_API_SECRET).update(statePayload).digest("hex").slice(0, 16);
     if (!statePayload || !sig || sig !== expectedSig) return res.status(400).send("State mismatch");
     if (!verifyOAuthHmac(req.query as Record<string, any>)) return res.status(400).send("HMAC failed");
-    // Task #2030 — recover the (already-validated-at-install-time) labelId
-    // so we can stamp the store + return the operator to the label's tab.
-    const [, stateLabelId] = statePayload.split(":");
+    // Recover the (already-validated-at-install-time) association context so
+    // we can stamp the store + return the operator to where they started.
+    //   `nonce:person:<id>` (3-part) → artist context   (Task #2435)
+    //   `nonce:<labelId>`   (2-part) → label context     (Task #2030)
+    //   `nonce`             (1-part) → global / legacy
+    const stateParts = statePayload.split(":");
+    let stateLabelId = "";
+    let statePersonId = "";
+    if (stateParts.length === 3 && stateParts[1] === "person") {
+      statePersonId = stateParts[2];
+    } else if (stateParts.length === 2) {
+      stateLabelId = stateParts[1];
+    }
 
     // Exchange the authorization code for an access token.
     const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
@@ -1060,6 +1090,7 @@ export function registerShopifyRoutes(app: Express) {
       accessToken: tokenJson.access_token,
       scopes: tokenJson.scope ?? SHOPIFY_SCOPES,
       labelId: stateLabelId || undefined,
+      personId: statePersonId || undefined,
     });
 
     // Best-effort post-install setup. If either fails, the admin can hit
@@ -1068,10 +1099,13 @@ export function registerShopifyRoutes(app: Express) {
     await registerWebhooks(store, appUrl);
     await installScriptTag(store, appUrl);
 
-    // Drop the operator back where they started: the label's Shopify tab
-    // when the install carried a labelId (Task #2030), otherwise the global
-    // admin install guide. Both key their success toast off ?installed=<id>.
-    if (stateLabelId) {
+    // Drop the operator back where they started: the artist's Overview tab
+    // (Task #2435), the label's Shopify tab (Task #2030), otherwise the
+    // global admin install guide. All key their success toast off
+    // ?installed=<id>.
+    if (statePersonId) {
+      res.redirect(`/admin/people/${statePersonId}?tab=overview&installed=${store.id}`);
+    } else if (stateLabelId) {
       res.redirect(`/admin/labels/${stateLabelId}?tab=shopify&installed=${store.id}`);
     } else {
       res.redirect(`/admin/shopify?installed=${store.id}`);
@@ -1459,6 +1493,9 @@ export function registerShopifyRoutes(app: Express) {
       products: products.map((p) => ({
         id: String(p.id),
         title: p.title as string,
+        // Task #2435 — surfaced so the artist product browser can offer a
+        // lightweight client-side product-type filter over loaded items.
+        productType: (p.product_type as string) || null,
         image: p.image?.src ?? p.images?.[0]?.src ?? null,
         variants: (p.variants ?? []).map((v: any) => ({
           id: String(v.id),
@@ -1575,6 +1612,102 @@ export function registerShopifyRoutes(app: Express) {
   app.post("/api/admin/labels/:id/shopify/detach", requireAdmin, async (req, res) => {
     const labelId = String(req.params.id);
     await db.update(shopifyStores).set({ labelId: null }).where(eq(shopifyStores.labelId, labelId));
+    res.json({ ok: true });
+  });
+
+  // ─── Admin: artist (Person) ↔ Shopify store (Task #2435) ──────────
+  // The artist's Overview Shopify section reads this for connection status +
+  // a per-release mapped/not-mapped summary. Mirrors the label block above
+  // on the independent `personId` axis. `store` is the store stamped with
+  // this person (most recent install wins); `unattachedStores` lets the
+  // operator attach an already-connected store with no person context yet.
+  app.get("/api/admin/people/:id/shopify", requireAdmin, async (req, res) => {
+    const personId = String(req.params.id);
+    const [person] = await db.select({ id: people.id, name: people.name }).from(people).where(eq(people.id, personId));
+    if (!person) return res.status(404).json({ message: "Person not found" });
+
+    const [store] = await db
+      .select()
+      .from(shopifyStores)
+      .where(eq(shopifyStores.personId, personId))
+      .orderBy(desc(shopifyStores.installedAt));
+
+    // Stores connected without an artist context — offered as "attach an
+    // existing store" options. Excludes stores already tied to a person.
+    const unattached = await db
+      .select({ id: shopifyStores.id, shopDomain: shopifyStores.shopDomain, storeName: shopifyStores.storeName })
+      .from(shopifyStores)
+      .where(isNull(shopifyStores.personId))
+      .orderBy(desc(shopifyStores.installedAt));
+
+    // This artist's releases (albums where they are the primary artist) +
+    // whether each is mapped to a Shopify product on the connected store.
+    const artistAlbums = await db
+      .select({ id: albums.id, title: albums.title, artist: albums.artist, artwork: albums.artwork })
+      .from(albums)
+      .where(and(eq(albums.primaryArtistId, personId), isNull(albums.deletedAt)))
+      .orderBy(desc(albums.year));
+
+    let mappedIds = new Set<string>();
+    if (store && artistAlbums.length > 0) {
+      const mapRows = await db
+        .select({ albumId: shopifyProductMappings.albumId })
+        .from(shopifyProductMappings)
+        .where(
+          and(
+            eq(shopifyProductMappings.storeId, store.id),
+            inArray(shopifyProductMappings.albumId, artistAlbums.map((a) => a.id)),
+          ),
+        );
+      mappedIds = new Set(mapRows.map((m) => m.albumId));
+    }
+
+    const albumSummary = artistAlbums.map((a) => ({ ...a, mapped: mappedIds.has(a.id) }));
+    res.json({
+      configured: shopifyConfigured(),
+      store: store
+        ? {
+            id: store.id,
+            shopDomain: store.shopDomain,
+            storeName: store.storeName,
+            scopes: store.scopes,
+            installedAt: store.installedAt,
+            uninstalledAt: store.uninstalledAt,
+            connected: store.uninstalledAt == null,
+          }
+        : null,
+      unattachedStores: unattached,
+      albums: albumSummary,
+      mappedCount: albumSummary.filter((a) => a.mapped).length,
+      totalCount: albumSummary.length,
+    });
+  });
+
+  // Attach an already-connected store to this artist. A store belongs to at
+  // most one person, so we first clear any other store currently pointing
+  // here, then stamp the chosen one. Gated by the same `map_shopify` verb
+  // that guards album product mappings (super_admin/admin auto-allow).
+  app.post("/api/admin/people/:id/shopify/attach", requireAdmin, async (req, res) => {
+    const personId = String(req.params.id);
+    const { partnerEditGate } = await import("./auth/partnerPermissions");
+    if ((await partnerEditGate(req, res, "map_shopify", { kind: "artist", id: personId })) !== "allow") return;
+    const storeId = z.string().min(1).parse(req.body?.storeId);
+    const [person] = await db.select({ id: people.id }).from(people).where(eq(people.id, personId));
+    if (!person) return res.status(404).json({ message: "Person not found" });
+    const store = await getStoreById(storeId);
+    if (!store) return res.status(404).json({ message: "Store not found" });
+    await db.update(shopifyStores).set({ personId: null }).where(eq(shopifyStores.personId, personId));
+    await db.update(shopifyStores).set({ personId }).where(eq(shopifyStores.id, storeId));
+    res.json({ ok: true });
+  });
+
+  // Disassociate this artist's store(s). The store row + its order history
+  // stay intact; only the person link is cleared.
+  app.post("/api/admin/people/:id/shopify/detach", requireAdmin, async (req, res) => {
+    const personId = String(req.params.id);
+    const { partnerEditGate } = await import("./auth/partnerPermissions");
+    if ((await partnerEditGate(req, res, "map_shopify", { kind: "artist", id: personId })) !== "allow") return;
+    await db.update(shopifyStores).set({ personId: null }).where(eq(shopifyStores.personId, personId));
     res.json({ ok: true });
   });
 

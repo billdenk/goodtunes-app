@@ -760,6 +760,32 @@ SQL
 migrate_shopify_store_label dev  "${DATABASE_URL:-}"
 migrate_shopify_store_label prod "${PROD_DATABASE_URL:-}"
 
+# Task #2435 — shopify_stores.person_id links a connected store to an artist
+# (Person), additive alongside label_id (independent axes). Stamped when the
+# install is kicked off from the artist's Overview Shopify section, or attached
+# after the fact. Declared in shared/schema.ts; hand-apply the additive DDL on
+# BOTH dev and prod so the schema-drift guard stays green and the publish
+# dev→prod diff stays empty. Idempotent (IF NOT EXISTS).
+migrate_shopify_store_person() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping shopify_store_person migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE IF EXISTS shopify_stores
+  ADD COLUMN IF NOT EXISTS person_id varchar
+    REFERENCES people(id) ON DELETE SET NULL;
+SQL
+  then
+    echo "post-merge: shopify_store_person migration ok on $label"
+  else
+    echo "post-merge: WARNING — shopify_store_person migration failed on $label (continuing)"
+  fi
+}
+migrate_shopify_store_person dev  "${DATABASE_URL:-}"
+migrate_shopify_store_person prod "${PROD_DATABASE_URL:-}"
+
 # Task #1976 — Odoo printer integration. orders.odoo_order_id (unique → a
 # replayed push can't double-create) + orders.odoo_last_synced_at record the
 # Odoo sale.order handoff and poll cursor; fulfillment_partners.is_odoo_printer

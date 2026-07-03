@@ -27,12 +27,15 @@ import {
   Loader2,
   Copy,
   Check,
+  ExternalLink,
+  Unplug,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { SiApplemusic, SiSpotify, SiTidal, SiPandora, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
+import { SiApplemusic, SiSpotify, SiTidal, SiPandora, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook, SiShopify } from "react-icons/si";
+import { ShopifyProductBrowser, type ShopifyBrowseProduct } from "@/components/admin/ShopifyProductBrowser";
 import { useAuth } from "@/hooks/useAuth";
 import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -2252,7 +2255,531 @@ function OverviewPanel({
           iTunes Lookup pull used by the Discography tab.
         </p>
       </div>
+      <PersonShopifyPanel person={person} />
     </div>
+  );
+}
+
+/* ─── Artist Shopify store (Task #2435) ────────────────────────────────
+ * An ARTIST-level Shopify store link that sits alongside the existing
+ * per-label connection (independent `personId` axis) and the per-album
+ * paste-URL mapping — both unchanged. The operator connects (or attaches)
+ * the artist's own store, then browses its live catalog in a thumbnail grid
+ * and maps a product to one of the artist's releases. Mapping reuses the
+ * existing per-album endpoint; cert/unlock fine-tuning still lives on the
+ * album's Shopify tab.
+ */
+interface PersonShopifyStore {
+  id: string;
+  shopDomain: string;
+  storeName: string | null;
+  connected: boolean;
+}
+interface PersonShopifyAlbum {
+  id: string;
+  title: string;
+  artist: string;
+  artwork: string;
+  mapped: boolean;
+}
+interface PersonShopifyStatus {
+  configured: boolean;
+  store: PersonShopifyStore | null;
+  unattachedStores: { id: string; shopDomain: string; storeName: string | null }[];
+  albums: PersonShopifyAlbum[];
+  mappedCount: number;
+  totalCount: number;
+}
+
+// Normalize whatever the operator pastes into a bare `<store>.myshopify.com`
+// domain. Accepts a full URL, a `foo.myshopify.com`, or just `foo`.
+function normalizePersonShopDomain(input: string): string | null {
+  let s = input.trim().toLowerCase();
+  if (!s) return null;
+  s = s.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  if (!s.includes(".")) s = `${s}.myshopify.com`;
+  return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(s) ? s : null;
+}
+
+function PersonShopifyPanel({ person }: { person: PersonFull }) {
+  const personId = person.id;
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [shopInput, setShopInput] = useState("");
+  const [attachId, setAttachId] = useState("");
+  const [browseOpen, setBrowseOpen] = useState(false);
+
+  const { data, isLoading } = useQuery<PersonShopifyStatus>({
+    queryKey: ["/api/admin/people", personId, "shopify"],
+  });
+
+  // Surface the post-install success toast keyed off ?installed=<id> and
+  // strip the param so a refresh doesn't re-toast.
+  useEffect(() => {
+    try {
+      const u = new URL(window.location.href);
+      if (u.searchParams.get("installed")) {
+        toast({ title: "Shopify store connected" });
+        u.searchParams.delete("installed");
+        window.history.replaceState({}, "", u.toString());
+        qc.invalidateQueries({ queryKey: ["/api/admin/people", personId, "shopify"] });
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const attach = useMutation({
+    mutationFn: async (storeId: string) => {
+      await apiRequest("POST", `/api/admin/people/${personId}/shopify/attach`, { storeId });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/people", personId, "shopify"] });
+      setAttachId("");
+      toast({ title: "Store attached to this artist" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't attach store", description: e?.message, variant: "destructive" }),
+  });
+
+  const detach = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `/api/admin/people/${personId}/shopify/detach`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/people", personId, "shopify"] });
+      toast({ title: "Store disconnected from this artist" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't disconnect", description: e?.message, variant: "destructive" }),
+  });
+
+  const startConnect = () => {
+    const domain = normalizePersonShopDomain(shopInput);
+    if (!domain) {
+      toast({
+        title: "Enter a valid store domain",
+        description: "e.g. your-store.myshopify.com",
+        variant: "destructive",
+      });
+      return;
+    }
+    window.location.href = `/api/shopify/install?shop=${encodeURIComponent(domain)}&personId=${encodeURIComponent(personId)}`;
+  };
+
+  if (isLoading || !data) {
+    return (
+      <Card className="rounded-2xl shadow-sm p-10 flex items-center justify-center" data-testid="panel-person-shopify-loading">
+        <Spinner />
+      </Card>
+    );
+  }
+
+  const store = data.store;
+
+  return (
+    <div className="space-y-3" data-testid="panel-person-shopify">
+      <Card className="rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
+              <SiShopify className="w-4 h-4 text-[#5E8E3E]" />
+              Artist Shopify store
+            </h2>
+            <p className="text-slate-400 text-[11.5px]">
+              Connect {person.name}'s own Shopify store to browse its catalog and
+              map products to this artist's releases.
+            </p>
+          </div>
+          {store && store.connected && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBrowseOpen(true)}
+              className="h-9 shrink-0"
+              data-testid="button-person-shopify-browse"
+            >
+              Browse products
+            </Button>
+          )}
+        </div>
+
+        {!data.configured && (
+          <div className="px-6 py-4 border-b border-slate-100" data-testid="status-person-shopify-unconfigured">
+            <p className="text-amber-700 text-[12.5px] bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              GoodTunes' Shopify app credentials aren't set up yet, so the
+              connect button is disabled. An operator needs to add the Shopify
+              API key and secret first — see the{" "}
+              <Link
+                href="/admin/shopify"
+                className="font-semibold hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+              >
+                Shopify admin page
+              </Link>
+              .
+            </p>
+          </div>
+        )}
+
+        {store ? (
+          <div className="px-6 py-4 flex items-center gap-3" data-testid="status-person-shopify-connected">
+            <div
+              className={[
+                "w-2 h-2 rounded-full flex-shrink-0",
+                store.connected ? "bg-emerald-500" : "bg-slate-300",
+              ].join(" ")}
+            />
+            <div className="flex-1 min-w-0">
+              <div className="text-slate-900 text-[13.5px] font-semibold truncate" data-testid="text-person-shopify-store-name">
+                {store.storeName || store.shopDomain}
+              </div>
+              <a
+                href={`https://${store.shopDomain}/admin`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-slate-400 text-[11.5px] hover:text-slate-700 inline-flex items-center gap-1"
+                data-testid="link-person-shopify-store-admin"
+              >
+                {store.shopDomain}
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <span
+              className={[
+                "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0",
+                store.connected ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600",
+              ].join(" ")}
+            >
+              {store.connected ? "Connected" : "Disconnected"}
+            </span>
+            <button
+              type="button"
+              onClick={() => detach.mutate()}
+              disabled={detach.isPending}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-[12.5px] font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 transition-colors"
+              data-testid="button-person-shopify-detach"
+            >
+              <Unplug className="w-3.5 h-3.5" />
+              Disconnect
+            </button>
+          </div>
+        ) : (
+          <div className="px-6 py-4 space-y-4" data-testid="status-person-shopify-disconnected">
+            <div>
+              <label className="block text-slate-600 text-[12px] font-semibold mb-1.5">
+                Store domain
+              </label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="text"
+                  value={shopInput}
+                  onChange={(e) => setShopInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && data.configured && startConnect()}
+                  placeholder="your-store.myshopify.com"
+                  disabled={!data.configured}
+                  className="flex-1 h-9"
+                  data-testid="input-person-shopify-domain"
+                />
+                <Button
+                  type="button"
+                  onClick={startConnect}
+                  disabled={!data.configured}
+                  className="h-9"
+                  data-testid="button-person-shopify-connect"
+                >
+                  Connect
+                </Button>
+              </div>
+              <p className="text-slate-400 text-[11.5px] mt-1.5">
+                Opens Shopify's secure install screen, then returns here.
+              </p>
+            </div>
+
+            {data.unattachedStores.length > 0 && (
+              <div className="pt-3 border-t border-slate-100">
+                <label className="block text-slate-600 text-[12px] font-semibold mb-1.5">
+                  Or attach an already-connected store
+                </label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={attachId}
+                    onChange={(e) => setAttachId(e.target.value)}
+                    className="flex-1 h-9 px-3 rounded-md border border-slate-300 text-[13px] text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/40"
+                    data-testid="select-person-shopify-attach"
+                  >
+                    <option value="">Select a store…</option>
+                    {data.unattachedStores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.storeName || s.shopDomain}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => attachId && attach.mutate(attachId)}
+                    disabled={!attachId || attach.isPending}
+                    className="h-9"
+                    data-testid="button-person-shopify-attach"
+                  >
+                    <Link2 className="w-3.5 h-3.5 mr-1.5" />
+                    Attach
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+
+      {/* Per-release mapping summary */}
+      <Card className="rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h2 className="text-slate-900 text-[14px] font-bold">Release mapping</h2>
+          <p className="text-slate-400 text-[11.5px]">
+            {data.totalCount === 0
+              ? "No releases for this artist yet"
+              : `${data.mappedCount} of ${data.totalCount} mapped to a Shopify product`}
+          </p>
+        </div>
+        {data.albums.length === 0 ? (
+          <div className="px-6 py-8 text-center" data-testid="panel-person-shopify-albums-empty">
+            <p className="text-slate-400 text-[12.5px]">
+              Set this person as the primary artist on a release and it'll show
+              up here.
+            </p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-slate-100" data-testid="list-person-shopify-albums">
+            {data.albums.map((a) => (
+              <li key={a.id}>
+                <Link
+                  href={`/admin/albums/${a.id}?tab=shopify`}
+                  className="w-full flex items-center gap-3.5 px-6 py-3 text-left hover:bg-slate-50 transition-colors"
+                  data-testid={`row-person-shopify-album-${a.id}`}
+                >
+                  <div className="w-11 h-11 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex-shrink-0">
+                    <img src={a.artwork} alt={a.title} className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-slate-900 text-[13.5px] font-semibold truncate">{a.title}</div>
+                    <div className="text-slate-400 text-[11.5px] truncate">{a.artist}</div>
+                  </div>
+                  {a.mapped ? (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex-shrink-0"
+                      data-testid={`status-person-shopify-album-${a.id}`}
+                    >
+                      <Check className="w-3 h-3" />
+                      Mapped
+                    </span>
+                  ) : (
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wider flex-shrink-0"
+                      data-testid={`status-person-shopify-album-${a.id}`}
+                    >
+                      Not mapped
+                    </span>
+                  )}
+                  <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {store && store.connected && (
+        <PersonShopifyBrowseDialog
+          open={browseOpen}
+          onOpenChange={setBrowseOpen}
+          storeId={store.id}
+          albums={data.albums}
+          onMapped={() =>
+            qc.invalidateQueries({ queryKey: ["/api/admin/people", personId, "shopify"] })
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Two-step dialog: browse the artist's store in a thumbnail grid, pick a
+ * product, then choose which of the artist's releases to map it to. The
+ * mapping create reuses the existing per-album endpoint and defaults to
+ * fulfillment-only — cert/unlock is fine-tuned on the album's Shopify tab.
+ */
+function PersonShopifyBrowseDialog({
+  open,
+  onOpenChange,
+  storeId,
+  albums,
+  onMapped,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  storeId: string;
+  albums: PersonShopifyAlbum[];
+  onMapped: () => void;
+}) {
+  const { toast } = useToast();
+  const [picked, setPicked] = useState<ShopifyBrowseProduct | null>(null);
+  const [albumId, setAlbumId] = useState("");
+  const [variantId, setVariantId] = useState<string | null>(null);
+
+  // Reset the wizard whenever the dialog is re-opened.
+  useEffect(() => {
+    if (open) {
+      setPicked(null);
+      setAlbumId("");
+      setVariantId(null);
+    }
+  }, [open]);
+
+  function pick(p: ShopifyBrowseProduct) {
+    setPicked(p);
+    setVariantId(p.variants.length === 1 ? p.variants[0].id : null);
+    setAlbumId("");
+  }
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!picked) throw new Error("Pick a product first");
+      if (!albumId) throw new Error("Choose a release");
+      const body = {
+        storeId,
+        shopifyProductId: picked.id,
+        shopifyVariantId: variantId,
+        shopifyProductTitle: picked.title,
+        albumId,
+        offerSignedCert: false,
+      };
+      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/shopify-mappings`, body);
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "shopify-mappings"] });
+      onMapped();
+      toast({ title: "Product mapped to release" });
+      onOpenChange(false);
+    },
+    onError: (e: any) => toast({ title: "Couldn't map product", description: e?.message, variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-w-2xl bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-4"
+        data-testid="dialog-person-shopify-browse"
+      >
+        <DialogHeader className="text-left space-y-1">
+          <DialogTitle className="text-slate-900 text-[15px] font-bold inline-flex items-center gap-2">
+            <SiShopify className="w-4 h-4 text-[#5E8E3E]" />
+            {picked ? "Map to a release" : "Browse store products"}
+          </DialogTitle>
+          <DialogDescription className="text-[12.5px] text-slate-500">
+            {picked
+              ? "Choose which of this artist's releases this product unlocks. Fine-tune the signed certificate and digital unlock later on the album's Shopify tab."
+              : "Pick a product from the artist's live catalog. Search by title or page through the whole catalog."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {!picked ? (
+          <ShopifyProductBrowser storeId={storeId} onPick={pick} layout="grid" heightClass="max-h-[52vh]" />
+        ) : (
+          <div className="space-y-4" data-testid="person-shopify-map-step">
+            <div className="flex items-center gap-3 rounded-lg border border-slate-200 p-3">
+              {picked.image ? (
+                <img src={picked.image} alt="" className="w-12 h-12 rounded object-cover bg-slate-100 shrink-0" />
+              ) : (
+                <div className="w-12 h-12 rounded bg-slate-100 flex items-center justify-center shrink-0">
+                  <ImageIcon className="w-5 h-5 text-slate-300" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="text-[13.5px] font-semibold text-slate-900 truncate">{picked.title}</div>
+                <div className="text-[11.5px] text-slate-500">
+                  {picked.variants.length} variant{picked.variants.length === 1 ? "" : "s"}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPicked(null)}
+                className="text-[12px] font-semibold text-slate-500 hover:text-slate-800 px-2 py-1"
+                data-testid="button-person-shopify-repick"
+              >
+                Change
+              </button>
+            </div>
+
+            {picked.variants.length > 1 && (
+              <div>
+                <label className="block text-slate-600 text-[12px] font-semibold mb-1.5">Variant</label>
+                <select
+                  value={variantId ?? ""}
+                  onChange={(e) => setVariantId(e.target.value || null)}
+                  className="w-full h-9 px-3 rounded-md border border-slate-300 text-[13px] text-slate-900 bg-white"
+                  data-testid="select-person-shopify-variant"
+                >
+                  <option value="">All variants</option>
+                  {picked.variants.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.title} · ${v.price}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-slate-600 text-[12px] font-semibold mb-1.5">Release</label>
+              {albums.length === 0 ? (
+                <p className="text-slate-400 text-[12.5px]">
+                  This artist has no releases yet. Set them as the primary artist
+                  on a release first.
+                </p>
+              ) : (
+                <select
+                  value={albumId}
+                  onChange={(e) => setAlbumId(e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border border-slate-300 text-[13px] text-slate-900 bg-white"
+                  data-testid="select-person-shopify-album"
+                >
+                  <option value="">Choose a release…</option>
+                  {albums.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.title}
+                      {a.mapped ? " (already mapped)" : ""}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setPicked(null)}
+                className="h-9"
+                data-testid="button-person-shopify-back"
+              >
+                Back
+              </Button>
+              <Button
+                type="button"
+                onClick={() => save.mutate()}
+                disabled={!albumId || save.isPending}
+                className="h-9"
+                data-testid="button-person-shopify-map"
+              >
+                {save.isPending ? "Mapping…" : "Map to release"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

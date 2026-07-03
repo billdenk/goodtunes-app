@@ -11242,26 +11242,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "className=\"flex-1 bg-transparent text-[13px] focus:outline-none\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<div className=\"px-3 py-4 text-center text-[12.5px] text-slate-400\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<div className=\"text-[13px] font-medium text-slate-900 truncate\">{p.title}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<div className=\"text-[11.5px] text-slate-500 truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "<div className=\"text-[11px] text-slate-400 uppercase tracking-wider font-semibold mb-1.5\">"
   },
   {
@@ -11368,6 +11348,46 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "<ol className=\"mt-3 text-[12px] text-slate-500 space-y-1 list-decimal list-inside leading-snug\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "className=\"flex-1 bg-transparent text-[13px] focus:outline-none\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "\"px-2 py-0.5 rounded-full text-[11.5px] border\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<div className=\"px-3 py-6 text-center text-[12.5px] text-slate-400\" data-testid=\"text-browser-empty\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<div className=\"text-[12.5px] font-medium text-slate-900 truncate\">{p.title}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<div className=\"text-[11px] text-slate-500 truncate\">{variantLine(p)}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<div className=\"text-[13px] font-medium text-slate-900 truncate\">{p.title}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<div className=\"text-[11.5px] text-slate-500 truncate\">{variantLine(p)}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "className=\"w-full h-9 rounded-md border border-slate-300 bg-white text-[12.5px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17032,6 +17052,126 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<h2 className=\"text-slate-900 text-[14px] font-bold inline-flex items-center gap-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[11.5px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<p className=\"text-amber-700 text-[12.5px] bg-amber-50 border border-amber-200 rounded-lg px-3 py-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<div className=\"text-slate-900 text-[13.5px] font-semibold truncate\" data-testid=\"text-person-shopify-store-name\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "className=\"text-slate-400 text-[11.5px] hover:text-slate-700 inline-flex items-center gap-1\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "\"inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-[12.5px] font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<label className=\"block text-slate-600 text-[12px] font-semibold mb-1.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[11.5px] mt-1.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "className=\"flex-1 h-9 px-3 rounded-md border border-slate-300 text-[13px] text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<h2 className=\"text-slate-900 text-[14px] font-bold\">Release mapping</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[12.5px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<div className=\"text-slate-900 text-[13.5px] font-semibold truncate\">{a.title}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<div className=\"text-slate-400 text-[11.5px] truncate\">{a.artist}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "className=\"inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wider flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<DialogTitle className=\"text-slate-900 text-[15px] font-bold inline-flex items-center gap-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<DialogDescription className=\"text-[12.5px] text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-semibold text-slate-900 truncate\">{picked.title}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<div className=\"text-[11.5px] text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "className=\"text-[12px] font-semibold text-slate-500 hover:text-slate-800 px-2 py-1\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<label className=\"block text-slate-600 text-[12px] font-semibold mb-1.5\">Variant</label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "className=\"w-full h-9 px-3 rounded-md border border-slate-300 text-[13px] text-slate-900 bg-white\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<label className=\"block text-slate-600 text-[12px] font-semibold mb-1.5\">Release</label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
     "snippet": "<DialogTitle className=\"text-slate-900 text-[14px] font-bold\">"
   },
   {
@@ -17068,11 +17208,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
     "snippet": "<p className=\"mt-4 text-[11.5px] text-slate-500 leading-relaxed\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "<h2 className=\"text-slate-900 text-[14px] font-bold inline-flex items-center gap-2\">"
   },
   {
     "rule": "hardcoded-font-size",
