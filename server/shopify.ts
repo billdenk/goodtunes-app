@@ -1001,6 +1001,23 @@ export function registerShopifyRoutes(app: Express) {
       const [personRow] = await db.select({ id: people.id }).from(people).where(eq(people.id, rawPersonId));
       if (personRow) personId = personRow.id;
     }
+    // Task #2435 — connecting a store to a specific label or artist is a
+    // `map_shopify` action, so gate the install the same way attach/detach are.
+    // This path is a top-level browser navigation (window.location.href), so
+    // there's no Bearer header — the Lax admin session cookie rides along and
+    // carries the operator identity. super_admin/admin auto-allow; a partner
+    // needs the map_shopify verb on that label/artist scope. Context-less
+    // installs (global Shopify page / Shopify-initiated) stay ungated.
+    if (personId || labelId) {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).send("Sign in as an operator to connect a store");
+      const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+      const scope = personId
+        ? ({ kind: "artist", id: personId } as const)
+        : ({ kind: "label", id: labelId } as const);
+      const gateErr = await checkPartnerVerbForScope(userId, "map_shopify", scope);
+      if (gateErr) return res.status(gateErr.status).send(typeof gateErr.body?.message === "string" ? gateErr.body.message : "Forbidden");
+    }
     const nonce = randomBytes(16).toString("hex");
     // The signed payload is `nonce` (context-less), `nonce:labelId` (2-part,
     // Task #2030), or `nonce:person:<personId>` (3-part, Task #2435). labelId
@@ -1055,6 +1072,23 @@ export function registerShopifyRoutes(app: Express) {
       statePersonId = stateParts[2];
     } else if (stateParts.length === 2) {
       stateLabelId = stateParts[1];
+    }
+
+    // Task #2435 — defense in depth: the signed state is only ever minted by
+    // the (now gated) install route, but re-verify the operator still holds
+    // map_shopify on the target label/artist before we stamp the store. The
+    // callback is a top-level nav back from Shopify, so the Lax admin session
+    // cookie is present. Context-less (global / Shopify-initiated) states skip
+    // this, exactly like install.
+    if (statePersonId || stateLabelId) {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).send("Sign in as an operator to finish connecting the store");
+      const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+      const scope = statePersonId
+        ? ({ kind: "artist", id: statePersonId } as const)
+        : ({ kind: "label", id: stateLabelId } as const);
+      const gateErr = await checkPartnerVerbForScope(userId, "map_shopify", scope);
+      if (gateErr) return res.status(gateErr.status).send(typeof gateErr.body?.message === "string" ? gateErr.body.message : "Forbidden");
     }
 
     // Exchange the authorization code for an access token.
@@ -1455,6 +1489,30 @@ export function registerShopifyRoutes(app: Express) {
     const storeId = String(req.params.storeId);
     const store = await getStoreById(storeId);
     if (!store) return res.status(404).json({ message: "Store not found" });
+    // Task #2435 — browsing a store's catalog is part of the map_shopify flow
+    // (you browse in order to map a product to a release), so gate it on the
+    // store's owning scope. requireAdmin already resolved the caller from the
+    // Bearer token (this endpoint has no session). super_admin/admin auto-allow;
+    // a partner needs map_shopify on the label/artist that owns this store; an
+    // unattached store (no owner) is operator-only.
+    {
+      const adminUserId = (req as any).adminUser?.id as string | undefined;
+      if (!adminUserId) return res.status(401).json({ message: "Sign in required" });
+      if (store.personId || store.labelId) {
+        const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+        const scope = store.personId
+          ? ({ kind: "artist", id: store.personId } as const)
+          : ({ kind: "label", id: store.labelId as string } as const);
+        const gateErr = await checkPartnerVerbForScope(adminUserId, "map_shopify", scope);
+        if (gateErr) return res.status(gateErr.status).json(gateErr.body);
+      } else {
+        const { getUserRole } = await import("./auth/roles");
+        const role = await getUserRole(adminUserId);
+        if (role?.role !== "super_admin" && role?.role !== "admin") {
+          return res.status(403).json({ message: "Out of scope" });
+        }
+      }
+    }
     const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
     const cursor = typeof req.query.cursor === "string" ? req.query.cursor.trim() : "";
 
