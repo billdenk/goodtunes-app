@@ -2984,6 +2984,17 @@ export const shopifyStores = pgTable("shopify_stores", {
   storeName: text("store_name"),
   accessToken: text("access_token").notNull(),
   scopes: text("scopes"),
+  // Expiring offline access tokens (Shopify's Dec 2025 cutover — the Admin
+  // API now rejects the classic non-expiring offline tokens our install used
+  // to mint). The OAuth code exchange requests `expiring=1`, returning a
+  // 1-hour access token plus a ~90-day refresh token. refreshToken is stored
+  // encrypted (same envelope as accessToken); the expiry timestamps let
+  // shopifyFetch rotate the access token before it lapses. All nullable so
+  // legacy non-expiring installs (accessTokenExpiresAt == null) keep reading
+  // as-is until the operator reconnects.
+  refreshToken: text("refresh_token"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at"),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
   // Task #2030 — the GoodTunes label this store belongs to. Stamped when
   // the operator kicks off the install from the label's Shopify tab (the
   // labelId rides through the signed OAuth `state`), or attached after the

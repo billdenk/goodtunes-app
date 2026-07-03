@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Search, RefreshCw, Image as ImageIcon } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiErrorBody } from "@/lib/queryClient";
 
 // Shared shape returned by GET /api/admin/shopify/stores/:storeId/products.
 export type ShopifyBrowseProduct = {
@@ -84,9 +84,14 @@ export function ShopifyProductBrowser({
         setItems(d.products ?? []);
         setCursor(d.nextCursor ?? null);
       })
-      .catch(() => {
+      .catch((err) => {
         if (reqRef.current !== myReq) return;
-        setError("Couldn't load products");
+        const body = apiErrorBody<{ code?: string }>(err);
+        setError(
+          body?.code === "shopify_reconnect_required"
+            ? "This Shopify connection expired. Reconnect the store to load products."
+            : "Couldn't load products",
+        );
         setItems([]);
         setCursor(null);
       })

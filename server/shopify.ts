@@ -122,6 +122,13 @@ async function upsertStore(input: {
   storeName: string | null;
   accessToken: string;
   scopes: string;
+  // Expiring offline token trio (Shopify Dec 2025 cutover). Undefined on a
+  // legacy path (kept for back-compat); populated by the OAuth callback now
+  // that we request `expiring=1`. refreshToken arrives as plaintext and is
+  // encrypted at rest alongside accessToken.
+  refreshToken?: string | null;
+  accessTokenExpiresAt?: Date | null;
+  refreshTokenExpiresAt?: Date | null;
   // Task #2030 — when the install was kicked off from a label's Shopify
   // tab, the validated labelId rides through here so the store is stamped
   // with its owning label. Undefined = installed without label context
@@ -140,6 +147,16 @@ async function upsertStore(input: {
       .set({
         accessToken: encrypted,
         scopes: input.scopes,
+        refreshToken:
+          input.refreshToken !== undefined
+            ? input.refreshToken
+              ? encryptToken(input.refreshToken)
+              : null
+            : existing.refreshToken,
+        accessTokenExpiresAt:
+          input.accessTokenExpiresAt !== undefined ? input.accessTokenExpiresAt : existing.accessTokenExpiresAt,
+        refreshTokenExpiresAt:
+          input.refreshTokenExpiresAt !== undefined ? input.refreshTokenExpiresAt : existing.refreshTokenExpiresAt,
         storeName: input.storeName ?? existing.storeName,
         labelId: input.labelId ?? existing.labelId,
         personId: input.personId ?? existing.personId,
@@ -157,6 +174,9 @@ async function upsertStore(input: {
       storeName: input.storeName,
       accessToken: encrypted,
       scopes: input.scopes,
+      refreshToken: input.refreshToken ? encryptToken(input.refreshToken) : null,
+      accessTokenExpiresAt: input.accessTokenExpiresAt ?? null,
+      refreshTokenExpiresAt: input.refreshTokenExpiresAt ?? null,
       labelId: input.labelId ?? null,
       personId: input.personId ?? null,
     })
@@ -169,17 +189,135 @@ async function upsertStore(input: {
 // this file resolves to express's response type because of the imports
 // above, which would mask `.ok` / `.json()`. Let TS infer the global
 // fetch `Response` from the body.
+// ─── Expiring offline access tokens (Shopify Dec 2025 cutover) ──────────
+// Shopify stopped accepting the classic non-expiring offline tokens our
+// install used to mint. We now request `expiring=1` on the OAuth code
+// exchange, which returns a 1-hour access token plus a ~90-day refresh
+// token. getFreshAccessToken rotates the access token before it lapses;
+// refreshStoreToken persists the rotated pair IMMEDIATELY (Shopify retires
+// the OLD refresh token the instant it issues a new one — a crash between
+// refresh and persist would brick the store). Legacy non-expiring installs
+// (accessTokenExpiresAt == null) return their stored token as-is; once it
+// 403s the operator reconnects (re-runs OAuth).
+const REFRESH_SKEW_MS = 120_000;
+// Single-flight per store so concurrent callers share ONE refresh and can't
+// each rotate the refresh token and invalidate one another. Per-instance
+// only; the DB re-read on failure is the cross-instance net.
+const refreshInFlight = new Map<string, Promise<string>>();
+
+async function refreshStoreToken(store: ShopifyStore): Promise<string> {
+  const inflight = refreshInFlight.get(store.id);
+  if (inflight) return inflight;
+
+  const p = (async (): Promise<string> => {
+    if (!store.refreshToken) return decryptToken(store.accessToken);
+    let refreshTokenPlain: string;
+    try {
+      refreshTokenPlain = decryptToken(store.refreshToken);
+    } catch {
+      return decryptToken(store.accessToken);
+    }
+    const r = await fetch(`https://${store.shopDomain}/admin/oauth/access_token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body: new URLSearchParams({
+        client_id: SHOPIFY_API_KEY,
+        client_secret: SHOPIFY_API_SECRET,
+        grant_type: "refresh_token",
+        refresh_token: refreshTokenPlain,
+      }).toString(),
+    });
+    if (!r.ok) {
+      // Our refresh token may already have been spent by another instance —
+      // re-read the row and use its (newer) access token if one landed fresh.
+      const latest = await getStoreById(store.id);
+      if (
+        latest?.accessTokenExpiresAt &&
+        latest.accessTokenExpiresAt.getTime() > Date.now() + REFRESH_SKEW_MS &&
+        latest.accessToken !== store.accessToken
+      ) {
+        // A concurrent refresh (another instance) already landed a fresh access
+        // token — adopt it. Compare the access-token ciphertext, not the refresh
+        // token, so this still holds on the rare grant that returns no new
+        // refresh_token.
+        return decryptToken(latest.accessToken);
+      }
+      console.error(`[shopify-oauth] token refresh failed for ${store.shopDomain}: ${r.status}`);
+      // Best-effort: hand back the current (likely-dead) token so the caller's
+      // response surfaces the reconnect state instead of throwing.
+      return decryptToken(store.accessToken);
+    }
+    const j = (await r.json()) as {
+      access_token: string;
+      expires_in?: number;
+      refresh_token?: string;
+      refresh_token_expires_in?: number;
+      scope?: string;
+    };
+    const now = Date.now();
+    // Persist the rotated pair BEFORE returning — this ordering is critical.
+    await db
+      .update(shopifyStores)
+      .set({
+        accessToken: encryptToken(j.access_token),
+        refreshToken: j.refresh_token ? encryptToken(j.refresh_token) : store.refreshToken,
+        accessTokenExpiresAt: j.expires_in ? new Date(now + j.expires_in * 1000) : null,
+        refreshTokenExpiresAt: j.refresh_token_expires_in
+          ? new Date(now + j.refresh_token_expires_in * 1000)
+          : store.refreshTokenExpiresAt,
+        scopes: j.scope ?? store.scopes,
+      })
+      .where(eq(shopifyStores.id, store.id));
+    return j.access_token;
+  })().finally(() => refreshInFlight.delete(store.id));
+
+  refreshInFlight.set(store.id, p);
+  return p;
+}
+
+// Return a currently-valid Admin API access token for the store id, refreshing
+// the expiring offline token when it's within the skew window of lapsing.
+// Always re-reads the row so a stale in-memory `store` never serves a token
+// another request already rotated. Returns "" for a missing/emptied token so
+// callers get a clean 401 → "reconnect required" rather than a throw.
+async function getFreshAccessToken(storeId: string): Promise<string> {
+  const store = await getStoreById(storeId);
+  if (!store || !store.accessToken) return "";
+  if (!store.accessTokenExpiresAt) return decryptToken(store.accessToken); // legacy non-expiring
+  if (store.accessTokenExpiresAt.getTime() > Date.now() + REFRESH_SKEW_MS) {
+    return decryptToken(store.accessToken);
+  }
+  return refreshStoreToken(store);
+}
+
+// ─── Shopify Admin REST helper ─────────────────────────────────────────
 async function shopifyFetch(store: ShopifyStore, path: string, init: RequestInit = {}) {
   const url = `https://${store.shopDomain}/admin/api/${SHOPIFY_API_VERSION}/${path.replace(/^\//, "")}`;
-  return fetch(url, {
-    ...init,
-    headers: {
-      "X-Shopify-Access-Token": decryptToken(store.accessToken),
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      ...(init.headers ?? {}),
-    },
-  });
+  const doFetch = (token: string) =>
+    fetch(url, {
+      ...init,
+      headers: {
+        "X-Shopify-Access-Token": token,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(init.headers ?? {}),
+      },
+    });
+
+  let r = await doFetch(await getFreshAccessToken(store.id));
+  // Reactive rotation: a 401/403 (token expired out from under us, rotated by
+  // another instance, or Shopify's non-expiring cutover) → force one refresh
+  // and retry. Never throws for token reasons, so best-effort callers keep
+  // their existing `r.ok` contract; a store with no refresh token just gets
+  // the 401/403 back and the route turns it into "reconnect required".
+  if (r.status === 401 || r.status === 403) {
+    const latest = await getStoreById(store.id);
+    if (latest?.refreshToken) {
+      const token = await refreshStoreToken(latest);
+      if (token) r = await doFetch(token);
+    }
+  }
+  return r;
 }
 
 // ─── Post-install setup: register webhooks + script tag ───────────────
@@ -1091,17 +1229,28 @@ export function registerShopifyRoutes(app: Express) {
       if (gateErr) return res.status(gateErr.status).send(typeof gateErr.body?.message === "string" ? gateErr.body.message : "Forbidden");
     }
 
-    // Exchange the authorization code for an access token.
+    // Exchange the authorization code for an access token. `expiring: "1"`
+    // opts into Shopify's expiring offline tokens (required as of the Dec 2025
+    // cutover — non-expiring offline tokens are rejected by the Admin API).
+    // The response carries a 1-hour access token plus a ~90-day refresh token
+    // we persist and rotate in shopifyFetch.
     const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ client_id: SHOPIFY_API_KEY, client_secret: SHOPIFY_API_SECRET, code }),
+      body: JSON.stringify({ client_id: SHOPIFY_API_KEY, client_secret: SHOPIFY_API_SECRET, code, expiring: "1" }),
     });
     if (!tokenRes.ok) {
       console.error(`[shopify-oauth] token exchange failed for ${shop}: ${tokenRes.status}`);
       return res.status(500).send("Token exchange failed");
     }
-    const tokenJson = (await tokenRes.json()) as { access_token: string; scope: string };
+    const tokenJson = (await tokenRes.json()) as {
+      access_token: string;
+      scope: string;
+      expires_in?: number;
+      refresh_token?: string;
+      refresh_token_expires_in?: number;
+    };
+    const tokenIssuedAtMs = Date.now();
 
     // Fetch the store's display name so admin lists look like the
     // label's brand, not the myshopify subdomain.
@@ -1123,6 +1272,13 @@ export function registerShopifyRoutes(app: Express) {
       storeName,
       accessToken: tokenJson.access_token,
       scopes: tokenJson.scope ?? SHOPIFY_SCOPES,
+      refreshToken: tokenJson.refresh_token ?? null,
+      accessTokenExpiresAt: tokenJson.expires_in
+        ? new Date(tokenIssuedAtMs + tokenJson.expires_in * 1000)
+        : null,
+      refreshTokenExpiresAt: tokenJson.refresh_token_expires_in
+        ? new Date(tokenIssuedAtMs + tokenJson.refresh_token_expires_in * 1000)
+        : null,
       labelId: stateLabelId || undefined,
       personId: statePersonId || undefined,
     });
@@ -1193,7 +1349,13 @@ export function registerShopifyRoutes(app: Express) {
       } else if (topic === "app/uninstalled") {
         await db
           .update(shopifyStores)
-          .set({ uninstalledAt: new Date(), accessToken: "" })
+          .set({
+            uninstalledAt: new Date(),
+            accessToken: "",
+            refreshToken: null,
+            accessTokenExpiresAt: null,
+            refreshTokenExpiresAt: null,
+          })
           .where(eq(shopifyStores.id, store.id));
       }
       res.json({ received: true });
@@ -1532,7 +1694,20 @@ export function registerShopifyRoutes(app: Express) {
     }
 
     const r = await shopifyFetch(store, `products.json?${params.toString()}`);
-    if (!r.ok) return res.status(502).json({ message: "Couldn't fetch products from Shopify" });
+    if (!r.ok) {
+      // A 401/403 after shopifyFetch's proactive + reactive refresh means the
+      // token can't be revived — a legacy non-expiring install, or the refresh
+      // token lapsed/was revoked. Tell the operator to reconnect (the existing
+      // OAuth install flow IS the reconnect). Other statuses (429/5xx) are
+      // transient Shopify errors — surface the status for diagnosability.
+      if (r.status === 401 || r.status === 403) {
+        return res.status(409).json({
+          code: "shopify_reconnect_required",
+          message: "Reconnect this Shopify store to continue.",
+        });
+      }
+      return res.status(502).json({ message: `Couldn't fetch products from Shopify (${r.status})` });
+    }
     const j: any = await r.json();
     let products: any[] = j?.products ?? [];
     if (search) {

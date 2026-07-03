@@ -300,6 +300,33 @@ SQL
 migrate_completed_template_checks dev  "${DATABASE_URL:-}"
 migrate_completed_template_checks prod "${PROD_DATABASE_URL:-}"
 
+# ─── Shopify expiring offline tokens (Dec 2025 cutover) ──────────────────
+# Adds the refresh-token trio to shopify_stores so shopifyFetch can rotate the
+# now-mandatory expiring access token. Required or schema-drift-guard fails on
+# the missing columns.
+migrate_shopify_expiring_tokens() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping shopify_expiring_tokens migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE shopify_stores
+  ADD COLUMN IF NOT EXISTS refresh_token            text,
+  ADD COLUMN IF NOT EXISTS access_token_expires_at  timestamp,
+  ADD COLUMN IF NOT EXISTS refresh_token_expires_at timestamp;
+COMMIT;
+SQL
+  then
+    echo "post-merge: shopify_expiring_tokens migration ok on $label"
+  else
+    echo "post-merge: WARNING — shopify_expiring_tokens migration failed on $label (continuing)"
+  fi
+}
+migrate_shopify_expiring_tokens dev  "${DATABASE_URL:-}"
+migrate_shopify_expiring_tokens prod "${PROD_DATABASE_URL:-}"
+
 # Task #1036 — TRUE ONE-TIME backfill: give every existing account exactly
 # ONE membership reproducing its current users.role / role_scope_id +
 # folded partner_permission_overrides. Marker-guarded in
