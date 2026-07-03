@@ -69,3 +69,14 @@ no-op on prod), the drift resolves, and a re-publish is clean with no DROP.
 **Diagnose fast:** `SELECT to_regclass('public.<name>')` on prod vs dev +
 `rg <name> shared server scripts`. If prod-only and code-absent, it's an unmerged
 task's prod artifact — cancel, wait for merge, re-publish.
+
+**Faster unblock when the operator can't wait for the task to merge:** mirror the
+prod table's EXACT structure into the dev DB (reconstruct DDL from prod
+information_schema.columns + pg_constraint — match udt types, nullability,
+defaults, and the PK), leaving it empty. Then the dev→prod diff for that table is
+nothing, and a FRESH publish (operator must Cancel the pending one and Republish —
+the already-generated migration doesn't recompute) emits no DROP. Safe because
+it's additive/empty and the owning task's post-merge `CREATE TABLE IF NOT EXISTS`
+is a no-op on merge. Caveat: this is temporary phantom drift (table in both DBs
+but not in main's code) until the task merges — fine as long as the task WILL
+merge; if it's cancelled, drop the dev table again.
