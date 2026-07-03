@@ -32,6 +32,7 @@ export function AdminShopify() {
 function AdminShopifyInner() {
   const { toast } = useToast();
   const [shop, setShop] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const { data: cfg } = useQuery<{ configured: boolean; apiKey: string | null; scopes: string }>({
     queryKey: ["/api/admin/shopify/config"],
@@ -86,13 +87,48 @@ function AdminShopifyInner() {
   });
   const mintedUrl = mintedCode ? `${window.location.origin}/redeem/${mintedCode}` : "";
 
+  // Accept either the bare subdomain or the full myshopify.com URL and
+  // normalize to the canonical `<sub>.myshopify.com`. Returns "" when the
+  // input can't be coerced into a valid shop domain.
+  const normalizeShop = (raw: string): string => {
+    let s = raw.trim().toLowerCase();
+    if (!s) return "";
+    s = s.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    // A bare subdomain (no dots) gets the myshopify.com suffix. A dotted host
+    // must already be a *.myshopify.com domain — a custom storefront domain
+    // (www.label.com) can't be turned into an install target, so reject it
+    // rather than silently coercing it to a bogus www.myshopify.com link.
+    if (!s.includes(".")) s = `${s}.myshopify.com`;
+    return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(s) ? s : "";
+  };
+  const normalizedShop = normalizeShop(shop);
+  // Absolute link a label's team member (who has Shopify admin access to
+  // their own store) opens to approve the install. The install route needs
+  // no GoodTunes login, so this link works in the label's hands — the
+  // operator almost never has admin access to a label's Shopify store, so
+  // handing over a link is the normal path, not clicking Install here.
+  const installLink = normalizedShop
+    ? `${window.location.origin}/api/shopify/install?shop=${encodeURIComponent(normalizedShop)}`
+    : "";
+
+  const copyInstallLink = async () => {
+    if (!installLink) return;
+    try {
+      await navigator.clipboard.writeText(installLink);
+      setLinkCopied(true);
+      toast({ title: "Install link copied", description: "Send it to someone on the label's team with Shopify admin access." });
+      setTimeout(() => setLinkCopied(false), 1500);
+    } catch {
+      toast({ title: "Couldn't copy", description: "Copy the link shown below by hand instead.", variant: "destructive" });
+    }
+  };
+
+  // "Install directly" — only useful when the operator themselves has admin
+  // access to the target store (e.g. a GoodTunes dev/test store). Otherwise
+  // Shopify shows "Unauthorized Access" and the label must use the link.
   const startInstall = () => {
-    let s = shop.trim().toLowerCase();
-    if (!s) return;
-    // Accept either the bare subdomain or the full myshopify.com URL.
-    s = s.replace(/^https?:\/\//, "").replace(/\/$/, "");
-    if (!s.endsWith(".myshopify.com")) s = `${s.split(".")[0]}.myshopify.com`;
-    window.location.href = `/api/shopify/install?shop=${encodeURIComponent(s)}`;
+    if (!normalizedShop) return;
+    window.location.href = `/api/shopify/install?shop=${encodeURIComponent(normalizedShop)}`;
   };
 
   return (
@@ -108,10 +144,13 @@ function AdminShopifyInner() {
           <h2 className="text-[15px] font-semibold text-slate-900 mb-3">Install on a label's store</h2>
           <ol className="text-[13.5px] text-slate-700 space-y-2 list-decimal list-inside mb-4">
             <li>Ask the label for their Shopify store URL (e.g. <code className="font-mono text-[12px] bg-slate-100 px-1.5 py-0.5 rounded">tim-snider-records.myshopify.com</code>).</li>
-            <li>Paste it below — we'll redirect you to Shopify for the approval click.</li>
-            <li>Label clicks "Install" on the Shopify approval screen. That's the whole label-side setup.</li>
-            <li>You land back here with the store listed. Open any album's <strong>Shopify</strong> tab to map a product.</li>
+            <li>Paste it below and click <strong>Copy install link</strong>.</li>
+            <li>Send that link to someone on the label's team who has admin access to their Shopify store. They open it and click <strong>Install</strong> on Shopify's approval screen — only a store admin can approve, so this can't be done from your side.</li>
+            <li>Once approved, the store appears under <strong>Connected stores</strong> below. Open any album's <strong>Shopify</strong> tab to map a product.</li>
           </ol>
+          <p className="text-[12.5px] text-slate-500 mb-4">
+            Installing on a store <em>you</em> have Shopify admin access to (e.g. a test store)? Use <strong>Install directly</strong> to skip the link and approve it yourself.
+          </p>
           {cfg && !cfg.configured && (
             <div className="rounded-md bg-rose-50 border border-rose-200 px-3 py-2 text-[12.5px] text-rose-700 mb-4">
               <strong>Not configured yet.</strong> Set <code>SHOPIFY_API_KEY</code> and <code>SHOPIFY_API_SECRET</code> in
@@ -152,16 +191,34 @@ Get your music now
             />
             <button
               type="button"
+              onClick={copyInstallLink}
+              disabled={!cfg?.configured || !normalizedShop}
+              className="h-10 px-4 rounded-md bg-slate-900 text-white text-[13px] font-medium hover:bg-slate-800 disabled:opacity-50 shrink-0"
+              data-testid="button-shopify-copy-link"
+            >
+              <span className="inline-flex items-center gap-1.5">
+                {linkCopied ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                {linkCopied ? "Copied" : "Copy install link"}
+              </span>
+            </button>
+            <button
+              type="button"
               onClick={startInstall}
-              disabled={!cfg?.configured || !shop.trim()}
-              className="h-10 px-4 rounded-md bg-slate-900 text-white text-[13px] font-medium hover:bg-slate-800 disabled:opacity-50"
+              disabled={!cfg?.configured || !normalizedShop}
+              className="h-10 px-4 rounded-md border border-slate-300 bg-white text-slate-700 text-[13px] font-medium hover:bg-slate-50 disabled:opacity-50 shrink-0"
               data-testid="button-shopify-install"
             >
               <span className="inline-flex items-center gap-1.5">
-                Install <ExternalLink className="w-3.5 h-3.5" />
+                Install directly <ExternalLink className="w-3.5 h-3.5" />
               </span>
             </button>
           </div>
+          {installLink && (
+            <div className="mt-3 rounded-md bg-slate-50 border border-slate-200 px-3 py-2" data-testid="shopify-install-link-readout">
+              <div className="text-[11.5px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Install link to send</div>
+              <div className="font-mono text-[12.5px] text-slate-700 break-all" data-testid="text-shopify-install-link">{installLink}</div>
+            </div>
+          )}
         </section>
 
         {/* Dev-only test mint */}
