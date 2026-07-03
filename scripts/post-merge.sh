@@ -992,6 +992,34 @@ backfill_gogoods_collectible_ids() {
 backfill_gogoods_collectible_ids dev  "${DATABASE_URL:-}"
 backfill_gogoods_collectible_ids prod "${PROD_DATABASE_URL:-}"
 
+# Task #2431 — reconcile legacy gogoods.com orders against LIVE Stripe. The
+# bulk import stamped only the base album price into orders.total_cents; this
+# re-derives the true grand total, tax, shipping, buyer address, and payment
+# snapshot from the Stripe Charge + Checkout Session (matched deterministically
+# on charge metadata.txn_id == orders.legacy_gogoods_id) and materializes
+# order_items. DATA ONLY — no receipts/transfers/fulfillment/cert/entitlement
+# side effects; never calls materializeOrderFromSession. Idempotent (per-order
+# audit table gogoods_stripe_reconciliation + post_merge_data_backfills marker),
+# reversible (audit stores the original total), and self-gating: a fresh dev
+# clone with no legacy:gogoods orders writes nothing and leaves the marker unset.
+# Always uses the LIVE Stripe connector because the charges only exist there.
+# Slow (thousands of Stripe reads) but marker-guarded, so it runs at most once
+# per DB. Runs AFTER the collectible-id backfill (independent, ordering cosmetic).
+reconcile_gogoods_stripe_orders() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping gogoods-stripe reconciliation on $label (no URL set)"
+    return 0
+  fi
+  if DATABASE_URL="$url" npx tsx scripts/reconcile-gogoods-stripe-orders.ts; then
+    echo "post-merge: gogoods-stripe reconciliation ok on $label"
+  else
+    echo "post-merge: WARNING — gogoods-stripe reconciliation failed on $label (continuing)"
+  fi
+}
+reconcile_gogoods_stripe_orders dev  "${DATABASE_URL:-}"
+reconcile_gogoods_stripe_orders prod "${PROD_DATABASE_URL:-}"
+
 # Hellbender "Splatter" 12" disc swatches — load Bill's authoritative 31-disc
 # export into both Splatter Color tiers (12_lp + 12_double) so the SellPanel
 # "Design your Package" picker renders real discs instead of an empty tier. The
