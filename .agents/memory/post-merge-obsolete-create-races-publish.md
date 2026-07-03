@@ -45,3 +45,27 @@ DML needed; the soft-deleted duplicate slug is legitimate and harmless.
 **General rule:** grep post-merge.sh for any CREATE that a later block DROPs and
 replaces; that create→drop churn is a publish-diff race. Remove the superseded
 create.
+
+## Variant: an IN-FLIGHT (unmerged) task's prod-side table makes publish emit a DROP
+
+A task agent working a **prod-only data job** (its post-merge runs `CREATE TABLE
+IF NOT EXISTS` against BOTH DATABASE_URL and PROD_DATABASE_URL) can create its
+bookkeeping table in **live prod before the task merges**. Until that task merges,
+main's dev DB and `shared/schema.ts` don't know the table exists. A publish kicked
+off from main then diffs dev→prod, sees "prod has a table dev doesn't," and
+generates `DROP TABLE "<name>" CASCADE` against prod.
+
+**Symptom:** publish "Generated migrations" step shows a lone
+`DROP TABLE "<something>" CASCADE;` for a table nobody in the current codebase
+references (`rg` finds nothing in shared/server/scripts; dev `to_regclass` is
+NULL; prod `to_regclass` is non-null).
+
+**Do NOT approve it.** Tell the operator to **Cancel** the publish. Rationale even
+when the table is empty + has no FK deps (CASCADE harmless): dropping it fights a
+mid-run job and it just gets recreated on merge, so pure downside. Once the owning
+task merges, main's post-merge creates the table in dev too (IF NOT EXISTS is a
+no-op on prod), the drift resolves, and a re-publish is clean with no DROP.
+
+**Diagnose fast:** `SELECT to_regclass('public.<name>')` on prod vs dev +
+`rg <name> shared server scripts`. If prod-only and code-absent, it's an unmerged
+task's prod artifact — cancel, wait for merge, re-publish.
