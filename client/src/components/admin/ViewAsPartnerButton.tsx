@@ -37,6 +37,10 @@ export interface ViewAsPartnerButtonProps {
   scopeKind?: string | null;
   scopeId: string;
   label: string;
+  /** button copy — defaults to "View as this partner" */
+  buttonText?: string;
+  /** overrides the default data-testid when set */
+  testId?: string;
 }
 
 export function ViewAsPartnerButton({
@@ -44,6 +48,8 @@ export function ViewAsPartnerButton({
   scopeKind,
   scopeId,
   label,
+  buttonText = "View as this partner",
+  testId = "button-view-as-partner",
 }: ViewAsPartnerButtonProps) {
   const { data: meRole } = useQuery<{ role: string }>({ queryKey: ["/api/me/role"] });
   const { toast } = useToast();
@@ -83,10 +89,10 @@ export function ViewAsPartnerButton({
       onClick={handleViewAs}
       disabled={loading}
       className="flex items-center gap-1.5 text-xs h-7 px-2.5 border-slate-200 text-slate-600 hover:text-[var(--brand-blue)] hover:border-[var(--brand-blue)]"
-      data-testid="button-view-as-partner"
+      data-testid={testId}
     >
       <Eye className="w-3.5 h-3.5" />
-      View as this partner
+      {buttonText}
     </Button>
   );
 }

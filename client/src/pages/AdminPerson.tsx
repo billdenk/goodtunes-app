@@ -3,6 +3,7 @@ import { getInitials } from "@/lib/initials";
 import { formatUsdCents } from "@shared/money";
 import { Link, useRoute, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ViewAsPartnerButton } from "@/components/admin/ViewAsPartnerButton";
 import {
   ChevronLeft,
   ChevronRight,
@@ -857,7 +858,8 @@ export function AdminPerson() {
     >
       <div className="space-y-6">
         {/* BREADCRUMB */}
-        <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
           {backCrumb ? (
             <>
               <Link
@@ -893,6 +895,21 @@ export function AdminPerson() {
           <span className="text-slate-700 font-semibold truncate max-w-[420px]">
             {person.name}
           </span>
+          </div>
+          {/* View as this Artist — super-admin-only god-view lens into the
+              artist's real restricted /artist portal (opens a new tab, current
+              god-view tab untouched). Mirrors ViewAsPartnerButton on partner
+              detail pages. Only for artist-shape People. */}
+          {!pressMode && personIsArtist(person) && (
+            <ViewAsPartnerButton
+              role="artist"
+              scopeKind="artist"
+              scopeId={personId}
+              label={person.name}
+              buttonText="View as this Artist"
+              testId="button-view-as-artist"
+            />
+          )}
         </div>
 
         {/* HEADER */}
