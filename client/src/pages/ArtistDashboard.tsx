@@ -112,7 +112,7 @@ export function ArtistDashboard() {
     invitedPress?: { id: string; name: string; logoUrl: string | null } | null;
     hasShippedFirst?: boolean;
   }>({
-    queryKey: ["/api/artist/me", qs],
+    queryKey: [`/api/artist/me?${qs}`],
   });
 
   // Friendly error surface — artist accounts that aren't fully wired
@@ -284,9 +284,9 @@ function LifetimeBanner({ data }: { data?: Lifetime | null }) {
 
 // ─── Tabs ─────────────────────────────────────────────────────────────
 function OverviewTab({ qs }: { qs: string }) {
-  const summary = useQuery<Summary>({ queryKey: ["/api/artist/summary", qs] });
-  const series = useQuery<Timeseries>({ queryKey: ["/api/artist/timeseries", qs] });
-  const geo = useQuery<GeoPayload & { range: Range }>({ queryKey: ["/api/artist/geo", qs] });
+  const summary = useQuery<Summary>({ queryKey: [`/api/artist/summary?${qs}`] });
+  const series = useQuery<Timeseries>({ queryKey: [`/api/artist/timeseries?${qs}`] });
+  const geo = useQuery<GeoPayload & { range: Range }>({ queryKey: [`/api/artist/geo?${qs}`] });
   const cur = summary.data?.current;
   const prev = summary.data?.previous ?? null;
   const lifetime = summary.data?.lifetime ?? null;
@@ -331,7 +331,7 @@ function OverviewTab({ qs }: { qs: string }) {
 }
 
 function AudienceTab({ qs }: { qs: string }) {
-  const aud = useQuery<Audience & { range: Range }>({ queryKey: ["/api/artist/audience", qs] });
+  const aud = useQuery<Audience & { range: Range }>({ queryKey: [`/api/artist/audience?${qs}`] });
   if (aud.isLoading) return <SkeletonBlock />;
   const d = aud.data;
   if (!d) return null;
@@ -379,8 +379,8 @@ function AudienceTab({ qs }: { qs: string }) {
 }
 
 function CatalogTab({ qs }: { qs: string }) {
-  const tracks = useQuery<Tracks & { range: Range }>({ queryKey: ["/api/artist/top-tracks", qs] });
-  const albums = useQuery<AlbumsPayload & { range: Range }>({ queryKey: ["/api/artist/top-albums", qs] });
+  const tracks = useQuery<Tracks & { range: Range }>({ queryKey: [`/api/artist/top-tracks?${qs}`] });
+  const albums = useQuery<AlbumsPayload & { range: Range }>({ queryKey: [`/api/artist/top-albums?${qs}`] });
   return (
     <>
       <Card
@@ -480,7 +480,7 @@ function CatalogTab({ qs }: { qs: string }) {
 }
 
 function OrdersTab({ qs }: { qs: string }) {
-  const orders = useQuery<OrdersPayload & { range: Range }>({ queryKey: ["/api/artist/orders", qs] });
+  const orders = useQuery<OrdersPayload & { range: Range }>({ queryKey: [`/api/artist/orders?${qs}`] });
   return (
     <Card
       title="Recent orders"
