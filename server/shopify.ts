@@ -1407,6 +1407,69 @@ export function registerShopifyRoutes(app: Express) {
     res.json({ code, orderId: order.id, reused: false });
   });
 
+  // ─── Admin: browse a connected store's products (Task #2432) ───────
+  // Backs the album Shopify tab's product picker — an operator chooses a
+  // store, then browses/searches its live catalog instead of hunting down
+  // a product URL to paste. Two modes:
+  //   - No `search`: cursor-paginated (Shopify's Link-header page_info),
+  //     20 at a time, newest-first (REST default).
+  //   - `search`: Shopify's REST `title` filter is exact-match, not a
+  //     substring search, so we instead pull a larger page (up to 250)
+  //     and filter case-insensitively in-process. Single-page best-effort
+  //     — fine for the store sizes this picker targets.
+  app.get("/api/admin/shopify/stores/:storeId/products", requireAdmin, async (req, res) => {
+    const storeId = String(req.params.storeId);
+    const store = await getStoreById(storeId);
+    if (!store) return res.status(404).json({ message: "Store not found" });
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const cursor = typeof req.query.cursor === "string" ? req.query.cursor.trim() : "";
+
+    const params = new URLSearchParams();
+    if (search) {
+      params.set("limit", "250");
+      params.set("status", "active");
+    } else {
+      params.set("limit", "20");
+      if (cursor) {
+        // Shopify's cursor pagination rejects any filter params other than
+        // `limit`/`fields` alongside `page_info` — don't also send `status`.
+        params.set("page_info", cursor);
+      } else {
+        params.set("status", "active");
+      }
+    }
+
+    const r = await shopifyFetch(store, `products.json?${params.toString()}`);
+    if (!r.ok) return res.status(502).json({ message: "Couldn't fetch products from Shopify" });
+    const j: any = await r.json();
+    let products: any[] = j?.products ?? [];
+    if (search) {
+      const needle = search.toLowerCase();
+      products = products.filter((p) => String(p.title ?? "").toLowerCase().includes(needle));
+    }
+
+    let nextCursor: string | null = null;
+    if (!search) {
+      const link = r.headers.get("link") ?? r.headers.get("Link");
+      const m = link?.match(/<[^>]*[?&]page_info=([^&>]+)[^>]*>;\s*rel="next"/);
+      if (m) nextCursor = decodeURIComponent(m[1]);
+    }
+
+    res.json({
+      products: products.map((p) => ({
+        id: String(p.id),
+        title: p.title as string,
+        image: p.image?.src ?? p.images?.[0]?.src ?? null,
+        variants: (p.variants ?? []).map((v: any) => ({
+          id: String(v.id),
+          title: v.title as string,
+          price: v.price as string,
+        })),
+      })),
+      nextCursor,
+    });
+  });
+
   // ─── Admin: list connected stores ─────────────────────────────────
   // Joins the owning label (Task #2030) so the global Shopify page can
   // attribute each store to its label without a second round-trip.

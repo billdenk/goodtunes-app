@@ -26,6 +26,7 @@ import {
   Music,
   Scissors,
   Video,
+  Search,
 } from "lucide-react";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 
@@ -144,6 +145,11 @@ export function ShopifyPanel({
   const [url, setUrl] = useState("");
   const [resolved, setResolved] = useState<Resolved | null>(null);
   const [variantId, setVariantId] = useState<string | null>(null);
+  // Task #2432 — store selector + product browser. Defaults to the store
+  // this album is already associated with (its Shopify push store), or
+  // the sole connected store when there's only one.
+  const [pickerStoreId, setPickerStoreId] = useState<string>("");
+  const [pickerSearch, setPickerSearch] = useState("");
   const [offerCert, setOfferCert] = useState(false);
   const [certPrice, setCertPrice] = useState("9.99");
   // Task #2428 — for a shopify_plus album the operator opts a mapping in to
@@ -171,6 +177,51 @@ export function ShopifyPanel({
       pushStatus.push?.storeId ?? (pushStatus.stores.length === 1 ? pushStatus.stores[0].id : ""),
     );
   }, [pushStatus]);
+
+  // Task #2432 — default the product-picker store the same way: the
+  // album's associated push store, or the sole connected store. Only
+  // fires once (won't stomp a manual selection on refetch).
+  useEffect(() => {
+    if (!pushStatus || pickerStoreId) return;
+    const defaultStoreId =
+      pushStatus.push?.storeId ?? (pushStatus.stores.length === 1 ? pushStatus.stores[0].id : "");
+    if (defaultStoreId) setPickerStoreId(defaultStoreId);
+  }, [pushStatus, pickerStoreId]);
+
+  type BrowseProduct = {
+    id: string;
+    title: string;
+    image: string | null;
+    variants: { id: string; title: string; price: string }[];
+  };
+  const { data: browseData, isFetching: isBrowsing } = useQuery<{
+    products: BrowseProduct[];
+    nextCursor: string | null;
+  }>({
+    queryKey: ["/api/admin/shopify/stores", pickerStoreId, "products", pickerSearch],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (pickerSearch.trim()) params.set("search", pickerSearch.trim());
+      const r = await apiRequest(
+        "GET",
+        `/api/admin/shopify/stores/${pickerStoreId}/products${params.toString() ? `?${params}` : ""}`,
+      );
+      return r.json();
+    },
+    enabled: !!pickerStoreId,
+  });
+
+  function pickBrowsedProduct(p: BrowseProduct) {
+    setResolved({
+      storeId: pickerStoreId,
+      shopifyProductId: p.id,
+      shopifyProductTitle: p.title,
+      variants: p.variants,
+      albumId,
+    });
+    setVariantId(p.variants.length === 1 ? p.variants[0].id : null);
+    setUrl("");
+  }
 
   const savePushFields = useMutation({
     mutationFn: async () => {
@@ -602,6 +653,88 @@ export function ShopifyPanel({
         {/* Add a new mapping */}
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <h3 className="text-[13.5px] font-semibold text-slate-900 mb-2">Link a Shopify product</h3>
+
+          {pushStatus && pushStatus.stores.length > 0 && (
+            <div className="mb-4">
+              {pushStatus.stores.length > 1 && (
+                <select
+                  value={pickerStoreId}
+                  onChange={(e) => {
+                    setPickerStoreId(e.target.value);
+                    setPickerSearch("");
+                  }}
+                  className="w-full h-9 border border-slate-300 rounded-md px-2 text-[13px] bg-white mb-2"
+                  data-testid="select-shopify-picker-store"
+                >
+                  <option value="">Choose a store…</option>
+                  {pushStatus.stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.storeName ?? s.shopDomain}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {pickerStoreId && (
+                <div className="rounded-md border border-slate-200 overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 bg-slate-50">
+                    <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <input
+                      type="text"
+                      value={pickerSearch}
+                      onChange={(e) => setPickerSearch(e.target.value)}
+                      placeholder="Search products…"
+                      className="flex-1 bg-transparent text-[13px] focus:outline-none"
+                      data-testid="input-shopify-product-search"
+                    />
+                    {isBrowsing && <RefreshCw className="w-3.5 h-3.5 text-slate-400 animate-spin shrink-0" />}
+                  </div>
+                  <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
+                    {!isBrowsing && (browseData?.products?.length ?? 0) === 0 && (
+                      <div className="px-3 py-4 text-center text-[12.5px] text-slate-400">
+                        {pickerSearch ? "No products matched that search" : "No products found in this store"}
+                      </div>
+                    )}
+                    {browseData?.products?.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => pickBrowsedProduct(p)}
+                        className={[
+                          "w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50",
+                          resolved?.storeId === pickerStoreId && resolved?.shopifyProductId === p.id
+                            ? "bg-blue-50"
+                            : "",
+                        ].join(" ")}
+                        data-testid={`button-browse-product-${p.id}`}
+                      >
+                        {p.image ? (
+                          <img src={p.image} alt="" className="w-9 h-9 rounded object-cover shrink-0 bg-slate-100" />
+                        ) : (
+                          <div className="w-9 h-9 rounded bg-slate-100 flex items-center justify-center shrink-0">
+                            <ImageIcon className="w-4 h-4 text-slate-300" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px] font-medium text-slate-900 truncate">{p.title}</div>
+                          <div className="text-[11.5px] text-slate-500 truncate">
+                            {p.variants.length > 1
+                              ? `${p.variants.length} variants · from $${p.variants[0]?.price ?? "—"}`
+                              : p.variants[0]
+                                ? `$${p.variants[0].price}`
+                                : "No variants"}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold mb-1.5">
+            Or paste a product URL directly
+          </div>
           <div className="flex gap-2 mb-3">
             <input
               type="url"
