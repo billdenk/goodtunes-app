@@ -468,7 +468,7 @@ function tabsForPerson(person: PersonFull): { key: Tab; label: string }[] {
 // when they carry the "artist" creative role. Contact-shape partner staff
 // with none of these (Travis Whitlock at Hellbender, Andrew at PMP) are NOT
 // artists — their Permissions tab shows only their partner-staff access.
-function personIsArtist(person: PersonFull): boolean {
+export function personIsArtist(person: PersonFull): boolean {
   return (
     person.shape === "artist" ||
     person.isArtistPromoted === true ||
