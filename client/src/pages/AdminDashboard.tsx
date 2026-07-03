@@ -35,14 +35,11 @@ import {
   Banknote,
   AlertTriangle,
   ArrowUpRight,
-  ArrowDownRight,
-  Minus,
-  Music,
-  PackageOpen,
   Heart,
 } from "lucide-react";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { KpiCard, type KpiCardModel } from "@/components/admin/KpiCard";
 
 /**
  * Task #140 — Stripe-style admin dashboard. Lives at /admin and
@@ -594,189 +591,72 @@ function KpiGrid({ kpis, loading, qs }: { kpis?: KpisData; loading: boolean; qs:
   // pane and `?from=…&to=…` for the date filter.
   return (
     <div className="grid grid-cols-2 lg:grid-cols-5 gap-4" data-testid="dashboard-kpi-grid">
-      <KpiTile
-        label="Gross sales"
-        value={kpis ? fmtUsd(kpis.gmvCents) : DASH}
-        prior={prior.gmvCents}
-        current={kpis?.gmvCents}
-        format={fmtUsd}
-        spark={series.map((s) => s?.gmvCents ?? 0)}
-        color={BLUE}
-        loading={loading}
+      <KpiCard
+        model={{
+          id: "gross",
+          label: "Gross sales",
+          value: kpis?.gmvCents ?? null,
+          prior: prior.gmvCents ?? null,
+          format: "currency",
+        }}
         testId="tile-gmv"
         href={`/admin/reports?tab=sales&${qs}`}
+        spark={series.map((s) => s?.gmvCents ?? 0)}
+        color={BLUE}
       />
-      <KpiTile
-        label="Net revenue"
-        value={kpis ? fmtUsd(kpis.netCents) : DASH}
-        prior={prior.netCents}
-        current={kpis?.netCents}
-        format={fmtUsd}
-        spark={null}
-        color={MINT}
-        loading={loading}
+      <KpiCard
+        model={{
+          id: "net",
+          label: "Net revenue",
+          value: kpis?.netCents ?? null,
+          prior: prior.netCents ?? null,
+          format: "currency",
+        }}
         testId="tile-net"
         href={`/admin/reports?tab=revenue&${qs}`}
+        spark={null}
+        color={MINT}
       />
-      <KpiTile
-        label="Orders"
-        value={kpis ? fmtNum(kpis.orderCount) : DASH}
-        prior={prior.orderCount}
-        current={kpis?.orderCount}
-        format={fmtNum}
-        spark={series.map((s) => s?.orders ?? 0)}
-        color={PURPLE}
-        loading={loading}
+      <KpiCard
+        model={{
+          id: "orders",
+          label: "Orders",
+          value: kpis?.orderCount ?? null,
+          prior: prior.orderCount ?? null,
+          format: "number",
+        }}
         testId="tile-orders"
         href={`/admin/orders?${qs}`}
+        spark={series.map((s) => s?.orders ?? 0)}
+        color={PURPLE}
       />
-      <KpiTile
-        label="New fans"
-        value={kpis ? fmtNum(kpis.newSignups) : DASH}
-        prior={prior.newSignups}
-        current={kpis?.newSignups}
-        format={fmtNum}
-        spark={series.map((s) => s?.signups ?? 0)}
-        color={PINK}
-        loading={loading}
+      <KpiCard
+        model={{
+          id: "newFans",
+          label: "New fans",
+          value: kpis?.newSignups ?? null,
+          prior: prior.newSignups ?? null,
+          format: "number",
+        }}
         testId="tile-signups"
         href={`/admin/customers?${qs}`}
+        spark={series.map((s) => s?.signups ?? 0)}
+        color={PINK}
       />
-      <KpiTile
-        label="Plays"
-        value={kpis ? fmtNum(kpis.plays) : DASH}
-        prior={prior.plays}
-        current={kpis?.plays}
-        format={fmtNum}
-        spark={series.map((s) => s?.plays ?? 0)}
-        color={BLUE}
-        loading={loading}
+      <KpiCard
+        model={{
+          id: "plays",
+          label: "Plays",
+          value: kpis?.plays ?? null,
+          prior: prior.plays ?? null,
+          format: "number",
+        }}
         testId="tile-plays"
         href={`/admin/reports?tab=plays&${qs}`}
+        spark={series.map((s) => s?.plays ?? 0)}
+        color={BLUE}
       />
     </div>
-  );
-}
-
-function KpiTile({
-  label,
-  value,
-  prior,
-  current,
-  format,
-  spark,
-  color,
-  loading,
-  testId,
-  href,
-}: {
-  label: string;
-  value: React.ReactNode;
-  prior?: number;
-  current?: number;
-  format: (n: number) => string;
-  spark: number[] | null;
-  color: string;
-  loading: boolean;
-  testId: string;
-  href?: string;
-}) {
-  const inner = (
-    <>
-      <div>
-        <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-1">
-          {label}
-          {href && (
-            <ArrowUpRight className="w-3 h-3 text-slate-300 group-hover:text-[#319ED8] transition-colors" />
-          )}
-        </div>
-        <div className="text-[22px] font-semibold text-slate-900 mt-1 tabular-nums">
-          {loading ? <span className="text-slate-300">—</span> : value}
-        </div>
-      </div>
-      <div className="flex items-end justify-between gap-2 mt-2">
-        <Delta current={current} prior={prior} format={format} />
-        {spark && spark.length > 1 && <Sparkline points={spark} color={color} />}
-      </div>
-    </>
-  );
-  const base =
-    "rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between min-h-[120px]";
-  if (!href) {
-    return (
-      <div className={base} data-testid={testId}>
-        {inner}
-      </div>
-    );
-  }
-  return (
-    <Link
-      href={href}
-      className={`${base} group cursor-pointer hover:border-slate-300 hover:shadow-sm hover:-translate-y-0.5 transition-all`}
-      data-testid={testId}
-    >
-      {inner}
-    </Link>
-  );
-}
-
-function Delta({
-  current,
-  prior,
-  format,
-}: {
-  current?: number;
-  prior?: number;
-  format: (n: number) => string;
-}) {
-  if (current === undefined || prior === undefined) {
-    return <span className="text-[11px] text-slate-400">vs prior: —</span>;
-  }
-  if (prior === 0 && current === 0) {
-    return <span className="text-[11px] text-slate-400">vs prior: —</span>;
-  }
-  const delta = current - prior;
-  const pct = prior === 0 ? null : delta / prior;
-  const up = delta > 0;
-  const down = delta < 0;
-  const Icon = up ? ArrowUpRight : down ? ArrowDownRight : Minus;
-  const tone = up
-    ? "text-emerald-600"
-    : down
-      ? "text-rose-600"
-      : "text-slate-400";
-  const pctStr = pct === null ? "n/a" : `${up ? "+" : ""}${(pct * 100).toFixed(1)}%`;
-  return (
-    <span
-      className={`inline-flex items-center gap-1 text-[11px] font-semibold ${tone}`}
-      title={`Prior period: ${format(prior)}`}
-    >
-      <Icon className="w-3 h-3" />
-      {pctStr}
-    </span>
-  );
-}
-
-function Sparkline({ points, color }: { points: number[]; color: string }) {
-  const W = 80;
-  const H = 28;
-  const max = Math.max(1, ...points);
-  const min = Math.min(0, ...points);
-  const range = max - min || 1;
-  const step = W / Math.max(1, points.length - 1);
-  const path = points
-    .map((p, i) => {
-      const x = i * step;
-      const y = H - ((p - min) / range) * H;
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-  const fillPath = `${path} L${W},${H} L0,${H} Z`;
-  return (
-    <svg width={W} height={H} className="flex-shrink-0" aria-hidden="true">
-      <path d={fillPath} fill={color} fillOpacity={0.12} />
-      <path d={path} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" />
-    </svg>
   );
 }
 
@@ -972,18 +852,6 @@ type ArtistSummaryData = {
   npoPayout: number;
 };
 
-function pctChange(cur: number, prev: number): number | null {
-  if (!prev) return null;
-  return Math.round(((cur - prev) / prev) * 100);
-}
-
-function TileArrow({ pct }: { pct: number | null }) {
-  if (pct === null) return null;
-  if (pct > 0) return <span className="text-emerald-600 flex items-center gap-0.5 text-xs font-medium"><ArrowUpRight className="w-3.5 h-3.5" />{pct}%</span>;
-  if (pct < 0) return <span className="text-rose-500 flex items-center gap-0.5 text-xs font-medium"><ArrowDownRight className="w-3.5 h-3.5" />{Math.abs(pct)}%</span>;
-  return <span className="text-slate-400 flex items-center gap-0.5 text-xs"><Minus className="w-3 h-3" />0%</span>;
-}
-
 function ArtistKpiTiles({
   summary,
   loading,
@@ -997,36 +865,55 @@ function ArtistKpiTiles({
   const npoPayout = summary?.npoPayout ?? 0;
   const cur = summary?.current;
   const prev = summary?.previous;
-  const tiles = [
+  const tiles: Array<{ model: KpiCardModel; testId: string }> = [
     {
-      label: "Revenue",
-      icon: <Banknote className="w-4 h-4 text-[color:var(--brand-blue)]" />,
-      value: cur ? `$${(cur.grossCents / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—",
-      pct: cur && prev ? pctChange(cur.grossCents, prev.grossCents) : null,
+      testId: "kpi-tile-revenue",
+      model: {
+        id: "revenue",
+        label: "Revenue",
+        value: cur ? cur.grossCents : null,
+        prior: prev ? prev.grossCents : null,
+        format: "currency",
+      },
     },
     {
-      label: "Units sold",
-      icon: <ShoppingBag className="w-4 h-4 text-[color:var(--brand-blue)]" />,
-      value: cur ? cur.units.toLocaleString() : "—",
-      pct: cur && prev ? pctChange(cur.units, prev.units) : null,
+      testId: "kpi-tile-units-sold",
+      model: {
+        id: "units",
+        label: "Units sold",
+        value: cur ? cur.units : null,
+        prior: prev ? prev.units : null,
+        format: "number",
+      },
     },
     {
-      label: "Fans",
-      icon: <UserPlus className="w-4 h-4 text-[color:var(--brand-blue)]" />,
-      value: cur ? cur.buyers.toLocaleString() : "—",
-      pct: cur && prev ? pctChange(cur.buyers, prev.buyers) : null,
+      testId: "kpi-tile-fans",
+      model: {
+        id: "fans",
+        label: "Fans",
+        value: cur ? cur.buyers : null,
+        prior: prev ? prev.buyers : null,
+        format: "number",
+      },
     },
     {
-      label: "Streams",
-      icon: <Music className="w-4 h-4 text-[color:var(--brand-blue)]" />,
-      value: cur ? cur.plays.toLocaleString() : "—",
-      pct: cur && prev ? pctChange(cur.plays, prev.plays) : null,
+      testId: "kpi-tile-streams",
+      model: {
+        id: "plays",
+        label: "Streams",
+        value: cur ? cur.plays : null,
+        prior: prev ? prev.plays : null,
+        format: "number",
+      },
     },
     {
-      label: "Open orders",
-      icon: <PackageOpen className="w-4 h-4 text-amber-500" />,
-      value: loading ? "—" : openOrders.toLocaleString(),
-      pct: null as number | null,
+      testId: "kpi-tile-open-orders",
+      model: {
+        id: "openOrders",
+        label: "Open orders",
+        value: loading ? null : openOrders,
+        format: "number",
+      },
     },
   ];
   const topAlbum = cur?.topAlbum ?? null;
@@ -1034,20 +921,7 @@ function ArtistKpiTiles({
     <div className="space-y-3">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" data-testid="artist-kpi-grid">
         {tiles.map((t) => (
-          <div key={t.label} className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col gap-2" data-testid={`kpi-tile-${t.label.toLowerCase().replace(/\s+/g, "-")}`}>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">{t.label}</span>
-              {t.icon}
-            </div>
-            {loading ? (
-              <div className="h-6 w-16 rounded bg-slate-100 animate-pulse" />
-            ) : (
-              <div className="flex items-end justify-between gap-2">
-                <span className="text-2xl font-bold text-slate-900 leading-none">{t.value}</span>
-                <TileArrow pct={t.pct} />
-              </div>
-            )}
-          </div>
+          <KpiCard key={t.testId} model={t.model} testId={t.testId} />
         ))}
       </div>
       {topAlbum && (

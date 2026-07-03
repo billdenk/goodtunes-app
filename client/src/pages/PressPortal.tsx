@@ -40,10 +40,10 @@ import {
   type DashboardKpi,
   type PartnerRangePreset,
   RANGE_PRESETS,
-  formatValue,
   TrendChart,
   ActivityList,
 } from "@/components/partner/PartnerDashboard";
+import { KpiCard, sparkFromSeries } from "@/components/admin/KpiCard";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ReferralLinkWidget } from "@/components/admin/ReferralLinkWidget";
 import { OperatorShell } from "@/components/operator/OperatorShell";
@@ -1170,52 +1170,14 @@ function PressDashboardTab({
           ? Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="rounded-xl border border-slate-200 bg-white h-[120px] animate-pulse" />
             ))
-          : allKpis.map((k) => {
-              const showDelta = !k.comingSoon && k.value !== null && k.prior != null;
-              const positive = showDelta && (k.value ?? 0) >= (k.prior as number);
-              const deltaStr = showDelta
-                ? k.prior === 0
-                  ? (k.value ?? 0) > 0 ? "+∞" : "—"
-                  : `${(((k.value ?? 0) - (k.prior as number)) / (k.prior as number)) >= 0 ? "+" : ""}${((((k.value ?? 0) - (k.prior as number)) / (k.prior as number)) * 100).toFixed(1)}%`
-                : null;
-              return (
-                <div
-                  key={k.id}
-                  data-testid={`kpi-press-${k.id}`}
-                  className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between min-h-[120px] transition-shadow duration-200 hover:shadow-sm hover:border-slate-300"
-                >
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">
-                      {k.label}
-                    </p>
-                    <p
-                      className={`mt-1 text-[22px] font-semibold tabular-nums ${k.comingSoon ? "text-slate-400" : "text-slate-900"}`}
-                      data-testid={`kpi-press-${k.id}-value`}
-                    >
-                      {formatValue(k.value, k.format)}
-                    </p>
-                  </div>
-                  <div className="mt-2 flex items-center gap-2 text-[11px]">
-                    {showDelta ? (
-                      <>
-                        <span className="text-slate-500">vs prior</span>
-                        <span
-                          className={`px-1.5 py-0.5 rounded-full font-semibold ${positive ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}
-                          data-testid={`kpi-press-${k.id}-delta`}
-                        >
-                          {deltaStr}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-slate-400">vs prior: —</span>
-                    )}
-                    {k.note && !k.comingSoon && (
-                      <span className="text-slate-400 truncate">{k.note}</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+          : allKpis.map((k) => (
+              <KpiCard
+                key={k.id}
+                model={k}
+                testId={`kpi-press-${k.id}`}
+                spark={sparkFromSeries(dash?.series ?? [], k.id)}
+              />
+            ))}
       </section>
 
       {/* Albums by stage — compact pill strip.

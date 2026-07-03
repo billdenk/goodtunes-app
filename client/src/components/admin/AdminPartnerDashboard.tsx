@@ -1,14 +1,13 @@
 import { useMemo, useState } from "react";
-import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { formatUsdCents } from "@shared/money";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts";
-import { ArrowUpRight, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { BRAND } from "@/lib/brand-tokens";
 import { cn } from "@/lib/utils";
+import { KpiCard, sparkFromSeries } from "@/components/admin/KpiCard";
 
 export type PartnerScopeKind = "label" | "npo" | "vendor" | "artist";
 export type PartnerRangePreset = "today" | "7d" | "30d" | "90d" | "all";
@@ -55,32 +54,6 @@ type DashboardPayload = {
   series: Array<Record<string, number | string>>;
   activity: ActivityItem[];
 };
-
-function formatValue(value: number | null, format: KpiFormat): string {
-  if (value === null || value === undefined) return "—";
-  switch (format) {
-    case "currency":
-      return value >= 1_000_000
-        ? formatUsdCents(value, { maximumFractionDigits: 0 })
-        : formatUsdCents(value);
-    case "percent":
-      return `${Math.round(value * 100)}%`;
-    case "duration":
-      return `${value}h`;
-    case "number":
-    default:
-      return value >= 10_000
-        ? `${(value / 1000).toFixed(value >= 100_000 ? 0 : 1)}k`
-        : value.toLocaleString();
-  }
-}
-
-function deltaPct(cur: number, prior: number): string {
-  if (prior === 0) return cur > 0 ? "+∞" : "—";
-  const pct = ((cur - prior) / prior) * 100;
-  const sign = pct >= 0 ? "+" : "";
-  return `${sign}${pct.toFixed(1)}%`;
-}
 
 const LIGHT_TOOLTIP_STYLE = {
   background: "#ffffff",
@@ -148,6 +121,7 @@ export function AdminPartnerDashboard({
         kpis={data?.kpis ?? []}
         loading={isLoading}
         scope={scope}
+        series={data?.series ?? []}
         ctx={
           data
             ? {
@@ -300,11 +274,13 @@ function KpiGrid({
   loading,
   scope,
   ctx,
+  series = [],
 }: {
   kpis: DashboardKpi[];
   loading: boolean;
   scope: PartnerScopeKind;
   ctx: PartnerLinkCtx | null;
+  series?: Array<Record<string, number | string>>;
 }) {
   if (loading && kpis.length === 0) {
     return (
@@ -314,7 +290,7 @@ function KpiGrid({
       >
         {Array.from({ length: 5 }).map((_, i) => (
           <Card key={i}>
-            <CardContent className="p-4 h-[96px] animate-pulse" />
+            <CardContent className="p-4 h-[120px] animate-pulse" />
           </Card>
         ))}
       </section>
@@ -326,99 +302,15 @@ function KpiGrid({
       data-testid={`kpi-grid-${scope}`}
     >
       {kpis.map((k) => (
-        <KpiTile key={k.id} k={k} scope={scope} href={partnerKpiHref(scope, k, ctx)} />
+        <KpiCard
+          key={k.id}
+          model={k}
+          testId={`kpi-${scope}-${k.id}`}
+          href={partnerKpiHref(scope, k, ctx)}
+          spark={sparkFromSeries(series, k.id)}
+        />
       ))}
     </section>
-  );
-}
-
-function KpiTile({
-  k,
-  scope,
-  href,
-}: {
-  k: DashboardKpi;
-  scope: PartnerScopeKind;
-  href: string | null;
-}) {
-  const testId = `kpi-${scope}-${k.id}`;
-  const value = formatValue(k.value, k.format);
-  const showDelta =
-    !k.comingSoon && k.value !== null && k.prior !== null && k.prior !== undefined;
-  const delta = showDelta ? deltaPct(k.value as number, k.prior as number) : null;
-  const positive = showDelta && (k.value as number) >= (k.prior as number);
-  const card = (
-    <Card
-      data-testid={testId}
-      className="transition-shadow duration-200 hover:shadow-md hover:border-slate-300"
-    >
-      <CardContent className="p-4">
-        <p className="text-[11px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-1">
-          {k.label}
-          {href && (
-            <ArrowUpRight className="w-3 h-3 text-slate-300 group-hover:text-[color:var(--brand-blue)] transition-colors" />
-          )}
-        </p>
-        <p
-          className={cn(
-            "mt-1 text-[22px] font-semibold tabular-nums text-slate-900",
-            k.comingSoon && "text-slate-400",
-          )}
-          data-testid={`${testId}-value`}
-        >
-          {value}
-        </p>
-        <div className="mt-1 flex items-center gap-2 text-xs">
-          {showDelta ? (
-            <>
-              <span className="text-slate-500">vs prior</span>
-              <span
-                className={cn(
-                  "px-1.5 py-0.5 rounded-full font-semibold",
-                  positive
-                    ? "bg-[color:var(--brand-mint)]/20 text-emerald-700"
-                    : "bg-rose-100 text-rose-700",
-                )}
-                data-testid={`${testId}-delta`}
-              >
-                {delta}
-              </span>
-            </>
-          ) : (
-            <span className="text-slate-400">vs prior: —</span>
-          )}
-          {k.note && !k.comingSoon && (
-            <span className="text-slate-400 truncate">{k.note}</span>
-          )}
-        </div>
-        {k.breakdown && k.breakdown.length > 0 && !k.comingSoon && (
-          <dl
-            className="mt-3 space-y-1 border-t border-slate-100 pt-2"
-            data-testid={`${testId}-breakdown`}
-          >
-            {k.breakdown.map((b, i) => (
-              <div key={i} className="flex items-center justify-between text-xs">
-                <dt className="text-slate-500">{b.label}</dt>
-                <dd
-                  className={cn(
-                    "tabular-nums font-medium",
-                    b.value < 0 ? "text-rose-600" : "text-slate-700",
-                  )}
-                >
-                  {formatValue(b.value, b.format)}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        )}
-      </CardContent>
-    </Card>
-  );
-  if (!href) return card;
-  return (
-    <Link href={href} className="group block cursor-pointer" data-testid={`${testId}-link`}>
-      {card}
-    </Link>
   );
 }
 

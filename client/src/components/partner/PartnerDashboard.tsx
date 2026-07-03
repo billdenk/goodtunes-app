@@ -16,6 +16,7 @@ import {
 import { Clock } from "lucide-react";
 import { RangePicker, DashboardPanel, type RangePreset } from "./dashboard-controls";
 import { BRAND, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
+import { KpiCard, sparkFromSeries } from "@/components/admin/KpiCard";
 
 export type PartnerScopeKind = "label" | "npo" | "vendor" | "artist";
 export type PartnerRangePreset = "today" | "7d" | "30d" | "90d" | "all";
@@ -82,13 +83,6 @@ export function formatValue(value: number | null, format: KpiFormat): string {
   }
 }
 
-function deltaPct(cur: number, prior: number): string {
-  if (prior === 0) return cur > 0 ? "+∞" : "—";
-  const pct = ((cur - prior) / prior) * 100;
-  const sign = pct >= 0 ? "+" : "";
-  return `${sign}${pct.toFixed(1)}%`;
-}
-
 export function PartnerDashboard({
   scope,
   title,
@@ -148,7 +142,7 @@ export function PartnerDashboard({
         {extraHeader}
       </section>
 
-      <KpiGrid kpis={data?.kpis ?? []} loading={isLoading} scope={scope} />
+      <KpiGrid kpis={data?.kpis ?? []} loading={isLoading} scope={scope} series={data?.series ?? []} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <DashboardPanel data-testid={`trend-${scope}`} className="lg:col-span-2">
@@ -176,85 +170,37 @@ export function PartnerDashboard({
 
 // ─── KPI tiles ──────────────────────────────────────────────────────
 
-export function KpiGrid({ kpis, loading, scope }: { kpis: DashboardKpi[]; loading: boolean; scope: PartnerScopeKind }) {
+export function KpiGrid({
+  kpis,
+  loading,
+  scope,
+  series = [],
+}: {
+  kpis: DashboardKpi[];
+  loading: boolean;
+  scope: PartnerScopeKind;
+  series?: Array<Record<string, number | string>>;
+}) {
   if (loading && kpis.length === 0) {
     return (
       <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" data-testid={`kpi-grid-${scope}`}>
         {Array.from({ length: 5 }).map((_, i) => (
-          <DashboardPanel key={i} className="h-[96px] animate-pulse" />
+          <DashboardPanel key={i} className="h-[120px] animate-pulse" />
         ))}
       </section>
     );
   }
   return (
     <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" data-testid={`kpi-grid-${scope}`}>
-      {kpis.map((k) => <KpiTile key={k.id} k={k} scope={scope} />)}
+      {kpis.map((k) => (
+        <KpiCard
+          key={k.id}
+          model={k}
+          testId={`kpi-${scope}-${k.id}`}
+          spark={sparkFromSeries(series, k.id)}
+        />
+      ))}
     </section>
-  );
-}
-
-function KpiTile({ k, scope }: { k: DashboardKpi; scope: PartnerScopeKind }) {
-  const testId = `kpi-${scope}-${k.id}`;
-  const value = formatValue(k.value, k.format);
-  const showDelta = !k.comingSoon && k.value !== null && k.prior !== null && k.prior !== undefined;
-  const delta = showDelta ? deltaPct(k.value as number, k.prior as number) : null;
-  const positive = showDelta && (k.value as number) >= (k.prior as number);
-  return (
-    <div
-      data-testid={testId}
-      className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between min-h-[120px] transition-shadow duration-200 hover:shadow-sm hover:border-slate-300"
-    >
-      <div>
-        <p className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">{k.label}</p>
-        <p
-          className={`mt-1 text-[22px] font-semibold tabular-nums ${k.comingSoon ? "text-slate-400" : "text-slate-900"}`}
-          data-testid={`${testId}-value`}
-        >
-          {value}
-        </p>
-      </div>
-      <div className="mt-2 flex items-center gap-2 text-[11px]">
-        {showDelta ? (
-          <>
-            <span className="text-slate-500">vs prior</span>
-            <span
-              className={`px-1.5 py-0.5 rounded-full font-semibold ${
-                positive
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "bg-rose-50 text-rose-700"
-              }`}
-              data-testid={`${testId}-delta`}
-            >
-              {delta}
-            </span>
-          </>
-        ) : (
-          <span className="text-slate-400">vs prior: —</span>
-        )}
-        {k.note && !k.comingSoon && (
-          <span className="text-slate-400 truncate">{k.note}</span>
-        )}
-      </div>
-      {k.breakdown && k.breakdown.length > 0 && !k.comingSoon && (
-        <dl
-          className="mt-3 space-y-1 border-t border-slate-200 pt-2"
-          data-testid={`${testId}-breakdown`}
-        >
-          {k.breakdown.map((b, i) => (
-            <div key={i} className="flex items-center justify-between text-xs">
-              <dt className="text-slate-600">{b.label}</dt>
-              <dd
-                className={`tabular-nums font-medium ${
-                  b.value < 0 ? "text-rose-600" : "text-slate-900"
-                }`}
-              >
-                {formatValue(b.value, b.format)}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
-    </div>
   );
 }
 
