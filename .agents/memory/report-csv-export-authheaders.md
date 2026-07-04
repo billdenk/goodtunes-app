@@ -21,4 +21,6 @@ partner's data — the exact leak the JSON fetch fix (view-as header) was meant 
 
 **How to apply:** The shared `ExportLink` in `client/src/pages/AdminReports.tsx` now
 does the blob download; reuse it for any new report export rather than adding a raw
-anchor.
+anchor. A regression test guards this: reverting the export trigger to a header-less
+anchor (dropping the view-as token) fails the client component test — don't remove
+that guard when refactoring the export affordance.

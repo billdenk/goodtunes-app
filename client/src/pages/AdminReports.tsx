@@ -595,7 +595,7 @@ function Stat({ label, value, sub }: { label: string; value: React.ReactNode; su
   );
 }
 
-function ExportLink({ href, label }: { href: string; label: string }) {
+export function ExportLink({ href, label }: { href: string; label: string }) {
   // Task #2497 — CSV exports must carry the SAME auth context as the JSON
   // report fetches (Bearer + preview pass + crucially the `X-View-As-Token`).
   // A plain `<a href>` navigation drops all headers, so an operator viewing a
