@@ -672,41 +672,56 @@ export function AlbumDashboardPanel({
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {topSongs.map((t, i) => (
-              <li
-                key={t.songId}
-                className="flex items-center gap-3 px-5 py-3"
-                data-testid={`top-song-${t.songId}`}
-              >
-                <span className="w-5 text-sm font-semibold text-slate-400 tabular-nums text-right flex-shrink-0">
-                  {i + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-slate-900 truncate">{t.title}</div>
-                  <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-[var(--brand-blue)]"
-                      style={{ width: `${Math.round((t.plays / maxPlays) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 flex-shrink-0 text-sm tabular-nums">
-                  <span className="inline-flex items-center gap-1 text-slate-600" title="Plays">
-                    <Play className="w-3.5 h-3.5 text-slate-400" />
-                    {t.plays.toLocaleString()}
+            {topSongs.map((t, i) => {
+              const completion =
+                t.plays > 0 ? Math.round((t.completes / t.plays) * 100) : null;
+              return (
+                <li
+                  key={t.songId}
+                  className="flex items-center gap-3 px-5 py-2.5"
+                  data-testid={`top-song-${t.songId}`}
+                >
+                  <span className="w-4 text-xs font-semibold text-slate-300 tabular-nums text-right flex-shrink-0">
+                    {i + 1}
                   </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-slate-900 truncate">{t.title}</div>
+                    {completion !== null && (
+                      <div className="text-xs text-slate-400 tabular-nums leading-tight mt-0.5">
+                        {completion}% completed
+                      </div>
+                    )}
+                  </div>
                   {t.favorites > 0 && (
                     <span
-                      className="inline-flex items-center gap-1 text-slate-600 hidden sm:inline-flex"
+                      className="inline-flex items-center gap-1 flex-shrink-0 text-xs text-slate-500 tabular-nums"
                       title="Favorites"
                     >
                       <Heart className="w-3.5 h-3.5 text-[color:var(--brand-heart)]" />
                       {t.favorites.toLocaleString()}
                     </span>
                   )}
-                </div>
-              </li>
-            ))}
+                  <div className="flex items-center gap-2.5 flex-shrink-0">
+                    <div
+                      className="h-1 w-14 rounded-full bg-slate-100 overflow-hidden hidden sm:block"
+                      aria-hidden="true"
+                    >
+                      <div
+                        className="h-full rounded-full bg-[var(--brand-blue)]"
+                        style={{ width: `${Math.round((t.plays / maxPlays) * 100)}%` }}
+                      />
+                    </div>
+                    <span
+                      className="inline-flex items-center gap-1 w-16 justify-end text-sm font-semibold text-slate-900 tabular-nums"
+                      title="Plays"
+                    >
+                      <Play className="w-3 h-3 text-slate-300 flex-shrink-0" />
+                      {t.plays.toLocaleString()}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </SectionCard>
