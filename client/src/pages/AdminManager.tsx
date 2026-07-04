@@ -452,6 +452,7 @@ export function AdminManager() {
           <ReleasesPanel
             releases={releases}
             onOpenPerson={(id) => navigate(`/admin/people/${id}?from=partner&backHref=${encodeURIComponent(`/admin/managers/${label.id}?tab=releases`)}&backName=${encodeURIComponent(label.name)}`)}
+            albumHref={(id) => `/admin/albums/${id}?from=partner&backHref=${encodeURIComponent(`/admin/managers/${label.id}?tab=releases`)}&backName=${encodeURIComponent(label.name)}`}
           />
         )}
         {tab === "permissions" && (
@@ -1351,9 +1352,15 @@ function ArtistsEmptyState({
 function ReleasesPanel({
   releases,
   onOpenPerson,
+  albumHref,
 }: {
   releases: AlbumLite[];
   onOpenPerson: (id: string) => void;
+  // Task #2536 — stamp a smart-back origin so the album page returns the
+  // operator to this manager instead of the generic Albums list. Managers
+  // aren't a keyed ORIGINS entry, so this uses the generic `from=partner`
+  // pass-through (backHref + backName carried directly on the URL).
+  albumHref: (id: string) => string;
 }) {
   if (releases.length === 0) {
     return (
@@ -1397,7 +1404,7 @@ function ReleasesPanel({
           // content; the artist button sits above it with pointer-events.
           <li key={a.id} className="relative">
             <Link
-              href={`/admin/albums/${a.id}`}
+              href={albumHref(a.id)}
               className="absolute inset-0 hover:bg-slate-50 transition-colors"
               data-testid={`row-release-${a.id}`}
               aria-label={a.title}

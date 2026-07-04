@@ -93,6 +93,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
+import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { AlbumPreviewCard } from "@/components/admin/previews/AlbumPreviewCard";
@@ -519,6 +520,14 @@ export function AdminAlbum({
   // (and left in the URL so refreshes still work) — we don't fight
   // the user if they collapse the row afterwards.
   const search = useSearch();
+  // Task #2536 — smart cross-section back-crumb. When the operator deep-links
+  // in from a sibling section (Person, Label, Vendor, Gear, another Album, or
+  // the generic `?from=partner` pass-through), the breadcrumb + not-found link
+  // return them to that origin row (with its real name) instead of the generic
+  // "Albums" list. Suppressed in embedded partner-portal mode, where the back
+  // target is the portal's own catalog (backToAlbumsHref), not `/admin/...`.
+  const rawBackCrumb = useSmartBackCrumb();
+  const backCrumb = embedded ? null : rawBackCrumb;
   const initialTrackId = useMemo(() => {
     try {
       return new URLSearchParams(search).get("track");
@@ -719,11 +728,12 @@ export function AdminAlbum({
       queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
       toast({ title: "Album deleted." });
       setDeleteConfirmOpen(false);
-      // Task #468 — smart-back: when the operator arrived from a Person
-      // page (`?from=person&personId=…`), return them to that Person
-      // instead of dumping them on the global Albums list. Falls back
-      // to `/admin/albums` for direct links + the canonical entry.
-      navigate(backToAlbumsHref);
+      // Task #468 / #2536 — smart-back: when the operator arrived from a
+      // sibling section (Person, Label, Vendor, …), return them to that
+      // origin row. Falls back to `backToAlbumsHref` (which itself honors
+      // the Albums list-state restore + embedded portal catalog) for direct
+      // links + the canonical entry.
+      navigate(backCrumb?.href ?? backToAlbumsHref);
     },
     onError: (e: any) => {
       toast({
@@ -1135,14 +1145,25 @@ export function AdminAlbum({
         <h1 className="text-slate-900 text-lg font-semibold">
           Album not found
         </h1>
-        <Link
-          href={backToAlbumsHref}
-          className="text-[var(--brand-blue)] text-sm hover:underline inline-flex items-center gap-1"
-          data-testid="link-back-to-albums"
-        >
-          <ChevronLeft className="w-3.5 h-3.5" />
-          {embedded ? "Back to catalog" : "Back to albums"}
-        </Link>
+        {backCrumb ? (
+          <Link
+            href={backCrumb.href}
+            className="text-[var(--brand-blue)] text-sm hover:underline inline-flex items-center gap-1"
+            data-testid={backCrumb.testId}
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            Back to {backCrumb.name}
+          </Link>
+        ) : (
+          <Link
+            href={backToAlbumsHref}
+            className="text-[var(--brand-blue)] text-sm hover:underline inline-flex items-center gap-1"
+            data-testid="link-back-to-albums"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            {embedded ? "Back to catalog" : "Back to albums"}
+          </Link>
+        )}
       </div>
     );
     return embedded ? notFoundBody : <AdminFrame active="albums">{notFoundBody}</AdminFrame>;
@@ -1172,13 +1193,37 @@ export function AdminAlbum({
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
-          <Link
-            href={backToAlbumsHref}
-            className="hover:text-slate-700"
-            data-testid="link-breadcrumb-albums"
-          >
-            {embedded ? "Catalog" : "Albums"}
-          </Link>
+          {backCrumb ? (
+            <>
+              <Link
+                href={backCrumb.href}
+                className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate max-w-[420px]"
+                data-testid={backCrumb.testId}
+              >
+                {backCrumb.name}
+              </Link>
+              {backCrumb.track && (
+                <>
+                  <ChevronRight className="w-3 h-3 flex-shrink-0" />
+                  <Link
+                    href={backCrumb.track.href}
+                    className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate max-w-[260px]"
+                    data-testid={backCrumb.track.testId}
+                  >
+                    {backCrumb.track.name}
+                  </Link>
+                </>
+              )}
+            </>
+          ) : (
+            <Link
+              href={backToAlbumsHref}
+              className="hover:text-slate-700"
+              data-testid="link-breadcrumb-albums"
+            >
+              {embedded ? "Catalog" : "Albums"}
+            </Link>
+          )}
           <ChevronRight className="w-3 h-3" />
           <span className="text-slate-700 font-semibold truncate max-w-[420px]">
             {album.title}
