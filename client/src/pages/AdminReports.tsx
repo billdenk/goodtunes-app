@@ -40,6 +40,8 @@ import {
 } from "recharts";
 import { Download, MapPin, TrendingUp, ChevronDown, ChevronRight, Clock, LogIn, FileEdit, RefreshCw, Package, ShoppingCart, Users } from "lucide-react";
 import { CampaignLinkBuilder } from "@/components/operator/CampaignLinkBuilder";
+import { fetchBlob } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 const BLUE = "#319ED8";
 const MINT = "#4AFFCA";
@@ -594,15 +596,49 @@ function Stat({ label, value, sub }: { label: string; value: React.ReactNode; su
 }
 
 function ExportLink({ href, label }: { href: string; label: string }) {
+  // Task #2497 — CSV exports must carry the SAME auth context as the JSON
+  // report fetches (Bearer + preview pass + crucially the `X-View-As-Token`).
+  // A plain `<a href>` navigation drops all headers, so an operator viewing a
+  // partner's portal via "View as" would download the CSV under their bare
+  // super_admin god-view scope and leak every partner's data. `fetchBlob`
+  // threads `authHeaders()`, so the download resolves to the impersonated hat.
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const filename = (href.split("?")[0].split("/").pop() || "export.csv").trim();
+  async function handleDownload() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const blob = await fetchBlob(href);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({
+        title: "Download failed",
+        description: err instanceof Error ? err.message : "Could not export CSV.",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
-    <a
-      href={href}
-      className="inline-flex items-center gap-1.5 text-sm text-[#319ED8] hover:underline font-medium"
+    <button
+      type="button"
+      onClick={handleDownload}
+      disabled={busy}
+      className="inline-flex items-center gap-1.5 text-sm text-[var(--brand-blue)] hover:underline font-medium disabled:opacity-50"
       data-testid="link-export-csv"
     >
       <Download className="w-3.5 h-3.5" />
       {label}
-    </a>
+    </button>
   );
 }
 
