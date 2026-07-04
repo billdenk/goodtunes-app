@@ -8713,3 +8713,144 @@ SQL
 }
 add_shopify_plus_mapping_unlock_flag dev  "${DATABASE_URL:-}"
 add_shopify_plus_mapping_unlock_flag prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #2454 — Reconcile duplicate CALIFORNIALAND releases ──────────
+# Prod accumulated THREE staged CALIFORNIALAND rows (same release, same
+# artist Niina Soleil): one canonical record holds the 23 songs, the SKU,
+# and the two internal comp grants, while two empty shells duplicate it —
+# and one empty shell was squatting the clean `californialand` share slug,
+# leaving the record with the actual content stuck on `californialand-2`.
+# This is the Nightbirde "Hope" decoy trap (a hollow row holding the good
+# slug while the real content lives elsewhere).
+#
+# This ONE-TIME, marker-guarded reconciliation (mirrors the Hellbender/
+# Memphis prod-data scripts) collapses the release to a single canonical
+# record: it frees the clean slug from any empty duplicate, soft-deletes
+# every non-canonical duplicate (so they drop out of catalog/search/admin
+# lists, reversible via admin trash), and hands the clean `californialand`
+# slug to the canonical record so links/pointers land on the album with
+# content. The two comp grants already live on the canonical, so the two
+# internal testers keep their access untouched.
+#
+# Keyed by VERIFIED IDENTITY at execution time, never by today's UUIDs:
+#   - artist resolved by the stable people.artist_share_slug 'niina-soleil'
+#   - canonical = the non-trashed CALIFORNIALAND with songs (must be exactly 1)
+#   - duplicates = the other CALIFORNIALAND rows for that artist
+# SAFETY: refuses (RAISE EXCEPTION → rolled back, WARNING logged, merge
+# continues, NO marker) if it can't find exactly one canonical, or if any
+# duplicate has since gained songs/orders/grants — never trash content.
+# SELF-GATE: DBs without Niina Soleil or without any CALIFORNIALAND row
+# (every dev clone — dev only has the unrelated "California Way") return
+# early WITHOUT stamping the marker, so the real prod run still executes.
+# Idempotent: once applied (marker set), later merges skip it.
+reconcile_task_2454_californialand() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2454 CALIFORNIALAND reconcile on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_artist    varchar;
+  v_total     integer := 0;
+  v_canon_cnt integer := 0;
+  v_canon     varchar;
+  v_bad       integer := 0;
+  v_freed     integer := 0;
+  v_trashed   integer := 0;
+BEGIN
+  IF EXISTS (SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2454_reconcile_californialand') THEN
+    RAISE NOTICE 'task-2454 reconcile already applied — skipping';
+    RETURN;
+  END IF;
+
+  -- Resolve the artist by a stable identity handle, not a UUID.
+  SELECT id INTO v_artist
+    FROM people
+   WHERE artist_share_slug = 'niina-soleil' AND deleted_at IS NULL
+   LIMIT 1;
+  IF v_artist IS NULL THEN
+    RAISE NOTICE 'task-2454: Niina Soleil not in this DB — nothing to do (no marker stamped)';
+    RETURN;
+  END IF;
+
+  -- Self-gate: no CALIFORNIALAND rows at all (any delete state) => not this DB.
+  SELECT COUNT(*) INTO v_total
+    FROM albums a
+   WHERE a.primary_artist_id = v_artist AND a.title ILIKE 'californialand';
+  IF v_total = 0 THEN
+    RAISE NOTICE 'task-2454: no CALIFORNIALAND rows in this DB — nothing to do (no marker stamped)';
+    RETURN;
+  END IF;
+
+  -- Canonical = the live (non-trashed) CALIFORNIALAND that actually has songs.
+  SELECT COUNT(*) INTO v_canon_cnt
+    FROM albums a
+   WHERE a.primary_artist_id = v_artist AND a.title ILIKE 'californialand'
+     AND a.deleted_at IS NULL
+     AND EXISTS (SELECT 1 FROM songs s WHERE s.album_id = a.id);
+  IF v_canon_cnt <> 1 THEN
+    RAISE EXCEPTION 'task-2454 ABORT: expected exactly 1 canonical CALIFORNIALAND with songs, found % — leaving prod untouched for manual review', v_canon_cnt;
+  END IF;
+  SELECT a.id INTO v_canon
+    FROM albums a
+   WHERE a.primary_artist_id = v_artist AND a.title ILIKE 'californialand'
+     AND a.deleted_at IS NULL
+     AND EXISTS (SELECT 1 FROM songs s WHERE s.album_id = a.id)
+   LIMIT 1;
+
+  -- Guard: never trash a duplicate that has content, orders, or grants.
+  SELECT COUNT(*) INTO v_bad
+    FROM albums a
+   WHERE a.primary_artist_id = v_artist AND a.title ILIKE 'californialand'
+     AND a.id <> v_canon
+     AND ( EXISTS (SELECT 1 FROM songs s        WHERE s.album_id  = a.id)
+        OR EXISTS (SELECT 1 FROM orders o       WHERE o.album_id  = a.id)
+        OR EXISTS (SELECT 1 FROM user_albums ua WHERE ua.album_id = a.id) );
+  IF v_bad > 0 THEN
+    RAISE EXCEPTION 'task-2454 ABORT: % non-canonical CALIFORNIALAND row(s) now carry songs/orders/grants — refusing to trash', v_bad;
+  END IF;
+
+  -- Free the clean slug from any duplicate that squats it, so the partial
+  -- unique (primary_artist_id, share_slug WHERE deleted_at IS NULL) is clear
+  -- and a later restore of the shell can't collide with the canonical.
+  UPDATE albums
+     SET share_slug = NULL
+   WHERE primary_artist_id = v_artist AND title ILIKE 'californialand'
+     AND id <> v_canon AND share_slug = 'californialand';
+  GET DIAGNOSTICS v_freed = ROW_COUNT;
+
+  -- Soft-delete every non-canonical duplicate (idempotent; keeps an already
+  -- set deleted_at). They drop out of catalog/search/admin, restorable.
+  UPDATE albums
+     SET deleted_at = COALESCE(deleted_at, now())
+   WHERE primary_artist_id = v_artist AND title ILIKE 'californialand'
+     AND id <> v_canon AND deleted_at IS NULL;
+  GET DIAGNOSTICS v_trashed = ROW_COUNT;
+
+  -- Hand the clean `californialand` slug to the canonical record.
+  UPDATE albums SET share_slug = 'californialand' WHERE id = v_canon;
+
+  INSERT INTO post_merge_data_backfills (name) VALUES ('task_2454_reconcile_californialand');
+  RAISE NOTICE 'task-2454 applied: canonical % now owns slug californialand; freed % slug, trashed % duplicate(s)', v_canon, v_freed, v_trashed;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2454 CALIFORNIALAND reconcile ok on $label"
+    echo "$out" | grep -i 'task-2454' || true
+  else
+    echo "post-merge: WARNING — task-2454 CALIFORNIALAND reconcile failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+reconcile_task_2454_californialand dev  "${DATABASE_URL:-}"
+reconcile_task_2454_californialand prod "${PROD_DATABASE_URL:-}"
