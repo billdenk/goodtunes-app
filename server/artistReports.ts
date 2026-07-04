@@ -34,6 +34,7 @@ import { pgArray } from "./lib/pgArray";
 import { getUserRole } from "./auth/roles";
 import { storage } from "./storage";
 import { LOC_CITY, LOC_REGION, LOC_COUNTRY } from "./reports/buyers";
+import { FULL_ACCESS_EMAILS } from "@shared/fullAccess";
 
 // ─── Date range helpers ─────────────────────────────────────────────────
 type Range = { from: Date; to: Date };
@@ -215,8 +216,64 @@ function playsFilter(scope: ArtistScope) {
   `;
 }
 
+// Task #2525 — Operator/internal denylist devices (comma-separated env),
+// mirroring the acquisition-funnel exclusion (server/reports/admin.ts).
+function internalDeviceIds(): string[] {
+  return (process.env.GT_INTERNAL_DEVICE_IDS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+// Task #2525 — SQL predicate that is TRUE when a play event should NOT count
+// toward genuine-fan metrics. Evaluated against an `analytics_events` row
+// aliased `e`. A play is a NON-fan listen when its listener is any of:
+//   (a) an internal-stamped event (client `_internal` flag) or a device on
+//       the GT_INTERNAL_DEVICE_IDS denylist,
+//   (b) an operator/staff account — an admin `users` row, or a full-access
+//       customer account (FULL_ACCESS_EMAILS, e.g. Bill's @billy fan login),
+//   (c) a comp / preview grant holder for THAT event's own album — a
+//       `user_albums` row for the song's album (a comp: is_preview=false, or
+//       an unexpired preview) with NO paid order for that album. A genuine
+//       buyer has both a user_albums row AND a paid order, so they stay in.
+// Anonymous (session-only) listens have no user_id, so (b)/(c) never fire —
+// only the internal stamp can exclude them. This mirrors the funnel's
+// internal detection and extends it with the comp/preview signal, so every
+// fan metric that ANDs `NOT (this)` stays in lock-step.
+function nonFanListen() {
+  const devices = internalDeviceIds();
+  const emails = FULL_ACCESS_EMAILS.map((x) => x.toLowerCase().trim()).filter(Boolean);
+  // COALESCE(..., FALSE): an absent `_internal` key or a NULL user_id makes
+  // individual branches evaluate to NULL, and a single NULL would poison the
+  // whole OR to NULL (dropping a genuine-fan row from BOTH the fan count and
+  // the excluded count). An event we can't positively flag as non-fan must
+  // count as a genuine listen, so fold NULL → FALSE.
+  return sql`COALESCE((
+    (e.payload->>'_internal') = 'true'
+    OR ${devices.length ? sql`(e.payload->>'_device_id') = ANY(${pgArray(devices)})` : sql`FALSE`}
+    OR e.user_id IN (SELECT u.id FROM users u)
+    OR ${emails.length ? sql`e.user_id IN (SELECT cu.id FROM customer_users cu WHERE lower(cu.email) = ANY(${pgArray(emails)}))` : sql`FALSE`}
+    OR EXISTS (
+      SELECT 1
+      FROM songs sg
+      JOIN user_albums ua ON ua.album_id = sg.album_id AND ua.user_id = e.user_id
+      WHERE sg.id = e.payload->>'songId'
+        AND (
+          ua.is_preview = FALSE
+          OR (ua.preview_expires_at IS NOT NULL AND ua.preview_expires_at > now())
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM orders o2
+          WHERE o2.customer_id = e.user_id
+            AND o2.album_id = sg.album_id
+            AND o2.status IN ('paid','shipped','complete','completed')
+        )
+    )
+  ), FALSE)`;
+}
+
 // ─── KPIs ─────────────────────────────────────────────────────────────
-async function computeKpis(scope: ArtistScope, r: Range) {
+export async function computeKpis(scope: ArtistScope, r: Range) {
   if (scope.albumIds.length === 0 && scope.songIds.length === 0) {
     return emptyKpis();
   }
@@ -238,19 +295,28 @@ async function computeKpis(scope: ArtistScope, r: Range) {
   `) : ({ rows: [{ gross: "0", units: "0", orders: "0", buyers: "0", refunded: "0" }] } as any);
   const rev = (revRow as any).rows?.[0] ?? { gross: "0", units: "0", orders: "0", buyers: "0", refunded: "0" };
 
+  // Fan-only play counts (non-fan listens excluded via nonFanListen), plus
+  // the excluded play_start count so operators still see what was removed.
+  // `nonfan` is computed ONCE per event in the inner subquery, then the
+  // outer FILTERs partition genuine-fan vs. excluded without re-evaluating
+  // the correlated comp/preview lookup.
   const playRow = scope.songIds.length ? await db.execute<{
-    starts: string; completes: string; listeners: string;
+    starts: string; completes: string; listeners: string; excluded: string;
   }>(sql`
     SELECT
-      COUNT(*) FILTER (WHERE e.name = 'play_start')::text AS starts,
-      COUNT(*) FILTER (WHERE e.name = 'play_complete')::text AS completes,
-      COUNT(DISTINCT COALESCE(e.user_id, e.session_id))
-        FILTER (WHERE e.name = 'play_start')::text AS listeners
-    FROM analytics_events e
-    WHERE ${playsFilter(scope)}
-      AND e.ts >= ${r.from} AND e.ts < ${r.to}
-  `) : ({ rows: [{ starts: "0", completes: "0", listeners: "0" }] } as any);
-  const p = (playRow as any).rows?.[0] ?? { starts: "0", completes: "0", listeners: "0" };
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS starts,
+      COUNT(*) FILTER (WHERE t.name = 'play_complete' AND NOT t.nonfan)::text AS completes,
+      COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
+        FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS listeners,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.nonfan)::text AS excluded
+    FROM (
+      SELECT e.name, e.user_id, e.session_id, ${nonFanListen()} AS nonfan
+      FROM analytics_events e
+      WHERE ${playsFilter(scope)}
+        AND e.ts >= ${r.from} AND e.ts < ${r.to}
+    ) t
+  `) : ({ rows: [{ starts: "0", completes: "0", listeners: "0", excluded: "0" }] } as any);
+  const p = (playRow as any).rows?.[0] ?? { starts: "0", completes: "0", listeners: "0", excluded: "0" };
 
   const topTrack = scope.songIds.length ? await db.execute<{
     song_id: string; title: string; plays: string;
@@ -261,6 +327,7 @@ async function computeKpis(scope: ArtistScope, r: Range) {
     WHERE e.name = 'play_start'
       AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
       AND e.ts >= ${r.from} AND e.ts < ${r.to}
+      AND NOT ${nonFanListen()}
     GROUP BY s.id, s.title
     ORDER BY COUNT(*) DESC
     LIMIT 1
@@ -297,6 +364,7 @@ async function computeKpis(scope: ArtistScope, r: Range) {
     completions: completes,
     completionRate: starts > 0 ? completes / starts : 0,
     listeners: Number(p.listeners),
+    excludedPlays: Number(p.excluded),
     topTrack: ((topTrack as any).rows?.[0]) ?? null,
     topAlbum: ((topAlbum as any).rows?.[0]) ?? null,
   };
@@ -306,7 +374,7 @@ function emptyKpis() {
   return {
     grossCents: 0, artistShareCents: 0, refundedCents: 0,
     units: 0, orders: 0, buyers: 0, plays: 0, completions: 0, completionRate: 0,
-    listeners: 0, topTrack: null, topAlbum: null,
+    listeners: 0, excludedPlays: 0, topTrack: null, topAlbum: null,
   };
 }
 
@@ -335,12 +403,13 @@ export type LifetimeTotals = {
   refundedCents: number;
   plays: number;
   listeners: number;
+  excludedPlays: number;
 };
 
-async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotals> {
+export async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotals> {
   const empty: LifetimeTotals = {
     grossCents: 0, units: 0, orders: 0, buyers: 0,
-    refundedCents: 0, plays: 0, listeners: 0,
+    refundedCents: 0, plays: 0, listeners: 0, excludedPlays: 0,
   };
   if (scope.albumIds.length === 0 && scope.songIds.length === 0) return empty;
 
@@ -362,16 +431,20 @@ async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotals> {
   const rev = (revRow as any).rows?.[0] ?? { gross: "0", units: "0", orders: "0", buyers: "0", refunded: "0" };
 
   const playRow = scope.songIds.length ? await db.execute<{
-    starts: string; listeners: string;
+    starts: string; listeners: string; excluded: string;
   }>(sql`
     SELECT
-      COUNT(*) FILTER (WHERE e.name = 'play_start')::text AS starts,
-      COUNT(DISTINCT COALESCE(e.user_id, e.session_id))
-        FILTER (WHERE e.name = 'play_start')::text AS listeners
-    FROM analytics_events e
-    WHERE ${playsFilter(scope)}
-  `) : ({ rows: [{ starts: "0", listeners: "0" }] } as any);
-  const p = (playRow as any).rows?.[0] ?? { starts: "0", listeners: "0" };
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS starts,
+      COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
+        FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS listeners,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.nonfan)::text AS excluded
+    FROM (
+      SELECT e.name, e.user_id, e.session_id, ${nonFanListen()} AS nonfan
+      FROM analytics_events e
+      WHERE ${playsFilter(scope)}
+    ) t
+  `) : ({ rows: [{ starts: "0", listeners: "0", excluded: "0" }] } as any);
+  const p = (playRow as any).rows?.[0] ?? { starts: "0", listeners: "0", excluded: "0" };
 
   return {
     grossCents: Number(rev.gross),
@@ -381,6 +454,7 @@ async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotals> {
     refundedCents: Number(rev.refunded),
     plays: Number(p.starts),
     listeners: Number(p.listeners),
+    excludedPlays: Number(p.excluded),
   };
 }
 
@@ -513,6 +587,7 @@ async function timeseriesHandler(req: Request, res: Response) {
         FROM analytics_events e
         WHERE ${playsFilter(scope)}
           AND e.ts >= ${range.from} AND e.ts < ${range.to}
+          AND NOT ${nonFanListen()}
         GROUP BY 1
         ORDER BY 1 ASC
       `)
@@ -560,6 +635,7 @@ async function geoHandler(req: Request, res: Response) {
     WHERE e.name = 'play_start'
       AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
       AND e.ts >= ${range.from} AND e.ts < ${range.to}
+      AND NOT ${nonFanListen()}
     GROUP BY 1
     ORDER BY 2 DESC NULLS LAST
   `) : ({ rows: [] } as any);
@@ -612,6 +688,7 @@ async function topTracksHandler(req: Request, res: Response) {
     WHERE e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
       AND e.name IN ('play_start','play_complete','favorite_song','song_added_to_playlist','share_completed')
       AND e.ts >= ${range.from} AND e.ts < ${range.to}
+      AND NOT ${nonFanListen()}
     GROUP BY s.id, s.title, s.album_id, a.title
     ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC
     LIMIT ${limit}
@@ -665,6 +742,7 @@ async function topAlbumsHandler(req: Request, res: Response) {
       AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
       AND s.album_id = ANY(${pgArray(scope.albumIds)})
       AND e.ts >= ${range.from} AND e.ts < ${range.to}
+      AND NOT ${nonFanListen()}
     GROUP BY 1
   `) : ({ rows: [] } as any);
   const playMap = new Map<string, { plays: number; listeners: number }>();
@@ -767,9 +845,12 @@ async function audienceHandler(req: Request, res: Response) {
   if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
   const { range } = parseRange(req);
   if (!scope.songIds.length) {
-    return res.json({ range, newListeners: 0, returningListeners: 0, repeatCohort: [], topFans: [] });
+    return res.json({ range, newListeners: 0, returningListeners: 0, repeatCohort: [], topFans: [], excludedPlays: 0 });
   }
 
+  // Genuine-fan cohort only — comp/preview grant holders, operators/staff,
+  // and internal-stamped sessions are dropped before first-seen / repeat /
+  // top-fan classification so none of them can appear as a "fan".
   const cohort = await db.execute<{ first_seen: string; listener: string; plays: string }>(sql`
     WITH listener_plays AS (
       SELECT COALESCE(e.user_id, e.session_id) AS listener,
@@ -779,12 +860,25 @@ async function audienceHandler(req: Request, res: Response) {
       WHERE e.name = 'play_start'
         AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
         AND COALESCE(e.user_id, e.session_id) IS NOT NULL
+        AND NOT ${nonFanListen()}
       GROUP BY 1
     )
     SELECT first_ever::text AS first_seen, listener, plays_in_window::text AS plays
     FROM listener_plays
     WHERE plays_in_window > 0
   `);
+
+  // Excluded (comp/preview/operator/internal) plays in the window, surfaced
+  // to operators so the removed volume stays visible rather than vanishing.
+  const excludedRow = await db.execute<{ excluded: string }>(sql`
+    SELECT COUNT(*)::text AS excluded
+    FROM analytics_events e
+    WHERE e.name = 'play_start'
+      AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
+      AND e.ts >= ${range.from} AND e.ts < ${range.to}
+      AND ${nonFanListen()}
+  `);
+  const excludedPlays = Number((excludedRow as any).rows?.[0]?.excluded ?? 0);
 
   const rows = (cohort as any).rows || [];
   let newCount = 0, retCount = 0;
@@ -819,6 +913,7 @@ async function audienceHandler(req: Request, res: Response) {
     returningListeners: retCount,
     repeatCohort,
     topFans,
+    excludedPlays,
   });
 }
 
@@ -967,6 +1062,7 @@ async function albumDashboardHandler(req: Request, res: Response) {
         LEFT JOIN analytics_events e
           ON e.payload->>'songId' = s.id
           AND e.name IN ('play_start', 'play_complete', 'favorite_song')
+          AND NOT ${nonFanListen()}
         WHERE s.id = ANY(${pgArray(scope.songIds)})
         GROUP BY s.id, s.title
         ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC, s.title ASC
@@ -1105,6 +1201,7 @@ async function albumExportHandler(req: Request, res: Response) {
           LEFT JOIN analytics_events e
             ON e.payload->>'songId' = s.id
             AND e.name IN ('play_start', 'play_complete', 'favorite_song')
+            AND NOT ${nonFanListen()}
           WHERE s.id = ANY(${pgArray(scope.songIds)})
           GROUP BY s.id, s.title
           ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC, s.title ASC

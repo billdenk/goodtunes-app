@@ -40,6 +40,7 @@ type Lifetime = {
   refundedCents: number;
   plays: number;
   listeners: number;
+  excludedPlays?: number;
 };
 type Addon = { sku: string; label: string; count: number; revenueCents: number };
 type TopSong = {
@@ -104,11 +105,13 @@ function StatCard({
   value,
   icon: Icon,
   testId,
+  note,
 }: {
   label: string;
   value: string;
   icon: React.ElementType;
   testId?: string;
+  note?: string;
 }) {
   return (
     <div
@@ -118,6 +121,9 @@ function StatCard({
       <Icon className="absolute top-4 right-4 w-4 h-4 text-slate-300" strokeWidth={1.6} />
       <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">{label}</div>
       <div className="text-2xl font-bold text-slate-900 tabular-nums mt-1">{value}</div>
+      {note ? (
+        <div className="text-xs text-slate-400 mt-1" data-testid={testId ? `${testId}-note` : undefined}>{note}</div>
+      ) : null}
     </div>
   );
 }
@@ -585,6 +591,7 @@ export function AlbumDashboardPanel({
             value={lifetime.plays.toLocaleString()}
             icon={Play}
             testId="kpi-plays"
+            note={lifetime.excludedPlays && lifetime.excludedPlays > 0 ? `${lifetime.excludedPlays.toLocaleString()} comp/internal excluded` : undefined}
           />
         )}
         {!pressMode && (

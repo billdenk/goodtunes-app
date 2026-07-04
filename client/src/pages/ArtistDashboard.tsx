@@ -56,12 +56,13 @@ type Kpis = {
   grossCents: number; artistShareCents: number; refundedCents: number;
   units: number; orders: number; buyers: number;
   plays: number; completions: number; completionRate: number; listeners: number;
+  excludedPlays?: number;
   topTrack: { song_id: string; title: string; plays: string } | null;
   topAlbum: { album_id: string; title: string; revenue: string } | null;
 };
 type Lifetime = {
   grossCents: number; units: number; orders: number; buyers: number;
-  refundedCents: number; plays: number; listeners: number;
+  refundedCents: number; plays: number; listeners: number; excludedPlays?: number;
 };
 type Summary = { range: Range; compare: Range | null; current: Kpis; previous: Kpis | null; lifetime?: Lifetime | null };
 type Timeseries = {
@@ -79,6 +80,7 @@ type Audience = {
   newListeners: number; returningListeners: number;
   repeatCohort: { range: string; listeners: number }[];
   topFans: { handle: string; plays: number }[];
+  excludedPlays?: number;
 };
 
 // Brand palette + per-SKU chart mapping come from the shared token
@@ -91,6 +93,10 @@ const dollars = (c: number) => formatUsdCents(c, { maximumFractionDigits: 0 });
 const dollarsCents = (c: number) => formatUsdCents(c);
 const compact = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n));
 const pct = (x: number) => `${Math.round(x * 100)}%`;
+// Task #2525 — comp/preview/operator/internal listens are stripped from every
+// fan metric; surface the removed volume so operators still see it wasn't lost.
+const excludedNote = (n?: number) => (n && n > 0 ? `${compact(n)} comp/internal excluded` : undefined);
+const joinSub = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(" · ") || undefined;
 
 const RANGE_PRESETS = [
   { id: "7d", label: "Last 7 days", days: 7 },
@@ -370,7 +376,7 @@ function LifetimeBanner({ data, loading }: { data?: Lifetime | null; loading?: b
             <Kpi label="Gross revenue" value={data ? dollars(data.grossCents) : "—"} sub={data && data.refundedCents ? `${dollars(data.refundedCents)} refunded` : undefined} testId="lifetime-gross" />
             <Kpi label="Orders" value={data ? compact(data.orders) : "—"} sub={data ? `${compact(data.buyers)} unique fan${data.buyers === 1 ? "" : "s"}` : undefined} testId="lifetime-orders" />
             <Kpi label="Units sold" value={data ? compact(data.units) : "—"} testId="lifetime-units" />
-            <Kpi label="Total plays" value={data ? compact(data.plays) : "—"} sub={data ? `${compact(data.listeners)} listeners` : undefined} testId="lifetime-plays" />
+            <Kpi label="Total plays" value={data ? compact(data.plays) : "—"} sub={data ? joinSub(`${compact(data.listeners)} listeners`, excludedNote(data.excludedPlays)) : undefined} testId="lifetime-plays" />
           </>
         )}
       </section>
@@ -407,7 +413,7 @@ function OverviewTab({ qs }: { qs: string }) {
             <Kpi label="Artist share" value={cur ? dollars(cur.artistShareCents) : "—"} prev={cur ? { cur: cur.artistShareCents, prev: prev?.artistShareCents ?? null } : null} testId="kpi-artist-share" />
             <Kpi label="Units sold" value={cur ? compact(cur.units) : "—"} sub={cur ? `${cur.buyers} unique buyer${cur.buyers === 1 ? "" : "s"}` : undefined} prev={cur ? { cur: cur.units, prev: prev?.units ?? null } : null} testId="kpi-units" />
             <Kpi label="Orders" value={cur ? compact(cur.orders) : "—"} sub={cur ? `${compact(cur.units)} cop${cur.units === 1 ? "y" : "ies"}` : undefined} prev={cur ? { cur: cur.orders, prev: prev?.orders ?? null } : null} testId="kpi-orders" />
-            <Kpi label="Total plays" value={cur ? compact(cur.plays) : "—"} sub={cur ? `${compact(cur.listeners)} listeners · ${pct(cur.completionRate)} complete` : undefined} prev={cur ? { cur: cur.plays, prev: prev?.plays ?? null } : null} spark={dailyPlays(series.data)} testId="kpi-plays" />
+            <Kpi label="Total plays" value={cur ? compact(cur.plays) : "—"} sub={cur ? joinSub(`${compact(cur.listeners)} listeners · ${pct(cur.completionRate)} complete`, excludedNote(cur.excludedPlays)) : undefined} prev={cur ? { cur: cur.plays, prev: prev?.plays ?? null } : null} spark={dailyPlays(series.data)} testId="kpi-plays" />
             <Kpi label="Unique listeners" value={cur ? compact(cur.listeners) : "—"} prev={cur ? { cur: cur.listeners, prev: prev?.listeners ?? null } : null} spark={dailyListeners(series.data)} testId="kpi-listeners" />
             <Kpi label="Top track" value={cur?.topTrack?.title ?? "—"} sub={cur?.topTrack ? `${Number(cur.topTrack.plays).toLocaleString()} plays` : undefined} testId="kpi-top-track" />
             <Kpi label="Top album" value={cur?.topAlbum?.title ?? "—"} sub={cur?.topAlbum ? dollars(Number(cur.topAlbum.revenue)) : undefined} testId="kpi-top-album" />
@@ -447,6 +453,11 @@ function AudienceTab({ qs }: { qs: string }) {
         <Kpi label="Returning listeners" value={compact(d.returningListeners)} sub={total ? `${pct(d.returningListeners / total)} of total` : undefined} testId="kpi-returning-listeners" />
         <Kpi label="Engaged fans" value={compact(d.repeatCohort.filter((b) => b.range !== "1").reduce((s, b) => s + b.listeners, 0))} sub="2+ plays in window" testId="kpi-engaged" />
       </section>
+      {d.excludedPlays && d.excludedPlays > 0 ? (
+        <p className="text-xs text-slate-400" data-testid="text-audience-excluded">
+          Excludes {compact(d.excludedPlays)} comp/preview, operator & internal play{d.excludedPlays === 1 ? "" : "s"} from these fan counts.
+        </p>
+      ) : null}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card title="Repeat-listener cohort" subtitle="Listeners by play count" testId="chart-cohort">
           <div style={{ width: "100%", height: 260 }}>
