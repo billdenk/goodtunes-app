@@ -15,7 +15,7 @@
 //
 // Nothing here is ever written back; it is a pure read.
 import { useQuery } from "@tanstack/react-query";
-import { Info } from "lucide-react";
+import { Info, Hourglass } from "lucide-react";
 import { formatUsdCents } from "@shared/money";
 import {
   Popover,
@@ -82,8 +82,9 @@ export function BreakEvenBar({
       return <span className={`text-xs ${t.label}`} data-testid={`break-even-na-${albumId}`}>—</span>;
     }
     return (
-      <div className={`text-xs ${t.label} ${className}`} data-testid={`break-even-na-${albumId}`}>
-        Break-even shows once a press tier and vinyl price are set.
+      <div className={`flex items-center gap-1.5 text-xs ${t.label} ${className}`} data-testid={`break-even-na-${albumId}`}>
+        <Hourglass className="w-3.5 h-3.5 shrink-0 opacity-70" aria-hidden="true" />
+        <span>Break-even fills in once you save a priced press tier and retail price.</span>
       </div>
     );
   }
