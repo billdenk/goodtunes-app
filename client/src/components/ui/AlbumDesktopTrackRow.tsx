@@ -30,7 +30,12 @@ function useCanHover(): boolean {
 }
 
 export type AlbumDesktopTrackRowProps = {
+  /** Stable identifier for testids / aria — the raw stored track number. */
   trackNumber: number;
+  /** Sequential 1..N running position for DISPLAY (never render the raw
+   *  stored trackNumber — legacy imports can leave gaps). Falls back to
+   *  trackNumber when omitted. */
+  displayNumber?: number;
   title: string;
   duration: string;
   isCurrent: boolean;
@@ -78,6 +83,7 @@ export type AlbumDesktopTrackRowProps = {
  */
 export function AlbumDesktopTrackRow({
   trackNumber,
+  displayNumber,
   title,
   duration,
   isCurrent,
@@ -96,6 +102,10 @@ export function AlbumDesktopTrackRow({
 }: AlbumDesktopTrackRowProps) {
   const [hover, setHover] = useState(false);
   const canHover = useCanHover();
+  // Display the sequential running position, never the raw stored track
+  // number (legacy imports can leave gaps like 1,4,5,…). Testids/aria that
+  // need a stable identifier stay on `trackNumber`.
+  const shownNumber = displayNumber ?? trackNumber;
   const interactive = state !== "locked";
   const showPlayGlyph = interactive && hover && !isCurrent;
 
@@ -155,7 +165,7 @@ export function AlbumDesktopTrackRow({
             showPlayGlyph || isCurrent ? "opacity-0" : "opacity-100",
           ].join(" ")}
         >
-          {trackNumber}
+          {shownNumber}
         </span>
 
         {/* Hover play triangle — rose, replaces the number on hover. */}
@@ -166,7 +176,7 @@ export function AlbumDesktopTrackRow({
               e.stopPropagation();
               onPlay?.();
             }}
-            aria-label={`Play track ${trackNumber}`}
+            aria-label={`Play track ${shownNumber}`}
             data-testid={`button-play-row-${trackNumber}`}
             className={[
               "absolute inset-0 inline-flex items-center justify-end pr-[1px] transition-opacity",

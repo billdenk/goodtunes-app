@@ -968,7 +968,7 @@ export function AlbumDetailMobileSurface({
                             className="text-[15px] tabular-nums"
                             style={{ color: "rgba(255,255,255,0.22)" }}
                           >
-                            {song.trackNumber}
+                            {i + 1}
                           </span>
                         </div>
                       </div>
@@ -1071,7 +1071,7 @@ export function AlbumDetailMobileSurface({
                           className="text-[15px] tabular-nums"
                           style={{ color: "rgba(255,255,255,0.32)" }}
                         >
-                          {song.trackNumber}
+                          {i + 1}
                         </span>
                       )}
                     </div>

@@ -974,7 +974,7 @@ export function DesktopAlbumView({
               {/* Top hairline — sits above row 1 and matches the per-row
                   weight so the list reads as one uniform set of rules. */}
               <span aria-hidden className="mx-3 h-px shrink-0 bg-white/20" />
-              {songs.map((s) => {
+              {songs.map((s, i) => {
                 // A hidden track (isPreviewable === false) reads as a quiet
                 // "locked" row for NON-OWNERS — matching Apple's pre-release
                 // pattern: greyed title, no runtime, not tappable. Owners who
@@ -993,6 +993,7 @@ export function DesktopAlbumView({
                   <Fragment key={s.id}>
                     <AlbumDesktopTrackRow
                       trackNumber={s.trackNumber}
+                      displayNumber={i + 1}
                       title={s.title}
                       duration={formatDuration(s.duration)}
                       isCurrent={isCurrent}

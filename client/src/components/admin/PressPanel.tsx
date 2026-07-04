@@ -600,7 +600,7 @@ export function PressPanel({
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((s) => {
+                {sorted.map((s, i) => {
                   const present = !!s.audioUrl;
                   return (
                     <tr
@@ -609,7 +609,7 @@ export function PressPanel({
                       data-testid={`row-master-${s.id}`}
                     >
                       <td className="px-3 py-2 text-slate-500 font-mono tabular-nums">
-                        {String(s.trackNumber ?? 0).padStart(2, "0")}
+                        {String(i + 1).padStart(2, "0")}
                       </td>
                       <td className="px-3 py-2 text-slate-800 font-medium">{s.title}</td>
                       <td className="px-3 py-2 text-slate-700 font-mono tabular-nums">

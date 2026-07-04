@@ -275,6 +275,20 @@ export function VinylOrderPanel({
     return m;
   }, [songs]);
 
+  // Clean sequential 1..N digital running position keyed by song id.
+  // The "#N" reference on each vinyl row shows the DIGITAL album position,
+  // and legacy imports leave gaps in the raw stored trackNumber (e.g.
+  // 1,4,5,…). Compute the position from the trackNumber-sorted order so
+  // the reference reads 1..N with no gaps — this never touches the stored
+  // trackNumber or the per-side vinyl order.
+  const digitalPositionById = useMemo(() => {
+    const m = new Map<string, number>();
+    [...songs]
+      .sort((a, b) => a.trackNumber - b.trackNumber)
+      .forEach((s, i) => m.set(s.id, i + 1));
+    return m;
+  }, [songs]);
+
   // Vinyl ordering writes through `edit_metadata` on the same gate as
   // every other album mutation. When the caller can't save — out-of-scope
   // partner, post-sale lock without an override, or approval-only mode
@@ -773,7 +787,7 @@ export function VinylOrderPanel({
                             title="Digital album track number"
                             data-testid={`vinyl-row-digital-track-${id}`}
                           >
-                            #{song.trackNumber}
+                            #{digitalPositionById.get(song.id) ?? song.trackNumber}
                           </span>
                           {song.title}
                         </div>

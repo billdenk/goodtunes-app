@@ -4693,6 +4693,15 @@ function TracksPanel({
       )
     : sorted;
 
+  // Clean sequential 1..N running position keyed by song id, computed from
+  // the FULL trackNumber-sorted list (never the search-filtered subset).
+  // Legacy imports leave gaps in the raw stored trackNumber (e.g. 1,4,5,…);
+  // the digital tracklist should read 1..N. This is display-only — it never
+  // touches the stored trackNumber, playback order, or vinyl layout.
+  const displayPositions = new Map<string, number>(
+    sorted.map((s, i) => [s.id, i + 1]),
+  );
+
   return (
     <div className="space-y-5 mb-32">
     <Card
@@ -4934,6 +4943,7 @@ function TracksPanel({
               key={song.id}
               song={song}
               albumId={album.id}
+              displayNumber={displayPositions.get(song.id) ?? song.trackNumber}
               withBorder={i !== filtered.length - 1}
               credits={songCredits ?? null}
               splitTotals={albumSplits?.bySongId?.[song.id]?.totals ?? null}
@@ -7599,6 +7609,16 @@ function GoodSyncAlbumDialog({
     for (const s of songs) m.set(s.id, s);
     return m;
   }, [songs]);
+  // Clean sequential 1..N digital running position keyed by song id, so the
+  // dialog list reads 1..N with no gaps even for legacy imports whose raw
+  // stored trackNumber is gapped (e.g. 1,4,5,…). Display-only.
+  const digitalPositionById = useMemo(() => {
+    const m = new Map<string, number>();
+    [...songs]
+      .sort((a, b) => a.trackNumber - b.trackNumber)
+      .forEach((s, i) => m.set(s.id, i + 1));
+    return m;
+  }, [songs]);
 
   // Counts for the done summary.
   const syncedCount = Object.values(states).filter((v) => v === "synced").length;
@@ -7785,7 +7805,7 @@ function GoodSyncAlbumDialog({
                   >
                     <span className="truncate text-slate-700">
                       <span className="text-slate-400 mr-2">
-                        {s.trackNumber}
+                        {digitalPositionById.get(s.id) ?? s.trackNumber}
                       </span>
                       {s.title}
                     </span>
@@ -8379,6 +8399,7 @@ function trackSectionStatuses(
 function TrackRow({
   song,
   albumId,
+  displayNumber,
   withBorder,
   credits,
   splitTotals,
@@ -8403,6 +8424,10 @@ function TrackRow({
 }: {
   song: SongLite;
   albumId: string;
+  // Sequential 1..N running position for DISPLAY (never the raw stored
+  // trackNumber, which legacy imports can leave gapped). Falls back to
+  // trackNumber when omitted.
+  displayNumber?: number;
   withBorder: boolean;
   credits: SongCreditsLite | null;
   splitTotals: { publishingBp: number; mechanicalBp: number } | null;
@@ -8726,7 +8751,7 @@ function TrackRow({
             ].join(" ")}
             aria-hidden={isCurrent ? true : undefined}
           >
-            {song.trackNumber}
+            {displayNumber ?? song.trackNumber}
           </span>
           {song.audioUrl && (
             <button
