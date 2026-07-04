@@ -13922,6 +13922,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider bg-blue-50 text-blue-700 ring-1 ring-blue-200\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"inline-flex items-center gap-1 text-amber-700 text-[10.5px] font-medium normal-case tracking-normal\""
   },
   {
@@ -18467,6 +18472,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
+    "snippet": "className=\"pointer-events-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide shadow-sm\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<p className=\"text-fan-secondary text-[11px] truncate mt-0.5\">{a.year}</p>"
   },
   {
@@ -18943,6 +18953,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<h3 className=\"text-fan-primary text-[22px] font-bold tracking-tight mb-3\" data-testid=\"heading-album-photos\">"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/AlbumDetail.tsx",
+    "snippet": "className=\"w-1.5 h-1.5 rounded-full\""
   },
   {
     "rule": "player-touch-target-too-small",

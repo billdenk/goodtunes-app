@@ -84,6 +84,15 @@ legacy `/s/`). A change to the dispatcher changes every importer at once.
   `phase` union is `download | extracting | process` and MUST stay in sync between server
   `ImportProgress` (routes.ts) and client (`AdminAlbum.tsx`).
 
+- **WeTransfer share links still resolve server-side but are NOT advertised anywhere.**
+  **Why:** Bill's call — WeTransfer import "never really worked" in practice, so all
+  user-facing copy (client dialogs) and the investor `docs/capabilities.md` bullet were
+  stripped to say **Dropbox-only**, while the server WeTransfer detection/resolution code
+  in `server/routes.ts` + `server/dropboxZip.ts` was left intact on purpose.
+  **How to apply:** don't "reconcile" the mismatch — do NOT delete the server WeTransfer
+  handling because the docs say Dropbox-only, and do NOT re-add "WeTransfer" to any UI copy
+  or capabilities bullet because the server still supports it. The gap is intentional.
+
 - **Pure zip helpers live in `server/dropboxZip.ts`, not `routes.ts`.** `extOf`,
   `basenameOf`, `fileLooksLikeZip`, `extractKeptZipEntries` + the `MAX_DROPBOX_*` caps were
   hoisted out so they're unit-testable without booting the 21k-line `routes.ts` (which would

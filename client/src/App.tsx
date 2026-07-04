@@ -10,6 +10,8 @@ import { NavVisibilityProvider } from "@/hooks/useNavVisibility";
 import { TopChromeFrostProvider } from "@/hooks/useTopChromeFrost";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 import { DownloadEntitlementGuard } from "@/components/DownloadEntitlementGuard";
+import { UploadManagerProvider } from "@/context/UploadManagerContext";
+import { GlobalUploadIndicator } from "@/components/admin/GlobalUploadIndicator";
 import { markBootSucceeded } from "@/lib/bootHeal";
 import { initPushNotifications } from "@/lib/pushNotifications";
 import { useTrackInAppNavigation } from "@/lib/navHistory";
@@ -1207,10 +1209,13 @@ function App() {
           <PlayerProvider>
             <NavVisibilityProvider>
               <TopChromeFrostProvider>
-                <Toaster />
-                <PushRegistrar />
-                <DownloadEntitlementGuard />
-                <Router />
+                <UploadManagerProvider>
+                  <Toaster />
+                  <PushRegistrar />
+                  <DownloadEntitlementGuard />
+                  <Router />
+                  <GlobalUploadIndicator />
+                </UploadManagerProvider>
               </TopChromeFrostProvider>
             </NavVisibilityProvider>
           </PlayerProvider>

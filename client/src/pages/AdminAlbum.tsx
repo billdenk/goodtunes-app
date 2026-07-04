@@ -103,6 +103,7 @@ import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
 import { apiRequest, getAuthToken, apiErrorStatus } from "@/lib/queryClient";
+import { enqueueAudioBatch, enqueueVideoBatch } from "@/context/UploadManagerContext";
 import { uploadImageFile } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import Hls from "hls.js";
@@ -112,7 +113,7 @@ import {
   type AdminAudioReason,
 } from "@/hooks/useAdminTrackAudioSource";
 import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
+import { useToast, toast as showToast } from "@/hooks/use-toast";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { ToastAction } from "@/components/ui/toast";
 import { Switch } from "@/components/ui/switch";
@@ -4664,7 +4665,7 @@ function TracksPanel({
               Upload multiple tracks
             </div>
             <div className="text-[11.5px] text-slate-500 mt-0.5">
-              Empty rows or a Dropbox / WeTransfer link.
+              Empty rows or a Dropbox link.
             </div>
           </button>
         </div>
@@ -4768,7 +4769,7 @@ function TracksPanel({
                     Upload multiple tracks
                   </div>
                   <div className="text-[11px] text-slate-500">
-                    Empty rows or a Dropbox / WeTransfer link.
+                    Empty rows or a Dropbox link.
                   </div>
                 </div>
               </DropdownMenuItem>
@@ -4784,7 +4785,7 @@ function TracksPanel({
                 <FileText className="w-4 h-4 text-slate-500" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900">
-                    Import lyrics from Dropbox or WeTransfer
+                    Import lyrics from Dropbox
                   </div>
                   <div className="text-[11px] text-slate-500">
                     PDF, Word, or text files — matched to tracks.
@@ -6471,127 +6472,26 @@ function AddMultipleTracksDialog({
     });
   };
 
-  const handleConfirmUpload = async () => {
+  const handleConfirmUpload = () => {
     if (uploadFiles.length === 0 || running) return;
-    setRunning(true);
-
-    // Derive per-album track numbering server-side equivalent: we start
-    // from nextTrackNumber (already the max+1 computed by the parent).
-    let trackNum = nextTrackNumber;
-    const token = getAuthToken();
-    const authHeaders: Record<string, string> = token
-      ? { Authorization: `Bearer ${token}` }
-      : {};
-
-    const setItemStatus = (
-      idx: number,
-      patch: Partial<FileUploadItem>,
-    ) => {
-      setUploadItems((prev) => {
-        const next = [...prev];
-        next[idx] = { ...next[idx], ...patch };
-        return next;
-      });
-    };
-
-    let okCount = 0;
-    let errCount = 0;
-
-    for (let i = 0; i < uploadFiles.length; i++) {
-      const file = uploadFiles[i];
-      try {
-        // 1. Sign — get a GCS upload URL.
-        setItemStatus(i, { status: "uploading", pct: 0 });
-        const contentType = file.type || "audio/mpeg";
-        const signRes = await fetch("/api/admin/upload-audio/sign", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders },
-          credentials: "include",
-          body: JSON.stringify({ contentType }),
-        });
-        if (!signRes.ok) {
-          const errBody = await signRes.json().catch(() => ({}));
-          throw new Error(errBody.message || `Sign failed (${signRes.status})`);
-        }
-        const { uploadUrl, finalPath, contentType: signedType } =
-          (await signRes.json()) as { uploadUrl: string; finalPath: string; contentType: string };
-
-        // 2. PUT directly to GCS with XHR so we get byte-level progress.
-        await new Promise<void>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open("PUT", uploadUrl, true);
-          xhr.setRequestHeader("Content-Type", signedType);
-          xhr.upload.onprogress = (ev) => {
-            if (ev.lengthComputable) {
-              setItemStatus(i, { pct: Math.round((ev.loaded / ev.total) * 100) });
-            }
-          };
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) resolve();
-            else reject(new Error(`Upload failed (${xhr.status})`));
-          };
-          xhr.onerror = () => reject(new Error("Upload failed — network error"));
-          xhr.send(file);
-        });
-
-        // 3. Finalize — server transcodes if needed and returns URLs + specs.
-        setItemStatus(i, { status: "saving", pct: 100 });
-        const finRes = await fetch("/api/admin/upload-audio/finalize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders },
-          credentials: "include",
-          body: JSON.stringify({ finalPath, contentType: signedType }),
-        });
-        if (!finRes.ok) {
-          const errBody = await finRes.json().catch(() => ({}));
-          throw new Error(errBody.message || `Finalize failed (${finRes.status})`);
-        }
-        const audioResult = (await finRes.json()) as {
-          url: string;
-          sourceUrl: string | null;
-          transcoded: boolean;
-          duration?: number | null;
-          servedSpecs?: AudioSpecsPayload | null;
-          sourceSpecs?: AudioSpecsPayload | null;
-        };
-
-        // 4. Create the song row.
-        await apiRequest("POST", "/api/admin/songs", {
-          albumId,
-          title: clientDeriveTitleFromFilename(file.name),
-          trackNumber: trackNum,
-          duration: audioResult.duration ?? 0,
-          audioUrl: audioResult.url,
-          ...(audioResult.sourceUrl ? { audioSourceUrl: audioResult.sourceUrl } : {}),
-          ...(audioResult.servedSpecs ? { servedSpecs: audioResult.servedSpecs } : {}),
-          ...(audioResult.sourceSpecs ? { sourceSpecs: audioResult.sourceSpecs } : {}),
-        });
-
-        trackNum++;
-        okCount++;
-        setItemStatus(i, { status: "done" });
-      } catch (e: any) {
-        errCount++;
-        setItemStatus(i, { status: "error", error: e?.message || "Upload failed" });
-      }
-    }
-
-    await onSaved();
-
-    const parts: string[] = [];
-    if (errCount > 0) parts.push(`${errCount} file${errCount === 1 ? "" : "s"} failed`);
-
-    toast({
-      title:
-        okCount === 0 && errCount > 0
-          ? "No tracks were added"
-          : `${okCount} ${okCount === 1 ? "track" : "tracks"} added`,
-      description: parts.length > 0 ? parts.join(" · ") : undefined,
-      variant: okCount === 0 && errCount > 0 ? "destructive" : undefined,
+    // Hand the per-file sign→PUT→finalize→create loop to the admin-shell
+    // upload manager (Task #2459) so it keeps running after this dialog
+    // closes and across admin navigation, then close immediately. The
+    // global indicator shows per-file progress + retry, and a toast with
+    // the final counts fires when the batch settles.
+    enqueueAudioBatch({
+      albumId,
+      files: uploadFiles.map((file) => ({
+        file,
+        title: clientDeriveTitleFromFilename(file.name),
+      })),
+      suggestedStartNumber: nextTrackNumber,
     });
-
-    setRunning(false);
-    if (okCount > 0) onOpenChange(false);
+    toast({
+      title: `Uploading ${uploadFiles.length} ${uploadFiles.length === 1 ? "track" : "tracks"} in the background`,
+      description: "Close this and keep working — you'll get a toast when it's done.",
+    });
+    onOpenChange(false);
   };
 
   return (
@@ -6624,14 +6524,13 @@ function AddMultipleTracksDialog({
                   drag-and-drop or pick audio files from your computer — each file becomes a track.
                 </p>
                 <p className="mt-2">
-                  <span className="font-medium text-slate-900">From Dropbox or WeTransfer</span>{" "}
+                  <span className="font-medium text-slate-900">From Dropbox</span>{" "}
                   pulls audio from a folder (whole album) or a single file (one
-                  track). Dropbox: share as{" "}
+                  track). Share as{" "}
                   <span className="font-medium text-slate-900">
                     Anyone with the link
                   </span>
-                  . WeTransfer: paste the link from the download page.
-                  Audio formats: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg.
+                  . Audio formats: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg.
                 </p>
                 <p className="mt-2">
                   <span className="font-medium text-slate-900">Empty rows</span>{" "}
@@ -6642,7 +6541,7 @@ function AddMultipleTracksDialog({
             </Popover>
           </DialogTitle>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
-            Upload files from your computer, pull from a Dropbox / WeTransfer link, or stamp out empty rows.
+            Upload files from your computer, pull from a Dropbox link, or stamp out empty rows.
           </DialogDescription>
         </DialogHeader>
 
@@ -6651,7 +6550,7 @@ function AddMultipleTracksDialog({
         <div className="inline-flex bg-slate-100 rounded-lg p-0.5 self-start" role="tablist">
           {([
             { id: "upload", label: "Upload files" },
-            { id: "dropbox", label: "From Dropbox / WeTransfer" },
+            { id: "dropbox", label: "From Dropbox" },
             { id: "empty", label: "Empty rows" },
           ] as const).map((opt) => (
             <button
@@ -6699,12 +6598,12 @@ function AddMultipleTracksDialog({
           <>
             <div className="space-y-1.5">
               <Label htmlFor="bulk-dropbox-url" className="text-[12.5px] font-medium text-slate-700">
-                Dropbox or WeTransfer link
+                Dropbox link
               </Label>
               <Input
                 id="bulk-dropbox-url"
                 type="url"
-                placeholder="https://www.dropbox.com/scl/fo/… or https://we.tl/t-…"
+                placeholder="https://www.dropbox.com/scl/fo/…"
                 value={folderUrl}
                 onChange={(e) => setFolderUrl(e.target.value)}
                 disabled={running}
@@ -6919,7 +6818,7 @@ function AddMultipleTracksDialog({
               data-testid="button-bulk-dropbox-confirm"
               className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-2"
             >
-              {running ? <>Importing…</> : <>Import from Dropbox / WeTransfer</>}
+              {running ? <>Importing…</> : <>Import from Dropbox</>}
             </button>
           ) : (
             <button
@@ -6942,7 +6841,7 @@ function AddMultipleTracksDialog({
   );
 }
 
-/* ─── Import lyrics from Dropbox or WeTransfer ──────────────────────────────────────
+/* ─── Import lyrics from Dropbox ──────────────────────────────────────
    Paste a Dropbox folder URL full of .pdf / .docx / .txt files; the
    server downloads the folder as a ZIP, extracts text from each
    document, and matches the filename to an existing track title (case-
@@ -7213,7 +7112,7 @@ function ImportLyricsFromDropboxDialog({
       <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
         <DialogHeader className="text-left space-y-1">
           <DialogTitle className="text-[17px] font-semibold text-slate-900 inline-flex items-center gap-2">
-            Import lyrics from Dropbox or WeTransfer
+            Import lyrics from Dropbox
             <Popover>
               <PopoverTrigger asChild>
                 <button
@@ -7252,7 +7151,7 @@ function ImportLyricsFromDropboxDialog({
             </Popover>
           </DialogTitle>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
-            Paste a Dropbox or WeTransfer link containing lyric documents —
+            Paste a Dropbox link containing lyric documents —
             or a single file for one track. I'll match each file to a
             track by filename and fill in the lyrics.
           </DialogDescription>
@@ -7260,12 +7159,12 @@ function ImportLyricsFromDropboxDialog({
 
         <div className="space-y-1.5">
           <Label htmlFor="lyrics-dropbox-url" className="text-[12.5px] font-medium text-slate-700">
-            Dropbox or WeTransfer link
+            Dropbox link
           </Label>
           <Input
             id="lyrics-dropbox-url"
             type="url"
-            placeholder="https://www.dropbox.com/scl/fo/… or https://we.tl/t-…"
+            placeholder="https://www.dropbox.com/scl/fo/…"
             value={folderUrl}
             onChange={(e) => setFolderUrl(e.target.value)}
             disabled={running || songCount === 0}
@@ -14972,68 +14871,6 @@ interface AlbumPhoto {
   position: number;
 }
 
-// Three-step direct-to-GCS upload (sign → PUT → finalize) so files past
-// Replit's ~32MB inbound proxy cap still work, with optional progress.
-async function uploadVideoFile(
-  file: File,
-  onProgress?: (fraction: number) => void,
-): Promise<{ url: string; posterUrl: string | null }> {
-  const token = getAuthToken();
-  if (!token) {
-    throw new Error("Sign out and back in — your session token is missing.");
-  }
-  const signRes = await fetch("/api/admin/upload-video/sign", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    credentials: "include",
-    body: JSON.stringify({ contentType: file.type || "video/mp4" }),
-  });
-  if (!signRes.ok) {
-    const body = await signRes.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${signRes.status})`);
-  }
-  const { uploadUrl, finalPath, contentType } = (await signRes.json()) as {
-    uploadUrl: string;
-    finalPath: string;
-    contentType: string;
-  };
-  await new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", uploadUrl, true);
-    xhr.setRequestHeader("Content-Type", contentType);
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`Upload failed (${xhr.status})`));
-    };
-    xhr.onerror = () => reject(new Error("Upload failed — network error"));
-    xhr.send(file);
-  });
-  const finRes = await fetch("/api/admin/upload-video/finalize", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    credentials: "include",
-    body: JSON.stringify({ finalPath }),
-  });
-  if (!finRes.ok) {
-    const body = await finRes.json().catch(() => ({}));
-    throw new Error(body.message || `Upload finalize failed (${finRes.status})`);
-  }
-  const { url, posterUrl } = (await finRes.json()) as {
-    url: string;
-    posterUrl?: string | null;
-  };
-  return { url, posterUrl: posterUrl ?? null };
-}
-
 function friendlyVideoError(raw: string): string {
   let msg = raw || "";
   const jsonMatch = msg.match(/\{[\s\S]*\}/);
@@ -15139,7 +14976,7 @@ function BonusVideos({
               the header. */}
           <BulkBonusAdvancedMenu
             label="Upload multiple videos"
-            description="Dropbox or WeTransfer — .mp4 / .mov / .webm files."
+            description="Dropbox — .mp4 / .mov / .webm files."
             onPick={() => setBulkOpen(true)}
           />
         </div>
@@ -15310,7 +15147,7 @@ function BonusPhotos({
         </div>
         <BulkBonusAdvancedMenu
           label="Upload multiple photos"
-          description="Dropbox or WeTransfer — .jpg / .png / .webp files."
+          description="Dropbox — .jpg / .png / .webp files."
           onPick={() => setBulkOpen(true)}
         />
       </div>
@@ -15578,14 +15415,14 @@ function BulkBonusFromDropboxDialog({
             Upload multiple {nounPlural}
           </DialogTitle>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
-            Pull every {noun} from a Dropbox or WeTransfer link in one go.
+            Pull every {noun} from a Dropbox link in one go.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
           <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
           <p className="text-[12.5px] leading-snug text-slate-600">
-            Paste a Dropbox or WeTransfer link — a{" "}
+            Paste a Dropbox link — a{" "}
             <span className="font-medium text-slate-700">folder</span> for many{" "}
             {nounPlural}, or a single{" "}
             <span className="font-medium text-slate-700">file</span> for one.{" "}
@@ -15597,12 +15434,12 @@ function BulkBonusFromDropboxDialog({
             htmlFor={`bulk-bonus-${kind}-url`}
             className="text-[12.5px] font-medium text-slate-700"
           >
-            Dropbox or WeTransfer link
+            Dropbox link
           </Label>
           <Input
             id={`bulk-bonus-${kind}-url`}
             type="url"
-            placeholder="https://www.dropbox.com/scl/fo/… or https://we.tl/t-…"
+            placeholder="https://www.dropbox.com/scl/fo/…"
             value={folderUrl}
             onChange={(e) => setFolderUrl(e.target.value)}
             disabled={running}
@@ -15637,7 +15474,7 @@ function BulkBonusFromDropboxDialog({
                 Importing…
               </>
             ) : (
-              <>Import from Dropbox / WeTransfer</>
+              <>Import from Dropbox</>
             )}
           </button>
         </DialogFooter>
@@ -16329,6 +16166,34 @@ function AlbumVideoSheet({
           posterUrl,
         });
       } else {
+        // Background upload path (Task #2459): hand the picked-file
+        // sign→PUT→finalize→create pipeline to the admin-shell upload
+        // manager so closing this sheet or navigating away doesn't kill
+        // it. The global indicator shows progress + retry and a toast
+        // fires when it settles. The URL-import path stays in-sheet — it
+        // needs the server round-trip's suggested title/poster before the
+        // create, and transitions the sheet into Edit mode on success.
+        if (source === "upload" && pickedFile) {
+          enqueueVideoBatch({
+            albumId,
+            items: [
+              {
+                file: pickedFile,
+                title: title.trim() || "Untitled video",
+                description: description.trim() || null,
+                // Auto-captured/manual poster if we have one; the manager
+                // falls back to the server-extracted still otherwise.
+                posterUrl,
+              },
+            ],
+          });
+          showToast({
+            title: "Uploading video in the background",
+            description: "Close this and keep working — you'll get a toast when it's done.",
+          });
+          onClose();
+          return;
+        }
         let videoUrl = "";
         // Resolve title + poster in locals so the create POST sees the
         // server-extracted values for URL imports — `setTitle` /
@@ -16337,20 +16202,7 @@ function AlbumVideoSheet({
         let resolvedTitle = title.trim();
         let resolvedPosterUrl = posterUrl;
         let resolvedSourceUrl: string | null = null;
-        if (source === "upload" && pickedFile) {
-          setProgress(0);
-          const uploaded = await uploadVideoFile(pickedFile, (f) =>
-            setProgress(Math.min(0.99, f)),
-          );
-          videoUrl = uploaded.url;
-          // The client tries a canvas capture on pick, but it fails on
-          // codecs the browser can't decode (e.g. HEVC .mov). Fall back to
-          // the server-extracted still so the tile always has a real poster.
-          if (!resolvedPosterUrl && uploaded.posterUrl) {
-            resolvedPosterUrl = uploaded.posterUrl;
-            setPosterUrl(resolvedPosterUrl);
-          }
-        } else if (source === "url") {
+        if (source === "url") {
           const pastedUrl = importUrl.trim();
           resolvedSourceUrl = pastedUrl;
           // Defensive title derive — the [importUrl, source] autofill
