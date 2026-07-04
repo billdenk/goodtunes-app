@@ -46,7 +46,7 @@ Every copy mints a numbered GoodDeed; fans can gift copies
 You watch plays, buyers, top fans, and your share in your dashboard
           ↓
 Fans buy the gear on your records → affiliate revenue
-You bring other artists → $1/unit referral credit
+You bring other artists → $1/unit referral credit for one year
 ```
 
 ## How the money flows to you
@@ -56,7 +56,7 @@ You bring other artists → $1/unit referral credit
 | Your share of sales | Stripe Connect pays your artist share when an order is marked fulfilled; the orders log reconciles to Stripe. |
 | Gear affiliate (SuperCredits™) | Tappable, affiliate-attributed gear links pay out when fans buy the equipment on your records. |
 | Signed GoodDeed add-on | Optional printed-and-signed certificate, priced with a live per-unit profit readout. |
-| Referral credit | $1.00 per paying unit (adjustable) on every artist you refer, rolled up by referred artist. |
+| Referral credit | $1.00 per paying unit (adjustable) on every artist you refer, for one year from when they join, rolled up by referred artist. |
 | Release control | Every payout lands in a held queue and is released explicitly, so transfers are controlled and auditable. |
 
 ## Coming next

@@ -39,6 +39,7 @@ import { planAutoGoodSyncUpdates, decideInstrumental } from "./lib/autoGoodSyncP
 import { detectExplicitLyrics } from "./lib/explicitLyrics";
 import { hasArtistShape, personShape } from "./lib/personArtistShape";
 import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
+import { isReferralWindowActive, referralWindowEndsAt } from "@shared/referralWindow";
 import {
   resolveMakerHostFromBrand as resolveMakerHostFromBrandShared,
   buildHostSlot as buildHostSlotShared,
@@ -28053,7 +28054,11 @@ export async function registerRoutes(
     const partners = await db.execute<any>(sql`
       SELECT p.id, p.name, p.photo_url,
         COALESCE((SELECT SUM(units)::int FROM referral_credits rc WHERE rc.referrer_person_id = ${targetPersonId} AND rc.referred_artist_id = p.id), 0) AS units,
-        COALESCE((SELECT SUM(amount_cents)::int FROM referral_credits rc WHERE rc.referrer_person_id = ${targetPersonId} AND rc.referred_artist_id = p.id AND status = 'pending_payout'), 0) AS pending_cents
+        COALESCE((SELECT SUM(amount_cents)::int FROM referral_credits rc WHERE rc.referrer_person_id = ${targetPersonId} AND rc.referred_artist_id = p.id AND status = 'pending_payout'), 0) AS pending_cents,
+        -- Task #2519 — one-year earning-window anchor: the EARLIEST
+        -- artist_referrals row for this pair (== the invitee's accept date).
+        (SELECT MIN(ar.created_at) FROM artist_referrals ar
+           WHERE ar.referrer_person_id = ${targetPersonId} AND ar.invitee_person_id = p.id) AS referral_started_at
       FROM people p
       WHERE p.referred_by_person_id = ${targetPersonId}
       ORDER BY p.name ASC
@@ -28079,6 +28084,10 @@ export async function registerRoutes(
       paidCents: s.paid_cents,
       partners: ((partners as any).rows ?? []).map((p: any) => ({
         id: p.id, name: p.name, photoUrl: p.photo_url, units: p.units, pendingCents: p.pending_cents,
+        // Task #2519 — one-year earning window per referred artist.
+        referralStartedAt: p.referral_started_at ?? null,
+        earningWindowActive: isReferralWindowActive(p.referral_started_at ?? null),
+        earningWindowEndsAt: p.referral_started_at ? referralWindowEndsAt(p.referral_started_at).toISOString() : null,
       })),
       nonProfits: ((referredNpos as any).rows ?? []).map((o: any) => ({
         id: o.id, name: o.name, logoUrl: o.logo_url,

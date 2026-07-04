@@ -1055,7 +1055,7 @@ export function InviteArtistPanel() {
   return (
     <Card
       title="Invite an artist or label"
-      subtitle="Invite verified artists & labels — you earn $1 on every paid unit they ship, for life."
+      subtitle="Invite verified artists & labels — you earn $1 on every paid unit they ship, for one year."
       testId="invite-artist-panel"
       action={
         <Button
@@ -1088,7 +1088,7 @@ export function InviteArtistPanel() {
           <DialogHeader>
             <DialogTitle>Invite an artist or label</DialogTitle>
             <DialogDescription>
-              We'll email them an invite to join GoodTunes. You earn $1 on every paid unit they ship, for life.
+              We'll email them an invite to join GoodTunes. You earn $1 on every paid unit they ship, for one year.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -1290,7 +1290,7 @@ export function InviteArtistPanel() {
         <div className="mt-4 rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center" data-testid="empty-artist-invites">
           <p className="font-semibold text-sm text-slate-900">Tell other artists about GoodTunes</p>
           <p className="mt-1 text-slate-500 text-xs max-w-sm mx-auto">
-            Invite the artists and labels you rate. When they join and start selling, you earn $1 on every paid unit they ship — for life. Use <span className="font-semibold text-slate-700">Invite</span> above to send your first one.
+            Invite the artists and labels you rate. When they join and start selling, you earn $1 on every paid unit they ship — for one year. Use <span className="font-semibold text-slate-700">Invite</span> above to send your first one.
           </p>
         </div>
       )}
@@ -1349,7 +1349,7 @@ function ReferralsTab() {
     pendingCents: number;
     pendingCount: number;
     paidCents: number;
-    partners: { id: string; name: string; photoUrl: string | null; units: number; pendingCents: number }[];
+    partners: { id: string; name: string; photoUrl: string | null; units: number; pendingCents: number; referralStartedAt: string | null; earningWindowActive: boolean; earningWindowEndsAt: string | null }[];
     nonProfits: { id: string; name: string; logoUrl: string | null }[];
   }>({ queryKey: ["/api/artist/referrals"] });
   if (q.isLoading) {
@@ -1368,7 +1368,7 @@ function ReferralsTab() {
         <Kpi label="Paid out" value={fmt(d.paidCents)} testId="kpi-ref-paid" />
         <Kpi label="Referred artists" value={String(d.partners.length)} testId="kpi-ref-count" />
       </section>
-      <Card title="Artists you've referred" subtitle="$1 per paid unit, for life" testId="table-referred-artists">
+      <Card title="Artists you've referred" subtitle="$1 per paid unit, for one year" testId="table-referred-artists">
         {d.partners.length === 0 ? (
           <p className="py-8 text-center text-slate-500 text-sm" data-testid="empty-referrals">
             No one's joined yet. Invite an artist or label above — once they accept, they'll
@@ -1385,7 +1385,16 @@ function ReferralsTab() {
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold truncate">{p.name}</p>
-                  <p className="text-[11px] text-slate-500">{p.units} unit{p.units === 1 ? "" : "s"} attributed</p>
+                  <p className="text-xs text-slate-500">
+                    {p.units} unit{p.units === 1 ? "" : "s"} attributed
+                    {p.earningWindowActive === false ? (
+                      <span className="ml-2 text-slate-400" data-testid={`status-window-ended-${p.id}`}>· Earning ended</span>
+                    ) : p.earningWindowEndsAt ? (
+                      <span className="ml-2 text-slate-400" data-testid={`status-window-active-${p.id}`}>
+                        · Earning through {new Date(p.earningWindowEndsAt).toLocaleDateString(undefined, { month: "short", year: "numeric" })}
+                      </span>
+                    ) : null}
+                  </p>
                 </div>
                 <span className="text-emerald-600 tabular-nums font-semibold text-sm">{fmt(p.pendingCents)}</span>
               </li>

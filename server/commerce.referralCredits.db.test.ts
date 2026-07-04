@@ -134,12 +134,23 @@ async function seedArtistReferral(opts: {
   inviteePersonId: string;
   albumId: string | null;
   swapState: string;
+  // Task #2519 — optional accept-date anchor for the one-year earning
+  // window. Defaults to the column default (now) so the pre-existing tests
+  // stay well inside the window and keep minting.
+  createdAt?: Date;
 }): Promise<string> {
   const id = randomUUID();
-  await exec(sql`
-    INSERT INTO artist_referrals (id, referrer_person_id, invitee_person_id, album_id, swap_state)
-    VALUES (${id}, ${opts.referrerPersonId}, ${opts.inviteePersonId}, ${opts.albumId}, ${opts.swapState})
-  `);
+  if (opts.createdAt) {
+    await exec(sql`
+      INSERT INTO artist_referrals (id, referrer_person_id, invitee_person_id, album_id, swap_state, created_at)
+      VALUES (${id}, ${opts.referrerPersonId}, ${opts.inviteePersonId}, ${opts.albumId}, ${opts.swapState}, ${opts.createdAt.toISOString()})
+    `);
+  } else {
+    await exec(sql`
+      INSERT INTO artist_referrals (id, referrer_person_id, invitee_person_id, album_id, swap_state)
+      VALUES (${id}, ${opts.referrerPersonId}, ${opts.inviteePersonId}, ${opts.albumId}, ${opts.swapState})
+    `);
+  }
   created.artistReferrals.add(id);
   return id;
 }
@@ -381,6 +392,103 @@ test("skips the artist credit when the referrer's earns_referral_payout is OFF (
   `));
   assert.equal(ar.length, 1, "the artist_referrals row must still be present");
   assert.notEqual(ar[0].frozen_at, null, "first paid sale must still freeze the swap even when payout is off");
+});
+
+test("skips the artist credit once the one-year earning window has passed (Task #2519)", async () => {
+  const customerId = await seedCustomer();
+  const albumId = await seedAlbum();
+
+  const FORMAT = "lp";
+  // Referrer + invitee whose relationship was accepted MORE than a year ago,
+  // so the one-year earning window has closed. No new credit should mint,
+  // but the swap must still freeze on first sale (attribution is preserved).
+  const referrerPersonId = await seedPerson({});
+  const inviteePersonId = await seedPerson({
+    referredByPersonId: referrerPersonId,
+    referrerPerUnitCents: 100,
+  });
+  const overAYearAgo = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
+  await seedArtistReferral({
+    referrerPersonId,
+    inviteePersonId,
+    albumId: null,
+    swapState: "referrer_keeps_full",
+    createdAt: overAYearAgo,
+  });
+  await seedVinylSku({ albumId, format: FORMAT, priceCents: 3000 });
+
+  const order = await drivePaidCheckout({
+    customerId,
+    albumId,
+    artistPersonId: inviteePersonId,
+    format: FORMAT,
+    unitPriceCents: 3000,
+    quantity: 2,
+  });
+
+  assert.equal(order.status, "paid", "the fixture session is PAID so the order must materialize as paid");
+
+  const credits = rows(await exec(sql`
+    SELECT id FROM referral_credits WHERE order_id = ${order.id} AND referrer_kind = 'artist'
+  `));
+  assert.equal(
+    credits.length,
+    0,
+    "a referral whose one-year window has lapsed must NOT mint a new artist credit",
+  );
+
+  // The relationship still freezes so attribution/reporting survives.
+  const ar = rows(await exec(sql`
+    SELECT frozen_at FROM artist_referrals
+      WHERE referrer_person_id = ${referrerPersonId} AND invitee_person_id = ${inviteePersonId}
+  `));
+  assert.equal(ar.length, 1, "the artist_referrals row must still be present");
+  assert.notEqual(ar[0].frozen_at, null, "first paid sale must still freeze the swap even after the window lapses");
+});
+
+test("still mints the artist credit inside the one-year earning window (Task #2519)", async () => {
+  const customerId = await seedCustomer();
+  const albumId = await seedAlbum();
+
+  const FORMAT = "lp";
+  const PER_UNIT_CENTS = 100;
+  const QUANTITY = 2;
+  // Relationship accepted 100 days ago — comfortably inside the one-year
+  // window, so the credit must still mint exactly as before.
+  const referrerPersonId = await seedPerson({});
+  const inviteePersonId = await seedPerson({
+    referredByPersonId: referrerPersonId,
+    referrerPerUnitCents: PER_UNIT_CENTS,
+  });
+  const recentlyJoined = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
+  await seedArtistReferral({
+    referrerPersonId,
+    inviteePersonId,
+    albumId: null,
+    swapState: "referrer_keeps_full",
+    createdAt: recentlyJoined,
+  });
+  await seedVinylSku({ albumId, format: FORMAT, priceCents: 3000 });
+
+  const order = await drivePaidCheckout({
+    customerId,
+    albumId,
+    artistPersonId: inviteePersonId,
+    format: FORMAT,
+    unitPriceCents: 3000,
+    quantity: QUANTITY,
+  });
+
+  assert.equal(order.status, "paid", "the fixture session is PAID so the order must materialize as paid");
+
+  const credits = rows(await exec(sql`
+    SELECT amount_cents, units, status FROM referral_credits
+      WHERE order_id = ${order.id} AND referrer_kind = 'artist'
+  `));
+  assert.equal(credits.length, 1, "a referral inside its one-year window must still mint one artist credit");
+  assert.equal(credits[0].amount_cents, PER_UNIT_CENTS * QUANTITY, "amount must be per-unit × units");
+  assert.equal(credits[0].units, QUANTITY, "units must be the paid format units");
+  assert.equal(credits[0].status, "pending_payout", "the credit must start pending_payout");
 });
 
 test("mints one non_profit credit per album NPO beneficiary", async () => {

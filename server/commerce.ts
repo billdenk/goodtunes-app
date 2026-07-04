@@ -77,6 +77,7 @@ import { registerPressPortalRoutes } from "./pressPortal";
 import { registerPrinterPortalRoutes } from "./printerPortal";
 import { grantLltBonusIfEligible } from "./lltBonus";
 import { hasReachedSunset } from "@shared/albumStage";
+import { isReferralWindowActive } from "@shared/referralWindow";
 import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "./storage";
@@ -4384,6 +4385,21 @@ export async function materializeOrderFromSession(
             `);
             const arRow = ((ar as any).rows ?? [])[0];
             const swapKeepsInvitee = arRow?.swap_state === "invitee_keeps_full";
+            // Task #2519 — one-year earning window. The referral anchor is
+            // when the invitee accepted (== artist_referrals.created_at).
+            // We take the EARLIEST created_at across the pair's rows so a
+            // second-album row (created when a later sale pins a new album)
+            // can't reset the clock. A missing anchor fails OPEN (mints) so
+            // a legacy referral with no recoverable date isn't wrongly cut
+            // off. Already-minted credits are never touched (no clawback).
+            const anchorRes = await db.execute<{ anchor: string | null }>(sql`
+              SELECT MIN(created_at) AS anchor
+              FROM artist_referrals
+              WHERE referrer_person_id = ${row.referred_by_person_id}
+                AND invitee_person_id = ${order.artistSnapshotId}
+            `);
+            const referralAnchor = ((anchorRes as any).rows?.[0]?.anchor ?? null) as string | null;
+            const withinReferralWindow = isReferralWindowActive(referralAnchor);
             if (arRow) {
               // Pin to this album + freeze the swap on first paid sale.
               await db.execute(sql`
@@ -4404,7 +4420,7 @@ export async function materializeOrderFromSession(
               FROM people WHERE id = ${row.referred_by_person_id} LIMIT 1
             `);
             const referrerEarns = ((payoutRow as any).rows?.[0]?.earns ?? true) !== false;
-            if (!swapKeepsInvitee && referrerEarns) {
+            if (!swapKeepsInvitee && referrerEarns && withinReferralWindow) {
               const amountCents = basePerUnit * safeUnits;
               await db.execute(sql`
                 INSERT INTO referral_credits (order_id, referred_artist_id, referrer_kind, referrer_person_id, amount_cents, currency, status, units)
