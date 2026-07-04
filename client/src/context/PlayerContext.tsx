@@ -5,7 +5,13 @@ import { Song, Album, getSongById } from "@/data/musicData";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { track } from "@/lib/analytics";
 import { apiRequest } from "@/lib/queryClient";
-import { isNative, isWebIOS } from "@/lib/platform";
+import { isNative, isNativeIOS, isWebIOS } from "@/lib/platform";
+import {
+  setNowPlayingMetadata,
+  setNowPlayingPlaybackState,
+  clearNowPlaying,
+  onNowPlayingRemoteCommand,
+} from "@/lib/nativeNowPlaying";
 import { offlineSrcFor } from "@/lib/nativeDownloads";
 
 export interface PlayerSong extends Song {
@@ -1088,6 +1094,210 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const toggleShuffle = useCallback(() => setShuffle((s) => !s), []);
   const toggleRepeat = useCallback(() => {
     setRepeat((r) => (r === "none" ? "all" : r === "all" ? "one" : "none"));
+  }, []);
+
+  // ── Lock-screen / Control Center / media-notification integration ────────
+  //
+  // Background audio + lock-screen transport (Task #162). Two layers:
+  //   1. Web `navigator.mediaSession` — drives mobile-web/PWA now-playing AND,
+  //      inside the Android Chromium System WebView, the media-style
+  //      notification + background playback for the native Android app. Gated
+  //      OFF on native iOS so the native plugin (below) is the sole owner of
+  //      the WKWebView lock-screen info (WKWebView's own MediaSession would
+  //      otherwise fight MPNowPlayingInfoCenter).
+  //   2. Native `NowPlaying` plugin — iOS only; sets AVAudioSession `.playback`
+  //      (keeps audio alive when locked/backgrounded), populates the lock
+  //      screen with artwork/metadata/position, and forwards MPRemoteCommand
+  //      transport back here. No-op on Android/web (plugin absent).
+  //
+  // Latest control callbacks are read through a ref so the OS action handlers
+  // register once and never go stale, without re-subscribing on every render.
+  const mediaControlsRef = useRef({
+    togglePlay,
+    next: handleNext,
+    prev: handlePrev,
+    seekTo,
+  });
+  useEffect(() => {
+    mediaControlsRef.current = {
+      togglePlay,
+      next: handleNext,
+      prev: handlePrev,
+      seekTo,
+    };
+  }, [togglePlay, handleNext, handlePrev, seekTo]);
+
+  // Publish current-track metadata to the OS (song change only).
+  useEffect(() => {
+    const song = currentSong;
+    const ms: any =
+      typeof navigator !== "undefined" ? (navigator as any).mediaSession : undefined;
+
+    if (!song) {
+      if (ms) {
+        try {
+          ms.metadata = null;
+        } catch {}
+      }
+      clearNowPlaying();
+      return;
+    }
+
+    const title = song.title ?? "";
+    const artist = song.album?.artist ?? "";
+    const albumTitle = song.album?.title ?? "";
+    const artwork = song.album?.artwork ?? undefined;
+
+    // Web MediaSession — skip on native iOS (native plugin owns the lock screen).
+    if (ms && !isNativeIOS && typeof (window as any)?.MediaMetadata === "function") {
+      try {
+        ms.metadata = new (window as any).MediaMetadata({
+          title,
+          artist,
+          album: albumTitle,
+          artwork: artwork
+            ? [96, 128, 192, 256, 384, 512].map((sz) => ({
+                src: artwork,
+                sizes: `${sz}x${sz}`,
+                type: "image/jpeg",
+              }))
+            : [],
+        });
+      } catch {}
+    }
+
+    // Native iOS lock screen.
+    setNowPlayingMetadata({ title, artist, album: albumTitle, artworkUrl: artwork, duration });
+    // duration is intentionally excluded from deps — the position effect below
+    // republishes it once loadedmetadata resolves the real length.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    currentSong?.id,
+    currentSong?.title,
+    currentSong?.album?.artist,
+    currentSong?.album?.title,
+    currentSong?.album?.artwork,
+  ]);
+
+  // Keep the web MediaSession playback-state + scrubber position live. Cheap
+  // (in-process), so it runs on every currentTime tick.
+  useEffect(() => {
+    const ms: any =
+      typeof navigator !== "undefined" ? (navigator as any).mediaSession : undefined;
+    if (!ms || isNativeIOS) return;
+    try {
+      ms.playbackState = isPlaying ? "playing" : "paused";
+    } catch {}
+    if (
+      typeof ms.setPositionState === "function" &&
+      Number.isFinite(duration) &&
+      duration > 0
+    ) {
+      try {
+        ms.setPositionState({
+          duration,
+          position: Math.min(Math.max(currentTime, 0), duration),
+          playbackRate: 1,
+        });
+      } catch {}
+    }
+  }, [isPlaying, currentTime, duration]);
+
+  // Mirror playback state + elapsed position to the native lock screen. The
+  // JS↔native bridge is chattier than an in-process call, so throttle the
+  // currentTime pushes to whole-second granularity while still reacting
+  // immediately to play/pause, duration, and song changes.
+  const nativeSyncRef = useRef({ sec: -1, playing: false, dur: 0, id: "" });
+  useEffect(() => {
+    const st = nativeSyncRef.current;
+    const sec = Math.floor(currentTime);
+    const id = currentSong?.id ?? "";
+    if (st.sec === sec && st.playing === isPlaying && st.dur === duration && st.id === id) {
+      return;
+    }
+    nativeSyncRef.current = { sec, playing: isPlaying, dur: duration, id };
+    setNowPlayingPlaybackState({ isPlaying, elapsed: currentTime, duration });
+  }, [isPlaying, currentTime, duration, currentSong?.id]);
+
+  // Register OS transport action handlers ONCE. All handlers dispatch through
+  // mediaControlsRef so they always call the latest player callbacks.
+  useEffect(() => {
+    // Web MediaSession action handlers (Android WebView + mobile web/PWA).
+    const ms: any =
+      typeof navigator !== "undefined" ? (navigator as any).mediaSession : undefined;
+    const wiredWeb = ms && !isNativeIOS && typeof ms.setActionHandler === "function";
+    if (wiredWeb) {
+      const set = (action: string, fn: ((d?: any) => void) | null) => {
+        try {
+          (ms as any).setActionHandler(action, fn);
+        } catch {}
+      };
+      set("play", () => {
+        if (!isPlayingRef.current) mediaControlsRef.current.togglePlay();
+      });
+      set("pause", () => {
+        if (isPlayingRef.current) mediaControlsRef.current.togglePlay();
+      });
+      set("previoustrack", () => mediaControlsRef.current.prev());
+      set("nexttrack", () => mediaControlsRef.current.next());
+      set("seekto", (d?: any) => {
+        if (d && typeof d.seekTime === "number") mediaControlsRef.current.seekTo(d.seekTime);
+      });
+      set("seekbackward", (d?: any) => {
+        const off = d && typeof d.seekOffset === "number" ? d.seekOffset : 10;
+        mediaControlsRef.current.seekTo(Math.max(0, currentTimeRef.current - off));
+      });
+      set("seekforward", (d?: any) => {
+        const off = d && typeof d.seekOffset === "number" ? d.seekOffset : 10;
+        mediaControlsRef.current.seekTo(currentTimeRef.current + off);
+      });
+    }
+
+    // Native iOS remote commands (MPRemoteCommandCenter → here).
+    const unsubscribeNative = onNowPlayingRemoteCommand((cmd) => {
+      const c = mediaControlsRef.current;
+      switch (cmd.action) {
+        case "play":
+          if (!isPlayingRef.current) c.togglePlay();
+          break;
+        case "pause":
+        case "stop":
+          if (isPlayingRef.current) c.togglePlay();
+          break;
+        case "toggle":
+          c.togglePlay();
+          break;
+        case "next":
+          c.next();
+          break;
+        case "prev":
+          c.prev();
+          break;
+        case "seek":
+          if (typeof cmd.value === "number") c.seekTo(cmd.value);
+          break;
+      }
+    });
+
+    return () => {
+      if (wiredWeb) {
+        const clear = (action: string) => {
+          try {
+            (ms as any).setActionHandler(action, null);
+          } catch {}
+        };
+        [
+          "play",
+          "pause",
+          "previoustrack",
+          "nexttrack",
+          "seekto",
+          "seekbackward",
+          "seekforward",
+        ].forEach(clear);
+      }
+      unsubscribeNative();
+    };
   }, []);
 
   const toggleFavorite = useCallback((songId: string) => {
