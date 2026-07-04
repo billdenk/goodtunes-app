@@ -169,8 +169,6 @@ export function LabelDashboard() {
   const labelName = me.data?.name ?? "Your dashboard";
   const rosterSize = me.data?.rosterSize ?? 0;
   const albumCount = me.data?.albumCount ?? 0;
-  const invitedPress = me.data?.invitedPress ?? null;
-  const hasShippedFirst = !!me.data?.hasShippedFirst;
 
   return (
     <OperatorShell
@@ -180,7 +178,6 @@ export function LabelDashboard() {
       logoUrl={me.data?.logoUrl ?? null}
       fallbackIcon={Building2}
       subtitle={`${rosterSize} artist${rosterSize === 1 ? "" : "s"} · ${albumCount} album${albumCount === 1 ? "" : "s"}`}
-      headerExtras={invitedPress ? <InvitedByPressRow press={invitedPress} hasShippedFirst={hasShippedFirst} /> : null}
       headerActions={
         <>
           <RangePicker presets={RANGE_PRESETS} value={preset} onChange={setPreset} />
@@ -225,42 +222,6 @@ export function LabelDashboard() {
       {tab === "catalog" && <CatalogTab qs={qs} />}
       {tab === "orders" && <OrdersTab qs={qs} labelIdParam={labelIdParam} />}
     </OperatorShell>
-  );
-}
-
-// Task #205 — Read-only "Invited by {Press}" credit on the label
-// dashboard. Mirrors the artist-dashboard row so the two surfaces feel
-// like one product; softens after the label's first physical run ships.
-function InvitedByPressRow({ press, hasShippedFirst }: {
-  press: { id: string; name: string; logoUrl: string | null };
-  hasShippedFirst: boolean;
-}) {
-  const prefix = hasShippedFirst ? "Originally invited by" : "Invited by";
-  return (
-    <div
-      className={`mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1.5 ring-1 ${hasShippedFirst ? "bg-white ring-slate-200 text-slate-500" : "bg-white ring-slate-200 text-slate-700"}`}
-      data-testid="row-invited-by-press"
-    >
-      {press.logoUrl ? (
-        <img src={press.logoUrl} alt="" className="w-5 h-5 rounded-sm object-cover" />
-      ) : (
-        <div className="w-5 h-5 rounded-sm bg-slate-100" />
-      )}
-      <span className="text-[12px]">
-        {prefix}{" "}
-        <span className="font-semibold text-slate-900" data-testid="text-invited-press-name">{press.name}</span>
-      </span>
-      {!hasShippedFirst && (
-        <>
-          <span className="text-slate-300">·</span>
-          <Link href="/chat">
-            <a className="text-xs font-semibold text-[color:var(--brand-blue)] hover:underline" data-testid="link-message-goodtunes">
-              Message GoodTunes to switch
-            </a>
-          </Link>
-        </>
-      )}
-    </div>
   );
 }
 

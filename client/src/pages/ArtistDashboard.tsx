@@ -136,8 +136,6 @@ export function ArtistDashboard() {
   const artistName = me.data?.name ?? "Your dashboard";
   const albumCount = me.data?.albumCount ?? 0;
   const songCount = me.data?.songCount ?? 0;
-  const invitedPress = me.data?.invitedPress ?? null;
-  const hasShippedFirst = !!me.data?.hasShippedFirst;
 
   return (
     <OperatorShell
@@ -165,7 +163,6 @@ export function ArtistDashboard() {
           </button>
         </>
       }
-      headerExtras={invitedPress ? <InvitedByPressRow press={invitedPress} hasShippedFirst={hasShippedFirst} /> : null}
       // The Dashboard tab renders the shared PartnerDashboard primitive, which
       // carries its OWN header + range picker (the super-admin AdminDashboard
       // shape). So on that tab we suppress the shell's page-header identity and
@@ -241,45 +238,6 @@ export function ArtistDashboard() {
       {tab === "buyers" && <BuyersTab qs={qs} personId={me.data?.personId ?? null} />}
       {tab === "referrals" && <ReferralsTab />}
     </OperatorShell>
-  );
-}
-
-// Task #205 — Read-only "Invited by {Press}" credit. Quietly fades to
-// "Originally invited by …" once the partner has shipped their first
-// physical run; the contact link routes to the in-app GoodTunes chat so
-// they can request a switch without an unlock button on this page.
-function InvitedByPressRow({ press, hasShippedFirst }: {
-  press: { id: string; name: string; logoUrl: string | null };
-  hasShippedFirst: boolean;
-}) {
-  const prefix = hasShippedFirst ? "Originally invited by" : "Invited by";
-  return (
-    <div
-      className={`mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1.5 ring-1 ${hasShippedFirst ? "bg-slate-50 ring-slate-200 text-slate-500" : "bg-slate-100 ring-slate-200 text-slate-700"}`}
-      data-testid="row-invited-by-press"
-    >
-      {press.logoUrl ? (
-        <img src={press.logoUrl} alt="" className="w-5 h-5 rounded-sm object-cover" />
-      ) : (
-        <div className="w-5 h-5 rounded-sm bg-slate-100" />
-      )}
-      <span className="text-[12px]">
-        {prefix}{" "}
-        <span className="font-semibold text-slate-900" data-testid="text-invited-press-name">{press.name}</span>
-      </span>
-      {!hasShippedFirst && (
-        <>
-          <span className="text-slate-300">·</span>
-          <a
-            href="/chat"
-            className="text-xs font-semibold text-[color:var(--brand-blue)] hover:underline"
-            data-testid="link-message-goodtunes"
-          >
-            Message GoodTunes to switch
-          </a>
-        </>
-      )}
-    </div>
   );
 }
 
