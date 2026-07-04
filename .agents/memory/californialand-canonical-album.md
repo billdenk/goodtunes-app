@@ -25,6 +25,17 @@ every non-canonical duplicate, then hands `californialand` to the canonical. Abo
 songs/orders/grants; self-gates to a no-op on any DB without the artist/release (all
 dev clones — dev only has the unrelated "California Way").
 
+**Prod status (verified 2026-07-04, still PENDING re-run):** the step FAILED SOFT on
+the original merge — as of 2026-07-04 prod had NO marker, the canonical was still on
+`californialand-2`, and one *trashed* empty shell still squatted the clean
+`californialand` slug (the two empty shells were trashed manually on 07-02/07-03, on
+different days, so they were NOT trashed by this reconcile). Because it fails soft
+(WARNING, no marker, continue) a silent no-op is expected until it re-runs. The current
+prod state now satisfies every guard (exactly 1 canonical-with-songs, 0 duplicates with
+songs/orders/grants, no *live* row holding `californialand`), so the marker-absent,
+idempotent step re-fires and completes on the NEXT post-merge run. Re-verify prod after
+merge: marker present + canonical on `californialand` + shell slugs cleared.
+
 **Why it's safe to hand the slug over even while a trashed shell still holds it:**
 `albums_artist_share_slug_unique` is a PARTIAL unique `WHERE deleted_at IS NULL`, so a
 soft-deleted shell doesn't block the live canonical. The step still clears the shell's
