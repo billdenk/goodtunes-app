@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, Mail, Phone, MapPin, ShoppingBag, Disc3, ListMusic, CheckCircle2, Plus, X, Search, Link2, AlertTriangle, ArrowLeftRight, Users, Pencil } from "lucide-react";
@@ -144,6 +144,27 @@ export function AdminCustomerDetail() {
   // Task #1342 (#1) — open the shared order Sheet inline instead of bouncing
   // to the un-drillable /admin/orders?orderId= list.
   const [openOrderId, setOpenOrderId] = useState<string | null>(null);
+
+  // Task #2455 — the top stat cards jump to their matching detail section
+  // and briefly highlight it so the operator sees where they landed.
+  const [highlightSection, setHighlightSection] = useState<string | null>(null);
+  const highlightTimer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+  }, []);
+  const jumpToSection = (key: "orders" | "collection" | "playlists") => {
+    document
+      .getElementById(`section-${key}`)
+      ?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+        block: "start",
+      });
+    setHighlightSection(key);
+    if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+    highlightTimer.current = window.setTimeout(() => setHighlightSection(null), 1600);
+  };
 
   // Task #1342 (#5) — quiet "Make admin…" action, super_admin only.
   const { data: meRole } = useQuery<{ role: string }>({
@@ -431,10 +452,10 @@ export function AdminCustomerDetail() {
         {/* Top stat strip — keeps the most-asked numbers visible without
             making the operator count rows in each section. */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Stat label="Orders" value={String(orders.length)} testId="stat-orders" />
-          <Stat label="Lifetime" value={formatMoney(lifetime)} testId="stat-lifetime" />
-          <Stat label="Collection" value={String(ownedCollectionCount)} testId="stat-collection" />
-          <Stat label="Playlists" value={String(playlists.length)} testId="stat-playlists" />
+          <Stat label="Orders" value={String(orders.length)} testId="stat-orders" onClick={() => jumpToSection("orders")} />
+          <Stat label="Lifetime" value={formatMoney(lifetime)} testId="stat-lifetime" onClick={() => jumpToSection("orders")} />
+          <Stat label="Collection" value={String(ownedCollectionCount)} testId="stat-collection" onClick={() => jumpToSection("collection")} />
+          <Stat label="Playlists" value={String(playlists.length)} testId="stat-playlists" onClick={() => jumpToSection("playlists")} />
         </div>
 
         {/* Addresses */}
@@ -456,7 +477,7 @@ export function AdminCustomerDetail() {
         </Section>
 
         {/* Orders */}
-        <Section title={`Orders (${orders.length})`}>
+        <Section id="section-orders" highlighted={highlightSection === "orders"} title={`Orders (${orders.length})`}>
           {orders.length === 0 ? (
             <EmptyRow icon={ShoppingBag} text="No orders yet." />
           ) : (
@@ -516,6 +537,8 @@ export function AdminCustomerDetail() {
 
         {/* Collection */}
         <Section
+          id="section-collection"
+          highlighted={highlightSection === "collection"}
           title={`Collection (${ownedCollectionCount})`}
           action={id ? <GrantAlbumGate customerId={id} ownedAlbumIds={collection.filter((a) => !a.isPreview).map((a) => a.albumId)} previewAlbumIds={collection.filter((a) => a.isPreview).map((a) => a.albumId)} /> : null}
         >
@@ -565,7 +588,7 @@ export function AdminCustomerDetail() {
         <MergeAuditSection customerId={c.id} />
 
         {/* Playlists */}
-        <Section title={`Playlists (${playlists.length})`}>
+        <Section id="section-playlists" highlighted={highlightSection === "playlists"} title={`Playlists (${playlists.length})`}>
           {playlists.length === 0 ? (
             <EmptyRow icon={ListMusic} text="No playlists yet." />
           ) : (
@@ -614,11 +637,38 @@ export function AdminCustomerDetail() {
   );
 }
 
-function Stat({ label, value, testId }: { label: string; value: string; testId?: string }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3" data-testid={testId}>
+function Stat({
+  label,
+  value,
+  testId,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  testId?: string;
+  onClick?: () => void;
+}) {
+  const body = (
+    <>
       <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
       <div className="text-slate-900 text-[18px] font-semibold tabular-nums mt-0.5">{value}</div>
+    </>
+  );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full text-left rounded-lg border border-slate-200 bg-white px-4 py-3 cursor-pointer transition-colors hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50"
+        data-testid={testId}
+      >
+        {body}
+      </button>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3" data-testid={testId}>
+      {body}
     </div>
   );
 }
@@ -1164,9 +1214,28 @@ function CombineAccountsPanel({ anchorId, anchorName }: { anchorId: string; anch
   );
 }
 
-function Section({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
+function Section({
+  title,
+  children,
+  action,
+  id,
+  highlighted,
+}: {
+  title: string;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+  id?: string;
+  highlighted?: boolean;
+}) {
   return (
-    <section className="space-y-2">
+    <section
+      id={id}
+      className={`space-y-2 scroll-mt-20 rounded-lg transition-shadow duration-500 ${
+        highlighted
+          ? "ring-2 ring-[var(--brand-blue)] ring-offset-4 ring-offset-slate-50"
+          : "ring-0"
+      }`}
+    >
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
         {action}
