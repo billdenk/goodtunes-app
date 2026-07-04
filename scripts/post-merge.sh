@@ -8896,3 +8896,103 @@ SQL
 }
 reconcile_task_2454_californialand dev  "${DATABASE_URL:-}"
 reconcile_task_2454_californialand prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #2460 — Strip Apple Music boilerplate bios (NBSP root cause) ──
+# The gear/artist scraper used to capture Apple's "Listen to music by
+# <Artist> on Apple Music." sentence as a "bio". Apple serves that phrase
+# with a NON-BREAKING SPACE (U+00A0) between "Apple" and "Music" (so it
+# never line-wraps), and the earlier cleanup regexes (#1710 / #2057) only
+# matched literal ASCII spaces — so they silently no-op'd on every affected
+# row. shared/appleMusicBio.ts now matches any Unicode whitespace; this is
+# the matching ONE-TIME, marker-guarded data backfill that normalizes the
+# already-stored rows so nothing has to lean on the render guards forever.
+#
+# It normalizes the known Unicode space variants to ASCII first, then strips
+# the boilerplate sentence (whitespace-tolerant, case-insensitive), collapses
+# leftover whitespace, and NULLs any bio left with no alphanumerics — mirroring
+# stripAppleMusicBoilerplate() exactly. Gated to ONLY touch rows that actually
+# contain the phrase (via has_am_bio), so legitimate bios are never rewritten.
+# Runs across every table that carries a scrapable bio (people, labels,
+# managers, vendors, manufacturers, fulfillment_partners). Idempotent + marker-
+# guarded (post_merge_data_backfills), NEW marker (never reuses #1710/#2057);
+# a clone with no boilerplate rows updates nothing but still stamps the marker.
+strip_task_2460_apple_music_bios() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2460 Apple-Music bio strip on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_total integer := 0;
+  v_n     integer := 0;
+  r       record;
+BEGIN
+  IF EXISTS (SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2460_strip_apple_music_bios') THEN
+    RAISE NOTICE 'task-2460 Apple-Music bio strip already applied — skipping';
+    RETURN;
+  END IF;
+
+  -- Normalize the known Unicode space variants (NBSP, narrow-NBSP, thin,
+  -- medium-mathematical, ideographic, line/para separators, ZWNBSP) to a
+  -- plain ASCII space so the ASCII-anchored regexes below can match.
+  CREATE OR REPLACE FUNCTION pg_temp.am_norm(s text) RETURNS text AS $fn$
+    SELECT translate(s, E'\u00a0\u202f\u2009\u205f\u3000\u2028\u2029\ufeff', '        ');
+  $fn$ LANGUAGE sql IMMUTABLE;
+
+  -- Does this bio contain the boilerplate sentence (whitespace-tolerant)?
+  CREATE OR REPLACE FUNCTION pg_temp.am_has(s text) RETURNS boolean AS $fn$
+    SELECT s IS NOT NULL AND pg_temp.am_norm(s) ~*
+      'listen[[:space:]]+to[[:space:]]+music[[:space:]]+by[[:space:]]+.+?[[:space:]]+on[[:space:]]+apple[[:space:]]+music';
+  $fn$ LANGUAGE sql IMMUTABLE;
+
+  -- Strip the boilerplate + tidy leftover whitespace; return NULL when nothing
+  -- with an alphanumeric survives. Mirrors stripAppleMusicBoilerplate().
+  CREATE OR REPLACE FUNCTION pg_temp.am_strip(s text) RETURNS text AS $fn$
+  DECLARE o text;
+  BEGIN
+    IF s IS NULL THEN RETURN NULL; END IF;
+    o := pg_temp.am_norm(s);
+    o := regexp_replace(o, 'listen[[:space:]]+to[[:space:]]+music[[:space:]]+by[[:space:]]+.+?[[:space:]]+on[[:space:]]+apple[[:space:]]+music\.?', ' ', 'gi');
+    o := regexp_replace(o, '[ \t]{2,}', ' ', 'g');
+    o := regexp_replace(o, E'\n{3,}', E'\n\n', 'g');
+    o := btrim(o);
+    IF o ~* '[a-z0-9]' THEN RETURN o; ELSE RETURN NULL; END IF;
+  END;
+  $fn$ LANGUAGE plpgsql IMMUTABLE;
+
+  FOR r IN
+    SELECT unnest(ARRAY['people','labels','managers','vendors','manufacturers','fulfillment_partners']) AS tbl
+  LOOP
+    EXECUTE format(
+      'UPDATE %I SET bio = pg_temp.am_strip(bio) WHERE pg_temp.am_has(bio)', r.tbl);
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    v_total := v_total + v_n;
+    IF v_n > 0 THEN
+      RAISE NOTICE 'task-2460: stripped % boilerplate bio(s) from %', v_n, r.tbl;
+    END IF;
+  END LOOP;
+
+  INSERT INTO post_merge_data_backfills (name) VALUES ('task_2460_strip_apple_music_bios');
+  RAISE NOTICE 'task-2460 Apple-Music bio strip applied: % row(s) cleaned across all bio tables', v_total;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2460 Apple-Music bio strip ok on $label"
+    echo "$out" | grep -i 'task-2460' || true
+  else
+    echo "post-merge: WARNING — task-2460 Apple-Music bio strip failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+strip_task_2460_apple_music_bios dev  "${DATABASE_URL:-}"
+strip_task_2460_apple_music_bios prod "${PROD_DATABASE_URL:-}"

@@ -38,6 +38,7 @@ import { findChorusStartMs, findChorusCueIndex } from "./lib/chorusFinder";
 import { planAutoGoodSyncUpdates, decideInstrumental } from "./lib/autoGoodSyncPolicy";
 import { detectExplicitLyrics } from "./lib/explicitLyrics";
 import { hasArtistShape, personShape } from "./lib/personArtistShape";
+import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
 import {
   resolveMakerHostFromBrand as resolveMakerHostFromBrandShared,
   buildHostSlot as buildHostSlotShared,
@@ -6949,23 +6950,6 @@ export async function registerRoutes(
     if (/(^|\.)music\.apple\.com$/.test(host)) return { kind: "appleMusicUrl", url: u.toString() };
     if (/(^|\.)linkedin\.com$/.test(host)) return { kind: "linkedinUrl", url: u.toString() };
     return { kind: "websiteUrl", url: u.toString() };
-  }
-  // Drop Apple Music's boilerplate "Listen to music by … on Apple Music."
-  // sentence wherever it appears. Apple serves this as the og:description on
-  // artist/label pages, so the person/vendor/label scrapers used to capture
-  // it verbatim as a "bio" — it's noise, not biography. If nothing of
-  // substance survives the strip, the bio collapses to "" (treated as no bio
-  // by callers). Shared by cleanBioText (person path) and the label/vendor
-  // scrapers. (Task #1710)
-  function stripAppleMusicBoilerplate(s: string | null | undefined): string {
-    if (!s) return "";
-    const out = s
-      .replace(/listen to music by .+? on apple music\.?/gi, " ")
-      .replace(/[ \t]{2,}/g, " ")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-    // Only-punctuation/whitespace left over → treat as empty.
-    return /[a-z0-9]/i.test(out) ? out : "";
   }
   // Strip HTML out of a JSON-LD description (Shopify / Squarespace embed
   // <p>/<br>) and collapse whitespace, then drop Apple Music boilerplate.

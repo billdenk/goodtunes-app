@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getInitials } from "@/lib/initials";
 import { formatUsdCents } from "@shared/money";
+import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
 import { Link, useRoute, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ViewAsPartnerButton } from "@/components/admin/ViewAsPartnerButton";
@@ -515,13 +516,13 @@ function PressPersonOverview({
             {labelName ? `Signed to ${labelName}` : "Independent"}
           </div>
         </div>
-        {person.bio && (
+        {stripAppleMusicBoilerplate(person.bio) && (
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Bio
             </div>
             <p className="text-slate-600 text-sm mt-1 whitespace-pre-line">
-              {person.bio}
+              {stripAppleMusicBoilerplate(person.bio)}
             </p>
           </div>
         )}
@@ -982,9 +983,9 @@ export function AdminPerson() {
             >
               {person.name}
             </h1>
-            {person.bio && (
+            {stripAppleMusicBoilerplate(person.bio) && (
               <p className="text-slate-500 text-[13px] mt-1 line-clamp-2 max-w-xl">
-                {person.bio}
+                {stripAppleMusicBoilerplate(person.bio)}
               </p>
             )}
           </div>

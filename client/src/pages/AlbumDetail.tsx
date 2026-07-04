@@ -119,6 +119,7 @@ import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { AlbumDetailDesktop } from "@/pages/AlbumDetailDesktop";
 import { shareAlbum } from "@/lib/shareAlbum";
 import { isSunrisePending, formatSalesBeginDate, hasReachedSunset, albumStage } from "@shared/albumStage";
+import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
 import { SalesBeginArrivalModal } from "@/components/ui/SalesBeginArrivalModal";
 import { goBack } from "@/lib/navHistory";
 
@@ -2207,22 +2208,6 @@ export function SheetHeader({ eyebrow, title, subtitle, onClose }: { eyebrow?: s
       />
     </div>
   );
-}
-
-// Drop Apple Music's boilerplate "Listen to music by … on Apple Music."
-// sentence wherever it appears. The scraper used to capture this as a "bio";
-// the server now strips it at import and a one-time backfill nulls existing
-// rows, but this is a defensive render-time guard so any boilerplate that
-// slips through never shows on the fan sheet. Returns "" when nothing of
-// substance survives. (Task #1710)
-export function stripAppleMusicBoilerplate(s: string | null | undefined): string {
-  if (!s) return "";
-  const out = s
-    .replace(/listen to music by .+? on apple music\.?/gi, " ")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  return /[a-z0-9]/i.test(out) ? out : "";
 }
 
 // A credited *instrument* role — guitar, bass, drums, keys, horns, … — as

@@ -159,6 +159,7 @@ import { db } from "./db";
 import { pgArray } from "./lib/pgArray";
 import { softDeleteEntity, restoreEntity, purgeEntity } from "./softDelete";
 import { todayISODate } from "@shared/albumStage";
+import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -1854,11 +1855,22 @@ export class DbStorage implements IStorage {
     return p;
   }
   async createPerson(data: InsertPerson & { id?: string }): Promise<Person> {
-    const [p] = await db.insert(people).values(data as any).returning();
+    // Hard chokepoint: strip Apple-Music boilerplate here so EVERY write path
+    // (scrape import, admin PUT, partner pending-change replay) is covered by
+    // default, not just the routes that remember to sanitize. See
+    // shared/appleMusicBio.ts.
+    const values = { ...(data as any) };
+    if (typeof values.bio === "string") {
+      values.bio = stripAppleMusicBoilerplate(values.bio) || null;
+    }
+    const [p] = await db.insert(people).values(values).returning();
     return p;
   }
   async updatePerson(id: string, data: Partial<Person>): Promise<Person | undefined> {
     const { id: _i, ...rest } = data as any;
+    if (typeof rest.bio === "string") {
+      rest.bio = stripAppleMusicBoilerplate(rest.bio) || null;
+    }
     if (Object.keys(rest).length === 0) return this.getPersonById(id);
     const [p] = await db.update(people).set(rest).where(eq(people.id, id)).returning();
     return p;

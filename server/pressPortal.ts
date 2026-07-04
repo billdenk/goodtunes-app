@@ -28,6 +28,7 @@ import {
 } from "@shared/schema";
 import { evaluateEarlyCut, syncEarlyCutQueue, resolveAlbumPressTier } from "./earlyCut";
 import { hasArtistShape } from "./lib/personArtistShape";
+import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
 
 // Pipeline stage IDs the Pipeline tab renders columns for. Derived in
 // `deriveStage` below — never persisted on the album row.
@@ -1609,7 +1610,7 @@ export function registerPressPortalRoutes(
         INSERT INTO people (name, email, invited_by_press_id, photo_url, bio, spotify_url, apple_music_url, itunes_artist_id)
         VALUES (
           ${name}, ${lower}, ${pressId},
-          ${photoUrl ?? null}, ${bio ?? null},
+          ${photoUrl ?? null}, ${stripAppleMusicBoilerplate(bio) || null},
           ${spotifyUrl ?? null}, ${appleMusicUrl ?? null}, ${itunesArtistId ?? null}
         )
         RETURNING id
