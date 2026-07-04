@@ -1,12 +1,12 @@
 package fm.goodtunes.player;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
@@ -70,7 +70,8 @@ public class NowPlayingPlugin extends Plugin {
         MediaSessionHolder holder = MediaSessionHolder.getInstance(getContext());
         int currentIndex = call.getInt("currentIndex", 0);
         List<MediaSessionHolder.QueueEntry> entries = new ArrayList<>();
-        JSONArray items = call.getArray("items", new JSONArray());
+        JSArray items = call.getArray("items", new JSArray());
+        if (items == null) items = new JSArray();
         for (int i = 0; i < items.length(); i++) {
             JSONObject o = items.optJSONObject(i);
             if (o == null) continue;
