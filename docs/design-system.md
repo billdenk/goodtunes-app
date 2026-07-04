@@ -58,6 +58,19 @@ Mobile player and desktop admin share **icon glyphs** (Lucide for UI chrome, `re
 
 When in doubt on the mobile player: Apple Music, Apple Music, Apple Music. Don't borrow admin chrome (h-9 squares, slate borders) into the player.
 
+### Partner dashboards mirror the super-admin surface (standing rule)
+
+Every partner dashboard (**artist / label / non-profit / manager / press / vendor / publisher / fulfillment**) must mirror the matching **super-admin** surface's UX/UI **identically**. The only two things a partner surface is allowed to change from the operator original are:
+
+1. **Voice / copy** — first-person, partner-scoped wording ("Your team", "you earn $1 per unit") instead of the operator's third-person, all-partners phrasing.
+2. **Permission-removed affordances** — hide/disable the buttons and fields a partner isn't allowed to use (gated by their verbs/scope). Removing an affordance is fine; **restyling, relaying-out, or reinventing one is not.**
+
+**Reuse the super-admin components and primitives** — the same `Card`/header-action pattern, the shadcn `Button` (default filled primary / `ghost` / `outline`), the shadcn `Dialog` for Add/Invite/Edit modals, the same slate token vocabulary below. Do **not** hand-roll bespoke partner-only widgets, custom filled-brand buttons, or inline forms where the operator surface uses a modal.
+
+- **Buttons.** Use the shadcn `Button` under `gt-admin` (light slate). One filled primary per section (the default variant); secondary actions are `ghost`/`outline`. Never drop the fan player's filled `bg-[var(--brand-purple)]` / `bg-[var(--brand-blue)]` chips into a portal — that's fan chrome on an operator surface.
+- **Add / Invite / Edit → modal, not inline.** Match the operator "Add a person" pattern: a single primary CTA in the card header opens a shadcn `Dialog`; don't expand an inline form in place, and don't duplicate the CTA (one open-button per section, not header + empty-state).
+- **Where an operator surface is a nav tab, the partner gets the same nav tab** (via `registry.ts` `OPERATOR_MODULES`), not a section buried inside an unrelated tab.
+
 ### Invited-partner & operator portals are LIGHT-ONLY (admin slate)
 
 Every invited-partner / operator portal — **Press, Vendor (Maker/Reseller), Artist, Label, Non-Profit, Manager, Publisher** — plus their invite panels, renders in the **light admin (Stripe-leaning slate) theme**, identical to the admin/CMS. They are **operator surfaces, not fan surfaces**, so they must **never** use the navy `#00062B` dark chrome. These portals are **light-only** (not dual-theme): hardcode slate classes mirroring the admin frame.

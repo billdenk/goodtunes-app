@@ -58,6 +58,7 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "orders",      label: "Orders",      roles: ["artist"] },
   { id: "buyers",      label: "Buyers",      roles: ["artist"] },
   { id: "referrals",   label: "Referrals",   roles: ["artist"] },
+  { id: "people",      label: "People",      roles: ["artist"] },
 
   // Label shell — `/label` (LabelDashboard.tsx)
   { id: "dashboard",   label: "Dashboard",   roles: ["label"] },

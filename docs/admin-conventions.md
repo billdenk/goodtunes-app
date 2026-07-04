@@ -1,5 +1,18 @@
 # Admin Conventions
 
+## Partner dashboards mirror the super-admin surface (standing rule)
+
+Every partner dashboard (artist / label / non-profit / manager / press / vendor / publisher / fulfillment) mirrors the matching **super-admin** surface's UX/UI **identically**, differing only in **(a) voice/copy** and **(b) permission-removed affordances**. Reuse the operator components and primitives — never a bespoke partner-only redesign.
+
+- **Same layout, same primitives.** Same `Card` + header-action pattern, shadcn `Button` (one filled primary per section; secondary = `ghost`/`outline`), shadcn `Dialog` for Add/Invite/Edit. Add/Invite opens a **modal**, not an inline form; a single open-CTA per section (don't duplicate it in header *and* empty-state). No fan chrome (`bg-[var(--brand-purple)]`/`bg-[var(--brand-blue)]` filled chips) on an operator surface — see `docs/design-system.md` for the slate token vocabulary.
+- **Same nav tab.** If the operator surface is a nav tab, the partner gets the same nav tab via `registry.ts` `OPERATOR_MODULES` (keyed by role), not a sub-section wedged into an unrelated tab. Example: the artist "People" tab (team invites) mirrors the operator People surface rather than living under Referrals.
+- **What you may change.** Only the copy (partner voice) and the affordance set (hide/disable what the partner's verbs/scope don't permit). Removing an affordance is fine; restyling or reinventing one is not.
+- **Scope boundary.** Mirror what already exists — do **not** invent new API endpoints to fabricate a list the operator surface doesn't expose to that partner (e.g. artist teammate invites have no roster read endpoint, so the artist People tab stays create-only).
+
+**Why:** partners should feel like they're using the same product operators use, and every partner dashboard should inherit operator fixes/polish for free instead of drifting into one-off designs.
+
+**How to apply:** before building or editing any partner dashboard surface, find the operator equivalent, copy its structure/primitives, then subtract permissions and rewrite the copy. If there's no operator equivalent, that's a signal to build it operator-first (or ask Bill) rather than inventing a partner-only widget.
+
 ## Platform pricing — snapshot, don't recompute
 
 Platform-wide costs (today: the certificate cost on `payout_settings.cert_cost_cents`, the Shopify fee on `payout_settings.shopify_fee_cents`) drive the artist's per-unit profit on every Sell panel. The Platform Pricing page at `/admin/platform-pricing` is super-admin-only and writes the singleton row. Other admin roles can still **read** the settings (the GET is open to admin) so the SellPanel can render its profit readout.

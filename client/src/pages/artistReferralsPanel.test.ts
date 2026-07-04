@@ -11,8 +11,9 @@
 //     at-cap copy when outstanding >= cap.
 //   • Each invite row shows the right status pill (Invited / Joined / Revoked
 //     / Expired) and joined rows show units sold + pending payout.
-//   • The empty state renders (with the "Send your first invite" CTA) when
-//     there are no invites.
+//   • The empty state renders when there are no invites, with the single
+//     header "Invite" CTA (Task #2495 collapsed the old header + empty-state
+//     CTAs into one primary that opens a modal).
 //
 // We render the REAL InviteArtistPanel into jsdom, seeding the three queries it
 // reads (/api/artist/invites, /api/artist/earmarked, /api/artist/referrals)
@@ -300,15 +301,18 @@ test("invite rows show the correct status pill per state", async () => {
   }
 });
 
-test("empty state renders with the 'Send your first invite' CTA when there are no invites", async () => {
+test("empty state renders with the single header 'Invite' CTA when there are no invites", async () => {
   const { q, teardown } = await mount({ cap: 5, outstanding: 0, invites: [] });
   try {
     assert.ok(q("empty-artist-invites"), "empty state renders");
     assert.equal(q("list-artist-invites"), null, "no invite list when empty");
     assert.equal(q("referral-funnel"), null, "no funnel strip when nothing sent");
-    const cta = q("button-empty-invite-artist");
-    assert.ok(cta, "the empty CTA renders");
-    assert.match(cta!.textContent ?? "", /Send your first invite/);
+    // The invite affordance is now a single primary CTA in the card header
+    // (opens a modal), not a second empty-state button.
+    const cta = q("button-open-invite-artist");
+    assert.ok(cta, "the single header CTA renders");
+    assert.equal((cta as HTMLButtonElement).disabled, false, "CTA is enabled when under cap");
+    assert.equal(q("button-empty-invite-artist"), null, "the old duplicate empty-state CTA is gone");
     assert.equal(
       q("text-invite-slots")?.textContent,
       "5 of 5 invite slots left",

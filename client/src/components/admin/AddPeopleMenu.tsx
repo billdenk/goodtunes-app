@@ -94,7 +94,7 @@ export interface AddPeopleMenuProps {
   canAddAdmins?: boolean;
 }
 
-type PersonLite = { id: string; name: string; photoUrl: string | null };
+export type PersonLite = { id: string; name: string; photoUrl: string | null };
 
 function humanizeApiError(err: unknown): string {
   const body = apiErrorBody<{ message?: string }>(err);
@@ -223,7 +223,11 @@ type ScrapePersonResult = {
   links?: Array<{ kind: string; url: string }>;
 };
 
-function PersonPicker({
+// Task #2495 — exported so partner dashboards (e.g. the artist Referrals
+// invite) reuse the exact same "Add a person" search UX — internal catalog
+// search → Spotify fallback → create-from-name / paste — instead of a
+// bespoke name field. Keep this the single source of that control.
+export function PersonPicker({
   value,
   onChange,
   excludeIds,

@@ -24,9 +24,13 @@ import {
 // Heart for song-favorite metrics — keeps the artist dashboard's
 // favourites column visually paired with the player's heart action.
 import {
-  Heart, User as UserIcon, Users, LayoutDashboard, BarChart3, Megaphone,
+  Heart, User as UserIcon, Users, Users2, LayoutDashboard, BarChart3, Megaphone,
   Disc3, ShoppingBag, FileBarChart, UserCheck, UserPlus,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
 import { OperatorShell } from "@/components/operator/OperatorShell";
@@ -37,6 +41,14 @@ import { BRAND, SKU_COLORS, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 import {
   KpiCard, KpiCardSkeleton, kpiInfoKeyFromTestId, type KpiCardModel,
 } from "@/components/admin/KpiCard";
+// Task #2495 — reuse the shared super-admin "Add a person" search control
+// (internal catalog search → Spotify → create-from-name) for the artist
+// Referrals invite, instead of a bespoke name field.
+import { PersonPicker, type PersonLite } from "@/components/admin/AddPeopleMenu";
+
+// PersonPicker needs an excludeIds set; the artist invite never excludes
+// anyone, so reuse one stable empty set.
+const NO_EXCLUDE: Set<string> = new Set();
 
 type Range = { from: string; to: string };
 type Kpis = {
@@ -110,9 +122,9 @@ function rangeFor(preset: PresetId): Range {
 export function ArtistDashboard() {
   const [preset, setPreset] = useState<PresetId>(() => presetFromSearch(window.location.search) ?? "30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"dashboard" | "overview" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals">(() => {
+  const [tab, setTab] = useState<"dashboard" | "overview" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people">(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
-    if (t === "dashboard" || t === "overview" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals") return t;
+    if (t === "dashboard" || t === "overview" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals" || t === "people") return t;
     return "dashboard";
   });
   // Task #2486 — Dashboard-tab KPI tiles deep-link via `?tab=…` (wouter
@@ -226,6 +238,7 @@ export function ArtistDashboard() {
         orders: ShoppingBag,
         buyers: UserCheck,
         referrals: UserPlus,
+        people: Users2,
       }}
       navExtras={[{ id: "reports", label: "Reports", href: "/admin/reports", icon: FileBarChart }]}
     >
@@ -268,12 +281,13 @@ export function ArtistDashboard() {
       {tab === "orders" && <OrdersTab qs={qs} />}
       {tab === "buyers" && <BuyersTab qs={qs} personId={me.data?.personId ?? null} />}
       {tab === "referrals" && <ReferralsTab />}
+      {tab === "people" && <ArtistPeoplePanel />}
     </OperatorShell>
   );
 }
 
 const ARTIST_TABS = modulesForRole("artist") as ReadonlyArray<{
-  id: "dashboard" | "overview" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals";
+  id: "dashboard" | "overview" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people";
   label: string;
 }>;
 type ArtistTabId = (typeof ARTIST_TABS)[number]["id"];
@@ -742,15 +756,20 @@ type SwapRow = SwapApiRow & { role: "referrer" | "invitee" };
 // path, locked to the caller's own artist scope. Manager/Team invites
 // flow into the claimed-Person review queue if the target Person is
 // claimed and the caller's email isn't on file.
-function InviteTeammatePanel() {
+// Task #2495 — "People" tab. Mirrors the super-admin People surface (Card +
+// header primary + Add-in-a-modal), differing only in voice and the
+// permission-scoped affordance set: an artist can invite managers/band
+// members onto their OWN scope, but there is no roster read endpoint for
+// artist teammates (team invites are excluded from the referral list on the
+// server), so this stays create-only — no fabricated list.
+function ArtistPeoplePanel() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"manager" | "team">("team");
-  // Task #351 — Resolve the caller's Person so the panel can show
-  // "Inviting for {artistName}". Makes it explicit which artist the
-  // invite is scoped to (the server-side wrapper hardcodes the caller's
-  // own scope; we surface it here so the artist can confirm).
+  // Task #351 — Resolve the caller's Person so the panel can show whose
+  // team this is. The server-side wrapper hardcodes the caller's own scope;
+  // we surface the name so the artist can confirm.
   const meQ = useQuery<{ person?: { name: string } | null } | null>({
     queryKey: ["/api/artist/me"],
   });
@@ -773,48 +792,83 @@ function InviteTeammatePanel() {
     onError: (e: Error) => toast({ title: "Couldn't invite", description: e.message, variant: "destructive" }),
   });
   return (
-    <Card title="Your team" subtitle={targetName ? `Inviting for ${targetName}` : "Invite a manager or band member"} testId="invite-teammate-panel">
-      {!open ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="text-xs font-semibold text-white bg-[var(--brand-blue)] hover:opacity-90 rounded-md px-3 py-1.5"
-          data-testid="button-open-invite-teammate"
-        >
-          Invite a teammate
-        </button>
-      ) : (
-        <form
-          onSubmit={(e) => { e.preventDefault(); if (email.trim()) m.mutate(); }}
-          className="flex flex-col sm:flex-row gap-2"
-          data-testid="form-invite-teammate"
-        >
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="teammate@example.com"
-            required
-            className="flex-1 px-3 py-2 rounded-md bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm"
-            data-testid="input-teammate-email"
-          />
-          <select
-            value={inviteRole}
-            onChange={(e) => setInviteRole(e.target.value as any)}
-            className="px-3 py-2 rounded-md bg-white border border-slate-200 text-slate-900 text-sm"
-            data-testid="select-teammate-role"
+    <Card
+      title="Your team"
+      subtitle={targetName ? `People who help run ${targetName}` : "Managers and band members"}
+      testId="artist-people-panel"
+      action={
+        <Button size="sm" onClick={() => setOpen(true)} data-testid="button-open-invite-teammate">
+          <UserPlus className="w-4 h-4" /> Add teammate
+        </Button>
+      }
+    >
+      <div
+        className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center"
+        data-testid="empty-team"
+      >
+        <p className="font-semibold text-sm text-slate-900">Bring your team onboard</p>
+        <p className="mx-auto mt-1 max-w-sm text-slate-500 text-xs">
+          Invite a manager or band member to help run your presence on GoodTunes.
+          They'll get their own sign-in — you stay in control of what they can do.
+        </p>
+      </div>
+
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEmail(""); }}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-invite-teammate">
+          <DialogHeader>
+            <DialogTitle>Add a teammate</DialogTitle>
+            <DialogDescription>
+              {targetName ? `They'll join ${targetName}'s team.` : "They'll join your team."} We'll email them an invite to accept.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            id="form-invite-teammate"
+            onSubmit={(e) => { e.preventDefault(); if (email.trim()) m.mutate(); }}
+            className="space-y-3"
+            data-testid="form-invite-teammate"
           >
-            <option value="team">Team (band/team member)</option>
-            <option value="manager">Manager</option>
-          </select>
-          <button type="submit" disabled={m.isPending} className="px-3 py-2 text-sm font-semibold text-white bg-[var(--brand-blue)] hover:opacity-90 rounded-md disabled:opacity-50" data-testid="button-send-teammate-invite">
-            {m.isPending ? "Sending…" : "Send invite"}
-          </button>
-          <button type="button" onClick={() => setOpen(false)} className="px-3 py-2 text-sm text-slate-600 hover:text-slate-900" data-testid="button-cancel-teammate-invite">
-            Cancel
-          </button>
-        </form>
-      )}
+            <div className="flex gap-2">
+              {(["team", "manager"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setInviteRole(r)}
+                  className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    inviteRole === r
+                      ? "border-transparent bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:text-slate-900"
+                  }`}
+                  data-testid={`button-teammate-role-${r}`}
+                >
+                  {r === "team" ? "Band / team member" : "Manager"}
+                </button>
+              ))}
+            </div>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="teammate@example.com"
+              required
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400"
+              data-testid="input-teammate-email"
+            />
+          </form>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)} data-testid="button-cancel-teammate-invite">
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="form-invite-teammate"
+              disabled={m.isPending}
+              data-testid="button-send-teammate-invite"
+            >
+              {m.isPending ? "Sending…" : "Send invite"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
@@ -880,6 +934,11 @@ export function InviteArtistPanel() {
   const [welcomeNote, setWelcomeNote] = useState("");
   // Task #952 — an artist can invite a fresh artist OR a fresh label.
   const [inviteeRole, setInviteeRole] = useState<"artist" | "label">("artist");
+  // Task #2495 — the artist invitee is chosen through the SHARED PersonPicker
+  // (catalog search → Spotify → create-from-name), the same "Add a person"
+  // control the super-admin Invite Artist flow uses. We mirror the picked
+  // name into `name` so the existing referral submit path is unchanged.
+  const [picked, setPicked] = useState<PersonLite | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const list = useQuery<{ invites: ArtistInviteRow[]; outstanding: number; cap: number }>({
@@ -913,7 +972,7 @@ export function InviteArtistPanel() {
     },
     onSuccess: (data: any) => {
       const kind = inviteeRole;
-      setEmail(""); setName(""); setWelcomeNote(""); setInviteeRole("artist"); setOpen(false);
+      setEmail(""); setName(""); setWelcomeNote(""); setInviteeRole("artist"); setPicked(null); setOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/artist/invites"] });
       queryClient.invalidateQueries({ queryKey: ["/api/artist/earmarked"] });
       toast({
@@ -984,17 +1043,37 @@ export function InviteArtistPanel() {
   const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
   const pickSuggestion = (s: EarmarkedSuggestion) => {
+    setInviteeRole("artist");
+    setPicked({ id: s.id, name: s.name, photoUrl: null });
     setName(s.name);
     setEmail(s.email);
     setOpen(true);
   };
+
+  const closeInvite = () => { setOpen(false); setEmail(""); setName(""); setWelcomeNote(""); setInviteeRole("artist"); setPicked(null); };
 
   return (
     <Card
       title="Invite an artist or label"
       subtitle="Invite verified artists & labels — you earn $1 on every paid unit they ship, for life."
       testId="invite-artist-panel"
+      action={
+        <Button
+          size="sm"
+          onClick={() => setOpen(true)}
+          disabled={atCap}
+          data-testid="button-open-invite-artist"
+        >
+          <UserPlus className="w-4 h-4" /> Invite
+        </Button>
+      }
     >
+      <p className="text-slate-500 text-xs mb-3" data-testid="text-invite-slots">
+        {atCap
+          ? "All invite slots used — revoke one below to free a slot"
+          : `${slotsLeft} of ${cap} invite slot${cap === 1 ? "" : "s"} left`}
+      </p>
+
       {sentCount > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4" data-testid="referral-funnel">
           <FunnelStat label="Invites sent" value={String(sentCount)} testId="funnel-sent" />
@@ -1004,91 +1083,101 @@ export function InviteArtistPanel() {
         </div>
       )}
 
-      {!open ? (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            disabled={atCap}
-            className="text-xs font-semibold text-white bg-[var(--brand-purple)] hover:opacity-90 rounded-md px-3 py-1.5 disabled:opacity-40"
-            data-testid="button-open-invite-artist"
+      <Dialog open={open} onOpenChange={(o) => { if (o) setOpen(true); else closeInvite(); }}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-invite-artist">
+          <DialogHeader>
+            <DialogTitle>Invite an artist or label</DialogTitle>
+            <DialogDescription>
+              We'll email them an invite to join GoodTunes. You earn $1 on every paid unit they ship, for life.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            id="form-invite-artist"
+            onSubmit={(e) => { e.preventDefault(); if (email.trim() && name.trim() && !atCap) send.mutate(); }}
+            className="space-y-3"
+            data-testid="form-invite-artist"
           >
-            Invite an artist or label
-          </button>
-          <span className="text-slate-500 text-xs" data-testid="text-invite-slots">
-            {atCap
-              ? "All invite slots used — revoke one below to free a slot"
-              : `${slotsLeft} of ${cap} invite slot${cap === 1 ? "" : "s"} left`}
-          </span>
-        </div>
-      ) : (
-        <form
-          onSubmit={(e) => { e.preventDefault(); if (email.trim() && name.trim() && !atCap) send.mutate(); }}
-          className="flex flex-col gap-2"
-          data-testid="form-invite-artist"
-        >
-          <div className="flex gap-1.5" data-testid="toggle-invitee-role">
-            {(["artist", "label"] as const).map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setInviteeRole(r)}
-                className={`text-xs font-semibold rounded-md px-3 py-1.5 border ${inviteeRole === r ? "bg-[var(--brand-purple)] text-white border-transparent" : "bg-white text-slate-600 border-slate-200 hover:text-slate-900"}`}
-                data-testid={`button-invitee-role-${r}`}
-              >
-                {r === "artist" ? "Artist" : "Label"}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={inviteeRole === "label" ? "Label name" : "Artist name"}
-              required
-              className="flex-1 px-3 py-2 rounded-md bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm"
-              data-testid="input-artist-name"
-            />
+            <div className="flex gap-2" data-testid="toggle-invitee-role">
+              {(["artist", "label"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setInviteeRole(r)}
+                  className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    inviteeRole === r
+                      ? "border-transparent bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:text-slate-900"
+                  }`}
+                  data-testid={`button-invitee-role-${r}`}
+                >
+                  {r === "artist" ? "Artist" : "Label"}
+                </button>
+              ))}
+            </div>
+            {inviteeRole === "artist" ? (
+              <div className="space-y-1.5" data-testid="picker-artist-invite">
+                <PersonPicker
+                  value={picked}
+                  onChange={(p) => { setPicked(p); setName(p?.name ?? ""); }}
+                  excludeIds={NO_EXCLUDE}
+                  testIdPrefix="artist-invite"
+                  enableSpotify
+                  hidePaste
+                />
+                <p className="text-xs text-slate-500">
+                  Search GoodTunes, then Spotify. New to us? Create them from the name.
+                </p>
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Label name"
+                required
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400"
+                data-testid="input-label-name"
+              />
+            )}
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="artist@example.com"
               required
-              className="flex-1 px-3 py-2 rounded-md bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm"
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400"
               data-testid="input-artist-email"
             />
-          </div>
-          <textarea
-            value={welcomeNote}
-            onChange={(e) => setWelcomeNote(e.target.value)}
-            placeholder="Optional personal note (1-2 sentences)"
-            maxLength={1000}
-            rows={2}
-            className="px-3 py-2 rounded-md bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm"
-            data-testid="input-artist-welcome-note"
-          />
-          <div className="flex gap-2">
-            <button
+            <textarea
+              value={welcomeNote}
+              onChange={(e) => setWelcomeNote(e.target.value)}
+              placeholder="Optional personal note (1-2 sentences)"
+              maxLength={1000}
+              rows={2}
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400"
+              data-testid="input-artist-welcome-note"
+            />
+          </form>
+          <DialogFooter>
+            <Button variant="ghost" onClick={closeInvite} data-testid="button-cancel-artist-invite">
+              Cancel
+            </Button>
+            <Button
               type="submit"
-              disabled={send.isPending || atCap}
-              className="px-3 py-2 text-sm font-semibold text-white bg-[var(--brand-purple)] hover:opacity-90 rounded-md disabled:opacity-40"
+              form="form-invite-artist"
+              disabled={
+                send.isPending ||
+                atCap ||
+                !email.trim() ||
+                (inviteeRole === "artist" ? !picked : !name.trim())
+              }
               data-testid="button-send-artist-invite"
             >
               {send.isPending ? "Sending…" : "Send invite"}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setOpen(false); setEmail(""); setName(""); setWelcomeNote(""); }}
-              className="px-3 py-2 text-sm text-slate-600 hover:text-slate-900"
-              data-testid="button-cancel-artist-invite"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {suggestions.length > 0 && (
         <div className="mt-4" data-testid="earmarked-suggestions">
@@ -1197,23 +1286,14 @@ export function InviteArtistPanel() {
             );
           })}
         </ul>
-      ) : !open ? (
-        <div className="mt-4 rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center" data-testid="empty-artist-invites">
-          <p className="font-semibold text-sm">Tell other artists about GoodTunes</p>
+      ) : (
+        <div className="mt-4 rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center" data-testid="empty-artist-invites">
+          <p className="font-semibold text-sm text-slate-900">Tell other artists about GoodTunes</p>
           <p className="mt-1 text-slate-500 text-xs max-w-sm mx-auto">
-            Invite the artists and labels you rate. When they join and start selling, you earn $1 on every paid unit they ship — for life.
+            Invite the artists and labels you rate. When they join and start selling, you earn $1 on every paid unit they ship — for life. Use <span className="font-semibold text-slate-700">Invite</span> above to send your first one.
           </p>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            disabled={atCap}
-            className="mt-3 text-xs font-semibold text-white bg-[var(--brand-purple)] hover:opacity-90 rounded-md px-3 py-1.5 disabled:opacity-40"
-            data-testid="button-empty-invite-artist"
-          >
-            Send your first invite
-          </button>
         </div>
-      ) : null}
+      )}
     </Card>
   );
 }
@@ -1283,7 +1363,6 @@ function ReferralsTab() {
   return (
     <>
       <InviteArtistPanel />
-      <InviteTeammatePanel />
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="referrals-kpis">
         <Kpi label="Pending payout" value={fmt(d.pendingCents)} sub={`${d.pendingCount} unit${d.pendingCount === 1 ? "" : "s"} this period`} testId="kpi-ref-pending" />
         <Kpi label="Paid out" value={fmt(d.paidCents)} testId="kpi-ref-paid" />
