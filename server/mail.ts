@@ -683,6 +683,47 @@ export async function sendAlbumDeleteRequestEmail(
   return sendViaResend("album-delete-request", toEmail, subject, html, text);
 }
 
+// Task #2468 — a release owner (or partner) whose release is out of
+// prepping can file a free-text "request a change" for the pieces that
+// can't be self-served through the review queue (master audio, pricing).
+// The request lands in the super-admin review queue AND emails every
+// super-admin. Best-effort: the caller swallows send failures.
+export async function sendAlbumChangeRequestEmail(
+  toEmail: string,
+  requester: { displayName: string; email: string },
+  album: { id: string; title: string },
+  note: string,
+  reviewUrl: string,
+): Promise<SendResult> {
+  const subject = `${requester.displayName} requested a change to "${album.title}"`;
+  const text = [
+    `${requester.displayName} <${requester.email}> requested a change to the release "${album.title}".`,
+    ``,
+    `Their note:`,
+    note,
+    ``,
+    `Review the request in the GoodTunes review queue:`,
+    reviewUrl,
+  ].join("\n");
+  const noteHtml = escapeHtml(note).replace(/\n/g, "<br>");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Review</div>
+      <h1 style="font-size: 22px; margin: 12px 0 12px; font-weight: 700;">Change requested for a release</h1>
+      <p style="font-size: 15px; line-height: 1.5; color: #333;">
+        <strong>${escapeHtml(requester.displayName)}</strong> &lt;${escapeHtml(requester.email)}&gt; requested a change to the release <strong>${escapeHtml(album.title)}</strong>.
+      </p>
+      <div style="font-size: 14px; line-height: 1.5; color: #333; background: #f5f5f7; border-radius: 8px; padding: 14px 16px; margin: 16px 0;">${noteHtml}</div>
+      <div style="margin: 24px 0;">
+        ${bulletproofButton(reviewUrl, "Open the review queue", { bgColor: "#319ED8", paddingV: 12, paddingH: 20, borderRadius: 8, fontSize: 14 })}
+      </div>
+      <p style="font-size: 13px; color: #888; line-height: 1.5;">Nothing has changed yet — this is a request for GoodTunes to make the edit.</p>
+    </div>
+  `;
+  return sendViaResend("album-change-request", toEmail, subject, html, text);
+}
+
 // Notify super-admins that a partner (the only roles that can't edit
 // custom add-ons) is asking for a change to a custom add-on they can
 // see but not modify. There's no in-app queue for this yet — the email

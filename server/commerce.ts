@@ -1005,6 +1005,35 @@ export function registerCommerceRoutes(app: Express) {
     next();
   };
 
+  // Task #2468 — commerce's requireAdmin is BEARER-ONLY and admits ANY
+  // partner (artist included) with NO per-verb gate — historically the
+  // one place an artist owner could touch pricing unchecked. Route the
+  // artist-scope OWNER through the SAME phase-aware post-sale gate the
+  // routes.ts SellPanel writes use; EVERY other caller (operator via the
+  // super_admin/admin short-circuit, and non-owner partners via
+  // `ownerOnly`) passes through byte-for-byte unchanged. Returns true
+  // once it has written a response — the caller must return immediately;
+  // false = proceed with the write.
+  const gatePricingWrite = async (req: Request, res: Response, albumId: string): Promise<boolean> => {
+    const userId = (req as any).adminUserId as string | undefined;
+    if (!userId) return false;
+    const { resolveAlbumScope, checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+    const albumScope = await resolveAlbumScope(albumId);
+    const scope = albumScope?.scope;
+    if (!scope) return false; // operator / unscoped album — requireAdmin already vetted
+    const gate = await checkPartnerVerbForScope(userId, "edit_metadata", scope, {
+      albumIdForLock: albumId,
+      phaseAware: true,
+      ownerOnly: true,
+      req,
+    });
+    if (gate) {
+      res.status(gate.status).json(gate.body);
+      return true;
+    }
+    return false;
+  };
+
   app.get("/api/admin/albums/:id/skus", requireAdmin, async (req, res) => {
     const albumId = String(req.params.id);
     const skus = await listAllSkus(albumId);
@@ -1124,6 +1153,7 @@ export function registerCommerceRoutes(app: Express) {
     locked: z.boolean().optional(),
   });
   app.put("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {
+    if (await gatePricingWrite(req, res, String(req.params.id))) return;
     const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
     const parsed = skuBodySchema.safeParse({ ...req.body, format: String(req.params.format) });
@@ -1874,6 +1904,7 @@ export function registerCommerceRoutes(app: Express) {
   });
 
   app.delete("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {
+    if (await gatePricingWrite(req, res, String(req.params.id))) return;
     await db
       .delete(albumSkus)
       .where(and(eq(albumSkus.albumId, String(req.params.id)), eq(albumSkus.format, String(req.params.format) as any)));
@@ -1904,6 +1935,7 @@ export function registerCommerceRoutes(app: Express) {
     bundlePriceCents: z.number().int().min(0).nullable().optional(),
   });
   app.put("/api/admin/albums/:id/addons/:kind", requireAdmin, async (req, res) => {
+    if (await gatePricingWrite(req, res, String(req.params.id))) return;
     const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
     const parsed = addonBodySchema.safeParse({ ...req.body, kind: String(req.params.kind) });
@@ -2003,6 +2035,7 @@ export function registerCommerceRoutes(app: Express) {
     },
   );
   app.delete("/api/admin/albums/:id/addons/:kind", requireAdmin, async (req, res) => {
+    if (await gatePricingWrite(req, res, String(req.params.id))) return;
     await db
       .delete(albumAddons)
       .where(and(eq(albumAddons.albumId, String(req.params.id)), eq(albumAddons.kind, String(req.params.kind) as any)));

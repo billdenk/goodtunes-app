@@ -9349,6 +9349,71 @@ export async function registerRoutes(
     return res.json({ message: "Deleted" });
   });
 
+  // Task #2468 — generic "Request a change" for a release owner (or any
+  // partner with edit_metadata on the album's scope). The structured
+  // gates already DIVERT queue-able metadata to review; this covers the
+  // pieces that CAN'T be represented as a review-queue patch (master
+  // audio, pricing) by filing a free-text note into the same super-admin
+  // review queue. Filing must succeed in every phase, so we run the
+  // membership + edit_metadata check WITHOUT albumIdForLock/phaseAware
+  // (the phase gate would otherwise turn the request itself into a 403).
+  app.post("/api/admin/albums/:id/request-change", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const userId = req.session.userId!;
+    const note = typeof req.body?.note === "string" ? req.body.note.trim() : "";
+    if (!note) return res.status(400).json({ message: "Please describe the change you'd like." });
+    if (note.length > 4000) return res.status(400).json({ message: "That note is too long." });
+
+    const { resolveAlbumScope, checkPartnerVerbForScope, createPendingChange } =
+      await import("./auth/partnerPermissions");
+    const albumScope = await resolveAlbumScope(id);
+    if (!albumScope) return res.status(404).json({ message: "Album not found" });
+    const scope = albumScope.scope;
+    if (!scope) return res.status(403).json({ message: "This album isn't managed by your team" });
+
+    const gate = await checkPartnerVerbForScope(userId, "edit_metadata", scope, { req });
+    if (gate) return res.status(gate.status).json(gate.body);
+
+    const row = await createPendingChange({
+      targetTable: "albums", targetId: id, albumId: id,
+      scopeKind: scope.kind, scopeId: scope.id,
+      patch: { __op: "request" },
+      submittedByUserId: userId,
+      submittedNote: note,
+    });
+
+    // Best-effort super-admin email (never fails the request — the queue
+    // row is already written).
+    try {
+      const { listSuperAdminEmails } = await import("./auth/roles");
+      const superEmails = await listSuperAdminEmails();
+      const requesterRow = await storage.getUser(userId);
+      const albumRow = await storage.getAlbumById(id, { includeHidden: true });
+      const requester = {
+        displayName: requesterRow?.displayName || requesterRow?.username || requesterRow?.email || "A partner",
+        email: requesterRow?.email || "",
+      };
+      const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+      const host = req.headers["x-forwarded-host"] || req.headers.host || "admin.goodtunes.music";
+      const reviewUrl = `${proto}://${host}/admin/review`;
+      const { sendAlbumChangeRequestEmail } = await import("./mail");
+      for (const email of superEmails) {
+        try {
+          await sendAlbumChangeRequestEmail(email, requester, { id, title: albumRow?.title ?? "Untitled album" }, note, reviewUrl);
+        } catch (e) {
+          console.warn("[task-2468] change-request notify failed", email, e);
+        }
+      }
+    } catch (e) {
+      console.warn("[task-2468] change-request notify lookup failed", e);
+    }
+
+    return res.status(202).json({
+      pendingChange: row,
+      message: "Your request was sent to GoodTunes for review.",
+    });
+  });
+
   app.post("/api/admin/songs", requireAdmin, async (req, res) => {
     const { albumId, title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, servedSpecs, sourceSpecs, streamOnly, spotifyTrackUrl, appleMusicTrackUrl, leadingSilenceSecs } = req.body ?? {};
     if (!albumId || !title || trackNumber == null) {

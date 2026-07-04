@@ -283,7 +283,8 @@ export function EditablePanel({
           }
         }
       }
-      if (Object.keys(body).length === 0) return { changed: null, response: null };
+      if (Object.keys(body).length === 0)
+        return { changed: null, response: null, status: null as number | null };
       const res = await apiRequest("PUT", endpoint, body);
       let response: any = null;
       try {
@@ -291,9 +292,9 @@ export function EditablePanel({
       } catch {
         response = null;
       }
-      return { changed: body, response };
+      return { changed: body, response, status: res.status as number | null };
     },
-    onSuccess: async ({ changed, response }) => {
+    onSuccess: async ({ changed, response, status }) => {
       // Refresh any combobox option lists that just had a value added /
       // edited from this form — otherwise the freshly-added genre /
       // tag / category won't show up as an existing option next time.
@@ -306,8 +307,25 @@ export function EditablePanel({
         ),
       );
       exitEdit();
-      if (changed) toast({ title: `${title} updated` });
-      if (changed && onSaved) onSaved(response);
+      if (!changed) return;
+      // Task #2468 — the partner-edit gate returns 202 when a save is
+      // DIVERTED to the GoodTunes review queue instead of applied: an
+      // approval-mode partner, or an artist owner editing a released /
+      // post-sale release. Nothing was written, so say "Sent for review"
+      // rather than falsely claiming the field updated (and skip onSaved,
+      // which assumes a real write). Operators + direct-save partners get
+      // 200 and the unchanged "updated" path.
+      if (status === 202) {
+        toast({
+          title: "Sent for review",
+          description:
+            response?.message ||
+            `Your change to ${title.toLowerCase()} was sent to GoodTunes for review.`,
+        });
+        return;
+      }
+      toast({ title: `${title} updated` });
+      if (onSaved) onSaved(response);
     },
     onError: (e: any) => {
       toast({

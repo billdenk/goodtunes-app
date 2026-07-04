@@ -983,6 +983,10 @@ export function AdminAlbum() {
     locked: boolean;
     hasActiveOverride: boolean;
     requiresApproval: boolean;
+    // Task #2468 — owner phase divert (released/post-sale). Optional because
+    // the shared endpoint always returns it but pre-#2468 consumers didn't.
+    isPrepping?: boolean;
+    requestOnly?: boolean;
     missingPermissions: string[];
   }>({
     queryKey: ["/api/admin/albums", albumId, "edit-access"],
@@ -2331,6 +2335,9 @@ function AlbumEditAccessChip({ albumId }: { albumId: string }) {
     locked: boolean;
     hasActiveOverride: boolean;
     requiresApproval: boolean;
+    // Task #2468 — owner phase divert (released → change-request, post-sale
+    // → can still request a change). Orthogonal to `requiresApproval`.
+    requestOnly?: boolean;
     missingPermissions: string[];
   }>({
     queryKey: ["/api/admin/albums", albumId, "edit-access"],
@@ -2341,16 +2348,24 @@ function AlbumEditAccessChip({ albumId }: { albumId: string }) {
     },
   });
   if (!data) return null;
-  if (data.canEdit && !data.requiresApproval) return null;
-  const label = !data.canEdit
-    ? data.locked && !data.hasActiveOverride
-      ? "Locked — ask GoodTunes to unlock"
-      : data.missingPermissions.includes("edit_metadata")
-        ? "Read-only for your team"
-        : data.missingPermissions.includes("out_of_scope")
-          ? "View only"
-          : "Read-only"
-    : "Edits go to GoodTunes for review";
+  // Task #2468 — an artist OWNER whose edits divert by release phase
+  // (`requestOnly`) still sees an affordance even though they *can* edit:
+  // released (pre-sale) edits are filed as change requests, and post-sale
+  // they can request a change instead of hitting a dead lock. `requestOnly`
+  // is the owner-phase signal only (orthogonal to the scope-wide approval
+  // flag), so non-owner + operator affordances stay byte-for-byte unchanged.
+  if (data.canEdit && !data.requiresApproval && !data.requestOnly) return null;
+  const label = data.requestOnly
+    ? "Edits go to GoodTunes for review"
+    : !data.canEdit
+      ? data.locked && !data.hasActiveOverride
+        ? "Locked — ask GoodTunes to unlock"
+        : data.missingPermissions.includes("edit_metadata")
+          ? "Read-only for your team"
+          : data.missingPermissions.includes("out_of_scope")
+            ? "View only"
+            : "Read-only"
+      : "Edits go to GoodTunes for review";
   return (
     <span
       className="inline-flex items-center gap-1 text-slate-600 text-[10.5px] font-medium normal-case tracking-normal bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5"
@@ -3530,6 +3545,10 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
     locked: boolean;
     hasActiveOverride: boolean;
     requiresApproval: boolean;
+    // Task #2468 — owner phase divert; not wired into `disabled` here (the
+    // released owner keeps editable fields that divert on save), surfaced so
+    // the shape matches the shared endpoint.
+    requestOnly?: boolean;
     missingPermissions: string[];
   }>({
     queryKey: ["/api/admin/albums", album.id, "edit-access"],

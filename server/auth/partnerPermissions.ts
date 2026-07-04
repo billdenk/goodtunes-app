@@ -44,6 +44,7 @@ import {
   findMembershipForScope,
   rebuildMembershipOverrides,
   type UserRoleInfo,
+  type ResolvedMembership,
 } from "./roles";
 
 export type PartnerVerb = PartnerPermissionVerb;
@@ -108,10 +109,13 @@ async function resolveTarget(targetTable: "albums" | "songs", targetId: string):
   scope: { kind: PartnerScopeKind; id: string } | null;
   albumId: string | null;
   firstSoldAt: Date | null;
+  // Task #2468 — pre-sunrise flag drives the artist-owner phase policy
+  // (prepping = edit directly; released = request-only).
+  isPrepping: boolean;
 } | null> {
   if (targetTable === "albums") {
     const [row] = await db
-      .select({ id: albums.id, labelId: albums.labelId, primaryArtistId: albums.primaryArtistId, firstSoldAt: albums.firstSoldAt })
+      .select({ id: albums.id, labelId: albums.labelId, primaryArtistId: albums.primaryArtistId, firstSoldAt: albums.firstSoldAt, isPrepping: albums.isPrepping })
       .from(albums)
       .where(eq(albums.id, targetId));
     if (!row) return null;
@@ -120,7 +124,7 @@ async function resolveTarget(targetTable: "albums" | "songs", targetId: string):
       : row.primaryArtistId
         ? { kind: "artist", id: row.primaryArtistId }
         : null;
-    return { scope, albumId: row.id, firstSoldAt: row.firstSoldAt ?? null };
+    return { scope, albumId: row.id, firstSoldAt: row.firstSoldAt ?? null, isPrepping: !!row.isPrepping };
   }
   // songs
   const [row] = await db
@@ -129,6 +133,7 @@ async function resolveTarget(targetTable: "albums" | "songs", targetId: string):
       labelId: albums.labelId,
       primaryArtistId: albums.primaryArtistId,
       firstSoldAt: albums.firstSoldAt,
+      isPrepping: albums.isPrepping,
     })
     .from(songs)
     .innerJoin(albums, eq(albums.id, songs.albumId))
@@ -139,7 +144,7 @@ async function resolveTarget(targetTable: "albums" | "songs", targetId: string):
     : row.primaryArtistId
       ? { kind: "artist", id: row.primaryArtistId }
       : null;
-  return { scope, albumId: row.albumId, firstSoldAt: row.firstSoldAt ?? null };
+  return { scope, albumId: row.albumId, firstSoldAt: row.firstSoldAt ?? null, isPrepping: !!row.isPrepping };
 }
 
 // Task #351 — verb → partner_permissions column name.
@@ -191,6 +196,74 @@ export async function getUserPermissionOverride(
     if (row2 && row2.granted) return true;
   }
   return null;
+}
+
+// Task #2468 — the self-serve verbs the OWNER of an artist scope (the
+// primary artist) may run on their own release without an explicit
+// grant. A brand-new artist holds no partner_permissions row and no
+// per-user overrides, so without this implicit default they'd be locked
+// out of their own catalog (allowed=false → 403 on every edit). The
+// grant is runtime-only — we deliberately do NOT seed a
+// partner_permissions row, whose metadataEditsRequireApproval default
+// (true) would wrongly divert even prepping edits into the review queue.
+export const OWNER_SELF_SERVE_VERBS: PartnerVerb[] = [
+  "edit_metadata",
+  "upload_masters",
+  "edit_credits_and_gear",
+  "manage_payouts",
+];
+
+// The primary artist (scope owner) is the membership on an `artist`
+// scope with no sub_role. Team ('team') and manager ('manager')
+// teammates share the same role + scope but carry a sub_role, so this
+// deliberately excludes them — they get only what their explicit
+// per-user overrides grant, never the implicit owner default. This is
+// what stops a credits-only Team member from being silently escalated
+// into a full metadata editor.
+export function isArtistScopeOwner(
+  scopeKind: PartnerScopeKind,
+  match: Pick<ResolvedMembership, "role" | "subRole">,
+): boolean {
+  return scopeKind === "artist" && match.role === "artist" && match.subRole == null;
+}
+
+// Task #2468 — single source of truth for the verb decision, shared by
+// requirePartnerPermission, partnerEditGate, checkPartnerVerbForScope
+// AND getAlbumEditAccess so the four can never drift. Precedence:
+//   1. explicit per-user override (grant OR deny) always wins — a
+//      super-admin can still revoke an owner's default with a deny.
+//   2. scope-wide partner_permissions grant.
+//   3. implicit artist-owner default (self-serve verbs only).
+export function resolveVerbAllowed(
+  scopeKind: PartnerScopeKind,
+  match: Pick<ResolvedMembership, "role" | "subRole">,
+  perms: Awaited<ReturnType<typeof getPartnerPermissions>>,
+  verb: PartnerVerb,
+  override: boolean | null,
+): boolean {
+  if (override !== null) return override;
+  const verbCol = verbToColumn(verb);
+  if (perms && perms[verbCol]) return true;
+  if (isArtistScopeOwner(scopeKind, match) && OWNER_SELF_SERVE_VERBS.includes(verb)) {
+    return true;
+  }
+  return false;
+}
+
+// Async convenience wrapper — fetches perms (unless supplied) + the
+// per-user override, then applies resolveVerbAllowed. Used by
+// getAlbumEditAccess which needs a per-verb answer without duplicating
+// the precedence rules.
+export async function resolvePartnerVerb(
+  userId: string,
+  verb: PartnerVerb,
+  scope: { kind: PartnerScopeKind; id: string },
+  match: Pick<ResolvedMembership, "role" | "subRole">,
+  perms?: Awaited<ReturnType<typeof getPartnerPermissions>>,
+): Promise<boolean> {
+  const p = perms !== undefined ? perms : await getPartnerPermissions(scope.kind, scope.id);
+  const override = await getUserPermissionOverride(scope.kind, scope.id, userId, verb);
+  return resolveVerbAllowed(scope.kind, match, p, verb, override);
 }
 
 // Task #699 — write the per-user permission overrides that distinguish a
@@ -422,6 +495,83 @@ async function consumeActiveOverride(albumId: string, userId: string, req?: Requ
   return true;
 }
 
+// Task #2468 — verbs whose edits ARE the historical record and CAN be
+// represented as a review-queue patch, so a released / post-sale owner
+// edit diverts to pending_changes instead of applying live. Master
+// audio is deliberately NOT here: a binary master can't be a queue
+// patch, so it request-a-changes (hard 403) instead.
+export const METADATA_CLASS_VERBS: PartnerVerb[] = ["edit_metadata", "edit_credits_and_gear"];
+
+// Task #2468 — shown when an artist-scope owner tries to change master
+// audio (or add a track carrying a master) after their release is live.
+// Carries `requestChange` so the client offers the generic
+// "Request a change" affordance instead of a dead-disabled control.
+export const MASTERS_REQUEST_CHANGE_MESSAGE =
+  "Master audio is locked once your release is live. Use \u201CRequest a change\u201D and GoodTunes will update it for you.";
+
+// Task #2468 — same idea for the commerce pricing writes, which have no
+// review queue to divert into (so a released/post-sale owner reprice is
+// a request-a-change rather than a silent queue).
+export const PRICING_REQUEST_CHANGE_MESSAGE =
+  "Pricing is locked once your release is live. Use \u201CRequest a change\u201D and GoodTunes will help you update it.";
+
+// Task #2468 — outcome of the artist-owner PHASE policy. Kept separate
+// from the legacy partner lock/approval path (which stays byte-for-byte
+// for operators, labels, and artist teammates). Only the primary artist
+// (isArtistScopeOwner) editing their OWN release reaches this.
+export type ArtistPhaseOutcome =
+  | { kind: "allow" }
+  | { kind: "divert"; reason: "approval_required" | "post_sale_lock" }
+  | { kind: "request_change" };
+
+/**
+ * Task #2468 — phase policy for the OWNER of an artist scope editing
+ * their OWN release. Returns `null` for everyone else (operators
+ * short-circuit above every gate; non-owner partners keep the legacy
+ * lock/approval path), which callers treat as "run the legacy path".
+ *
+ * Phases (owner only):
+ *   • prepping (is_prepping=true, pre-sunrise) → allow (edit directly)
+ *   • released (is_prepping=false) pre-sale    → metadata-class diverts
+ *                                                to the review queue;
+ *                                                masters request-a-change
+ *   • post-sale (first_sold_at set)            → metadata-class consumes
+ *                                                an active admin override
+ *                                                if present, else diverts
+ *                                                (reason post_sale_lock —
+ *                                                NEVER a hard 403); masters
+ *                                                request-a-change
+ *
+ * Consumes at most one single-shot override (memoized per-request via
+ * consumeActiveOverride) and only on the post-sale metadata branch, so
+ * it can never double-burn against the legacy path (which this owner
+ * never reaches).
+ */
+export async function resolveArtistOwnerPhaseOutcome(
+  verb: PartnerVerb,
+  scopeKind: PartnerScopeKind,
+  match: Pick<ResolvedMembership, "role" | "subRole">,
+  albumId: string | null,
+  phase: { isPrepping: boolean; firstSoldAt: Date | null },
+  userId: string,
+  req?: Request,
+): Promise<ArtistPhaseOutcome | null> {
+  if (!isArtistScopeOwner(scopeKind, match)) return null;
+  // Masters / track files can't be represented as a review-queue patch.
+  if (verb === "upload_masters") {
+    return phase.isPrepping ? { kind: "allow" } : { kind: "request_change" };
+  }
+  if (METADATA_CLASS_VERBS.includes(verb)) {
+    if (phase.isPrepping) return { kind: "allow" };
+    if (!phase.firstSoldAt) return { kind: "divert", reason: "approval_required" };
+    const consumed = albumId ? await consumeActiveOverride(albumId, userId, req) : false;
+    return consumed ? { kind: "allow" } : { kind: "divert", reason: "post_sale_lock" };
+  }
+  // manage_payouts (+ anything else the owner self-serves) is operational
+  // configuration, not the record — applies directly regardless of phase.
+  return { kind: "allow" };
+}
+
 /**
  * Express middleware that gates a partner-touchable mutation by verb.
  *
@@ -487,14 +637,49 @@ export function requirePartnerPermission(
     }
 
     const perms = await getPartnerPermissions(target.scope.kind, target.scope.id);
-    const verbCol = verbToColumn(verb);
     // Task #351 — per-(scope, user) override layer. An explicit override
     // (granted=true or false) wins over the scope default. NULL row =>
-    // fall back to the scope verb.
+    // fall back to the scope verb, then to the Task #2468 implicit
+    // artist-owner self-serve grant.
     const override = await getUserPermissionOverride(target.scope.kind, target.scope.id, userId, verb);
-    const allowed = override !== null ? override : !!(perms && perms[verbCol]);
+    const allowed = resolveVerbAllowed(target.scope.kind, match, perms, verb, override);
     if (!allowed) {
       return res.status(403).json({ message: `Missing permission: ${verb}` });
+    }
+
+    // Task #2468 — artist-owner PHASE policy. Only the primary artist
+    // editing their OWN release reaches this (operators short-circuited
+    // above; every non-owner partner returns null → legacy path below).
+    // Operational routes (skipPostSaleLock) bypass it so sell-mode /
+    // format config still applies directly regardless of phase.
+    if (!opts.skipPostSaleLock) {
+      const ownerPhase = await resolveArtistOwnerPhaseOutcome(
+        verb,
+        target.scope.kind,
+        match,
+        target.albumId,
+        { isPrepping: target.isPrepping, firstSoldAt: target.firstSoldAt },
+        userId,
+        req,
+      );
+      if (ownerPhase) {
+        if (ownerPhase.kind === "request_change") {
+          return res.status(403).json({
+            message: MASTERS_REQUEST_CHANGE_MESSAGE,
+            requestChange: true,
+            locked: !!target.firstSoldAt,
+          });
+        }
+        req.partnerGate = {
+          role: match.role,
+          roleScopeId: match.scopeId,
+          targetScope: target.scope,
+          albumId: target.albumId,
+          divert: ownerPhase.kind === "divert",
+          divertReason: ownerPhase.kind === "divert" ? ownerPhase.reason : undefined,
+        };
+        return next();
+      }
     }
 
     // Post-sale lock only applies to metadata edits. Masters upload, Shopify
@@ -552,9 +737,10 @@ export function requirePartnerPermission(
 export async function resolveAlbumScope(albumId: string): Promise<{
   scope: { kind: PartnerScopeKind; id: string } | null;
   firstSoldAt: Date | null;
+  isPrepping: boolean;
 } | null> {
   const [row] = await db
-    .select({ labelId: albums.labelId, primaryArtistId: albums.primaryArtistId, firstSoldAt: albums.firstSoldAt })
+    .select({ labelId: albums.labelId, primaryArtistId: albums.primaryArtistId, firstSoldAt: albums.firstSoldAt, isPrepping: albums.isPrepping })
     .from(albums)
     .where(eq(albums.id, albumId));
   if (!row) return null;
@@ -563,7 +749,7 @@ export async function resolveAlbumScope(albumId: string): Promise<{
     : row.primaryArtistId
       ? { kind: "artist", id: row.primaryArtistId }
       : null;
-  return { scope, firstSoldAt: row.firstSoldAt ?? null };
+  return { scope, firstSoldAt: row.firstSoldAt ?? null, isPrepping: !!row.isPrepping };
 }
 
 /**
@@ -655,12 +841,41 @@ export async function partnerEditGate(
   }
 
   const perms = await getPartnerPermissions(scope.kind, scope.id);
-  const col = verbToColumn(verb);
   const override = await getUserPermissionOverride(scope.kind, scope.id, userId, verb);
-  const allowed = override !== null ? override : !!(perms && perms[col]);
+  const allowed = resolveVerbAllowed(scope.kind, match, perms, verb, override);
   if (!allowed) {
     res.status(403).json({ message: `Missing permission: ${verb}` });
     return "deny";
+  }
+
+  // Task #2468 — artist-owner PHASE policy (own release only). Needs an
+  // album to read the phase from; bio edits (no albumIdForLock) fall
+  // through to the legacy path. Non-owners return null → legacy path.
+  if (opts.albumIdForLock && isArtistScopeOwner(scope.kind, match)) {
+    const [ph] = await db
+      .select({ isPrepping: albums.isPrepping, firstSoldAt: albums.firstSoldAt })
+      .from(albums)
+      .where(eq(albums.id, opts.albumIdForLock));
+    const ownerPhase = await resolveArtistOwnerPhaseOutcome(
+      verb,
+      scope.kind,
+      match,
+      opts.albumIdForLock,
+      { isPrepping: ph?.isPrepping ?? false, firstSoldAt: ph?.firstSoldAt ?? null },
+      userId,
+      req,
+    );
+    if (ownerPhase) {
+      if (ownerPhase.kind === "request_change") {
+        res.status(403).json({
+          message: MASTERS_REQUEST_CHANGE_MESSAGE,
+          requestChange: true,
+          locked: !!ph?.firstSoldAt,
+        });
+        return "deny";
+      }
+      return ownerPhase.kind === "divert" ? "divert" : "allow";
+    }
   }
 
   // Post-sale lock (hard-403) for record-as-sold verbs. Never diverts.
@@ -706,7 +921,7 @@ export async function checkPartnerVerbForScope(
   userId: string,
   verb: PartnerVerb,
   scope: { kind: PartnerScopeKind; id: string },
-  opts: { albumIdForLock?: string | null; req?: Request } = {},
+  opts: { albumIdForLock?: string | null; req?: Request; phaseAware?: boolean; ownerOnly?: boolean } = {},
 ): Promise<{ status: number; body: any } | null> {
   const role = await getUserRole(userId);
   if (!role) return { status: 403, body: { message: "No role" } };
@@ -715,16 +930,62 @@ export async function checkPartnerVerbForScope(
   // Task #1036 — match against the membership SET (identical to the
   // legacy single-role check for single-membership users).
   const match = await findMembershipForScope(userId, scope.kind, scope.id);
+  // Task #2468 — `ownerOnly` (commerce pricing routes) applies the phase
+  // gate to the artist-scope OWNER and passes EVERYONE else through
+  // byte-for-byte unchanged. commerce's bearer-only requireAdmin never
+  // gated these routes for partners, so a non-owner (non-member,
+  // sub_role teammate, or a partner on another scope) must return null
+  // (no gate) here — BEFORE the out-of-scope 403 / permission / lock
+  // checks — or we'd change a previously-ungated path.
+  if (opts.ownerOnly && !(match && isArtistScopeOwner(scope.kind, match))) {
+    return null;
+  }
   if (!match) {
     return { status: 403, body: { message: "Out of scope" } };
   }
 
   const perms = await getPartnerPermissions(scope.kind, scope.id);
-  const col = verbToColumn(verb);
   const override = await getUserPermissionOverride(scope.kind, scope.id, userId, verb);
-  const allowed = override !== null ? override : !!(perms && perms[col]);
+  const allowed = resolveVerbAllowed(scope.kind, match, perms, verb, override);
   if (!allowed) {
     return { status: 403, body: { message: `Missing permission: ${verb}` } };
+  }
+
+  // Task #2468 — artist-owner PHASE policy. This gate has NO divert
+  // channel, so a queued outcome collapses to a 403 carrying
+  // `requestChange`. upload_masters is ALWAYS phased here (gateAlbumRoute
+  // path — masters can't be queued). Metadata-class is phased ONLY when
+  // the caller opts in (phaseAware — commerce pricing writes with no
+  // review queue); pressing-order reads/submits + delete-request leave
+  // phaseAware off so they keep the legacy path.
+  if (
+    opts.albumIdForLock &&
+    isArtistScopeOwner(scope.kind, match) &&
+    (verb === "upload_masters" || (opts.phaseAware && METADATA_CLASS_VERBS.includes(verb)))
+  ) {
+    const [ph] = await db
+      .select({ isPrepping: albums.isPrepping, firstSoldAt: albums.firstSoldAt })
+      .from(albums)
+      .where(eq(albums.id, opts.albumIdForLock));
+    const ownerPhase = await resolveArtistOwnerPhaseOutcome(
+      verb,
+      scope.kind,
+      match,
+      opts.albumIdForLock,
+      { isPrepping: ph?.isPrepping ?? false, firstSoldAt: ph?.firstSoldAt ?? null },
+      userId,
+      opts.req,
+    );
+    if (ownerPhase && ownerPhase.kind !== "allow") {
+      return {
+        status: 403,
+        body:
+          verb === "upload_masters"
+            ? { message: MASTERS_REQUEST_CHANGE_MESSAGE, requestChange: true, locked: !!ph?.firstSoldAt }
+            : { message: PRICING_REQUEST_CHANGE_MESSAGE, requestChange: true, locked: !!ph?.firstSoldAt },
+      };
+    }
+    if (ownerPhase && ownerPhase.kind === "allow") return null;
   }
 
   // Post-sale lock check. Applies to anything that mutates the
@@ -763,11 +1024,12 @@ export async function checkPartnerVerbForScope(
 export async function getAlbumEditAccess(userId: string, albumId: string) {
   const role = await getUserRole(userId);
   const [album] = await db
-    .select({ id: albums.id, labelId: albums.labelId, primaryArtistId: albums.primaryArtistId, firstSoldAt: albums.firstSoldAt })
+    .select({ id: albums.id, labelId: albums.labelId, primaryArtistId: albums.primaryArtistId, firstSoldAt: albums.firstSoldAt, isPrepping: albums.isPrepping })
     .from(albums)
     .where(eq(albums.id, albumId));
   if (!album) return null;
   const locked = !!album.firstSoldAt;
+  const isPrepping = !!album.isPrepping;
   const scope: { kind: PartnerScopeKind; id: string } | null = album.labelId
     ? { kind: "label", id: album.labelId }
     : album.primaryArtistId
@@ -780,6 +1042,9 @@ export async function getAlbumEditAccess(userId: string, albumId: string) {
       canEdit: true,
       canManagePayouts: true,
       locked,
+      isPrepping,
+      // Operators apply every edit directly; they never divert to review.
+      requestOnly: false,
       hasActiveOverride: false,
       requiresApproval: false,
       missingPermissions: [] as string[],
@@ -796,6 +1061,8 @@ export async function getAlbumEditAccess(userId: string, albumId: string) {
       canEdit: false,
       canManagePayouts: false,
       locked,
+      isPrepping,
+      requestOnly: false,
       hasActiveOverride: false,
       requiresApproval: false,
       missingPermissions: ["out_of_scope"],
@@ -804,7 +1071,21 @@ export async function getAlbumEditAccess(userId: string, albumId: string) {
 
   const perms = scope ? await getPartnerPermissions(scope.kind, scope.id) : null;
   const missing: string[] = [];
-  if (!perms?.editMetadata) missing.push("edit_metadata");
+  // Task #2468 — resolve via the shared precedence (override → scope
+  // grant → implicit artist-owner default) instead of reading the scope
+  // row directly, so per-user overrides + the owner default are honored
+  // here exactly as the write gates enforce them. (Historically this
+  // ignored overrides, so an override-granted teammate wrongly saw
+  // canEdit=false.)
+  const canEditMetadata =
+    scope && match
+      ? await resolvePartnerVerb(userId, "edit_metadata", scope, match, perms ?? undefined)
+      : false;
+  const canManagePayoutsResolved =
+    scope && match
+      ? await resolvePartnerVerb(userId, "manage_payouts", scope, match, perms ?? undefined)
+      : false;
+  if (!canEditMetadata) missing.push("edit_metadata");
 
   // Peek at override availability without consuming.
   let hasActiveOverride = false;
@@ -825,15 +1106,39 @@ export async function getAlbumEditAccess(userId: string, albumId: string) {
   }
 
   const canEdit = missing.length === 0 && (!locked || hasActiveOverride);
+  const requiresApproval = !!perms?.metadataEditsRequireApproval;
+  // Task #2468 — `requestOnly` surfaces the OWNER phase divert only: when
+  // the artist owner edits a RELEASED (pre-sale) release their metadata
+  // save is filed as a change request, and post-sale (no active override)
+  // they can still REQUEST a change rather than hit a hard lock. It is
+  // deliberately orthogonal to `requiresApproval` (the scope-wide approval
+  // flag, already surfaced separately and handled by the existing chip) so
+  // the editor's non-owner + operator affordances stay byte-for-byte
+  // unchanged. This only PEEKS — it never consumes an override; the owner
+  // phase resolver that burns a single-shot override runs on the write
+  // path. `isPrepping` allows direct edits, so the owner divert is exactly
+  // "in scope + can edit metadata + not prepping (and, if locked, no
+  // override to consume)".
+  const isOwner = scope ? isArtistScopeOwner(scope.kind, match) : false;
+  const requestOnly =
+    isOwner && canEditMetadata
+      ? locked
+        ? !hasActiveOverride
+        : !isPrepping
+      : false;
   return {
     role: role.role,
     canEdit,
     // Task #2428 — anyone in scope holding `manage_payouts` can pay the
     // Shopify+ manufacturing ledger, independent of the edit_metadata lock.
-    canManagePayouts: !!perms?.managePayouts,
+    // Task #2468 — resolved via the shared precedence so an override /
+    // owner grant counts, not just the scope row.
+    canManagePayouts: canManagePayoutsResolved,
     locked,
+    isPrepping,
+    requestOnly,
     hasActiveOverride,
-    requiresApproval: !!perms?.metadataEditsRequireApproval,
+    requiresApproval,
     missingPermissions: missing,
   };
 }
@@ -866,8 +1171,15 @@ export async function applyPendingChange(
   // The patch may carry a `__op` discriminator for tables that support
   // create/delete via the queue (credits, song create, album/song
   // delete). Default behavior for the plain row-update path strips it.
-  const { __op, ...payload } = patch as { __op?: "create" | "update" | "delete" } & Record<string, unknown>;
+  const { __op, ...payload } = patch as { __op?: "create" | "update" | "delete" | "request" } & Record<string, unknown>;
   const op = __op ?? "update";
+
+  // Task #2468 — a "request a change" note carries no structured patch
+  // (masters / pricing can't be auto-applied). Approving it just
+  // acknowledges the request; the operator makes the actual edit by hand
+  // in the editor. Treat as a successful no-op so the queue advances
+  // instead of 502-ing on an empty apply.
+  if (op === "request") return true;
 
   switch (targetTable) {
     case "albums": {
