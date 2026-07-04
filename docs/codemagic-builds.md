@@ -287,6 +287,22 @@ the artwork: re-run the build, and if it recurs confirm the App target's
 `Assets.xcassets` is in **Copy Bundle Resources** and
 `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon` (it is, today).
 
+### The Xcode toolchain is pinned (don't float it back to `latest`)
+
+`codemagic.yaml` pins **`xcode: 26.3`** in the shared `ios_env` block. It used to
+say `xcode: latest`, and when Codemagic rolled `latest` forward to **Xcode 26.4.1**
+the archive step (`Build the signed .ipa`) started failing with **"Failed to
+archive" (exit 65)** — every earlier step (web build, Capacitor sync, CocoaPods,
+signing, all four guards) stayed green, so it was purely the toolchain, not our
+code. 26.3 is the last-known-good version the last green TestFlight build ran on.
+
+Keep it pinned. If Codemagic ever retires 26.3, bump it to the newest 26.x that
+still predates the 26.4.1 archive break and re-run. To move *onto* current Xcode
+26.4.x later (eventually required for App Store SDK minimums), you'll also need to
+raise the `platform :ios` deployment target in `ios/App/Podfile` (and stamp it in
+the `post_install` hook) and pin `cocoapods:` to a 26-compatible version — do that
+in a dedicated change, not by silently floating back to `latest`.
+
 ### 2. A transient App Store Connect 500 no longer wastes a whole build
 
 App Store Connect occasionally returns a **`500 internal server error`** on the

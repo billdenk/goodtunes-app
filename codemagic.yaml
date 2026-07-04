@@ -31,7 +31,19 @@ definitions:
   # Reusable environment runtime block for the two iOS workflows.
   ios_env: &ios_env
     node: 20
-    xcode: latest
+    # PINNED (was `latest`): Codemagic rolled `latest` forward to Xcode 26.4.1,
+    # whose toolchain breaks our `xcodebuild ... archive` step ("Failed to
+    # archive", exit 65) even though no app code changed — every earlier step
+    # (web build, cap sync, pods, signing, guards) stays green. The last GREEN
+    # TestFlight build (#40, ~a month before this change) ran on Xcode 26.3, so
+    # we pin to that exact last-known-good toolchain. This is fully reversible
+    # and stops a future `latest` roll from silently breaking the archive again.
+    # If Codemagic ever retires 26.3 from its supported list, bump this to the
+    # newest 26.x that still predates the 26.4.1 archive break and re-run the
+    # build. See docs/native-builds.md / task notes for the forward-compat path
+    # (Podfile deployment-target bump + pinned cocoapods) needed to move onto
+    # Xcode 26.4.x later.
+    xcode: 26.3
     cocoapods: default
 
   # Reusable build steps shared by both iOS workflows: web payload → Capacitor
