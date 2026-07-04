@@ -1736,11 +1736,10 @@ function IntroductionsPanel({ person }: { person: PersonFull }) {
    the operator sees the full picture without re-tagging by hand. Tagging
    "Artist" here flips the row to artist shape server-side, which is what
    kills the old add-as-admin → convert-to-artist dead-end. */
-function RolesPanel({ person }: { person: PersonFull }) {
+export function RolesPanel({ person }: { person: PersonFull }) {
   const { toast } = useToast();
   const initial = useMemo(() => (Array.isArray(person.roles) ? person.roles : []), [person.roles]);
   const [roles, setRoles] = useState<string[]>(initial);
-  useEffect(() => { setRoles(initial); }, [initial]);
 
   const dirty = useMemo(() => {
     if (roles.length !== initial.length) return true;
@@ -1749,11 +1748,46 @@ function RolesPanel({ person }: { person: PersonFull }) {
     return a.some((v, i) => v !== b[i]);
   }, [roles, initial]);
 
+  // Task #2444 — re-seed the local chip state from the server ONLY when we
+  // switch to a different person, or when the operator has no unsaved edits.
+  // Every sibling panel on this page invalidates the shared person query, so
+  // a save elsewhere (bio, streaming, label…) refetches the person and hands
+  // us a brand-new `person.roles` array reference. The old code re-seeded on
+  // every such reference change, which silently wiped in-progress toggles —
+  // the reported "checks turn on but never persist" bug. Guarding on
+  // person.id + `dirty` keeps a background refetch from discarding an unsaved
+  // edit, while still letting a freshly-saved value flow back in.
+  const seededPersonId = useRef(person.id);
+  useEffect(() => {
+    if (seededPersonId.current !== person.id) {
+      seededPersonId.current = person.id;
+      setRoles(initial);
+      return;
+    }
+    if (!dirty) setRoles(initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [person.id, initial]);
+
   const save = useMutation({
     mutationFn: async () => {
-      await apiRequest("PUT", `/api/admin/people/${person.id}`, { roles });
+      const res = await apiRequest("PUT", `/api/admin/people/${person.id}`, { roles });
+      // Task #2444 — a partner account in approval mode gets its edit queued
+      // for review (HTTP 202) rather than applied. apiRequest treats every
+      // 2xx as success, so the old code showed a false "Credits saved" while
+      // nothing persisted. Surface the divert honestly instead.
+      return { diverted: res.status === 202 };
     },
-    onSuccess: () => {
+    onSuccess: ({ diverted }) => {
+      if (diverted) {
+        // Nothing persisted — reset the picker to the real (unchanged)
+        // server value so the queued edit isn't presented as saved.
+        setRoles(initial);
+        toast({
+          title: "Sent for review",
+          description: "Your credit change was sent to GoodTunes for review — it isn't applied yet.",
+        });
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/admin/people", person.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/people", person.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/people"] });
