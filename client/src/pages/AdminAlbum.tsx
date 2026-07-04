@@ -2460,7 +2460,7 @@ function statusLabel(status: MyChangeRequest["status"]): string {
       : "In review";
 }
 
-function MyChangeRequestsPanel({ albumId }: { albumId: string }) {
+export function MyChangeRequestsPanel({ albumId }: { albumId: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data: requests } = useQuery<MyChangeRequest[]>({
