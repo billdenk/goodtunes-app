@@ -416,13 +416,15 @@ function CatalogTab({ qs }: { qs: string }) {
               {albums.data?.albums.map((a) => (
                 <tr key={a.albumId} className="border-t border-slate-100" data-testid={`row-album-${a.albumId}`}>
                   <td className="py-2 pr-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {a.artwork && <img src={a.artwork} alt="" className="w-9 h-9 rounded object-cover" />}
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold">{a.title}</p>
-                        <p className="truncate text-slate-400 text-[11px]">{a.artist}</p>
-                      </div>
-                    </div>
+                    <Link href={`/album/${a.albumId}`}>
+                      <a className="flex items-center gap-2 min-w-0 group" data-testid={`link-album-${a.albumId}`}>
+                        {a.artwork && <img src={a.artwork} alt="" className="w-9 h-9 rounded object-cover" />}
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold transition-colors group-hover:text-[color:var(--brand-blue)] group-hover:underline underline-offset-2">{a.title}</p>
+                          <p className="truncate text-slate-400 text-[11px]">{a.artist}</p>
+                        </div>
+                      </a>
+                    </Link>
                   </td>
                   <td className="px-2 align-middle">
                     <BreakEvenBar albumId={a.albumId} tone="light" variant="compact" />
