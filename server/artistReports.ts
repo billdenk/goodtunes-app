@@ -1065,7 +1065,7 @@ async function albumDashboardHandler(req: Request, res: Response) {
           AND NOT ${nonFanListen()}
         WHERE s.id = ANY(${pgArray(scope.songIds)})
         GROUP BY s.id, s.title
-        ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC, s.title ASC
+        ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC, s.track_number ASC, s.title ASC
       `)
     : ({ rows: [] } as any);
   const topSongs = ((songRows as any).rows || []).map((r: any) => ({
@@ -1204,7 +1204,7 @@ async function albumExportHandler(req: Request, res: Response) {
             AND NOT ${nonFanListen()}
           WHERE s.id = ANY(${pgArray(scope.songIds)})
           GROUP BY s.id, s.title
-          ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC, s.title ASC
+          ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC, s.track_number ASC, s.title ASC
         `)
       : ({ rows: [] } as any);
     const out = ((songRows as any).rows || []).map((r: any, i: number) => ({

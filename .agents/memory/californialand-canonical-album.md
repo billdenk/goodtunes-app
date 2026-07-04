@@ -12,7 +12,7 @@ clean `californialand` share slug while the record with songs was stuck on
 `californialand-2`.
 
 - **Canonical (keep):** the CALIFORNIALAND row that actually has songs (23) +
-  the SKU + the two internal comp grants (`billdenk@mac.com`, `agshorty8@gmail.com`).
+  the SKU + the two internal comp grants.
   It now owns the clean `californialand` share slug.
 - **Empty shells (trashed):** the other two CALIFORNIALAND rows — no songs/orders/grants.
 
