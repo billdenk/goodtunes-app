@@ -33,6 +33,12 @@ The press portal whitelabels its rail header with the press wordmark (navLogoUrl
 
 **Why:** Bill — a press should see its name once (rail), not twice. The operator's own admin (AdminFrame) is untouched and keeps the GoodTunes logo top-left.
 
+## The partner SalesMap is a light-only surface too (looks dark by its tokens)
+
+`client/src/components/partner/SalesMap.tsx` ("Where your fans are buying" geo/choropleth) is rendered ONLY on the three light partner dashboards (Artist/Label/Manager), each inside a `bg-white ring-1 ring-slate-200` card. It was originally authored in dark fan tokens (`text-white`, `text-fan-*`, `bg-white/NN`, `ring-white/10`, `bg-[#0B1457]` table header, and a `shadeFor(0)` = near-white country fill) so it rendered **invisibly on the white card** — the symptom Bill reported as a mysterious "empty rectangle" (the map SVG's faint ring was the only thing showing). It is now light slate. Keep it light; don't reintroduce fan-navy tokens. The one intentional dark element is the floating hover tooltip (dark gradient bg + `text-white`).
+
+**How to apply:** choropleth "no data" fill is dark-on-light (`rgba(15,23,42,0.06)`), path stroke `rgba(15,23,42,0.12)`, metric toggle = slate-100 track with a white selected pill. Empty-state message shows whenever `!loading && ranked.length === 0` (don't re-gate it behind a truthy `data`, or a zero-sales artist sees a blank right column).
+
 ## Alpha-on-CSS-var renders nothing
 
 `bg-[color:var(--brand-blue)]/NN` (or any `var(--brand-*)/NN` alpha) produces **no color** — Tailwind can't alpha a CSS var. On the old dark surfaces this was silently broken too. Use a `bg-blue-100`/`bg-blue-50` tint or a solid `var(--brand-blue)` fill instead. (See also `tailwind-var-opacity.md`.)

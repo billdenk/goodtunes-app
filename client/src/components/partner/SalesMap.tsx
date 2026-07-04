@@ -157,7 +157,7 @@ function featureInUsWindow(f: GeoFeature): boolean {
 
 function shadeFor(intensity: number): string {
   // Muted base → brand blue ramp. 0 keeps a faint graticule fill.
-  if (intensity <= 0) return "rgba(255,255,255,0.05)";
+  if (intensity <= 0) return "rgba(15,23,42,0.06)";
   const alpha = 0.18 + Math.min(1, intensity) * 0.72;
   return `rgba(49,158,216,${alpha.toFixed(3)})`;
 }
@@ -334,23 +334,23 @@ export function SalesMap({
     [data, metric],
   );
 
-  const isEmpty = !loading && data && ranked.length === 0;
+  const isEmpty = !loading && ranked.length === 0;
 
   return (
     <div data-testid="sales-map" className="space-y-4">
       {/* Header: title + metric toggle */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-white">{title}</h3>
+          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
           {totals && (
-            <p className="mt-0.5 text-xs text-fan-secondary" data-testid="sales-map-summary">
+            <p className="mt-0.5 text-xs text-slate-500" data-testid="sales-map-summary">
               {totals.units.toLocaleString()} units · {formatUsdCents(totals.revenueCents)} gross ·{" "}
               {totals.customers.toLocaleString()} customers
             </p>
           )}
         </div>
         <div
-          className="inline-flex rounded-lg bg-white/5 p-0.5 text-xs"
+          className="inline-flex rounded-lg bg-slate-100 p-0.5 text-xs"
           role="tablist"
           aria-label="Map metric"
         >
@@ -364,7 +364,7 @@ export function SalesMap({
               data-testid={`metric-${m.key}`}
               className={
                 "rounded-md px-2.5 py-1 font-medium transition-colors " +
-                (metric === m.key ? "bg-white/15 text-white" : "text-fan-secondary hover:text-fan-primary")
+                (metric === m.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")
               }
             >
               {m.label}
@@ -375,26 +375,26 @@ export function SalesMap({
 
       {/* Drill breadcrumb */}
       {(drillUs || hasUsStates) && (
-        <div className="flex items-center gap-2 text-xs text-fan-secondary">
+        <div className="flex items-center gap-2 text-xs text-slate-500">
           {drillUs ? (
             <>
               <button
                 type="button"
                 onClick={() => setDrillUs(false)}
                 data-testid="drill-back"
-                className="rounded-md bg-white/5 px-2 py-1 font-medium text-fan-secondary hover:bg-white/10"
+                className="rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-500 hover:bg-slate-200"
               >
                 ← World
               </button>
-              <span className="text-fan-faint">/</span>
-              <span className="text-fan-secondary">United States — by state</span>
+              <span className="text-slate-400">/</span>
+              <span className="text-slate-500">United States — by state</span>
             </>
           ) : (
             <button
               type="button"
               onClick={() => setDrillUs(true)}
               data-testid="drill-us"
-              className="rounded-md bg-white/5 px-2 py-1 font-medium text-fan-secondary hover:bg-white/10"
+              className="rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-500 hover:bg-slate-200"
             >
               Drill into U.S. states →
             </button>
@@ -406,11 +406,11 @@ export function SalesMap({
         {/* Choropleth */}
         <div ref={mapWrapRef} className="relative lg:col-span-3">
           {loading ? (
-            <div className="aspect-[2/1] w-full animate-pulse rounded-xl bg-white/5" />
+            <div className="aspect-[2/1] w-full animate-pulse rounded-xl bg-slate-100" />
           ) : (
             <svg
               viewBox={viewBox}
-              className="w-full rounded-xl bg-white/[0.02] ring-1 ring-white/10"
+              className="w-full rounded-xl bg-slate-50 ring-1 ring-slate-200"
               role="img"
               aria-label={title}
               onMouseLeave={() => setHover(null)}
@@ -424,7 +424,7 @@ export function SalesMap({
                     key={f.properties.id ?? i}
                     d={geometryToPath(f.geometry, proj)}
                     fill={shadeFor(intensity)}
-                    stroke="rgba(255,255,255,0.12)"
+                    stroke="rgba(15,23,42,0.12)"
                     strokeWidth={0.5}
                     onMouseMove={(e) => v > 0 && moveHover(e, f.properties.name, v)}
                     style={{ cursor: v > 0 ? "pointer" : "default" }}
@@ -441,11 +441,11 @@ export function SalesMap({
                     cx={p.x}
                     cy={p.y}
                     r={r}
-                    fill={BRAND.mint}
-                    fillOpacity={0.55}
-                    stroke={BRAND.mint}
+                    fill={BRAND.heart}
+                    fillOpacity={0.85}
+                    stroke="#ffffff"
                     strokeOpacity={0.9}
-                    strokeWidth={0.4}
+                    strokeWidth={0.5}
                     onMouseMove={(e) => moveHover(e, label || "City", p.value)}
                     style={{ cursor: "pointer" }}
                   />
@@ -465,7 +465,7 @@ export function SalesMap({
               data-testid="map-tooltip"
             >
               <span className="font-medium">{hover.name}</span>
-              <span className="ml-2 text-fan-secondary">{hover.value}</span>
+              <span className="ml-2 text-white/70">{hover.value}</span>
             </div>
           )}
         </div>
@@ -475,11 +475,11 @@ export function SalesMap({
           {loading ? (
             <div className="space-y-2">
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-8 animate-pulse rounded bg-white/5" />
+                <div key={i} className="h-8 animate-pulse rounded bg-slate-100" />
               ))}
             </div>
           ) : isEmpty ? (
-            <p className="py-8 text-center text-sm text-fan-secondary" data-testid="sales-map-empty">
+            <p className="py-8 text-center text-sm text-slate-500" data-testid="sales-map-empty">
               No sales with location data in this range yet.
             </p>
           ) : (
@@ -496,14 +496,14 @@ export function SalesMap({
                       className="h-2.5 w-2.5 flex-shrink-0 rounded-[9999px]"
                       style={{ background: r.color }}
                     />
-                    <span className="w-28 flex-shrink-0 truncate text-fan-primary">{r.name}</span>
-                    <span className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/8">
+                    <span className="w-28 flex-shrink-0 truncate text-slate-700">{r.name}</span>
+                    <span className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
                       <span
                         className="absolute inset-y-0 left-0 rounded-full"
                         style={{ width: `${share}%`, background: r.color, opacity: 0.7 }}
                       />
                     </span>
-                    <span className="w-16 flex-shrink-0 text-right tabular-nums text-fan-secondary">
+                    <span className="w-16 flex-shrink-0 text-right tabular-nums text-slate-500">
                       {formatMetric(r.value, metric)}
                     </span>
                   </li>
@@ -528,13 +528,13 @@ export function SalesMap({
       {/* Full breakdown table + export */}
       {!loading && data && ranked.length > 0 && (
         <details
-          className="rounded-xl bg-white/[0.02] ring-1 ring-white/10"
+          className="rounded-xl bg-slate-50 ring-1 ring-slate-200"
           data-testid="full-breakdown"
         >
-          <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium text-fan-secondary">
+          <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium text-slate-500">
             Full breakdown ({ranked.length} {drillUs ? "states" : "regions"})
           </summary>
-          <div className="border-t border-white/10 px-4 py-3">
+          <div className="border-t border-slate-200 px-4 py-3">
             <div className="mb-3 flex justify-end">
               <button
                 type="button"
@@ -561,14 +561,14 @@ export function SalesMap({
                     toCsv(rows),
                   );
                 }}
-                className="rounded-md bg-white/5 px-3 py-1.5 text-xs font-medium text-fan-secondary hover:bg-white/10"
+                className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-200"
               >
                 Export CSV
               </button>
             </div>
             <div className="max-h-72 overflow-auto">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-[#0B1457] text-left text-xs text-fan-secondary">
+                <thead className="sticky top-0 bg-slate-50 text-left text-xs text-slate-500">
                   <tr>
                     <th className="py-1.5 pr-2 font-medium">{drillUs ? "State" : "Country"}</th>
                     <th className="py-1.5 px-2 text-right font-medium">Units</th>
@@ -576,7 +576,7 @@ export function SalesMap({
                     <th className="py-1.5 pl-2 text-right font-medium">Customers</th>
                   </tr>
                 </thead>
-                <tbody className="text-fan-secondary">
+                <tbody className="text-slate-500">
                   {[...(drillUs ? data.states : data.regions)]
                     .sort((a, b) => metricValue(b, metric) - metricValue(a, metric))
                     .map((row, i) => {
@@ -585,7 +585,7 @@ export function SalesMap({
                         ? (drillUs ? usNames : worldNames).get(code.toUpperCase()) ?? code
                         : "Unknown";
                       return (
-                        <tr key={code ?? i} className="border-t border-white/5">
+                        <tr key={code ?? i} className="border-t border-slate-100">
                           <td className="py-1.5 pr-2">{name}</td>
                           <td className="py-1.5 px-2 text-right tabular-nums">
                             {row.units.toLocaleString()}
@@ -608,9 +608,9 @@ export function SalesMap({
 
       {/* Top sources (best-effort) */}
       {!loading && data && data.sources.length > 0 && (
-        <div className="rounded-xl bg-white/[0.02] p-4 ring-1 ring-white/10" data-testid="top-sources">
-          <h4 className="text-sm font-semibold text-white">Top sources</h4>
-          <p className="mt-0.5 text-xs text-fan-secondary">
+        <div className="rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200" data-testid="top-sources">
+          <h4 className="text-sm font-semibold text-slate-900">Top sources</h4>
+          <p className="mt-0.5 text-xs text-slate-500">
             Where these orders originated. Best-effort, based on checkout origin.
           </p>
           <ul className="mt-3 space-y-1.5">
@@ -630,14 +630,14 @@ export function SalesMap({
                       className="h-2.5 w-2.5 flex-shrink-0 rounded-[9999px]"
                       style={{ background: color }}
                     />
-                    <span className="w-40 flex-shrink-0 truncate text-fan-primary">{s.label}</span>
-                    <span className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/8">
+                    <span className="w-40 flex-shrink-0 truncate text-slate-700">{s.label}</span>
+                    <span className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
                       <span
                         className="absolute inset-y-0 left-0 rounded-full"
                         style={{ width: `${share}%`, background: color, opacity: 0.7 }}
                       />
                     </span>
-                    <span className="w-16 flex-shrink-0 text-right tabular-nums text-fan-secondary">
+                    <span className="w-16 flex-shrink-0 text-right tabular-nums text-slate-500">
                       {formatMetric(v, metric)}
                     </span>
                   </li>
@@ -645,7 +645,7 @@ export function SalesMap({
               })}
           </ul>
           {referredUnits > 0 && (
-            <p className="mt-3 text-xs text-fan-secondary" data-testid="referred-note">
+            <p className="mt-3 text-xs text-slate-500" data-testid="referred-note">
               {referredUnits.toLocaleString()} of these units came through a referral or affiliate
               link ({formatUsdCents(data.referred.revenueCents)} gross).
             </p>
