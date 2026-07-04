@@ -10,7 +10,7 @@
 // layout at desktop breakpoints.
 import { useEffect, useMemo, useState } from "react";
 import { formatUsd, formatUsdCents } from "@shared/money";
-import { Link, useSearch } from "wouter";
+import { Link, useSearch, useRoute, useLocation } from "wouter";
 import { SalesMap, type SalesGeoPayload } from "@/components/partner/SalesMap";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
 import { BreakEvenBar } from "@/components/BreakEvenBar";
@@ -36,6 +36,9 @@ import { RangePicker, CompareToggle } from "@/components/partner/dashboard-contr
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
 import { AdminReports } from "@/pages/AdminReports";
+// Task #2524 — an artist opening one of their albums stays INSIDE this portal
+// shell; AdminAlbum renders in `embedded` mode (no operator /admin chrome).
+import { AdminAlbum } from "@/pages/AdminAlbum";
 import { CertRunsSection } from "@/components/partner/cert-runs-section";
 import { BuyerReport } from "@/components/partner/BuyerReport";
 import { BRAND, SKU_COLORS, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
@@ -176,6 +179,15 @@ export function ArtistDashboard() {
     queryKey: [`/api/artist/me?${qs}`],
   });
 
+  // Task #2524 — `/artist/albums/:id` opens that album's admin page embedded in
+  // this portal shell instead of the operator `/admin/albums/:id` chrome. When
+  // matched we force the Catalog tab active, drop the section header/date
+  // controls (the album page renders its own), and route tab clicks back out to
+  // the portal home so the artist can leave the album view.
+  const [isAlbumView, albumRouteParams] = useRoute<{ id: string }>("/artist/albums/:id");
+  const [, setLocation] = useLocation();
+  const albumViewId = isAlbumView ? (albumRouteParams?.id ?? null) : null;
+
   // Friendly error surface — artist accounts that aren't fully wired
   // (no person scope) or fans landing here get an actionable message
   // instead of a blank page.
@@ -217,10 +229,10 @@ export function ArtistDashboard() {
       // header + date range — so on those two sections we suppress the shell
       // page header entirely (no pageTitle, hideHeaderIdentity, no
       // headerActions) to avoid a duplicate title + duplicate range control.
-      pageTitle={tab === "dashboard" || tab === "reports" ? undefined : currentTabLabel}
-      hideHeaderIdentity={tab === "dashboard" || tab === "reports"}
+      pageTitle={albumViewId || tab === "dashboard" || tab === "reports" ? undefined : currentTabLabel}
+      hideHeaderIdentity={!!albumViewId || tab === "dashboard" || tab === "reports"}
       headerActions={
-        tab === "dashboard" || tab === "reports" ? undefined : (
+        albumViewId || tab === "dashboard" || tab === "reports" ? undefined : (
           <>
             <RangePicker presets={RANGE_PRESETS} value={preset} onChange={applyPreset} />
             <CompareToggle active={compare} onToggle={setCompare} />
@@ -228,8 +240,14 @@ export function ArtistDashboard() {
         )
       }
       tabs={ARTIST_TABS}
-      activeTab={tab}
+      activeTab={albumViewId ? "catalog" : tab}
       onTabChange={(newTab) => {
+        // In the embedded album view, a tab click leaves the album and lands on
+        // the portal home for that tab.
+        if (albumViewId) {
+          setLocation(`/artist?tab=${newTab}`);
+          return;
+        }
         setTab(newTab);
         const sp = new URLSearchParams(window.location.search);
         sp.set("tab", newTab);
@@ -250,6 +268,17 @@ export function ArtistDashboard() {
         reports: FileBarChart,
       }}
     >
+      {/* Task #2524 — embedded album view takes over the content area (Catalog
+          tab active), rendering AdminAlbum without the operator /admin chrome.
+          Back link returns to the portal catalog list. */}
+      {albumViewId ? (
+        <AdminAlbum
+          embedded
+          albumId={albumViewId}
+          backHref="/artist?tab=catalog"
+        />
+      ) : (
+        <>
       {tab === "dashboard" && (
         <PartnerDashboard
           scope="artist"
@@ -295,6 +324,8 @@ export function ArtistDashboard() {
           chrome). Scope is resolved server-side from the caller (or ?personId=
           for a viewing-as super-admin), exactly as the god-view page does. */}
       {tab === "reports" && <AdminReports embedded />}
+        </>
+      )}
     </OperatorShell>
   );
 }
@@ -525,7 +556,7 @@ function CatalogTab({ qs }: { qs: string }) {
                 <tr key={a.albumId} className="border-t border-slate-100" data-testid={`row-album-${a.albumId}`}>
                   <td className="py-2 pr-3">
                     <Link
-                      href={`/admin/albums/${a.albumId}`}
+                      href={`/artist/albums/${a.albumId}`}
                       className="flex items-center gap-2 min-w-0 group"
                       data-testid={`link-manage-album-${a.albumId}`}
                     >

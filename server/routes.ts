@@ -21859,6 +21859,65 @@ export async function registerRoutes(
     },
   );
 
+  // Task #2524 — revoke a comped/free (user_albums) copy. Operator-only:
+  // unlike a preview LINK (which the owning artist/label may manage for their
+  // own release), the comped fan roster is never exposed to partners, so only
+  // super_admin/admin may revoke here. This is an operational verb — it removes
+  // non-paying access and BYPASSES the post-sale edit_metadata lock by design.
+  app.post(
+    "/api/admin/albums/:id/free-access/:grantId/revoke",
+    requireAdmin,
+    async (req, res) => {
+      const userId = req.session.userId!;
+      const albumId = String(req.params.id);
+      const grantId = String(req.params.grantId);
+      const { getUserRole } = await import("./auth/roles");
+      const role = await getUserRole(userId);
+      if (role?.role !== "super_admin" && role?.role !== "admin") {
+        return res
+          .status(403)
+          .json({ message: "Only operators can revoke free access" });
+      }
+      // grantId === user_albums.id; scope to this album so an id from another
+      // release can't be touched.
+      const [row] = await db
+        .select({ id: userAlbums.id, customerId: userAlbums.userId })
+        .from(userAlbums)
+        .where(and(eq(userAlbums.id, grantId), eq(userAlbums.albumId, albumId)))
+        .limit(1);
+      if (!row) {
+        return res.status(404).json({ message: "Grant not found" });
+      }
+      // Safety net: never strip access from someone who actually paid — a paid
+      // order for this album means this is real ownership, not a comp. (Paid
+      // customers are already filtered out of the free-access list, but guard
+      // the mutation directly in case the two ever diverge.)
+      const paid = await db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.albumId, albumId),
+            eq(orders.customerId, row.customerId),
+            inArray(orders.status, ["paid", "shipped", "complete", "completed"]),
+          ),
+        )
+        .limit(1);
+      if (paid.length > 0) {
+        return res.status(409).json({
+          message:
+            "This account has a paid order — access can't be revoked here.",
+        });
+      }
+      await db
+        .delete(userAlbums)
+        .where(
+          and(eq(userAlbums.id, grantId), eq(userAlbums.albumId, albumId)),
+        );
+      return res.json({ ok: true });
+    },
+  );
+
   // Public, visibility-gated read: a logged-out fan opening a LIVE release on
   // get.goodtunes.music (the launch root or a /<artist>/<release> share link)
   // must get the album, not a 401 → "couldn't find that album". optionalAuth

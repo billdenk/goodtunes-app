@@ -922,6 +922,13 @@ function Router() {
         <Route path="/vendor">
           <ProtectedRoute component={VendorPortal} />
         </Route>
+        {/* Task #2524 — an artist opening one of their albums stays inside the
+            portal shell (ArtistDashboard renders AdminAlbum embedded). Listed
+            BEFORE /artist/:slug; the two-segment path can't collide with the
+            single-segment slug route, but keep it ahead for clarity. */}
+        <Route path="/artist/albums/:id">
+          <ProtectedRoute component={ArtistDashboard} />
+        </Route>
         <Route path="/artist/:slug">
           <ProtectedRoute component={ArtistDetail} />
         </Route>

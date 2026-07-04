@@ -124,7 +124,7 @@ import { SellPanel } from "@/components/admin/SellPanel";
 import { PressPanel } from "@/components/admin/PressPanel";
 import { ShopifyPanel } from "@/components/admin/ShopifyPanel";
 import { ShopifyPlusPanel } from "@/components/admin/ShopifyPlusPanel";
-import { AlbumCustomersPanel } from "@/components/admin/AlbumCustomersPanel";
+import { AlbumCustomersPanel, AccessWithoutPurchaseSection } from "@/components/admin/AlbumCustomersPanel";
 import { AlbumWaitlistPanel } from "@/components/admin/AlbumWaitlistPanel";
 import { NewMusicAnnouncePanel } from "@/components/admin/NewMusicAnnouncePanel";
 import { AlbumDashboardPanel } from "@/components/admin/AlbumDashboardPanel";
@@ -466,7 +466,20 @@ function SectionDot({
 // (POST/PUT/Dropbox-import hooks + boot-time backfill in server/routes.ts)
 // made the migrate button entirely redundant. Per-row spinners on encoding
 
-export function AdminAlbum() {
+export function AdminAlbum({
+  embedded = false,
+  albumId: albumIdProp,
+  backHref,
+}: {
+  // Task #2524 — when a partner portal (e.g. the artist dashboard) opens an
+  // album, it renders this page INSIDE its own OperatorShell instead of the
+  // operator `/admin/albums/:id` AdminFrame chrome. `embedded` drops the
+  // AdminFrame wrapper (no operator sidebar / preview pane) and `albumId` +
+  // `backHref` come from the portal route instead of the `/admin` route.
+  embedded?: boolean;
+  albumId?: string;
+  backHref?: string;
+} = {}) {
   const { user, isLoading: authLoading } = useAuth();
   const [, params] = useRoute<{ id: string }>("/admin/albums/:id");
   const [, navigate] = useLocation();
@@ -537,6 +550,9 @@ export function AdminAlbum() {
   //      legacy form (#1007) still honored for any in-flight links.
   //   3. Otherwise the canonical Albums list (Released default).
   const backToAlbumsHref = useMemo(() => {
+    // Embedded in a partner portal → the "back" target is the portal's own
+    // catalog list, not the operator Albums index.
+    if (embedded) return backHref ?? "/artist?tab=catalog";
     try {
       const sp = new URLSearchParams(search);
       if (sp.get("from") === "person") {
@@ -557,7 +573,7 @@ export function AdminAlbum() {
       /* malformed query string — fall through to the default */
     }
     return "/admin/albums";
-  }, [search]);
+  }, [search, embedded, backHref]);
   // Task #674 — Persist the active tab in the URL (`?tab=`) so a refresh
   // reopens the same tab instead of snapping back to Overview. Read once
   // on mount, AFTER the `track`/`onboarding` deep-link precedence above,
@@ -646,7 +662,7 @@ export function AdminAlbum() {
   // mostly-empty whitespace and removes the centered-then-flush-left
   // layout jump we had when toggling Edit on the old ArtworkPanel.
   const [artworkEditorOpen, setArtworkEditorOpen] = useState(false);
-  const albumId = params?.id ?? "";
+  const albumId = albumIdProp ?? params?.id ?? "";
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -1097,13 +1113,12 @@ export function AdminAlbum() {
   };
 
   if (authLoading || isLoading) {
-    return (
-      <AdminFrame active="albums">
-        <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
-        </div>
-      </AdminFrame>
+    const loadingBody = (
+      <div className="py-20 flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
+      </div>
     );
+    return embedded ? loadingBody : <AdminFrame active="albums">{loadingBody}</AdminFrame>;
   }
 
   if (!user?.isAdmin) {
@@ -1115,23 +1130,22 @@ export function AdminAlbum() {
   }
 
   if (error || !album) {
-    return (
-      <AdminFrame active="albums">
-        <div className="py-20 text-center space-y-3">
-          <h1 className="text-slate-900 text-lg font-semibold">
-            Album not found
-          </h1>
-          <Link
-            href={backToAlbumsHref}
-            className="text-[var(--brand-blue)] text-sm hover:underline inline-flex items-center gap-1"
-            data-testid="link-back-to-albums"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            Back to albums
-          </Link>
-        </div>
-      </AdminFrame>
+    const notFoundBody = (
+      <div className="py-20 text-center space-y-3">
+        <h1 className="text-slate-900 text-lg font-semibold">
+          Album not found
+        </h1>
+        <Link
+          href={backToAlbumsHref}
+          className="text-[var(--brand-blue)] text-sm hover:underline inline-flex items-center gap-1"
+          data-testid="link-back-to-albums"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+          {embedded ? "Back to catalog" : "Back to albums"}
+        </Link>
+      </div>
     );
+    return embedded ? notFoundBody : <AdminFrame active="albums">{notFoundBody}</AdminFrame>;
   }
 
   // Lifecycle pill — derived from the same logic the Albums grid uses.
@@ -1145,15 +1159,8 @@ export function AdminAlbum() {
       ? { label: "Prepping", tone: "slate" as const }
       : { label: "Released", tone: "mint" as const };
 
-  return (
-    <AdminFrame
-      active="albums"
-      contentWidth="wide"
-      preview={{
-        phone: <AlbumPreviewCard album={album} />,
-        tablet: <AlbumDesktopPreviewCard album={album} />,
-      }}
-    >
+  const mainBody = (
+    <>
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
@@ -1162,7 +1169,7 @@ export function AdminAlbum() {
             className="hover:text-slate-700"
             data-testid="link-breadcrumb-albums"
           >
-            Albums
+            {embedded ? "Catalog" : "Albums"}
           </Link>
           <ChevronRight className="w-3 h-3" />
           <span className="text-slate-700 font-semibold truncate max-w-[420px]">
@@ -2194,6 +2201,21 @@ export function AdminAlbum() {
           );
         }}
       />
+    </>
+  );
+  // Task #2524 — embedded in a partner portal shell: no AdminFrame chrome
+  // (no operator sidebar, no phone/tablet preview pane), just the content.
+  if (embedded) return mainBody;
+  return (
+    <AdminFrame
+      active="albums"
+      contentWidth="wide"
+      preview={{
+        phone: <AlbumPreviewCard album={album} />,
+        tablet: <AlbumDesktopPreviewCard album={album} />,
+      }}
+    >
+      {mainBody}
     </AdminFrame>
   );
 }
@@ -3860,6 +3882,18 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
   const { data: labels = [] } = useQuery<LabelLite[]>({
     queryKey: ["/api/labels"],
   });
+  // Task #2524 — partner viewers (artist/label) never get the operator
+  // Customers tab (it exposes the comped/free fan roster), so the place they
+  // manage + revoke their OWN reviewer/preview links is here on Overview.
+  // Operators keep managing everything on the Customers tab, so this section
+  // renders for partners only.
+  const { data: overviewRole } = useQuery<{ role: string }>({
+    queryKey: ["/api/me/role"],
+  });
+  const isPartnerViewer =
+    !!overviewRole?.role &&
+    overviewRole.role !== "super_admin" &&
+    overviewRole.role !== "admin";
   // Task #1918 — fulfillment partners for the per-album routing override.
   const { data: fulfillmentPartners = [] } = useQuery<
     { id: string; name: string; isDefault?: boolean }[]
@@ -4186,6 +4220,13 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
         disabled={disabled}
         disabledReason={disabledReason}
       />
+      {/* Task #2524 — partner-facing manage/revoke for their OWN reviewer +
+          preview links. Preview-links-only mode: the comped/free "owners"
+          fan list stays hidden from partners for privacy. Operators manage
+          the same grants (plus the fan roster) on the Customers tab. */}
+      {isPartnerViewer && (
+        <AccessWithoutPurchaseSection albumId={album.id} previewLinksOnly />
+      )}
       {/* Task #190 — per-album Lineup snapshot. Only meaningful when the
           album's primary artist is a group (band/duo/orchestra). Renders
           inside its own panel below Metadata. */}

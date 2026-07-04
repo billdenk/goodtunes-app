@@ -334,15 +334,108 @@ function PreviewGrantRevokeRow({
   );
 }
 
-function AccessWithoutPurchaseSection({
+// Task #2524 — operator-only Revoke for a comped/free (user_albums) copy.
+// This is an operational verb: it removes non-paying access and bypasses the
+// post-sale edit_metadata lock by design. It only ever renders on the operator
+// Customers tab (full section), never in the partner preview-links-only view,
+// so the comped fan identity is never exposed to a partner.
+function FreeOwnerRevokeButton({
+  owner,
+  albumId,
+}: {
+  owner: FreeOwner;
+  albumId: string;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const revoke = useMutation({
+    mutationFn: async () => {
+      await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/free-access/${owner.id}/revoke`,
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ["/api/admin/albums", albumId, "free-access"],
+      });
+      toast({
+        title: "Access revoked",
+        description: "That account can no longer open this release for free.",
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't revoke",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      }),
+  });
+
+  const who = owner.name || owner.email || "This account";
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button
+          type="button"
+          className="-m-1 shrink-0 p-1 text-slate-400 transition-colors hover:text-rose-600"
+          title="Revoke this free access"
+          data-testid={`button-revoke-access-owner-${owner.id}`}
+        >
+          {revoke.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Ban className="h-4 w-4" />
+          )}
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent
+        className="rounded-xl border-slate-200 bg-white"
+        data-testid={`dialog-revoke-access-owner-${owner.id}`}
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle className="text-slate-900">
+            Revoke free access?
+          </AlertDialogTitle>
+          <AlertDialogDescription className="text-slate-500">
+            {who} will lose their comped access to this release. This can't be
+            undone — you can grant access again anytime.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid={`button-cancel-revoke-owner-${owner.id}`}>
+            Keep access
+          </AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-rose-600 text-white hover:bg-rose-700"
+            onClick={() => revoke.mutate()}
+            data-testid={`button-confirm-revoke-owner-${owner.id}`}
+          >
+            Revoke access
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+// Task #2524 — `previewLinksOnly` renders ONLY the "Preview & reviewer links"
+// section (no comped/free fan roster) for partner portals, where exposing the
+// comped fan identities would be a privacy leak. In that mode the free-access
+// read is not even issued.
+export function AccessWithoutPurchaseSection({
   albumId,
   onManagePreview,
+  previewLinksOnly = false,
 }: {
   albumId: string;
   onManagePreview?: () => void;
+  previewLinksOnly?: boolean;
 }) {
   const freeQuery = useQuery<{ owners: FreeOwner[] }>({
     queryKey: ["/api/admin/albums", albumId, "free-access"],
+    enabled: !previewLinksOnly,
   });
   const grantsQuery = useQuery<{ grants: PreviewGrant[] }>({
     queryKey: ["/api/admin/albums", albumId, "preview-grants"],
@@ -351,16 +444,17 @@ function AccessWithoutPurchaseSection({
   // Hidden entirely if the viewer isn't allowed to manage previews for this
   // release (either read returns 403). Same gate as the Overview preview panel.
   if (
-    apiErrorStatus(freeQuery.error) === 403 ||
+    (!previewLinksOnly && apiErrorStatus(freeQuery.error) === 403) ||
     apiErrorStatus(grantsQuery.error) === 403
   ) {
     return null;
   }
 
   // Don't flash an empty card before the data lands.
-  if (freeQuery.isLoading || grantsQuery.isLoading) return null;
+  if ((!previewLinksOnly && freeQuery.isLoading) || grantsQuery.isLoading)
+    return null;
 
-  const owners = freeQuery.data?.owners ?? [];
+  const owners = previewLinksOnly ? [] : (freeQuery.data?.owners ?? []);
   const grants = grantsQuery.data?.grants ?? [];
   const count = owners.length + grants.length;
 
@@ -375,7 +469,7 @@ function AccessWithoutPurchaseSection({
       <div className="flex items-start justify-between gap-4 px-5 py-3.5 border-b border-slate-100">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-slate-900">
-            Access without a purchase
+            {previewLinksOnly ? "Preview & reviewer links" : "Access without a purchase"}
             <span
               className="ml-2 text-slate-400 font-normal text-xs"
               data-testid="text-access-without-purchase-count"
@@ -384,8 +478,9 @@ function AccessWithoutPurchaseSection({
             </span>
           </h2>
           <p className="mt-0.5 text-xs leading-snug text-slate-500">
-            Comped copies and reviewer preview links. These don't count toward
-            revenue or units above.
+            {previewLinksOnly
+              ? "Private reviewer links you've created for this release. Revoke any anytime — fans never see these."
+              : "Comped copies and reviewer preview links. These don't count toward revenue or units above."}
           </p>
         </div>
         {onManagePreview && (
@@ -454,6 +549,7 @@ function AccessWithoutPurchaseSection({
                         : `Comped${o.acquiredAt ? ` · ${formatDate(o.acquiredAt)}` : ""}`}
                     </p>
                   </div>
+                  <FreeOwnerRevokeButton owner={o} albumId={albumId} />
                 </div>
               ))}
             </div>
