@@ -12,6 +12,7 @@
 // fee / Stripe fees) lives INSIDE the info popover, never in the card
 // body. Light admin slate theme only — no fan surfaces.
 
+import type { ReactNode } from "react";
 import { Link } from "wouter";
 import { ArrowUpRight, Info } from "lucide-react";
 import { formatUsdCents } from "@shared/money";
@@ -30,11 +31,26 @@ export type KpiBreakdownRow = { label: string; value: number; format: KpiFormat 
 export type KpiCardModel = {
   id: string;
   label: string;
+  /** Optional glyph rendered just before the label (e.g. the Roster star). */
+  labelIcon?: ReactNode;
   value: number | null;
   prior?: number | null;
   format: KpiFormat;
+  /**
+   * Pre-formatted display string. When set it overrides `formatKpiValue`
+   * for the big number — used for non-numeric metrics (a "Top track" title)
+   * or when a caller keeps its own bespoke formatting. `value`/`prior` still
+   * drive the delta pill, so pass both a numeric `value` and `valueText` when
+   * you want a custom display AND a comparison pill.
+   */
+  valueText?: string;
   note?: string;
   comingSoon?: boolean;
+  /**
+   * Suppress the "vs prior" row entirely (no pill, no "—" placeholder) for
+   * point-in-time or lifetime metrics that have no prior-period comparison.
+   */
+  hideDelta?: boolean;
   breakdown?: KpiBreakdownRow[];
   /** Plain-language help copy. Falls back to KPI_INFO[id] when omitted. */
   info?: string;
@@ -133,11 +149,33 @@ export const KPI_INFO: Record<string, string> = {
   // Artist all-time headline strip
   fans: "Unique fans who bought one of your releases in this period.",
   openOrders: "Paid orders that haven't shipped yet.",
+  // Artist / Label / Manager reporting dashboards
+  artistShare: "Your share of sales after the platform split.",
+  listeners: "Distinct people who played at least one track in this period.",
+  topAlbum: "Your highest-earning release in this period.",
+  roster: "Artists on your roster.",
+  arpa: "Average gross revenue per roster artist in this period.",
+  newListeners: "Listeners playing this music for the first time in this period.",
+  returningListeners: "Listeners who had played this music before this period.",
+  engaged: "Listeners with two or more plays in this period.",
+  // Non-profit dashboard
+  npoPending: "Money owed to this cause but not yet paid out.",
+  npoPaid: "Money already paid out to this cause.",
+  npoArtists: "Artists referred by this cause.",
 };
 
 // Shown when a KPI id has no specific entry above, so every box always
 // carries an info-(i) with at least a plain-language explanation.
 export const DEFAULT_KPI_INFO = "A summary metric for this dashboard.";
+
+// Normalize a dashboard test-id ("kpi-top-track", "lifetime-gross") into a
+// camelCase KPI_INFO key ("topTrack", "gross") so a migrated card picks up
+// real help copy instead of the generic fallback.
+export function kpiInfoKeyFromTestId(testId: string): string {
+  return testId
+    .replace(/^(kpi|lifetime)-/, "")
+    .replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+}
 
 // ─── Sparkline ───────────────────────────────────────────────────────
 
@@ -180,7 +218,14 @@ export function KpiCard({
   spark?: number[] | null;
   color?: string;
 }) {
-  const value = formatKpiValue(model.value, model.format);
+  const value = model.valueText ?? formatKpiValue(model.value, model.format);
+  // A genuine no-data metric (null number, no forced display string, or an
+  // explicit "—" placeholder) renders as a quiet, muted, label-weight dash
+  // rather than a heavy 22px headline — so an empty grid reads calm, not alarming.
+  const isEmpty =
+    !model.comingSoon &&
+    model.value === null &&
+    (model.valueText === undefined || model.valueText === "" || model.valueText === "—");
   const showDelta =
     !model.comingSoon &&
     model.value !== null &&
@@ -221,6 +266,7 @@ export function KpiCard({
           to it, except on the interactive info button (pointer-events-auto). */}
       <div className={cn("relative z-[2]", linked && "pointer-events-none")}>
         <div className="flex items-center gap-1 text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+          {model.labelIcon}
           <span className="truncate">{model.label}</span>
           {showInfo && (
             <Popover>
@@ -280,15 +326,24 @@ export function KpiCard({
           )}
         </div>
 
-        <p
-          className={cn(
-            "mt-1 text-[22px] font-semibold tabular-nums",
-            model.comingSoon ? "text-slate-400" : "text-slate-900",
-          )}
-          data-testid={`${testId}-value`}
-        >
-          {value}
-        </p>
+        {isEmpty ? (
+          <p
+            className="mt-1 text-lg font-normal text-slate-300 tabular-nums"
+            data-testid={`${testId}-value`}
+          >
+            —
+          </p>
+        ) : (
+          <p
+            className={cn(
+              "mt-1 text-[22px] font-semibold tabular-nums",
+              model.comingSoon ? "text-slate-400" : "text-slate-900",
+            )}
+            data-testid={`${testId}-value`}
+          >
+            {value}
+          </p>
+        )}
       </div>
 
       <div
@@ -298,7 +353,7 @@ export function KpiCard({
         )}
       >
         <div className="flex items-center gap-2 text-[11px] min-w-0">
-          {showDelta ? (
+          {model.hideDelta ? null : showDelta ? (
             <>
               <span className="text-slate-500">vs prior</span>
               <span
@@ -322,6 +377,25 @@ export function KpiCard({
         </div>
         {showSpark && <Sparkline points={spark as number[]} color={color} />}
       </div>
+    </div>
+  );
+}
+
+// ─── Loading skeleton ────────────────────────────────────────────────
+// Same frame + rhythm as KpiCard so a metric grid can render placeholder
+// cards while its query is in flight — a quiet shimmer instead of a grid
+// full of "—" bars.
+export function KpiCardSkeleton({ testId }: { testId?: string }) {
+  return (
+    <div
+      data-testid={testId}
+      className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between min-h-[120px]"
+    >
+      <div className="space-y-2">
+        <div className="h-3 w-16 rounded bg-slate-100 animate-pulse" />
+        <div className="h-6 w-24 rounded bg-slate-200 animate-pulse" />
+      </div>
+      <div className="mt-2 h-3 w-20 rounded bg-slate-100 animate-pulse" />
     </div>
   );
 }

@@ -10,7 +10,7 @@
 // dashboards feel like one product. Headline view is the roster table;
 // catalog/audience/orders match the artist layout.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { formatUsd, formatUsdCents } from "@shared/money";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -34,6 +34,9 @@ import { CertRunsSection } from "@/components/partner/cert-runs-section";
 import { SalesMap, type SalesGeoPayload } from "@/components/partner/SalesMap";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { BRAND, CHART_STACK_PALETTE, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
+import {
+  KpiCard, KpiCardSkeleton, kpiInfoKeyFromTestId, type KpiCardModel,
+} from "@/components/admin/KpiCard";
 
 type Range = { from: string; to: string };
 type LabelMe = {
@@ -232,28 +235,45 @@ const LABEL_TABS = modulesForRole("label") as ReadonlyArray<{
 type LabelTabId = (typeof LABEL_TABS)[number]["id"];
 
 // ─── KPI card ─────────────────────────────────────────────────────────
-function delta(cur: number, prev: number | null | undefined): { val: string; positive: boolean } | null {
-  if (prev == null || prev === 0) return null;
-  const change = (cur - prev) / prev;
-  if (!isFinite(change)) return null;
-  return { val: `${change >= 0 ? "+" : ""}${(change * 100).toFixed(1)}%`, positive: change >= 0 };
+// Thin adapter onto the shared house KPI primitive (KpiCard). Pre-formatted
+// display strings ride `valueText`; raw numeric `prev` drives the delta pill;
+// a leading glyph (the Roster star) rides `labelIcon`. No `prev` → suppress
+// the "vs prior" row (hideDelta) so the card reads as a clean headline.
+function Kpi({
+  label, labelIcon, value, sub, prev, testId, spark,
+}: {
+  label: string; labelIcon?: ReactNode; value: string; sub?: string;
+  prev?: { cur: number; prev: number | null } | null;
+  testId: string; spark?: number[] | null;
+}) {
+  const model: KpiCardModel = {
+    id: kpiInfoKeyFromTestId(testId),
+    label,
+    labelIcon,
+    value: prev ? prev.cur : null,
+    prior: prev ? prev.prev : null,
+    valueText: value === "—" ? undefined : value,
+    format: "number",
+    note: sub,
+    hideDelta: !prev,
+  };
+  return <KpiCard model={model} testId={testId} spark={spark ?? null} />;
 }
-function Kpi({ label, value, sub, prev, testId }: { label: React.ReactNode; value: string; sub?: string; prev?: { cur: number; prev: number | null } | null; testId: string }) {
-  const d = prev ? delta(prev.cur, prev.prev) : null;
-  return (
-    <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4" data-testid={testId}>
-      <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">{label}</p>
-      <p className="mt-1 text-2xl sm:text-[28px] font-bold tabular-nums" data-testid={`${testId}-value`}>{value}</p>
-      <div className="mt-1 flex items-center gap-2 text-[11px]">
-        {sub && <span className="text-slate-500">{sub}</span>}
-        {d && (
-          <span className={`px-1.5 py-0.5 rounded-full font-semibold ${d.positive ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"}`} data-testid={`${testId}-delta`}>
-            {d.val}
-          </span>
-        )}
-      </div>
-    </div>
-  );
+
+// Daily series → sparkline points for the range-windowed KPIs.
+function dailyGross(series?: Timeseries): number[] {
+  if (!series?.revenue?.length) return [];
+  const byDay = new Map<string, number>();
+  for (const r of series.revenue) byDay.set(r.day, (byDay.get(r.day) ?? 0) + r.revenueCents);
+  return Array.from(byDay.keys()).sort().map((d) => byDay.get(d)!);
+}
+function dailyPlays(series?: Timeseries): number[] {
+  if (!series?.plays?.length) return [];
+  return [...series.plays].sort((a, b) => (a.day < b.day ? -1 : 1)).map((p) => p.starts);
+}
+function dailyListeners(series?: Timeseries): number[] {
+  if (!series?.plays?.length) return [];
+  return [...series.plays].sort((a, b) => (a.day < b.day ? -1 : 1)).map((p) => p.listeners);
 }
 
 // ─── Overview tab ─────────────────────────────────────────────────────
@@ -268,14 +288,22 @@ function OverviewTab({ qs, labelId, labelName }: { qs: string; labelId: string |
   return (
     <>
       <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3" data-testid="kpi-grid">
-        <Kpi label="Gross revenue" value={cur ? dollars(cur.grossCents) : "—"} sub={cur && cur.refundedCents ? `${dollars(cur.refundedCents)} refunded` : undefined} prev={cur ? { cur: cur.grossCents, prev: prev?.grossCents ?? null } : null} testId="kpi-gross" />
-        <Kpi label="Units sold" value={cur ? compact(cur.units) : "—"} sub={cur ? `${cur.buyers} unique buyer${cur.buyers === 1 ? "" : "s"}` : undefined} prev={cur ? { cur: cur.units, prev: prev?.units ?? null } : null} testId="kpi-units" />
-        <Kpi label="Total plays" value={cur ? compact(cur.plays) : "—"} sub={cur ? `${pct(cur.completionRate)} complete` : undefined} prev={cur ? { cur: cur.plays, prev: prev?.plays ?? null } : null} testId="kpi-plays" />
-        <Kpi label="Unique listeners" value={cur ? compact(cur.listeners) : "—"} prev={cur ? { cur: cur.listeners, prev: prev?.listeners ?? null } : null} testId="kpi-listeners" />
-        <Kpi label="New fans" value={cur ? compact(cur.newFans) : "—"} sub="First-ever play in window" prev={cur ? { cur: cur.newFans, prev: prev?.newFans ?? null } : null} testId="kpi-new-fans" />
-        <Kpi label={<><Star className="w-3 h-3 inline -mt-0.5 mr-1 text-emerald-500 fill-emerald-500" />Roster</>} value={cur ? compact(cur.rosterSize) : "—"} sub={cur ? `${cur.albumCount} album${cur.albumCount === 1 ? "" : "s"}` : undefined} testId="kpi-roster" />
-        <Kpi label="Completion rate" value={cur ? pct(cur.completionRate) : "—"} sub={cur ? `${compact(cur.completions)} completions` : undefined} testId="kpi-completion" />
-        <Kpi label="Avg. revenue / artist" value={cur && cur.rosterSize ? dollars(cur.grossCents / cur.rosterSize) : "—"} testId="kpi-arpa" />
+        {summary.isLoading ? (
+          Array.from({ length: 8 }).map((_, i) => (
+            <KpiCardSkeleton key={i} testId={`kpi-skeleton-${i}`} />
+          ))
+        ) : (
+          <>
+            <Kpi label="Gross revenue" value={cur ? dollars(cur.grossCents) : "—"} sub={cur && cur.refundedCents ? `${dollars(cur.refundedCents)} refunded` : undefined} prev={cur ? { cur: cur.grossCents, prev: prev?.grossCents ?? null } : null} spark={dailyGross(series.data)} testId="kpi-gross" />
+            <Kpi label="Units sold" value={cur ? compact(cur.units) : "—"} sub={cur ? `${cur.buyers} unique buyer${cur.buyers === 1 ? "" : "s"}` : undefined} prev={cur ? { cur: cur.units, prev: prev?.units ?? null } : null} testId="kpi-units" />
+            <Kpi label="Total plays" value={cur ? compact(cur.plays) : "—"} sub={cur ? `${pct(cur.completionRate)} complete` : undefined} prev={cur ? { cur: cur.plays, prev: prev?.plays ?? null } : null} spark={dailyPlays(series.data)} testId="kpi-plays" />
+            <Kpi label="Unique listeners" value={cur ? compact(cur.listeners) : "—"} prev={cur ? { cur: cur.listeners, prev: prev?.listeners ?? null } : null} spark={dailyListeners(series.data)} testId="kpi-listeners" />
+            <Kpi label="New fans" value={cur ? compact(cur.newFans) : "—"} sub="First-ever play in window" prev={cur ? { cur: cur.newFans, prev: prev?.newFans ?? null } : null} testId="kpi-new-fans" />
+            <Kpi label="Roster" labelIcon={<Star className="w-3 h-3 -mt-0.5 text-emerald-500 fill-emerald-500" />} value={cur ? compact(cur.rosterSize) : "—"} sub={cur ? `${cur.albumCount} album${cur.albumCount === 1 ? "" : "s"}` : undefined} testId="kpi-roster" />
+            <Kpi label="Completion rate" value={cur ? pct(cur.completionRate) : "—"} sub={cur ? `${compact(cur.completions)} completions` : undefined} testId="kpi-completion" />
+            <Kpi label="Avg. revenue / artist" value={cur && cur.rosterSize ? dollars(cur.grossCents / cur.rosterSize) : "—"} testId="kpi-arpa" />
+          </>
+        )}
       </section>
 
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">

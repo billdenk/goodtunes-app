@@ -14,6 +14,9 @@ import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import {
+  KpiCard, KpiCardSkeleton, kpiInfoKeyFromTestId, type KpiCardModel,
+} from "@/components/admin/KpiCard";
 
 // Task #78 — Non-profit partner shell. Task #545 extends it with the
 // ambassador / staff / artist invite tree: NPO admins can mint
@@ -189,9 +192,17 @@ function ArtistsTab() {
   return (
     <>
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="npo-kpis">
-        <Kpi label="Pending payout" value={fmt(dash.data?.pendingCents ?? 0)} sub={`${dash.data?.pendingCount ?? 0} unit${(dash.data?.pendingCount ?? 0) === 1 ? "" : "s"}`} testId="kpi-npo-pending" />
-        <Kpi label="Paid out" value={fmt(dash.data?.paidCents ?? 0)} testId="kpi-npo-paid" />
-        <Kpi label="Referred artists" value={String(dash.data?.artists.length ?? 0)} testId="kpi-npo-artists" />
+        {dash.isLoading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <KpiCardSkeleton key={i} testId={`kpi-npo-skeleton-${i}`} />
+          ))
+        ) : (
+          <>
+            <Kpi label="Pending payout" value={fmt(dash.data?.pendingCents ?? 0)} sub={`${dash.data?.pendingCount ?? 0} unit${(dash.data?.pendingCount ?? 0) === 1 ? "" : "s"}`} testId="kpi-npo-pending" />
+            <Kpi label="Paid out" value={fmt(dash.data?.paidCents ?? 0)} testId="kpi-npo-paid" />
+            <Kpi label="Referred artists" value={String(dash.data?.artists.length ?? 0)} testId="kpi-npo-artists" />
+          </>
+        )}
       </section>
 
       <section className="mt-6">
@@ -727,12 +738,18 @@ function AmbassadorChip({ personId, canInviteAmbassadors }: { personId: string; 
   );
 }
 
+// Thin adapter onto the shared house KPI primitive (KpiCard). These are all
+// point-in-time figures with no prior-period comparison, so `hideDelta`
+// keeps the "vs prior" row off and the card reads as a clean headline.
 function Kpi({ label, value, sub, testId }: { label: string; value: string; sub?: string; testId: string }) {
-  return (
-    <DashboardPanel data-testid={testId}>
-      <p className="text-xs uppercase tracking-wider text-slate-500 font-semibold">{label}</p>
-      <p className="mt-1 text-2xl font-bold tabular-nums" data-testid={`${testId}-value`}>{value}</p>
-      {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
-    </DashboardPanel>
-  );
+  const model: KpiCardModel = {
+    id: kpiInfoKeyFromTestId(testId),
+    label,
+    value: null,
+    valueText: value,
+    format: "number",
+    note: sub,
+    hideDelta: true,
+  };
+  return <KpiCard model={model} testId={testId} />;
 }

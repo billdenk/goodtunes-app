@@ -34,6 +34,9 @@ import { modulesForRole } from "@/components/operator/registry";
 import { CertRunsSection } from "@/components/partner/cert-runs-section";
 import { BuyerReport } from "@/components/partner/BuyerReport";
 import { BRAND, SKU_COLORS, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
+import {
+  KpiCard, KpiCardSkeleton, kpiInfoKeyFromTestId, type KpiCardModel,
+} from "@/components/admin/KpiCard";
 
 type Range = { from: string; to: string };
 type Kpis = {
@@ -240,29 +243,47 @@ const ARTIST_TABS = modulesForRole("artist") as ReadonlyArray<{
 type ArtistTabId = (typeof ARTIST_TABS)[number]["id"];
 
 // ─── KPI card ─────────────────────────────────────────────────────────
-function delta(cur: number, prev: number | null | undefined): { val: string; positive: boolean } | null {
-  if (prev == null || prev === 0) return null;
-  const change = (cur - prev) / prev;
-  if (!isFinite(change)) return null;
-  return { val: `${change >= 0 ? "+" : ""}${(change * 100).toFixed(1)}%`, positive: change >= 0 };
+// Thin adapter onto the shared house KPI primitive (KpiCard). Callers keep
+// their pre-formatted display strings (dollars()/compact()/pct()) via
+// `valueText`; the raw numeric `prev.cur`/`prev.prev` drive the delta pill.
+// A KPI with no `prev` is a point-in-time figure → suppress the "vs prior"
+// row entirely (hideDelta) so it reads as a clean headline.
+function Kpi({
+  label, value, sub, prev, testId, spark,
+}: {
+  label: string; value: string; sub?: string;
+  prev?: { cur: number; prev: number | null } | null;
+  testId: string; spark?: number[] | null;
+}) {
+  const model: KpiCardModel = {
+    id: kpiInfoKeyFromTestId(testId),
+    label,
+    value: prev ? prev.cur : null,
+    prior: prev ? prev.prev : null,
+    valueText: value === "—" ? undefined : value,
+    format: "number",
+    note: sub,
+    hideDelta: !prev,
+  };
+  return <KpiCard model={model} testId={testId} spark={spark ?? null} />;
 }
 
-function Kpi({ label, value, sub, prev, testId }: { label: string; value: string; sub?: string; prev?: { cur: number; prev: number | null } | null; testId: string }) {
-  const d = prev ? delta(prev.cur, prev.prev) : null;
-  return (
-    <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4" data-testid={testId}>
-      <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">{label}</p>
-      <p className="mt-1 text-2xl sm:text-[28px] font-bold tabular-nums" data-testid={`${testId}-value`}>{value}</p>
-      <div className="mt-1 flex items-center gap-2 text-[11px]">
-        {sub && <span className="text-slate-500">{sub}</span>}
-        {d && (
-          <span className={`px-1.5 py-0.5 rounded-full font-semibold ${d.positive ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"}`} data-testid={`${testId}-delta`}>
-            {d.val}
-          </span>
-        )}
-      </div>
-    </div>
-  );
+// Daily series → sparkline points for the range-windowed KPIs. Gross rolls
+// per-SKU revenue rows up by day; plays/listeners ride the daily plays rows.
+// Empty series returns [] so KpiCard simply omits the spark.
+function dailyGross(series?: Timeseries): number[] {
+  if (!series?.revenue?.length) return [];
+  const byDay = new Map<string, number>();
+  for (const r of series.revenue) byDay.set(r.day, (byDay.get(r.day) ?? 0) + r.revenueCents);
+  return Array.from(byDay.keys()).sort().map((d) => byDay.get(d)!);
+}
+function dailyPlays(series?: Timeseries): number[] {
+  if (!series?.plays?.length) return [];
+  return [...series.plays].sort((a, b) => (a.day < b.day ? -1 : 1)).map((p) => p.starts);
+}
+function dailyListeners(series?: Timeseries): number[] {
+  if (!series?.plays?.length) return [];
+  return [...series.plays].sort((a, b) => (a.day < b.day ? -1 : 1)).map((p) => p.listeners);
 }
 
 // Task #1334 — All-time "since launch" headline. Lives ABOVE the
@@ -270,7 +291,7 @@ function Kpi({ label, value, sub, prev, testId }: { label: string; value: string
 // time" eyebrow) so the lifetime figures are never confused with the
 // date-range numbers below. Reconciles with the buyer-roster totals at
 // /admin/people/:id/buyers.
-function LifetimeBanner({ data }: { data?: Lifetime | null }) {
+function LifetimeBanner({ data, loading }: { data?: Lifetime | null; loading?: boolean }) {
   return (
     <section
       className="rounded-2xl bg-emerald-50 ring-1 ring-emerald-200 p-4 sm:p-5"
@@ -280,10 +301,21 @@ function LifetimeBanner({ data }: { data?: Lifetime | null }) {
         All time · since launch
       </p>
       <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Kpi label="Gross revenue" value={data ? dollars(data.grossCents) : "—"} sub={data && data.refundedCents ? `${dollars(data.refundedCents)} refunded` : undefined} testId="lifetime-gross" />
-        <Kpi label="Orders" value={data ? compact(data.orders) : "—"} sub={data ? `${compact(data.buyers)} unique fan${data.buyers === 1 ? "" : "s"}` : undefined} testId="lifetime-orders" />
-        <Kpi label="Units sold" value={data ? compact(data.units) : "—"} testId="lifetime-units" />
-        <Kpi label="Total plays" value={data ? compact(data.plays) : "—"} sub={data ? `${compact(data.listeners)} listeners` : undefined} testId="lifetime-plays" />
+        {loading ? (
+          <>
+            <KpiCardSkeleton testId="lifetime-gross-skeleton" />
+            <KpiCardSkeleton testId="lifetime-orders-skeleton" />
+            <KpiCardSkeleton testId="lifetime-units-skeleton" />
+            <KpiCardSkeleton testId="lifetime-plays-skeleton" />
+          </>
+        ) : (
+          <>
+            <Kpi label="Gross revenue" value={data ? dollars(data.grossCents) : "—"} sub={data && data.refundedCents ? `${dollars(data.refundedCents)} refunded` : undefined} testId="lifetime-gross" />
+            <Kpi label="Orders" value={data ? compact(data.orders) : "—"} sub={data ? `${compact(data.buyers)} unique fan${data.buyers === 1 ? "" : "s"}` : undefined} testId="lifetime-orders" />
+            <Kpi label="Units sold" value={data ? compact(data.units) : "—"} testId="lifetime-units" />
+            <Kpi label="Total plays" value={data ? compact(data.plays) : "—"} sub={data ? `${compact(data.listeners)} listeners` : undefined} testId="lifetime-plays" />
+          </>
+        )}
       </section>
     </section>
   );
@@ -300,7 +332,7 @@ function OverviewTab({ qs }: { qs: string }) {
 
   return (
     <>
-      <LifetimeBanner data={lifetime} />
+      <LifetimeBanner data={lifetime} loading={summary.isLoading} />
 
       <div className="flex items-baseline justify-between">
         <p className="text-xs uppercase tracking-wider font-semibold text-slate-400" data-testid="kpi-range-label">
@@ -308,15 +340,23 @@ function OverviewTab({ qs }: { qs: string }) {
         </p>
       </div>
       <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3" data-testid="kpi-grid">
-        <Kpi label="Gross revenue" value={cur ? dollars(cur.grossCents) : "—"} sub={cur && cur.refundedCents ? `${dollars(cur.refundedCents)} refunded` : undefined} prev={cur ? { cur: cur.grossCents, prev: prev?.grossCents ?? null } : null} testId="kpi-gross" />
-        <Kpi label="Artist share" value={cur ? dollars(cur.artistShareCents) : "—"} prev={cur ? { cur: cur.artistShareCents, prev: prev?.artistShareCents ?? null } : null} testId="kpi-artist-share" />
-        <Kpi label="Units sold" value={cur ? compact(cur.units) : "—"} sub={cur ? `${cur.buyers} unique buyer${cur.buyers === 1 ? "" : "s"}` : undefined} prev={cur ? { cur: cur.units, prev: prev?.units ?? null } : null} testId="kpi-units" />
-        <Kpi label="Orders" value={cur ? compact(cur.orders) : "—"} sub={cur ? `${compact(cur.units)} cop${cur.units === 1 ? "y" : "ies"}` : undefined} prev={cur ? { cur: cur.orders, prev: prev?.orders ?? null } : null} testId="kpi-orders" />
-        <Kpi label="Total plays" value={cur ? compact(cur.plays) : "—"} sub={cur ? `${compact(cur.listeners)} listeners · ${pct(cur.completionRate)} complete` : undefined} prev={cur ? { cur: cur.plays, prev: prev?.plays ?? null } : null} testId="kpi-plays" />
-        <Kpi label="Unique listeners" value={cur ? compact(cur.listeners) : "—"} prev={cur ? { cur: cur.listeners, prev: prev?.listeners ?? null } : null} testId="kpi-listeners" />
-        <Kpi label="Top track" value={cur?.topTrack?.title ?? "—"} sub={cur?.topTrack ? `${Number(cur.topTrack.plays).toLocaleString()} plays` : undefined} testId="kpi-top-track" />
-        <Kpi label="Top album" value={cur?.topAlbum?.title ?? "—"} sub={cur?.topAlbum ? dollars(Number(cur.topAlbum.revenue)) : undefined} testId="kpi-top-album" />
-        <Kpi label="Completion rate" value={cur ? pct(cur.completionRate) : "—"} sub={cur ? `${compact(cur.completions)} completions` : undefined} testId="kpi-completion" />
+        {summary.isLoading ? (
+          Array.from({ length: 9 }).map((_, i) => (
+            <KpiCardSkeleton key={i} testId={`kpi-skeleton-${i}`} />
+          ))
+        ) : (
+          <>
+            <Kpi label="Gross revenue" value={cur ? dollars(cur.grossCents) : "—"} sub={cur && cur.refundedCents ? `${dollars(cur.refundedCents)} refunded` : undefined} prev={cur ? { cur: cur.grossCents, prev: prev?.grossCents ?? null } : null} spark={dailyGross(series.data)} testId="kpi-gross" />
+            <Kpi label="Artist share" value={cur ? dollars(cur.artistShareCents) : "—"} prev={cur ? { cur: cur.artistShareCents, prev: prev?.artistShareCents ?? null } : null} testId="kpi-artist-share" />
+            <Kpi label="Units sold" value={cur ? compact(cur.units) : "—"} sub={cur ? `${cur.buyers} unique buyer${cur.buyers === 1 ? "" : "s"}` : undefined} prev={cur ? { cur: cur.units, prev: prev?.units ?? null } : null} testId="kpi-units" />
+            <Kpi label="Orders" value={cur ? compact(cur.orders) : "—"} sub={cur ? `${compact(cur.units)} cop${cur.units === 1 ? "y" : "ies"}` : undefined} prev={cur ? { cur: cur.orders, prev: prev?.orders ?? null } : null} testId="kpi-orders" />
+            <Kpi label="Total plays" value={cur ? compact(cur.plays) : "—"} sub={cur ? `${compact(cur.listeners)} listeners · ${pct(cur.completionRate)} complete` : undefined} prev={cur ? { cur: cur.plays, prev: prev?.plays ?? null } : null} spark={dailyPlays(series.data)} testId="kpi-plays" />
+            <Kpi label="Unique listeners" value={cur ? compact(cur.listeners) : "—"} prev={cur ? { cur: cur.listeners, prev: prev?.listeners ?? null } : null} spark={dailyListeners(series.data)} testId="kpi-listeners" />
+            <Kpi label="Top track" value={cur?.topTrack?.title ?? "—"} sub={cur?.topTrack ? `${Number(cur.topTrack.plays).toLocaleString()} plays` : undefined} testId="kpi-top-track" />
+            <Kpi label="Top album" value={cur?.topAlbum?.title ?? "—"} sub={cur?.topAlbum ? dollars(Number(cur.topAlbum.revenue)) : undefined} testId="kpi-top-album" />
+            <Kpi label="Completion rate" value={cur ? pct(cur.completionRate) : "—"} sub={cur ? `${compact(cur.completions)} completions` : undefined} testId="kpi-completion" />
+          </>
+        )}
       </section>
 
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
