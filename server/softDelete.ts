@@ -123,6 +123,36 @@ const CHILDREN: Partial<Record<TrashEntityType, { table: string; fk: string }[]>
   ],
 };
 
+// Task #2449 — renumber an album's surviving (non-deleted) tracks to a
+// gap-free 1..N sequence in their current `track_number` order. This is
+// the shared recompaction the song soft-delete calls so a deletion never
+// leaves a hole in the tracklist, mirroring what the drag-and-drop
+// reorder route already does. It runs on the caller's transaction client
+// so it commits atomically with the delete, and only writes
+// `track_number` (vinyl side/order fields are never touched). Ties on
+// track_number fall back to a stable `id` order. Ascending order is
+// preserved because ROW_NUMBER walks the same `track_number ASC` sort the
+// tracklist renders by.
+async function recompactTracklist(
+  client: { query: (text: string, params?: unknown[]) => Promise<any> },
+  albumId: string,
+): Promise<void> {
+  await client.query(
+    `WITH ordered AS (
+       SELECT id,
+              ROW_NUMBER() OVER (ORDER BY track_number ASC, id ASC) AS rn
+         FROM songs
+        WHERE album_id = $1 AND deleted_at IS NULL
+     )
+     UPDATE songs s
+        SET track_number = ordered.rn
+       FROM ordered
+      WHERE s.id = ordered.id
+        AND s.track_number IS DISTINCT FROM ordered.rn`,
+    [albumId],
+  );
+}
+
 export async function softDeleteEntity(
   kind: TrashEntityType,
   id: string,
@@ -195,6 +225,22 @@ export async function softDeleteEntity(
       }
     } else if (kind === "song") {
       await softCascadeFromSong(id);
+      // Task #2449 — recompact the album's remaining tracklist to a
+      // gap-free 1..N so a delete never leaves a hole (e.g. 1,4,5,…).
+      // Same renumbering the drag-and-drop reorder does, but derived from
+      // the surviving rows' current `track_number` order instead of a
+      // client-supplied order. Runs in the same transaction as the delete
+      // and only touches `track_number` — vinyl side/order stay untouched.
+      // The soft-deleted row keeps its FK, so we can still read its
+      // album_id after the flip.
+      const albumRow = await client.query(
+        `SELECT album_id FROM songs WHERE id = $1`,
+        [id],
+      );
+      const albumId = albumRow.rows[0]?.album_id;
+      if (albumId) {
+        await recompactTracklist(client, albumId);
+      }
     } else if (kind === "person") {
       // band_members carries two FKs into people (bandId + memberId), so
       // we soft-cascade on either side rather than via CHILDREN above.
