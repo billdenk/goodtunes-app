@@ -23,7 +23,10 @@ import {
 } from "recharts";
 // Heart for song-favorite metrics — keeps the artist dashboard's
 // favourites column visually paired with the player's heart action.
-import { Heart, User as UserIcon, Users } from "lucide-react";
+import {
+  Heart, User as UserIcon, Users, LayoutDashboard, BarChart3, Megaphone,
+  Disc3, ShoppingBag, FileBarChart, UserCheck, UserPlus,
+} from "lucide-react";
 import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
 import { OperatorShell } from "@/components/operator/OperatorShell";
@@ -144,13 +147,38 @@ export function ArtistDashboard() {
       logoUrl={me.data?.photoUrl ?? null}
       fallbackIcon={UserIcon}
       logoShape="circle"
-      subtitle={`${albumCount} album${albumCount === 1 ? "" : "s"} · ${songCount} credited track${songCount === 1 ? "" : "s"}`}
-      headerExtras={invitedPress ? <InvitedByPressRow press={invitedPress} hasShippedFirst={hasShippedFirst} /> : null}
-      headerActions={
+      subtitle={
         <>
-          <RangePicker presets={RANGE_PRESETS} value={preset} onChange={setPreset} />
-          <CompareToggle active={compare} onToggle={setCompare} />
+          {albumCount} album{albumCount === 1 ? "" : "s"} ·{" "}
+          <button
+            type="button"
+            onClick={() => {
+              setTab("catalog");
+              const sp = new URLSearchParams(window.location.search);
+              sp.set("tab", "catalog");
+              history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+            }}
+            className="underline underline-offset-2 decoration-slate-300 hover:text-slate-700 transition-colors"
+            data-testid="link-credited-tracks"
+          >
+            {songCount} credited track{songCount === 1 ? "" : "s"}
+          </button>
         </>
+      }
+      headerExtras={invitedPress ? <InvitedByPressRow press={invitedPress} hasShippedFirst={hasShippedFirst} /> : null}
+      // The Dashboard tab renders the shared PartnerDashboard primitive, which
+      // carries its OWN header + range picker (the super-admin AdminDashboard
+      // shape). So on that tab we suppress the shell's page-header identity and
+      // range/compare controls to avoid a duplicate title + duplicate range
+      // control; every other tab keeps the single shell-level header + range.
+      hideHeaderIdentity={tab === "dashboard"}
+      headerActions={
+        tab === "dashboard" ? undefined : (
+          <>
+            <RangePicker presets={RANGE_PRESETS} value={preset} onChange={setPreset} />
+            <CompareToggle active={compare} onToggle={setCompare} />
+          </>
+        )
       }
       tabs={ARTIST_TABS}
       activeTab={tab}
@@ -161,12 +189,41 @@ export function ArtistDashboard() {
         history.replaceState(null, "", `${window.location.pathname}?${sp}`);
       }}
       spaceContent
+      layout="leftnav"
+      navIcons={{
+        dashboard: LayoutDashboard,
+        overview: BarChart3,
+        audience: Users,
+        acquisition: Megaphone,
+        catalog: Disc3,
+        orders: ShoppingBag,
+        buyers: UserCheck,
+        referrals: UserPlus,
+      }}
+      navExtras={[{ id: "reports", label: "Reports", href: "/admin/reports", icon: FileBarChart }]}
     >
       {tab === "dashboard" && (
         <PartnerDashboard
           scope="artist"
           title={artistName}
-          subtitle="Sales and listening at a glance"
+          subtitle={
+            <>
+              {albumCount} album{albumCount === 1 ? "" : "s"} ·{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setTab("catalog");
+                  const sp = new URLSearchParams(window.location.search);
+                  sp.set("tab", "catalog");
+                  history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+                }}
+                className="underline underline-offset-2 decoration-slate-300 hover:text-slate-700 transition-colors"
+                data-testid="link-credited-tracks"
+              >
+                {songCount} credited track{songCount === 1 ? "" : "s"}
+              </button>
+            </>
+          }
           scopeIdQs={new URLSearchParams(window.location.search).get("personId")}
         />
       )}
@@ -249,7 +306,7 @@ function Kpi({ label, value, sub, prev, testId }: { label: string; value: string
       <div className="mt-1 flex items-center gap-2 text-[11px]">
         {sub && <span className="text-slate-500">{sub}</span>}
         {d && (
-          <span className={`px-1.5 py-0.5 rounded-full font-semibold ${d.positive ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`} data-testid={`${testId}-delta`}>
+          <span className={`px-1.5 py-0.5 rounded-full font-semibold ${d.positive ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"}`} data-testid={`${testId}-delta`}>
             {d.val}
           </span>
         )}

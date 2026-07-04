@@ -414,12 +414,26 @@ async function meHandler(req: Request, res: Response) {
     }
   }
 
+  // Album headline counts GoodTunes releases only — never streaming-imported
+  // discography rows (see docs/admin-conventions.md, streaming-row vs
+  // GoodTunes-release rule). scope.albumIds is the full owned set (used for
+  // revenue/order scoping); this narrows the DISPLAY count so the subtitle
+  // matches what the artist actually sells on the platform.
+  let albumCount = 0;
+  if (scope.albumIds.length) {
+    const r: any = await db.execute(sql`
+      SELECT count(*)::int AS n FROM albums
+      WHERE id = ANY(${pgArray(scope.albumIds)}) AND is_goodtunes_release = true
+    `);
+    albumCount = Number(((r as any).rows ?? [])[0]?.n ?? 0);
+  }
+
   return res.json({
     personId: scope.personId,
     name: person.name,
     slug: (person as any).slug ?? null,
     photoUrl: (person as any).photoUrl ?? null,
-    albumCount: scope.albumIds.length,
+    albumCount,
     songCount: scope.songIds.length,
     invitedPress,
     hasShippedFirst,

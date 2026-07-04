@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
-import { Button } from "@/components/ui/button";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type RangePreset<T extends string> = { id: T; label: string };
@@ -57,21 +57,21 @@ export function CompareToggle({
   label?: string;
 }) {
   return (
-    <Button
+    <button
       type="button"
-      variant="ghost"
       onClick={() => onToggle(!active)}
       aria-pressed={active}
       className={cn(
-        "ml-auto h-11 min-w-[44px] px-4 rounded-full font-semibold ring-1 transition-colors",
+        "ml-auto h-9 px-3 inline-flex items-center gap-1.5 rounded-md text-xs font-semibold ring-1 transition-colors",
         active
-          ? "bg-blue-50 text-blue-700 ring-blue-200 hover:bg-blue-100 hover:text-blue-700"
-          : "bg-transparent text-slate-600 ring-slate-200 hover:bg-slate-100 hover:text-slate-900",
+          ? "bg-slate-900 text-white ring-slate-900 hover:bg-slate-800"
+          : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50 hover:text-slate-900",
       )}
       data-testid="button-toggle-compare"
     >
-      {label} {active ? "✓" : ""}
-    </Button>
+      <Check className={cn("w-3.5 h-3.5 flex-shrink-0 transition-opacity", active ? "opacity-100" : "opacity-30")} />
+      {label}
+    </button>
   );
 }
 

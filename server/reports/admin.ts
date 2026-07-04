@@ -865,10 +865,15 @@ export async function ownedReleasesWithFunnel(albumIds: readonly string[]) {
     releases: [] as { albumId: string; title: string; artist: string; landed: number; shareSlug: string | null }[],
   };
   if (albumIds.length === 0) return empty;
+  // Only GoodTunes storefront releases belong in the acquisition picker /
+  // campaign link-builder — streaming-imported discography rows have no
+  // storefront page or share link, so a funnel/UTM link for them is
+  // meaningless (see docs/admin-conventions.md, streaming-row vs GoodTunes
+  // release rule).
   const albumRows = await db
     .select({ id: albums.id, title: albums.title, artist: albums.artist, shareSlug: albums.shareSlug })
     .from(albums)
-    .where(and(inArray(albums.id, albumIds as string[]), isNull(albums.deletedAt)));
+    .where(and(inArray(albums.id, albumIds as string[]), isNull(albums.deletedAt), eq(albums.isGoodTunesRelease, true)));
   if (albumRows.length === 0) return empty;
   const liveIds = albumRows.map((a) => a.id);
   const counts = await db.execute<{ album_id: string; landed: string }>(sql`

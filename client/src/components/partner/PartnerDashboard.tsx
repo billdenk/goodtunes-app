@@ -7,7 +7,7 @@
 // `dashboard-controls.tsx` so it sits naturally inside the rest of
 // each partner shell. Backend: `GET /api/partner/:scope/dashboard`.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatUsdCents } from "@shared/money";
 import {
@@ -93,7 +93,7 @@ export function PartnerDashboard({
 }: {
   scope: PartnerScopeKind;
   title: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
   /** Optional `?scopeId=…` for super-admin impersonation. */
   scopeIdQs?: string | null;
   /** Optional `?scopeKind=…` (vendor|manufacturer|fulfillment) for vendor-scope super-admin views. */
