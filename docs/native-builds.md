@@ -134,6 +134,40 @@ File any gaps as follow-up tasks with the device/OS version — known suspects: 
 
 ---
 
+## In-car verification — CarPlay + Android Auto (device-only — can't run in the Replit container)
+
+> **Status (2026-07-04): code-complete + reviewed in-repo; on-hardware pass still outstanding.** The CarPlay + Android Auto wiring is committed and has been reviewed end-to-end — the iOS scene/entitlement/plugin, the Android service/session, and the JS bridge all line up and drive playback bidirectionally (details below). What remains is the on-device pass, which **cannot run in the Replit container or in CI** (no Xcode, no Android SDK, no head unit), so it is deferred to an operator with a CarPlay / Android Auto unit (or the Xcode CarPlay simulator / Desktop Head Unit). **When that pass is run, record its dated result here** — device + head-unit (or simulator/DHU) versions and pass/fail per checklist item — so this section becomes the verification record, not just the procedure.
+
+The in-car surfaces are native code that cannot be compiled or exercised in the Linux container (no Xcode, no Android SDK, no head unit). The wiring is reviewed in-repo and all three layers line up — the web player publishes metadata/state/queue and handles the `playIndex` command (`client/src/context/PlayerContext.tsx` → `client/src/lib/nativeNowPlaying.ts`), iOS renders it through `CarPlaySceneDelegate` + `NowPlayingStore` + `NowPlayingPlugin` (all three registered in the Xcode target), and Android through `AutoMediaBrowserService` + `MediaSessionHolder` + `NowPlayingPlugin` (service + `@xml/automotive_app_desc` declared in the manifest). But metadata rendering, transport, the browse list, and the no-duplicate-notification behaviour can only be confirmed on real hardware. Run this pass on a **CarPlay unit (or the Xcode CarPlay simulator)** and an **Android Auto unit (or the Desktop Head Unit / DHU)** whenever `PlayerContext`'s now-playing block, `nativeNowPlaying.ts`, or any of the native in-car files change.
+
+### iOS — CarPlay
+
+CarPlay needs the `com.apple.developer.carplay-audio` entitlement (`ios/App/App/App.entitlements`, committed) **enabled on the App ID / provisioning profile**. Apple grants this as a managed capability — request it in the Developer portal first. On a development profile you can test on a device/simulator before the managed grant lands; a distribution (App Store) build will fail signing until it's enabled on the profile.
+
+1. **Connect.** Run the app on a device wired to a CarPlay head unit, or use Xcode → the CarPlay simulator (**I/O → External Displays → CarPlay** in the Simulator, or the CarPlay window when running on a device). GoodTunes appears with a two-tab layout: **Now Playing** + **Up Next**.
+2. **Metadata + artwork.** Start a song in the phone app, then look at CarPlay's Now Playing tab: title, artist, album, and album artwork all show. Artwork arrives a beat after the text (it's fetched async) — that's expected.
+3. **Transport + scrubber.** From the car: play/pause, next, previous, and dragging the scrubber all drive the phone player. Confirm the car scrubber tracks real elapsed time while playing (it interpolates between updates, so it should advance smoothly, not jump).
+4. **Up Next browse list.** The Up Next tab lists the current queue; the now-playing row is marked as playing. **Tap a different row** — the phone player jumps to that track (this is the `playIndex` → `playQueueIndex` path) and the car's now-playing updates to match.
+5. **Both directions.** Change the track *in the phone app* (next/prev or tap a song) and confirm CarPlay's Now Playing + Up Next both update; then drive a change *from the car* and confirm the phone player mirrors it. They must stay in lock-step.
+
+### Android — Android Auto
+
+Build the release `.aab`/`.apk` and install it; Android Auto projection works with the debug build too. Use a real Android Auto head unit or the **Desktop Head Unit (DHU)** (Android Studio → SDK Manager → *Android Auto Desktop Head Unit emulator*; enable **Developer mode → Unknown sources** in the phone's Android Auto settings, then launch the DHU over USB).
+
+1. **Media picker.** With the phone connected/projecting, open Android Auto's media-app picker — **GoodTunes appears** in the list (this proves `AutoMediaBrowserService` + the `com.google.android.gms.car.application` meta-data are recognised).
+2. **Metadata + transport.** Start a song and confirm title/artist/album/artwork show in the car, and that play/pause/next/prev/seek from the car drive the phone player.
+3. **Browse list.** The one-level browse list shows the Up Next queue; **tapping a row plays that track** (browse-tap → `onPlayFromMediaId` → `playIndex`). The car's now-playing tap-through queue button reflects the same list.
+4. **No duplicate phone notification.** While projecting in-car, glance at the phone's notification shade — there is **exactly one** media notification (the WebView's own), *not* two. The app-owned session is only set active while a car client is connected precisely to avoid a second card. Disconnect the car and confirm the phone keeps its single WebView notification.
+5. **Both directions.** Same lock-step check as CarPlay: a change in the phone app updates the car, and a change from the car updates the phone.
+
+### Off-car regression (both platforms)
+
+With **no** car connected, confirm the baseline is unchanged: audio keeps playing with the screen locked / app backgrounded, and the lock-screen (iOS) / media-style notification (Android) shows the current track with working transport. The in-car code must not have regressed the everyday lock-screen path.
+
+If any step fails, capture the device/OS + head-unit (or simulator/DHU) versions and the Xcode / Logcat console output. The JS bridge swallows plugin errors into no-ops (so an older native binary degrades gracefully), which means the native log is the only place a wiring failure is visible.
+
+---
+
 ## What is intentionally **not** in v1
 
 - Push notifications, deep links, in-app purchases, native chat — all deferred (see `docs/roadmap.md`).
