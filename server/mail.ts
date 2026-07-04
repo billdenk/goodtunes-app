@@ -724,6 +724,57 @@ export async function sendAlbumChangeRequestEmail(
   return sendViaResend("album-change-request", toEmail, subject, html, text);
 }
 
+// Task #2481 — close the loop after an operator reviews a partner's
+// submitted change request. When the request is approved (the edit was
+// applied) or rejected, email the submitting artist/partner so they
+// aren't left refreshing the album page. Best-effort: the caller
+// swallows send failures so the operator's approve/reject never errors.
+export async function sendChangeRequestDecisionEmail(
+  toEmail: string,
+  params: {
+    recipientName: string;
+    albumTitle: string;
+    decision: "approved" | "rejected";
+    reviewerNote?: string | null;
+    albumUrl: string;
+  },
+): Promise<SendResult> {
+  const { recipientName, albumTitle, decision, reviewerNote, albumUrl } = params;
+  const approved = decision === "approved";
+  const headline = approved ? "Your edit was applied" : "Your edit wasn't applied";
+  const lead = approved
+    ? `GoodTunes reviewed and applied your requested change to "${albumTitle}". It's now live.`
+    : `GoodTunes reviewed your requested change to "${albumTitle}" and didn't apply it this time.`;
+  const subject = approved
+    ? `Your change to "${albumTitle}" was applied`
+    : `Your change to "${albumTitle}" wasn't applied`;
+  const trimmedNote = reviewerNote?.trim() || "";
+  const text = [
+    `Hi ${recipientName},`,
+    ``,
+    lead,
+    ...(trimmedNote ? [``, `Note from GoodTunes:`, trimmedNote] : []),
+    ``,
+    `View the release: ${albumUrl}`,
+  ].join("\n");
+  const noteBlock = trimmedNote
+    ? `<div style="font-size: 14px; line-height: 1.5; color: #333; background: #f5f5f7; border-radius: 8px; padding: 14px 16px; margin: 16px 0;"><div style="font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Note from GoodTunes</div>${escapeHtml(trimmedNote).replace(/\n/g, "<br>")}</div>`
+    : "";
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Change request</div>
+      <h1 style="font-size: 22px; margin: 12px 0 12px; font-weight: 700;">${headline}</h1>
+      <p style="font-size: 15px; line-height: 1.5; color: #333;">${escapeHtml(lead)}</p>
+      ${noteBlock}
+      <div style="margin: 24px 0;">
+        ${bulletproofButton(albumUrl, "View the release", { bgColor: "#319ED8", paddingV: 12, paddingH: 20, borderRadius: 8, fontSize: 14 })}
+      </div>
+    </div>
+  `;
+  return sendViaResend("change-request-decision", toEmail, subject, html, text);
+}
+
 // Notify super-admins that a partner (the only roles that can't edit
 // custom add-ons) is asking for a change to a custom add-on they can
 // see but not modify. There's no in-app queue for this yet — the email

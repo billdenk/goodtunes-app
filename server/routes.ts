@@ -30204,6 +30204,42 @@ export async function registerRoutes(
         throw err;
       }
       if (!updated) return res.status(404).json({ message: "Not found or already reviewed" });
+
+      // Task #2481 — close the loop with the submitting artist/partner.
+      // Best-effort email naming the release + the decision (+ reviewer
+      // note if any). Never blocks or fails the operator's review action —
+      // the queue row is already stamped by the time we get here.
+      try {
+        const submitter = await storage.getUser(updated.submittedByUserId);
+        const toEmail = submitter?.email?.trim();
+        if (toEmail) {
+          const albumRow = updated.albumId
+            ? await storage.getAlbumById(updated.albumId, { includeHidden: true })
+            : null;
+          const recipientName =
+            submitter?.displayName || submitter?.username || "there";
+          const proto =
+            (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+          const host =
+            req.headers["x-forwarded-host"] ||
+            req.headers.host ||
+            "admin.goodtunes.music";
+          const albumUrl = updated.albumId
+            ? `${proto}://${host}/admin/albums/${updated.albumId}`
+            : `${proto}://${host}/admin/albums`;
+          const { sendChangeRequestDecisionEmail } = await import("./mail");
+          await sendChangeRequestDecisionEmail(toEmail, {
+            recipientName,
+            albumTitle: albumRow?.title ?? "your release",
+            decision,
+            reviewerNote,
+            albumUrl,
+          });
+        }
+      } catch (e) {
+        console.warn("[task-2481] change-request decision notify failed", e);
+      }
+
       res.json(updated);
     },
   );
