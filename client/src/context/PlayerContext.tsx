@@ -12,6 +12,7 @@ import {
   setNowPlayingQueue,
   clearNowPlaying,
   onNowPlayingRemoteCommand,
+  absolutizeArtwork,
 } from "@/lib/nativeNowPlaying";
 import { offlineSrcFor } from "@/lib/nativeDownloads";
 
@@ -1170,7 +1171,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const title = song.title ?? "";
     const artist = song.album?.artist ?? "";
     const albumTitle = song.album?.title ?? "";
-    const artwork = song.album?.artwork ?? undefined;
+    // Album artwork is stored as an app-relative path (e.g. "/objects/uploads/x"
+    // or "/figmaAssets/x"). The web MediaSession resolves relative URLs against
+    // the page origin, but the native iOS plugin fetches the image with a native
+    // URLSession *outside* the WebView, where `URL(string: "/objects/…")` has no
+    // host and the fetch silently fails (no lock-screen art). Absolutize against
+    // the WebView origin (the live remote host on native) so both paths get a
+    // fetchable URL; already-absolute URLs pass through unchanged.
+    const artwork = absolutizeArtwork(song.album?.artwork ?? undefined);
 
     // Web MediaSession — skip on native iOS (native plugin owns the lock screen).
     if (ms && !isNativeIOS && typeof (window as any)?.MediaMetadata === "function") {

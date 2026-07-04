@@ -67,3 +67,17 @@ latest player callbacks through a ref. CarPlay / Android Auto are BUILT (see
 "Car surface" above) and reuse this exact metadata/state/queue + transport path
 — any new remote command must thread the plugin → JS `remoteCommand` handler →
 `mediaControlsRef` on BOTH iOS and Android.
+
+## iOS lock-screen artwork must be an ABSOLUTE URL
+Album art is stored app-relative (`/objects/uploads/x`, `/figmaAssets/x`). The
+iOS plugin fetches it with a native `URLSession` OUTSIDE the WebView, so a
+relative URL has no host → `URL(string:)` fails silently → no lock-screen art.
+`absolutizeArtwork()` in `nativeNowPlaying.ts` resolves it against
+`window.location.origin` (the live remote host on native) before it crosses the
+bridge; already-absolute `http(s)`/`data:` pass through. **Web MediaSession
+never hit this** (browser resolves relative art against the page), so it's an
+iOS-native-only trap — any new now-playing art source must stay absolute.
+**Why:** this is device-only code; the whole path can't be exercised in the
+container, so the artwork URL contract is pinned by `nativeNowPlaying.test.ts`
+and the on-device pass is documented under "Background audio + lock-screen
+controls" in `docs/native-builds.md`.

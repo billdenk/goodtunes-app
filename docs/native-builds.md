@@ -121,6 +121,19 @@ If any step fails, capture the device/OS version and the Xcode/Logcat console ou
 
 ---
 
+## Background audio + lock-screen controls (device-only — can't run in the Replit container)
+
+Background playback and the lock-screen / Control Center transport are native code: the iOS `NowPlaying` Capacitor plugin (`ios/App/App/NowPlayingPlugin.swift`) drives `AVAudioSession` + `MPNowPlayingInfoCenter` + `MPRemoteCommandCenter`, and on Android the Chromium System WebView surfaces the web `navigator.mediaSession` as the media notification. Neither compiles or runs in the Linux container. What **is** covered here: the TS wiring (`client/src/lib/nativeNowPlaying.ts`, the media-session effects in `client/src/context/PlayerContext.tsx`) and the artwork-URL absolutization (`nativeNowPlaying.test.ts`). Behavior notes live in `.agents/memory/nowplaying-lockscreen-split.md`. Run this pass on a **real iPhone and a real Android phone** whenever the plugin, the JS bridge, or the PlayerContext media-session effects change.
+
+1. **iPhone — audio survives lock/background.** Play an album, lock the phone (and separately, swipe to the home screen). Audio keeps playing. If it cuts out on lock, the `AVAudioSession .playback` category isn't sticking — WKWebView can reset it, which is why the plugin re-applies it on `setMetadata`/`setPlaybackState` (`configureAudioSession()`); capture whether it dies immediately or after a delay.
+2. **iPhone — lock screen shows the right metadata + art.** With the screen locked, confirm the album **artwork**, song title, and artist all show. Artwork is the fragile one: it's fetched by a native `URLSession` outside the WebView, so the URL must be absolute — the app now absolutizes app-relative art (`/objects/…`, `/figmaAssets/…`) against the WebView origin before it crosses the bridge. If art is missing, note the exact art URL and whether it's an `/objects/` (object-storage) or `/figmaAssets/` (bundled) path.
+3. **iPhone — transport is bidirectional + the scrubber tracks.** From the lock screen: play/pause, next, previous, and drag the scrubber. Each must move the in-app player, and changing the track/position **in-app** must update the lock screen within ~1s (native position pushes are throttled to whole-second granularity). Confirm play/pause state stays in sync both directions (no "playing" pill while paused).
+4. **Android — media notification + background audio.** Play an album, lower the notification shade: a media-style notification shows the same artwork/title/artist with working play/pause + next/previous, and audio keeps playing when the app is backgrounded. There is **no** Android native plugin — this all comes from the system WebView surfacing `navigator.mediaSession`, so if the notification is missing, it's a WebView/MediaSession issue, not a plugin bug.
+
+File any gaps as follow-up tasks with the device/OS version — known suspects: WKWebView resetting the audio session on interruption (a phone call), object-storage artwork 401ing the unauthenticated native fetch, and the Android WebView dropping the notification on some OEM skins.
+
+---
+
 ## What is intentionally **not** in v1
 
 - Push notifications, deep links, in-app purchases, native chat — all deferred (see `docs/roadmap.md`).

@@ -94,6 +94,35 @@ interface NowPlayingPlugin {
 
 const NowPlaying = registerPlugin<NowPlayingPlugin>("NowPlaying");
 
+/**
+ * Resolve an album-artwork value to an absolute, fetchable URL.
+ *
+ * Artwork is stored app-relative (e.g. `/objects/uploads/<id>` or
+ * `/figmaAssets/<file>`). The web MediaSession resolves those against the page
+ * origin, but the native iOS plugin loads the image with a native `URLSession`
+ * *outside* the WebView — `URL(string: "/objects/…")` there has no host, so the
+ * fetch fails and the lock screen shows no art. Absolutizing against the WebView
+ * origin (the live remote host on native) gives both paths a fetchable URL.
+ * Already-absolute (`http(s)://…`, `data:`) values pass through unchanged, and
+ * anything that can't be resolved falls back to the original string.
+ */
+export function absolutizeArtwork(
+  artwork: string | undefined,
+): string | undefined {
+  if (!artwork) return undefined;
+  if (/^(https?:|data:)/i.test(artwork)) return artwork;
+  const origin =
+    typeof window !== "undefined" && window.location
+      ? window.location.origin
+      : undefined;
+  if (!origin) return artwork;
+  try {
+    return new URL(artwork, origin).href;
+  } catch {
+    return artwork;
+  }
+}
+
 // Cache the availability probe: `isPluginAvailable` is cheap but this is called
 // on every position tick. False on web and on any native binary that predates
 // the plugin, so every call below short-circuits to a no-op there.
