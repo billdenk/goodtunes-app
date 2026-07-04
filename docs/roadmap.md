@@ -100,6 +100,37 @@ Out of scope for the brief (and still): building GoodGear, any Spotify/Deezer
 integration, new endpoints, the mockups (separate task), and procuring API keys or
 partner deals.
 
+## Apple TV (tvOS) — feasibility brief
+
+Bill is weighing expanding GoodTunes to **Apple TV**, matched to Apple's own TV
+conventions the way the iPhone/Android apps mirror Apple Music — **music-first**
+(shelves of albums, big artwork, full-screen Now Playing with lyrics, bonus videos
+secondary), not a video-first Apple TV clone. The full feasibility & plan brief —
+written for Bill to read and share — lives in
+**[apple-tv-feasibility.md](./apple-tv-feasibility.md)**. Read that for the details;
+the headline conclusions:
+
+- **Apple TV can't be a re-wrap.** The phone apps are a thin Capacitor shell loading
+  the live site in a webview; that doesn't extend to TV — Capacitor has no tvOS
+  target, and a 440px touch-first page is the wrong shape for a 10-foot,
+  remote-driven, focus-engine screen. TV means a genuinely **native TV front-end**.
+- **Almost everything else carries over.** The backend, catalog, ownership, and the
+  signed **Mux HLS** streaming (plays natively via AVPlayer, keeps masters protected)
+  are reusable as-is, along with every product decision. Only the *screen* is new.
+- **The strategic fork:** (A) build a native tvOS app (Swift/SwiftUI) on the existing
+  backend now — clean but a separate multi-week codebase — or (B) fold TV into the
+  **React Native port** already planned above (§ *Mobile / native strategy*), so tvOS
+  becomes one target of a shared codebase, but only after the RN port lands.
+  **Recommendation: default to Path B (one maintainable codebase); choose Path A only
+  if Bill wants TV *sooner* than the RN port will realistically ship.**
+- **TV sign-in** leads with **device-code pairing** ("go to goodtunes.music/tv, enter
+  this code") reusing the existing web login + bearer-token model, with **Sign in with
+  Apple** alongside — typing a password on a remote is the enemy.
+
+Out of scope for the brief (and still): any Apple TV code, tvOS scaffolding, UI
+mockups (separate task), and committing to Path A vs. B or a timeline — the brief
+presents the recommendation; Bill decides.
+
 ## Search in the nav bar (Apple-Music pattern, parked)
 
 Apple Music doesn't give Search its own tab — it lives **inside the nav bar** as a tappable field that pushes a full search screen on tap. When the mini-player is active, the whole bar collapses into a single pill that contains:
