@@ -52,7 +52,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { AlbumCover } from "@/components/ui/AlbumCover";
 import { GearDetailBody, type GearArtist, type GearArtistNote } from "@/components/gear/GearDetailBody";
-import { ChevronLeft, Share, MoreHorizontal, Lock, ShieldCheck, Music2, ArrowRight, Eye } from "lucide-react";
+import { ChevronLeft, Share, MoreHorizontal, Lock, ShieldCheck, Music2, ArrowRight } from "lucide-react";
 import { buyEnabled, nativeDownloadsEnabled, streamingHandoffEnabled } from "@/lib/platform";
 import { isPurchaseFunnelHost, isPlayerHost } from "@/hooks/useAuthKind";
 import { LockedOfferModal } from "@/components/ui/LockedOfferModal";
@@ -352,14 +352,35 @@ export function AlbumDetail({
 // signal, never the enforcement.
 function PreviewModeBanner() {
   if (!hasPreviewPass()) return null;
+  // Discrete Apple/ElevenLabs-style "Preview" pill (replaced the loud
+  // full-width mint bar). Fan navy surface → the sanctioned pink "preview tag"
+  // role (`--brand-pink`, see docs/design-system.md). No backdrop-blur so we
+  // never stack a second GPU blur layer over the top chrome scrim. The
+  // checkout-disabled sentence stays in the DOM (sr-only) + as a hover tooltip;
+  // the server is the real enforcement, this is purely the UX signal.
   return (
     <div
-      className="fixed top-0 inset-x-0 z-[100] flex items-center justify-center gap-2 px-3 py-1.5 text-center text-xs font-semibold"
-      style={{ backgroundColor: "var(--brand-mint)", color: "var(--brand-bg)" }}
+      className="fixed left-1/2 -translate-x-1/2 z-[100] pointer-events-none"
+      style={{ top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
       data-testid="banner-preview-mode"
     >
-      <Eye className="w-3.5 h-3.5 shrink-0" />
-      <span>Preview mode — this release isn’t live yet. Checkout is disabled.</span>
+      <span
+        className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold tracking-wide shadow-sm"
+        style={{
+          backgroundColor: "var(--brand-pink-soft)",
+          color: "var(--brand-pink)",
+          boxShadow: "inset 0 0 0 1px var(--brand-pink-soft-hover)",
+        }}
+        title="This release isn’t live yet — checkout is disabled."
+      >
+        <span
+          className="w-1.5 h-1.5"
+          style={{ backgroundColor: "var(--brand-pink)", borderRadius: "9999px" }}
+          aria-hidden="true"
+        />
+        Preview
+        <span className="sr-only"> — this release isn’t live yet. Checkout is disabled.</span>
+      </span>
     </div>
   );
 }

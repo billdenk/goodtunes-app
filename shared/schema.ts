@@ -5669,3 +5669,41 @@ export const artistApplicationProofs = pgTable("artist_application_proofs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 export type ArtistApplicationProof = typeof artistApplicationProofs.$inferSelect;
+
+// album_preview_grants: one row per behind-the-scenes preview link an
+// operator (or the owning artist/label) hands out for a not-yet-live
+// album. Makes preview access STATEFUL — the minted "preview pass" carries
+// this row's id as its `jti`, so every read re-checks the row and a
+// revoked / expired grant is rejected immediately (the stateless operator
+// "See Preview Flow" self-preview keeps no row / no jti). Fans never see
+// these — grant/revoke is admin/partner-only. viewCount / lastViewedAt let
+// the operator confirm whether a link was actually opened before revoking.
+export const albumPreviewGrants = pgTable("album_preview_grants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull(),
+  recipientName: text("recipient_name"),
+  recipientEmail: text("recipient_email"),
+  note: text("note"),
+  createdByUserId: varchar("created_by_user_id").notNull(),
+  // Display label of who granted (e.g. "GoodTunes" / the label or artist
+  // name) so the list reads clearly across operator + partner surfaces.
+  createdByLabel: text("created_by_label"),
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+  revokedByUserId: varchar("revoked_by_user_id"),
+  lastViewedAt: timestamp("last_viewed_at"),
+  viewCount: integer("view_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  byAlbum: index("album_preview_grants_album_idx").on(t.albumId),
+}));
+export const insertAlbumPreviewGrantSchema = createInsertSchema(albumPreviewGrants).omit({
+  id: true,
+  revokedAt: true,
+  revokedByUserId: true,
+  lastViewedAt: true,
+  viewCount: true,
+  createdAt: true,
+});
+export type AlbumPreviewGrant = typeof albumPreviewGrants.$inferSelect;
+export type InsertAlbumPreviewGrant = z.infer<typeof insertAlbumPreviewGrantSchema>;

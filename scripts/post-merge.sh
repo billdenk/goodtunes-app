@@ -300,6 +300,48 @@ SQL
 migrate_completed_template_checks dev  "${DATABASE_URL:-}"
 migrate_completed_template_checks prod "${PROD_DATABASE_URL:-}"
 
+# Task #1766 — behind-the-scenes album preview GRANTS (revocable, view-tracked
+# links handed to a specific reviewer for a release at any stage). shared/
+# schema.ts declares album_preview_grants; hand-apply the canonical CREATE TABLE
+# on BOTH dev and prod so the schema-drift guard stays green and the publish
+# dev→prod diff is empty. No FK on album_id (matches schema.ts — a plain varchar
+# column) to avoid the auth_tokens-style FK re-add drift. Idempotent.
+migrate_album_preview_grants() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping album_preview_grants migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS album_preview_grants (
+  id                  varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id            varchar NOT NULL,
+  recipient_name      text,
+  recipient_email     text,
+  note                text,
+  created_by_user_id  varchar NOT NULL,
+  created_by_label    text,
+  expires_at          timestamp NOT NULL,
+  revoked_at          timestamp,
+  revoked_by_user_id  varchar,
+  last_viewed_at      timestamp,
+  view_count          integer NOT NULL DEFAULT 0,
+  created_at          timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS album_preview_grants_album_idx
+  ON album_preview_grants (album_id);
+COMMIT;
+SQL
+  then
+    echo "post-merge: album_preview_grants migration ok on $label"
+  else
+    echo "post-merge: WARNING — album_preview_grants migration failed on $label (continuing)"
+  fi
+}
+migrate_album_preview_grants dev  "${DATABASE_URL:-}"
+migrate_album_preview_grants prod "${PROD_DATABASE_URL:-}"
+
 # ─── Shopify expiring offline tokens (Dec 2025 cutover) ──────────────────
 # Adds the refresh-token trio to shopify_stores so shopifyFetch can rotate the
 # now-mandatory expiring access token. Required or schema-drift-guard fails on

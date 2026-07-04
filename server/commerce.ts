@@ -823,8 +823,8 @@ export function registerCommerceRoutes(app: Express) {
     // sheet (so family reviewers see real pricing) without granting a charge.
     let includeHidden = await viewerIsAdmin(req);
     if (!includeHidden) {
-      const { readPreviewPass } = await import("./previewPass");
-      const pass = readPreviewPass(req);
+      const { resolvePreviewPass } = await import("./previewPass");
+      const pass = await resolvePreviewPass(req);
       if (pass && pass.albumId === req.params.id) includeHidden = true;
     }
     const album = await storage.getAlbumById(req.params.id, { includeHidden });
@@ -2326,8 +2326,8 @@ export function registerCommerceRoutes(app: Express) {
     // matches THIS album (resolved below) is allowed through to mint the
     // session — the reviewer stops at the card input; no charge completes here.
     // A pass for a DIFFERENT album is still rejected outright.
-    const { readPreviewPass } = await import("./previewPass");
-    const previewPass = readPreviewPass(req);
+    const { resolvePreviewPass } = await import("./previewPass");
+    const previewPass = await resolvePreviewPass(req);
     // Task #1784 — a pass minted for a DIFFERENT album can never drive this
     // checkout: reject it up front (before any auth / SKU work) exactly as
     // Task #1766 did for ALL passes. A pass that MATCHES the album being
@@ -2351,8 +2351,13 @@ export function registerCommerceRoutes(app: Express) {
     // A wrong-album pass was already rejected up front (above); here a matching
     // pass authorizes the reviewer to proceed past the prepping gate so they
     // reach the Stripe card screen. No pass means a normal (live) fan checkout.
+    // Task #1766 — only the operator's STATELESS self-preview (no jti) may walk
+    // the full Stripe flow on a prepping release. A handed-out grant (jti
+    // present) is VIEW-ONLY: the artist / reviewer sees everything at any stage,
+    // but a forwarded link can never mint a charge. A revoked grant already
+    // resolved to null above, so previewPass is falsy for it.
     const stagingAuthorized =
-      !!previewPass && previewPass.albumId === album.id;
+      !!previewPass && !previewPass.jti && previewPass.albumId === album.id;
     // Task #1778 — a PREPPING (pre-launch) release shows the rich page in
     // notify-only "Get Early Access" mode; there is no fan checkout for it.
     // Hard-reject any charge before we touch SKUs/stock so no surface can

@@ -102,7 +102,7 @@ import { SplitsImportSheet, TrackSplitsEditor } from "@/components/admin/SplitsP
 import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
-import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import { apiRequest, getAuthToken, apiErrorStatus } from "@/lib/queryClient";
 import { uploadImageFile } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import Hls from "hls.js";
@@ -160,6 +160,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
 /**
@@ -1239,6 +1240,24 @@ export function AdminAlbum() {
                   admin chrome (white card, slate text). */}
               {album.isExplicit && <ExplicitBadge tone="slate" />}
               <LifecyclePill {...lifecycle} />
+              {/* Task #1766 — operator mirror of the fan "Preview" tag. The
+                  same dot+label shape fans and hand-picked reviewers see on
+                  the album page (there in navy pink; here in admin-legal blue),
+                  so the operator recognizes at a glance that any copy handed
+                  out via the grant panel below reads as a no-charge preview.
+                  Shown whenever the release isn't a live purchasable album
+                  (prepping / sunset / imported), i.e. exactly when a preview
+                  pass is what unlocks it for a reviewer. */}
+              {lifecycle.label !== "Released" && (
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-bold tracking-wider bg-blue-50 text-blue-700 ring-1 ring-blue-200"
+                  title="Fans and hand-picked reviewers see this as a preview — checkout is disabled until it's released."
+                  data-testid="badge-preview-mode"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600" aria-hidden="true" />
+                  Preview
+                </span>
+              )}
               {/* Task #440 — Promote/Demote affordance lives next to the
                   lifecycle pill so the state + the action that mutates it
                   read as one unit. Hidden in Sunset (operator un-hides via
@@ -2803,6 +2822,14 @@ function ShareLinkPanel({
     : "";
 
   const canPreview = !!(savedArtistSlug && savedAlbumSlug);
+  // Task #1766 — the behind-the-scenes preview-grants panel only makes sense
+  // before a release is publicly purchasable; mirror the header lifecycle's
+  // non-"Released" set (prepping / sunset-hidden / imported).
+  const inPreviewState = !!(
+    album.isPrepping ||
+    album.isHidden ||
+    !album.isGoodTunesRelease
+  );
   const openPreview = () => {
     if (!canPreview) return;
     const win = window.open(`/${savedArtistSlug}/${savedAlbumSlug}`, "_blank");
@@ -2864,6 +2891,7 @@ function ShareLinkPanel({
     !!savedArtistSlug && albumPostSale && artistIsDirty && !!artistNormalized;
 
   return (
+    <>
     <div
       className="rounded-xl border border-slate-200 bg-white p-4"
       data-testid="panel-share-link"
@@ -3101,6 +3129,409 @@ function ShareLinkPanel({
             )}
             See Preview Flow
           </button>
+        )}
+      </div>
+    </div>
+    {inPreviewState && (
+      <PreviewGrantsPanel album={album} linkBase={fullUrl || copyUrl} />
+    )}
+    </>
+  );
+}
+
+/* ── Behind-the-scenes preview access grants ───────────────────────────────
+   Task #1766 — hand a specific reviewer a private, revocable, view-tracked
+   link to a release at ANY stage (hidden / prepping / sunrise). Operator +
+   owning-artist/label ONLY (the server gate is canManageAlbumPreviews); a
+   customer NEVER sees this control. The link is view-only — the checkout
+   route refuses to mint a charge for a jti pass — so it stays available even
+   after the post-sale lock (handing out a preview is not a metadata edit).
+   Light-slate admin surface (Apple/ElevenLabs restraint), not fan navy. */
+type PreviewGrant = {
+  id: string;
+  recipientName: string | null;
+  recipientEmail: string | null;
+  note: string | null;
+  createdByLabel: string | null;
+  expiresAt: string;
+  revokedAt: string | null;
+  lastViewedAt: string | null;
+  viewCount: number;
+  createdAt: string;
+  status: "active" | "expired" | "revoked";
+};
+
+function fmtGrantDate(d: string | null): string {
+  if (!d) return "";
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return "";
+  return dt.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function PreviewGrantStatusPill({
+  status,
+}: {
+  status: PreviewGrant["status"];
+}) {
+  const map = {
+    active: { cls: "bg-emerald-100 text-emerald-800", label: "Active" },
+    expired: { cls: "bg-slate-100 text-slate-500", label: "Expired" },
+    revoked: { cls: "bg-rose-100 text-rose-700", label: "Revoked" },
+  } as const;
+  const m = map[status];
+  return (
+    <span
+      className={
+        "inline-flex items-center rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wider " +
+        m.cls
+      }
+      data-testid={`badge-preview-grant-status-${status}`}
+    >
+      {m.label}
+    </span>
+  );
+}
+
+function PreviewGrantRow({
+  grant,
+  albumId,
+}: {
+  grant: PreviewGrant;
+  albumId: string;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const revoke = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/preview-grants/${grant.id}/revoke`,
+      );
+      return (await r.json()) as { grant: PreviewGrant };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ["/api/admin/albums", albumId, "preview-grants"],
+      });
+      toast({
+        title: "Preview link revoked",
+        description: "That link no longer opens this release.",
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't revoke",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      }),
+  });
+
+  const who =
+    grant.recipientName || grant.recipientEmail || "Anyone with the link";
+  const viewedLine =
+    grant.viewCount > 0
+      ? `Viewed ${grant.viewCount} ${grant.viewCount === 1 ? "time" : "times"}${grant.lastViewedAt ? ` · last ${fmtGrantDate(grant.lastViewedAt)}` : ""}`
+      : "Not viewed yet";
+  const expiryLine =
+    grant.status === "revoked"
+      ? "Revoked"
+      : grant.status === "expired"
+        ? `Expired ${fmtGrantDate(grant.expiresAt)}`
+        : `Expires ${fmtGrantDate(grant.expiresAt)}`;
+
+  return (
+    <div
+      className="flex items-start justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/70 p-2.5"
+      data-testid={`row-preview-grant-${grant.id}`}
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span
+            className="truncate text-sm font-medium text-slate-800"
+            data-testid={`text-preview-grant-recipient-${grant.id}`}
+          >
+            {who}
+          </span>
+          <PreviewGrantStatusPill status={grant.status} />
+        </div>
+        {grant.recipientName && grant.recipientEmail && (
+          <p className="truncate text-xs text-slate-400">
+            {grant.recipientEmail}
+          </p>
+        )}
+        <p
+          className="mt-0.5 text-xs leading-snug text-slate-500"
+          data-testid={`text-preview-grant-meta-${grant.id}`}
+        >
+          {viewedLine} · {expiryLine}
+          {grant.createdByLabel ? ` · by ${grant.createdByLabel}` : ""}
+        </p>
+      </div>
+      {grant.status === "active" && (
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button
+              type="button"
+              className="-m-1 shrink-0 p-1 text-slate-400 transition-colors hover:text-rose-600"
+              title="Revoke this preview link"
+              data-testid={`button-revoke-preview-grant-${grant.id}`}
+            >
+              {revoke.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Ban className="h-4 w-4" />
+              )}
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent
+            className="rounded-xl border-slate-200 bg-white"
+            data-testid={`dialog-revoke-preview-grant-${grant.id}`}
+          >
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-slate-900">
+                Revoke this preview link?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-slate-500">
+                {who} will no longer be able to open this release with their
+                link. This can't be undone — you can create a fresh link
+                anytime.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid={`button-cancel-revoke-${grant.id}`}>
+                Keep link
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-rose-600 text-white hover:bg-rose-700"
+                onClick={() => revoke.mutate()}
+                data-testid={`button-confirm-revoke-${grant.id}`}
+              >
+                Revoke link
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+    </div>
+  );
+}
+
+function PreviewGrantsPanel({
+  album,
+  linkBase,
+}: {
+  album: AlbumFull;
+  linkBase: string;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [rName, setRName] = useState("");
+  const [rEmail, setREmail] = useState("");
+  const [days, setDays] = useState(14);
+  const [lastLink, setLastLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const grantsQuery = useQuery<{ grants: PreviewGrant[] }>({
+    queryKey: ["/api/admin/albums", album.id, "preview-grants"],
+  });
+
+  const create = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest(
+        "POST",
+        `/api/admin/albums/${album.id}/preview-grants`,
+        {
+          recipientName: rName.trim() || undefined,
+          recipientEmail: rEmail.trim() || undefined,
+          expiresInDays: days,
+        },
+      );
+      return (await r.json()) as { grant: PreviewGrant; token: string };
+    },
+    onSuccess: async ({ token }) => {
+      const link = linkBase
+        ? `${linkBase}#previewpass=${encodeURIComponent(token)}`
+        : "";
+      setLastLink(link || null);
+      setCopied(false);
+      setRName("");
+      setREmail("");
+      await qc.invalidateQueries({
+        queryKey: ["/api/admin/albums", album.id, "preview-grants"],
+      });
+      if (link) {
+        const ok = await copyTextToClipboard(link);
+        setCopied(ok);
+        toast({
+          title: ok ? "Preview link copied" : "Preview link ready",
+          description: ok
+            ? "Sent to your clipboard — paste it to your reviewer."
+            : "Copy it from the box below.",
+        });
+      } else {
+        toast({
+          title: "Preview access created",
+          description: "Set the share link above to generate a shareable URL.",
+        });
+      }
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't create preview link",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      }),
+  });
+
+  // Hidden entirely if the viewer isn't allowed to manage previews for this
+  // release (the server returns 403). Operators always pass; a partner with
+  // no membership on the owning scope sees nothing rather than a dead panel.
+  // Checked AFTER all hooks so hook order stays stable across renders.
+  if (apiErrorStatus(grantsQuery.error) === 403) return null;
+
+  const grants = grantsQuery.data?.grants ?? [];
+
+  const copyLast = async () => {
+    if (!lastLink) return;
+    const ok = await copyTextToClipboard(lastLink);
+    setCopied(ok);
+    if (!ok)
+      toast({
+        title: "Couldn't copy",
+        description: lastLink,
+        variant: "destructive",
+      });
+  };
+
+  return (
+    <div
+      className="rounded-xl border border-slate-200 bg-white p-4"
+      data-testid="panel-preview-grants"
+    >
+      <div className="flex items-center gap-1.5">
+        <Eye className="h-4 w-4 text-[color:var(--brand-blue)]" />
+        <span className="text-sm font-semibold text-slate-900">
+          Preview access
+        </span>
+      </div>
+      <p className="mt-1 text-xs leading-snug text-slate-500">
+        Hand a reviewer a private link to this release at any stage. Checkout
+        stays disabled, you can revoke it anytime, and views are tracked. Only
+        you and the artist's team see this — fans never do.
+      </p>
+
+      {/* Create form */}
+      <div className="mt-3 grid gap-2">
+        <div className="grid grid-cols-2 gap-2">
+          <Input
+            value={rName}
+            onChange={(e) => setRName(e.target.value)}
+            placeholder="Reviewer name (optional)"
+            className="h-8"
+            data-testid="input-preview-recipient-name"
+          />
+          <Input
+            value={rEmail}
+            onChange={(e) => setREmail(e.target.value)}
+            placeholder="Email (optional)"
+            className="h-8"
+            data-testid="input-preview-recipient-email"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
+            <SelectTrigger
+              className="h-8 w-[150px]"
+              data-testid="select-preview-expiry"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">Expires in 7 days</SelectItem>
+              <SelectItem value="14">Expires in 14 days</SelectItem>
+              <SelectItem value="30">Expires in 30 days</SelectItem>
+              <SelectItem value="60">Expires in 60 days</SelectItem>
+              <SelectItem value="90">Expires in 90 days</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            className="h-8"
+            disabled={create.isPending || !linkBase}
+            onClick={() => create.mutate()}
+            data-testid="button-create-preview-grant"
+          >
+            {create.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Link2 className="h-4 w-4" />
+            )}
+            <span className="ml-1.5">Create preview link</span>
+          </Button>
+        </div>
+        {!linkBase && (
+          <p className="text-xs text-amber-700">
+            Set the share link above first to generate a shareable preview URL.
+          </p>
+        )}
+      </div>
+
+      {/* One-time link reveal — the token is only returned once. */}
+      {lastLink && (
+        <div
+          className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-2.5"
+          data-testid="callout-preview-link-created"
+        >
+          <p className="text-xs font-semibold text-blue-800">
+            Preview link ready — copy it now
+          </p>
+          <p className="mt-0.5 text-xs leading-snug text-blue-700/80">
+            This link is shown once. Copy it and send it to your reviewer.
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <code
+              className="flex-1 truncate rounded-md border border-blue-200 bg-white px-2 py-1 text-xs text-slate-700"
+              data-testid="text-preview-link"
+            >
+              {lastLink}
+            </code>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 shrink-0"
+              onClick={copyLast}
+              data-testid="button-copy-preview-link"
+            >
+              {copied ? (
+                <Check className="h-4 w-4 text-emerald-600" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+              <span className="ml-1.5">{copied ? "Copied" : "Copy"}</span>
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Existing grants */}
+      <div className="mt-3 space-y-2" data-testid="list-preview-grants">
+        {grantsQuery.isLoading ? (
+          <p className="text-xs text-slate-400">Loading…</p>
+        ) : grants.length === 0 ? (
+          <p
+            className="text-xs text-slate-400"
+            data-testid="text-preview-grants-empty"
+          >
+            No preview links yet.
+          </p>
+        ) : (
+          grants.map((g) => (
+            <PreviewGrantRow key={g.id} grant={g} albumId={album.id} />
+          ))
         )}
       </div>
     </div>

@@ -1,14 +1,15 @@
 // Task #1771 — regression guard for the staged-launch review "preview pass"
-// fan experience: the mint "Preview mode" banner + the checkout block.
+// fan experience: the discrete "Preview" pill + the checkout block.
 //
 // When the operator's "See Preview Flow" link plants a preview pass
 // (sessionStorage, via #previewpass=), a reviewer walks the real buyer
 // experience on a not-yet-live release. Two things make that safe and obvious,
 // and neither has any other client coverage:
-//   • AlbumDetail renders a fixed mint banner (`banner-preview-mode`) reading
-//     "Preview mode — … Checkout is disabled." It is the ONLY visible signal
-//     that the reviewer is in no-charge mode, so a silent regression would make
-//     the review flow look like a real purchase flow.
+//   • AlbumDetail renders a discrete floating "Preview" pill
+//     (`banner-preview-mode`) whose text still spells out "Checkout is
+//     disabled" (visible label "Preview" + sr-only/tooltip detail). It is the
+//     ONLY visible signal that the reviewer is in no-charge mode, so a silent
+//     regression would make the review flow look like a real purchase flow.
 //   • The block itself is NOT a disabled Buy button — the Buy pill still opens
 //     the sheet. The actual enforcement is that `apiRequest`/the query fetcher
 //     attach an `X-Preview-Pass` header on EVERY request whenever a pass is

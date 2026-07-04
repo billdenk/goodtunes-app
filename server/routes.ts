@@ -5,7 +5,7 @@ import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
 import { registerPublishingSettlementRoutes, registerPublisherPortalRoutes } from "./publishingSettlementRoutes";
 import { sql, and, eq, ne, or, ilike, isNull, isNotNull, desc, inArray } from "drizzle-orm";
-import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, fulfillmentPartners, TERMS_VERSION } from "@shared/schema";
+import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, fulfillmentPartners, albumPreviewGrants, TERMS_VERSION } from "@shared/schema";
 import {
   MRP_DOMAIN,
   HELLBENDER_DOMAIN,
@@ -21421,19 +21421,27 @@ export async function registerRoutes(
     // grants staging read of its OWN album only. We re-resolve with
     // includeHidden and require the resolved id to match the pass's albumId,
     // so a pass for album X can never reveal a different hidden/prepping row.
-    if (!album && !staging) {
-      const { readPreviewPass } = await import("./previewPass");
-      const pass = readPreviewPass(req);
-      if (pass) {
-        const candidate = await storage.getAlbumBySlug(slug, { includeHidden: true });
-        if (candidate && candidate.id === pass.albumId) {
-          album = candidate;
-          staging = true;
-        }
+    // Resolve a handed-out (stateful) or operator (stateless) preview pass
+    // ONCE. A stateful grant that's been revoked/expired resolves to null here,
+    // so it stops unlocking a hidden row immediately.
+    const { resolvePreviewPass, touchPreviewGrant } = await import("./previewPass");
+    const previewPass = await resolvePreviewPass(req);
+    if (!album && !staging && previewPass) {
+      const candidate = await storage.getAlbumBySlug(slug, { includeHidden: true });
+      if (candidate && candidate.id === previewPass.albumId) {
+        album = candidate;
+        staging = true;
       }
     }
     if (!album) {
       return res.status(404).json({ message: "Not found" });
+    }
+    // Behind-the-scenes view tracking for a handed-out grant (throttled,
+    // best-effort). Fires at ANY stage — including a prepping release that
+    // resolved publicly above — so the operator can see whether the artist /
+    // reviewer actually opened the link before revoking it.
+    if (previewPass?.jti && previewPass.albumId === album.id) {
+      touchPreviewGrant(previewPass.jti);
     }
     const songs = await storage.getSongsByAlbum(album.id);
     const derivedExplicit =
@@ -21487,21 +21495,26 @@ export async function registerRoutes(
     );
     // Task #1766 — a valid preview pass grants staging read of its OWN album
     // only (same leak-safe re-resolve as the single-slug route).
-    if (!album && !staging) {
-      const { readPreviewPass } = await import("./previewPass");
-      const pass = readPreviewPass(req);
-      if (pass) {
-        const candidate = await storage.getAlbumByArtistAndSlug(artist.id, albumSlug, {
-          includeHidden: true,
-        });
-        if (candidate && candidate.id === pass.albumId) {
-          album = candidate;
-          staging = true;
-        }
+    // Same handed-out/operator preview-pass resolution as the single-slug
+    // route (revocation-aware; view-tracked below).
+    const { resolvePreviewPass, touchPreviewGrant } = await import("./previewPass");
+    const previewPass = await resolvePreviewPass(req);
+    if (!album && !staging && previewPass) {
+      const candidate = await storage.getAlbumByArtistAndSlug(artist.id, albumSlug, {
+        includeHidden: true,
+      });
+      if (candidate && candidate.id === previewPass.albumId) {
+        album = candidate;
+        staging = true;
       }
     }
     if (!album) {
       return res.status(404).json({ message: "Not found" });
+    }
+    // Behind-the-scenes view tracking for a handed-out grant (throttled,
+    // best-effort) — fires at any stage, same as the single-slug route.
+    if (previewPass?.jti && previewPass.albumId === album.id) {
+      touchPreviewGrant(previewPass.jti);
     }
     const songs = await storage.getSongsByAlbum(album.id);
     const derivedExplicit =
@@ -21539,6 +21552,169 @@ export async function registerRoutes(
     const token = signPreviewPass(album.id);
     return res.json({ token });
   });
+
+  // Task #1766 — behind-the-scenes preview GRANTS (hand a specific reviewer a
+  // revocable, view-tracked link to a release at ANY stage: hidden / prepping /
+  // sunrise). This is operator + owning-artist/label only; a customer NEVER
+  // sees a grant control. The link is view-only — a forwarded copy can watch
+  // progress but the checkout route refuses to mint a charge for a jti pass.
+  //
+  // Authorization: requireAdmin admits partner accounts (their verbs gate
+  // EDITS, not creates), so we add an explicit manage check — super_admin/admin
+  // OR a membership on the album's owning scope (artist/label). We do NOT run
+  // this through the partner-permission verb / post-sale lock: handing out a
+  // preview link is not a metadata edit and must stay available after sale.
+  const canManageAlbumPreviews = async (
+    userId: string,
+    albumId: string,
+  ): Promise<boolean> => {
+    const { getUserRole } = await import("./auth/roles");
+    const role = await getUserRole(userId);
+    if (role?.role === "super_admin" || role?.role === "admin") return true;
+    const { resolveAlbumScope } = await import("./auth/partnerPermissions");
+    const resolved = await resolveAlbumScope(albumId);
+    if (!resolved?.scope) return false;
+    const { findMembershipForScope } = await import("./auth/roles");
+    return !!(await findMembershipForScope(
+      userId,
+      resolved.scope.kind,
+      resolved.scope.id,
+    ));
+  };
+
+  const previewGrantStatus = (g: {
+    revokedAt: Date | null;
+    expiresAt: Date;
+  }): "revoked" | "expired" | "active" => {
+    if (g.revokedAt) return "revoked";
+    if (g.expiresAt && g.expiresAt.getTime() < Date.now()) return "expired";
+    return "active";
+  };
+
+  // Metadata only — NEVER the token. Only the create response carries the
+  // token (once); the list must never re-expose it, and nothing logs it.
+  const publicPreviewGrant = (g: typeof albumPreviewGrants.$inferSelect) => ({
+    id: g.id,
+    recipientName: g.recipientName,
+    recipientEmail: g.recipientEmail,
+    note: g.note,
+    createdByLabel: g.createdByLabel,
+    expiresAt: g.expiresAt,
+    revokedAt: g.revokedAt,
+    lastViewedAt: g.lastViewedAt,
+    viewCount: g.viewCount,
+    createdAt: g.createdAt,
+    status: previewGrantStatus(g),
+  });
+
+  const createPreviewGrantSchema = z.object({
+    recipientName: z.string().trim().max(120).optional(),
+    recipientEmail: z.string().trim().max(200).optional(),
+    note: z.string().trim().max(500).optional(),
+    expiresInDays: z.coerce.number().int().min(7).max(90).optional(),
+  });
+
+  app.post(
+    "/api/admin/albums/:id/preview-grants",
+    requireAdmin,
+    async (req, res) => {
+      const userId = req.session.userId!;
+      const albumId = String(req.params.id);
+      if (!(await canManageAlbumPreviews(userId, albumId))) {
+        return res
+          .status(403)
+          .json({ message: "Not allowed to manage previews for this release" });
+      }
+      const album = await storage.getAlbumById(albumId, { includeHidden: true });
+      if (!album) return res.status(404).json({ message: "Album not found" });
+      const parsed = createPreviewGrantSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ message: "Invalid grant", errors: parsed.error.flatten() });
+      }
+      const { recipientName, recipientEmail, note, expiresInDays } = parsed.data;
+      const email = recipientEmail && recipientEmail.length ? recipientEmail : null;
+      const days = expiresInDays ?? 14;
+      const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+      const { getUserRole } = await import("./auth/roles");
+      const role = await getUserRole(userId);
+      const isOperator = role?.role === "super_admin" || role?.role === "admin";
+      const [grant] = await db
+        .insert(albumPreviewGrants)
+        .values({
+          albumId,
+          recipientName: recipientName || null,
+          recipientEmail: email,
+          note: note || null,
+          createdByUserId: userId,
+          createdByLabel: isOperator ? "GoodTunes" : null,
+          expiresAt,
+        })
+        .returning();
+      const { signPreviewPass } = await import("./previewPass");
+      const ttlSeconds = Math.max(
+        60,
+        Math.floor((expiresAt.getTime() - Date.now()) / 1000),
+      );
+      const token = signPreviewPass(albumId, { jti: grant.id, ttlSeconds });
+      // Token returned ONLY here so the client can build the shareable link.
+      return res.json({ grant: publicPreviewGrant(grant), token });
+    },
+  );
+
+  app.get(
+    "/api/admin/albums/:id/preview-grants",
+    requireAdmin,
+    async (req, res) => {
+      const userId = req.session.userId!;
+      const albumId = String(req.params.id);
+      if (!(await canManageAlbumPreviews(userId, albumId))) {
+        return res
+          .status(403)
+          .json({ message: "Not allowed to manage previews for this release" });
+      }
+      const rows = await db
+        .select()
+        .from(albumPreviewGrants)
+        .where(eq(albumPreviewGrants.albumId, albumId))
+        .orderBy(desc(albumPreviewGrants.createdAt));
+      return res.json({ grants: rows.map(publicPreviewGrant) });
+    },
+  );
+
+  app.post(
+    "/api/admin/albums/:id/preview-grants/:grantId/revoke",
+    requireAdmin,
+    async (req, res) => {
+      const userId = req.session.userId!;
+      const albumId = String(req.params.id);
+      if (!(await canManageAlbumPreviews(userId, albumId))) {
+        return res
+          .status(403)
+          .json({ message: "Not allowed to manage previews for this release" });
+      }
+      // Revoke is terminal: only flip a still-active row (revokedAt IS NULL),
+      // scoped to this album so a grantId from another release can't be touched.
+      const [updated] = await db
+        .update(albumPreviewGrants)
+        .set({ revokedAt: new Date(), revokedByUserId: userId })
+        .where(
+          and(
+            eq(albumPreviewGrants.id, String(req.params.grantId)),
+            eq(albumPreviewGrants.albumId, albumId),
+            isNull(albumPreviewGrants.revokedAt),
+          ),
+        )
+        .returning();
+      if (!updated) {
+        return res
+          .status(404)
+          .json({ message: "Grant not found or already revoked" });
+      }
+      return res.json({ grant: publicPreviewGrant(updated) });
+    },
+  );
 
   // Public, visibility-gated read: a logged-out fan opening a LIVE release on
   // get.goodtunes.music (the launch root or a /<artist>/<release> share link)
