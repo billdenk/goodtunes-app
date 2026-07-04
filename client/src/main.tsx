@@ -86,10 +86,13 @@ try {
   const p = window.location.pathname || "";
   // Invited-partner portals are light admin surfaces too. Match their EXACT
   // landing paths (not prefixes — `/artist/:slug` is the dark fan artist page,
-  // only the bare `/artist` is the portal) plus the invite-accept page so the
-  // body is light from the very first paint with no dark flash.
+  // only the bare `/artist` is the portal), plus `/artist/albums/:id` (Task
+  // #2524 — the same portal with one album opened embedded) and the
+  // invite-accept page, so the body is light from the very first paint with
+  // no dark flash.
   const lightPortal =
-    p === "/artist" || p === "/label" || p === "/manager" ||
+    p === "/artist" || p.indexOf("/artist/albums/") === 0 ||
+    p === "/label" || p === "/manager" ||
     p === "/vendor" || p === "/non-profit" || p === "/publisher" ||
     p === "/invite" || p.indexOf("/invite/") === 0;
   const isAdmin =

@@ -530,12 +530,16 @@ function Router() {
       location.startsWith("/album") ||
       // Bare `/artist` is the invited-artist PARTNER PORTAL (a light admin
       // surface, same tier as /label, /vendor, /manager, /non-profit — none
-      // of which are blocked here). Only the dark fan page `/artist/<slug>`
-      // should bounce admins on a prod admin host. `location` here is a
-      // wouter pathname (no query/hash), so `/artist#viewas=...` still
-      // resolves to the exact `/artist` we want to exempt. Mirrors the
-      // bare-path check in main.tsx's light-portal detector.
-      (location.startsWith("/artist") && location !== "/artist") ||
+      // of which are blocked here). `/artist/albums/:id` (Task #2524) is that
+      // SAME portal with one album opened embedded, so it's exempt too — else
+      // clicking a Catalog album bounces the admin to a blank `/admin`. Only
+      // the dark fan page `/artist/<slug>` should bounce admins on a prod
+      // admin host. `location` here is a wouter pathname (no query/hash), so
+      // `/artist#viewas=...` still resolves to the exact `/artist` we want to
+      // exempt. Mirrors the bare-path check in main.tsx's light-portal detector.
+      (location.startsWith("/artist") &&
+        location !== "/artist" &&
+        !location.startsWith("/artist/albums/")) ||
       location.startsWith("/instrument") || location.startsWith("/search") ||
       location.startsWith("/recents")
     )) {
