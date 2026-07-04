@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { authHeaders } from "@/lib/queryClient";
 
 /**
  * Recoverable error UI for admin pages. Extracted from AdminReports so
@@ -15,7 +16,14 @@ import { Button } from "@/components/ui/button";
 
 /** Throw on non-OK so React Query flips into isError. */
 export async function fetchJson(url: string): Promise<any> {
-  const res = await fetch(url, { credentials: "include" });
+  // Task #2487 — carry the same auth context the shared `apiRequest` sends:
+  // the Bearer token, the staged-launch preview pass, and crucially the
+  // `X-View-As-Token` header. Without the view-as token the server resolved
+  // an operator's "View as this partner" report calls to their own bare
+  // super_admin scope (god-view) and leaked every other partner's releases
+  // and metrics into the scoped portal. Sending it makes the server resolve
+  // the impersonated artist's hat so the reports scope to that artist only.
+  const res = await fetch(url, { credentials: "include", headers: authHeaders() });
   if (!res.ok) {
     let msg = `Request failed (${res.status})`;
     try {

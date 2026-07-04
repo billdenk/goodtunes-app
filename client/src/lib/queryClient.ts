@@ -49,7 +49,7 @@ export function clearViewAsSession() {
   } catch {}
 }
 
-function authHeaders(): Record<string, string> {
+export function authHeaders(): Record<string, string> {
   const token = getAuthToken();
   const headers: Record<string, string> = token
     ? { Authorization: `Bearer ${token}` }

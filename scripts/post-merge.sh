@@ -8897,6 +8897,118 @@ SQL
 reconcile_task_2454_californialand dev  "${DATABASE_URL:-}"
 reconcile_task_2454_californialand prod "${PROD_DATABASE_URL:-}"
 
+# ─── Task #2487 — Reconcile duplicate Niina Soleil `people` rows ────────
+# Prod carries TWO "Niina Soleil" people rows: the canonical one holds the
+# stable artist_share_slug 'niina-soleil' and owns her releases (incl.
+# CALIFORNIALAND), while a second, hollow duplicate has NO slug, owns NO
+# albums, and holds nothing but redundant streaming person_discography rows
+# (the same discography already lives on the canonical). It carries no user
+# grant, no membership, no partner attribution — a pure orphan.
+#
+# During the #2487 partner-reports scope hardening, an operator "view as"
+# an artist now resolves strictly to that person's owned cohort. An extra
+# empty "Niina Soleil" row is a foot-gun: an operator could pick the hollow
+# duplicate from a person picker and land on an all-empty (fail-closed)
+# scope, which reads as "the reports are broken" rather than "wrong row."
+# Collapsing to one canonical Niina removes that ambiguity.
+#
+# This ONE-TIME, marker-guarded reconciliation (mirrors task-2454) SOFT-
+# deletes every non-canonical, genuinely-empty "Niina Soleil" duplicate so
+# it drops out of pickers/search/admin (reversible via admin trash). Its
+# person_discography rows are redundant with the canonical's and stay
+# attached to the (now-hidden) row, so nothing is lost.
+#
+# Keyed by VERIFIED IDENTITY at execution time, never by today's UUIDs:
+#   - canonical = the live Niina resolved by artist_share_slug 'niina-soleil'
+#   - duplicates = other live "Niina Soleil" rows that are NOT the canonical
+# SAFETY: refuses (RAISE EXCEPTION → rolled back, WARNING logged, merge
+# continues, NO marker) if a "duplicate" has since gained an owned album,
+# a user role-scope grant, or a membership — never hide a row with content.
+# SELF-GATE: DBs without Niina Soleil (every dev clone) return early WITHOUT
+# stamping the marker, so the real prod run still executes on a later merge.
+# Idempotent: once applied (marker set), later merges skip it.
+reconcile_task_2487_niina_people() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2487 Niina people reconcile on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_canon   varchar;
+  v_dupes   integer := 0;
+  v_bad     integer := 0;
+  v_trashed integer := 0;
+BEGIN
+  IF EXISTS (SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2487_reconcile_niina_people') THEN
+    RAISE NOTICE 'task-2487 Niina reconcile already applied — skipping';
+    RETURN;
+  END IF;
+
+  -- Canonical resolved by a stable identity handle, not a UUID.
+  SELECT id INTO v_canon
+    FROM people
+   WHERE artist_share_slug = 'niina-soleil' AND deleted_at IS NULL
+   LIMIT 1;
+  IF v_canon IS NULL THEN
+    RAISE NOTICE 'task-2487: Niina Soleil not in this DB — nothing to do (no marker stamped)';
+    RETURN;
+  END IF;
+
+  -- Self-gate: any other live "Niina Soleil" row is a candidate duplicate.
+  SELECT COUNT(*) INTO v_dupes
+    FROM people
+   WHERE name = 'Niina Soleil' AND deleted_at IS NULL AND id <> v_canon;
+  IF v_dupes = 0 THEN
+    RAISE NOTICE 'task-2487: no duplicate Niina rows — nothing to do (no marker stamped)';
+    RETURN;
+  END IF;
+
+  -- Guard: never hide a "duplicate" that owns an album, a user role-scope
+  -- grant, or a membership. Those carry real access/content — leave for
+  -- manual review rather than silently hiding them.
+  SELECT COUNT(*) INTO v_bad
+    FROM people p
+   WHERE p.name = 'Niina Soleil' AND p.deleted_at IS NULL AND p.id <> v_canon
+     AND ( EXISTS (SELECT 1 FROM albums a      WHERE a.primary_artist_id = p.id AND a.deleted_at IS NULL)
+        OR EXISTS (SELECT 1 FROM users u       WHERE u.role_scope_id     = p.id)
+        OR EXISTS (SELECT 1 FROM memberships m WHERE m.scope_id          = p.id) );
+  IF v_bad > 0 THEN
+    RAISE EXCEPTION 'task-2487 ABORT: % duplicate Niina row(s) now carry an owned album / role-scope grant / membership — refusing to hide', v_bad;
+  END IF;
+
+  -- Soft-delete every non-canonical Niina duplicate (idempotent; keeps an
+  -- already-set deleted_at). They drop out of pickers/search/admin,
+  -- restorable via admin trash. Their redundant discography stays attached.
+  UPDATE people
+     SET deleted_at = COALESCE(deleted_at, now())
+   WHERE name = 'Niina Soleil' AND deleted_at IS NULL AND id <> v_canon;
+  GET DIAGNOSTICS v_trashed = ROW_COUNT;
+
+  INSERT INTO post_merge_data_backfills (name) VALUES ('task_2487_reconcile_niina_people');
+  RAISE NOTICE 'task-2487 applied: canonical Niina %; trashed % empty duplicate(s)', v_canon, v_trashed;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2487 Niina people reconcile ok on $label"
+    echo "$out" | grep -i 'task-2487' || true
+  else
+    echo "post-merge: WARNING — task-2487 Niina people reconcile failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+reconcile_task_2487_niina_people dev  "${DATABASE_URL:-}"
+reconcile_task_2487_niina_people prod "${PROD_DATABASE_URL:-}"
+
 # ─── Task #2460 — Strip Apple Music boilerplate bios (NBSP root cause) ──
 # The gear/artist scraper used to capture Apple's "Listen to music by
 # <Artist> on Apple Music." sentence as a "bio". Apple serves that phrase

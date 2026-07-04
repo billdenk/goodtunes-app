@@ -541,10 +541,21 @@ async function detectRoleColumns(): Promise<boolean> {
 }
 
 export async function getPartnerScope(userId: string): Promise<PartnerScope> {
+  // Task #2487 — FAIL CLOSED on an unresolvable account. Both branches below
+  // previously synthesized `super_admin`, which (a) handed the caller the
+  // whole-catalog god-view on the partner-reports surface and (b) let them
+  // impersonate ANY partner via ?asPartner= (resolveReportScope grants that
+  // only to super_admin). Fall back to a plain `admin` scope instead: it
+  // carries a null roleScopeId, so effectiveScopeFilter returns null and
+  // resolveScope yields an EMPTY cohort on the partner surface — and because
+  // it is NOT super_admin, no ?asPartner impersonation is granted. God-view
+  // for a genuinely-resolved operator still flows through getUserRole below
+  // (and only ever applies to /api/admin/reports/*, never the partner
+  // endpoints, which now fail closed in resolveScope).
   const hasCols = await detectRoleColumns();
-  if (!hasCols) return { role: "super_admin", roleScopeId: null };
+  if (!hasCols) return { role: "admin", roleScopeId: null };
   const info = await getUserRole(userId);
-  if (!info) return { role: "super_admin", roleScopeId: null };
+  if (!info) return { role: "admin", roleScopeId: null };
   return info;
 }
 

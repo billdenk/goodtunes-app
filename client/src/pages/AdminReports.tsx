@@ -219,6 +219,23 @@ export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) 
           />
         )}
 
+        {/* Task #2487 — album-scoped partner tabs now fail CLOSED: with no
+            partner selected they resolve to an empty cohort (never a god-view
+            of every artist's releases). Tell the operator how to populate them
+            so an empty Sales/Plays panel doesn't read as "reports are broken."
+            Platform-wide totals still live in the god-view Overview/Revenue. */}
+        {isSuper && !asPartner && showAlbumScopedTabs && (
+          <div
+            className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+            data-testid="banner-pick-partner"
+          >
+            Pick a partner in <span className="font-medium text-slate-700">Viewing as</span> above to
+            load album-scoped Sales, Plays, Payouts and fan reports. Platform-wide totals live in the{" "}
+            <span className="font-medium text-slate-700">Overview</span> and{" "}
+            <span className="font-medium text-slate-700">Revenue breakdown</span> tabs.
+          </div>
+        )}
+
         <AdminErrorBoundary title="Reports failed to render">
         <Tabs defaultValue={initialTab} className="w-full">
           <div className="border-b border-slate-200 -mx-1 overflow-x-auto">

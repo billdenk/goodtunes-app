@@ -63,9 +63,18 @@ async function resolveScope(ctx: ReportContext): Promise<ScopeResolution> {
     return { albumIds: [], referredArtistIds: [], perUnitCents: 0, label: orgName ? `Non-profit · ${orgName}` : "Non-profit" };
   }
   const eff = effectiveScopeFilter(ctx.scope);
-  // super_admin with no impersonation → see everything.
+  // Task #2487 — FAIL CLOSED. Reaching here with no concrete scope filter
+  // means the caller is a super_admin/admin with NO impersonation target
+  // (real label/artist/manager/manufacturer return a filter above;
+  // non-profit is handled by isOrgScope; publisher/vendor/fulfillment are
+  // 403'd in requireReportScope). The partner-reports surface must NEVER
+  // serve the whole catalog — that whole-catalog god-view lives ONLY on
+  // /api/admin/reports/*. Return an EMPTY cohort so every album-scoped
+  // engine (sales/plays/payouts/top-fans/fan-map/redemption) AND the funnel
+  // release picker resolve to nothing rather than leaking every partner's
+  // releases and metrics into a scoped portal / view-as session.
   if (!eff) {
-    return { albumIds: null, referredArtistIds: [], perUnitCents: 0, label: "All partners" };
+    return { albumIds: [], referredArtistIds: [], perUnitCents: 0, label: "No partner selected" };
   }
   if (eff.kind === "label") {
     const rows = await db
