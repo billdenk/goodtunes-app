@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatUsdCents } from "@shared/money";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { Heart, Music as MusicIcon, Mail, Clock, UserPlus, Users, Trash2, Send, Copy, Check, ChevronDown, LayoutDashboard, ShoppingBag, ScrollText, Network, Megaphone } from "lucide-react";
 import { ReferralLinkWidget } from "@/components/admin/ReferralLinkWidget";
 import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
@@ -105,9 +105,19 @@ export function NonProfitDashboard() {
   }, [caps?.canViewTree]);
   const [tab, setTab] = useState<NpoTabId>(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
-    if (t === "dashboard" || t === "artists" || t === "buyers" || t === "invites" || t === "ledger" || t === "tree") return t;
+    if (t === "dashboard" || t === "artists" || t === "acquisition" || t === "buyers" || t === "invites" || t === "ledger" || t === "tree") return t;
     return "dashboard";
   });
+  // Task #2486 — Dashboard-tab KPI tiles deep-link via `?tab=…` (wouter
+  // pushState); mirror later `?tab=` changes into the once-seeded tab
+  // state. onTabChange's replaceState lands here as an idempotent no-op.
+  const search = useSearch();
+  useEffect(() => {
+    const t = new URLSearchParams(search).get("tab");
+    if (t === "dashboard" || t === "artists" || t === "acquisition" || t === "buyers" || t === "invites" || t === "ledger" || t === "tree") {
+      setTab(t);
+    }
+  }, [search]);
 
   if (me.error) {
     const msg = (me.error as any)?.message || "We couldn't load your non-profit scope.";

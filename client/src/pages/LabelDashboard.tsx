@@ -10,9 +10,9 @@
 // dashboards feel like one product. Headline view is the roster table;
 // catalog/audience/orders match the artist layout.
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { formatUsd, formatUsdCents } from "@shared/money";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -122,6 +122,19 @@ const RANGE_PRESETS = [
 ] as const;
 type PresetId = (typeof RANGE_PRESETS)[number]["id"];
 
+// Task #2486 — Dashboard-tab KPI tiles carry the picked window as
+// `?range=<preset>` using the shared PartnerDashboard preset vocab
+// (today/7d/30d/90d/all); map it into this shell's own preset ids
+// (today→7d nearest-narrow, all→12mo nearest-wide) so a drill-down
+// lands on the same window.
+const RANGE_FROM_DASHBOARD: Record<string, PresetId> = {
+  today: "7d", "7d": "7d", "30d": "30d", "90d": "90d", "12mo": "12mo", all: "12mo",
+};
+function presetFromSearch(search: string): PresetId | null {
+  const r = new URLSearchParams(search).get("range");
+  return r ? (RANGE_FROM_DASHBOARD[r] ?? null) : null;
+}
+
 function toIso(d: Date) { return d.toISOString(); }
 function rangeFor(preset: PresetId): Range {
   const to = new Date();
@@ -132,13 +145,35 @@ function rangeFor(preset: PresetId): Range {
 type SortKey = "revenue" | "units" | "plays" | "listeners" | "buyers" | "albumCount" | "name";
 
 export function LabelDashboard() {
-  const [preset, setPreset] = useState<PresetId>("30d");
+  const [preset, setPreset] = useState<PresetId>(() => presetFromSearch(window.location.search) ?? "30d");
   const [compare, setCompare] = useState(true);
   const [tab, setTab] = useState<"dashboard" | "overview" | "acquisition" | "roster" | "catalog" | "orders">(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
     if (t === "dashboard" || t === "overview" || t === "acquisition" || t === "roster" || t === "catalog" || t === "orders") return t;
     return "dashboard";
   });
+  // Task #2486 — Dashboard-tab KPI tiles deep-link via `?tab=…` (wouter
+  // pushState); mirror later `?tab=` changes into the once-seeded tab
+  // state. onTabChange's replaceState lands here as an idempotent no-op.
+  const search = useSearch();
+  useEffect(() => {
+    const t = new URLSearchParams(search).get("tab");
+    if (t === "dashboard" || t === "overview" || t === "acquisition" || t === "roster" || t === "catalog" || t === "orders") {
+      setTab(t);
+    }
+    const p = presetFromSearch(search);
+    if (p) setPreset(p);
+  }, [search]);
+  // Task #2486 — the range picker writes `?range=` back to the URL so it
+  // stays the single source of truth: a KPI deep-link and the picker both
+  // funnel through the URL, so the `[search]` sync above can never clobber
+  // a later picker choice with a stale `?range=` (e.g. on a tab switch).
+  const applyPreset = (p: PresetId) => {
+    setPreset(p);
+    const sp = new URLSearchParams(window.location.search);
+    sp.set("range", p);
+    history.replaceState(null, "", `${window.location.pathname}?${sp.toString()}`);
+  };
   const range = useMemo(() => rangeFor(preset), [preset]);
   const qs = useMemo(() => {
     const u = new URLSearchParams({ from: range.from, to: range.to });
@@ -183,7 +218,7 @@ export function LabelDashboard() {
       subtitle={`${rosterSize} artist${rosterSize === 1 ? "" : "s"} · ${albumCount} album${albumCount === 1 ? "" : "s"}`}
       headerActions={
         <>
-          <RangePicker presets={RANGE_PRESETS} value={preset} onChange={setPreset} />
+          <RangePicker presets={RANGE_PRESETS} value={preset} onChange={applyPreset} />
           <CompareToggle active={compare} onToggle={setCompare} />
         </>
       }

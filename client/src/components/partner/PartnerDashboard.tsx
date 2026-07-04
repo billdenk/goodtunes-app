@@ -170,7 +170,7 @@ export function PartnerDashboard({
         {extraHeader}
       </section>
 
-      <KpiGrid kpis={data?.kpis ?? []} loading={isLoading} scope={scope} series={data?.series ?? []} />
+      <KpiGrid kpis={data?.kpis ?? []} loading={isLoading} scope={scope} series={data?.series ?? []} preset={preset} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <DashboardPanel data-testid={`trend-${scope}`} className="lg:col-span-2">
@@ -198,16 +198,76 @@ export function PartnerDashboard({
 
 // ─── KPI tiles ──────────────────────────────────────────────────────
 
+// Task #2486 — each real (non-comingSoon) KPI tile drills into the
+// closest existing tab of the SAME partner shell, carrying the
+// dashboard's currently-selected date range wherever the destination
+// supports one. The artist and label report tabs own a range picker
+// that now reads a `?range=` seed off the URL, so their tiles append
+// `?range=<preset>` (mapped into each shell's own preset vocab on
+// arrival) alongside `?tab=<dest>` and the existing scope params
+// (`?personId`/`?labelId`/`?scopeId`…). The NPO drill-downs
+// (buyers/acquisition/ledger/…) have no range picker, so their tiles
+// carry `?tab=` only. Tiles with no matching in-shell tab (and every
+// coming-soon tile) stay inert.
+function partnerTabDest(scope: PartnerScopeKind, k: DashboardKpi): string | null {
+  if (k.comingSoon) return null;
+  switch (scope) {
+    case "artist":
+      // dashboard/overview/audience/acquisition/catalog/orders/buyers/referrals
+      if (k.id === "orders") return "orders";
+      if (k.id === "units" || k.id === "gross" || k.id === "pricePerUnit" || k.id === "net") return "overview";
+      if (k.id === "plays" || k.id === "newFans") return "audience";
+      return null;
+    case "label":
+      // dashboard/overview/acquisition/roster/catalog/orders
+      if (k.id === "orders") return "orders";
+      if (k.id === "gross" || k.id === "plays" || k.id === "newFans") return "overview";
+      return null;
+    case "npo":
+      // dashboard/artists/acquisition/buyers/invites/ledger(/tree)
+      if (k.id === "orders") return "buyers";
+      if (k.id === "newFans") return "acquisition";
+      if (k.id === "pending" || k.id === "paid") return "artists";
+      if (k.id === "donated") return "ledger";
+      return null;
+    case "vendor":
+    default:
+      // The vendor/manufacturer/fulfillment shell only has the Dashboard
+      // tab and (vendor-only) GoodDeed Services pricing — no sales/jobs
+      // report tab — so these tiles have no honest drill-down and stay
+      // inert rather than linking into the unrelated pricing surface.
+      return null;
+  }
+}
+
+// Build a same-shell tab href that preserves the current scope query
+// params (e.g. super-admin `?personId=`/`?labelId=`/`?scopeId=`),
+// swaps `?tab=`, and — when the destination shell supports a range
+// picker — carries the dashboard's active `?range=` preset so the
+// drill-down lands on the same window. Mirrors each shell's onTabChange.
+function tabHref(dest: string, range?: string): string {
+  const search = typeof window !== "undefined" ? window.location.search : "";
+  const path = typeof window !== "undefined" ? window.location.pathname : "";
+  const sp = new URLSearchParams(search);
+  sp.set("tab", dest);
+  if (range) sp.set("range", range);
+  return `${path}?${sp.toString()}`;
+}
+
 export function KpiGrid({
   kpis,
   loading,
   scope,
   series = [],
+  preset,
 }: {
   kpis: DashboardKpi[];
   loading: boolean;
   scope: PartnerScopeKind;
   series?: Array<Record<string, number | string>>;
+  /** The dashboard's active range preset, carried into range-aware
+   * destination tabs (artist + label) via `?range=`. */
+  preset?: PartnerRangePreset;
 }) {
   if (loading && kpis.length === 0) {
     return (
@@ -220,14 +280,26 @@ export function KpiGrid({
   }
   return (
     <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" data-testid={`kpi-grid-${scope}`}>
-      {kpis.map((k) => (
-        <KpiCard
-          key={k.id}
-          model={k}
-          testId={`kpi-${scope}-${k.id}`}
-          spark={sparkFromSeries(series, k.id)}
-        />
-      ))}
+      {kpis.map((k) => {
+        const dest = partnerTabDest(scope, k);
+        // Only the artist + label report tabs read a `?range=` seed;
+        // NPO/vendor drill-downs have no range picker, so they carry
+        // `?tab=` only.
+        const carriesRange = scope === "artist" || scope === "label";
+        // A real, populated KPI is clickable; a card with no value yet
+        // (e.g. artist price-per-unit before any units sell) stays inert
+        // even though its destination tab exists.
+        const clickable = dest != null && k.value != null;
+        return (
+          <KpiCard
+            key={k.id}
+            model={k}
+            testId={`kpi-${scope}-${k.id}`}
+            href={clickable ? tabHref(dest, carriesRange ? preset : undefined) : null}
+            spark={sparkFromSeries(series, k.id)}
+          />
+        );
+      })}
     </section>
   );
 }
