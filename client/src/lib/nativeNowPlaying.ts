@@ -18,12 +18,16 @@
  *     events. This is the reliable lock-screen path on iOS WKWebView, which is
  *     why PlayerContext gates the *web* MediaSession block off on native iOS
  *     and lets the plugin own the now-playing info instead.
- *   - Android (native): there is intentionally NO native plugin. The Chromium
- *     System WebView surfaces the web `navigator.mediaSession` metadata as a
- *     media-style notification and keeps audio alive in the background, so the
- *     web MediaSession layer in PlayerContext covers Android for free. This
- *     wrapper's `isPluginAvailable("NowPlaying")` check is false there, so every
- *     call is a no-op.
+ *   - Android (native): the Chromium System WebView still surfaces the web
+ *     `navigator.mediaSession` metadata as the phone media-style notification
+ *     and keeps audio alive in the background (unchanged). The in-tree
+ *     `NowPlaying` plugin (`android/.../NowPlayingPlugin.java`) additionally
+ *     mirrors the same metadata/state/queue into an app-owned
+ *     `MediaSessionCompat` that the `AutoMediaBrowserService` exposes to
+ *     Android Auto, and forwards Auto's transport back into the web player.
+ *     The native session only goes active while a media browser (Android Auto
+ *     / Assistant) is connected, so the phone lock screen keeps showing the
+ *     single WebView card when you're not projecting.
  *   - Web (any browser / PWA): no native token — every export is a no-op and the
  *     web MediaSession layer handles the mobile-web / PWA lock screen.
  *
@@ -52,10 +56,26 @@ export interface NowPlayingPlaybackState {
   duration: number;
 }
 
-/** A transport command originated from the OS lock screen / Control Center. */
+/** A single browsable entry (a queued track) published to CarPlay / Android
+ *  Auto so the car head-unit can show + jump around the Up Next list. */
+export interface NowPlayingQueueItem {
+  /** Stable id (the PlayerSong id) echoed back on a `playIndex` command. */
+  id: string;
+  title: string;
+  artist: string;
+  /** Album artwork URL for the browse row thumbnail; omitted when unavailable. */
+  artworkUrl?: string;
+}
+
+/** A transport command originated from the OS lock screen / Control Center or
+ *  an in-car surface (CarPlay / Android Auto). */
 export type RemoteCommand =
   | { action: "play" | "pause" | "toggle" | "next" | "prev" | "stop" }
-  | { action: "seek"; value: number };
+  | { action: "seek"; value: number }
+  /** The user tapped a row in the CarPlay / Android Auto browse list —
+   *  `value` is the 0-based index into the queue last published via
+   *  {@link setNowPlayingQueue}. */
+  | { action: "playIndex"; value: number };
 
 interface PluginListenerHandle {
   remove: () => Promise<void>;
@@ -64,6 +84,7 @@ interface PluginListenerHandle {
 interface NowPlayingPlugin {
   setMetadata(options: NowPlayingMetadata): Promise<void>;
   setPlaybackState(options: NowPlayingPlaybackState): Promise<void>;
+  setQueue(options: { items: NowPlayingQueueItem[]; currentIndex: number }): Promise<void>;
   clear(): Promise<void>;
   addListener(
     eventName: "remoteCommand",
@@ -102,6 +123,19 @@ export function setNowPlayingMetadata(meta: NowPlayingMetadata): void {
 export function setNowPlayingPlaybackState(state: NowPlayingPlaybackState): void {
   if (!available()) return;
   NowPlaying.setPlaybackState(state).catch(() => {});
+}
+
+/**
+ * Publish the current Up Next queue so CarPlay / Android Auto can render a
+ * browsable list and let the driver jump to any track. `currentIndex` marks
+ * the now-playing row. No-op off-native (and on native iOS this is only
+ * consumed by the CarPlay scene — the lock screen ignores it). */
+export function setNowPlayingQueue(
+  items: NowPlayingQueueItem[],
+  currentIndex: number,
+): void {
+  if (!available()) return;
+  NowPlaying.setQueue({ items, currentIndex }).catch(() => {});
 }
 
 /** Clear the OS now-playing info (queue emptied / player torn down). */

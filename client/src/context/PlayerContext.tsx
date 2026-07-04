@@ -9,6 +9,7 @@ import { isNative, isNativeIOS, isWebIOS } from "@/lib/platform";
 import {
   setNowPlayingMetadata,
   setNowPlayingPlaybackState,
+  setNowPlayingQueue,
   clearNowPlaying,
   onNowPlayingRemoteCommand,
 } from "@/lib/nativeNowPlaying";
@@ -91,6 +92,9 @@ interface PlayerContextValue extends PlayerState {
   addToQueue: (song: PlayerSong) => void;
   playNext: (song: PlayerSong) => void;
   playLast: (song: PlayerSong) => void;
+  /** Jump to a track already in the queue by its index and start playing it.
+   *  Used by the CarPlay / Android Auto browse list (`playIndex` command). */
+  playQueueIndex: (index: number) => void;
   setPreviewMode: (on: boolean) => void;
   /** Preview window for the current song, in seconds, derived from the
    *  operator/GoodSync-placed previewStartMs/previewEndMs. previewStartSec is
@@ -1058,6 +1062,24 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       .catch(() => { /* fire-and-forget */ });
   }, [hydrate, beginPlayInstance, queryClient, ensureAudioUnlocked]);
 
+  // Jump to an existing queue entry by index and start it. Backs the CarPlay /
+  // Android Auto browse list — the head-unit sends the index of the tapped row
+  // and we re-point currentIndex at it (no re-hydration; the queue is already
+  // hydrated). Guarded so an out-of-range index from a stale car snapshot no-ops.
+  const playQueueIndex = useCallback((index: number) => {
+    ensureAudioUnlocked();
+    setQueue((q) => {
+      if (index < 0 || index >= q.length) return q;
+      const song = q[index];
+      setCurrentIndex(index);
+      setCurrentTime(0);
+      setAudioDuration(null);
+      setIsPlaying(true);
+      beginPlayInstance(song, !song.audioUrl);
+      return q;
+    });
+  }, [beginPlayInstance, ensureAudioUnlocked]);
+
   const togglePlay = useCallback(() => {
     // Bless the element on the resume tap too (WebKit autoplay unlock).
     ensureAudioUnlocked();
@@ -1117,6 +1139,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     next: handleNext,
     prev: handlePrev,
     seekTo,
+    playQueueIndex,
   });
   useEffect(() => {
     mediaControlsRef.current = {
@@ -1124,8 +1147,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       next: handleNext,
       prev: handlePrev,
       seekTo,
+      playQueueIndex,
     };
-  }, [togglePlay, handleNext, handlePrev, seekTo]);
+  }, [togglePlay, handleNext, handlePrev, seekTo, playQueueIndex]);
 
   // Publish current-track metadata to the OS (song change only).
   useEffect(() => {
@@ -1219,6 +1243,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setNowPlayingPlaybackState({ isPlaying, elapsed: currentTime, duration });
   }, [isPlaying, currentTime, duration, currentSong?.id]);
 
+  // Mirror the Up Next queue to the native plugin so CarPlay / Android Auto can
+  // render a browsable list. Only the head-unit (CarPlay scene / Android Auto
+  // MediaBrowserService) consumes this — the phone lock screen ignores it — so
+  // it is a no-op off-native. Re-published whenever the queue contents or the
+  // now-playing row change; the bridge itself short-circuits when unavailable.
+  useEffect(() => {
+    setNowPlayingQueue(
+      queue.map((s) => ({
+        id: s.id,
+        title: s.title ?? "",
+        artist: s.album?.artist ?? "",
+        artworkUrl: s.album?.artwork ?? undefined,
+      })),
+      currentIndex,
+    );
+  }, [queue, currentIndex]);
+
   // Register OS transport action handlers ONCE. All handlers dispatch through
   // mediaControlsRef so they always call the latest player callbacks.
   useEffect(() => {
@@ -1275,6 +1316,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           break;
         case "seek":
           if (typeof cmd.value === "number") c.seekTo(cmd.value);
+          break;
+        case "playIndex":
+          if (typeof cmd.value === "number") c.playQueueIndex(cmd.value);
           break;
       }
     });
@@ -1427,6 +1471,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         addToQueue,
         playNext,
         playLast,
+        playQueueIndex,
         previewMode,
         previewStartSec,
         previewEndSec,

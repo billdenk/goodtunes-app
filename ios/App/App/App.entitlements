@@ -25,5 +25,14 @@
          rejected at upload (ITMS-90163 invalid aps-environment). -->
     <key>aps-environment</key>
     <string>production</string>
+    <!-- Task #2504 — CarPlay audio. Grants the app the CarPlay audio scene so
+         a head unit can connect and show the now-playing + Up Next templates
+         (CarPlaySceneDelegate). This is a MANAGED entitlement: Apple must
+         approve the CarPlay-audio capability on the App ID before it can be
+         signed for distribution — until then, device/simulator CarPlay testing
+         works with a development profile but App Store builds will fail signing
+         if the capability isn't enabled on the provisioning profile. -->
+    <key>com.apple.developer.carplay-audio</key>
+    <true/>
 </dict>
 </plist>

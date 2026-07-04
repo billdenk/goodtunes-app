@@ -37,6 +37,7 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "setMetadata", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPlaybackState", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setQueue", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clear", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "addListener", returnType: CAPPluginReturnCallback),
         CAPPluginMethod(name: "removeAllListeners", returnType: CAPPluginReturnPromise)
@@ -50,6 +51,12 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
     public override func load() {
         configureAudioSession()
         wireRemoteCommands()
+        // Register with the shared store so a CarPlay row tap (which reaches
+        // NowPlayingStore, not this plugin) is forwarded to JS as a `playIndex`
+        // remote command, exactly like the transport commands above.
+        NowPlayingStore.shared.onPlayIndex = { [weak self] index in
+            self?.emitPlayIndex(index)
+        }
     }
 
     /// Put the shared audio session in `.playback` so the WebView's <audio>
@@ -140,8 +147,27 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// Mirror the web player's Up Next queue into the shared store so the
+    /// CarPlay browse list can render it. No effect on the lock screen (which
+    /// only shows the single now-playing item); consumed by CarPlay only.
+    @objc func setQueue(_ call: CAPPluginCall) {
+        let raw = call.getArray("items", [String: Any].self) ?? []
+        let currentIndex = call.getInt("currentIndex") ?? 0
+        let items: [NowPlayingQueueEntry] = raw.map { dict in
+            NowPlayingQueueEntry(
+                id: dict["id"] as? String ?? "",
+                title: dict["title"] as? String ?? "",
+                artist: dict["artist"] as? String ?? "",
+                artworkUrl: dict["artworkUrl"] as? String
+            )
+        }
+        NowPlayingStore.shared.updateQueue(items, currentIndex: currentIndex)
+        call.resolve()
+    }
+
     @objc func clear(_ call: CAPPluginCall) {
         artworkURL = nil
+        NowPlayingStore.shared.updateQueue([], currentIndex: 0)
         DispatchQueue.main.async {
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             call.resolve()
@@ -191,5 +217,9 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func emitSeek(_ time: Double) {
         notifyListeners("remoteCommand", data: ["action": "seek", "value": time])
+    }
+
+    private func emitPlayIndex(_ index: Int) {
+        notifyListeners("remoteCommand", data: ["action": "playIndex", "value": index])
     }
 }

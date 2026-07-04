@@ -53,6 +53,33 @@
         <array>
                 <string>audio</string>
         </array>
+        <!-- CarPlay (Task #2504). GoodTunes keeps its legacy AppDelegate window
+             for the phone UI, so we declare ONLY the CarPlay scene role here
+             (no UIWindowSceneSessionRoleApplication). With no window scene
+             declared, UIKit leaves the phone app on the AppDelegate lifecycle
+             untouched and instantiates CarPlaySceneDelegate ONLY for the in-car
+             surface — Apple's documented hybrid path for adding CarPlay to a
+             non-scene app. UISceneDelegateClassName is module-qualified because
+             Swift classes live under the product module namespace. Pairs with
+             the com.apple.developer.carplay-audio entitlement, which Apple must
+             grant to the App ID before a real head unit will connect. -->
+        <key>UIApplicationSceneManifest</key>
+        <dict>
+                <key>UIApplicationSupportsMultipleScenes</key>
+                <true/>
+                <key>UISceneConfigurations</key>
+                <dict>
+                        <key>CPTemplateApplicationSceneSessionRoleApplication</key>
+                        <array>
+                                <dict>
+                                        <key>UISceneConfigurationName</key>
+                                        <string>CarPlay</string>
+                                        <key>UISceneDelegateClassName</key>
+                                        <string>$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate</string>
+                                </dict>
+                        </array>
+                </dict>
+        </dict>
         <!-- App Transport Security: all GoodTunes traffic is HTTPS to
              goodtunes.music + Mux/Stripe/Object Storage CDNs. No
              arbitrary loads allowed; this keeps App Review happy and
