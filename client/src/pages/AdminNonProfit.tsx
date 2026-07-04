@@ -65,7 +65,7 @@ export default function AdminNonProfit() {
 
   if (npoQ.isLoading) {
     return (
-      <AdminFrame active="nonprofits" contentWidth="narrow">
+      <AdminFrame active="nonprofits" contentWidth="wide">
         <div className="py-20 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
@@ -74,7 +74,7 @@ export default function AdminNonProfit() {
   }
   if (npoQ.error || !npoQ.data) {
     return (
-      <AdminFrame active="nonprofits" contentWidth="narrow">
+      <AdminFrame active="nonprofits" contentWidth="wide">
         <div className="py-20 text-center space-y-2">
           <p className="text-sm text-rose-700">
             {(npoQ.error as Error)?.message ?? "Not found"}
@@ -94,7 +94,7 @@ export default function AdminNonProfit() {
   };
 
   return (
-    <AdminFrame active="nonprofits" contentWidth="narrow">
+    <AdminFrame active="nonprofits" contentWidth="wide">
       <div className="space-y-5" data-testid="page-admin-non-profit">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium min-w-0">

@@ -283,7 +283,7 @@ export function AdminManager() {
   }
 
   return (
-    <AdminFrame active="managers" contentWidth="narrow">
+    <AdminFrame active="managers" contentWidth="wide">
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">

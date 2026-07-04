@@ -132,7 +132,7 @@ function AdminShopifyInner() {
   };
 
   return (
-    <AdminFrame active="shopify" contentWidth="narrow">
+    <AdminFrame active="shopify" contentWidth="wide">
       <div data-testid="page-admin-shopify">
         <h1 className="text-2xl font-bold text-slate-900 mb-1">Shopify</h1>
         <p className="text-slate-500 text-sm mb-8">

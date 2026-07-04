@@ -52,7 +52,7 @@ function AdminAlbumEngagementInner() {
   const songTitle = (id: string) => songs?.find((s) => s.id === id)?.title ?? id.slice(0, 8);
 
   return (
-    <AdminFrame active="albums" contentWidth="narrow">
+    <AdminFrame active="albums" contentWidth="wide">
       <div data-testid="page-album-engagement">
         <Link href={`/admin/albums/${albumId}`} className="text-[12px] text-slate-500 hover:text-slate-700">
           ← Back to album

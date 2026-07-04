@@ -851,7 +851,7 @@ export function AdminPerson() {
   return (
     <AdminFrame
       active="people"
-      contentWidth="narrow"
+      contentWidth="wide"
       preview={
         <PersonPreviewCard
           person={person}

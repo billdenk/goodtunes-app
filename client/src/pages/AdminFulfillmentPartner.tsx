@@ -126,7 +126,7 @@ export function AdminFulfillmentPartner() {
 
   if (authLoading || isLoading) {
     return (
-      <AdminFrame active="fulfillment" contentWidth="narrow">
+      <AdminFrame active="fulfillment" contentWidth="wide">
         <div className="py-20 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
@@ -135,7 +135,7 @@ export function AdminFulfillmentPartner() {
   }
   if (!user?.isAdmin) {
     return (
-      <AdminFrame active="fulfillment" contentWidth="narrow">
+      <AdminFrame active="fulfillment" contentWidth="wide">
         <div className="py-20 text-center text-slate-500">
           You need to be signed in as an admin to view this page.
         </div>
@@ -144,7 +144,7 @@ export function AdminFulfillmentPartner() {
   }
   if (!f) {
     return (
-      <AdminFrame active="fulfillment" contentWidth="narrow">
+      <AdminFrame active="fulfillment" contentWidth="wide">
         <div className="py-20 text-center">
           <h1 className="text-slate-900 text-lg font-semibold">Partner not found</h1>
           <Link href="/admin/fulfillment-partners" className="text-[var(--brand-blue)] text-sm hover:underline underline-offset-2">
@@ -156,7 +156,7 @@ export function AdminFulfillmentPartner() {
   }
 
   return (
-    <AdminFrame active="fulfillment" contentWidth="narrow">
+    <AdminFrame active="fulfillment" contentWidth="wide">
       <div className="space-y-5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium min-w-0">

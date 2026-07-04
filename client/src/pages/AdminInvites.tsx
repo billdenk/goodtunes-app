@@ -328,7 +328,7 @@ export function AdminInvites() {
   // gate exactly. Render nothing role-specific until the role resolves.
   if (roleLoaded && !canInvite) {
     return (
-      <AdminFrame active="invites" contentWidth="narrow">
+      <AdminFrame active="invites" contentWidth="wide">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 mb-1" data-testid="text-page-title">Invites</h1>
           <div
@@ -350,7 +350,7 @@ export function AdminInvites() {
   }
 
   return (
-    <AdminFrame active="invites" contentWidth="narrow">
+    <AdminFrame active="invites" contentWidth="wide">
       <div>
         <h1 className="text-2xl font-semibold text-slate-900 mb-1" data-testid="text-page-title">Invites</h1>
         <p className="text-sm text-slate-600 mb-6">

@@ -95,7 +95,7 @@ export function AdminPlaylist() {
   const ownerHref = data.owner ? `/admin/customers/${data.owner.id}` : "/admin/customers";
 
   return (
-    <AdminFrame active="customers" contentWidth="narrow">
+    <AdminFrame active="customers" contentWidth="wide">
       <div className="space-y-6" data-testid="page-admin-playlist">
         <Link href={ownerHref} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors" data-testid="link-back-to-owner">
           <ArrowLeft className="w-3.5 h-3.5" />

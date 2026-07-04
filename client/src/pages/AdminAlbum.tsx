@@ -1148,7 +1148,7 @@ export function AdminAlbum() {
   return (
     <AdminFrame
       active="albums"
-      contentWidth="narrow"
+      contentWidth="wide"
       preview={{
         phone: <AlbumPreviewCard album={album} />,
         tablet: <AlbumDesktopPreviewCard album={album} />,

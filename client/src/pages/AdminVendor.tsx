@@ -377,7 +377,7 @@ export function AdminVendor() {
   return (
     <AdminFrame
       active={activeKey}
-      contentWidth="narrow"
+      contentWidth="wide"
       preview={
         <VendorPreviewCard vendor={vendor} instruments={instruments} />
       }

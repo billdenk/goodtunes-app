@@ -396,7 +396,7 @@ export function AdminManufacturer() {
   }
 
   return (
-    <AdminFrame active="manufacturers" contentWidth="narrow">
+    <AdminFrame active="manufacturers" contentWidth="wide">
       <div className="space-y-6">
         {/* BREADCRUMB */}
         <div className="flex items-center justify-between gap-2">

@@ -304,7 +304,7 @@ export function AdminCustomerDetail() {
   });
 
   return (
-    <AdminFrame active="customers" contentWidth="narrow">
+    <AdminFrame active="customers" contentWidth="wide">
       <div className="space-y-6">
         <Link
           href="/admin/customers"
