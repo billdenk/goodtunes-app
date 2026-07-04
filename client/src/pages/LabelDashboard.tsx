@@ -29,6 +29,7 @@ import { ReferralLinkWidget } from "@/components/admin/ReferralLinkWidget";
 import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
+import { AdminReports } from "@/pages/AdminReports";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
 import { CertRunsSection } from "@/components/partner/cert-runs-section";
 import { SalesMap, type SalesGeoPayload } from "@/components/partner/SalesMap";
@@ -147,9 +148,9 @@ type SortKey = "revenue" | "units" | "plays" | "listeners" | "buyers" | "albumCo
 export function LabelDashboard() {
   const [preset, setPreset] = useState<PresetId>(() => presetFromSearch(window.location.search) ?? "30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"dashboard" | "overview" | "acquisition" | "roster" | "catalog" | "orders">(() => {
+  const [tab, setTab] = useState<"dashboard" | "overview" | "acquisition" | "roster" | "catalog" | "orders" | "reports">(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
-    if (t === "dashboard" || t === "overview" || t === "acquisition" || t === "roster" || t === "catalog" || t === "orders") return t;
+    if (t === "dashboard" || t === "overview" || t === "acquisition" || t === "roster" || t === "catalog" || t === "orders" || t === "reports") return t;
     return "dashboard";
   });
   // Task #2486 — Dashboard-tab KPI tiles deep-link via `?tab=…` (wouter
@@ -158,7 +159,7 @@ export function LabelDashboard() {
   const search = useSearch();
   useEffect(() => {
     const t = new URLSearchParams(search).get("tab");
-    if (t === "dashboard" || t === "overview" || t === "acquisition" || t === "roster" || t === "catalog" || t === "orders") {
+    if (t === "dashboard" || t === "overview" || t === "acquisition" || t === "roster" || t === "catalog" || t === "orders" || t === "reports") {
       setTab(t);
     }
     const p = presetFromSearch(search);
@@ -216,11 +217,21 @@ export function LabelDashboard() {
       logoUrl={me.data?.logoUrl ?? null}
       fallbackIcon={Building2}
       subtitle={`${rosterSize} artist${rosterSize === 1 ? "" : "s"} · ${albumCount} album${albumCount === 1 ? "" : "s"}`}
+      // Reports carries its own "Reports" header, so drop the shell's content
+      // header identity band on that section (parity with ArtistDashboard) —
+      // the rail identity stays. Combined with headerActions=undefined below,
+      // the whole content-header band collapses on Reports.
+      hideHeaderIdentity={tab === "reports"}
       headerActions={
-        <>
-          <RangePicker presets={RANGE_PRESETS} value={preset} onChange={applyPreset} />
-          <CompareToggle active={compare} onToggle={setCompare} />
-        </>
+        // Reports renders the embedded AdminReports, which carries its own
+        // "Reports" header + date range, so suppress the shell's range
+        // controls on that section to avoid a duplicate picker.
+        tab === "reports" ? undefined : (
+          <>
+            <RangePicker presets={RANGE_PRESETS} value={preset} onChange={applyPreset} />
+            <CompareToggle active={compare} onToggle={setCompare} />
+          </>
+        )
       }
       tabs={LABEL_TABS}
       activeTab={tab}
@@ -239,8 +250,8 @@ export function LabelDashboard() {
         roster: Users,
         catalog: Disc3,
         orders: ShoppingBag,
+        reports: FileBarChart,
       }}
-      navExtras={[{ id: "reports", label: "Reports", href: "/admin/reports", icon: FileBarChart }]}
     >
       {tab === "dashboard" && (
         <PartnerDashboard
@@ -259,12 +270,17 @@ export function LabelDashboard() {
       {tab === "roster" && <RosterTab qs={qs} labelIdParam={labelIdParam} />}
       {tab === "catalog" && <CatalogTab qs={qs} />}
       {tab === "orders" && <OrdersTab qs={qs} labelIdParam={labelIdParam} />}
+      {/* Task #2522 — Reports renders the shared AdminReports in `embedded`
+          mode so the label stays inside their own portal shell (no /admin
+          chrome). Scope is resolved server-side from the caller (or ?labelId=
+          for a viewing-as super-admin), exactly as the god-view page does. */}
+      {tab === "reports" && <AdminReports embedded />}
     </OperatorShell>
   );
 }
 
 const LABEL_TABS = modulesForRole("label") as ReadonlyArray<{
-  id: "dashboard" | "overview" | "acquisition" | "roster" | "catalog" | "orders";
+  id: "dashboard" | "overview" | "acquisition" | "roster" | "catalog" | "orders" | "reports";
   label: string;
 }>;
 type LabelTabId = (typeof LABEL_TABS)[number]["id"];

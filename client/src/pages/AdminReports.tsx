@@ -170,9 +170,19 @@ export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) 
   // `/admin/reports?tab=<name>&from=…&to=…`. We read `tab` once on
   // mount to pick the initial active tab; the date range is already
   // picked up by useDateRange() above.
+  //
+  // Task #2522 — when EMBEDDED inside a partner portal shell, the shell
+  // owns the `?tab=` param (it tracks the active portal section, e.g.
+  // `?tab=reports`). If we read/wrote `?tab=` here too, the shell's
+  // section value would be (mis)interpreted as one of our report sub-tabs
+  // (e.g. "overview"/"referrals" collide) — rendering a blank/wrong panel
+  // — and switching report sub-tabs would knock the shell off Reports.
+  // So embedded mode reads/writes its OWN `?rtab=` param, leaving the
+  // shell's `?tab=` untouched.
+  const subTabParam = embedded ? "rtab" : "tab";
   const initialTab = useMemo(() => {
     if (typeof window === "undefined") return "sales";
-    const t = new URLSearchParams(window.location.search).get("tab");
+    const t = new URLSearchParams(window.location.search).get(subTabParam);
     const allowed = new Set([
       "sales", "plays", "payouts", "redemption", "fans", "map",
       "referrals", "overview", "revenue", "engagement", "funnels",
@@ -186,6 +196,12 @@ export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) 
     if (t && (allowed.has(t) || superOnlyTabs.has(t))) return t;
     return "sales";
   }, []);
+
+  // Embedded mode drives the Tabs component controlled off `?rtab=` so the
+  // sub-tab survives a reload and never touches the shell's `?tab=`.
+  // Non-embedded mode leaves Tabs uncontrolled (defaultValue) exactly as
+  // before — the god-view page is unchanged.
+  const [reportTab, setReportTab] = useState(initialTab);
 
   const body = (
       <div className="space-y-6">
@@ -239,7 +255,20 @@ export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) 
         )}
 
         <AdminErrorBoundary title="Reports failed to render">
-        <Tabs defaultValue={initialTab} className="w-full">
+        <Tabs
+          {...(embedded
+            ? {
+                value: reportTab,
+                onValueChange: (v: string) => {
+                  setReportTab(v);
+                  const sp = new URLSearchParams(window.location.search);
+                  sp.set("rtab", v);
+                  history.replaceState(null, "", `${window.location.pathname}?${sp.toString()}`);
+                },
+              }
+            : { defaultValue: initialTab })}
+          className="w-full"
+        >
           <div className="border-b border-slate-200 -mx-1 overflow-x-auto">
             <TabsList className="bg-transparent border-0 p-0 h-auto gap-6 px-1 flex-nowrap justify-start rounded-none">
               {showAlbumScopedTabs && <ReportTab value="sales" testId="tab-sales">Sales</ReportTab>}

@@ -59,6 +59,9 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "buyers",      label: "Buyers",      roles: ["artist"] },
   { id: "referrals",   label: "Referrals",   roles: ["artist"] },
   { id: "people",      label: "People",      roles: ["artist"] },
+  // Reports renders the shared AdminReports in `embedded` mode INSIDE the
+  // artist portal shell (no /admin chrome). See ArtistDashboard.tsx.
+  { id: "reports",     label: "Reports",     roles: ["artist"] },
 
   // Label shell — `/label` (LabelDashboard.tsx)
   { id: "dashboard",   label: "Dashboard",   roles: ["label"] },
@@ -67,6 +70,9 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "roster",      label: "Roster",      roles: ["label"] },
   { id: "catalog",     label: "Catalog",     roles: ["label"] },
   { id: "orders",      label: "Orders",      roles: ["label"] },
+  // Reports renders the shared AdminReports in `embedded` mode INSIDE the
+  // label portal shell (no /admin chrome). See LabelDashboard.tsx.
+  { id: "reports",     label: "Reports",     roles: ["label"] },
 
   // Manager shell — `/manager` (ManagerDashboard.tsx). No self-serve
   // dashboard/PartnerDashboard tab (managers carry no press provenance

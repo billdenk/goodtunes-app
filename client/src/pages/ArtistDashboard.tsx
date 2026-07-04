@@ -35,6 +35,7 @@ import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
+import { AdminReports } from "@/pages/AdminReports";
 import { CertRunsSection } from "@/components/partner/cert-runs-section";
 import { BuyerReport } from "@/components/partner/BuyerReport";
 import { BRAND, SKU_COLORS, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
@@ -122,9 +123,9 @@ function rangeFor(preset: PresetId): Range {
 export function ArtistDashboard() {
   const [preset, setPreset] = useState<PresetId>(() => presetFromSearch(window.location.search) ?? "30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"dashboard" | "overview" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people">(() => {
+  const [tab, setTab] = useState<"dashboard" | "overview" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people" | "reports">(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
-    if (t === "dashboard" || t === "overview" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals" || t === "people") return t;
+    if (t === "dashboard" || t === "overview" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals" || t === "people" || t === "reports") return t;
     return "dashboard";
   });
   // Task #2486 — Dashboard-tab KPI tiles deep-link via `?tab=…` (wouter
@@ -134,7 +135,7 @@ export function ArtistDashboard() {
   const search = useSearch();
   useEffect(() => {
     const t = new URLSearchParams(search).get("tab");
-    if (t === "dashboard" || t === "overview" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals") {
+    if (t === "dashboard" || t === "overview" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals" || t === "people" || t === "reports") {
       setTab(t);
     }
     const p = presetFromSearch(search);
@@ -205,14 +206,15 @@ export function ArtistDashboard() {
       // highlighted nav item. The artist's identity (avatar + name) lives only
       // in the rail + mobile top strip, so it isn't repeated as the page H1.
       //
-      // The Dashboard tab renders the shared PartnerDashboard primitive, which
-      // carries its OWN section header + range picker, so on that tab we
-      // suppress the shell page header entirely (no pageTitle, hideHeaderIdentity,
-      // no headerActions) to avoid a duplicate title + duplicate range control.
-      pageTitle={tab === "dashboard" ? undefined : currentTabLabel}
-      hideHeaderIdentity={tab === "dashboard"}
+      // Dashboard renders the shared PartnerDashboard primitive and Reports
+      // renders the embedded AdminReports — both carry their OWN section
+      // header + date range — so on those two sections we suppress the shell
+      // page header entirely (no pageTitle, hideHeaderIdentity, no
+      // headerActions) to avoid a duplicate title + duplicate range control.
+      pageTitle={tab === "dashboard" || tab === "reports" ? undefined : currentTabLabel}
+      hideHeaderIdentity={tab === "dashboard" || tab === "reports"}
       headerActions={
-        tab === "dashboard" ? undefined : (
+        tab === "dashboard" || tab === "reports" ? undefined : (
           <>
             <RangePicker presets={RANGE_PRESETS} value={preset} onChange={applyPreset} />
             <CompareToggle active={compare} onToggle={setCompare} />
@@ -239,8 +241,8 @@ export function ArtistDashboard() {
         buyers: UserCheck,
         referrals: UserPlus,
         people: Users2,
+        reports: FileBarChart,
       }}
-      navExtras={[{ id: "reports", label: "Reports", href: "/admin/reports", icon: FileBarChart }]}
     >
       {tab === "dashboard" && (
         <PartnerDashboard
@@ -282,12 +284,17 @@ export function ArtistDashboard() {
       {tab === "buyers" && <BuyersTab qs={qs} personId={me.data?.personId ?? null} />}
       {tab === "referrals" && <ReferralsTab />}
       {tab === "people" && <ArtistPeoplePanel />}
+      {/* Task #2522 — Reports renders the shared AdminReports in `embedded`
+          mode so the artist stays inside their own portal shell (no /admin
+          chrome). Scope is resolved server-side from the caller (or ?personId=
+          for a viewing-as super-admin), exactly as the god-view page does. */}
+      {tab === "reports" && <AdminReports embedded />}
     </OperatorShell>
   );
 }
 
 const ARTIST_TABS = modulesForRole("artist") as ReadonlyArray<{
-  id: "dashboard" | "overview" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people";
+  id: "dashboard" | "overview" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people" | "reports";
   label: string;
 }>;
 type ArtistTabId = (typeof ARTIST_TABS)[number]["id"];
