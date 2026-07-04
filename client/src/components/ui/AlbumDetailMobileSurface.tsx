@@ -91,6 +91,12 @@ export interface AlbumDetailMobileSurfaceProps {
   /** Fan owns the album (full playback). Owned albums never lock rows —
    *  matches the desktop `isOwned ? "full"` branch. */
   isOwned?: boolean;
+  /** Task #2530 — owner-only "Not yet released" marker. Mirrors the Library
+   *  card badge: shows only to a fan who owns a copy of a release that is
+   *  still prepping (staged) or hidden, and disappears once it's public. The
+   *  host derives this from the owner-scoped `/api/my-albums` flags; the
+   *  public detail response never carries them, so non-owners never see it. */
+  notYetReleased?: boolean;
   currentSongId?: string | null;
   isPlaying?: boolean;
   downloadedSongIds?: Set<string>;
@@ -193,6 +199,7 @@ export function AlbumDetailMobileSurface({
   label,
   ownedNums = [],
   isOwned = false,
+  notYetReleased = false,
   currentSongId,
   isPlaying = false,
   downloadedSongIds,
@@ -637,6 +644,25 @@ export function AlbumDetailMobileSurface({
                   ));
                 })()}
               </p>
+            )}
+            {notYetReleased && (
+              // Task #2530 — owner-only "Not yet released" marker, mirroring the
+              // Library card badge but centered under the album metadata to fit
+              // the Apple-Music mobile header. Same wording + navy translucent
+              // pill treatment as AlbumCard.
+              <div className="mt-2 flex justify-center">
+                <span
+                  className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+                  style={{
+                    background: "rgba(0,6,43,0.62)",
+                    color: "rgba(255,255,255,0.92)",
+                    border: "1px solid rgba(255,255,255,0.28)",
+                  }}
+                  data-testid="badge-not-yet-released"
+                >
+                  Not yet released
+                </span>
+              </div>
             )}
             {/* Apple reserves the description's room and anchors the Play /
                 Shuffle / Info row lower, so it doesn't slide up when an album

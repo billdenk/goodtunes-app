@@ -275,3 +275,9 @@ id = "hY405MpiGazHy9pqWQaR4"
 uri = "file://.local/tasks/investor-what-we-built.md"
 type = "text"
 title = "GoodTunes — What We've Built (Investor Summary)"
+
+[[outputs]]
+id = "T-omSNfu0L6v9RTlTnqWz"
+uri = "file://attached_assets/screenshots/5293185b-8e25-4d4f-b8b2-dc5494b9adc6-00-2smdxrpg586m8-hv0i4msx_kirk_replit_dev_mockup_preview_admin-album-status_StatusPlacements.png"
+type = "image"
+title = "Admin album header — status placement options (Today, A, B, C)"

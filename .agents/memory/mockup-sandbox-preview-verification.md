@@ -14,3 +14,14 @@ Canvas mockup components live under `/__mockup/preview/<group>/<Component>` and 
 **How to apply:**
 - To eyeball a mockup, use `external_url` on the full `https://<domain>/__mockup/preview/<group>/<Component>` URL. Cache-bust with `?v=N`; if the first capture is blank, re-shoot once (load timing) before assuming a real error.
 - To verify it merely compiles (no runtime render), curl the sandbox: find the port from the workflow log line `Local: http://localhost:<PORT>/__mockup/` ("artifacts/mockup-sandbox: Component Preview Server", port is dynamic per boot) and `curl -o /dev/null -w "%{http_code}" http://localhost:5000/__mockup/src/components/mockups/<group>/<Component>.tsx` → 200 = Vite transformed it, 500 = syntax/transform error.
+
+## Delivery = build the component; the artifact is a singleton
+Do NOT call `createArtifact` per mock. The mockup-sandbox artifact is a
+**singleton** — once it exists, `createArtifact({artifactType:"mockup-sandbox",...})`
+returns `{success:false, error:"Only one mockup-sandbox artifact (kind: design)
+is allowed"}` (and it requires `slug`, `previewPath`, `title` or it 422s on
+missing params). Delivery of a new mock is simply: create the component under
+`artifacts/mockup-sandbox/src/components/mockups/<group>/<Component>.tsx`; the
+canvas auto-serves it at `/__mockup/preview/<group>/<Component>`. That's how all
+the sibling groups (admin-album-title, etc.) ship — no special canvas-shape
+callback is needed just to make a mock viewable.

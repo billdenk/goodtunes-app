@@ -403,7 +403,13 @@ function AlbumDetailMobile({
   // Task #909 — is this album an *active* admin-granted preview (vs a real
   // owned/comp copy)? Drives the [Demo] GoodDeed cert. Server already
   // excludes expired previews from /api/my-albums.
-  const { data: myAlbumsForPreview } = useQuery<Array<{ albumId: string; isPreview?: boolean }> | null>({
+  const { data: myAlbumsForPreview } = useQuery<
+    Array<{
+      albumId: string;
+      isPreview?: boolean;
+      album?: { isPrepping?: boolean; isHidden?: boolean };
+    }> | null
+  >({
     queryKey: ["/api/my-albums"],
   });
   const isPreviewAlbum = !!id && (myAlbumsForPreview ?? []).some((a) => a.albumId === id && a.isPreview);
@@ -426,6 +432,16 @@ function AlbumDetailMobile({
   // True ownership = in library AND NOT a preview grant. Used specifically to
   // gate Add-to-Playlist (previews cannot playlist songs they don't truly own).
   const trulyOwns = isOwned && !isPreviewAlbum;
+  // Task #2530 — owner-only "Not yet released" marker. Matches the Library
+  // card gating: the owner (a row in the owner-scoped /api/my-albums) of a
+  // release that is still prepping (staged) or hidden. The public detail
+  // payload strips those flags, so non-owners can never trip this; the fanView
+  // lens suppresses it (isOwned already zeroes under fanView).
+  const myAlbumRow = !!id
+    ? (myAlbumsForPreview ?? []).find((a) => a.albumId === id)
+    : undefined;
+  const notYetReleased =
+    isOwned && !!(myAlbumRow?.album?.isPrepping || myAlbumRow?.album?.isHidden);
   const previewFirst = buyEnabled && !isOwned && !fullPlaybackAccess;
   const queueHasUpcoming = queue.length - currentIndex - 1 > 0;
   const { user, updateProfile } = useAuth();
@@ -1149,6 +1165,7 @@ function AlbumDetailMobile({
       <section className="relative w-full h-screen text-fan-primary flex flex-col">
         <AlbumDetailMobileSurface
           scrollRef={scrollRef}
+          notYetReleased={notYetReleased}
           album={{
             id: album.id,
             title: album.title,

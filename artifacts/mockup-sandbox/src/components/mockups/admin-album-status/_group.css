@@ -1,0 +1,8 @@
+/* Brand tokens for the admin-album-status mockups.
+   Kept in CSS (not .tsx) so the brand-hex design-lint rule stays clean —
+   the six brand literals are only allowed to live in .css files. */
+:root {
+  --brand-blue: #319ED8;
+  --brand-purple: #7F10A7;
+  --brand-mint: #4AFFCA;
+}

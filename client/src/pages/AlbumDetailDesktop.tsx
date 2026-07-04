@@ -269,10 +269,29 @@ export function AlbumDetailDesktop({
   // the GoodDeed cert must render "[Demo]" everywhere a serial would appear
   // instead of falling back to a misleading "#01". Mirrors mobile AlbumDetail;
   // the server already excludes expired previews from /api/my-albums.
-  const { data: myAlbumsForPreview } = useQuery<Array<{ albumId: string; isPreview?: boolean }> | null>({
+  const { data: myAlbumsForPreview } = useQuery<
+    Array<{
+      albumId: string;
+      isPreview?: boolean;
+      album?: { isPrepping?: boolean; isHidden?: boolean };
+    }> | null
+  >({
     queryKey: ["/api/my-albums"],
   });
   const isPreviewAlbum = !!id && (myAlbumsForPreview ?? []).some((a) => a.albumId === id && a.isPreview);
+  // Task #2530 — owner-only "Not yet released" marker. Matches the Library
+  // card gating: the owner (a row in the owner-scoped /api/my-albums) of a
+  // release still prepping (staged) or hidden. The public detail payload strips
+  // those flags, so non-owners can never trip this; the fanView lens suppresses
+  // it (effectiveOwned already zeroes under fanView).
+  const notYetReleased =
+    effectiveOwned &&
+    (() => {
+      const row = !!id
+        ? (myAlbumsForPreview ?? []).find((a) => a.albumId === id)
+        : undefined;
+      return !!(row?.album?.isPrepping || row?.album?.isHidden);
+    })();
   const favSongs = useFavoriteSongs();
   const [showAlbumCredits, setShowAlbumCredits] = useState(false);
   const [playlistPickerSong, setPlaylistPickerSong] = useState<{ id: string; title: string } | null>(null);
@@ -767,6 +786,7 @@ export function AlbumDetailDesktop({
             photos={photos}
             label={album?.label ?? null}
             isOwned={effectiveOwned}
+            notYetReleased={notYetReleased}
             canPlay={canPlay}
             currentSongId={player.currentSong?.id ?? null}
             isPlaying={player.isPlaying}

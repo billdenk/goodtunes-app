@@ -77,6 +77,12 @@ export type DesktopAlbumViewProps = {
   label?: { id: string; name: string; logoUrl?: string | null } | null;
 
   isOwned: boolean;
+  /** Task #2530 — owner-only "Not yet released" marker. Mirrors the Library
+   *  card badge: shows only to a fan who owns a copy of a release that is
+   *  still prepping (staged) or hidden, and disappears once it's public. The
+   *  host derives this from the owner-scoped `/api/my-albums` flags; the public
+   *  detail payload never carries them, so non-owners never see it. */
+  notYetReleased?: boolean;
   /** When false, "Play" / "Shuffle" CTAs are suppressed (no previews + locked album). */
   canPlay: boolean;
 
@@ -314,6 +320,7 @@ export function DesktopAlbumView({
   photos,
   label,
   isOwned,
+  notYetReleased = false,
   canPlay,
   currentSongId,
   isPlaying,
@@ -731,6 +738,24 @@ export function DesktopAlbumView({
             >
               {album.artist}
             </span>
+
+            {notYetReleased && (
+              // Task #2530 — owner-only "Not yet released" marker, mirroring the
+              // Library card badge but adapted to the left-aligned desktop
+              // album header. Same wording + navy translucent pill treatment as
+              // AlbumCard.
+              <span
+                className="self-start mt-2 text-xs font-semibold px-3 py-1 rounded-full"
+                style={{
+                  background: "rgba(0,6,43,0.62)",
+                  color: "rgba(255,255,255,0.92)",
+                  border: "1px solid rgba(255,255,255,0.28)",
+                }}
+                data-testid="badge-not-yet-released"
+              >
+                Not yet released
+              </span>
+            )}
 
             {meta && (
               <div

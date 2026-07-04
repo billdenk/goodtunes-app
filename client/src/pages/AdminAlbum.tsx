@@ -192,9 +192,9 @@ interface AlbumFull {
   description: string | null;
   isHidden: boolean;
   isGoodTunesRelease: boolean;
-  // Task #440 — "Prepping" lifecycle gate. Drives the LifecyclePill +
-  // the Promote/Demote CTA next to it. New shells land here; admin
-  // flips it off via "Mark as released" once the album is ready.
+  // Task #440 — "Prepping" lifecycle gate. Drives the grouped header
+  // STATUS control + its Promote/Demote action (Task #2531). New shells
+  // land here; admin flips it off via "Mark as released" once ready.
   isPrepping?: boolean;
   isExplicit?: boolean;
   // Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
@@ -1159,6 +1159,14 @@ export function AdminAlbum({
       ? { label: "Prepping", tone: "slate" as const }
       : { label: "Released", tone: "mint" as const };
 
+  // Task #2531 — Option C: dot color for the grouped header STATUS control.
+  const statusDotCls =
+    lifecycle.tone === "mint"
+      ? "bg-emerald-500"
+      : lifecycle.tone === "amber"
+        ? "bg-amber-500"
+        : "bg-slate-400";
+
   const mainBody = (
     <>
       <div className="space-y-6">
@@ -1253,7 +1261,6 @@ export function AdminAlbum({
                   it with the per-track switch. Slate tone matches the
                   admin chrome (white card, slate text). */}
               {album.isExplicit && <ExplicitBadge tone="slate" />}
-              <LifecyclePill {...lifecycle} />
               {/* Task #1766 — operator mirror of the fan "Preview" tag. The
                   same dot+label shape fans and hand-picked reviewers see on
                   the album page (there in navy pink; here in admin-legal blue),
@@ -1271,37 +1278,6 @@ export function AdminAlbum({
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-600" aria-hidden="true" />
                   Preview
                 </span>
-              )}
-              {/* Task #440 — Promote/Demote affordance lives next to the
-                  lifecycle pill so the state + the action that mutates it
-                  read as one unit. Hidden in Sunset (operator un-hides via
-                  the existing Hidden toggle first). The button rides the
-                  same PUT edit_metadata gate as every other field, so it
-                  hides cleanly for partners who can't edit. */}
-              {!album.isHidden && (
-                album.isPrepping || !album.isGoodTunesRelease ? (
-                  <button
-                    type="button"
-                    onClick={() => setPrepping.mutate(false)}
-                    disabled={setPrepping.isPending}
-                    className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10 disabled:opacity-50 transition-colors"
-                    data-testid="button-album-promote"
-                    title="Promote this album from Prepping to Released"
-                  >
-                    Mark as released
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setDemoteConfirmOpen(true)}
-                    disabled={setPrepping.isPending}
-                    className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 transition-colors"
-                    data-testid="button-album-demote"
-                    title="Move this album back to Prepping (hidden from fans)"
-                  >
-                    Move to prepping
-                  </button>
-                )
               )}
               {album.firstSoldAt && <AlbumLockChip album={album} />}
               <AlbumEditAccessChip albumId={album.id} />
@@ -1352,6 +1328,72 @@ export function AdminAlbum({
               {album.label && <span>· {album.label.name}</span>}
             </div>
           </div>
+          </div>
+          {/* Task #2531 — Option C: the release lifecycle status + its
+              promote/demote action, grouped into one bordered control in
+              the header's right slot. Groups the state with the action that
+              mutates it so "status" reads as a control (not another caps-line
+              tag) and scales cleanly across Prepping / Released / Sunset.
+              Hidden (Sunset) shows the status read-only — the operator
+              un-hides via the Hidden toggle before it can be promoted again,
+              mirroring the old behavior of suppressing the action. */}
+          <div className="flex-shrink-0 pt-0.5">
+            {album.isHidden ? (
+              <div
+                className="inline-flex items-center gap-2 pl-2.5 pr-2.5 py-1.5 rounded-lg border border-slate-200 bg-white shadow-sm"
+                data-testid="album-status-control"
+                title={`Album status — ${lifecycle.label}. Un-hide from the store to change it.`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${statusDotCls}`} aria-hidden="true" />
+                <span className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">
+                  Status
+                </span>
+                <span className="text-slate-800 text-[12.5px] font-semibold" data-testid="text-album-status">
+                  {lifecycle.label}
+                </span>
+              </div>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={setPrepping.isPending}
+                    className="inline-flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 shadow-sm transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-1"
+                    data-testid="album-status-control"
+                    title={`Album status — ${lifecycle.label}. Click to change.`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${statusDotCls}`} aria-hidden="true" />
+                    <span className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">
+                      Status
+                    </span>
+                    <span className="text-slate-800 text-[12.5px] font-semibold" data-testid="text-album-status">
+                      {lifecycle.label}
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>Release status</DropdownMenuLabel>
+                  {album.isPrepping || !album.isGoodTunesRelease ? (
+                    <DropdownMenuItem
+                      onClick={() => setPrepping.mutate(false)}
+                      disabled={setPrepping.isPending}
+                      data-testid="button-album-promote"
+                    >
+                      Mark as released
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem
+                      onClick={() => setDemoteConfirmOpen(true)}
+                      disabled={setPrepping.isPending}
+                      data-testid="button-album-demote"
+                    >
+                      Move to prepping
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
 
@@ -16178,32 +16220,6 @@ function AddTile({
 
 
 /* ─── Bits ─────────────────────────────────────────────────────────── */
-
-function LifecyclePill({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: "slate" | "amber" | "mint";
-}) {
-  const cls =
-    tone === "mint"
-      ? "bg-[var(--brand-mint)]/15 text-emerald-700"
-      : tone === "amber"
-        ? "bg-amber-50 text-amber-700"
-        : "bg-slate-100 text-slate-600";
-  return (
-    <span
-      className={[
-        "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider normal-case",
-        cls,
-      ].join(" ")}
-      data-testid="badge-lifecycle"
-    >
-      {label}
-    </span>
-  );
-}
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
