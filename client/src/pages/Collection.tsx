@@ -61,8 +61,17 @@ function useFanLibrary() {
   // The fan's collection (real owned/comp + active previews; expired previews
   // already filtered server-side). `acquiredAt` is the real backend timestamp
   // recorded when each album entered the library — it drives Recently Added.
+  // The owner-scoped ownership feed also resolves the full album row server-
+  // side (`album`), which — unlike the public `/api/albums` catalog — includes
+  // Prepping/hidden releases the fan owns. We source owned tiles from it so a
+  // staged copy still renders in its owner's Library. (Task #2476.)
   const { data: myAlbumsRaw, isLoading: myAlbumsLoading } = useQuery<
-    Array<{ albumId: string; isPreview?: boolean; acquiredAt?: string | null }> | null
+    Array<{
+      albumId: string;
+      isPreview?: boolean;
+      acquiredAt?: string | null;
+      album?: Album;
+    }> | null
   >({ queryKey: ["/api/my-albums"] });
 
   const previewAlbumIds = useMemo(
@@ -73,6 +82,15 @@ function useFanLibrary() {
     () => new Set((myAlbumsRaw ?? []).map((a) => a.albumId)),
     [myAlbumsRaw],
   );
+  // albumId → the server-resolved album row from the ownership feed. Covers
+  // Prepping/hidden owned releases the public catalog strips. (Task #2476.)
+  const ownedAlbumById = useMemo(() => {
+    const m = new Map<string, Album>();
+    (myAlbumsRaw ?? []).forEach((a) => {
+      if (a.album) m.set(a.albumId, a.album);
+    });
+    return m;
+  }, [myAlbumsRaw]);
   // albumId → acquired-at epoch millis (0 when missing). Used to order
   // Recently Added freshest-first.
   const acquiredAtById = useMemo(() => {
@@ -83,19 +101,25 @@ function useFanLibrary() {
     return m;
   }, [myAlbumsRaw]);
 
-  // GoodTunes releases the fan actually owns (no streaming-only rows, no
-  // "Prepping" shells). Songs + artists derive from this filtered list so
-  // every lens stays scoped to the fan's collection.
-  const dbAlbums = useMemo(
-    () =>
-      (albumsRaw ?? []).filter(
-        (a) =>
-          a.isGoodTunesRelease &&
-          !(a as any).isPrepping &&
-          ownedAlbumIds.has(a.id),
-      ),
-    [albumsRaw, ownedAlbumIds],
-  );
+  // GoodTunes releases the fan actually owns. Songs + artists derive from
+  // this list so every lens stays scoped to the fan's collection.
+  //
+  // Task #2476 — sourced from OWNERSHIP, not the public catalog. For each
+  // owned album we prefer the richer public-catalog row (label credit, artist
+  // photo, share slug) but fall back to the owner-scoped ownership row for a
+  // Prepping/hidden release the public feed strips. We keep the "curated
+  // GoodTunes releases only" scope but NO LONGER drop Prepping/hidden — the
+  // fan owns these, so they belong in their own Library at any stage.
+  const dbAlbums = useMemo(() => {
+    const publicById = new Map((albumsRaw ?? []).map((a) => [a.id, a] as const));
+    const out: Album[] = [];
+    ownedAlbumIds.forEach((id) => {
+      const album = publicById.get(id) ?? ownedAlbumById.get(id);
+      if (!album || !album.isGoodTunesRelease) return;
+      out.push(album);
+    });
+    return out;
+  }, [albumsRaw, ownedAlbumById, ownedAlbumIds]);
   const dbAlbumIds = useMemo(() => new Set(dbAlbums.map((a) => a.id)), [dbAlbums]);
   const dbSongs = useMemo(
     () => (songsRaw ?? []).filter((s) => dbAlbumIds.has(s.albumId)),
@@ -405,6 +429,7 @@ export function Home() {
                   key={album.id}
                   album={album}
                   isPreview={previewAlbumIds.has(album.id)}
+                  notYetReleased={!!(album.isPrepping || album.isHidden)}
                   onNavigate={() => openAlbum(album)}
                 />
               ))}
@@ -526,6 +551,7 @@ export function Collection() {
                   key={album.id}
                   album={album}
                   isPreview={previewAlbumIds.has(album.id)}
+                  notYetReleased={!!(album.isPrepping || album.isHidden)}
                   onNavigate={() => openAlbum(album)}
                 />
               ))}

@@ -3973,22 +3973,32 @@ export class DbStorage implements IStorage {
   }
 
   async getUserAlbums(userId: string): Promise<(UserAlbum & { album: Album })[]> {
-    // Hidden albums are excluded from a user's collection so the demo
-    // show/hide toggle keeps the album out of the fan-facing Library tab
-    // even after the user has added it. Admin still sees the row in the
-    // CMS list (that path goes through getAlbums(includeHidden=true)).
+    // Task #2476 — owner-bypass for the Library feed. This is the single
+    // owner-scoped ownership feed behind GET /api/my-albums, and it must
+    // surface a release the fan actually owns (real purchase/comp, or an
+    // unexpired preview) at ANY lifecycle stage — including a still-Prepping
+    // (staged) or `isHidden` (demo-hidden) release — so the owner can find
+    // and open their own copy before it goes public. This mirrors the album-
+    // detail owner-bypass (userOwnsAlbum re-reads with includeHidden). We
+    // deliberately do NOT filter `isHidden` / `isPrepping` here.
     //
-    // Task #909 — an EXPIRED preview is treated as "not granted": filter
-    // out any preview row whose deadline has passed so the album silently
-    // leaves the fan's Library the moment its preview lapses. Real
-    // owned/comp rows (is_preview=false) are always included.
+    // Scoping stays airtight: rows are keyed on `userAlbums.userId`, so a
+    // fan only ever sees their OWN grants. No public surface (catalog list,
+    // detail, search, slug, buy) reads through here — those keep their
+    // Prepping/hidden/sunrise filters, so a staged release stays invisible
+    // to non-owners.
+    //
+    // Still filtered: soft-deleted albums (a trashed release is gone, not a
+    // private preview) and EXPIRED previews (Task #909 — a preview past its
+    // deadline reads as "not granted", so the album silently leaves the
+    // Library the moment its window lapses). Real owned/comp rows
+    // (is_preview=false) are always included.
     const rows = await db
       .select()
       .from(userAlbums)
       .innerJoin(albums, eq(userAlbums.albumId, albums.id))
       .where(and(
         eq(userAlbums.userId, userId),
-        eq(albums.isHidden, false),
         isNull(albums.deletedAt),
         or(
           eq(userAlbums.isPreview, false),

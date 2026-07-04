@@ -91,6 +91,13 @@ export interface AlbumCardProps {
    * the cover + body-click handoff.
    */
   playable?: boolean;
+  /**
+   * Task #2476 — subtle "Not yet released" marker on the OWNER's Library
+   * tile for a copy they own that isn't public yet (still Prepping/staged
+   * or demo-hidden). Only the owner-scoped Library passes this; other
+   * surfaces (Artist page, Search) never do, and never receive staged rows.
+   */
+  notYetReleased?: boolean;
   /** Body-click handler. Defaults to navigating to /album/:id. */
   onNavigate?: () => void;
 }
@@ -103,6 +110,7 @@ export function AlbumCard({
   width,
   compact = false,
   playable = true,
+  notYetReleased = false,
   onNavigate,
 }: AlbumCardProps) {
   const [, navigate] = useLocation();
@@ -289,6 +297,20 @@ export function AlbumCard({
               data-testid={`badge-demo-${album.id}`}
             >
               Demo
+            </span>
+          </div>
+        )}
+        {notYetReleased && (
+          // Task #2476 — owner-only "not yet public" marker. Top-LEFT so it
+          // never collides with the top-right Demo / ×N ownership badges.
+          // Matches the Demo badge's micro-size for visual consistency.
+          <div className="absolute top-2 left-2">
+            <span
+              className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+              style={{ background: "rgba(0,6,43,0.62)", color: "rgba(255,255,255,0.92)", border: "1px solid rgba(255,255,255,0.28)", backdropFilter: "blur(4px)" }}
+              data-testid={`badge-not-yet-released-${album.id}`}
+            >
+              Not yet released
             </span>
           </div>
         )}

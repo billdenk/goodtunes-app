@@ -45,6 +45,14 @@ export interface Album {
   // to these). Optional on the static seed where every row is curated;
   // the API row from `/api/albums` always sets it.
   isGoodTunesRelease?: boolean;
+  // Task #2476 — lifecycle stage flags, present on the owner-scoped
+  // `/api/my-albums` row (never on the public `/api/albums` feed, which
+  // strips both). `isPrepping` = a staged release not yet promoted to
+  // Released; `isHidden` = the demo show/hide toggle. The owner's Library
+  // uses these to render a subtle "Not yet released" marker on a copy the
+  // fan owns before it's public. Non-owners never receive these rows.
+  isPrepping?: boolean;
+  isHidden?: boolean;
   certificateNumber?: number;
   ownedCertificates?: number[];
   purchases?: CertPurchase[];
