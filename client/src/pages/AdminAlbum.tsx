@@ -1674,7 +1674,10 @@ export function AdminAlbum() {
                 />
               )}
               {safeTab === "customers" && allowed.has("customers") && (
-                <AlbumCustomersPanel albumId={album.id} />
+                <AlbumCustomersPanel
+                  albumId={album.id}
+                  onManagePreview={() => setTab("overview")}
+                />
               )}
               {safeTab === "waitlist" && allowed.has("waitlist") && (
                 <>
@@ -3162,165 +3165,6 @@ type PreviewGrant = {
   status: "active" | "expired" | "revoked";
 };
 
-function fmtGrantDate(d: string | null): string {
-  if (!d) return "";
-  const dt = new Date(d);
-  if (Number.isNaN(dt.getTime())) return "";
-  return dt.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function PreviewGrantStatusPill({
-  status,
-}: {
-  status: PreviewGrant["status"];
-}) {
-  const map = {
-    active: { cls: "bg-emerald-100 text-emerald-800", label: "Active" },
-    expired: { cls: "bg-slate-100 text-slate-500", label: "Expired" },
-    revoked: { cls: "bg-rose-100 text-rose-700", label: "Revoked" },
-  } as const;
-  const m = map[status];
-  return (
-    <span
-      className={
-        "inline-flex items-center rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wider " +
-        m.cls
-      }
-      data-testid={`badge-preview-grant-status-${status}`}
-    >
-      {m.label}
-    </span>
-  );
-}
-
-function PreviewGrantRow({
-  grant,
-  albumId,
-}: {
-  grant: PreviewGrant;
-  albumId: string;
-}) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const revoke = useMutation({
-    mutationFn: async () => {
-      const r = await apiRequest(
-        "POST",
-        `/api/admin/albums/${albumId}/preview-grants/${grant.id}/revoke`,
-      );
-      return (await r.json()) as { grant: PreviewGrant };
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({
-        queryKey: ["/api/admin/albums", albumId, "preview-grants"],
-      });
-      toast({
-        title: "Preview link revoked",
-        description: "That link no longer opens this release.",
-      });
-    },
-    onError: (e: any) =>
-      toast({
-        title: "Couldn't revoke",
-        description: e?.message || "Please try again.",
-        variant: "destructive",
-      }),
-  });
-
-  const who =
-    grant.recipientName || grant.recipientEmail || "Anyone with the link";
-  const viewedLine =
-    grant.viewCount > 0
-      ? `Viewed ${grant.viewCount} ${grant.viewCount === 1 ? "time" : "times"}${grant.lastViewedAt ? ` · last ${fmtGrantDate(grant.lastViewedAt)}` : ""}`
-      : "Not viewed yet";
-  const expiryLine =
-    grant.status === "revoked"
-      ? "Revoked"
-      : grant.status === "expired"
-        ? `Expired ${fmtGrantDate(grant.expiresAt)}`
-        : `Expires ${fmtGrantDate(grant.expiresAt)}`;
-
-  return (
-    <div
-      className="flex items-start justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/70 p-2.5"
-      data-testid={`row-preview-grant-${grant.id}`}
-    >
-      <div className="min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span
-            className="truncate text-sm font-medium text-slate-800"
-            data-testid={`text-preview-grant-recipient-${grant.id}`}
-          >
-            {who}
-          </span>
-          <PreviewGrantStatusPill status={grant.status} />
-        </div>
-        {grant.recipientName && grant.recipientEmail && (
-          <p className="truncate text-xs text-slate-400">
-            {grant.recipientEmail}
-          </p>
-        )}
-        <p
-          className="mt-0.5 text-xs leading-snug text-slate-500"
-          data-testid={`text-preview-grant-meta-${grant.id}`}
-        >
-          {viewedLine} · {expiryLine}
-          {grant.createdByLabel ? ` · by ${grant.createdByLabel}` : ""}
-        </p>
-      </div>
-      {grant.status === "active" && (
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <button
-              type="button"
-              className="-m-1 shrink-0 p-1 text-slate-400 transition-colors hover:text-rose-600"
-              title="Revoke this preview link"
-              data-testid={`button-revoke-preview-grant-${grant.id}`}
-            >
-              {revoke.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Ban className="h-4 w-4" />
-              )}
-            </button>
-          </AlertDialogTrigger>
-          <AlertDialogContent
-            className="rounded-xl border-slate-200 bg-white"
-            data-testid={`dialog-revoke-preview-grant-${grant.id}`}
-          >
-            <AlertDialogHeader>
-              <AlertDialogTitle className="text-slate-900">
-                Revoke this preview link?
-              </AlertDialogTitle>
-              <AlertDialogDescription className="text-slate-500">
-                {who} will no longer be able to open this release with their
-                link. This can't be undone — you can create a fresh link
-                anytime.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel data-testid={`button-cancel-revoke-${grant.id}`}>
-                Keep link
-              </AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-rose-600 text-white hover:bg-rose-700"
-                onClick={() => revoke.mutate()}
-                data-testid={`button-confirm-revoke-${grant.id}`}
-              >
-                Revoke link
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
-    </div>
-  );
-}
-
 function PreviewGrantsPanel({
   album,
   linkBase,
@@ -3518,21 +3362,28 @@ function PreviewGrantsPanel({
         </div>
       )}
 
-      {/* Existing grants */}
-      <div className="mt-3 space-y-2" data-testid="list-preview-grants">
+      {/* Existing preview links (and comped/free owners) now live on the
+          Customers tab under "Access without a purchase" so every non-paying
+          grantee reads in one place. This panel stays the create surface. */}
+      <div className="mt-3" data-testid="note-preview-grants-moved">
         {grantsQuery.isLoading ? (
           <p className="text-xs text-slate-400">Loading…</p>
-        ) : grants.length === 0 ? (
+        ) : grants.length > 0 ? (
+          <p className="text-xs text-slate-500" data-testid="text-preview-grants-count">
+            {grants.length} preview {grants.length === 1 ? "link" : "links"} on
+            this release. Manage or revoke them under{" "}
+            <span className="font-medium text-slate-700">
+              Customers → Access without a purchase
+            </span>
+            .
+          </p>
+        ) : (
           <p
             className="text-xs text-slate-400"
             data-testid="text-preview-grants-empty"
           >
             No preview links yet.
           </p>
-        ) : (
-          grants.map((g) => (
-            <PreviewGrantRow key={g.id} grant={g} albumId={album.id} />
-          ))
         )}
       </div>
     </div>

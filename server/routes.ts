@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
 import { registerPublishingSettlementRoutes, registerPublisherPortalRoutes } from "./publishingSettlementRoutes";
-import { sql, and, eq, ne, or, ilike, isNull, isNotNull, desc, inArray } from "drizzle-orm";
+import { sql, and, eq, ne, or, ilike, isNull, isNotNull, desc, inArray, gt } from "drizzle-orm";
 import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, fulfillmentPartners, albumPreviewGrants, TERMS_VERSION } from "@shared/schema";
 import {
   MRP_DOMAIN,
@@ -21697,6 +21697,99 @@ export async function registerRoutes(
           .json({ message: "Grant not found or already revoked" });
       }
       return res.json({ grant: publicPreviewGrant(updated) });
+    },
+  );
+
+  // Task #2467 — "Access without a purchase" roster: everyone who can open
+  // this release WITHOUT having paid for it. Comped / free OWNERS live in
+  // `user_albums` as a real (non-preview) copy, or an unexpired account-level
+  // preview grant, with NO paid order for this album. These count toward
+  // NOTHING — no revenue, no units (the buyers KPIs only sum paid orders).
+  // The reviewer preview LINKS are read separately via /preview-grants (the
+  // Customers tab renders both under one heading). Same visibility gate as the
+  // preview grants: operator + owning artist/label only (canManageAlbumPreviews);
+  // a partner who can't manage previews 403s and the client hides the section.
+  app.get(
+    "/api/admin/albums/:id/free-access",
+    requireAdmin,
+    async (req, res) => {
+      const userId = req.session.userId!;
+      const albumId = String(req.params.id);
+      if (!(await canManageAlbumPreviews(userId, albumId))) {
+        return res
+          .status(403)
+          .json({ message: "Not allowed to view access for this release" });
+      }
+      // Customers with a paid order for this album are the paying roster —
+      // fetch that set and filter it out in JS so this list is strictly the
+      // non-paying grantees. (Kept as a separate query rather than a
+      // correlated NOT EXISTS subquery, which would render an unqualified
+      // column that binds to the wrong table — see the drizzle subquery memo.)
+      const paidRows = await db
+        .selectDistinct({ customerId: orders.customerId })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.albumId, albumId),
+            inArray(orders.status, [
+              "paid",
+              "shipped",
+              "complete",
+              "completed",
+            ]),
+          ),
+        );
+      const paidSet = new Set(paidRows.map((r) => r.customerId));
+
+      // Real owned/comp rows (isPreview=false) plus still-live account-level
+      // preview grants (isPreview=true AND not expired). An expired preview is
+      // "not granted" everywhere it's read, so it's excluded here too.
+      const now = new Date();
+      const rows = await db
+        .select({
+          id: userAlbums.id,
+          customerId: userAlbums.userId,
+          isPreview: userAlbums.isPreview,
+          previewExpiresAt: userAlbums.previewExpiresAt,
+          acquiredAt: userAlbums.acquiredAt,
+          displayName: customerUsers.displayName,
+          realName: customerUsers.realName,
+          email: customerUsers.email,
+        })
+        .from(userAlbums)
+        .leftJoin(customerUsers, eq(customerUsers.id, userAlbums.userId))
+        .where(
+          and(
+            eq(userAlbums.albumId, albumId),
+            or(
+              eq(userAlbums.isPreview, false),
+              and(
+                eq(userAlbums.isPreview, true),
+                isNotNull(userAlbums.previewExpiresAt),
+                gt(userAlbums.previewExpiresAt, now),
+              ),
+            ),
+          ),
+        )
+        .orderBy(desc(userAlbums.acquiredAt));
+
+      const owners = rows
+        .filter((r) => !paidSet.has(r.customerId))
+        .map((r) => ({
+          id: r.id,
+          customerId: r.customerId,
+          name:
+            (r.displayName && r.displayName.trim()) ||
+            (r.realName && r.realName.trim()) ||
+            r.email ||
+            null,
+          email: r.email ?? null,
+          kind: r.isPreview ? ("preview" as const) : ("comp" as const),
+          expiresAt: r.isPreview ? r.previewExpiresAt : null,
+          acquiredAt: r.acquiredAt,
+        }));
+
+      return res.json({ owners });
     },
   );
 

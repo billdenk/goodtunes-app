@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Users,
   DollarSign,
@@ -13,6 +13,11 @@ import {
   Check,
   Download,
   ChevronDown,
+  Gift,
+  Eye,
+  Ban,
+  Loader2,
+  ArrowRight,
 } from "lucide-react";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import {
@@ -21,7 +26,19 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { apiRequest } from "@/lib/queryClient";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { apiRequest, apiErrorStatus } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 type Kpis = { totalOrders: number; distinctFans: number; totalCents: number };
 type OrderRow = {
@@ -145,7 +162,332 @@ function SortHeader({
 
 const PAGE_SIZE = 200;
 
-export function AlbumCustomersPanel({ albumId }: { albumId: string }) {
+// ── "Access without a purchase" ──────────────────────────────────────────────
+// Everyone who can open this release without having paid: comped/free owners
+// (a real user_albums copy, or an unexpired account-level preview grant) plus
+// the reviewer preview LINKS. None of these count toward the revenue/units KPIs
+// above — those only sum paid orders. Same visibility gate as the preview
+// grants (operator + owning artist/label); a partner who can't manage previews
+// gets a 403 on both reads and the whole section stays hidden.
+type FreeOwner = {
+  id: string;
+  customerId: string;
+  name: string | null;
+  email: string | null;
+  kind: "comp" | "preview";
+  expiresAt: string | null;
+  acquiredAt: string | null;
+};
+
+type PreviewGrant = {
+  id: string;
+  recipientName: string | null;
+  recipientEmail: string | null;
+  note: string | null;
+  createdByLabel: string | null;
+  expiresAt: string;
+  revokedAt: string | null;
+  lastViewedAt: string | null;
+  viewCount: number;
+  createdAt: string;
+  status: "active" | "expired" | "revoked";
+};
+
+function GrantStatusPill({ status }: { status: PreviewGrant["status"] }) {
+  const map = {
+    active: { cls: "bg-emerald-100 text-emerald-800", label: "Active" },
+    expired: { cls: "bg-slate-100 text-slate-500", label: "Expired" },
+    revoked: { cls: "bg-rose-100 text-rose-700", label: "Revoked" },
+  } as const;
+  const m = map[status];
+  return (
+    <span
+      className={
+        "inline-flex items-center rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wider " +
+        m.cls
+      }
+      data-testid={`badge-access-grant-status-${status}`}
+    >
+      {m.label}
+    </span>
+  );
+}
+
+function PreviewGrantRevokeRow({
+  grant,
+  albumId,
+}: {
+  grant: PreviewGrant;
+  albumId: string;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const revoke = useMutation({
+    mutationFn: async () => {
+      await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/preview-grants/${grant.id}/revoke`,
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ["/api/admin/albums", albumId, "preview-grants"],
+      });
+      toast({
+        title: "Preview link revoked",
+        description: "That link no longer opens this release.",
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't revoke",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      }),
+  });
+
+  const who =
+    grant.recipientName || grant.recipientEmail || "Anyone with the link";
+  const viewedLine =
+    grant.viewCount > 0
+      ? `Viewed ${grant.viewCount} ${grant.viewCount === 1 ? "time" : "times"}${grant.lastViewedAt ? ` · last ${formatDate(grant.lastViewedAt)}` : ""}`
+      : "Not viewed yet";
+  const expiryLine =
+    grant.status === "revoked"
+      ? "Revoked"
+      : grant.status === "expired"
+        ? `Expired ${formatDate(grant.expiresAt)}`
+        : `Expires ${formatDate(grant.expiresAt)}`;
+
+  return (
+    <div
+      className="flex items-start justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/70 p-2.5"
+      data-testid={`row-access-grant-${grant.id}`}
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span
+            className="truncate text-sm font-medium text-slate-800"
+            data-testid={`text-access-grant-recipient-${grant.id}`}
+          >
+            {who}
+          </span>
+          <GrantStatusPill status={grant.status} />
+        </div>
+        {grant.recipientName && grant.recipientEmail && (
+          <p className="truncate text-xs text-slate-400">
+            {grant.recipientEmail}
+          </p>
+        )}
+        <p className="mt-0.5 text-xs leading-snug text-slate-500">
+          {`Granted ${formatDate(grant.createdAt)}`} · {viewedLine} ·{" "}
+          {expiryLine}
+          {grant.createdByLabel ? ` · by ${grant.createdByLabel}` : ""}
+        </p>
+      </div>
+      {grant.status === "active" && (
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button
+              type="button"
+              className="-m-1 shrink-0 p-1 text-slate-400 transition-colors hover:text-rose-600"
+              title="Revoke this preview link"
+              data-testid={`button-revoke-access-grant-${grant.id}`}
+            >
+              {revoke.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Ban className="h-4 w-4" />
+              )}
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent
+            className="rounded-xl border-slate-200 bg-white"
+            data-testid={`dialog-revoke-access-grant-${grant.id}`}
+          >
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-slate-900">
+                Revoke this preview link?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-slate-500">
+                {who} will no longer be able to open this release with their
+                link. This can't be undone — you can create a fresh link
+                anytime.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid={`button-cancel-revoke-access-${grant.id}`}>
+                Keep link
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-rose-600 text-white hover:bg-rose-700"
+                onClick={() => revoke.mutate()}
+                data-testid={`button-confirm-revoke-access-${grant.id}`}
+              >
+                Revoke link
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+    </div>
+  );
+}
+
+function AccessWithoutPurchaseSection({
+  albumId,
+  onManagePreview,
+}: {
+  albumId: string;
+  onManagePreview?: () => void;
+}) {
+  const freeQuery = useQuery<{ owners: FreeOwner[] }>({
+    queryKey: ["/api/admin/albums", albumId, "free-access"],
+  });
+  const grantsQuery = useQuery<{ grants: PreviewGrant[] }>({
+    queryKey: ["/api/admin/albums", albumId, "preview-grants"],
+  });
+
+  // Hidden entirely if the viewer isn't allowed to manage previews for this
+  // release (either read returns 403). Same gate as the Overview preview panel.
+  if (
+    apiErrorStatus(freeQuery.error) === 403 ||
+    apiErrorStatus(grantsQuery.error) === 403
+  ) {
+    return null;
+  }
+
+  // Don't flash an empty card before the data lands.
+  if (freeQuery.isLoading || grantsQuery.isLoading) return null;
+
+  const owners = freeQuery.data?.owners ?? [];
+  const grants = grantsQuery.data?.grants ?? [];
+  const count = owners.length + grants.length;
+
+  // Only surfaces when at least one non-paying grantee exists.
+  if (count === 0) return null;
+
+  return (
+    <div
+      className="rounded-xl border border-slate-200 bg-white overflow-hidden"
+      data-testid="panel-access-without-purchase"
+    >
+      <div className="flex items-start justify-between gap-4 px-5 py-3.5 border-b border-slate-100">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-slate-900">
+            Access without a purchase
+            <span
+              className="ml-2 text-slate-400 font-normal text-xs"
+              data-testid="text-access-without-purchase-count"
+            >
+              ({count.toLocaleString()})
+            </span>
+          </h2>
+          <p className="mt-0.5 text-xs leading-snug text-slate-500">
+            Comped copies and reviewer preview links. These don't count toward
+            revenue or units above.
+          </p>
+        </div>
+        {onManagePreview && (
+          <button
+            type="button"
+            onClick={onManagePreview}
+            className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+            data-testid="button-manage-preview-links"
+          >
+            Create a preview link
+            <ArrowRight className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+
+      <div className="p-4 space-y-4">
+        {/* Comped / free owners */}
+        {owners.length > 0 && (
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <Gift className="h-3.5 w-3.5 text-[color:var(--brand-blue)]" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Comped &amp; free access
+              </span>
+            </div>
+            <div className="space-y-2" data-testid="list-access-owners">
+              {owners.map((o) => (
+                <div
+                  key={o.id}
+                  className="flex items-start justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/70 p-2.5"
+                  data-testid={`row-access-owner-${o.id}`}
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-sm font-medium text-slate-800">
+                        {o.name ? (
+                          <Link href={`/admin/customers/${o.customerId}`} className="text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors" data-testid={`link-access-owner-${o.customerId}`}>
+                            {o.name}
+                          </Link>
+                        ) : (
+                          "Unknown account"
+                        )}
+                      </span>
+                      {o.kind === "comp" ? (
+                        <span
+                          className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wider bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
+                          data-testid={`badge-access-owner-comp-${o.id}`}
+                        >
+                          Comp
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wider bg-slate-100 text-slate-600"
+                          data-testid={`badge-access-owner-preview-${o.id}`}
+                        >
+                          Preview
+                        </span>
+                      )}
+                    </div>
+                    {o.name && o.email && (
+                      <p className="truncate text-xs text-slate-400">{o.email}</p>
+                    )}
+                    <p className="mt-0.5 text-xs leading-snug text-slate-500">
+                      {o.kind === "preview" && o.expiresAt
+                        ? `Preview access · expires ${formatDate(o.expiresAt)}`
+                        : `Comped${o.acquiredAt ? ` · ${formatDate(o.acquiredAt)}` : ""}`}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Reviewer preview links */}
+        {grants.length > 0 && (
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <Eye className="h-3.5 w-3.5 text-[color:var(--brand-blue)]" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Preview &amp; reviewer links
+              </span>
+            </div>
+            <div className="space-y-2" data-testid="list-access-grants">
+              {grants.map((g) => (
+                <PreviewGrantRevokeRow key={g.id} grant={g} albumId={albumId} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function AlbumCustomersPanel({
+  albumId,
+  onManagePreview,
+}: {
+  albumId: string;
+  onManagePreview?: () => void;
+}) {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("date");
@@ -482,6 +824,11 @@ export function AlbumCustomersPanel({ albumId }: { albumId: string }) {
           </div>
         )}
       </div>
+
+      <AccessWithoutPurchaseSection
+        albumId={albumId}
+        onManagePreview={onManagePreview}
+      />
     </div>
   );
 }
