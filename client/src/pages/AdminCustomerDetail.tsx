@@ -149,6 +149,10 @@ export function AdminCustomerDetail() {
   // dozens of orders (Bill D has 68); this filters by album title, artist,
   // GoodDeed number, and formatted payment method without any server call.
   const [orderSearch, setOrderSearch] = useState("");
+  // Task #2493 — matching client-side filters for the Collection and
+  // Playlists sections, so the whole page is consistently searchable.
+  const [collectionSearch, setCollectionSearch] = useState("");
+  const [playlistSearch, setPlaylistSearch] = useState("");
 
   // Task #2455 — the top stat cards jump to their matching detail section
   // and briefly highlight it so the operator sees where they landed.
@@ -293,6 +297,27 @@ export function AdminCustomerDetail() {
   const orderCountLabel = orderQuery
     ? `Orders (${filteredOrders.length} of ${orders.length})`
     : `Orders (${orders.length})`;
+  // Task #2493 — Collection filter: album title + artist, case-insensitive /
+  // partial. Previews still render (flagged Demo); the header count keeps
+  // tracking owned rows only, so it shows the filtered owned count.
+  const collectionQuery = collectionSearch.trim().toLowerCase();
+  const filteredCollection = collectionQuery
+    ? collection.filter((a) =>
+        `${a.albumTitle} ${a.albumArtist}`.toLowerCase().includes(collectionQuery),
+      )
+    : collection;
+  const filteredOwnedCollectionCount = filteredCollection.filter((a) => !a.isPreview).length;
+  const collectionCountLabel = collectionQuery
+    ? `Collection (${filteredOwnedCollectionCount} of ${ownedCollectionCount})`
+    : `Collection (${ownedCollectionCount})`;
+  // Task #2493 — Playlists filter: playlist name, case-insensitive / partial.
+  const playlistQuery = playlistSearch.trim().toLowerCase();
+  const filteredPlaylists = playlistQuery
+    ? playlists.filter((p) => p.name.toLowerCase().includes(playlistQuery))
+    : playlists;
+  const playlistCountLabel = playlistQuery
+    ? `Playlists (${filteredPlaylists.length} of ${playlists.length})`
+    : `Playlists (${playlists.length})`;
   // Task #1342 (#6) — honest join date. Orders are sorted newest-first, so the
   // last row is the oldest. See resolveJoinedDisplay for the full rationale.
   const earliestOrderAt =
@@ -600,14 +625,52 @@ export function AdminCustomerDetail() {
         <Section
           id="section-collection"
           highlighted={highlightSection === "collection"}
-          title={`Collection (${ownedCollectionCount})`}
-          action={id ? <GrantAlbumGate customerId={id} ownedAlbumIds={collection.filter((a) => !a.isPreview).map((a) => a.albumId)} previewAlbumIds={collection.filter((a) => a.isPreview).map((a) => a.albumId)} /> : null}
+          title={collectionCountLabel}
+          action={
+            <div className="flex items-center gap-2">
+              {collection.length > 0 && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-white border border-slate-200 shadow-sm">
+                  <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                  <input
+                    className="w-40 bg-transparent text-xs text-slate-700 placeholder-slate-400 focus:outline-none"
+                    placeholder="Filter collection…"
+                    value={collectionSearch}
+                    onChange={(e) => setCollectionSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setCollectionSearch("");
+                    }}
+                    data-testid="input-search-collection"
+                  />
+                  {collectionSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setCollectionSearch("")}
+                      className="text-slate-400 hover:text-slate-700"
+                      data-testid="button-clear-collection-search"
+                      aria-label="Clear collection search"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
+              {id ? (
+                <GrantAlbumGate
+                  customerId={id}
+                  ownedAlbumIds={collection.filter((a) => !a.isPreview).map((a) => a.albumId)}
+                  previewAlbumIds={collection.filter((a) => a.isPreview).map((a) => a.albumId)}
+                />
+              ) : null}
+            </div>
+          }
         >
           {collection.length === 0 ? (
             <EmptyRow icon={Disc3} text="No albums in this fan's collection yet." />
+          ) : filteredCollection.length === 0 ? (
+            <EmptyRow icon={Search} text="No albums match your search." />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {collection.map((a) =>
+              {filteredCollection.map((a) =>
                 a.isPreview && id ? (
                   <PreviewCollectionCard key={a.id} customerId={id} item={a} />
                 ) : (
@@ -649,12 +712,46 @@ export function AdminCustomerDetail() {
         <MergeAuditSection customerId={c.id} />
 
         {/* Playlists */}
-        <Section id="section-playlists" highlighted={highlightSection === "playlists"} title={`Playlists (${playlists.length})`}>
+        <Section
+          id="section-playlists"
+          highlighted={highlightSection === "playlists"}
+          title={playlistCountLabel}
+          action={
+            playlists.length > 0 ? (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-white border border-slate-200 shadow-sm">
+                <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                <input
+                  className="w-40 bg-transparent text-xs text-slate-700 placeholder-slate-400 focus:outline-none"
+                  placeholder="Filter playlists…"
+                  value={playlistSearch}
+                  onChange={(e) => setPlaylistSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setPlaylistSearch("");
+                  }}
+                  data-testid="input-search-playlists"
+                />
+                {playlistSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setPlaylistSearch("")}
+                    className="text-slate-400 hover:text-slate-700"
+                    data-testid="button-clear-playlist-search"
+                    aria-label="Clear playlist search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            ) : undefined
+          }
+        >
           {playlists.length === 0 ? (
             <EmptyRow icon={ListMusic} text="No playlists yet." />
+          ) : filteredPlaylists.length === 0 ? (
+            <EmptyRow icon={Search} text="No playlists match your search." />
           ) : (
             <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
-              {playlists.map((p) => (
+              {filteredPlaylists.map((p) => (
                 <div
                   key={p.id}
                   className="px-4 py-3 flex items-center gap-3"
