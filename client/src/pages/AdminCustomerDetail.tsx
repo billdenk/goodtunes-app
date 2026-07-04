@@ -145,6 +145,11 @@ export function AdminCustomerDetail() {
   // to the un-drillable /admin/orders?orderId= list.
   const [openOrderId, setOpenOrderId] = useState<string | null>(null);
 
+  // Task #2488 — client-side filter for the Orders section. A fan can have
+  // dozens of orders (Bill D has 68); this filters by album title, artist,
+  // GoodDeed number, and formatted payment method without any server call.
+  const [orderSearch, setOrderSearch] = useState("");
+
   // Task #2455 — the top stat cards jump to their matching detail section
   // and briefly highlight it so the operator sees where they landed.
   const [highlightSection, setHighlightSection] = useState<string | null>(null);
@@ -266,6 +271,28 @@ export function AdminCustomerDetail() {
   const lifetime = orders
     .filter((o) => REVENUE_STATUSES.has(o.status))
     .reduce((sum, o) => sum + o.totalCents, 0);
+  // Task #2488 — filter the loaded orders client-side. Matches album title,
+  // artist, GoodDeed number, and the formatted payment method (card brand /
+  // last-4 / wallet), case-insensitive, partial. Not a hook so it stays below
+  // the loading/not-found guards above.
+  const orderQuery = orderSearch.trim().toLowerCase();
+  const filteredOrders = orderQuery
+    ? orders.filter((o) => {
+        const haystack = [
+          o.albumTitle,
+          o.albumArtist,
+          o.goodDeedNumber != null ? `#${o.goodDeedNumber}` : "",
+          o.goodDeedNumber != null ? String(o.goodDeedNumber) : "",
+          formatPaymentMethod(o) ?? "",
+        ]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(orderQuery);
+      })
+    : orders;
+  const orderCountLabel = orderQuery
+    ? `Orders (${filteredOrders.length} of ${orders.length})`
+    : `Orders (${orders.length})`;
   // Task #1342 (#6) — honest join date. Orders are sorted newest-first, so the
   // last row is the oldest. See resolveJoinedDisplay for the full rationale.
   const earliestOrderAt =
@@ -477,12 +504,46 @@ export function AdminCustomerDetail() {
         </Section>
 
         {/* Orders */}
-        <Section id="section-orders" highlighted={highlightSection === "orders"} title={`Orders (${orders.length})`}>
+        <Section
+          id="section-orders"
+          highlighted={highlightSection === "orders"}
+          title={orderCountLabel}
+          action={
+            orders.length > 0 ? (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-white border border-slate-200 shadow-sm">
+                <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                <input
+                  className="w-40 bg-transparent text-xs text-slate-700 placeholder-slate-400 focus:outline-none"
+                  placeholder="Filter orders…"
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setOrderSearch("");
+                  }}
+                  data-testid="input-search-orders"
+                />
+                {orderSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setOrderSearch("")}
+                    className="text-slate-400 hover:text-slate-700"
+                    data-testid="button-clear-order-search"
+                    aria-label="Clear order search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            ) : undefined
+          }
+        >
           {orders.length === 0 ? (
             <EmptyRow icon={ShoppingBag} text="No orders yet." />
+          ) : filteredOrders.length === 0 ? (
+            <EmptyRow icon={Search} text="No orders match your search." />
           ) : (
             <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
-              {orders.map((o) => {
+              {filteredOrders.map((o) => {
                 const payment = formatPaymentMethod(o);
                 return (
                 <div
