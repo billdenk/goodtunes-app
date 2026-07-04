@@ -24,7 +24,7 @@
 // the request body as the patch.
 
 import type { Request, Response, NextFunction } from "express";
-import { sql, and, eq, isNull, gt, or } from "drizzle-orm";
+import { sql, and, eq, ne, isNull, gt, or } from "drizzle-orm";
 import { db } from "../db";
 import { storage } from "../storage";
 import {
@@ -1352,9 +1352,44 @@ export async function listMyChangeRequestsForAlbum(
       and(
         eq(pendingChanges.submittedByUserId, userId),
         eq(pendingChanges.albumId, albumId),
+        // Task #2482 — a withdrawn request is retracted by its submitter;
+        // it stays in the DB for the audit trail but drops out of the
+        // artist's own list (and the operator queue, which filters by
+        // status separately).
+        ne(pendingChanges.status, "withdrawn"),
       ),
     )
     .orderBy(sql`created_at DESC`);
+}
+
+// Task #2482 — an artist retracts a still-pending change request they filed
+// by mistake. Scoped to `submittedByUserId = userId` (so a partner can only
+// withdraw their OWN submissions) AND `status = "pending"` (an approved or
+// rejected row is terminal and can't be withdrawn). Soft terminal status —
+// the row is NOT deleted, preserving the audit trail. Returns the updated
+// row, or null when nothing matched (wrong owner, not found, or already
+// reviewed) so the route can 404 without leaking which case it was.
+export async function withdrawPendingChange(
+  id: string,
+  userId: string,
+  albumId: string,
+) {
+  const [updated] = await db
+    .update(pendingChanges)
+    .set({ status: "withdrawn" })
+    .where(
+      and(
+        eq(pendingChanges.id, id),
+        // Bind the request to the album in the route URL so a request can
+        // only be withdrawn through its OWN album's endpoint, not any album
+        // the caller happens to have edit access to.
+        eq(pendingChanges.albumId, albumId),
+        eq(pendingChanges.submittedByUserId, userId),
+        eq(pendingChanges.status, "pending"),
+      ),
+    )
+    .returning();
+  return updated ?? null;
 }
 
 export async function reviewPendingChange(

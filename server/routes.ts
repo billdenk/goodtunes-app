@@ -30258,6 +30258,40 @@ export async function registerRoutes(
     },
   );
 
+  // Task #2482 — an artist withdraws a still-pending change request they
+  // filed by mistake. Scoped server-side in `withdrawPendingChange` to the
+  // requesting user's OWN submissions AND status="pending", so a partner can
+  // never retract a teammate's request or one that's already been reviewed.
+  // Soft terminal status ("withdrawn") — the row is kept for the audit trail
+  // but drops out of both the artist list and the operator review queue.
+  // Same requireAdmin (admits partners) + edit-access existence gate as the
+  // sibling GET, so a stale deep link degrades to a clean 404.
+  app.post(
+    "/api/admin/albums/:id/my-change-requests/:requestId/withdraw",
+    requireAdmin,
+    async (req, res) => {
+      const { withdrawPendingChange } = await import(
+        "./auth/partnerPermissions"
+      );
+      const access = await getAlbumEditAccess(
+        req.session.userId!,
+        String(req.params.id),
+      );
+      if (!access) return res.status(404).json({ message: "Album not found" });
+      const updated = await withdrawPendingChange(
+        String(req.params.requestId),
+        req.session.userId!,
+        String(req.params.id),
+      );
+      if (!updated) {
+        return res.status(404).json({
+          message: "Request not found, not yours, or already reviewed",
+        });
+      }
+      res.json(updated);
+    },
+  );
+
   // Task #969 / Task #1310 — share-slug availability probe powering the
   // "Suggest" affordance in AdminAlbum's ShareLinkPanel. Validates shape
   // + reserved-word via the shared helper, then checks per-artist

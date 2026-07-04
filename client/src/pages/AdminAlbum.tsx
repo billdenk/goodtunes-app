@@ -2395,7 +2395,10 @@ interface MyChangeRequest {
   targetId: string;
   albumId: string | null;
   patch: Record<string, unknown>;
-  status: "pending" | "approved" | "rejected";
+  // "withdrawn" rows are filtered out server-side (listMyChangeRequestsForAlbum),
+  // so they never reach this list — but the union mirrors the shared
+  // PendingChangeStatus so the contract stays honest.
+  status: "pending" | "approved" | "rejected" | "withdrawn";
   submittedNote: string | null;
   reviewedAt: string | null;
   reviewerNote: string | null;
@@ -2458,6 +2461,8 @@ function statusLabel(status: MyChangeRequest["status"]): string {
 }
 
 function MyChangeRequestsPanel({ albumId }: { albumId: string }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
   const { data: requests } = useQuery<MyChangeRequest[]>({
     queryKey: ["/api/admin/albums", albumId, "my-change-requests"],
     queryFn: async () => {
@@ -2470,6 +2475,32 @@ function MyChangeRequestsPanel({ albumId }: { albumId: string }) {
     },
   });
   const disclosure = useExclusiveDisclosure<string>();
+
+  // Task #2482 — withdraw a still-pending request the artist filed by
+  // mistake. Server soft-marks it "withdrawn" (kept for audit) so it drops
+  // out of this list on refetch and out of the operator review queue.
+  const withdraw = useMutation({
+    mutationFn: async (requestId: string) => {
+      await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/my-change-requests/${requestId}/withdraw`,
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ["/api/admin/albums", albumId, "my-change-requests"],
+      });
+      toast({ title: "Request withdrawn" });
+    },
+    onError: () => {
+      toast({
+        title: "Couldn't withdraw",
+        description:
+          "It may have already been reviewed. Refresh to see the latest status.",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Nothing to show for operators (never divert) or partners who haven't
   // submitted anything — keep the tab quiet in the happy path.
@@ -2592,6 +2623,61 @@ function MyChangeRequestsPanel({ albumId }: { albumId: string }) {
                           GoodTunes: “{req.reviewerNote}”
                         </div>
                       )}
+                    </div>
+                  )}
+                  {req.status === "pending" && (
+                    <div className="pt-1 flex items-center justify-between gap-3">
+                      <p className="text-xs text-slate-500 min-w-0">
+                        Filed by mistake? You can withdraw it before GoodTunes
+                        reviews it.
+                      </p>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-rose-600 hover:text-rose-700 flex-shrink-0 disabled:opacity-50"
+                            disabled={
+                              withdraw.isPending &&
+                              withdraw.variables === req.id
+                            }
+                            data-testid={`button-withdraw-my-change-request-${req.id}`}
+                          >
+                            {withdraw.isPending &&
+                            withdraw.variables === req.id ? (
+                              <span className="inline-flex items-center gap-1">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Withdrawing…
+                              </span>
+                            ) : (
+                              "Withdraw"
+                            )}
+                          </button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent data-testid={`dialog-withdraw-my-change-request-${req.id}`}>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              Withdraw this change request?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              It will be removed from GoodTunes' review queue and
+                              won't be applied. You can always submit the edit
+                              again later.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel data-testid={`button-cancel-withdraw-${req.id}`}>
+                              Keep it
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                              className="bg-rose-600 hover:bg-rose-700"
+                              onClick={() => withdraw.mutate(req.id)}
+                              data-testid={`button-confirm-withdraw-${req.id}`}
+                            >
+                              Withdraw request
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   )}
                 </div>

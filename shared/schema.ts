@@ -5151,7 +5151,11 @@ export type InsertMembership = typeof memberships.$inferInsert;
 // `targetTable` ∈ {albums, songs} for the v1 surface. `patch` is the
 // raw JSON body the partner submitted; the apply step replays it
 // against the same storage method an admin PUT would call.
-export const PENDING_CHANGE_STATUSES = ["pending", "approved", "rejected"] as const;
+// `withdrawn` (Task #2482) is a terminal, artist-initiated status: the
+// submitter retracted a still-pending request before review. It is NOT a
+// hard delete — the row stays for the audit trail — but it drops out of
+// both the artist's own list and the operator review queue.
+export const PENDING_CHANGE_STATUSES = ["pending", "approved", "rejected", "withdrawn"] as const;
 export type PendingChangeStatus = (typeof PENDING_CHANGE_STATUSES)[number];
 
 export const pendingChanges = pgTable("pending_changes", {
