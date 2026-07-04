@@ -30224,6 +30224,40 @@ export async function registerRoutes(
     },
   );
 
+  // Task #2478 — a partner's own submitted change requests for this album.
+  // When an artist owner edits a released/sold release their save diverts to
+  // the pending-changes queue (202). This read lets them see WHAT they filed
+  // and its status (pending / applied / rejected) so they aren't left in the
+  // dark after saving (which invited duplicate submissions + support pings).
+  // Scoped server-side in `listMyChangeRequestsForAlbum` to the requesting
+  // user's own submissions, so it leaks nothing a teammate or other scope
+  // filed. Operators never divert, so their list is simply empty. Guarded by
+  // requireAdmin (admits partners) — any user who can already load the album.
+  app.get(
+    "/api/admin/albums/:id/my-change-requests",
+    requireAdmin,
+    async (req, res) => {
+      const { listMyChangeRequestsForAlbum } = await import(
+        "./auth/partnerPermissions"
+      );
+      // Mirror the sibling /edit-access gate: confirm the album exists and is
+      // loadable by this user before returning anything, so a stale/deleted
+      // deep link degrades to a clean 404 rather than an empty 200. The list
+      // itself is still scoped to the caller's own submissions inside the
+      // helper.
+      const access = await getAlbumEditAccess(
+        req.session.userId!,
+        String(req.params.id),
+      );
+      if (!access) return res.status(404).json({ message: "Album not found" });
+      const rows = await listMyChangeRequestsForAlbum(
+        req.session.userId!,
+        String(req.params.id),
+      );
+      res.json(rows);
+    },
+  );
+
   // Task #969 / Task #1310 — share-slug availability probe powering the
   // "Suggest" affordance in AdminAlbum's ShareLinkPanel. Validates shape
   // + reserved-word via the shared helper, then checks per-artist

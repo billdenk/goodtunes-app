@@ -1322,6 +1322,41 @@ export async function getPendingChange(id: string) {
   return row ?? null;
 }
 
+// Task #2478 — a partner's own submitted change requests for one album.
+// Scoped to `submittedByUserId = userId` so a partner only ever sees the
+// requests THEY filed (never a teammate's or another scope's), and to the
+// denormalized `albumId` so song/credit diverts (which roll up to the
+// album) surface alongside album-level edits. Reviewer *identity*
+// (reviewedByUserId) is intentionally NOT returned — the partner sees the
+// decision and GoodTunes' note, but never which operator made the call.
+// Newest first.
+export async function listMyChangeRequestsForAlbum(
+  userId: string,
+  albumId: string,
+) {
+  return db
+    .select({
+      id: pendingChanges.id,
+      targetTable: pendingChanges.targetTable,
+      targetId: pendingChanges.targetId,
+      albumId: pendingChanges.albumId,
+      patch: pendingChanges.patch,
+      status: pendingChanges.status,
+      submittedNote: pendingChanges.submittedNote,
+      reviewedAt: pendingChanges.reviewedAt,
+      reviewerNote: pendingChanges.reviewerNote,
+      createdAt: pendingChanges.createdAt,
+    })
+    .from(pendingChanges)
+    .where(
+      and(
+        eq(pendingChanges.submittedByUserId, userId),
+        eq(pendingChanges.albumId, albumId),
+      ),
+    )
+    .orderBy(sql`created_at DESC`);
+}
+
 export async function reviewPendingChange(
   id: string,
   decision: "approved" | "rejected",

@@ -38,6 +38,8 @@ import {
   X as XIcon,
   Circle,
   CheckCircle2,
+  XCircle,
+  Clock,
   Ban,
   Lock,
   LockOpen,
@@ -2377,6 +2379,246 @@ function AlbumEditAccessChip({ albumId }: { albumId: string }) {
   );
 }
 
+/* ─── My change requests (partner-facing) ──────────────────────────── */
+//
+// Task #2478 — when an artist owner edits a released/sold release their
+// save diverts to the pending-changes queue (202 "Sent for review"). This
+// panel lets them see WHAT they submitted and its status without pinging
+// support or re-submitting. It reads their OWN submissions only (scoped
+// server-side by submittedByUserId), so operators — who never divert — get
+// an empty list and the panel renders nothing for them. Read-only: the
+// operator queue at /admin/review is where decisions are made.
+
+interface MyChangeRequest {
+  id: string;
+  targetTable: "albums" | "songs" | "people" | "labels" | "track_writers" | "track_performers";
+  targetId: string;
+  albumId: string | null;
+  patch: Record<string, unknown>;
+  status: "pending" | "approved" | "rejected";
+  submittedNote: string | null;
+  reviewedAt: string | null;
+  reviewerNote: string | null;
+  createdAt: string;
+}
+
+// Humanize a patch column name (camelCase / snake_case → "Title Case").
+function humanizeField(key: string): string {
+  const spaced = key
+    .replace(/_/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+// A short, non-technical summary of what a change request touched, for the
+// collapsed row. Handles the __op meta keys (create / delete / request)
+// that ride in the patch, else lists the human field names that changed.
+function summarizeChangeRequest(req: MyChangeRequest): string {
+  const op = (req.patch as any)?.__op;
+  const target =
+    req.targetTable === "albums"
+      ? "release"
+      : req.targetTable === "songs"
+        ? "a track"
+        : req.targetTable === "people"
+          ? "artist profile"
+          : req.targetTable === "labels"
+            ? "label"
+            : "credits";
+  if (op === "delete") return `Requested to remove ${target}`;
+  if (op === "create") return `Requested to add ${target}`;
+  if (op === "request") return `Requested a change to ${target}`;
+  const fields = Object.keys(req.patch || {}).filter(
+    (k) => k !== "__op" && k !== "__note",
+  );
+  if (fields.length === 0) return `Edit to ${target}`;
+  const names = fields.slice(0, 3).map(humanizeField);
+  const extra = fields.length > 3 ? ` +${fields.length - 3} more` : "";
+  return `${names.join(", ")}${extra}`;
+}
+
+function statusPillClasses(status: MyChangeRequest["status"]): string {
+  // Design-system status pills (docs/design-system.md): applied → emerald,
+  // pending → amber, rejected → rose.
+  if (status === "approved")
+    return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+  if (status === "rejected")
+    return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
+  return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+}
+
+function statusLabel(status: MyChangeRequest["status"]): string {
+  // "approved" reads as "Applied" to the partner — the operator approving
+  // replays the patch onto the live record.
+  return status === "approved"
+    ? "Applied"
+    : status === "rejected"
+      ? "Not applied"
+      : "In review";
+}
+
+function MyChangeRequestsPanel({ albumId }: { albumId: string }) {
+  const { data: requests } = useQuery<MyChangeRequest[]>({
+    queryKey: ["/api/admin/albums", albumId, "my-change-requests"],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/admin/albums/${albumId}/my-change-requests`,
+        { credentials: "include" },
+      );
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+  });
+  const disclosure = useExclusiveDisclosure<string>();
+
+  // Nothing to show for operators (never divert) or partners who haven't
+  // submitted anything — keep the tab quiet in the happy path.
+  if (!requests || requests.length === 0) return null;
+
+  const pendingCount = requests.filter((r) => r.status === "pending").length;
+
+  return (
+    <Card className="p-5" data-testid="panel-my-change-requests">
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <h3 className="text-[14px] font-semibold text-slate-900">
+          Your change requests
+        </h3>
+        {pendingCount > 0 && (
+          <span
+            className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 py-0.5 bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+            data-testid="badge-my-change-requests-pending"
+          >
+            {pendingCount} in review
+          </span>
+        )}
+      </div>
+      <p className="text-[12.5px] text-slate-500 mb-3">
+        Edits you submit for this release are reviewed by GoodTunes before they
+        go live. Track their status here.
+      </p>
+      <div className="space-y-2">
+        {requests.map((req) => {
+          const expanded = disclosure.isOpen(req.id);
+          const fields = Object.keys(req.patch || {}).filter(
+            (k) => k !== "__op" && k !== "__note",
+          );
+          const StatusIcon =
+            req.status === "approved"
+              ? CheckCircle2
+              : req.status === "rejected"
+                ? XCircle
+                : Clock;
+          return (
+            <div
+              key={req.id}
+              className="border border-slate-200 rounded-lg"
+              data-testid={`row-my-change-request-${req.id}`}
+            >
+              <div
+                role="button"
+                tabIndex={0}
+                aria-expanded={expanded}
+                onClick={() => disclosure.setOpen(req.id, !expanded)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    disclosure.setOpen(req.id, !expanded);
+                  }
+                }}
+                className="flex items-start justify-between gap-3 p-3 cursor-pointer select-none"
+                data-testid={`button-toggle-my-change-request-${req.id}`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={[
+                        "inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 py-0.5",
+                        statusPillClasses(req.status),
+                      ].join(" ")}
+                      data-testid={`status-my-change-request-${req.id}`}
+                    >
+                      <StatusIcon className="w-3 h-3" />
+                      {statusLabel(req.status)}
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      {new Date(req.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[13px] font-medium text-slate-800 truncate">
+                    {summarizeChangeRequest(req)}
+                  </div>
+                </div>
+                <ChevronDown
+                  className={[
+                    "w-4 h-4 text-slate-400 mt-0.5 transition-transform flex-shrink-0",
+                    expanded ? "rotate-180" : "",
+                  ].join(" ")}
+                />
+              </div>
+              {expanded && (
+                <div className="px-3 pb-3 -mt-1 space-y-2">
+                  {req.submittedNote && (
+                    <div className="text-[12px] text-slate-600 italic">
+                      Your note: “{req.submittedNote}”
+                    </div>
+                  )}
+                  {fields.length > 0 && (
+                    <dl className="text-[12px] rounded-md bg-slate-50 border border-slate-200 divide-y divide-slate-200">
+                      {fields.map((k) => (
+                        <div
+                          key={k}
+                          className="flex gap-3 px-3 py-1.5"
+                          data-testid={`field-my-change-request-${req.id}-${k}`}
+                        >
+                          <dt className="font-medium text-slate-500 flex-shrink-0 w-32">
+                            {humanizeField(k)}
+                          </dt>
+                          <dd className="text-slate-800 break-words min-w-0">
+                            {formatPatchValue((req.patch as any)[k])}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                  {req.status !== "pending" && (
+                    <div className="text-[12px] text-slate-500">
+                      {req.status === "approved"
+                        ? "Applied to your release"
+                        : "This request wasn't applied"}
+                      {req.reviewedAt &&
+                        ` · ${new Date(req.reviewedAt).toLocaleDateString()}`}
+                      {req.reviewerNote && (
+                        <div className="mt-1 text-slate-600 italic">
+                          GoodTunes: “{req.reviewerNote}”
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+// Render a patch value for the field/value detail. Objects/arrays fall back
+// to compact JSON; primitives print as-is (booleans as Yes/No).
+function formatPatchValue(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  if (typeof v === "object") {
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return String(v);
+    }
+  }
+  return String(v);
+}
+
 /* ─── Overview tab ─────────────────────────────────────────────────── */
 
 /**
@@ -3593,6 +3835,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
   ];
   return (
     <div className="space-y-5">
+      <MyChangeRequestsPanel albumId={album.id} />
       <EditablePanel
         title="Release"
         testId="panel-overview-release"

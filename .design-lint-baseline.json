@@ -13922,11 +13922,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider bg-blue-50 text-blue-700 ring-1 ring-blue-200\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"inline-flex items-center gap-1 text-amber-700 text-[10.5px] font-medium normal-case tracking-normal\""
   },
   {
@@ -14023,6 +14018,51 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"inline-flex items-center gap-1 text-slate-600 text-[10.5px] font-medium normal-case tracking-normal bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<h3 className=\"text-[14px] font-semibold text-slate-900\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 py-0.5 bg-amber-50 text-amber-700 ring-1 ring-amber-200\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<p className=\"text-[12.5px] text-slate-500 mb-3\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "\"inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 py-0.5\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<span className=\"text-[11px] text-slate-400\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"mt-1 text-[13px] font-medium text-slate-800 truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"text-[12px] text-slate-600 italic\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<dl className=\"text-[12px] rounded-md bg-slate-50 border border-slate-200 divide-y divide-slate-200\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"text-[12px] text-slate-500\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14473,11 +14513,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"flex-1 flex flex-col items-center justify-center text-center text-[12px] text-slate-500 px-4 py-10 gap-2\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<span className=\"text-[11px] text-slate-400\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18472,11 +18507,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"pointer-events-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide shadow-sm\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<p className=\"text-fan-secondary text-[11px] truncate mt-0.5\">{a.year}</p>"
   },
   {
@@ -18957,11 +18987,6 @@
   {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"w-1.5 h-1.5 rounded-full\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<div className=\"absolute -left-[18px] top-1 w-3 h-3 rounded-full\" style={{ background: e.color, boxShadow: `0 0 0 3px rgba(0,6,43,1), 0 0 12px ${e.color}55` }} />"
   },
   {
@@ -18993,11 +19018,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetailDesktop.tsx",
     "snippet": "<span className=\"text-fan-secondary uppercase tracking-[0.1em] text-[10px]\">DEV</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<span className=\"text-[12px]\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -20083,11 +20103,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/InstrumentDetail.tsx",
     "snippet": "<p className=\"text-white/70 text-[15px]\">This bookmark is no longer available.</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/LabelDashboard.tsx",
-    "snippet": "<span className=\"text-[12px]\">"
   },
   {
     "rule": "hardcoded-font-size",

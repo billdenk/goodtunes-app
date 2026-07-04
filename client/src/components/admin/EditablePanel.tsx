@@ -316,6 +316,17 @@ export function EditablePanel({
       // which assumes a real write). Operators + direct-save partners get
       // 200 and the unchanged "updated" path.
       if (status === 202) {
+        // Task #2478 — a fresh change request was just filed. Refresh the
+        // partner's "Your change requests" panel (MyChangeRequestsPanel) so
+        // it shows immediately, across any tab. staleTime:Infinity means a
+        // remount won't refetch, so we invalidate explicitly. Targeted by
+        // key shape so we don't churn unrelated album queries.
+        qc.invalidateQueries({
+          predicate: (q) =>
+            Array.isArray(q.queryKey) &&
+            q.queryKey[0] === "/api/admin/albums" &&
+            q.queryKey[2] === "my-change-requests",
+        });
         toast({
           title: "Sent for review",
           description:
