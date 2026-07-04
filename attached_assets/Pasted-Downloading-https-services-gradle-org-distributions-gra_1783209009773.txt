@@ -1,0 +1,360 @@
+Downloading https://services.gradle.org/distributions/gradle-8.9-all.zip
+.....................10%......................20%.....................30%......................40%.....................50%......................60%.....................70%......................80%.....................90%......................100%
+
+Welcome to Gradle 8.9!
+
+Here are the highlights of this release:
+ - Enhanced Error and Warning Messages
+ - IDE Integration Improvements
+ - Daemon JVM Information
+
+For more details see https://docs.gradle.org/8.9/release-notes.html
+
+Starting a Gradle Daemon (subsequent builds will be faster)
+
+> Configure project :app
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+
+> Configure project :capacitor-cordova-android-plugins
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:generateReleaseResValues
+> Task :capacitor-android:preBuild UP-TO-DATE
+> Task :capacitor-android:preReleaseBuild UP-TO-DATE
+> Task :capacitor-android:generateReleaseResValues
+> Task :capacitor-android:generateReleaseResources
+> Task :capacitor-android:packageReleaseResources
+> Task :capacitor-app:preBuild UP-TO-DATE
+> Task :capacitor-app:preReleaseBuild UP-TO-DATE
+> Task :capacitor-app:generateReleaseResValues
+> Task :capacitor-app:generateReleaseResources
+> Task :capacitor-app:packageReleaseResources
+> Task :capacitor-cordova-android-plugins:preBuild UP-TO-DATE
+> Task :capacitor-cordova-android-plugins:preReleaseBuild UP-TO-DATE
+> Task :capacitor-cordova-android-plugins:generateReleaseResValues
+> Task :capacitor-cordova-android-plugins:generateReleaseResources
+> Task :capacitor-cordova-android-plugins:packageReleaseResources
+> Task :capacitor-filesystem:preBuild UP-TO-DATE
+> Task :capacitor-filesystem:preReleaseBuild UP-TO-DATE
+> Task :capacitor-filesystem:generateReleaseResValues
+> Task :capacitor-filesystem:generateReleaseResources
+> Task :capacitor-filesystem:packageReleaseResources
+> Task :capacitor-push-notifications:preBuild UP-TO-DATE
+> Task :capacitor-push-notifications:preReleaseBuild UP-TO-DATE
+> Task :capacitor-push-notifications:generateReleaseResValues
+> Task :capacitor-push-notifications:generateReleaseResources
+> Task :capacitor-push-notifications:packageReleaseResources
+> Task :capacitor-splash-screen:preBuild UP-TO-DATE
+> Task :capacitor-splash-screen:preReleaseBuild UP-TO-DATE
+> Task :capacitor-splash-screen:generateReleaseResValues
+> Task :capacitor-splash-screen:generateReleaseResources
+> Task :capacitor-splash-screen:packageReleaseResources
+> Task :capacitor-status-bar:preBuild UP-TO-DATE
+> Task :capacitor-status-bar:preReleaseBuild UP-TO-DATE
+> Task :capacitor-status-bar:generateReleaseResValues
+> Task :capacitor-status-bar:generateReleaseResources
+> Task :capacitor-status-bar:packageReleaseResources
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:generateReleaseResources
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease
+> Task :capacitor-android:extractDeepLinksRelease
+> Task :capacitor-app:extractDeepLinksRelease
+> Task :capacitor-cordova-android-plugins:extractDeepLinksRelease
+> Task :capacitor-app:processReleaseManifest
+> Task :capacitor-filesystem:extractDeepLinksRelease
+> Task :capacitor-android:processReleaseManifest
+> Task :capacitor-push-notifications:extractDeepLinksRelease
+> Task :capacitor-filesystem:processReleaseManifest
+> Task :capacitor-splash-screen:extractDeepLinksRelease
+> Task :capacitor-push-notifications:processReleaseManifest
+> Task :capacitor-splash-screen:processReleaseManifest
+> Task :capacitor-cordova-android-plugins:processReleaseManifest
+> Task :capacitor-status-bar:extractDeepLinksRelease
+> Task :capacitor-status-bar:processReleaseManifest
+> Task :capacitor-app:writeReleaseAarMetadata
+> Task :capacitor-android:writeReleaseAarMetadata
+> Task :app:processReleaseMainManifest
+> Task :app:mergeReleaseResources
+> Task :app:processReleaseManifest
+> Task :app:processApplicationManifestReleaseForBundle
+> Task :capacitor-cordova-android-plugins:writeReleaseAarMetadata
+> Task :capacitor-filesystem:writeReleaseAarMetadata
+> Task :capacitor-push-notifications:writeReleaseAarMetadata
+> Task :capacitor-splash-screen:writeReleaseAarMetadata
+> Task :capacitor-status-bar:writeReleaseAarMetadata
+> Task :app:packageReleaseResources
+> Task :app:checkReleaseAarMetadata
+> Task :app:processReleaseManifestForPackage
+> Task :capacitor-android:compileReleaseLibraryResources
+> Task :capacitor-app:compileReleaseLibraryResources
+> Task :capacitor-cordova-android-plugins:compileReleaseLibraryResources
+> Task :capacitor-app:parseReleaseLocalResources
+> Task :capacitor-cordova-android-plugins:parseReleaseLocalResources
+> Task :capacitor-filesystem:compileReleaseLibraryResources
+> Task :app:parseReleaseLocalResources
+> Task :capacitor-android:parseReleaseLocalResources
+> Task :capacitor-push-notifications:compileReleaseLibraryResources
+> Task :capacitor-filesystem:parseReleaseLocalResources
+> Task :capacitor-splash-screen:compileReleaseLibraryResources
+> Task :capacitor-app:generateReleaseRFile
+> Task :capacitor-push-notifications:parseReleaseLocalResources
+> Task :capacitor-cordova-android-plugins:generateReleaseRFile
+> Task :capacitor-android:generateReleaseRFile
+> Task :capacitor-filesystem:generateReleaseRFile
+> Task :capacitor-push-notifications:generateReleaseRFile
+> Task :capacitor-splash-screen:parseReleaseLocalResources
+> Task :capacitor-status-bar:compileReleaseLibraryResources
+> Task :capacitor-status-bar:parseReleaseLocalResources
+> Task :capacitor-splash-screen:generateReleaseRFile
+> Task :app:extractReleaseVersionControlInfo
+> Task :capacitor-status-bar:generateReleaseRFile
+> Task :capacitor-android:javaPreCompileRelease
+> Task :capacitor-app:javaPreCompileRelease
+> Task :app:processReleaseResources
+
+> Task :capacitor-android:compileReleaseJavaWithJavac
+Note: /home/builder/clone/node_modules/@capacitor/android/capacitor/src/main/java/com/getcapacitor/Bridge.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+> Task :capacitor-filesystem:javaPreCompileRelease
+> Task :capacitor-push-notifications:javaPreCompileRelease
+> Task :capacitor-splash-screen:javaPreCompileRelease
+> Task :capacitor-status-bar:javaPreCompileRelease
+> Task :capacitor-cordova-android-plugins:javaPreCompileRelease
+> Task :capacitor-android:bundleLibRuntimeToJarRelease
+> Task :capacitor-android:bundleLibCompileToJarRelease
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:bundleReleaseResources
+> Task :capacitor-app:compileReleaseJavaWithJavac
+> Task :capacitor-app:bundleLibRuntimeToJarRelease
+> Task :capacitor-filesystem:compileReleaseJavaWithJavac
+> Task :capacitor-filesystem:bundleLibRuntimeToJarRelease
+> Task :capacitor-push-notifications:compileReleaseJavaWithJavac
+> Task :capacitor-push-notifications:bundleLibRuntimeToJarRelease
+> Task :capacitor-splash-screen:compileReleaseJavaWithJavac
+> Task :capacitor-splash-screen:bundleLibRuntimeToJarRelease
+
+> Task :capacitor-status-bar:compileReleaseJavaWithJavac
+Note: /home/builder/clone/node_modules/@capacitor/status-bar/android/src/main/java/com/capacitorjs/plugins/statusbar/StatusBar.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :capacitor-status-bar:bundleLibRuntimeToJarRelease
+> Task :capacitor-cordova-android-plugins:compileReleaseJavaWithJavac NO-SOURCE
+> Task :capacitor-cordova-android-plugins:bundleLibRuntimeToJarRelease
+> Task :app:javaPreCompileRelease
+> Task :capacitor-app:bundleLibCompileToJarRelease
+> Task :capacitor-cordova-android-plugins:bundleLibCompileToJarRelease
+> Task :capacitor-filesystem:bundleLibCompileToJarRelease
+> Task :capacitor-push-notifications:bundleLibCompileToJarRelease
+> Task :capacitor-splash-screen:bundleLibCompileToJarRelease
+> Task :capacitor-status-bar:bundleLibCompileToJarRelease
+> Task :app:desugarReleaseFileDependencies
+
+> Task :app:compileReleaseJavaWithJavac FAILED
+/home/builder/clone/android/app/src/main/java/fm/goodtunes/player/NowPlayingPlugin.java:73: error: incompatible types: JSONArray cannot be converted to JSArray
+        JSONArray items = call.getArray("items", new JSONArray());
+                                                 ^
+Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+1 error
+Downloading https://services.gradle.org/distributions/gradle-8.9-all.zip
+.....................10%......................20%.....................30%......................40%.....................50%......................60%.....................70%......................80%.....................90%......................100%
+
+Welcome to Gradle 8.9!
+
+Here are the highlights of this release:
+ - Enhanced Error and Warning Messages
+ - IDE Integration Improvements
+ - Daemon JVM Information
+
+For more details see https://docs.gradle.org/8.9/release-notes.html
+
+Starting a Gradle Daemon (subsequent builds will be faster)
+
+> Configure project :app
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+
+> Configure project :capacitor-cordova-android-plugins
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:generateReleaseResValues
+> Task :capacitor-android:preBuild UP-TO-DATE
+> Task :capacitor-android:preReleaseBuild UP-TO-DATE
+> Task :capacitor-android:generateReleaseResValues
+> Task :capacitor-android:generateReleaseResources
+> Task :capacitor-android:packageReleaseResources
+> Task :capacitor-app:preBuild UP-TO-DATE
+> Task :capacitor-app:preReleaseBuild UP-TO-DATE
+> Task :capacitor-app:generateReleaseResValues
+> Task :capacitor-app:generateReleaseResources
+> Task :capacitor-app:packageReleaseResources
+> Task :capacitor-cordova-android-plugins:preBuild UP-TO-DATE
+> Task :capacitor-cordova-android-plugins:preReleaseBuild UP-TO-DATE
+> Task :capacitor-cordova-android-plugins:generateReleaseResValues
+> Task :capacitor-cordova-android-plugins:generateReleaseResources
+> Task :capacitor-cordova-android-plugins:packageReleaseResources
+> Task :capacitor-filesystem:preBuild UP-TO-DATE
+> Task :capacitor-filesystem:preReleaseBuild UP-TO-DATE
+> Task :capacitor-filesystem:generateReleaseResValues
+> Task :capacitor-filesystem:generateReleaseResources
+> Task :capacitor-filesystem:packageReleaseResources
+> Task :capacitor-push-notifications:preBuild UP-TO-DATE
+> Task :capacitor-push-notifications:preReleaseBuild UP-TO-DATE
+> Task :capacitor-push-notifications:generateReleaseResValues
+> Task :capacitor-push-notifications:generateReleaseResources
+> Task :capacitor-push-notifications:packageReleaseResources
+> Task :capacitor-splash-screen:preBuild UP-TO-DATE
+> Task :capacitor-splash-screen:preReleaseBuild UP-TO-DATE
+> Task :capacitor-splash-screen:generateReleaseResValues
+> Task :capacitor-splash-screen:generateReleaseResources
+> Task :capacitor-splash-screen:packageReleaseResources
+> Task :capacitor-status-bar:preBuild UP-TO-DATE
+> Task :capacitor-status-bar:preReleaseBuild UP-TO-DATE
+> Task :capacitor-status-bar:generateReleaseResValues
+> Task :capacitor-status-bar:generateReleaseResources
+> Task :capacitor-status-bar:packageReleaseResources
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:generateReleaseResources
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease
+> Task :capacitor-android:extractDeepLinksRelease
+> Task :capacitor-app:extractDeepLinksRelease
+> Task :capacitor-cordova-android-plugins:extractDeepLinksRelease
+> Task :capacitor-app:processReleaseManifest
+> Task :capacitor-filesystem:extractDeepLinksRelease
+> Task :capacitor-android:processReleaseManifest
+> Task :capacitor-push-notifications:extractDeepLinksRelease
+> Task :capacitor-filesystem:processReleaseManifest
+> Task :capacitor-splash-screen:extractDeepLinksRelease
+> Task :capacitor-push-notifications:processReleaseManifest
+> Task :capacitor-splash-screen:processReleaseManifest
+> Task :capacitor-cordova-android-plugins:processReleaseManifest
+> Task :capacitor-status-bar:extractDeepLinksRelease
+> Task :capacitor-status-bar:processReleaseManifest
+> Task :capacitor-app:writeReleaseAarMetadata
+> Task :capacitor-android:writeReleaseAarMetadata
+> Task :app:processReleaseMainManifest
+> Task :app:mergeReleaseResources
+> Task :app:processReleaseManifest
+> Task :app:processApplicationManifestReleaseForBundle
+> Task :capacitor-cordova-android-plugins:writeReleaseAarMetadata
+> Task :capacitor-filesystem:writeReleaseAarMetadata
+> Task :capacitor-push-notifications:writeReleaseAarMetadata
+> Task :capacitor-splash-screen:writeReleaseAarMetadata
+> Task :capacitor-status-bar:writeReleaseAarMetadata
+> Task :app:packageReleaseResources
+> Task :app:checkReleaseAarMetadata
+> Task :app:processReleaseManifestForPackage
+> Task :capacitor-android:compileReleaseLibraryResources
+> Task :capacitor-app:compileReleaseLibraryResources
+> Task :capacitor-cordova-android-plugins:compileReleaseLibraryResources
+> Task :capacitor-app:parseReleaseLocalResources
+> Task :capacitor-cordova-android-plugins:parseReleaseLocalResources
+> Task :capacitor-filesystem:compileReleaseLibraryResources
+> Task :app:parseReleaseLocalResources
+> Task :capacitor-android:parseReleaseLocalResources
+> Task :capacitor-push-notifications:compileReleaseLibraryResources
+> Task :capacitor-filesystem:parseReleaseLocalResources
+> Task :capacitor-splash-screen:compileReleaseLibraryResources
+> Task :capacitor-app:generateReleaseRFile
+> Task :capacitor-push-notifications:parseReleaseLocalResources
+> Task :capacitor-cordova-android-plugins:generateReleaseRFile
+> Task :capacitor-android:generateReleaseRFile
+> Task :capacitor-filesystem:generateReleaseRFile
+> Task :capacitor-push-notifications:generateReleaseRFile
+> Task :capacitor-splash-screen:parseReleaseLocalResources
+> Task :capacitor-status-bar:compileReleaseLibraryResources
+> Task :capacitor-status-bar:parseReleaseLocalResources
+> Task :capacitor-splash-screen:generateReleaseRFile
+> Task :app:extractReleaseVersionControlInfo
+> Task :capacitor-status-bar:generateReleaseRFile
+> Task :capacitor-android:javaPreCompileRelease
+> Task :capacitor-app:javaPreCompileRelease
+> Task :app:processReleaseResources
+
+> Task :capacitor-android:compileReleaseJavaWithJavac
+Note: /home/builder/clone/node_modules/@capacitor/android/capacitor/src/main/java/com/getcapacitor/Bridge.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+> Task :capacitor-filesystem:javaPreCompileRelease
+> Task :capacitor-push-notifications:javaPreCompileRelease
+> Task :capacitor-splash-screen:javaPreCompileRelease
+> Task :capacitor-status-bar:javaPreCompileRelease
+> Task :capacitor-cordova-android-plugins:javaPreCompileRelease
+> Task :capacitor-android:bundleLibRuntimeToJarRelease
+> Task :capacitor-android:bundleLibCompileToJarRelease
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:bundleReleaseResources
+> Task :capacitor-app:compileReleaseJavaWithJavac
+> Task :capacitor-app:bundleLibRuntimeToJarRelease
+> Task :capacitor-filesystem:compileReleaseJavaWithJavac
+> Task :capacitor-filesystem:bundleLibRuntimeToJarRelease
+> Task :capacitor-push-notifications:compileReleaseJavaWithJavac
+> Task :capacitor-push-notifications:bundleLibRuntimeToJarRelease
+> Task :capacitor-splash-screen:compileReleaseJavaWithJavac
+> Task :capacitor-splash-screen:bundleLibRuntimeToJarRelease
+
+> Task :capacitor-status-bar:compileReleaseJavaWithJavac
+Note: /home/builder/clone/node_modules/@capacitor/status-bar/android/src/main/java/com/capacitorjs/plugins/statusbar/StatusBar.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :capacitor-status-bar:bundleLibRuntimeToJarRelease
+> Task :capacitor-cordova-android-plugins:compileReleaseJavaWithJavac NO-SOURCE
+> Task :capacitor-cordova-android-plugins:bundleLibRuntimeToJarRelease
+> Task :app:javaPreCompileRelease
+> Task :capacitor-app:bundleLibCompileToJarRelease
+> Task :capacitor-cordova-android-plugins:bundleLibCompileToJarRelease
+> Task :capacitor-filesystem:bundleLibCompileToJarRelease
+> Task :capacitor-push-notifications:bundleLibCompileToJarRelease
+> Task :capacitor-splash-screen:bundleLibCompileToJarRelease
+> Task :capacitor-status-bar:bundleLibCompileToJarRelease
+> Task :app:desugarReleaseFileDependencies
+
+> Task :app:compileReleaseJavaWithJavac FAILED
+/home/builder/clone/android/app/src/main/java/fm/goodtunes/player/NowPlayingPlugin.java:73: error: incompatible types: JSONArray cannot be converted to JSArray
+        JSONArray items = call.getArray("items", new JSONArray());
+                                                 ^
+Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+1 error
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileReleaseJavaWithJavac'.
+> Compilation failed; see the compiler error output for details.
+
+* Try:
+> Run with --info option to get more log output.
+> Run with --scan to get full insights.
+
+BUILD FAILED in 56s
+110 actionable tasks: 110 executed
+
+
+Build failed :|
+Step 9 script `Build the signed .aab` exited with status code 1
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileReleaseJavaWithJavac'.
+> Compilation failed; see the compiler error output for details.
+
+* Try:
+> Run with --info option to get more log output.
+> Run with --scan to get full insights.
+
+BUILD FAILED in 56s
+110 actionable tasks: 110 executed
+
+
+Build failed :|
+Step 9 script `Build the signed .aab` exited with status code 1
