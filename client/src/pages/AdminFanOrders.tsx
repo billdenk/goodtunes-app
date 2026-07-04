@@ -651,6 +651,8 @@ function AdminFanOrdersInner() {
       <OrderDetailSheet
         orderId={openOrderId}
         onClose={closeOrderDetail}
+        customerBackHref="/admin/fan-orders"
+        customerBackName="Orders"
       />
     </AdminFrame>
   );

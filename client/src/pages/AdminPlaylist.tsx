@@ -92,7 +92,11 @@ export function AdminPlaylist() {
     );
   }
 
-  const ownerHref = data.owner ? `/admin/customers/${data.owner.id}` : "/admin/customers";
+  // Task #2533 — stamp the playlist origin onto the owner link so the
+  // customer page's back-crumb returns here instead of "← Customers".
+  const ownerHref = data.owner
+    ? `/admin/customers/${data.owner.id}?from=partner&backHref=${encodeURIComponent(`/admin/playlists/${id}`)}&backName=${encodeURIComponent(data.name)}`
+    : "/admin/customers";
 
   return (
     <AdminFrame active="customers" contentWidth="wide">

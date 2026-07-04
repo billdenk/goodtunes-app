@@ -3,6 +3,7 @@ import { Link, useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, Mail, Phone, MapPin, ShoppingBag, Disc3, ListMusic, CheckCircle2, Plus, X, Search, Link2, AlertTriangle, ArrowLeftRight, Users, Pencil } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -135,6 +136,11 @@ export function AdminCustomerDetail() {
   const { toast } = useToast();
   const [, params] = useRoute<{ id: string }>("/admin/customers/:id");
   const id = params?.id;
+  // Task #2533 — smart back crumb: when the operator arrived here via a
+  // deep link that stamped its origin (`?from=…`), the back-link points at
+  // that origin (the album, order list, playlist, …) instead of the
+  // generic Customers list. Falls back to "← Customers" for direct visits.
+  const backCrumb = useSmartBackCrumb();
 
   const { data, isLoading, error } = useQuery<Profile>({
     queryKey: ["/api/admin/customers", id],
@@ -244,13 +250,23 @@ export function AdminCustomerDetail() {
     return (
       <AdminFrame active="customers">
         <div className="space-y-4">
-          <Link
-            href="/admin/customers"
-            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-[var(--brand-blue)]"
-            data-testid="link-back-to-customers"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Customers
-          </Link>
+          {backCrumb ? (
+            <Link
+              href={backCrumb.href}
+              className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-[var(--brand-blue)]"
+              data-testid={backCrumb.testId}
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> {backCrumb.name}
+            </Link>
+          ) : (
+            <Link
+              href="/admin/customers"
+              className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-[var(--brand-blue)]"
+              data-testid="link-back-to-customers"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Customers
+            </Link>
+          )}
           <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-slate-500 text-sm">
             Customer not found.
           </div>
@@ -331,13 +347,23 @@ export function AdminCustomerDetail() {
   return (
     <AdminFrame active="customers" contentWidth="wide">
       <div className="space-y-6">
-        <Link
-          href="/admin/customers"
-          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-[var(--brand-blue)] transition-colors"
-          data-testid="link-back-to-customers"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" /> Customers
-        </Link>
+        {backCrumb ? (
+          <Link
+            href={backCrumb.href}
+            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-[var(--brand-blue)] transition-colors"
+            data-testid={backCrumb.testId}
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> {backCrumb.name}
+          </Link>
+        ) : (
+          <Link
+            href="/admin/customers"
+            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-[var(--brand-blue)] transition-colors"
+            data-testid="link-back-to-customers"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Customers
+          </Link>
+        )}
 
         <AdminPageHeader
           title={

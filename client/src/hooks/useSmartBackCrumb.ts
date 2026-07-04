@@ -141,7 +141,7 @@ export function useSmartBackCrumb(): SmartBackCrumb | null {
   }
 
   const cfg = origin ? ORIGINS[origin] : null;
-  const { data } = useQuery<{
+  const { data, isError, isSuccess } = useQuery<{
     id: string;
     name?: string;
     title?: string;
@@ -162,7 +162,16 @@ export function useSmartBackCrumb(): SmartBackCrumb | null {
   }
 
   if (!cfg || !id) return null;
-  const name = data?.name ?? data?.title ?? cfg.fallbackName;
+
+  // A keyed origin must resolve to a real entity. If the fetch failed
+  // (a stale / mistyped id → 404) or settled with no usable entity, drop
+  // the crumb entirely so the consumer falls back to its canonical
+  // section link (e.g. "← Customers") instead of pointing at a dead id.
+  const entity = data && (data.name || data.title) ? data : null;
+  if (isError) return null;
+  if (isSuccess && !entity) return null;
+
+  const name = entity?.name ?? entity?.title ?? cfg.fallbackName;
 
   let track: SmartBackCrumbTrack | undefined;
   if (origin === "album" && trackId) {

@@ -112,13 +112,14 @@ function AlbumBreakdownTable({ albums, selectedAlbumId, onSelectAlbum }: {
   );
 }
 
-function BuyerList({ orders, total, onLoadMore, isLoading, search, onSearch }: {
+function BuyerList({ orders, total, onLoadMore, isLoading, search, onSearch, personId }: {
   orders: OrderRow[];
   total: number;
   onLoadMore: () => void;
   isLoading: boolean;
   search: string;
   onSearch: (v: string) => void;
+  personId: string;
 }) {
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -180,7 +181,7 @@ function BuyerList({ orders, total, onLoadMore, isLoading, search, onSearch }: {
                   <div className="font-medium text-slate-900 truncate max-w-[180px]">
                     {o.customerId ? (
                       <Link
-                        href={`/admin/customers/${o.customerId}`}
+                        href={`/admin/customers/${o.customerId}?from=person&personId=${personId}`}
                         className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
                         data-testid={`link-customer-${o.customerId}`}
                       >
@@ -347,6 +348,7 @@ function AdminArtistBuyersInner() {
               isLoading={isFetching}
               search={search}
               onSearch={setSearch}
+              personId={personId}
             />
           </>
         )}

@@ -215,7 +215,7 @@ The destination consumes the params via the shared `useSmartBackCrumb()` hook at
 2. If your destination entity is new to the hook, add it to the `ORIGINS` map in `useSmartBackCrumb.ts` (param name + API path + admin href + testid prefix + fallback name).
 3. On the **destination** page, call `useSmartBackCrumb()` once and use the returned crumb in both the breadcrumb chain and the not-found error state. No further state is needed — refreshes and shared deep-links work because the signal lives in the URL.
 
-Currently wired: Gear ↔ Vendor, Gear ↔ Person. Album ↔ Person, Album ↔ Label, Vendor ↔ Label use the same primitive — wire them in when their cross-section tabs ship.
+Currently wired: Gear ↔ Vendor, Gear ↔ Person, Album → Customer (album Dashboard city drill-down, album Customers/comped rows, album Buyers list → the fan detail page returns to the album). The customer page also honors the generic `?from=partner&backHref=…&backName=…` pass-through, so the Orders list, the shared order-detail Sheet (Fan Orders queue), a playlist's owner link, and the dashboard's recent-customers rows each return the operator to their own origin; the artist buyers list uses `?from=person`. Album ↔ Person, Album ↔ Label, Vendor ↔ Label use the same primitive — wire them in when their cross-section tabs ship.
 
 ## Per-song splits — publishing + master, basis points, fans see names only
 

@@ -831,7 +831,7 @@ export function AlbumDashboardPanel({
                   {(selectedCity.fanList ?? []).map((f) => (
                     <li key={f.id}>
                       <Link className="group flex items-center justify-between gap-3 py-2 text-sm text-slate-700 transition-colors hover:text-[color:var(--brand-blue)]"
-                        href={`/admin/customers/${f.id}`}
+                        href={`/admin/customers/${f.id}?from=album&albumId=${albumId}`}
                         onClick={() => setSelectedCity(null)}
                         data-testid={`link-city-fan-${f.id}`}
                       >

@@ -152,8 +152,5 @@
 - [Report CSV export view-as leak](report-csv-export-authheaders.md) — a bare `<a href>` CSV download drops X-View-As-Token → god-view export; fetch report CSVs via fetchBlob (authHeaders)+blob, never an anchor.
 - [Artist referral one-year window](referral-one-year-window.md) — artist→artist referrals earn $1/unit for ONE YEAR (anchor=earliest artist_referrals.created_at, null fails OPEN), an ADDITIONAL mint gate beside earns_referral_payout+swap-state; NPO stays ongoing, press unaffected, no clawback; helper shared/referralWindow.ts, only mint site is commerce.ts artist branch.
 - [Embedded AdminReports rtab isolation](embedded-adminreports-rtab-isolation.md) — partner portals embed the shared AdminReports as a rail `reports` module (registry.ts, not a navExtras link-out); embedded mode drives its sub-tab via controlled Tabs on `?rtab=` so it doesn't fight the portal shell's `?tab=`; god-view stays uncontrolled `?tab=`.
-<<<<<<< HEAD
 - [SQL OR-null poisons classification](sql-or-null-poisons-classification.md) — a nullable OR-branch in a kept-vs-excluded row split NULL-poisons the whole predicate; COALESCE(...,FALSE) + assert kept+excluded==total.
-=======
 - [Partner album embed + free-access revoke](partner-album-embed-and-free-access-revoke.md) — artist album links open AdminAlbum `embedded` (no /admin chrome) inside the portal via `/artist/albums/:id`; partners see previewLinksOnly (comped fan roster HIDDEN — don't even fetch /free-access); operator-only free-access revoke (user_albums delete, 409 if paid) bypasses post-sale lock; extracting mainBody needs a `<>` fragment or trailing dialogs = multiple JSX roots.
->>>>>>> fd18c18 (Task #2524 — Partner album access & grants)

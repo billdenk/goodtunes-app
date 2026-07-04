@@ -164,9 +164,18 @@ export function statusPill(o: { status: string; id: string }) {
 export function OrderDetailSheet({
   orderId,
   onClose,
+  customerBackHref,
+  customerBackName,
 }: {
   orderId: string | null;
   onClose: () => void;
+  // Task #2533 — smart-back origin for the "View customer" link. When the
+  // sheet opens from a list (e.g. the Fan Orders queue) these stamp the
+  // customer page so its back-crumb returns to that list instead of the
+  // generic Customers directory. Omitted when the origin is already a
+  // customer page (the link would be self-referential).
+  customerBackHref?: string;
+  customerBackName?: string;
 }) {
   const { data, isLoading, isError, error, refetch } = useQuery<AdminOrderDetail>({
     queryKey: ["/api/admin/orders", orderId],
@@ -199,13 +208,27 @@ export function OrderDetailSheet({
             />
           </div>
         )}
-        {data && <OrderDetailBody detail={data} />}
+        {data && (
+          <OrderDetailBody
+            detail={data}
+            customerBackHref={customerBackHref}
+            customerBackName={customerBackName}
+          />
+        )}
       </SheetContent>
     </Sheet>
   );
 }
 
-function OrderDetailBody({ detail }: { detail: AdminOrderDetail }) {
+function OrderDetailBody({
+  detail,
+  customerBackHref,
+  customerBackName,
+}: {
+  detail: AdminOrderDetail;
+  customerBackHref?: string;
+  customerBackName?: string;
+}) {
   const o = detail.order;
   const customer = detail.customer;
   const items = (detail.items ?? []) as Array<{
@@ -217,6 +240,15 @@ function OrderDetailBody({ detail }: { detail: AdminOrderDetail }) {
     unitPriceCents: number;
   }>;
   const refunded = o.status === "refunded";
+  // Task #2533 — when the sheet opens from a list, stamp the origin onto
+  // the "View customer" link so the customer page's back-crumb returns to
+  // that list. Built as a const so the anchor stays single-line (the design
+  // linter reads the inline-link treatment off the same source line).
+  const customerHref = customer
+    ? customerBackHref
+      ? `/admin/customers/${customer.id}?from=partner&backHref=${encodeURIComponent(customerBackHref)}&backName=${encodeURIComponent(customerBackName ?? "Orders")}`
+      : `/admin/customers/${customer.id}`
+    : "";
   const events = detail.orderDeskEvents ?? [];
   const refundEvents = events.filter(
     (e) =>
@@ -277,7 +309,7 @@ function OrderDetailBody({ detail }: { detail: AdminOrderDetail }) {
               </div>
               <div className="text-slate-500 truncate">{customer.email}</div>
             </div>
-            <Link href={`/admin/customers/${customer.id}`} className="ml-auto text-[12px] text-[var(--brand-blue)] hover:underline underline-offset-2" data-testid="link-customer">
+            <Link href={customerHref} className="ml-auto text-xs text-[var(--brand-blue)] hover:underline underline-offset-2" data-testid="link-customer">
               View customer
             </Link>
           </div>

@@ -624,7 +624,7 @@ function AdminOrdersInner() {
                 <div className="text-[12.5px] text-slate-500 mt-0.5">
                   {o.customerId ? (
                     <Link
-                      href={`/admin/customers/${o.customerId}`}
+                      href={`/admin/customers/${o.customerId}?from=partner&backHref=${encodeURIComponent("/admin/orders")}&backName=${encodeURIComponent("Orders")}`}
                       className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
                       data-testid={`link-customer-${o.id}`}
                     >

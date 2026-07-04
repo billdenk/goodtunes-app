@@ -1003,7 +1003,9 @@ function ActivityFeed({ orders, customers, className = "" }: { orders: OrderRow[
         ts: new Date(c.createdAt),
         title: `${c.displayName || c.username || c.realName || c.email} joined`,
         detail: c.email,
-        href: `/admin/customers/${c.id}`,
+        // Task #2533 — stamp the dashboard origin so the customer page's
+        // back-crumb returns to the dashboard, not "← Customers".
+        href: `/admin/customers/${c.id}?from=partner&backHref=${encodeURIComponent("/admin/dashboard")}&backName=${encodeURIComponent("Dashboard")}`,
       });
     }
     out.sort((a, b) => b.ts.getTime() - a.ts.getTime());

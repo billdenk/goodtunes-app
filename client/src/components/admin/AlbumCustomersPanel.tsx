@@ -517,7 +517,7 @@ export function AccessWithoutPurchaseSection({
                     <div className="flex items-center gap-1.5">
                       <span className="truncate text-sm font-medium text-slate-800">
                         {o.name ? (
-                          <Link href={`/admin/customers/${o.customerId}`} className="text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors" data-testid={`link-access-owner-${o.customerId}`}>
+                          <Link href={`/admin/customers/${o.customerId}?from=album&albumId=${albumId}`} className="text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors" data-testid={`link-access-owner-${o.customerId}`}>
                             {o.name}
                           </Link>
                         ) : (
@@ -864,7 +864,7 @@ export function AlbumCustomersPanel({
                   <td className="px-5 py-3">
                     <div className="font-medium text-slate-900 truncate max-w-[200px]">
                       {o.customerId ? (
-                        <Link href={`/admin/customers/${o.customerId}`} className="text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors" data-testid={`link-customer-${o.customerId}`}>
+                        <Link href={`/admin/customers/${o.customerId}?from=album&albumId=${albumId}`} className="text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors" data-testid={`link-customer-${o.customerId}`}>
                           {o.buyerName ?? o.buyerEmail ?? "Anonymous"}
                         </Link>
                       ) : (

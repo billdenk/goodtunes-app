@@ -171,7 +171,7 @@ function AdminAlbumBuyersInner() {
                           <div className="font-medium text-slate-900 truncate max-w-[200px]">
                             {o.customerId ? (
                               <Link
-                                href={`/admin/customers/${o.customerId}`}
+                                href={`/admin/customers/${o.customerId}?from=album&albumId=${albumId}`}
                                 className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
                                 data-testid={`link-customer-${o.customerId}`}
                               >
