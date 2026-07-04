@@ -17,6 +17,7 @@ import { Clock } from "lucide-react";
 import { RangePicker, DashboardPanel, type RangePreset } from "./dashboard-controls";
 import { BRAND, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 import { KpiCard, sparkFromSeries } from "@/components/admin/KpiCard";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 export type PartnerScopeKind = "label" | "npo" | "vendor" | "artist";
 export type PartnerRangePreset = "today" | "7d" | "30d" | "90d" | "all";
@@ -87,6 +88,7 @@ export function PartnerDashboard({
   scope,
   title,
   subtitle,
+  sectionTitle,
   scopeIdQs,
   scopeKindQs,
   extraHeader,
@@ -94,6 +96,13 @@ export function PartnerDashboard({
   scope: PartnerScopeKind;
   title: string;
   subtitle?: ReactNode;
+  /** When set, the header renders in the super-admin section-title treatment
+   * — a single bold H1 (`sectionTitle`) with the range picker inline on the
+   * right and a bottom hairline — instead of the "Dashboard" eyebrow + entity
+   * name. The artist shell passes "Dashboard" here so this tab matches the
+   * clean section headers on its other tabs; `title` (the entity name) stays
+   * available for the rail. Label/NPO/Vendor omit it → unchanged. */
+  sectionTitle?: ReactNode;
   /** Optional `?scopeId=…` for super-admin impersonation. */
   scopeIdQs?: string | null;
   /** Optional `?scopeKind=…` (vendor|manufacturer|fulfillment) for vendor-scope super-admin views. */
@@ -124,21 +133,40 @@ export function PartnerDashboard({
   return (
     <div className="space-y-6" data-testid={`partner-dashboard-${scope}`}>
       <section className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-slate-500 text-[12px] uppercase tracking-wider font-semibold">Dashboard</p>
-            <h2 className="text-2xl sm:text-3xl font-bold truncate" data-testid={`heading-partner-dashboard-${scope}`}>
-              {title}
-            </h2>
-            {subtitle && <p className="text-slate-500 text-[13px] mt-0.5">{subtitle}</p>}
-          </div>
-          <RangePicker
-            presets={RANGE_PRESETS}
-            value={preset}
-            onChange={setPreset}
-            testId={`range-picker-${scope}`}
+        {sectionTitle ? (
+          /* Section-title header (artist Dashboard tab): the canonical
+             super-admin AdminPageHeader treatment so this tab matches the
+             clean section headers the shell draws on every other artist tab. */
+          <AdminPageHeader
+            title={sectionTitle}
+            subtitle={subtitle}
+            actions={
+              <RangePicker
+                presets={RANGE_PRESETS}
+                value={preset}
+                onChange={setPreset}
+                testId={`range-picker-${scope}`}
+              />
+            }
+            testId={`heading-partner-dashboard-${scope}`}
           />
-        </div>
+        ) : (
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-slate-500 text-[12px] uppercase tracking-wider font-semibold">Dashboard</p>
+              <h2 className="text-2xl sm:text-3xl font-bold truncate" data-testid={`heading-partner-dashboard-${scope}`}>
+                {title}
+              </h2>
+              {subtitle && <p className="text-slate-500 text-[13px] mt-0.5">{subtitle}</p>}
+            </div>
+            <RangePicker
+              presets={RANGE_PRESETS}
+              value={preset}
+              onChange={setPreset}
+              testId={`range-picker-${scope}`}
+            />
+          </div>
+        )}
         {extraHeader}
       </section>
 

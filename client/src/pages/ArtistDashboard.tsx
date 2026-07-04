@@ -136,6 +136,9 @@ export function ArtistDashboard() {
   const artistName = me.data?.name ?? "Your dashboard";
   const albumCount = me.data?.albumCount ?? 0;
   const songCount = me.data?.songCount ?? 0;
+  // The page header names the CURRENT section (not the artist) so it always
+  // agrees with the highlighted nav item.
+  const currentTabLabel = ARTIST_TABS.find((t) => t.id === tab)?.label ?? "";
 
   return (
     <OperatorShell
@@ -145,29 +148,17 @@ export function ArtistDashboard() {
       logoUrl={me.data?.photoUrl ?? null}
       fallbackIcon={UserIcon}
       logoShape="circle"
-      subtitle={
-        <>
-          {albumCount} album{albumCount === 1 ? "" : "s"} ·{" "}
-          <button
-            type="button"
-            onClick={() => {
-              setTab("catalog");
-              const sp = new URLSearchParams(window.location.search);
-              sp.set("tab", "catalog");
-              history.replaceState(null, "", `${window.location.pathname}?${sp}`);
-            }}
-            className="underline underline-offset-2 decoration-slate-300 hover:text-slate-700 transition-colors"
-            data-testid="link-credited-tracks"
-          >
-            {songCount} credited track{songCount === 1 ? "" : "s"}
-          </button>
-        </>
-      }
+      // The header names the CURRENT section (Dashboard / Overview / …) in the
+      // super-admin AdminPageHeader treatment — big title left, range picker +
+      // compare inline right, bottom hairline — so it always agrees with the
+      // highlighted nav item. The artist's identity (avatar + name) lives only
+      // in the rail + mobile top strip, so it isn't repeated as the page H1.
+      //
       // The Dashboard tab renders the shared PartnerDashboard primitive, which
-      // carries its OWN header + range picker (the super-admin AdminDashboard
-      // shape). So on that tab we suppress the shell's page-header identity and
-      // range/compare controls to avoid a duplicate title + duplicate range
-      // control; every other tab keeps the single shell-level header + range.
+      // carries its OWN section header + range picker, so on that tab we
+      // suppress the shell page header entirely (no pageTitle, hideHeaderIdentity,
+      // no headerActions) to avoid a duplicate title + duplicate range control.
+      pageTitle={tab === "dashboard" ? undefined : currentTabLabel}
       hideHeaderIdentity={tab === "dashboard"}
       headerActions={
         tab === "dashboard" ? undefined : (
@@ -202,6 +193,7 @@ export function ArtistDashboard() {
       {tab === "dashboard" && (
         <PartnerDashboard
           scope="artist"
+          sectionTitle="Dashboard"
           title={artistName}
           subtitle={
             <>

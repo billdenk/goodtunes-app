@@ -28,6 +28,7 @@ import { Link } from "wouter";
 import { Circle, Eye, type LucideIcon } from "lucide-react";
 import { DashboardTabs, type TabDef } from "@/components/partner/dashboard-controls";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { FeedbackLauncher } from "@/components/operator/FeedbackLauncher";
 import { ViewAsBanner } from "@/components/admin/ViewAsBanner";
 import { cn } from "@/lib/utils";
@@ -67,6 +68,15 @@ export type OperatorShellProps<TabId extends string> = {
   /** Slot for the RangePicker + CompareToggle row on analytics-heavy
    * shells (Artist + Label). Rendered as a flex row under the title. */
   headerActions?: React.ReactNode;
+  /** When set (leftnav layout), the content page header renders this as a
+   * section title in the super-admin AdminPageHeader treatment — a single
+   * bold H1 with `headerActions` inline on the right and a bottom hairline —
+   * instead of the role eyebrow + entity name. Used by the artist shell so
+   * the header always names the CURRENT section (Dashboard / Overview / …)
+   * and agrees with the highlighted nav item; the entity identity stays in
+   * the rail + mobile top strip so it isn't redundantly repeated as the H1.
+   * `subtitle` (if passed) sits under the title. */
+  pageTitle?: React.ReactNode;
   /** Press portal opt-in (leftnav only). The press already shows its wordmark
    * in the rail header (top-left, replacing the GoodTunes logo), so repeating
    * the role eyebrow + name in the content page header is redundant. When true,
@@ -115,6 +125,7 @@ export function OperatorShell<TabId extends string>({
   subtitle,
   headerExtras,
   headerActions,
+  pageTitle,
   hideHeaderIdentity = false,
   superAdminView = false,
   tabs,
@@ -347,7 +358,25 @@ export function OperatorShell<TabId extends string>({
               already sits in the rail header, so the eyebrow + name here would
               just repeat it; the whole band collapses when there are no header
               extras/actions to show. */}
-          {(!hideHeaderIdentity || headerExtras || headerActions) && (
+          {pageTitle ? (
+            /* Section-title header (artist shell): the canonical super-admin
+               AdminPageHeader treatment — a single bold H1 naming the current
+               section, `headerActions` (range picker + compare) inline on the
+               right, and a bottom hairline. Reusing AdminPageHeader keeps this
+               byte-identical to the main dashboard header. The entity identity
+               lives in the rail + mobile top strip, so it isn't repeated here. */
+            <div className="flex-shrink-0 bg-white px-4 sm:px-6 pt-6">
+              <div className={cn(maxW, "mx-auto")}>
+                <AdminPageHeader
+                  title={pageTitle}
+                  subtitle={subtitle}
+                  actions={headerActions}
+                  testId="text-operator-page-title"
+                />
+                {headerExtras && <div className="mt-4">{headerExtras}</div>}
+              </div>
+            </div>
+          ) : (!hideHeaderIdentity || headerExtras || headerActions) ? (
             <div className="flex-shrink-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-5">
               <div className={cn(maxW, "mx-auto")}>
                 {!hideHeaderIdentity && (
@@ -373,7 +402,7 @@ export function OperatorShell<TabId extends string>({
                 )}
               </div>
             </div>
-          )}
+          ) : null}
 
           {/* Scrollable content area. */}
           <div className="flex-1 overflow-y-auto">
