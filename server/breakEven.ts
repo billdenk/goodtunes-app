@@ -9,7 +9,7 @@
 // writes anything back.
 import { sql } from "drizzle-orm";
 import { db } from "./db";
-import { resolveAlbumPressTier, sqlUnitsSoldForAlbum } from "./earlyCut";
+import { resolveAlbumPressTier, resolveAlbumSkuPressTier, sqlUnitsSoldForAlbum } from "./earlyCut";
 import { resolveLivePricing, getDefaultGoodDeedLegs } from "./vendorGoodDeedPricing";
 import { computeBreakEven, type AlbumBreakEven } from "@shared/breakEven";
 
@@ -46,7 +46,14 @@ async function unitsSoldForAlbum(albumId: string): Promise<number> {
 // against the album (operator via requireAdmin, artist via scope).
 export async function computeAlbumBreakEven(albumId: string): Promise<AlbumBreakEven> {
   const unitsSold = await unitsSoldForAlbum(albumId);
-  const tier = await resolveAlbumPressTier(albumId);
+  // Task #2564 — prefer the saved SKU's tier so a Prepping album (no
+  // submitted pressing_order_request yet) breaks even the instant a
+  // priced tier + retail are saved. Fall back to the POR-derived tier
+  // for submitted / legacy rows. Both resolvers share the same ladder
+  // derivation, so the number never shifts when an album later gets a
+  // POR for the same tier.
+  const tier =
+    (await resolveAlbumSkuPressTier(albumId)) ?? (await resolveAlbumPressTier(albumId));
   if (!tier) return emptyBreakEven(albumId, unitsSold);
 
   // Vinyl SKU for the picked tier's format — retail price + the track

@@ -45,6 +45,41 @@ export function sqlResolveAlbumPressTier(albumId: string): SQL {
   `;
 }
 
+// Task #2564 — resolve the album's picked press tier straight from the
+// saved vinyl SKU, WITHOUT needing a submitted pressing_order_request.
+// A POR is only created at "Go to Press!"; a Prepping album that has
+// merely saved a priced package therefore has no POR and the readouts
+// that keyed off `sqlResolveAlbumPressTier` (break-even) stayed stuck on
+// the placeholder even though the SKU carries the exact tier identity
+// the Sell panel prices the run from. Prefer the pinned `press_tier_id`
+// (each press_color_tiers row carries its own press), and fall back to
+// matching on (press_id + format + vinyl_color_tier name) for legacy
+// rows saved before the id was snapshotted. Reads the SAME
+// `price_ladder` + masters-prep columns the POR path does, so the two
+// resolution paths can never disagree on min-run / unit cost / prep.
+export function sqlResolveAlbumSkuPressTier(albumId: string): SQL {
+  return sql`
+    SELECT pct.id            AS tier_id,
+           pct.press_id      AS press_id,
+           pct.format        AS format,
+           pct.name          AS tier_name,
+           pct.price_ladder  AS price_ladder,
+           pct.masters_prep_cost_cents::int AS masters_prep_cents
+    FROM album_skus s
+    JOIN press_color_tiers pct
+      ON pct.id = s.press_tier_id
+      OR (s.press_tier_id IS NULL
+          AND s.press_id IS NOT NULL
+          AND pct.press_id = s.press_id
+          AND pct.format   = s.format
+          AND pct.name     = s.vinyl_color_tier)
+    WHERE s.album_id = ${albumId}
+    ORDER BY (s.press_tier_id IS NOT NULL) DESC, (s.active = true) DESC,
+             s.created_at DESC NULLS LAST, s.id DESC
+    LIMIT 1
+  `;
+}
+
 // Count paid, un-refunded format units sold for an album.
 export function sqlUnitsSoldForAlbum(albumId: string): SQL {
   return sql`
@@ -121,7 +156,29 @@ export async function resolveAlbumPressTier(
   albumId: string,
 ): Promise<AlbumPressTier | null> {
   const r = await db.execute<any>(sqlResolveAlbumPressTier(albumId));
-  const row = ((r as any).rows ?? [])[0];
+  return albumPressTierFromRow(((r as any).rows ?? [])[0]);
+}
+
+// Task #2564 — resolve the tier from the saved SKU (no POR needed). Both
+// this and `resolveAlbumPressTier` feed the SAME `albumPressTierFromRow`
+// derivation off the SAME `price_ladder` + masters-prep columns, so an
+// album's break-even / start-the-press floor is identical whichever path
+// resolves it (they can only differ if the operator re-picked the tier
+// after submitting to press — in which case the SKU pick is the current
+// truth).
+export async function resolveAlbumSkuPressTier(
+  albumId: string,
+): Promise<AlbumPressTier | null> {
+  const r = await db.execute<any>(sqlResolveAlbumSkuPressTier(albumId));
+  return albumPressTierFromRow(((r as any).rows ?? [])[0]);
+}
+
+// Shared derivation: turn a resolved press_color_tiers row (price_ladder
+// + masters-prep + identity) into an AlbumPressTier. The min-run rung is
+// the smallest priced quantity in the ladder. Returns null when the row
+// is absent or has no priced rungs. Keeping this in one place is what
+// guarantees the POR path and the SKU path can never drift.
+function albumPressTierFromRow(row: any): AlbumPressTier | null {
   if (!row) return null;
 
   const ladder: { qty: number; unitCents: number }[] = Array.isArray(row.price_ladder)
