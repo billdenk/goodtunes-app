@@ -31,33 +31,46 @@ definitions:
   # Reusable environment runtime block for the two iOS workflows.
   ios_env: &ios_env
     node: 20
-    # PINNED to the last-known-good toolchain (Xcode 26.3). GOTCHA: an explicit
-    # `xcode: 26.4` pin does NOT protect against the archive break — Codemagic
-    # resolves `26.4` *up* to the broken `26.4.1` point release, so the pin still
-    # ran on 26.4.1 and `xcodebuild ... archive` failed ("Failed to archive",
-    # exit 65) with no app-code change. Every earlier step (web build, cap sync,
-    # pods, signing, all four guards) stayed green — it's purely the toolchain.
-    # The committed `ENABLE_USER_SCRIPT_SANDBOXING = NO` fix on the App target
-    # (ios/App/App.xcodeproj/project.pbxproj) did NOT resolve the 26.4.1 failure,
-    # so we pin back to 26.3, which archives cleanly and still ships the iOS 26
-    # SDK (satisfies App Store Connect's iOS 26 SDK requirement from 2026-04-28).
+    # PINNED to Codemagic's current default/stable toolchain, Xcode 26.4.1
+    # (17E202), selected via the `26.4` selector (Codemagic exposes no finer
+    # `26.4.1` string; `26.4` == `latest` == 26.4.1 today, and there is no higher
+    # 26.4.x to drift to — 26.5/26.6/27 are `edge`, not stable). We are NOT on
+    # `latest`/`edge`: those aliases roll silently.
     #
-    # Kept EXPLICIT on 26.3, never `latest`/`edge`, so a silent roll can't break
-    # the archive. Only move forward once a specific 26.x is confirmed to archive
-    # green (re-run ios-testflight; on failure read the `xcodebuild_logs` artifact
-    # for the exact error) — and remember a `26.4` pin drifts up to `26.4.1`, so
-    # any forward move must name a version Codemagic offers as a stable image, not
-    # a `26.x` prefix that resolves up. No deployment-target bump is needed: Xcode
-    # 26's minimum is iOS 12 and we're at 13.0, and Capacitor's
-    # `assertDeploymentTarget` post_install already stamps every pod target ≥13.0.
+    # WHY WE MOVED FORWARD OFF 26.3: when Codemagic first rolled to 26.4.1 the
+    # `Build the signed .ipa` step failed ("Failed to archive", exit 65) even
+    # though NO app code changed, so #2551 pinned back to the last-known-good 26.3.
+    # A failed 26.4.1 build's console (attached_assets/Pasted-Using-Xcode-26-4-1
+    # -*.txt) finally root-caused it: the exit-65 is NOT a compiler break and NOT
+    # the CarPlay grant — the archive fails with
+    #   "App" requires a provisioning profile with the Associated Domains and
+    #   Push Notifications features. Select a provisioning profile in the Signing
+    #   & Capabilities editor.
+    # That is the documented Xcode 26.2+ archive-time provisioning regression: the
+    # newer toolchain's capability-resolution service fails to see that the
+    # profile fetched by `fetch-signing-files` + applied by `use-profiles` already
+    # carries the App ID's Associated Domains + Push capabilities. (It names only
+    # those two, never carplay-audio, confirming this predates the CarPlay
+    # entitlement and is a separate issue from the operator-blocked CarPlay grant.)
+    # The `ENABLE_USER_SCRIPT_SANDBOXING = NO` setting is unrelated and was never
+    # the fix. THE FIX is `-allowProvisioningUpdates` on the archive (see the
+    # "Build the signed .ipa" step below), which lets xcodebuild re-resolve/refresh
+    # the profile against Apple's backend (using the same ASC API key the build
+    # already has) so the capability check passes.
+    #
+    # If a future Codemagic patch bumps the `26.4` selector to 26.4.2+ (drift the
+    # memory warns about), re-confirm a green archive; on failure read the
+    # `xcodebuild_logs` artifact. No deployment-target bump is needed: Xcode 26's
+    # minimum is iOS 12 and we're at 13.0, and Capacitor's `assertDeploymentTarget`
+    # post_install already stamps every pod target ≥13.0.
     #
     # `cocoapods: default` stays: Codemagic keeps each image's bundled CocoaPods in
-    # lock-step with that image's Xcode, so `default` on the 26.3 image is the
+    # lock-step with that image's Xcode, so `default` on the 26.4 image is the
     # SAFEST choice. Hard-pinning (e.g. 1.16.2) risks the open Xcode-26
     # `objectVersion 70` incompatibility — not a concern for us today (our
     # project.pbxproj is objectVersion 48), but a pin would freeze us on a version
     # that can't move forward with the image.
-    xcode: 26.3
+    xcode: 26.4
     cocoapods: default
 
   # Reusable build steps shared by both iOS workflows: web payload → Capacitor
@@ -253,9 +266,27 @@ definitions:
         python3 scripts/verify-ios-appicon.py
     - name: Build the signed .ipa
       script: |
+        # `--archive-flags="-allowProvisioningUpdates"` is THE fix for the Xcode
+        # 26.2+ archive break that #2551 papered over by pinning back to 26.3.
+        # Under 26.4.1 the archive failed exit 65 with '"App" requires a
+        # provisioning profile with the Associated Domains and Push Notifications
+        # features' even though `fetch-signing-files`/`use-profiles` had already
+        # installed a profile carrying exactly those capabilities — a known
+        # regression where the newer toolchain's archive-time capability check
+        # can't resolve the installed manual profile's entitlements. Passing
+        # `-allowProvisioningUpdates` lets xcodebuild re-resolve/refresh the
+        # profile against Apple's backend (it uses the SAME App Store Connect API
+        # key the `app_store_connect` integration already exports as
+        # APP_STORE_CONNECT_*), so the check passes. It is harmless on older
+        # toolchains (no-op when the local profile already satisfies signing), so
+        # it's safe to keep across Xcode bumps. Do NOT confuse it with the
+        # unrelated `ENABLE_USER_SCRIPT_SANDBOXING = NO` setting, which never fixed
+        # this. Verification is CI-only: re-run `ios-testflight`; on a fresh
+        # failure read the `/tmp/xcodebuild_logs/*.log` artifact for the exact error.
         xcode-project build-ipa \
           --workspace "ios/App/App.xcworkspace" \
-          --scheme "App"
+          --scheme "App" \
+          --archive-flags="-allowProvisioningUpdates"
     - name: Guard — fail fast if the BUILT .ipa ships Apple's placeholder icon
       script: |
         # WHY THIS EXISTS (and why it's separate from the source-icon guard above):
