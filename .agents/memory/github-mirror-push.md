@@ -220,3 +220,18 @@ GitHub's 3 published host keys (ed25519/ecdsa/rsa) inline via heredoc. The **rsa
 in **March 2023** (the old `…IEs4TT4qFOj4XBQ==` was leaked/revoked; current is
 `…IEs4TT4jk+S4dhPeAUC5y+…wsjk=`) — if you ever re-pin, copy the live values from
 `api.github.com/meta` `ssh_keys`, don't trust a remembered blob.
+
+## A "stale mirror" report may self-heal before you investigate
+
+The mirror is force-pushed to the FULL project `main` HEAD on every merge, so a
+reported-stale mirror (a task naming an old tip) is often already current by the time
+you look — a later unrelated merge's `sync_github_build_mirror` carried the fix.
+**Before assuming it's still behind or doing a manual catch-up, re-check the LIVE tip
+and ancestry** (isolated-clone safe, no push): `ssh -T git@github.com` with the deploy
+key + pinned known_hosts to prove auth, then
+`git ls-remote git@github.com:billdenk/goodtunes-app.git refs/heads/main` for the real
+tip, then locally `git merge-base --is-ancestor <fix-commit> <mirror-tip>` plus
+`git show <mirror-tip>:path` to confirm the fix's content is present. If ancestry
+passes, the supported path already worked — no manual push needed, and a native-shell
+change (`android/`/`codemagic.yaml`) in that same push already re-triggered
+`android-internal` via its changeset filter.
