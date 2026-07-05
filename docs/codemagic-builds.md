@@ -365,6 +365,33 @@ already satisfies signing, so it is safe to keep across Xcode bumps. The earlier
 > still the provisioning message above, the quickest rollback is to re-pin
 > `xcode: 26.3` (known-green) while investigating — do not float back to `latest`.
 
+**Second break — the exit-65 "build-graph cycle" (surfaced once provisioning was
+fixed).** The first build carrying `-allowProvisioningUpdates` (Xcode 26.4.1)
+cleared the provisioning error but the archive **still** failed exit 65 — and it
+failed **fast (~13s, before any real compilation)**. The only flagged console
+line was the CocoaPods **`[CP] Embed Pods Frameworks`** phase warning: *"will be
+run during every build because it does not specify any outputs."* A ~13-second
+failure is the build **dependency graph** being rejected up front (a *cycle*),
+**not** the embed script failing to *run* (that would fail minutes in, after
+compiling), and **not** the script sandbox (`ENABLE_USER_SCRIPT_SANDBOXING` is
+already `NO`). Root cause: Capacitor's generated `ios/App/Podfile` set `install!
+'cocoapods', :disable_input_output_paths => true`, which leaves the `[CP]` script
+phases with **no declared outputs**; Xcode 26.3 tolerated the resulting graph, but
+26.4.1's stricter build system rejects it.
+
+**The fix:** flip that Podfile flag to `install! 'cocoapods',
+:disable_input_output_paths => false` (the CocoaPods default) so `pod install`
+regenerates proper input/output `.xcfilelist`s and Xcode can order the phases.
+It's safe on CI — every build is a fresh clone + `pod install`, so the
+stale-Pods-cache dev ergonomics the Capacitor comment worried about don't apply.
+**Confirmed green (Jul 2026):** with the flag flipped, the archive succeeded and
+build **3.0.2 (72)** uploaded to App Store Connect (reached "Waiting for Review"),
+so the two 26.4.1 archive fixes — `-allowProvisioningUpdates` + this
+`disable_input_output_paths => false` — together restore the end-to-end
+`ios-testflight` pipeline. If a future archive exit-65s again, download the
+**`/tmp/xcodebuild_logs/*.log`** artifact and search it for `Cycle`, `error:`, or
+`PhaseScriptExecution failed` for the exact cause before changing more.
+
 The **`ENABLE_USER_SCRIPT_SANDBOXING = NO`** build setting stays committed on the
 **App** target (`ios/App/App.xcodeproj/project.pbxproj`, both Debug and Release).
 Newer Xcode sandboxes run-script build phases, which can deny the CocoaPods

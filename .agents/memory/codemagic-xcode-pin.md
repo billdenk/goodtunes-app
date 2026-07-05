@@ -1,6 +1,6 @@
 ---
 name: Codemagic Xcode toolchain pin
-description: Why codemagic.yaml pins an explicit Xcode; and that exit-65 at "Build the signed .ipa" is a GENERIC xcodebuild failure with (so far) TWO distinct root causes — always read the actual error, never assume.
+description: Why codemagic.yaml pins an explicit Xcode; and that exit-65 at "Build the signed .ipa" is a GENERIC xcodebuild failure with (so far) TWO distinct root causes — always read the actual error, never assume. Includes the fail-duration heuristic.
 ---
 
 The iOS Codemagic build pins an explicit `xcode:` in the shared `ios_env` anchor
@@ -45,6 +45,28 @@ Xcode bumps.
 - CarPlay grant. The error names ONLY Associated Domains + Push, never
   `carplay-audio`, so these logs predate the CarPlay entitlement. CarPlay is a
   SEPARATE operator-blocked signing blocker (see `carplay-restricted-entitlement.md`).
+
+**SECOND, distinct 26.4.1 exit-65 (surfaced AFTER the provisioning fix landed):**
+a build-GRAPH cycle, not a signing error. Symptom: the `Build the signed .ipa`
+step fails **fast (~13s, before any real compilation)**; the only flagged console
+line is the CocoaPods `[CP] Embed Pods Frameworks` phase warning *"will be run
+during every build because it does not specify any outputs."* Root cause:
+Capacitor's `ios/App/Podfile` sets `install! 'cocoapods',
+:disable_input_output_paths => true`, leaving the `[CP]` script phases with no
+declared outputs — Xcode 26.3 tolerated the graph, 26.4.1's stricter build system
+rejects it as a cycle. **FIX:** flip that flag to `false` (CocoaPods default) so
+`pod install` emits proper input/output `.xcfilelist`s.
+**Why:** the flag is a stale-Pods-cache dev-ergonomics workaround irrelevant on
+CI (fresh clone + `pod install` every build), so `false` is safe there.
+
+**Fail-DURATION heuristic (the useful diagnostic — Codemagic's console is
+FILTERED to warnings/errors, so the real `error:` line often isn't shown; read
+the `/tmp/xcodebuild_logs/*.log` artifact for it):**
+- Archive fails in **seconds** → build-graph *planning* rejection (a *cycle*),
+  usually output-less script phases. Fix the graph (xcfilelists), not the script.
+- Archive fails **minutes in** → a *script-execution* failure (e.g.
+  `PhaseScriptExecution failed`, a `Sandbox: deny`, or a compile error). Different
+  fix entirely.
 
 **Selector nuance:** Codemagic's `26.4` selector == `latest` == the current stable
 release 26.4.1 (17E202); there's no finer `26.4.1` string, and 26.5/26.6/27 are

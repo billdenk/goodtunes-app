@@ -58,6 +58,12 @@ definitions:
     # the profile against Apple's backend (using the same ASC API key the build
     # already has) so the capability check passes.
     #
+    # A SECOND, distinct archive break then surfaced under 26.4.1 once provisioning
+    # was fixed: a build-graph cycle from output-less CocoaPods script phases
+    # (Capacitor's `:disable_input_output_paths => true`), fixed in ios/App/Podfile
+    # by flipping that flag to `false`. See the "Build the signed .ipa" step below
+    # and docs/codemagic-builds.md.
+    #
     # If a future Codemagic patch bumps the `26.4` selector to 26.4.2+ (drift the
     # memory warns about), re-confirm a green archive; on failure read the
     # `xcodebuild_logs` artifact. No deployment-target bump is needed: Xcode 26's
@@ -326,6 +332,23 @@ definitions:
         # unrelated `ENABLE_USER_SCRIPT_SANDBOXING = NO` setting, which never fixed
         # this. Verification is CI-only: re-run `ios-testflight`; on a fresh
         # failure read the `/tmp/xcodebuild_logs/*.log` artifact for the exact error.
+        #
+        # SECOND FAILURE (after the provisioning fix landed): build #42 on 26.4.1
+        # got PAST the provisioning error but the archive still exit-65'd — this
+        # time FAST (~13s, before any real compilation), with the only flagged
+        # console line being the CocoaPods `[CP] Embed Pods Frameworks` phase
+        # warning "will be run during every build because it does not specify any
+        # outputs". A ~13s fail is a build-GRAPH (dependency cycle) rejection, not
+        # a script-EXECUTION failure (which would fail minutes in, after compiling).
+        # Root cause: Capacitor's Podfile set `install! 'cocoapods',
+        # :disable_input_output_paths => true`, leaving that phase with no declared
+        # outputs; 26.3 tolerated the resulting graph, 26.4.1's stricter build
+        # system rejects it. FIX: flip that Podfile flag to `false` (ios/App/Podfile)
+        # so CocoaPods emits proper input/output .xcfilelists. CONFIRMED green
+        # (Jul 2026): archive succeeded and build 3.0.2 (72) uploaded to App Store
+        # Connect. If a future archive exit-65s again, read the `xcodebuild_logs`
+        # artifact for the exact line ("Cycle", "error:", or "PhaseScriptExecution
+        # failed").
         xcode-project build-ipa \
           --workspace "ios/App/App.xcworkspace" \
           --scheme "App" \

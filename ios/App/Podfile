@@ -3,10 +3,21 @@ require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
 platform :ios, '13.0'
 use_frameworks!
 
-# workaround to avoid Xcode caching of Pods that requires
-# Product -> Clean Build Folder after new Cordova plugins installed
-# Requires CocoaPods 1.6 or newer
-install! 'cocoapods', :disable_input_output_paths => true
+# Let CocoaPods generate input/output file lists (.xcfilelist) for its script
+# phases. Capacitor's generated Podfile ships this as `true`
+# (:disable_input_output_paths => true), which leaves the `[CP] Embed Pods
+# Frameworks` / `[CP] Copy Pods Resources` phases with NO declared outputs. That
+# archived fine through Xcode 26.3, but under Xcode 26.4.1 the stricter build
+# system rejects the resulting dependency graph and the archive fails FAST
+# (~13s, before any real compilation) at the `[CP] Embed Pods Frameworks` phase
+# (exit 65) — a build-GRAPH cycle, distinct from the earlier provisioning-profile
+# regression that `-allowProvisioningUpdates` fixed. Setting this to `false` (the
+# CocoaPods default) restores proper input/output xcfilelists so Xcode can order
+# the phases. Safe on CI: every build is a fresh clone + `pod install`, so the
+# stale-Pods-cache dev ergonomics the original Capacitor comment worried about
+# ("Product -> Clean Build Folder after new Cordova plugins") don't apply.
+# Requires CocoaPods 1.6 or newer.
+install! 'cocoapods', :disable_input_output_paths => false
 
 def capacitor_pods
   pod 'Capacitor', :path => '../../node_modules/@capacitor/ios'
