@@ -7,7 +7,7 @@
 // so this module stays tiny and the unit-of-work is reusable from a
 // debug admin endpoint if we ever add one.
 import type { Express } from "express";
-import { log } from "./index";
+import { log } from "./log";
 import { runDueGiftDeliveries } from "./gifts";
 
 export function armGiftDeliveryScheduler() {

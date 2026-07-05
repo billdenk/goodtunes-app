@@ -13,6 +13,7 @@ import { forwardToPostHog, geoFromRequest } from "./analytics";
 import { alertOps } from "./opsAlert";
 import { describeDbError, type DbErrorInfo } from "./db";
 import { isStripeConfigured } from "./stripe";
+import { log } from "./log";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -129,16 +130,11 @@ app.use(express.urlencoded({ extended: false }));
 // GET /objects/uploads/<id> (see server/routes.ts). The old local "uploads/"
 // disk was ephemeral on Autoscale deploys and is no longer used.
 
-export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
-}
+// log() now lives in ./log so modules that only need logging (odoo,
+// giftScheduler, credentialExpiry) can import it WITHOUT evaluating this
+// module — whose body binds the app port on import. Re-exported here for any
+// remaining `import { log } from "./index"` consumers.
+export { log };
 
 app.use((req, res, next) => {
   const start = Date.now();

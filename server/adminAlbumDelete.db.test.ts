@@ -11,9 +11,10 @@
 //      row whose patch is `{__op:"delete"}`, and the album is left
 //      present (deleted_at still NULL) until a super-admin approves it.
 //
-// Plus two negative controls a code review would want: an out-of-scope
-// partner and an in-scope partner WITHOUT edit_metadata both 403 before
-// anything is written.
+// Plus two scope controls a code review would want: an out-of-scope partner is
+// rejected 403 before anything is written, and an in-scope OWNER — even with a
+// scope-wide edit_metadata=false — still gets owner-self-serve (202 + a queued
+// request), because the owner default overrides partner_permissions.
 //
 // The branching lives inside the real Express handler (scope resolution +
 // the sold check + createPendingChange), so a faithful guard must drive
@@ -212,7 +213,7 @@ test("an in-scope artist's delete on an UNSOLD album queues a request (202), alb
   assert.equal(await albumDeletedAt(albumId), null, "the album is NOT deleted — it waits for review");
 });
 
-// ─── Negative controls (optional per the task, kept for confidence) ───
+// ─── Scope controls: out-of-scope 403, owner-self-serve 202 ───────────
 
 test("an OUT-OF-SCOPE artist is rejected (403) and queues nothing", async () => {
   const ownerScope = await seedPerson(); // the album's real owner
@@ -229,18 +230,34 @@ test("an OUT-OF-SCOPE artist is rejected (403) and queues nothing", async () => 
   assert.equal((await pendingDeleteRows(albumId)).length, 0, "nothing queued");
 });
 
-test("an in-scope artist WITHOUT edit_metadata is rejected (403) and queues nothing", async () => {
+// An artist-scope OWNER (their role_scope_id IS the album's primary_artist_id,
+// with no memberships row — so getUserRole synthesizes an owner membership,
+// subRole=null) implicitly holds the OWNER_SELF_SERVE_VERBS, including
+// edit_metadata, via resolveVerbAllowed — REGARDLESS of partner_permissions. So
+// a scope-wide edit_metadata=false does NOT lock an owner out of their own
+// release: the delete still diverts to the review queue (202 + a queued
+// request). partner_permissions only constrains invited teammates, who carry a
+// subRole. (An earlier version of this test asserted an owner without an
+// explicit grant got 403; that was stale — the owner-self-serve default landed
+// after the test was first written.)
+test("an in-scope OWNER without an explicit edit_metadata grant still gets owner-self-serve (202 + queued), not 403", async () => {
   const person = await seedPerson();
-  await seedPartnerPermission(person, false); // explicitly denied edit_metadata
-  const artist = await seedUser({ role: "artist", roleScopeId: person });
+  await seedPartnerPermission(person, false); // scope-wide edit_metadata denied…
+  const artist = await seedUser({ role: "artist", roleScopeId: person }); // …but this user OWNS the scope
   const token = await tokenFor(artist);
   const albumId = await seedAlbum({ primaryArtistId: person, sold: false });
 
   const res = await del(`/api/admin/albums/${albumId}`, token);
 
-  assert.equal(res.status, 403, "no edit_metadata grant → no delete request");
-  assert.equal(await albumDeletedAt(albumId), null, "album untouched");
-  assert.equal((await pendingDeleteRows(albumId)).length, 0, "nothing queued");
+  assert.equal(res.status, 202, "an owner's delete is accepted-for-review despite edit_metadata=false");
+  assert.ok(res.json?.pendingChange?.id, "the queued delete request is returned");
+
+  const pending = await pendingDeleteRows(albumId);
+  assert.equal(pending.length, 1, "exactly one delete request is queued");
+  assert.equal(pending[0].status, "pending");
+  assert.equal((pending[0].patch as any)?.__op, "delete", "the patch is the delete discriminator");
+
+  assert.equal(await albumDeletedAt(albumId), null, "the album is NOT deleted — it waits for review");
 });
 
 after(async () => {

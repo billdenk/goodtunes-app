@@ -42,7 +42,7 @@ import {
   dispatchShippingEmail,
   isPhysicalSkuKind,
 } from "./orderDesk";
-import { log } from "./index";
+import { log } from "./log";
 
 // ─── Env / config ────────────────────────────────────────────────────
 type OdooCreds = { url: string; dbName: string; login: string; apiKey: string };

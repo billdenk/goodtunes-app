@@ -35,10 +35,10 @@ import { alertOps } from "./opsAlert";
 // `log` lives in server/index.ts, whose module top-level boots the server. Pull
 // it in lazily so importing this module (e.g. from a unit test) stays
 // side-effect-free; by the time anything here actually logs, the scheduler has
-// been armed from an already-booted index.ts so the require() is a cache hit.
+// been armed from an already-booted server so the require("./log") is a cache hit.
 function log(message: string, source = "cred-expiry"): void {
   try {
-    require("./index").log(message, source);
+    require("./log").log(message, source);
   } catch {
     console.log(`[${source}] ${message}`);
   }
