@@ -235,6 +235,135 @@ function logFailure(template: string, to: string, reason: string): void {
   pushFailure({ ts: new Date().toISOString(), template, recipientDomain: domain, reason });
 }
 
+// --- Operator fan-out notification guard (Task #2547) -------------------
+// Review-queue / operator-notification emails fan a SINGLE event out to
+// EVERY super-admin (delete requests, change requests, rig quotes, add-on
+// change requests). Two ways that floods a real inbox:
+//
+//   1. A test or dev run that drives the real route (e.g. the album-delete
+//      db test) reaches listSuperAdminEmails(), which returns Bill's real
+//      super-admin address, and emails him on every run. The synthetic-
+//      RECIPIENT guard above doesn't catch this: the recipient (Bill) is
+//      real — it's the REQUESTER that's synthetic.
+//   2. A genuine burst of identical requests (or a retry loop) sends the
+//      same notification many times in a few seconds.
+//
+// notifySuperAdmins() neutralizes both: it only sends on the live host,
+// drops anything from a synthetic requester even in prod, coalesces
+// identical requester+subject notifications within a short window, and
+// caps how many of one template a single recipient can get per hour. All
+// state is in-memory per-instance (resets on restart), matching the
+// mail-health pattern above. Sending stays best-effort — a throttle or
+// skip is never surfaced to the caller as an error.
+const OPERATOR_NOTIFY_DEDUPE_WINDOW_MS = 10 * 60 * 1000; // identical event within 10m => once
+const OPERATOR_NOTIFY_RECIPIENT_WINDOW_MS = 60 * 60 * 1000;
+const OPERATOR_NOTIFY_RECIPIENT_CAP = 12; // max of one template per recipient per hour
+const operatorNotifyDedupe = new Map<string, number>(); // dedupeKey -> last-sent ms
+const operatorNotifyRecipientHits = new Map<string, number[]>(); // `${template}|${recipient}` -> send timestamps
+let operatorNotifyLastSweep = 0;
+
+// Keep the dedupe map bounded on a long-lived instance: entries older than the
+// dedupe window can never suppress again, so drop them. O(n) but gated to run at
+// most once per window, so it's negligible.
+function sweepOperatorNotifyDedupe(now: number): void {
+  if (now - operatorNotifyLastSweep < OPERATOR_NOTIFY_DEDUPE_WINDOW_MS) return;
+  operatorNotifyLastSweep = now;
+  for (const [key, ts] of operatorNotifyDedupe) {
+    if (now - ts >= OPERATOR_NOTIFY_DEDUPE_WINDOW_MS) operatorNotifyDedupe.delete(key);
+  }
+}
+
+function pruneRecipientHits(key: string, now: number): number[] {
+  const cutoff = now - OPERATOR_NOTIFY_RECIPIENT_WINDOW_MS;
+  const hits = (operatorNotifyRecipientHits.get(key) ?? []).filter((t) => t >= cutoff);
+  if (hits.length) operatorNotifyRecipientHits.set(key, hits);
+  else operatorNotifyRecipientHits.delete(key);
+  return hits;
+}
+
+export type OperatorNotifyResult = {
+  attempted: number;
+  sent: number;
+  skippedReason?: "non-production" | "synthetic-requester" | "duplicate";
+};
+
+export async function notifySuperAdmins(opts: {
+  // Template/log namespace — also used as the per-recipient cap bucket.
+  template: string;
+  recipients: string[];
+  // Requester's email (partner or fan). A synthetic one is dropped even in
+  // prod — this is what stops the test-suite flood from reaching Bill.
+  requesterEmail?: string | null;
+  // Identical requester+subject events sharing this key coalesce to one
+  // send within OPERATOR_NOTIFY_DEDUPE_WINDOW_MS. Omit to skip dedupe.
+  dedupeKey?: string;
+  send: (email: string) => Promise<SendResult>;
+}): Promise<OperatorNotifyResult> {
+  const { template, recipients, requesterEmail, dedupeKey, send } = opts;
+
+  // Gate 1 — only real production traffic emails real operators. Every test
+  // and dev exercise of a notify route stops here (root cause of the flood).
+  if (process.env.NODE_ENV !== "production") {
+    console.log(
+      `[operator-notify-skip] template=${template} reason=non-production recipients=${recipients.length}`,
+    );
+    return { attempted: 0, sent: 0, skippedReason: "non-production" };
+  }
+
+  // Gate 2 — defense in depth: a synthetic requester (test account) must
+  // never reach a real inbox even if the route somehow runs in production.
+  if (requesterEmail && isSyntheticRecipient(requesterEmail)) {
+    console.log(`[operator-notify-skip] template=${template} reason=synthetic-requester`);
+    return { attempted: 0, sent: 0, skippedReason: "synthetic-requester" };
+  }
+
+  const now = Date.now();
+  sweepOperatorNotifyDedupe(now);
+
+  // Gate 3a — coalesce identical events within a short window.
+  if (dedupeKey) {
+    const last = operatorNotifyDedupe.get(dedupeKey);
+    if (last != null && now - last < OPERATOR_NOTIFY_DEDUPE_WINDOW_MS) {
+      console.log(
+        `[operator-notify-skip] template=${template} reason=duplicate window_ms=${OPERATOR_NOTIFY_DEDUPE_WINDOW_MS}`,
+      );
+      return { attempted: 0, sent: 0, skippedReason: "duplicate" };
+    }
+  }
+
+  let sent = 0;
+  let attempted = 0;
+  for (const email of recipients) {
+    // Gate 3b — per-recipient hourly cap so a burst of DISTINCT events
+    // still can't flood one inbox.
+    const rkey = `${template}|${email.toLowerCase()}`;
+    const hits = pruneRecipientHits(rkey, now);
+    if (hits.length >= OPERATOR_NOTIFY_RECIPIENT_CAP) {
+      console.log(
+        `[operator-notify-skip] template=${template} reason=recipient-cap cap=${OPERATOR_NOTIFY_RECIPIENT_CAP}`,
+      );
+      continue;
+    }
+    attempted += 1;
+    try {
+      const result = await send(email);
+      if (result?.ok) {
+        sent += 1;
+        hits.push(now);
+        operatorNotifyRecipientHits.set(rkey, hits);
+      }
+    } catch (e) {
+      console.warn(`[operator-notify] template=${template} send failed`, e);
+    }
+  }
+
+  // Stamp the dedupe key only after a successful send so a fully failed run
+  // (e.g. transient mail outage) doesn't suppress the next real attempt.
+  if (dedupeKey && sent > 0) operatorNotifyDedupe.set(dedupeKey, now);
+
+  return { attempted, sent };
+}
+
 async function sendViaResend(
   templateName: string,
   to: string,

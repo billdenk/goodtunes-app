@@ -9329,14 +9329,18 @@ export async function registerRoutes(
         const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
         const host = req.headers["x-forwarded-host"] || req.headers.host || "admin.goodtunes.music";
         const reviewUrl = `${proto}://${host}/admin/review`;
-        const { sendAlbumDeleteRequestEmail } = await import("./mail");
-        for (const email of superEmails) {
-          try {
-            await sendAlbumDeleteRequestEmail(email, requester, { id, title: albumRow?.title ?? "Untitled album" }, reviewUrl);
-          } catch (e) {
-            console.warn("[task-1250] delete-request notify failed", email, e);
-          }
-        }
+        // Task #2547 — route through the shared operator-notify guard so a
+        // test/dev run (or a synthetic requester) never reaches Bill's real
+        // inbox, and a burst of identical delete requests is coalesced.
+        const { sendAlbumDeleteRequestEmail, notifySuperAdmins } = await import("./mail");
+        await notifySuperAdmins({
+          template: "album-delete-request",
+          recipients: superEmails,
+          requesterEmail: requester.email,
+          dedupeKey: `album-delete-request:${userId}:${id}`,
+          send: (email) =>
+            sendAlbumDeleteRequestEmail(email, requester, { id, title: albumRow?.title ?? "Untitled album" }, reviewUrl),
+        });
       } catch (e) {
         console.warn("[task-1250] delete-request notify lookup failed", e);
       }
@@ -9397,14 +9401,16 @@ export async function registerRoutes(
       const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
       const host = req.headers["x-forwarded-host"] || req.headers.host || "admin.goodtunes.music";
       const reviewUrl = `${proto}://${host}/admin/review`;
-      const { sendAlbumChangeRequestEmail } = await import("./mail");
-      for (const email of superEmails) {
-        try {
-          await sendAlbumChangeRequestEmail(email, requester, { id, title: albumRow?.title ?? "Untitled album" }, note, reviewUrl);
-        } catch (e) {
-          console.warn("[task-2468] change-request notify failed", email, e);
-        }
-      }
+      // Task #2547 — same shared operator-notify guard as the delete path.
+      const { sendAlbumChangeRequestEmail, notifySuperAdmins } = await import("./mail");
+      await notifySuperAdmins({
+        template: "album-change-request",
+        recipients: superEmails,
+        requesterEmail: requester.email,
+        dedupeKey: `album-change-request:${userId}:${id}`,
+        send: (email) =>
+          sendAlbumChangeRequestEmail(email, requester, { id, title: albumRow?.title ?? "Untitled album" }, note, reviewUrl),
+      });
     } catch (e) {
       console.warn("[task-2468] change-request notify lookup failed", e);
     }
@@ -19837,19 +19843,22 @@ export async function registerRoutes(
         const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
         const host = req.headers["x-forwarded-host"] || req.headers.host || "admin.goodtunes.music";
         const reviewUrl = `${proto}://${host}/admin`;
-        const { sendRigQuoteRequestEmail } = await import("./mail");
-        for (const email of superEmails) {
-          try {
-            await sendRigQuoteRequestEmail(
+        // Task #2547 — shared operator-notify guard (prod-only + synthetic-
+        // requester drop + burst cap). Requester here is the fan.
+        const { sendRigQuoteRequestEmail, notifySuperAdmins } = await import("./mail");
+        await notifySuperAdmins({
+          template: "rig-quote-request",
+          recipients: superEmails,
+          requesterEmail: saved.email,
+          dedupeKey: `rig-quote-request:${saved.email}:${saved.rigName}`,
+          send: (email) =>
+            sendRigQuoteRequestEmail(
               email,
               { name: saved.name ?? null, email: saved.email, phone: saved.phone ?? null },
               { rigName: saved.rigName, stockState: saved.stockState ?? null, message: saved.message ?? null },
               reviewUrl,
-            );
-          } catch (e) {
-            console.warn("[rig-quote] notify failed", email, e);
-          }
-        }
+            ),
+        });
       }
     } catch (e) {
       console.warn("[rig-quote] notify lookup failed", e);
@@ -24899,21 +24908,19 @@ export async function registerRoutes(
       const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
       const host = req.headers["x-forwarded-host"] || req.headers.host || "admin.goodtunes.music";
       const manageUrl = `${proto}://${host}/admin/custom-addons`;
-      const { sendCustomAddonChangeRequestEmail } = await import("./mail");
-      for (const email of superEmails) {
-        try {
-          const result = await sendCustomAddonChangeRequestEmail(
-            email,
-            requester,
-            { id, name: addon.name },
-            manageUrl,
-          );
-          if (result?.ok) delivered = true;
-          else console.warn("[task-1786] addon change-request not sent", email, (result as any)?.reason);
-        } catch (e) {
-          console.warn("[task-1786] addon change-request notify failed", email, e);
-        }
-      }
+      // Task #2547 — shared operator-notify guard. `delivered` reflects the
+      // guard's actual send count so the partner still gets an honest reply
+      // (a non-prod/dev run reports "couldn't send", which is truthful).
+      const { sendCustomAddonChangeRequestEmail, notifySuperAdmins } = await import("./mail");
+      const outcome = await notifySuperAdmins({
+        template: "custom-addon-change-request",
+        recipients: superEmails,
+        requesterEmail: requester.email,
+        dedupeKey: `custom-addon-change-request:${req.session.userId}:${id}`,
+        send: (email) =>
+          sendCustomAddonChangeRequestEmail(email, requester, { id, name: addon.name }, manageUrl),
+      });
+      if (outcome.sent > 0) delivered = true;
     } catch (e) {
       console.warn("[task-1786] addon change-request notify lookup failed", e);
     }
