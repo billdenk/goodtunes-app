@@ -130,7 +130,18 @@ access, so Codemagic can talk to your Play account programmatically.
      internal) — and "Manage testing tracks".
    - **Admin (all permissions)** is the simplest if you'd rather not pick — but
      least-privilege (release-to-testing) is enough for this pipeline.
-4. In Codemagic → **Environment variables**:
+4. **Enable the Google Play Android Developer API on the Cloud project.** The
+   service account can authenticate, but the *project* it belongs to must also
+   have the publishing API switched on, or the upload fails at the very last step
+   with **"Google Play Android Developer API has not been used in project `<N>`
+   before or it is disabled."** Open
+   **`https://console.cloud.google.com/apis/library/androidpublisher.googleapis.com`**
+   (or the exact `console.developers.google.com/...?project=<N>` link printed in
+   the error), confirm the project selector shows the **same Cloud project the
+   service-account JSON belongs to** (its `project_id` / number), and click
+   **Enable**. Wait a few minutes for it to propagate, then re-run the Codemagic
+   build — no code change and no new `.aab` config is needed.
+5. In Codemagic → **Environment variables**:
    - Create a group named exactly **`google_play`**.
    - Add a variable **`GCLOUD_SERVICE_ACCOUNT_CREDENTIALS`**, paste the **entire
      contents of the JSON file** as the value, and mark it **Secure**.
