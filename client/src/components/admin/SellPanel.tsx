@@ -5490,7 +5490,17 @@ function SkuRow({
                       </div>
                     )}
                     <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
-                      <span className={blockNeedsQuote ? "text-[color:var(--brand-blue)]" : ""}>Manufacturing</span>
+                      <span className={blockNeedsQuote ? "text-[color:var(--brand-blue)]" : ""}>
+                        Manufacturing
+                        {!blockNeedsQuote && econ.mfg > 0 && (
+                          <span
+                            className="ml-1 text-slate-400 font-normal"
+                            data-testid={`text-mfg-run-total-${idSuffix}`}
+                          >
+                            ({dollars(econ.mfg * opts.blockQty)})
+                          </span>
+                        )}
+                      </span>
                       <span className={["tabular-nums", blockNeedsQuote ? "text-[color:var(--brand-blue)]" : ""].join(" ")}>{dollars(econ.mfg)}</span>
                     </div>
                     {blockNeedsQuote && (
@@ -5518,7 +5528,17 @@ function SkuRow({
                       <span className="tabular-nums">{dollars(econ.gt)}</span>
                     </div>
                     <div className="flex items-center justify-between gap-6 text-xs text-slate-900 font-semibold pt-1.5 border-t border-slate-100 mt-1">
-                      <span>Cost / unit</span>
+                      <span>
+                        Cost / unit
+                        {econ.costPerUnit !== null && econ.costPerUnit > 0 && (
+                          <span
+                            className="ml-1 text-slate-400 font-normal"
+                            data-testid={`text-cost-run-total-${idSuffix}`}
+                          >
+                            ({dollars(econ.costPerUnit * opts.blockQty)})
+                          </span>
+                        )}
+                      </span>
                       <span
                         className="tabular-nums"
                         data-testid={`text-cost-${idSuffix}`}
@@ -6420,7 +6440,17 @@ function SkuRow({
               ) : (
                 <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs tabular-nums">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Manufacturing</span>
+                    <span className="text-slate-500">
+                      Manufacturing
+                      {params.mfgCents > 0 && (
+                        <span
+                          className="ml-1 text-slate-400"
+                          data-testid={`text-quote-mfg-run-total-${format}-${params.key}`}
+                        >
+                          ({dollars(params.mfgCents * params.qty)})
+                        </span>
+                      )}
+                    </span>
                     <span>{dollars(params.mfgCents)}</span>
                   </div>
                   <div className="flex justify-between">
@@ -6436,7 +6466,17 @@ function SkuRow({
                     <span>{dollars(gtC)}</span>
                   </div>
                   <div className="flex justify-between col-span-2 pt-1 border-t border-slate-100 mt-1 font-medium text-slate-900">
-                    <span>Cost / unit</span>
+                    <span>
+                      Cost / unit
+                      {costPerUnit > 0 && (
+                        <span
+                          className="ml-1 text-slate-400 font-normal"
+                          data-testid={`text-quote-cost-run-total-${format}-${params.key}`}
+                        >
+                          ({dollars(costPerUnit * params.qty)})
+                        </span>
+                      )}
+                    </span>
                     <span>{dollars(costPerUnit)}</span>
                   </div>
                   <div className="flex justify-between">
@@ -8746,7 +8786,17 @@ function GoodDeedOptionCard({
                 <>
                   <div className="flex items-center justify-between text-xs tabular-nums">
                     <span className="flex items-center gap-1.5 text-slate-600">
-                      Manufacturing &amp; Shipping
+                      <span>
+                        Manufacturing &amp; Shipping
+                        {costCents > 0 && (
+                          <span
+                            className="ml-1 text-slate-400 font-normal"
+                            data-testid={`text-gooddeed-option-wholesale-run-total-${idSuffix}`}
+                          >
+                            ({dollars(costCents * certCount)})
+                          </span>
+                        )}
+                      </span>
                       <InfoTip
                         label="What Manufacturing & Shipping covers"
                         testId={`info-gooddeed-option-manufacturing-${idSuffix}`}
@@ -8773,7 +8823,17 @@ function GoodDeedOptionCard({
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs font-semibold border-t border-slate-200 pt-1.5 mt-1 tabular-nums">
-                    <span className="text-slate-700">Cost / unit</span>
+                    <span className="text-slate-700">
+                      Cost / unit
+                      {costPerUnitCents !== null && costPerUnitCents > 0 && (
+                        <span
+                          className="ml-1 text-slate-400 font-normal"
+                          data-testid={`text-gooddeed-option-cost-per-unit-run-total-${idSuffix}`}
+                        >
+                          ({dollars(costPerUnitCents * certCount)})
+                        </span>
+                      )}
+                    </span>
                     <span
                       className="text-slate-900"
                       data-testid={`text-gooddeed-option-cost-per-unit-${idSuffix}`}
