@@ -287,26 +287,34 @@ the artwork: re-run the build, and if it recurs confirm the App target's
 `Assets.xcassets` is in **Copy Bundle Resources** and
 `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon` (it is, today).
 
-### The Xcode toolchain is pinned to the CURRENT Xcode (26.4) — keep it explicit, never `latest`
+### The Xcode toolchain is pinned to the last-known-good Xcode (26.3) — keep it explicit, never `latest`
 
-`codemagic.yaml` pins **`xcode: 26.4`** in the shared `ios_env` block. Short
+`codemagic.yaml` pins **`xcode: 26.3`** in the shared `ios_env` block. Short
 history: it used to say `xcode: latest`; when Codemagic rolled `latest` forward to
 **Xcode 26.4.1** the archive step (`Build the signed .ipa`) started failing with
 **"Failed to archive" (exit 65)** — every earlier step (web build, Capacitor sync,
 CocoaPods, signing, all four guards) stayed green, so it was purely the toolchain.
-We first pinned to **26.3** (the last-known-good) as a quick unblock, but that was
-always temporary: Apple periodically requires builds compiled with the current
-Xcode/SDK (App Store Connect began requiring the **iOS 26 SDK on 2026-04-28**), so
-we can't sit on an old Xcode forever.
 
-**We're now on 26.4 with the archive break fixed at the source.** The fix is one
-build setting: **`ENABLE_USER_SCRIPT_SANDBOXING = NO`** on the **App** target
-(`ios/App/App.xcodeproj/project.pbxproj`, both Debug and Release). Newer Xcode
-sandboxes run-script build phases, which denies the CocoaPods `[CP] …` phases
-(`Embed Pods Frameworks`, `Copy Pods Resources`, `Check Pods Manifest.lock`) and
-aborts the archive. Turning the App target's script sandbox off is the standard
-CocoaPods fix and is **zero-risk here**: our project's old implicit default was
-already `NO`, so it changes nothing on 26.3 while protecting the archive on 26.4+.
+**The trap: an explicit `xcode: 26.4` pin does NOT protect against this.**
+Codemagic resolves a `26.4` pin *up* to the broken **26.4.1** point release, so a
+build pinned at `26.4` still ran on 26.4.1 and still failed to archive. The
+committed **`ENABLE_USER_SCRIPT_SANDBOXING = NO`** fix on the App target (below)
+did **not** resolve the 26.4.1 failure either. So we pin back to **26.3**, the
+last version confirmed to archive cleanly. 26.3 still ships the **iOS 26 SDK**, so
+App Store Connect's iOS 26 SDK requirement (in force since **2026-04-28**) is
+satisfied — pinning back costs us nothing on the SDK front.
+
+**When moving forward again**, name a specific Xcode version Codemagic offers as a
+stable image and confirm it archives green first — do **not** trust a `26.x`
+prefix pin, since (as above) `26.4` silently drifts up to `26.4.1`.
+
+The **`ENABLE_USER_SCRIPT_SANDBOXING = NO`** build setting stays committed on the
+**App** target (`ios/App/App.xcodeproj/project.pbxproj`, both Debug and Release).
+Newer Xcode sandboxes run-script build phases, which can deny the CocoaPods
+`[CP] …` phases (`Embed Pods Frameworks`, `Copy Pods Resources`, `Check Pods
+Manifest.lock`) and abort the archive. It's the standard CocoaPods fix and is
+**zero-risk here** (our project's old implicit default was already `NO`), so we
+keep it — it just wasn't sufficient to fix the 26.4.1 break on its own.
 
 Two things we deliberately did **not** change, because research showed they
 weren't needed:
@@ -316,17 +324,19 @@ weren't needed:
   `ios/App/Podfile`) already stamps every *pod* target to ≥13.0. Raising
   `platform :ios` would only drop older-device support for no build benefit.
 - **`cocoapods: default` stays.** Codemagic keeps each image's bundled CocoaPods in
-  lock-step with that image's Xcode, so `default` on the 26.4 image is the safest
+  lock-step with that image's Xcode, so `default` on the 26.3 image is the safest
   choice. Hard-pinning (e.g. `1.16.2`) would risk the still-open Xcode-26
   `objectVersion 70` CocoaPods incompatibility — not a concern for us *today* (our
   `project.pbxproj` is `objectVersion 48`), but a pin would freeze us on a version
   that can't move forward with the image.
 
 Keep the pin **explicit** (never `latest`) so a future silent roll can't break the
-archive again. If Codemagic retires 26.4, bump to the newest 26.x that builds green
-and re-run `ios-testflight`; **if an archive ever fails, read the `xcodebuild_logs`
-artifact for the exact compile/link error** and fix that specifically rather than
-floating back to `latest`.
+archive again. To move forward off 26.3, pin the newest Xcode version Codemagic
+offers as a stable image and confirm it archives green (re-run `ios-testflight`);
+**do not use a `26.4`-style prefix pin — it resolves up to the broken 26.4.1.** If
+an archive ever fails, **read the `xcodebuild_logs` artifact for the exact
+compile/link error** and fix that specifically rather than floating back to
+`latest`.
 
 ### 2. A transient App Store Connect 500 no longer wastes a whole build
 
