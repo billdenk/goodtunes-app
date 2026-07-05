@@ -23,7 +23,15 @@ import UIKit
  *
  * Requires the `com.apple.developer.carplay-audio` entitlement (App.entitlements)
  * which Apple must grant to the App ID before a real head unit will connect.
+ *
+ * The whole delegate is gated to iOS 14.0+: every CarPlay template API it uses
+ * (CPNowPlayingTemplate, CPTabBarTemplate, CPListItem.isPlaying/handler/setImage,
+ * tabTitle, and the completion-handler setRootTemplate) is iOS 14.0-only. The
+ * app's deployment target stays at iOS 13.0; UIKit instantiates this class only
+ * by name from Info.plist's CarPlay scene role, so the attribute never cascades
+ * availability onto the iOS 13-capable phone app.
  */
+@available(iOS 14.0, *)
 class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
 
     private var interfaceController: CPInterfaceController?
@@ -39,9 +47,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
 
         let upNext = CPListTemplate(title: "Up Next", sections: [buildSection()])
         upNext.tabTitle = "Up Next"
-        if #available(iOS 14.0, *) {
-            upNext.tabImage = UIImage(systemName: "list.bullet")
-        }
+        upNext.tabImage = UIImage(systemName: "list.bullet")
         self.upNextTemplate = upNext
 
         let tabBar = CPTabBarTemplate(templates: [nowPlaying, upNext])

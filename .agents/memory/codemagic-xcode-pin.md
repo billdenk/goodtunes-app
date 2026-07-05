@@ -1,14 +1,27 @@
 ---
 name: Codemagic Xcode toolchain pin
-description: Why codemagic.yaml pins an explicit Xcode, and that the 26.4.1 "Failed to archive" exit-65 was a provisioning regression fixed with -allowProvisioningUpdates (NOT a compiler break, NOT CarPlay, NOT the sandbox setting).
+description: Why codemagic.yaml pins an explicit Xcode; and that exit-65 at "Build the signed .ipa" is a GENERIC xcodebuild failure with (so far) TWO distinct root causes — always read the actual error, never assume.
 ---
 
 The iOS Codemagic build pins an explicit `xcode:` in the shared `ios_env` anchor
 (`codemagic.yaml`), NOT `xcode: latest` / `edge`, so Codemagic can't silently roll
 the toolchain forward onto an untested version without us choosing it.
 
-**Root cause of the 26.4.1 "Failed to archive" (exit 65) — it is a signing
-regression, NOT a compiler break.** When `latest` rolled to Xcode 26.4.1 the
+**exit-65 is NOT a diagnosis — it's the generic `xcodebuild` "something failed"
+code.** The `Build the signed .ipa` step has failed exit-65 for two completely
+different reasons; the log's `❌` lines tell you which. ALWAYS read them:
+  1. **Signing / provisioning regression** (Associated Domains + Push) — see below.
+  2. **Swift availability compile error** — a `CompileSwift` failure with
+     `❌ … 'X' is only available in iOS 14.0 or newer`. On build #43 the new
+     `CarPlaySceneDelegate.swift` used seven iOS-14-only CarPlay template APIs
+     while the app deployment target is iOS 13.0. Fix = gate the whole delegate
+     with `@available(iOS 14.0, *)` (the class is instantiated only by NAME from
+     Info.plist's CarPlay scene role, so it doesn't cascade onto the phone app;
+     the app minimum stays 13.0). Do NOT roll Xcode back to dodge a real compiler
+     error — Apple requires a current SDK for App Store submissions.
+
+**Root cause #1 detail — the earlier 26.4.1 "Failed to archive" (exit 65) was a
+signing regression, not a compiler break.** When `latest` rolled to Xcode 26.4.1 the
 `Build the signed .ipa` step failed exit-65 with no app-code change (every earlier
 step green). The failed console (`attached_assets/Pasted-Using-Xcode-26-4-1-*.txt`)
 shows the real error:
