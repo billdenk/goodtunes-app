@@ -46,7 +46,9 @@ test("a tampered signature fails verification", () => {
 });
 
 test("an expired pass does not verify", () => {
-  const token = signPreviewPass("album-123", -1);
+  // signPreviewPass takes an options object; ttlSeconds:-1 mints an
+  // already-expired pass (exp = now - 1s) so verify must reject it.
+  const token = signPreviewPass("album-123", { ttlSeconds: -1 });
   assert.equal(verifyPreviewPass(token), null);
 });
 

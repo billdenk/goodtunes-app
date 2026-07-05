@@ -40,7 +40,15 @@ const editorUser = id("editor"); // edit_metadata only
 const outUser = id("outsider"); // in scope of otherScopeId, not artistScopeId
 const superUser = id("super"); // super_admin (bypasses every verb)
 
-async function seedUser(userId: string, role: string, scopeId: string | null) {
+async function seedUser(
+  userId: string,
+  role: string,
+  scopeId: string | null,
+  // A null sub_role = the artist-scope OWNER (primary artist), who implicitly
+  // self-serves every OWNER_SELF_SERVE_VERB. Pass "team" to seed a NON-owner
+  // teammate whose verbs come SOLELY from the scope grant / per-user override.
+  subRole: string | null = null,
+) {
   const uniq = userId.slice(-8);
   await exec(sql`
     INSERT INTO users (id, username, password, display_name, email, role, role_scope_id)
@@ -51,8 +59,8 @@ async function seedUser(userId: string, role: string, scopeId: string | null) {
   // findMembershipForScope read the SET). God role = null scope.
   const scopeKind = role === "super_admin" ? "global" : "artist";
   await exec(sql`
-    INSERT INTO memberships (user_id, role, scope_kind, scope_id)
-    VALUES (${userId}, ${role}, ${scopeKind}, ${scopeId})
+    INSERT INTO memberships (user_id, role, scope_kind, scope_id, sub_role)
+    VALUES (${userId}, ${role}, ${scopeKind}, ${scopeId}, ${subRole})
   `);
 }
 
@@ -105,11 +113,14 @@ test("a scope that grants edit_metadata allows the structure-mutation verb", asy
 test("manage_payouts and edit_metadata are checked independently", async () => {
   // Prove the two verbs don't imply each other: with a scope that grants
   // ONLY manage_payouts, the edit_metadata verb must be refused. We use a
-  // throwaway scope so the grant is truly payer-only.
+  // throwaway scope so the grant is truly payer-only, and seed the user as a
+  // NON-owner teammate (sub_role="team") — an artist-scope OWNER implicitly
+  // self-serves every OWNER_SELF_SERVE_VERB (incl. edit_metadata) regardless
+  // of the partner_permissions row, which would mask the independence check.
   const payerOnlyScope = id("artist-payeronly");
   const payerOnlyUser = id("payeronly");
   try {
-    await seedUser(payerOnlyUser, "artist", payerOnlyScope);
+    await seedUser(payerOnlyUser, "artist", payerOnlyScope, "team");
     await seedPerms(payerOnlyScope, { managePayouts: true, editMetadata: false });
     const okPay = await checkPartnerVerbForScope(payerOnlyUser, "manage_payouts", {
       kind: "artist",
@@ -130,10 +141,13 @@ test("manage_payouts and edit_metadata are checked independently", async () => {
 });
 
 test("an editor-only scope is refused the pay verb", async () => {
+  // As above, the user is a NON-owner teammate (sub_role="team"): an
+  // artist-scope owner would self-serve manage_payouts regardless of the
+  // grant, defeating the point of the independence check.
   const editorOnlyScope = id("artist-editoronly");
   const editorOnlyUser = id("editoronly");
   try {
-    await seedUser(editorOnlyUser, "artist", editorOnlyScope);
+    await seedUser(editorOnlyUser, "artist", editorOnlyScope, "team");
     await seedPerms(editorOnlyScope, { managePayouts: false, editMetadata: true });
     const okEdit = await checkPartnerVerbForScope(editorOnlyUser, "edit_metadata", {
       kind: "artist",
