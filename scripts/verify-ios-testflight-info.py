@@ -3,7 +3,8 @@
 
 App Store Connect rejects any TestFlight submission whose Beta App Review
 Information is missing required fields (Contact First/Last Name, Phone Number,
-Email) or whose Beta App Information is missing a Feedback Email — but it only
+Email), whose Beta App Information is missing a Feedback Email, or (for external
+testing) whose Beta App Description is blank — but it only
 surfaces that rejection at the VERY END of a ~10-25 minute Mac build, after
 build + sign + upload (this is the deterministic failure `scripts/publish-ios.sh`
 already catches post-upload). This guard asks App Store Connect whether that
@@ -151,6 +152,20 @@ def main():
         )
         if not has_feedback:
             missing.append("Feedback Email")
+        # Beta App Description (per-locale) is REQUIRED to submit a build to
+        # EXTERNAL TestFlight testers: App Store Connect rejects the external
+        # beta review submission with 422 "Beta App Description is missing"
+        # otherwise (build 71 hit exactly this AFTER a full ~13 min Mac build).
+        # This pipeline always submits to the external beta group, so a blank
+        # description is a guaranteed post-build failure — catch it here. Same
+        # fail-open list-shape guard as the Feedback Email check above.
+        has_description = any(
+            not is_blank((item.get("attributes") or {}).get("description"))
+            for item in loc_items
+            if isinstance(item, dict)
+        )
+        if not has_description:
+            missing.append("Beta App Description")
 
     if not missing:
         print("OK: TestFlight Test Information is complete (review contact + feedback email).")
@@ -169,7 +184,7 @@ def main():
     print()
     print("FIX: open TestFlight -> Test Information and fill in Beta App Review")
     print("Information (contact name / phone / email), the Beta App Information")
-    print("Feedback Email, then re-run the build:")
+    print("Feedback Email + Beta App Description, then re-run the build:")
     print(f"  {test_info_url}")
     return 1
 
