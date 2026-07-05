@@ -1,0 +1,796 @@
+Publishing 'build/ios/ipa/App.ipa' (build number 71) for app ******** in mode 'testflight'.
+=== Publish attempt 1/4 ===
+
+Publish "build/ios/ipa/App.ipa" to App Store Connect
+App name: GoodTunes
+Bundle identifier: Io.GoGoods.music
+Certificate expires: 2027-06-05T14:27:34.000+0000
+Distribution type: App Store
+Min OS version: 13.0
+Provisioned devices: N/A
+Provisions all devices: No
+Supported platforms: iPhoneOS
+Version code: 71
+Version: 3.0.2
+
+Upload "build/ios/ipa/App.ipa" to App Store Connect
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+26.30.4 (173004)
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+2026-07-05 07:34:38.070  INFO: [ContentDelivery.Uploader.9EEC28640] 
+==========================================
+UPLOAD SUCCEEDED with no errors
+Delivery UUID: f9604768-5c93-4dea-9f01-1e8641edad94
+Transferred 49155915 bytes in 0.708 seconds (69.4MB/s, 555.408Mbps)
+==========================================
+{
+  "details" : {
+    "delivery-uuid" : "f9604768-5c93-4dea-9f01-1e8641edad94",
+    "transferred" : "49155915 bytes in 0.708 seconds (69.4MB/s, 555.408Mbps)"
+  },
+  "os-version" : "Version 26.4.1 (Build 25E253)",
+  "success-message" : "No errors uploading archive at 'build/ios/ipa/App.ipa'.",
+  "tool-path" : "/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources",
+  "tool-version" : "26.30.4 (173004)"
+}
+
+No errors uploading archive at 'build/ios/ipa/App.ipa'.
+
+Find application entry from App Store Connect for uploaded binary
+Found 1 App matching specified filters: bundleId=Io.GoGoods.music.
+-- App --
+Id: ********
+Type: apps
+Bundle id: Io.GoGoods.music
+Name: GoodTunes
+Primary locale: en-US
+Sku: 20230423gogoods-goodtunes
+Content rights declaration: DOES_NOT_USE_THIRD_PARTY_CONTENT
+Is or ever was made for kids: False
+
+Find uploaded build
+Build has finished uploading but is not available in App Store Connect yet. Could not find the build matching the uploaded version, waiting 30 seconds to try again. Timeout in 10 minutes.
+Could not find the build matching the uploaded version, waiting 30 seconds to try again.
+Could not find the build matching the uploaded version, waiting 30 seconds to try again.
+Could not find the build matching the uploaded version, waiting 30 seconds to try again.
+Could not find the build matching the uploaded version, waiting 30 seconds to try again.
+
+Uploaded build is
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+
+Wait until build f9604768-5c93-4dea-9f01-1e8641edad94 and its beta details are processed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 beta detail f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+
+Processed build and beta details are
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+-- Build Beta Detail --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: buildBetaDetails
+Auto notify enabled: True
+External build state: READY_FOR_BETA_SUBMISSION
+Internal build state: READY_FOR_BETA_TESTING
+Adding build 'f9604768-5c93-4dea-9f01-1e8641edad94' to the following beta groups: GoGoods Test Group.
+Added build 'f9604768-5c93-4dea-9f01-1e8641edad94' to 'GoGoods Test Group' beta group
+
+Submit build 'f9604768-5c93-4dea-9f01-1e8641edad94' to TestFlight beta review
+Creating new Beta App Review Submission: build: f9604768-5c93-4dea-9f01-1e8641edad94
+POST https://api.appstoreconnect.apple.com/v1/betaAppReviewSubmissions returned 422: Beta App Description is missing. - Beta App Description is required to submit a build for external testing.
+Failed to publish build/ios/ipa/App.ipa
+Publish attempt 1 failed (exit 1).
+Checking whether the binary registered despite the failure (transient 500 case)…
+  registration check: latest on App Store Connect = '71', this build = '71'
+Binary build 71 IS registered. Not re-uploading (would be a
+duplicate-binary rejection). Retrying the SUBMISSION only.
+Backing off 30s before the next attempt…
+=== Publish attempt 2/4 (binary already registered — submitting only) ===
+
+Publish "build/ios/ipa/App.ipa" to App Store Connect
+App name: GoodTunes
+Bundle identifier: Io.GoGoods.music
+Certificate expires: 2027-06-05T14:27:34.000+0000
+Distribution type: App Store
+Min OS version: 13.0
+Provisioned devices: N/A
+Provisions all devices: No
+Supported platforms: iPhoneOS
+Version code: 71
+Version: 3.0.2
+
+Skip uploading "build/ios/ipa/App.ipa" to App Store Connect
+
+Find application entry from App Store Connect for uploaded binary
+Found 1 App matching specified filters: bundleId=Io.GoGoods.music.
+-- App --
+Id: ********
+Type: apps
+Bundle id: Io.GoGoods.music
+Name: GoodTunes
+Primary locale: en-US
+Sku: 20230423gogoods-goodtunes
+Content rights declaration: DOES_NOT_USE_THIRD_PARTY_CONTENT
+Is or ever was made for kids: False
+
+Find uploaded build
+
+Uploaded build is
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+
+Wait until build f9604768-5c93-4dea-9f01-1e8641edad94 and its beta details are processed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 beta detail f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+
+Processed build and beta details are
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+-- Build Beta Detail --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: buildBetaDetails
+Auto notify enabled: True
+External build state: READY_FOR_BETA_SUBMISSION
+Internal build state: IN_BETA_TESTING
+Adding build 'f9604768-5c93-4dea-9f01-1e8641edad94' to the following beta groups: GoGoods Test Group.
+Added build 'f9604768-5c93-4dea-9f01-1e8641edad94' to 'GoGoods Test Group' beta group
+
+Submit build 'f9604768-5c93-4dea-9f01-1e8641edad94' to TestFlight beta review
+Creating new Beta App Review Submission: build: f9604768-5c93-4dea-9f01-1e8641edad94
+POST https://api.appstoreconnect.apple.com/v1/betaAppReviewSubmissions returned 422: Beta App Description is missing. - Beta App Description is required to submit a build for external testing.
+Failed to publish build/ios/ipa/App.ipa
+Publish attempt 2 failed (exit 1).
+Checking whether the binary registered despite the failure (transient 500 case)…
+  registration check: latest on App Store Connect = '71', this build = '71'
+Binary build 71 IS registered. Not re-uploading (would be a
+duplicate-binary rejection). Retrying the SUBMISSION only.
+Backing off 60s before the next attempt…
+=== Publish attempt 3/4 (binary already registered — submitting only) ===
+
+Publish "build/ios/ipa/App.ipa" to App Store Connect
+App name: GoodTunes
+Bundle identifier: Io.GoGoods.music
+Certificate expires: 2027-06-05T14:27:34.000+0000
+Distribution type: App Store
+Min OS version: 13.0
+Provisioned devices: N/A
+Provisions all devices: No
+Supported platforms: iPhoneOS
+Version code: 71
+Version: 3.0.2
+
+Skip uploading "build/ios/ipa/App.ipa" to App Store Connect
+
+Find application entry from App Store Connect for uploaded binary
+Found 1 App matching specified filters: bundleId=Io.GoGoods.music.
+-- App --
+Id: ********
+Type: apps
+Bundle id: Io.GoGoods.music
+Name: GoodTunes
+Primary locale: en-US
+Sku: 20230423gogoods-goodtunes
+Content rights declaration: DOES_NOT_USE_THIRD_PARTY_CONTENT
+Is or ever was made for kids: False
+
+Find uploaded build
+
+Uploaded build is
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+
+Wait until build f9604768-5c93-4dea-9f01-1e8641edad94 and its beta details are processed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 beta detail f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+
+Processed build and beta details are
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+-- Build Beta Detail --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: buildBetaDetails
+Auto notify enabled: True
+External build state: READY_FOR_BETA_SUBMISSION
+Internal build state: IN_BETA_TESTING
+Adding build 'f9604768-5c93-4dea-9f01-1e8641edad94' to the following beta groups: GoGoods Test Group.
+Added build 'f9604768-5c93-4dea-9f01-1e8641edad94' to 'GoGoods Test Group' beta group
+
+Submit build 'f9604768-5c93-4dea-9f01-1e8641edad94' to TestFlight beta review
+Creating new Beta App Review Submission: build: f9604768-5c93-4dea-9f01-1e8641edad94
+POST https://api.appstoreconnect.apple.com/v1/betaAppReviewSubmissions returned 422: Beta App Description is missing. - Beta App Description is required to submit a build for external testing.
+Failed to publish build/ios/ipa/App.ipa
+Publish attempt 3 failed (exit 1).
+Checking whether the binary registered despite the failure (transient 500 case)…
+  registration check: latest on App Store Connect = '71', this build = '71'
+Binary build 71 IS registered. Not re-uploading (would be a
+duplicate-binary rejection). Retrying the SUBMISSION only.
+Backing off 120s before the next attempt…
+=== Publish attempt 4/4 (binary already registered — submitting only) ===
+
+Publish "build/ios/ipa/App.ipa" to App Store Connect
+App name: GoodTunes
+Bundle identifier: Io.GoGoods.music
+Certificate expires: 2027-06-05T14:27:34.000+0000
+Distribution type: App Store
+Min OS version: 13.0
+Provisioned devices: N/A
+Provisions all devices: No
+Supported platforms: iPhoneOS
+Version code: 71
+Version: 3.0.2
+
+Skip uploading "build/ios/ipa/App.ipa" to App Store Connect
+
+Find application entry from App Store Connect for uploaded binary
+Found 1 App matching specified filters: bundleId=Io.GoGoods.music.
+-- App --
+Id: ********
+Type: apps
+Bundle id: Io.GoGoods.music
+Name: GoodTunes
+Primary locale: en-US
+Sku: 20230423gogoods-goodtunes
+Content rights declaration: DOES_NOT_USE_THIRD_PARTY_CONTENT
+Is or ever was made for kids: False
+
+Find uploaded build
+
+Uploaded build is
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+
+Wait until build f9604768-5c93-4dea-9f01-1e8641edad94 and its beta details are processed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 beta detail f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+
+Processed build and beta details are
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+-- Build Beta Detail --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: buildBetaDetails
+Auto notify enabled: True
+External build state: READY_FOR_BETA_SUBMISSION
+Internal build state: IN_BETA_TESTING
+Adding build 'f9604768-5c93-4dea-9f01-1e8641edad94' to the following beta groups: GoGoods Test Group.
+Added build 'f9604768-5c93-4dea-9f01-1e8641edad94' to 'GoGoods Test Group' beta group
+
+Submit build 'f9604768-5c93-4dea-9f01-1e8641edad94' to TestFlight beta review
+Creating new Beta App Review Submission: build: f9604768-5c93-4dea-9f01-1e8641edad94
+POST https://api.appstoreconnect.apple.com/v1/betaAppReviewSubmissions returned 422: Beta App Description is missing. - Beta App Description is required to submit a build for external testing.
+Failed to publish build/ios/ipa/App.ipa
+Publish attempt 4 failed (exit 1).
+Checking whether the binary registered despite the failure (transient 500 case)…
+  registration check: latest on App Store Connect = '71', this build = '71'
+Binary build 71 IS registered. Not re-uploading (would be a
+duplicate-binary rejection). Retrying the SUBMISSION only.
+ERROR: publishing failed after 4 attempts.
+  registration check: latest on App Store Connect = '71', this build = '71'
+NOTE: the binary (build 71) IS on App Store Connect — the
+      failure was in a POST-upload submission step, not the upload itself.
+      Check the log above; if it mentions TestFlight test information, that
+      is an operator setup task, not a pipeline bug.
+
+
+Build failed :|
+Step 16 script `Publish to App Store Connect (tolerant of transient 500s)` exited with status code 1
+Publishing 'build/ios/ipa/App.ipa' (build number 71) for app ******** in mode 'testflight'.
+=== Publish attempt 1/4 ===
+
+Publish "build/ios/ipa/App.ipa" to App Store Connect
+App name: GoodTunes
+Bundle identifier: Io.GoGoods.music
+Certificate expires: 2027-06-05T14:27:34.000+0000
+Distribution type: App Store
+Min OS version: 13.0
+Provisioned devices: N/A
+Provisions all devices: No
+Supported platforms: iPhoneOS
+Version code: 71
+Version: 3.0.2
+
+Upload "build/ios/ipa/App.ipa" to App Store Connect
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+26.30.4 (173004)
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+2026-07-05 07:34:38.070  INFO: [ContentDelivery.Uploader.9EEC28640] 
+==========================================
+UPLOAD SUCCEEDED with no errors
+Delivery UUID: f9604768-5c93-4dea-9f01-1e8641edad94
+Transferred 49155915 bytes in 0.708 seconds (69.4MB/s, 555.408Mbps)
+==========================================
+{
+  "details" : {
+    "delivery-uuid" : "f9604768-5c93-4dea-9f01-1e8641edad94",
+    "transferred" : "49155915 bytes in 0.708 seconds (69.4MB/s, 555.408Mbps)"
+  },
+  "os-version" : "Version 26.4.1 (Build 25E253)",
+  "success-message" : "No errors uploading archive at 'build/ios/ipa/App.ipa'.",
+  "tool-path" : "/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources",
+  "tool-version" : "26.30.4 (173004)"
+}
+
+No errors uploading archive at 'build/ios/ipa/App.ipa'.
+
+Find application entry from App Store Connect for uploaded binary
+Found 1 App matching specified filters: bundleId=Io.GoGoods.music.
+-- App --
+Id: ********
+Type: apps
+Bundle id: Io.GoGoods.music
+Name: GoodTunes
+Primary locale: en-US
+Sku: 20230423gogoods-goodtunes
+Content rights declaration: DOES_NOT_USE_THIRD_PARTY_CONTENT
+Is or ever was made for kids: False
+
+Find uploaded build
+Build has finished uploading but is not available in App Store Connect yet. Could not find the build matching the uploaded version, waiting 30 seconds to try again. Timeout in 10 minutes.
+Could not find the build matching the uploaded version, waiting 30 seconds to try again.
+Could not find the build matching the uploaded version, waiting 30 seconds to try again.
+Could not find the build matching the uploaded version, waiting 30 seconds to try again.
+Could not find the build matching the uploaded version, waiting 30 seconds to try again.
+
+Uploaded build is
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+
+Wait until build f9604768-5c93-4dea-9f01-1e8641edad94 and its beta details are processed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 beta detail f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+
+Processed build and beta details are
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+-- Build Beta Detail --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: buildBetaDetails
+Auto notify enabled: True
+External build state: READY_FOR_BETA_SUBMISSION
+Internal build state: READY_FOR_BETA_TESTING
+Adding build 'f9604768-5c93-4dea-9f01-1e8641edad94' to the following beta groups: GoGoods Test Group.
+Added build 'f9604768-5c93-4dea-9f01-1e8641edad94' to 'GoGoods Test Group' beta group
+
+Submit build 'f9604768-5c93-4dea-9f01-1e8641edad94' to TestFlight beta review
+Creating new Beta App Review Submission: build: f9604768-5c93-4dea-9f01-1e8641edad94
+POST https://api.appstoreconnect.apple.com/v1/betaAppReviewSubmissions returned 422: Beta App Description is missing. - Beta App Description is required to submit a build for external testing.
+Failed to publish build/ios/ipa/App.ipa
+Publish attempt 1 failed (exit 1).
+Checking whether the binary registered despite the failure (transient 500 case)…
+  registration check: latest on App Store Connect = '71', this build = '71'
+Binary build 71 IS registered. Not re-uploading (would be a
+duplicate-binary rejection). Retrying the SUBMISSION only.
+Backing off 30s before the next attempt…
+=== Publish attempt 2/4 (binary already registered — submitting only) ===
+
+Publish "build/ios/ipa/App.ipa" to App Store Connect
+App name: GoodTunes
+Bundle identifier: Io.GoGoods.music
+Certificate expires: 2027-06-05T14:27:34.000+0000
+Distribution type: App Store
+Min OS version: 13.0
+Provisioned devices: N/A
+Provisions all devices: No
+Supported platforms: iPhoneOS
+Version code: 71
+Version: 3.0.2
+
+Skip uploading "build/ios/ipa/App.ipa" to App Store Connect
+
+Find application entry from App Store Connect for uploaded binary
+Found 1 App matching specified filters: bundleId=Io.GoGoods.music.
+-- App --
+Id: ********
+Type: apps
+Bundle id: Io.GoGoods.music
+Name: GoodTunes
+Primary locale: en-US
+Sku: 20230423gogoods-goodtunes
+Content rights declaration: DOES_NOT_USE_THIRD_PARTY_CONTENT
+Is or ever was made for kids: False
+
+Find uploaded build
+
+Uploaded build is
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+
+Wait until build f9604768-5c93-4dea-9f01-1e8641edad94 and its beta details are processed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 beta detail f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+
+Processed build and beta details are
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+-- Build Beta Detail --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: buildBetaDetails
+Auto notify enabled: True
+External build state: READY_FOR_BETA_SUBMISSION
+Internal build state: IN_BETA_TESTING
+Adding build 'f9604768-5c93-4dea-9f01-1e8641edad94' to the following beta groups: GoGoods Test Group.
+Added build 'f9604768-5c93-4dea-9f01-1e8641edad94' to 'GoGoods Test Group' beta group
+
+Submit build 'f9604768-5c93-4dea-9f01-1e8641edad94' to TestFlight beta review
+Creating new Beta App Review Submission: build: f9604768-5c93-4dea-9f01-1e8641edad94
+POST https://api.appstoreconnect.apple.com/v1/betaAppReviewSubmissions returned 422: Beta App Description is missing. - Beta App Description is required to submit a build for external testing.
+Failed to publish build/ios/ipa/App.ipa
+Publish attempt 2 failed (exit 1).
+Checking whether the binary registered despite the failure (transient 500 case)…
+  registration check: latest on App Store Connect = '71', this build = '71'
+Binary build 71 IS registered. Not re-uploading (would be a
+duplicate-binary rejection). Retrying the SUBMISSION only.
+Backing off 60s before the next attempt…
+=== Publish attempt 3/4 (binary already registered — submitting only) ===
+
+Publish "build/ios/ipa/App.ipa" to App Store Connect
+App name: GoodTunes
+Bundle identifier: Io.GoGoods.music
+Certificate expires: 2027-06-05T14:27:34.000+0000
+Distribution type: App Store
+Min OS version: 13.0
+Provisioned devices: N/A
+Provisions all devices: No
+Supported platforms: iPhoneOS
+Version code: 71
+Version: 3.0.2
+
+Skip uploading "build/ios/ipa/App.ipa" to App Store Connect
+
+Find application entry from App Store Connect for uploaded binary
+Found 1 App matching specified filters: bundleId=Io.GoGoods.music.
+-- App --
+Id: ********
+Type: apps
+Bundle id: Io.GoGoods.music
+Name: GoodTunes
+Primary locale: en-US
+Sku: 20230423gogoods-goodtunes
+Content rights declaration: DOES_NOT_USE_THIRD_PARTY_CONTENT
+Is or ever was made for kids: False
+
+Find uploaded build
+
+Uploaded build is
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+
+Wait until build f9604768-5c93-4dea-9f01-1e8641edad94 and its beta details are processed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 beta detail f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+
+Processed build and beta details are
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+-- Build Beta Detail --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: buildBetaDetails
+Auto notify enabled: True
+External build state: READY_FOR_BETA_SUBMISSION
+Internal build state: IN_BETA_TESTING
+Adding build 'f9604768-5c93-4dea-9f01-1e8641edad94' to the following beta groups: GoGoods Test Group.
+Added build 'f9604768-5c93-4dea-9f01-1e8641edad94' to 'GoGoods Test Group' beta group
+
+Submit build 'f9604768-5c93-4dea-9f01-1e8641edad94' to TestFlight beta review
+Creating new Beta App Review Submission: build: f9604768-5c93-4dea-9f01-1e8641edad94
+POST https://api.appstoreconnect.apple.com/v1/betaAppReviewSubmissions returned 422: Beta App Description is missing. - Beta App Description is required to submit a build for external testing.
+Failed to publish build/ios/ipa/App.ipa
+Publish attempt 3 failed (exit 1).
+Checking whether the binary registered despite the failure (transient 500 case)…
+  registration check: latest on App Store Connect = '71', this build = '71'
+Binary build 71 IS registered. Not re-uploading (would be a
+duplicate-binary rejection). Retrying the SUBMISSION only.
+Backing off 120s before the next attempt…
+=== Publish attempt 4/4 (binary already registered — submitting only) ===
+
+Publish "build/ios/ipa/App.ipa" to App Store Connect
+App name: GoodTunes
+Bundle identifier: Io.GoGoods.music
+Certificate expires: 2027-06-05T14:27:34.000+0000
+Distribution type: App Store
+Min OS version: 13.0
+Provisioned devices: N/A
+Provisions all devices: No
+Supported platforms: iPhoneOS
+Version code: 71
+Version: 3.0.2
+
+Skip uploading "build/ios/ipa/App.ipa" to App Store Connect
+
+Find application entry from App Store Connect for uploaded binary
+Found 1 App matching specified filters: bundleId=Io.GoGoods.music.
+-- App --
+Id: ********
+Type: apps
+Bundle id: Io.GoGoods.music
+Name: GoodTunes
+Primary locale: en-US
+Sku: 20230423gogoods-goodtunes
+Content rights declaration: DOES_NOT_USE_THIRD_PARTY_CONTENT
+Is or ever was made for kids: False
+
+Find uploaded build
+
+Uploaded build is
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+
+Wait until build f9604768-5c93-4dea-9f01-1e8641edad94 and its beta details are processed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+Processing build f9604768-5c93-4dea-9f01-1e8641edad94 beta detail f9604768-5c93-4dea-9f01-1e8641edad94 is completed
+
+Processed build and beta details are
+-- Build --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e7/65/aa/e765aa9b-5d26-f727-6a9e-e2274e602191/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 71
+Uses non exempt encryption: False
+Uploaded date: 2026-07-05 00:35:18-07:00
+Expiration date: 2026-10-03 00:35:18-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+-- Build Beta Detail --
+Id: f9604768-5c93-4dea-9f01-1e8641edad94
+Type: buildBetaDetails
+Auto notify enabled: True
+External build state: READY_FOR_BETA_SUBMISSION
+Internal build state: IN_BETA_TESTING
+Adding build 'f9604768-5c93-4dea-9f01-1e8641edad94' to the following beta groups: GoGoods Test Group.
+Added build 'f9604768-5c93-4dea-9f01-1e8641edad94' to 'GoGoods Test Group' beta group
+
+Submit build 'f9604768-5c93-4dea-9f01-1e8641edad94' to TestFlight beta review
+Creating new Beta App Review Submission: build: f9604768-5c93-4dea-9f01-1e8641edad94
+POST https://api.appstoreconnect.apple.com/v1/betaAppReviewSubmissions returned 422: Beta App Description is missing. - Beta App Description is required to submit a build for external testing.
+Failed to publish build/ios/ipa/App.ipa
+Publish attempt 4 failed (exit 1).
+Checking whether the binary registered despite the failure (transient 500 case)…
+  registration check: latest on App Store Connect = '71', this build = '71'
+Binary build 71 IS registered. Not re-uploading (would be a
+duplicate-binary rejection). Retrying the SUBMISSION only.
+ERROR: publishing failed after 4 attempts.
+  registration check: latest on App Store Connect = '71', this build = '71'
+NOTE: the binary (build 71) IS on App Store Connect — the
+      failure was in a POST-upload submission step, not the upload itself.
+      Check the log above; if it mentions TestFlight test information, that
+      is an operator setup task, not a pipeline bug.
+
+
+Build failed :|
+Step 16 script `Publish to App Store Connect (tolerant of transient 500s)` exited with status code 1
