@@ -24,3 +24,12 @@ load on a distribution build), don't touch code — it's the Apple-portal grant 
 profile regen. After Apple grants it, delete stale App Store profiles for the
 App ID so the pipeline's `--create` mints a fresh profile that carries CarPlay
 (a cached profile without it keeps failing). Operator runbook: `docs/codemagic-builds.md` step 3.
+
+**Pipeline no longer blocks on the grant (Task #2554):** codemagic.yaml's
+"Gate CarPlay out of the distribution archive" step (in the shared iOS scripts,
+just before build-ipa) PlistBuddy-deletes `com.apple.developer.carplay-audio`
+from `App.entitlements` before signing BY DEFAULT, so TestFlight/App Store builds
+succeed while the Apple request is pending. The key stays committed (dev/simulator
+CarPlay unaffected); only the signed distribution binary drops it. To ship CarPlay
+once granted, set `CARPLAY_GRANTED=true` (also 1/yes/granted) in Codemagic's
+`apple_app` group AND regen the profile — the step then keeps the entitlement.
