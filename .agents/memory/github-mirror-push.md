@@ -268,3 +268,25 @@ the main agent, so route that case through an isolated task agent.
 The recurring trigger for a behind mirror: a fix landing via a **main-agent checkpoint**
 (no task merge → `post-merge.sh` / `sync_github_build_mirror` never fires), which is
 exactly how the CarPlay iOS-14 fix left the mirror stale.
+
+## Read-only drift detector (`mirror-freshness` validation)
+
+`scripts/check-github-mirror-freshness.sh` (registered as the `mirror-freshness`
+validation check) is the automated signal for the checkpoint-drift above. It **reuses**
+`github_mirror_known_hosts_contents` + `write_normalized_deploy_key` from `post-merge.sh`
+by `sed`-extracting just those two function bodies and `eval`ing them (so the pinned host
+keys + key-normalization stay single-source — no duplicate known_hosts to drift), then
+`git ls-remote`s the mirror's `refs/heads/main` **read-only (never pushes)** and compares to
+local project main (HEAD):
+- tip == HEAD → OK.
+- tip is an **ancestor** of HEAD → `WARNING — mirror is BEHIND by N` + lists missing commits,
+  **exit 0**. Must NOT fail: every in-flight task legitimately sits ahead of the mirror, so a
+  hard fail would false-alarm every task completion; behind self-heals on the next merge's
+  force-push. A *persistent* behind-count across tasks = a checkpoint fix that needs manual
+  catch-up.
+- tip **not an ancestor** (or unknown object) → diverged → **exit 1** (needs a real force-push
+  through a task agent; main agent can't force-push).
+- key unset / mirror unreachable → SKIP, exit 0 (infra, not drift).
+**Why exit-0-on-behind, not fail:** a mark_task_complete validation that failed whenever the
+mirror was behind would block EVERY task (task HEAD is always ahead of the mirror pre-merge).
+Diverged is the only genuinely-actionable-and-never-false state, so it's the only hard fail.

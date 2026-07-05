@@ -69,6 +69,10 @@ args = "ios-ipa-icon-smoke"
 task = "workflow.run"
 args = "codemagic-android-changeset-smoke"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "mirror-freshness"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -151,6 +155,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python3 scripts/verify-codemagic-android-changeset-smoke.py"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "mirror-freshness"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/check-github-mirror-freshness.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

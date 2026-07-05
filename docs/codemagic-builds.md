@@ -200,6 +200,31 @@ token-expiry pre-warn scheduler was retired along with the PAT.)
 The sync mechanism itself (fetch-first, LFS upload, lockfile sanitize, time budget, force-push)
 is unchanged; see [`.agents/memory/github-mirror-push.md`](../.agents/memory/github-mirror-push.md).
 
+### A drift signal when the mirror falls behind (read-only)
+
+The mirror only auto-syncs when an **isolated task agent merges** to project main (that's when
+`post-merge.sh` runs `sync_github_build_mirror`). A fix that lands via a **main-agent checkpoint**
+(no task merge) never triggers that step, so the mirror silently stays behind and Codemagic keeps
+building **stale** code with no failed-build signal — exactly how the CarPlay iOS-14 fix left the
+mirror stale until a manual catch-up push.
+
+`scripts/check-github-mirror-freshness.sh` (registered as the **`mirror-freshness`** validation
+check) surfaces that drift. It reuses the same deploy key + pinned known_hosts as the sync to
+`git ls-remote` the mirror's `refs/heads/main` tip **read-only (it never pushes)** and compares it
+to local project `main`:
+
+- **current** (tip == project main) → passes quietly.
+- **behind by N** (tip is an ancestor of project main) → passes but prints a loud `WARNING —
+  mirror is BEHIND project main by N commit(s)` and lists the missing commits. It does **not** fail
+  the run, because every in-flight task legitimately sits ahead of the mirror and the gap self-heals
+  on the next merge's force-push; a *persistent* behind-count across tasks is the signal that a fix
+  landed via a checkpoint and needs a manual catch-up (recipe in
+  [`.agents/memory/github-mirror-push.md`](../.agents/memory/github-mirror-push.md)).
+- **diverged** (tip is not an ancestor of project main) → **fails** (exit 1); this is the one
+  genuinely actionable state and needs a real force-push through an isolated task agent (the main
+  agent can't force-push).
+- **key unset / mirror unreachable** → skips cleanly (exit 0); that's infra, not drift.
+
 ---
 
 ## Keeping the GitHub mirror small (history shrink)
