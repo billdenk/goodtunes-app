@@ -28,8 +28,30 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        // Codemagic exposes the uploaded `goodtunes_keystore` reference through
+        // these env vars (environment.android_signing in codemagic.yaml). Wiring
+        // them here is REQUIRED: without a signingConfig, `gradlew bundleRelease`
+        // emits an UNSIGNED .aab and Google Play rejects the upload with
+        // "All uploaded bundles must be signed." Guarded on CM_KEYSTORE_PATH so
+        // local/dev builds (var absent) behave exactly as before.
+        release {
+            def cmKeystorePath = System.getenv("CM_KEYSTORE_PATH")
+            if (cmKeystorePath) {
+                storeFile file(cmKeystorePath)
+                storePassword System.getenv("CM_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("CM_KEY_ALIAS")
+                keyPassword System.getenv("CM_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
+            // Attach signing only when Codemagic supplied the keystore (CI).
+            // Locally the release stays unsigned — unchanged from before.
+            if (System.getenv("CM_KEYSTORE_PATH")) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

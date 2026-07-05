@@ -479,6 +479,35 @@ workflows:
         script: |
           cd android
           ./gradlew bundleRelease
+      - name: Guard — fail fast if the BUILT .aab is not signed
+        script: |
+          # WHY THIS EXISTS: a `release` buildType with no signingConfig (or a
+          # missing/renamed Codemagic keystore reference) makes `gradlew
+          # bundleRelease` emit an UNSIGNED .aab with NO build-time error — it
+          # only fails at the very LAST step, the Play upload ("All uploaded
+          # bundles must be signed. Please sign the bundle using jarsigner."),
+          # wasting the whole build. Catch it here with an actionable message.
+          AAB="android/app/build/outputs/bundle/release/app-release.aab"
+          if [ ! -f "$AAB" ]; then
+            echo "ERROR: expected release bundle not found at $AAB"; exit 1
+          fi
+          if [ -z "${CM_KEYSTORE_PATH:-}" ]; then
+            echo "ERROR: CM_KEYSTORE_PATH is empty — Codemagic did not supply the signing keystore."
+            echo "       Check environment.android_signing (goodtunes_keystore) here AND that the"
+            echo "       'goodtunes_keystore' reference is uploaded under Codemagic > Code signing identities."
+            exit 1
+          fi
+          if command -v jarsigner >/dev/null 2>&1; then
+            if ! jarsigner -verify "$AAB" >/tmp/jarsigner.log 2>&1; then
+              echo "ERROR: the built .aab is NOT signed — Google Play will reject it."
+              echo "       Verify android/app/build.gradle attaches signingConfigs.release to buildTypes.release."
+              cat /tmp/jarsigner.log || true
+              exit 1
+            fi
+            echo "aab signing check ok — bundle is signed"
+          else
+            echo "jarsigner not found — skipping binary signature verify (CM_KEYSTORE_PATH is present)"
+          fi
       - name: Guard — fail fast if the BUILT .aab ships a wrong/blank launcher icon
         script: |
           # WHY THIS EXISTS (and why it's separate from the source-icon guard above):
