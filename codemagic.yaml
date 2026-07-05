@@ -158,7 +158,7 @@ definitions:
         #    version. The next step ("Guard — ...marketing version...") fails the
         #    build in seconds if you forget, instead of letting Apple reject the
         #    finished upload ten minutes later.
-        MARKETING_VERSION=3.0.1
+        MARKETING_VERSION=3.0.2
         agvtool new-marketing-version "$MARKETING_VERSION"
         #
         # 2) BUILD NUMBER (CFBundleVersion) — an internal counter that must be

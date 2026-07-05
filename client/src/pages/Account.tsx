@@ -756,7 +756,7 @@ export function Account() {
               className="text-inherit no-underline hover:no-underline"
               data-testid="link-hidden-admin"
             >
-              Version 3.0.1
+              Version 3.0.2
             </a>
           </p>
           </div>
