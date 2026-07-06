@@ -24,7 +24,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch, useLocation } from "wouter";
-import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign, BookOpen, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Mail, FileCheck } from "lucide-react";
+import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Mail, FileCheck } from "lucide-react";
 import { albumStage, type AlbumStage } from "@shared/albumStage";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
@@ -253,16 +253,6 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
     <OperatorShell
       testId="press-shell"
       layout="leftnav"
-      navIcons={{
-        dashboard: LayoutDashboard,
-        people: Users,
-        catalog: BookOpen,
-        albums: Disc3,
-        pipeline: GitBranch,
-        reports: FileBarChart,
-        pricing: CircleDollarSign,
-        settings: Cog,
-      }}
       roleLabel="Press portal"
       superAdminView={isSuperAdminView}
       name={me?.name ?? "Your press"}

@@ -10,7 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { Redirect, useSearch } from "wouter";
 import { GoodDeedServicesTab } from "@/components/admin/GoodDeedServicesTab";
-import { Store, Loader2, LayoutDashboard, Wrench } from "lucide-react";
+import { Store, Loader2 } from "lucide-react";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole, type OperatorRole } from "@/components/operator/registry";
@@ -194,10 +194,6 @@ function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string;
       activeTab={tab}
       onTabChange={handleTabChange}
       layout="leftnav"
-      navIcons={{
-        dashboard: LayoutDashboard,
-        services: Wrench,
-      }}
     >
       {tab === "dashboard" && (
         <PartnerDashboard

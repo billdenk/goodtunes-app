@@ -24,8 +24,7 @@ import {
 // Heart for song-favorite metrics — keeps the artist dashboard's
 // favourites column visually paired with the player's heart action.
 import {
-  Heart, User as UserIcon, Users, Users2, LayoutDashboard, BarChart3, Megaphone,
-  Disc3, ShoppingBag, FileBarChart, UserCheck, UserPlus,
+  Heart, User as UserIcon, Users, UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -255,18 +254,6 @@ export function ArtistDashboard() {
       }}
       spaceContent
       layout="leftnav"
-      navIcons={{
-        dashboard: LayoutDashboard,
-        overview: BarChart3,
-        audience: Users,
-        acquisition: Megaphone,
-        catalog: Disc3,
-        orders: ShoppingBag,
-        buyers: UserCheck,
-        referrals: UserPlus,
-        people: Users2,
-        reports: FileBarChart,
-      }}
     >
       {/* Task #2524 — embedded album view takes over the content area (Catalog
           tab active), rendering AdminAlbum without the operator /admin chrome.

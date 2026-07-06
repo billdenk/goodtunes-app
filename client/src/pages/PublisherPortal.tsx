@@ -235,7 +235,7 @@ export function PublisherPortal() {
     [statement],
   );
 
-  const tabs = [{ id: "statement" as const, label: "Statement" }] as const;
+  const tabs = [{ id: "statement" as const, label: "Statement", icon: ScrollText }] as const;
 
   return (
     <OperatorShell
@@ -252,7 +252,6 @@ export function PublisherPortal() {
       spaceContent
       testId="publisher-portal"
       layout="leftnav"
-      navIcons={{ statement: ScrollText }}
     >
       {/* Payout onboarding CTA */}
       {me && !me.payoutsEnabled && (

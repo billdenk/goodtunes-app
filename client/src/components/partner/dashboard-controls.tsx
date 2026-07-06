@@ -1,6 +1,7 @@
 import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
-import { Check } from "lucide-react";
+import { Check, type LucideIcon } from "lucide-react";
+import type { OperatorSectionId } from "@/components/operator/registry";
 import { cn } from "@/lib/utils";
 
 export type RangePreset<T extends string> = { id: T; label: string };
@@ -77,7 +78,16 @@ export function CompareToggle({
   );
 }
 
-export type TabDef<T extends string> = { id: T; label: string };
+export type TabDef<T extends string> = {
+  id: T;
+  label: string;
+  /** Task #2566 — left-rail glyph (OperatorShell leftnav). The mobile
+   * DashboardTabs bar ignores it. */
+  icon?: LucideIcon;
+  /** Task #2566 — collapsible rail section membership (OperatorShell
+   * leftnav). The mobile DashboardTabs bar ignores it. */
+  section?: OperatorSectionId;
+};
 
 export function DashboardTabs<T extends string>({
   tabs,

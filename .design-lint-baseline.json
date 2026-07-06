@@ -10272,11 +10272,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/OrderDetailSheet.tsx",
-    "snippet": "<Link href={`/admin/customers/${customer.id}`} className=\"ml-auto text-[12px] text-[var(--brand-blue)] hover:underline underline-offset-2\" data-testid=\"link-customer\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/OrderDetailSheet.tsx",
     "snippet": "<div className=\"text-slate-500 text-[11.5px]\">"
   },
   {
@@ -12552,7 +12547,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/operator/OperatorShell.tsx",
+    "snippet": "<Link key={x.id} href={x.href} data-testid={`nav-${x.id}`} className=\"gt-nav w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-medium text-slate-700 hover:bg-slate-100 transitio"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/operator/OperatorShell.tsx",
     "snippet": "<p className=\"text-[7px] text-slate-400 font-medium uppercase tracking-wider mb-1.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/operator/OperatorShell.tsx",
+    "snippet": "\"w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors\","
   },
   {
     "rule": "hardcoded-font-size",

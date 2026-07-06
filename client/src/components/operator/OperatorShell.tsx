@@ -25,8 +25,10 @@
 
 import * as React from "react";
 import { Link } from "wouter";
-import { Circle, Eye, type LucideIcon } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { ChevronRight, Circle, Eye, type LucideIcon } from "lucide-react";
 import { DashboardTabs, type TabDef } from "@/components/partner/dashboard-controls";
+import { SECTION_LABELS, type OperatorSectionId } from "@/components/operator/registry";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { FeedbackLauncher } from "@/components/operator/FeedbackLauncher";
@@ -105,9 +107,6 @@ export type OperatorShellProps<TabId extends string> = {
    * the unified scoped left-nav for the standalone partner portals.
    */
   layout?: "tabs" | "leftnav";
-  /** Per-tab icons for the left rail (`layout="leftnav"`). Tabs without
-   * an icon fall back to a small dot so the rail stays aligned. */
-  navIcons?: Partial<Record<TabId, LucideIcon>>;
   /** Extra non-tab left-nav links (`layout="leftnav"`), rendered below
    * the tabs with a divider. */
   navExtras?: ReadonlyArray<OperatorNavExtra>;
@@ -134,7 +133,6 @@ export function OperatorShell<TabId extends string>({
   maxWidth = "6xl",
   spaceContent = false,
   layout = "tabs",
-  navIcons,
   navExtras,
   children,
   testId,
@@ -157,6 +155,37 @@ export function OperatorShell<TabId extends string>({
 
   const maxW = maxWidth === "5xl" ? "max-w-5xl" : "max-w-6xl";
   const radius = logoShape === "circle" ? "rounded-full" : "rounded-2xl";
+
+  // Task #2566 — collapsible rail sections, mirroring AdminFrame's
+  // Stripe-style accordion (at most one section open at a time, choice
+  // persisted to localStorage). The section holding the active tab is
+  // expanded on first load with no stored value; after that the stored
+  // value wins so navigating never re-expands a section the partner
+  // collapsed. Keyed separately from the admin so the two don't clobber.
+  const SIDEBAR_SECTIONS_KEY = "gt:operator-sidebar-sections";
+  const reduceMotion = useReducedMotion();
+  const activeSection: OperatorSectionId | null =
+    (tabs.find((t) => t.id === activeTab)?.section as OperatorSectionId | undefined) ?? null;
+  const [openSection, setOpenSection] = React.useState<OperatorSectionId | null>(() => {
+    if (typeof window === "undefined") return activeSection;
+    try {
+      const raw = window.localStorage.getItem(SIDEBAR_SECTIONS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed === "string" || parsed === null) {
+          return parsed as OperatorSectionId | null;
+        }
+      }
+    } catch {}
+    return activeSection;
+  });
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_SECTIONS_KEY, JSON.stringify(openSection));
+    } catch {}
+  }, [openSection]);
+  const toggleSection = (id: OperatorSectionId) =>
+    setOpenSection((prev) => (prev === id ? null : id));
 
   // Elegant top-nav badge that signals an operator is viewing this portal in
   // super-admin mode. Uses the soft brand-blue token (inline style — Tailwind
@@ -259,46 +288,69 @@ export function OperatorShell<TabId extends string>({
             )}
           </div>
 
-          {/* Task #2085 — nav items mirror AdminFrame's SidebarLink class
-              treatment (px-3 py-2, text-sm, brand-blue active, slate-700
+          {/* Task #2085 + #2566 — nav items mirror AdminFrame's SidebarLink
+              treatment (px-3 py-2, 13.5px, brand-blue active, slate-700
               hover:bg-slate-100) so a partner sees the same nav styling
               whether they're in this portal or in a shared admin tool
               (Reports, album detail) reached through AdminFrame's trimmed
-              rail. SidebarLink uses a grandfathered ~13.5px size; this new
-              code uses the text-sm scale token (the sub-pixel difference is
-              imperceptible). Keep these in lock-step with SidebarLink. */}
+              rail. Icons + section grouping come from the SINGLE registry
+              source (registry.ts), never per-page maps that can drift.
+              Keep these in lock-step with SidebarLink / Section. */}
           <nav
             className="flex-1 px-2 pt-2 pb-3 space-y-0.5 overflow-y-auto border-r border-slate-200"
             data-testid="operator-shell-nav"
           >
-            {tabs.map((t) => {
-              const Icon = navIcons?.[t.id] ?? Circle;
-              const isActive = t.id === activeTab;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => onTabChange(t.id)}
-                  aria-current={isActive ? "page" : undefined}
-                  className={cn(
-                    "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors",
-                    isActive ? "font-bold" : "font-medium",
-                    isActive
-                      ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
-                      : "text-slate-700 hover:bg-slate-100",
-                  )}
-                  data-testid={`nav-${t.id}`}
-                >
-                  <Icon
-                    className={cn(
-                      "w-4 h-4 flex-shrink-0",
-                      isActive ? "text-[var(--brand-blue)]" : "text-slate-400",
-                    )}
+            {(() => {
+              // Render each tab in registry order. The first tab of a
+              // section emits a collapsible Section wrapping every member of
+              // that section (registry order); later members are skipped
+              // (already drawn). Flat tabs render inline. Because the
+              // registry places section members contiguously right under the
+              // section's anchor row, the group lands in the intended spot.
+              const drawnSections = new Set<OperatorSectionId>();
+              return tabs.map((t) => {
+                if (t.section) {
+                  if (drawnSections.has(t.section)) return null;
+                  drawnSections.add(t.section);
+                  const sectionId = t.section;
+                  const members = tabs.filter((x) => x.section === sectionId);
+                  const containsActive = members.some((m) => m.id === activeTab);
+                  const expanded = openSection === sectionId;
+                  return (
+                    <NavSection
+                      key={`section-${sectionId}`}
+                      label={SECTION_LABELS[sectionId]}
+                      expanded={expanded}
+                      containsActive={containsActive}
+                      reduceMotion={!!reduceMotion}
+                      onToggle={() => toggleSection(sectionId)}
+                      testId={`nav-section-${sectionId}`}
+                    >
+                      {members.map((m) => (
+                        <NavButton
+                          key={m.id}
+                          label={m.label}
+                          icon={m.icon}
+                          active={m.id === activeTab}
+                          onClick={() => onTabChange(m.id)}
+                          testId={`nav-${m.id}`}
+                        />
+                      ))}
+                    </NavSection>
+                  );
+                }
+                return (
+                  <NavButton
+                    key={t.id}
+                    label={t.label}
+                    icon={t.icon}
+                    active={t.id === activeTab}
+                    onClick={() => onTabChange(t.id)}
+                    testId={`nav-${t.id}`}
                   />
-                  <span className="flex-1 text-left truncate">{t.label}</span>
-                </button>
-              );
-            })}
+                );
+              });
+            })()}
 
             {navExtras && navExtras.length > 0 && (
               <>
@@ -306,7 +358,7 @@ export function OperatorShell<TabId extends string>({
                 {navExtras.map((x) => {
                   const Icon = x.icon ?? Circle;
                   return (
-                    <Link key={x.id} href={x.href} data-testid={`nav-${x.id}`} className="gt-nav w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors">
+                    <Link key={x.id} href={x.href} data-testid={`nav-${x.id}`} className="gt-nav w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-medium text-slate-700 hover:bg-slate-100 transition-colors">
                       <Icon className="w-4 h-4 flex-shrink-0 text-slate-400" />
                       <span className="flex-1 text-left truncate">{x.label}</span>
                     </Link>
@@ -449,5 +501,133 @@ export function OperatorShell<TabId extends string>({
       </div>
     </main>
     </>
+  );
+}
+
+/** A single left-rail nav row (`layout="leftnav"`). Mirrors AdminFrame's
+ * SidebarLink: px-3 py-2, 13.5px, brand-blue active, slate hover. The icon
+ * comes from the registry; a small dot is the safety fallback. */
+function NavButton({
+  label,
+  icon: Icon,
+  active,
+  onClick,
+  testId,
+}: {
+  label: string;
+  icon?: LucideIcon;
+  active: boolean;
+  onClick: () => void;
+  testId?: string;
+}) {
+  const Glyph = Icon ?? Circle;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      data-testid={testId}
+      className={cn(
+        "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors",
+        active ? "font-bold" : "font-medium",
+        active
+          ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
+          : "text-slate-700 hover:bg-slate-100",
+      )}
+    >
+      <Glyph
+        className={cn(
+          "w-4 h-4 flex-shrink-0",
+          active ? "text-[var(--brand-blue)]" : "text-slate-400",
+        )}
+      />
+      <span className="flex-1 text-left truncate">{label}</span>
+    </button>
+  );
+}
+
+/** A collapsible left-rail section header with nested children
+ * (`layout="leftnav"`). Mirrors AdminFrame's `Section`: chevron rotates on
+ * expand, Stripe-style spring, active-parent highlight when collapsed while
+ * it holds the current tab, children indented `pl-4`. */
+function NavSection({
+  label,
+  expanded,
+  containsActive,
+  reduceMotion,
+  onToggle,
+  testId,
+  children,
+}: {
+  label: string;
+  expanded: boolean;
+  containsActive: boolean;
+  reduceMotion: boolean;
+  onToggle: () => void;
+  testId?: string;
+  children: React.ReactNode;
+}) {
+  const highlightParent = containsActive && !expanded;
+  const openTransition = reduceMotion
+    ? { duration: 0 }
+    : {
+        height: { type: "spring" as const, stiffness: 520, damping: 28, mass: 0.9 },
+        opacity: { duration: 0.18, ease: "easeOut" as const },
+      };
+  const closeTransition = reduceMotion
+    ? { duration: 0 }
+    : {
+        height: { duration: 0.18, ease: [0.4, 0, 0.2, 1] as [number, number, number, number] },
+        opacity: { duration: 0.12, ease: "easeIn" as const },
+      };
+  return (
+    <div className="pt-2 first:pt-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        data-testid={testId}
+        data-active={highlightParent ? "true" : "false"}
+        className={cn(
+          "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors",
+          highlightParent ? "font-bold" : "font-medium",
+          highlightParent
+            ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
+            : "text-slate-700 hover:bg-slate-100",
+        )}
+      >
+        <motion.span
+          animate={{ rotate: expanded ? 90 : 0 }}
+          transition={
+            reduceMotion
+              ? { duration: 0 }
+              : { type: "spring", stiffness: 520, damping: 28, mass: 0.9 }
+          }
+          className="flex-shrink-0"
+        >
+          <ChevronRight
+            className={cn(
+              "w-4 h-4",
+              highlightParent ? "text-[var(--brand-blue)]" : "text-slate-400",
+            )}
+          />
+        </motion.span>
+        <span className="flex-1 text-left">{label}</span>
+      </button>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="content"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={expanded ? openTransition : closeTransition}
+            style={{ overflow: "hidden" }}
+          >
+            <div className="pl-4 mt-0.5 space-y-0.5">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }

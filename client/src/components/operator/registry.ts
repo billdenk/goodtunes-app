@@ -17,6 +17,40 @@
 // real gate today — but the field is here so a new module that needs
 // e.g. `invite_subusers` to appear can declare it without re-plumbing
 // the shell.
+//
+// Task #2566 — each module also carries its own `icon` (a lucide glyph)
+// and optional `section` membership, so the shared OperatorShell rail is
+// the SINGLE SOURCE OF TRUTH for every portal's icons and grouping (no
+// per-page icon maps that can drift). Icons match the super-admin
+// AdminFrame `SidebarLink`s for every shared destination (Dashboard →
+// LayoutDashboard, People → User, Albums → Disc3, Orders → ShoppingBag,
+// Reports → BarChart3); portal-only destinations pick one consistent
+// glyph reused across every portal. `section` mirrors AdminFrame's
+// `SidebarSectionId` / `SECTION_FOR_ENTITY` model — modules that share a
+// section id render nested under a collapsible header in the rail.
+
+import {
+  LayoutDashboard,
+  User,
+  Users,
+  Disc3,
+  ShoppingBag,
+  BarChart3,
+  Activity,
+  Megaphone,
+  UserCheck,
+  UserPlus,
+  Mail,
+  ScrollText,
+  Network,
+  Wrench,
+  BookOpen,
+  CircleDollarSign,
+  BadgeDollarSign,
+  Cog,
+  Printer,
+  type LucideIcon,
+} from "lucide-react";
 
 export type OperatorRole =
   | "artist"
@@ -40,83 +74,113 @@ export type PartnerVerb =
   | "invite_subusers"
   | "edit_credits_and_gear";
 
+/** Collapsible rail groups. Only "catalog" exists today — mirrors the
+ * super-admin's Catalog section (People/Roster + Albums nested under a
+ * chevron header directly under Dashboard). */
+export type OperatorSectionId = "catalog";
+
+/** Header labels for each collapsible section. */
+export const SECTION_LABELS: Record<OperatorSectionId, string> = {
+  catalog: "Catalog",
+};
+
 export interface OperatorModuleDef {
   id: string;
   label: string;
+  /** Lucide glyph shown in the left rail. Shared destinations use the
+   * exact icon the super-admin AdminFrame uses. */
+  icon: LucideIcon;
+  /** When set, this module renders nested under the matching collapsible
+   * section header in the rail instead of as a flat top-level row. */
+  section?: OperatorSectionId;
   slot?: "main" | "aside";
   roles: readonly OperatorRole[];
   requires?: readonly PartnerVerb[];
 }
 
 export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
-  // Artist shell — `/artist` (ArtistDashboard.tsx)
-  { id: "dashboard",   label: "Dashboard",   roles: ["artist"] },
-  { id: "overview",    label: "Overview",    roles: ["artist"] },
-  { id: "audience",    label: "Audience",    roles: ["artist"] },
-  { id: "acquisition", label: "Acquisition", roles: ["artist"] },
-  { id: "catalog",     label: "Catalog",     roles: ["artist"] },
-  { id: "orders",      label: "Orders",      roles: ["artist"] },
-  { id: "buyers",      label: "Buyers",      roles: ["artist"] },
-  { id: "referrals",   label: "Referrals",   roles: ["artist"] },
-  { id: "people",      label: "People",      roles: ["artist"] },
+  // Artist shell — `/artist` (ArtistDashboard.tsx). Catalog section
+  // (People, Albums) sits directly under Dashboard, mirroring the
+  // super-admin. The "catalog" module renders the releases list — its id
+  // stays "catalog" (ArtistDashboard keys the embedded album view on it)
+  // but its LABEL is "Albums".
+  { id: "dashboard",   label: "Dashboard",   icon: LayoutDashboard, roles: ["artist"] },
+  { id: "people",      label: "People",      icon: User,      section: "catalog", roles: ["artist"] },
+  { id: "catalog",     label: "Albums",      icon: Disc3,     section: "catalog", roles: ["artist"] },
+  { id: "overview",    label: "Overview",    icon: Activity,  roles: ["artist"] },
+  { id: "audience",    label: "Audience",    icon: Users,     roles: ["artist"] },
+  { id: "acquisition", label: "Acquisition", icon: Megaphone, roles: ["artist"] },
+  { id: "orders",      label: "Orders",      icon: ShoppingBag, roles: ["artist"] },
+  { id: "buyers",      label: "Buyers",      icon: UserCheck, roles: ["artist"] },
+  { id: "referrals",   label: "Referrals",   icon: UserPlus,  roles: ["artist"] },
   // Reports renders the shared AdminReports in `embedded` mode INSIDE the
   // artist portal shell (no /admin chrome). See ArtistDashboard.tsx.
-  { id: "reports",     label: "Reports",     roles: ["artist"] },
+  { id: "reports",     label: "Reports",     icon: BarChart3, roles: ["artist"] },
 
-  // Label shell — `/label` (LabelDashboard.tsx)
-  { id: "dashboard",   label: "Dashboard",   roles: ["label"] },
-  { id: "overview",    label: "Overview",    roles: ["label"] },
-  { id: "acquisition", label: "Acquisition", roles: ["label"] },
-  { id: "roster",      label: "Roster",      roles: ["label"] },
-  { id: "catalog",     label: "Catalog",     roles: ["label"] },
-  { id: "orders",      label: "Orders",      roles: ["label"] },
+  // Label shell — `/label` (LabelDashboard.tsx). Catalog section (Roster,
+  // Albums) under Dashboard. "catalog" relabeled "Albums".
+  { id: "dashboard",   label: "Dashboard",   icon: LayoutDashboard, roles: ["label"] },
+  { id: "roster",      label: "Roster",      icon: Users,     section: "catalog", roles: ["label"] },
+  { id: "catalog",     label: "Albums",      icon: Disc3,     section: "catalog", roles: ["label"] },
+  { id: "overview",    label: "Overview",    icon: Activity,  roles: ["label"] },
+  { id: "acquisition", label: "Acquisition", icon: Megaphone, roles: ["label"] },
+  { id: "orders",      label: "Orders",      icon: ShoppingBag, roles: ["label"] },
   // Reports renders the shared AdminReports in `embedded` mode INSIDE the
   // label portal shell (no /admin chrome). See LabelDashboard.tsx.
-  { id: "reports",     label: "Reports",     roles: ["label"] },
+  { id: "reports",     label: "Reports",     icon: BarChart3, roles: ["label"] },
 
   // Manager shell — `/manager` (ManagerDashboard.tsx). No self-serve
   // dashboard/PartnerDashboard tab (managers carry no press provenance
   // and have no /api/partner/manager/dashboard route); reporting only.
-  { id: "overview",  label: "Overview",  roles: ["manager"] },
-  { id: "roster",    label: "Roster",    roles: ["manager"] },
-  { id: "catalog",   label: "Catalog",   roles: ["manager"] },
-  { id: "orders",    label: "Orders",    roles: ["manager"] },
+  // Catalog section (Roster, Albums) sits under Overview since there's no
+  // Dashboard tab. "catalog" relabeled "Albums".
+  { id: "overview",  label: "Overview",  icon: Activity,    roles: ["manager"] },
+  { id: "roster",    label: "Roster",    icon: Users,  section: "catalog", roles: ["manager"] },
+  { id: "catalog",   label: "Albums",    icon: Disc3,  section: "catalog", roles: ["manager"] },
+  { id: "orders",    label: "Orders",    icon: ShoppingBag, roles: ["manager"] },
 
-  // Non-profit shell — `/non-profit` (NonProfitDashboard.tsx)
-  { id: "dashboard",   label: "Dashboard",     roles: ["non_profit"] },
-  { id: "artists",     label: "Your artists",  roles: ["non_profit"] },
-  { id: "acquisition", label: "Acquisition",   roles: ["non_profit"] },
-  { id: "buyers",      label: "Buyers",        roles: ["non_profit"] },
-  { id: "invites",     label: "Invites",       roles: ["non_profit"] },
+  // Non-profit shell — `/non-profit` (NonProfitDashboard.tsx). No catalog
+  // entities, so no Catalog section — flat list. `tree` is gated at the
+  // call site by caps.canViewTree.
+  { id: "dashboard",   label: "Dashboard",     icon: LayoutDashboard, roles: ["non_profit"] },
+  { id: "artists",     label: "Your artists",  icon: Users,      roles: ["non_profit"] },
+  { id: "acquisition", label: "Acquisition",   icon: Megaphone,  roles: ["non_profit"] },
+  { id: "buyers",      label: "Buyers",        icon: UserCheck,  roles: ["non_profit"] },
+  { id: "invites",     label: "Invites",       icon: Mail,       roles: ["non_profit"] },
+  { id: "ledger",      label: "Album ledger",  icon: ScrollText, roles: ["non_profit"] },
+  { id: "tree",        label: "Team tree",     icon: Network,    roles: ["non_profit"] },
 
   // Vendor + reseller + fulfillment shell — `/vendor` (VendorPortal.tsx)
   // GoodDeed Services is vendor-only server-side (gateVendorAccess in
   // server/routes.ts admits role==='vendor' only); manufacturer +
-  // fulfillment scopes get the dashboard tab only.
-  { id: "dashboard", label: "Dashboard",         roles: ["vendor", "manufacturer", "fulfillment"] },
-  { id: "services",  label: "GoodDeed Services", roles: ["vendor"] },
+  // fulfillment scopes get the dashboard tab only. No catalog — flat list.
+  { id: "dashboard", label: "Dashboard",         icon: LayoutDashboard, roles: ["vendor", "manufacturer", "fulfillment"] },
+  { id: "services",  label: "GoodDeed Services", icon: Wrench,          roles: ["vendor"] },
 
   // Press shell — `/vendor` routed via ManufacturerScopeRouter for
-  // is_maker manufacturers (PressPortal.tsx). Catalog promoted to first-class
-  // nav tab (Task #2188); Pipeline + Reports removed from nav (still reachable
-  // via direct ?tab= URL). GoodDeed pricing renders INLINE (Task #2075).
-  { id: "dashboard", label: "Dashboard",        roles: ["press"] },
-  { id: "people",    label: "People",           roles: ["press"] },
-  { id: "catalog",   label: "Catalog",          roles: ["press"] },
-  { id: "albums",    label: "Albums",           roles: ["press"] },
-  { id: "pricing",   label: "GoodDeed pricing", roles: ["press"] },
-  { id: "settings",  label: "Settings",         roles: ["press"] },
+  // is_maker manufacturers (PressPortal.tsx). Catalog section (People,
+  // Albums) under Dashboard. The press's own "catalog" tab is the VINYL
+  // PRODUCT catalog (not releases) — relabeled "Vinyl catalog" and left
+  // flat alongside GoodDeed pricing + Settings so it doesn't clash with
+  // the section name. GoodDeed pricing renders INLINE (Task #2075).
+  { id: "dashboard", label: "Dashboard",        icon: LayoutDashboard,  roles: ["press"] },
+  { id: "people",    label: "People",           icon: User,   section: "catalog", roles: ["press"] },
+  { id: "albums",    label: "Albums",           icon: Disc3,  section: "catalog", roles: ["press"] },
+  { id: "catalog",   label: "Vinyl catalog",    icon: BookOpen,         roles: ["press"] },
+  { id: "pricing",   label: "GoodDeed pricing", icon: CircleDollarSign, roles: ["press"] },
+  { id: "settings",  label: "Settings",         icon: Cog,              roles: ["press"] },
 
   // GoodDeed Quickprinter shell — `/vendor` routed via VendorScopeRouter
-  // for is_quickprinter vendors (PrinterPortal.tsx). Print Queue is the
-  // centerpiece; Catalog is the GoodDeed Services pricing editor; Albums
-  // and People are derived read-only views of who they print for.
-  { id: "dashboard",   label: "Dashboard",       roles: ["printer"] },
-  { id: "print-queue", label: "Print Queue",     roles: ["printer"] },
-  { id: "catalog",     label: "Catalog",         roles: ["printer"] },
-  { id: "albums",      label: "Albums",          roles: ["printer"] },
-  { id: "people",      label: "People & Labels", roles: ["printer"] },
-  { id: "settings",    label: "Settings",        roles: ["printer"] },
+  // for is_quickprinter vendors (PrinterPortal.tsx). Print Queue stays the
+  // first item under Dashboard (deliberate centerpiece). Catalog section
+  // (People & Labels, Albums) follows. The printer's own "catalog" tab is
+  // the GoodDeed pricing editor — relabeled "GoodDeed pricing" and left flat.
+  { id: "dashboard",   label: "Dashboard",       icon: LayoutDashboard,  roles: ["printer"] },
+  { id: "print-queue", label: "Print Queue",     icon: Printer,          roles: ["printer"] },
+  { id: "people",      label: "People & Labels", icon: User,   section: "catalog", roles: ["printer"] },
+  { id: "albums",      label: "Albums",          icon: Disc3,  section: "catalog", roles: ["printer"] },
+  { id: "catalog",     label: "GoodDeed pricing", icon: BadgeDollarSign, roles: ["printer"] },
+  { id: "settings",    label: "Settings",        icon: Cog,              roles: ["printer"] },
 ];
 
 export function modulesForRole(

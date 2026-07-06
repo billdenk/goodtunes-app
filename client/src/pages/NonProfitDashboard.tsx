@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatUsdCents } from "@shared/money";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
-import { Heart, Music as MusicIcon, Mail, Clock, UserPlus, Users, Trash2, Send, Copy, Check, ChevronDown, LayoutDashboard, ShoppingBag, ScrollText, Network, Megaphone } from "lucide-react";
+import { Heart, Music as MusicIcon, Mail, Clock, UserPlus, Users, Trash2, Send, Copy, Check, ChevronDown } from "lucide-react";
 import { ReferralLinkWidget } from "@/components/admin/ReferralLinkWidget";
 import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { DashboardPanel } from "@/components/partner/dashboard-controls";
@@ -89,7 +89,6 @@ type Tree = {
 
 const fmt = (c: number) => formatUsdCents(c);
 
-const BASE_NPO_TABS = modulesForRole("non_profit") as ReadonlyArray<{ id: "dashboard" | "artists" | "acquisition" | "buyers" | "invites"; label: string }>;
 type NpoTabId = "dashboard" | "artists" | "acquisition" | "buyers" | "invites" | "ledger" | "tree";
 
 
@@ -97,12 +96,16 @@ export function NonProfitDashboard() {
   const me = useQuery<Me>({ queryKey: ["/api/non-profit/me"] });
   const caps = me.data?.caller;
   const npoId = me.data?.id;
-  const tabs = useMemo<ReadonlyArray<{ id: NpoTabId; label: string }>>(() => {
-    const base: { id: NpoTabId; label: string }[] = BASE_NPO_TABS.map((t) => ({ id: t.id, label: t.label }));
-    base.push({ id: "ledger", label: "Album ledger" });
-    if (caps?.canViewTree) base.push({ id: "tree", label: "Team tree" });
-    return base;
-  }, [caps?.canViewTree]);
+  // Tabs (incl. icons + labels) come straight from the registry — the
+  // single source of truth. `tree` is gated on caps.canViewTree; the
+  // registry keeps the runtime `icon` on each row for the rail.
+  const tabs = useMemo<ReadonlyArray<{ id: NpoTabId; label: string }>>(
+    () =>
+      modulesForRole("non_profit").filter(
+        (t) => t.id !== "tree" || caps?.canViewTree,
+      ) as ReadonlyArray<{ id: NpoTabId; label: string }>,
+    [caps?.canViewTree],
+  );
   const [tab, setTab] = useState<NpoTabId>(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
     if (t === "dashboard" || t === "artists" || t === "acquisition" || t === "buyers" || t === "invites" || t === "ledger" || t === "tree") return t;
@@ -164,15 +167,6 @@ export function NonProfitDashboard() {
         history.replaceState(null, "", `${window.location.pathname}?${sp}`);
       }}
       layout="leftnav"
-      navIcons={{
-        dashboard: LayoutDashboard,
-        artists: Users,
-        acquisition: Megaphone,
-        buyers: ShoppingBag,
-        invites: UserPlus,
-        ledger: ScrollText,
-        tree: Network,
-      }}
     >
       {tab === "dashboard" && (
         <PartnerDashboard
