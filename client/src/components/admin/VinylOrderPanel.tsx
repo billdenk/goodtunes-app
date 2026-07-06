@@ -707,8 +707,16 @@ export function VinylOrderPanel({
                   >
                     {side}
                   </div>
-                  <div className="text-[12.5px] font-semibold text-slate-900">
-                    Side {side}
+                  <div>
+                    <div className="text-[12.5px] font-semibold text-slate-900">
+                      Side {side}
+                    </div>
+                    <div
+                      className="text-xs font-normal text-slate-400"
+                      data-testid={`text-side-catalog-number-${side}`}
+                    >
+                      Catalog Number: [Title-001-{side}]
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-[12px]">
