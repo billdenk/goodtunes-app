@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, ExternalLink, Heart, Pencil } from "lucide-react";
-import { ReferralSummaryPanel } from "@/pages/AdminPerson";
+import { ReferralSummaryPanel, BackfillReferralPanel } from "@/pages/AdminPerson";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
@@ -253,6 +253,7 @@ export default function AdminNonProfit() {
               ]}
             />
             <ReferralSummaryPanel kind="non_profit" id={npo.id} />
+            <BackfillReferralPanel kind="non_profit" id={npo.id} />
           </>
         )}
         {tab === "people" && (

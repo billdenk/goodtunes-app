@@ -123,6 +123,25 @@ async function comparePasswords(supplied: string, stored: string): Promise<boole
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
+// Task #2568 — pick a free username for an account minted from a name/
+// email rather than an operator-typed handle (back-filled referral
+// provisioning). Mirrors the suggest-then-suffix pattern used across the
+// signup flows; collisions are rare since usernames are globally unique.
+function seedUsernameFrom(nameOrEmail: string): string {
+  const base = (nameOrEmail.split("@")[0] || "artist").toLowerCase().replace(/[^a-z0-9_]/g, "");
+  return (base || "artist").slice(0, 20);
+}
+async function pickUniqueUsernameFor(kind: "admin" | "customer", nameOrEmail: string): Promise<string> {
+  const seed = seedUsernameFrom(nameOrEmail);
+  let candidate = seed;
+  for (let i = 0; i < 8; i++) {
+    const existing = kind === "admin" ? await storage.getUserByUsername(candidate) : await storage.getCustomerByUsername(candidate);
+    if (!existing) return candidate;
+    candidate = `${seed.slice(0, 14)}${Math.floor(1000 + Math.random() * 9000)}`.slice(0, 20);
+  }
+  return `${seed.slice(0, 10)}${randomBytes(4).toString("hex")}`.slice(0, 20);
+}
+
 // Hide all but the first character of the local part. We surface this on
 // the email-OTP step so the admin sees which inbox to check without us
 // echoing the full address back to a page that might be screen-shared.
@@ -28128,6 +28147,162 @@ export async function registerRoutes(
       })),
       provenance: { referredBy, invitedBy },
     });
+  });
+
+  // Task #2568 — Back-fill an already-happened referral + hand over a
+  // welcome-back sign-in link. This is the operator escape hatch for a
+  // relationship that started off-platform (a text, a DM, a handshake at
+  // a show) before GoodTunes could track it — NOT a substitute for the
+  // emailed invite flow. It deliberately reuses:
+  //   - applyAdminInviteGrant (never raw setUserRole) for account
+  //     provisioning, so a back-filled artist is granted access exactly
+  //     the way an invite-accept would.
+  //   - applyArtistAcceptReferral's stamping helpers (via the same
+  //     applyAdminInviteGrant call) so referred_by_person_id/org_id +
+  //     the artist_referrals row are written identically to a real
+  //     accept — no parallel stamping logic to drift out of sync.
+  //   - mintWelcomeBackToken + customerOriginFromReq for the link, the
+  //     same mint AdminCustomerDetail's "Sign-in link" button uses.
+  // No invite/transactional email is ever sent from this route.
+  app.post("/api/admin/partners/:kind/:id/backfill-referral", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    try {
+      const kind = String(req.params.kind);
+      const referrerId = String(req.params.id);
+      if (kind !== "artist" && kind !== "non_profit") {
+        return res.status(400).json({ message: "kind must be artist or non_profit" });
+      }
+      const referredPersonId = typeof req.body?.referredPersonId === "string" ? req.body.referredPersonId.trim() : "";
+      const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+      const effectiveDateRaw = typeof req.body?.effectiveDate === "string" ? req.body.effectiveDate.trim() : "";
+      if (!referredPersonId) return res.status(400).json({ message: "Pick the referred artist" });
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+        return res.status(400).json({ message: "A valid email is required to provision the artist's login" });
+      }
+      let effectiveDate: Date | null = null;
+      if (effectiveDateRaw) {
+        const d = new Date(`${effectiveDateRaw}T12:00:00.000Z`);
+        if (Number.isNaN(d.getTime())) return res.status(400).json({ message: "Invalid effective date" });
+        effectiveDate = d;
+      }
+
+      // Referrer must exist.
+      const safeReferrerId = referrerId.replace(/'/g, "''");
+      if (kind === "artist") {
+        const referrer = await storage.getPersonById(referrerId);
+        if (!referrer) return res.status(404).json({ message: "Referring artist not found" });
+      } else {
+        const r = await db.execute<any>(sql.raw(`SELECT id FROM organizations WHERE id = '${safeReferrerId}' AND kind = 'non_profit' LIMIT 1`));
+        if (((r as any).rows ?? []).length === 0) return res.status(404).json({ message: "Referring non-profit not found" });
+      }
+
+      const referred = await storage.getPersonById(referredPersonId);
+      if (!referred) return res.status(404).json({ message: "Referred artist not found" });
+
+      // Already-attributed guard — sqlStampReferredByPerson/Org NULL-guard
+      // (only stamp when the column is currently NULL), so re-attributing
+      // to a DIFFERENT referrer would otherwise silently no-op and read as
+      // a false success. Surface the conflict instead. Re-running against
+      // the SAME referrer is treated as idempotent (still mints a link).
+      const referrerCol = kind === "artist" ? "referred_by_person_id" : "referred_by_org_id";
+      const safeReferredId = referredPersonId.replace(/'/g, "''");
+      const existing = await db.execute<any>(sql.raw(`SELECT ${referrerCol} AS val FROM people WHERE id = '${safeReferredId}' LIMIT 1`));
+      const currentVal = ((existing as any).rows ?? [])[0]?.val ?? null;
+      const alreadySame = currentVal === referrerId;
+      if (currentVal && !alreadySame) {
+        let otherName: string | null = null;
+        if (kind === "artist") {
+          otherName = (await storage.getPersonById(currentVal))?.name ?? null;
+        } else {
+          const orgRow = await db.execute<any>(sql.raw(`SELECT name FROM organizations WHERE id = '${String(currentVal).replace(/'/g, "''")}' LIMIT 1`));
+          otherName = ((orgRow as any).rows ?? [])[0]?.name ?? null;
+        }
+        return res.status(409).json({
+          message: `${referred.name} is already attributed to ${otherName ?? "a different referrer"} — can't re-attribute.`,
+        });
+      }
+
+      // Ensure a fan (customer) row exists for the email — the welcome-
+      // back link mints against it, and applyAdminInviteGrant's by-email
+      // link step needs it to already exist to connect the two hats.
+      let customer = await storage.getCustomerByEmail(email);
+      let createdAccount = false;
+      if (!customer) {
+        const uname = await pickUniqueUsernameFor("customer", referred.name || email);
+        customer = await storage.createCustomer({
+          username: uname,
+          email,
+          displayName: referred.name || email.split("@")[0],
+          realName: null,
+          password: null,
+        });
+        createdAccount = true;
+      }
+
+      // Ensure an admin (artist-role) account exists for the same email.
+      // applyAdminInviteGrant below handles BOTH branches identically to
+      // the emailed-invite accept path: an existing account gets the
+      // artist hat ADDED via addMembership, a brand-new one is minted via
+      // setUserRole — never a raw setUserRole on an existing user.
+      let adminUser = await storage.getUserByEmail(email);
+      const isNewAccount = !adminUser;
+      if (!adminUser) {
+        const uname = await pickUniqueUsernameFor("admin", referred.name || email);
+        const placeholderPassword = await hashPassword(randomBytes(24).toString("hex"));
+        adminUser = await storage.createUser({
+          username: uname,
+          email,
+          displayName: referred.name || email.split("@")[0],
+          realName: null,
+          password: placeholderPassword,
+        });
+      }
+      await applyAdminInviteGrant(
+        adminUser.id,
+        {
+          id: null,
+          role: "artist",
+          roleScopeId: referredPersonId,
+          referrerKind: kind,
+          referrerScopeId: referrerId,
+          inviteRole: null,
+          email,
+        } as any,
+        { isNewAccount },
+      );
+
+      // Honor the operator's chosen hand-shake date as the artist→artist
+      // one-year earning-window anchor. sqlOpenArtistReferral defaults
+      // created_at=now(); back-date it only when the operator supplied an
+      // explicit effective date (NPOs have no earning window to anchor).
+      if (kind === "artist" && effectiveDate) {
+        await db.execute(sql`
+          UPDATE artist_referrals SET created_at = ${effectiveDate}
+          WHERE referrer_person_id = ${referrerId} AND invitee_person_id = ${referredPersonId} AND album_id IS NULL
+        `);
+      }
+
+      // Mint the copyable login link — same helper + host resolution the
+      // customer-detail "Sign-in link" escape hatch uses. No email sent.
+      const { mintWelcomeBackToken, customerOriginFromReq } = await import("./welcomeBack");
+      const raw = await mintWelcomeBackToken(customer.id);
+      const origin = customerOriginFromReq(req);
+      const signInUrl = `${origin}/api/welcome-back/redeem/${raw}`;
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      console.log(`[admin] referral back-filled: ${kind} ${referrerId} -> artist ${referredPersonId} (by user ${req.session.userId})`);
+
+      res.json({
+        referredPersonId,
+        referredName: referred.name,
+        createdAccount,
+        alreadyAttributed: alreadySame,
+        signInUrl,
+        expiresAt,
+      });
+    } catch (err) {
+      console.error("[admin] backfill-referral failed:", err);
+      res.status(500).json({ message: "Couldn't back-fill the referral, please try again" });
+    }
   });
 
   // Artist-self referrals tab — uses the user's role scope.

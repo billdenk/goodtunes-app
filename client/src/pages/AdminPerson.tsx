@@ -66,9 +66,11 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PersonPicker } from "@/components/admin/AddPeopleMenu";
 import {
   Select,
   SelectContent,
@@ -2101,6 +2103,7 @@ function OverviewPanel({
   return (
     <div className="space-y-5">
       <ReferralSummaryPanel kind="artist" id={person.id} />
+      <BackfillReferralPanel kind="artist" id={person.id} />
       <InvitedByPressPanel kind="people" id={person.id} currentPressId={person.invitedByPressId} currentPressMode={(person as any).pressMode} />
       <RolesPanel person={person} />
       {/* Task #968 — an artist who is also partner staff (band artist +
@@ -3819,9 +3822,199 @@ function ReferralSummaryPanel({ kind, id }: { kind: "artist" | "non_profit"; id:
   );
 }
 
-// Exported so AdminNonProfit can reuse the same panel without
+// Task #2568 — Back-fill an already-happened referral (a text, a DM, a
+// handshake at a show) and hand the referred artist a copyable
+// welcome-back sign-in link. Super-admin-only escape hatch — the server
+// re-checks the role. Shares the referred-artist search UX with the
+// invite flow via PersonPicker (search catalog → Spotify → create-from-
+// name), so operators aren't hand-typing a name into a bespoke field.
+function BackfillReferralPanel({ kind, id }: { kind: "artist" | "non_profit"; id: string }) {
+  const { toast } = useToast();
+  // Super-admin-only affordance — the server re-checks the role, this
+  // just keeps the entry point out of view for everyone else.
+  const { data: meRole } = useQuery<{ role?: string }>({ queryKey: ["/api/me/role"] });
+  const [open, setOpen] = useState(false);
+  const [referred, setReferred] = useState<{ id: string; name: string; photoUrl: string | null } | null>(null);
+  const [email, setEmail] = useState("");
+  const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [result, setResult] = useState<{ signInUrl: string; referredName: string; alreadyAttributed: boolean } | null>(null);
+
+  const reset = () => {
+    setReferred(null);
+    setEmail("");
+    setEffectiveDate(new Date().toISOString().slice(0, 10));
+    setResult(null);
+  };
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/partners/${kind}/${id}/backfill-referral`, {
+        referredPersonId: referred?.id,
+        email: email.trim(),
+        effectiveDate,
+      });
+      return (await r.json()) as {
+        signInUrl: string;
+        referredName: string;
+        alreadyAttributed: boolean;
+        expiresAt: string;
+        createdAccount: boolean;
+      };
+    },
+    onSuccess: (res) => {
+      setResult(res);
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/partners/${kind}/${id}/referral-summary`] });
+      navigator.clipboard.writeText(res.signInUrl).catch(() => {});
+      toast({
+        title: res.alreadyAttributed ? "Already attributed here" : "Referral back-filled",
+        description: `Sign-in link copied for ${res.referredName}.`,
+      });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Couldn't back-fill the referral", description: e.message, variant: "destructive" }),
+  });
+
+  if (meRole?.role !== "super_admin") return null;
+  return (
+    <div data-testid="panel-backfill-referral">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-sm text-slate-400 hover:text-[var(--brand-blue)] transition-colors"
+        data-testid="button-open-backfill-referral"
+      >
+        Back-fill a referral…
+      </button>
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) reset();
+        }}
+      >
+        <DialogContent data-testid="dialog-backfill-referral">
+          <DialogHeader>
+            <DialogTitle>Back-fill a referral</DialogTitle>
+            <DialogDescription>
+              Record a referral relationship that already happened off-platform and hand the
+              referred artist a one-tap sign-in link. No invite email is sent.
+            </DialogDescription>
+          </DialogHeader>
+          {result ? (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-600" data-testid="text-backfill-result">
+                {result.alreadyAttributed
+                  ? `${result.referredName} was already attributed here — here's a fresh sign-in link:`
+                  : `${result.referredName} is now attributed here. Send them this sign-in link:`}
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  value={result.signInUrl}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="flex-1 min-w-0 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm text-slate-700"
+                  data-testid="input-backfill-signin-link"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(result.signInUrl);
+                      toast({ title: "Copied" });
+                    } catch {
+                      /* clipboard blocked — the field is selectable as a fallback */
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors flex-shrink-0"
+                  data-testid="button-copy-backfill-signin-link"
+                >
+                  Copy
+                </button>
+              </div>
+              <p className="text-xs text-slate-500">Works once and expires in 30 days.</p>
+              <DialogFooter>
+                <Button type="button" onClick={() => setOpen(false)} data-testid="button-close-backfill-referral">
+                  Done
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+                  Referred artist
+                </label>
+                <PersonPicker
+                  value={referred}
+                  onChange={(p) => setReferred(p)}
+                  excludeIds={new Set(kind === "artist" ? [id] : [])}
+                  testIdPrefix="backfill-referred-artist"
+                  enableSpotify
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="artist@email.com"
+                  className="w-full h-9 px-3 rounded-md border border-slate-200 text-sm"
+                  data-testid="input-backfill-email"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Used to find or create their GoodTunes account and mint the sign-in link.
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+                  Effective date
+                </label>
+                <input
+                  type="date"
+                  value={effectiveDate}
+                  onChange={(e) => setEffectiveDate(e.target.value)}
+                  max={new Date().toISOString().slice(0, 10)}
+                  className="w-full h-9 px-3 rounded-md border border-slate-200 text-sm"
+                  data-testid="input-backfill-date"
+                />
+                {kind === "artist" && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Anchors the one-year referral-payout window — defaults to today.
+                  </p>
+                )}
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setOpen(false)}
+                  data-testid="button-cancel-backfill-referral"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!referred || !email.trim() || mutation.isPending}
+                  onClick={() => mutation.mutate()}
+                  data-testid="button-submit-backfill-referral"
+                >
+                  {mutation.isPending ? "Recording…" : "Record referral & get link"}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// Exported so AdminNonProfit can reuse the same panels without
 // re-implementing the layout.
-export { ReferralSummaryPanel };
+export { ReferralSummaryPanel, BackfillReferralPanel };
 
 // ─── Task #190 — MembersPanel ────────────────────────────────────────
 // Admin surface for curating a band/duo/orchestra's roster. Only
