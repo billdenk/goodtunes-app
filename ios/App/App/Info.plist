@@ -53,22 +53,44 @@
         <array>
                 <string>audio</string>
         </array>
-        <!-- CarPlay (Task #2504). GoodTunes keeps its legacy AppDelegate window
-             for the phone UI, so we declare ONLY the CarPlay scene role here
-             (no UIWindowSceneSessionRoleApplication). With no window scene
-             declared, UIKit leaves the phone app on the AppDelegate lifecycle
-             untouched and instantiates CarPlaySceneDelegate ONLY for the in-car
-             surface — Apple's documented hybrid path for adding CarPlay to a
-             non-scene app. UISceneDelegateClassName is module-qualified because
-             Swift classes live under the product module namespace. Pairs with
-             the com.apple.developer.carplay-audio entitlement, which Apple must
-             grant to the App ID before a real head unit will connect. -->
+        <!-- Scene manifest: phone window + CarPlay (Tasks #2504 + #2570).
+             Once a UIApplicationSceneManifest is present, UIKit adopts the
+             scene lifecycle for the WHOLE app and ignores the legacy
+             AppDelegate/UIMainStoryboardFile window path. The original CarPlay
+             change declared ONLY the CarPlay role here, so the phone session
+             had no window configuration and the App Store build launched to a
+             BLACK screen (Task #2570). Fix: declare BOTH roles —
+               * UIWindowSceneSessionRoleApplication → SceneDelegate + the Main
+                 storyboard (initial VC = Capacitor's CAPBridgeViewController),
+                 so the phone window hosts the same bridge as before;
+               * CPTemplateApplicationSceneSessionRoleApplication →
+                 CarPlaySceneDelegate for the in-car surface.
+             UIApplicationSupportsMultipleScenes stays true so the phone and
+             CarPlay scenes can run simultaneously (required for CarPlay
+             audio). UISceneDelegateClassName is module-qualified because Swift
+             classes live under the product module namespace. The CarPlay scene
+             still pairs with the com.apple.developer.carplay-audio entitlement,
+             which Apple must grant before a real head unit connects (Codemagic
+             strips that entitlement from distribution archives until then —
+             the manifest itself is safe to ship now that the window role is
+             declared). -->
         <key>UIApplicationSceneManifest</key>
         <dict>
                 <key>UIApplicationSupportsMultipleScenes</key>
                 <true/>
                 <key>UISceneConfigurations</key>
                 <dict>
+                        <key>UIWindowSceneSessionRoleApplication</key>
+                        <array>
+                                <dict>
+                                        <key>UISceneConfigurationName</key>
+                                        <string>Phone</string>
+                                        <key>UISceneDelegateClassName</key>
+                                        <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+                                        <key>UISceneStoryboardFile</key>
+                                        <string>Main</string>
+                                </dict>
+                        </array>
                         <key>CPTemplateApplicationSceneSessionRoleApplication</key>
                         <array>
                                 <dict>

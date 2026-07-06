@@ -4,13 +4,16 @@ import UIKit
 /**
  * CarPlaySceneDelegate — the in-car UI for GoodTunes.
  *
- * GoodTunes is a Capacitor thin-wrap: audio plays in the WKWebView and the
- * phone UI keeps the legacy AppDelegate window lifecycle. To add CarPlay
- * without migrating the whole app to UIScene, Info.plist declares ONLY the
- * CarPlay scene role (`CPTemplateApplicationSceneSessionRoleApplication`) and
- * points it at this delegate via `UISceneDelegateClassName`. Because no
- * `UIWindowSceneSessionRoleApplication` is declared, the phone app is untouched
- * and only the car surface runs through here (Apple's documented hybrid path).
+ * GoodTunes is a Capacitor thin-wrap: audio plays in the WKWebView. The app
+ * runs the UIScene lifecycle — Info.plist declares BOTH scene roles:
+ * `UIWindowSceneSessionRoleApplication` → SceneDelegate.swift (the phone
+ * window hosting the Capacitor bridge) and
+ * `CPTemplateApplicationSceneSessionRoleApplication` → this delegate for the
+ * in-car surface. (The original CarPlay change declared ONLY the CarPlay role
+ * on the theory that omitting the window role would leave the phone on the
+ * legacy AppDelegate lifecycle — WRONG: any scene manifest flips the whole
+ * app to scenes, and the missing window role black-screened the phone at
+ * launch. See Task #2570 / SceneDelegate.swift.)
  *
  * Two templates in a tab bar:
  *   - Now Playing: `CPNowPlayingTemplate.shared`, which reads

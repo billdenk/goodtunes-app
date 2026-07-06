@@ -3,12 +3,39 @@ import Capacitor
 
 // Brand navy — matches capacitor.config.ts SplashScreen.backgroundColor and
 // the LaunchScreen.storyboard background so there is no colour discontinuity
-// at any point during launch or app load.
-private let brandNavy = UIColor(red: 0.0, green: 6.0/255.0, blue: 43.0/255.0, alpha: 1.0)
+// at any point during launch or app load. Internal (not private) because
+// SceneDelegate paints the same navy under the scene lifecycle.
+let brandNavy = UIColor(red: 0.0, green: 6.0/255.0, blue: 43.0/255.0, alpha: 1.0)
+
+// Walk the view-controller tree to find the Capacitor bridge VC and set its
+// WKWebView background to brand navy so no white ever shows through during a
+// remote-URL load. Top-level (module-internal) so both AppDelegate (legacy
+// lifecycle) and SceneDelegate (scene lifecycle) share one implementation.
+func applyNavyToWebView(in vc: UIViewController) {
+    if let bridgeVC = vc as? CAPBridgeViewController {
+        bridgeVC.view.backgroundColor = brandNavy
+        if let wv = bridgeVC.webView {
+            wv.backgroundColor         = brandNavy
+            wv.scrollView.backgroundColor = brandNavy
+            // isOpaque=false lets the WKWebView honour its backgroundColor
+            // instead of forcing an opaque white surface.
+            wv.isOpaque = false
+        }
+    }
+    for child in vc.children {
+        applyNavyToWebView(in: child)
+    }
+}
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
+    // NOTE (Task #2570): the app now runs the UIScene lifecycle — Info.plist
+    // declares a UIWindowSceneSessionRoleApplication configuration backed by
+    // SceneDelegate, which creates/owns the phone window and mirrors it onto
+    // this property so existing window-based code keeps working. At
+    // didFinishLaunching time this is still nil; SceneDelegate assigns it in
+    // scene(_:willConnectTo:), which runs after this returns.
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
@@ -18,7 +45,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         //   → Capacitor SplashScreen overlay (navy, already configured)
         //   → WKWebView white flash while my.goodtunes.music loads (~4 s)
         //   → app
-        // Setting backgroundColor here closes that last white gap.
+        // Setting backgroundColor here closes that last white gap. (Under the
+        // scene lifecycle `window` is nil here and SceneDelegate does the real
+        // painting; this stays as a harmless no-op fallback for the legacy
+        // lifecycle.)
         window?.backgroundColor = brandNavy
         if let root = window?.rootViewController {
             root.view.backgroundColor = brandNavy
@@ -29,29 +59,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     // Called every time the app comes back to the foreground — covers the
     // race where the CAPBridgeViewController's view wasn't yet attached
-    // when didFinishLaunchingWithOptions ran.
+    // when didFinishLaunchingWithOptions ran. (Not called under the scene
+    // lifecycle — SceneDelegate.sceneDidBecomeActive covers it there.)
     func applicationDidBecomeActive(_ application: UIApplication) {
         if let root = window?.rootViewController {
             applyNavyToWebView(in: root)
-        }
-    }
-
-    // Walk the view-controller tree to find the Capacitor bridge VC and
-    // set its WKWebView background to brand navy so no white ever shows
-    // through during a remote-URL load.
-    private func applyNavyToWebView(in vc: UIViewController) {
-        if let bridgeVC = vc as? CAPBridgeViewController {
-            bridgeVC.view.backgroundColor = brandNavy
-            if let wv = bridgeVC.webView {
-                wv.backgroundColor         = brandNavy
-                wv.scrollView.backgroundColor = brandNavy
-                // isOpaque=false lets the WKWebView honour its backgroundColor
-                // instead of forcing an opaque white surface.
-                wv.isOpaque = false
-            }
-        }
-        for child in vc.children {
-            applyNavyToWebView(in: child)
         }
     }
 

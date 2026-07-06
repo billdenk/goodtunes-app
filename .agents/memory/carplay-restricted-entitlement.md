@@ -4,7 +4,10 @@ description: Why an App Store/TestFlight build fails signing even though CarPlay
 ---
 
 `com.apple.developer.carplay-audio` is committed in `ios/App/App/App.entitlements`
-plus the CarPlay scene manifest in `Info.plist` and `CarPlaySceneDelegate.swift`.
+plus the CarPlay role of the `Info.plist` scene manifest and
+`CarPlaySceneDelegate.swift`. (The manifest must ALSO declare the phone window
+role — a CarPlay-only manifest black-screens the phone at launch, see
+ios-scene-manifest-black-screen.md.)
 Device/simulator CarPlay testing works under a **development** profile with just
 those committed files. But it is a **restricted** entitlement — NOT a normal
 capability tick-box.
