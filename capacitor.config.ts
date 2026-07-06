@@ -51,6 +51,15 @@ const config: CapacitorConfig = {
       "accounts.google.com",
       "appleid.apple.com",
     ],
+    // Task #2578 — without this, a failed remote load (no network yet on
+    // cold launch, DNS hiccup, brief outage) leaves the webview on
+    // whatever it had, which on first launch is nothing: a plain BLACK
+    // screen forever, with no retry. Capacitor's WebViewDelegationHandler
+    // only shows a fallback when `errorPath` is set — it then loads this
+    // LOCAL bundled page (client/public/offline.html, synced into
+    // ios/App/App/public) instead of leaving the view blank. That page
+    // auto-retries the real load with backoff and offers a manual button.
+    errorPath: "offline.html",
   },
   ios: {
     contentInset: "always",

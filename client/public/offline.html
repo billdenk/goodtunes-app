@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
+  <title>GoodTunes</title>
+  <!--
+    Native-app offline / load-failure fallback (Task #2578).
+
+    The native iOS/Android shells point capacitor.config.ts's server.url at
+    the LIVE player (my.goodtunes.music) instead of a bundled payload — see
+    the comment in capacitor.config.ts. If that remote load fails (no
+    network yet on cold launch, DNS hiccup, a brief outage, a slow cellular
+    handshake, etc.), Capacitor's WebViewDelegationHandler does nothing
+    unless `server.errorPath` is configured: no error page, no retry — the
+    WKWebView/WebView just sits on whatever it had, which on a cold launch
+    is nothing at all. On iOS that reads as a plain BLACK screen (a fresh
+    WKWebView paints black before its first committed frame, regardless of
+    the navy `backgroundColor` we set on the window/webview chrome around
+    it), forever, with no way for the fan to recover short of force-quitting
+    the app. That is the leading suspect for the TestFlight "opens to a
+    black screen" reports on build 74 — see docs/native-builds.md.
+
+    This file is bundled into the native app's local webDir (dist/public →
+    ios/App/App/public via `npx cap sync`) and wired up as
+    `server.errorPath: "offline.html"` in capacitor.config.ts, so Capacitor
+    loads THIS page locally the moment the remote load fails, instead of
+    leaving the webview blank. It auto-retries the real load a few times
+    with backoff, then falls back to a manual "Try Again" tap so the app
+    never dead-ends silently.
+  -->
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #00062B;
+      background-image: radial-gradient(ellipse at top, rgba(127, 16, 167, 0.35), transparent 60%);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap {
+      box-sizing: border-box;
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 32px 24px calc(32px + env(safe-area-inset-bottom, 0px));
+      padding-top: calc(32px + env(safe-area-inset-top, 0px));
+    }
+    .logo {
+      width: 96px;
+      height: auto;
+      opacity: 0.95;
+      margin-bottom: 28px;
+    }
+    h1 {
+      color: #fff;
+      font-size: 19px;
+      font-weight: 600;
+      margin: 0 0 8px;
+    }
+    p {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 14.5px;
+      line-height: 1.5;
+      margin: 0 0 28px;
+      max-width: 300px;
+    }
+    button {
+      appearance: none;
+      border: none;
+      border-radius: 999px;
+      padding: 13px 28px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #00062B;
+      background: #4AFFCA;
+      min-height: 44px;
+      min-width: 44px;
+    }
+    button:active {
+      opacity: 0.85;
+    }
+    .status {
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 12.5px;
+      margin-top: 18px;
+      min-height: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <img class="logo" src="goodtunes-logo-white-sm.png" alt="GoodTunes" />
+    <h1>Couldn't connect</h1>
+    <p>GoodTunes couldn't reach the player. Check your connection and try again.</p>
+    <button id="retry" type="button" data-testid="button-offline-retry">Try Again</button>
+    <div class="status" id="status" data-testid="text-offline-status"></div>
+  </div>
+  <script>
+    (function () {
+      var TARGET = "https://my.goodtunes.music";
+      var statusEl = document.getElementById("status");
+      var retryBtn = document.getElementById("retry");
+      var AUTO_RETRY_DELAYS_MS = [2000, 4000, 8000, 15000];
+      var attempt = 0;
+
+      function goHome() {
+        window.location.href = TARGET;
+      }
+
+      function scheduleAutoRetry() {
+        if (attempt >= AUTO_RETRY_DELAYS_MS.length) {
+          statusEl.textContent = "";
+          return;
+        }
+        var delay = AUTO_RETRY_DELAYS_MS[attempt];
+        attempt += 1;
+        statusEl.textContent = "Retrying automatically\u2026";
+        window.setTimeout(goHome, delay);
+      }
+
+      retryBtn.addEventListener("click", function () {
+        statusEl.textContent = "Retrying\u2026";
+        goHome();
+      });
+
+      // Only auto-retry once the OS reports we actually have a connection
+      // (or immediately if the platform can't tell us either way) so we're
+      // not just hammering a dead radio on repeat.
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        statusEl.textContent = "Waiting for a connection\u2026";
+        window.addEventListener("online", function () {
+          attempt = 0;
+          scheduleAutoRetry();
+        });
+      } else {
+        scheduleAutoRetry();
+      }
+    })();
+  </script>
+</body>
+</html>
