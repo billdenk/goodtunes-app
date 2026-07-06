@@ -31,3 +31,8 @@ Still-un-migrated landmine sites remain: `server/storage.ts` (kinds::text[]),
 `server/payoutEarmarks.ts` (ids::varchar[] ×2), and `server/referralPayouts.ts`
 (creditIds/claimedIds ×4). They will 500 the moment their array goes non-empty —
 migrate to pgArray when touching those flows.
+
+**Guard test:** `server/anyArraySpread.test.ts` mechanically scans server/+shared for any
+`ANY(${...})` not wrapped in `pgArray(` (whitespace-tolerant, skips comment lines) — the
+whole codebase was swept clean in the NPO-analytics 500 fix, so any new offender fails the
+test workflow.

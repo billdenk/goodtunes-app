@@ -25004,7 +25004,7 @@ export async function registerRoutes(
              por.status
       FROM pressing_order_requests por
       LEFT JOIN manufacturers m ON m.id = (por.package_snapshot->>'pressId')
-      WHERE por.album_id = ANY(${albumIds})
+      WHERE por.album_id = ANY(${pgArray(albumIds)})
         AND por.status IN ('pending','approved')
         AND (por.package_snapshot->>'pressId') IS NOT NULL
     `).catch(() => ({ rows: [] }) as any);
@@ -25119,7 +25119,7 @@ export async function registerRoutes(
                COUNT(*) FILTER (WHERE name = 'album_viewed')::int AS views,
                COUNT(*) FILTER (WHERE name = 'play_start')::int AS plays
         FROM analytics_events
-        WHERE (payload->>'albumId') = ANY(${albumIds})
+        WHERE (payload->>'albumId') = ANY(${pgArray(albumIds)})
         ${fromSql}
         ${toSql}
         GROUP BY (payload->>'albumId')
@@ -25151,7 +25151,7 @@ export async function registerRoutes(
         FROM analytics_events ae
         WHERE ae.name = 'play_start'
           AND (ae.payload->>'songId') IS NOT NULL
-          AND (SELECT album_id FROM songs WHERE id = (ae.payload->>'songId')) = ANY(${albumIds})
+          AND (SELECT album_id FROM songs WHERE id = (ae.payload->>'songId')) = ANY(${pgArray(albumIds)})
         ${fromSqlAe}
         ${toSqlAe}
         GROUP BY (ae.payload->>'songId')
@@ -25180,7 +25180,7 @@ export async function registerRoutes(
                COUNT(*)::int AS clicks
         FROM analytics_events
         WHERE name IN ('credits_person_clicked','artist_viewed')
-          AND COALESCE(payload->>'personId', payload->>'artistId') = ANY(${personIds})
+          AND COALESCE(payload->>'personId', payload->>'artistId') = ANY(${pgArray(personIds)})
         ${fromSql}
         ${toSql}
         GROUP BY COALESCE(payload->>'personId', payload->>'artistId')
@@ -25332,7 +25332,7 @@ export async function registerRoutes(
           SELECT DISTINCT p.id, p.name
           FROM people p
           JOIN albums a ON a.primary_artist_id = p.id
-          WHERE a.id = ANY(${albumIds})
+          WHERE a.id = ANY(${pgArray(albumIds)})
         `)
       : ({ rows: [] } as any);
     const names: Record<string, string> = {};
@@ -25390,14 +25390,14 @@ export async function registerRoutes(
       ? await db.execute<{ id: string; name: string }>(sql`
           SELECT DISTINCT p.id, p.name FROM people p
           WHERE p.id IN (
-            SELECT primary_artist_id FROM albums WHERE id = ANY(${albumIds}) AND primary_artist_id IS NOT NULL
+            SELECT primary_artist_id FROM albums WHERE id = ANY(${pgArray(albumIds)}) AND primary_artist_id IS NOT NULL
             UNION
             SELECT tp.person_id
             FROM track_performers tp
             JOIN songs s ON s.id = tp.song_id
             JOIN instrument_vendors iv ON iv.instrument_id = tp.instrument_id
             WHERE iv.vendor_id = ${req.params.id}
-              AND s.album_id = ANY(${albumIds})
+              AND s.album_id = ANY(${pgArray(albumIds)})
               AND tp.person_id IS NOT NULL
           )
         `)
@@ -25462,7 +25462,7 @@ export async function registerRoutes(
           SELECT DISTINCT p.id, p.name
           FROM people p
           JOIN albums a ON a.primary_artist_id = p.id
-          WHERE a.id = ANY(${albumIds})
+          WHERE a.id = ANY(${pgArray(albumIds)})
         `)
       : ({ rows: [] } as any);
     const names: Record<string, string> = {};

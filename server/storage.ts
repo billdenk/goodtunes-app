@@ -3862,7 +3862,7 @@ export class DbStorage implements IStorage {
   async searchOrganizations(q: string, kinds?: string[], limit = 20) {
     const like = `%${(q || "").toLowerCase()}%`;
     const kindFilter = kinds && kinds.length
-      ? sql`AND kind = ANY(${kinds}::text[])`
+      ? sql`AND kind = ANY(${pgArray(kinds)})`
       : sql``;
     const rows = await db.execute<{ id: string; name: string; kind: string }>(sql`
       SELECT id, name, kind FROM organizations

@@ -32,6 +32,7 @@ import crypto from "node:crypto";
 import type { Express, Request, Response } from "express";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import { pgArray } from "./lib/pgArray";
 import { getStripe } from "./stripe";
 import { storage } from "./storage";
 
@@ -181,7 +182,7 @@ export async function runReferralPayouts(options?: {
         await db.execute(sql`
           UPDATE referral_credits
              SET payout_error = ${reason}
-           WHERE id = ANY(${b.creditIds}::varchar[])
+           WHERE id = ANY(${pgArray(b.creditIds, "varchar")})
              AND status = 'pending_payout'
         `);
       }
@@ -215,7 +216,7 @@ export async function runReferralPayouts(options?: {
              payout_owner_kind = ${b.ownerKind},
              payout_owner_id   = ${b.ownerId}
        WHERE status = 'pending_payout'
-         AND id = ANY(${b.creditIds}::varchar[])
+         AND id = ANY(${pgArray(b.creditIds, "varchar")})
       RETURNING id, amount_cents
     `);
     const claimedRows = (claimed as any).rows ?? [];
@@ -246,7 +247,7 @@ export async function runReferralPayouts(options?: {
            SET status = 'paid', paid_at = now(), payout_error = NULL
          WHERE payout_run_id = ${runId}
            AND status        = 'processing'
-           AND id = ANY(${claimedIds}::varchar[])
+           AND id = ANY(${pgArray(claimedIds, "varchar")})
       `);
       out.skipped += 1;
       out.batches.push({
@@ -301,7 +302,7 @@ export async function runReferralPayouts(options?: {
                payout_error  = ${msg}
          WHERE payout_run_id = ${runId}
            AND status        = 'processing'
-           AND id = ANY(${claimedIds}::varchar[])
+           AND id = ANY(${pgArray(claimedIds, "varchar")})
       `);
       out.failed += 1;
       out.batches.push({

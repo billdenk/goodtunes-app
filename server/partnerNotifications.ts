@@ -13,6 +13,7 @@
 
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "./db";
+import { pgArray } from "./lib/pgArray";
 import {
   partnerNotificationRecipients,
   partnerNotificationLog,
@@ -59,7 +60,7 @@ export async function listRecipients(
     .where(
       and(
         eq(partnerNotificationLog.status, "sent"),
-        sql`${partnerNotificationLog.recipientId} = ANY(${ids})`,
+        sql`${partnerNotificationLog.recipientId} = ANY(${pgArray(ids)})`,
       ),
     )
     .groupBy(partnerNotificationLog.recipientId);

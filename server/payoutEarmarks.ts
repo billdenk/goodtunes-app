@@ -18,6 +18,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { formatUsdCents } from "@shared/money";
 import { db } from "./db";
+import { pgArray } from "./lib/pgArray";
 import {
   PAYOUT_EARMARK_OWNER_KINDS,
   PAYOUT_EARMARK_SOURCE_KINDS,
@@ -378,7 +379,7 @@ async function applySourceSideEffectsOnRelease(earmark: PayoutEarmark, transferI
                paid_at           = NOW(),
                payout_transfer_id = ${transferId},
                payout_error      = NULL
-         WHERE id = ANY(${ids}::varchar[])
+         WHERE id = ANY(${pgArray(ids, "varchar")})
            AND status = 'processing'
       `);
     }
@@ -413,7 +414,7 @@ async function applySourceSideEffectsOnReject(earmark: PayoutEarmark, reason: st
            SET status        = 'pending_payout',
                payout_run_id = NULL,
                payout_error  = ${`Rejected by Bill: ${reason}`}
-         WHERE id = ANY(${ids}::varchar[])
+         WHERE id = ANY(${pgArray(ids, "varchar")})
            AND status = 'processing'
       `);
     }
