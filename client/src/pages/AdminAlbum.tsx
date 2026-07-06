@@ -506,9 +506,13 @@ export function AdminAlbum({
   // the Releases grid (other-press rows are locked), so role alone is a safe
   // signal here.
   const isPress = adminRoleInfo?.role === "manufacturer";
-  // Hide the Physical/press section (pressing plant + master preflight) for
-  // artist and label partners for now — manufacturing stays with operators.
-  const hidePressSection = isArtist || isLabel;
+  // Task #2578 — Bill asked for artists to see the Physical tab (masters
+  // on file, tracklist FLAC table, side assignments, Go-to-Press status)
+  // since it's their own release, and the underlying endpoints already
+  // admit partner accounts (requireAdmin/requireAdminBearer treat every
+  // partner role as admin). Label partners still stay hidden here —
+  // manufacturing isn't their surface — until Bill asks for that too.
+  const hidePressSection = isLabel;
   // Task #1250 / #1267 — artist *and* label partners get a single
   // (request-only) album-delete affordance: it routes to the sold-blocked
   // popup or the request-to-delete confirmation based on the album's sold
@@ -1830,6 +1834,7 @@ export function AdminAlbum({
                   readyToSend={completeness?.pressReadyToSend ?? false}
                   sendBlockers={completeness?.press.missing ?? []}
                   pressMode={isPress}
+                  hideEntityLinks={isArtist}
                 />
               )}
               {safeTab === "shopify" && allowed.has("shopify") && (

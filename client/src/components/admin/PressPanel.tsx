@@ -297,6 +297,7 @@ export function PressPanel({
   readyToSend = false,
   sendBlockers = [],
   pressMode = false,
+  hideEntityLinks = false,
 }: {
   albumId: string;
   songs: PressPanelSong[];
@@ -318,6 +319,11 @@ export function PressPanel({
   // dedicated note + a CTA to send GoodTunes their plant's exact specs
   // instead of just the terse operator badge.
   pressMode?: boolean;
+  // Task #2578 — true when an artist partner (not an operator or the
+  // press itself) is viewing this tab. Hides the "Change/Assign a plant"
+  // deep-links to /admin/people|labels/:id — those pages are operator-only
+  // and the artist can't reach them, so the link would just dead-end.
+  hideEntityLinks?: boolean;
 }) {
   const showVinylSides =
     !!physicalFormat && physicalFormat !== "cassette" && physicalFormat !== "cd";
@@ -734,7 +740,7 @@ export function PressPanel({
             {pressOrigin === "explicit" ? (
               <>
                 Set on the {invitedPress?.scopeKind === "label" ? "label" : "artist"}&rsquo;s page.
-                {invitedPress?.scopeKind && invitedPress.scopeId && !pressMode && (
+                {invitedPress?.scopeKind && invitedPress.scopeId && !pressMode && !hideEntityLinks && (
                   <>
                     {" "}
                     <a
@@ -751,7 +757,7 @@ export function PressPanel({
               <>
                 No plant is assigned to the{" "}
                 {invitedPress?.scopeKind === "label" ? "label" : "artist"} — resolving from this album&rsquo;s vinyl pricing.
-                {invitedPress?.scopeId && !pressMode && (
+                {invitedPress?.scopeId && !pressMode && !hideEntityLinks && (
                   <>
                     {" "}
                     <a
@@ -767,7 +773,7 @@ export function PressPanel({
             ) : (
               <>
                 No plant assigned — using platform defaults.
-                {invitedPress?.scopeId && !pressMode && (
+                {invitedPress?.scopeId && !pressMode && !hideEntityLinks && (
                   <>
                     {" "}
                     <a
