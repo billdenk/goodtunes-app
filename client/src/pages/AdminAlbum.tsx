@@ -197,6 +197,10 @@ interface AlbumFull {
   // STATUS control + its Promote/Demote action (Task #2531). New shells
   // land here; admin flips it off via "Mark as released" once ready.
   isPrepping?: boolean;
+  // Task #2574 — Shopify+ "Submitted to press" middle status. Non-null
+  // while isPrepping means the package was formally submitted for the
+  // press to review; fan gates still key off isPrepping alone.
+  submittedToPressAt?: string | null;
   isExplicit?: boolean;
   // Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
   // marker. No fan-facing effect.
@@ -974,10 +978,20 @@ export function AdminAlbum({
   // back is a meaningful state regression; promote is the happy path and
   // fires on click.
   const [demoteConfirmOpen, setDemoteConfirmOpen] = useState(false);
+  // Task #2574 — where the demote confirm lands: back to Prepping, or
+  // (Shopify+ only) back to Submitted-to-press. Both re-hide from fans.
+  const [demoteTarget, setDemoteTarget] = useState<
+    "prepping" | "submitted_to_press"
+  >("prepping");
+  // Task #2574 — the mutation now speaks the explicit three-state
+  // `releaseStatus` verb (prepping / submitted_to_press / released) so
+  // Shopify+ albums get the middle "Submitted to press" rung. The server
+  // derives isPrepping + submittedToPressAt from it and rejects the
+  // middle state for non-Shopify+ sell modes.
   const setPrepping = useMutation({
-    mutationFn: async (next: boolean) => {
+    mutationFn: async (next: "prepping" | "submitted_to_press" | "released") => {
       const r = await apiRequest("PUT", `/api/admin/albums/${albumId}`, {
-        isPrepping: next,
+        releaseStatus: next,
       });
       return r.json();
     },
@@ -987,7 +1001,12 @@ export function AdminAlbum({
       queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
       setDemoteConfirmOpen(false);
       toast({
-        title: next ? "Moved back to Prepping." : "Album marked as released.",
+        title:
+          next === "prepping"
+            ? "Moved back to Prepping."
+            : next === "submitted_to_press"
+              ? "Marked as submitted to press."
+              : "Album marked as released.",
       });
     },
     onError: (e: any) => {
@@ -1174,10 +1193,19 @@ export function AdminAlbum({
   // GoodTunes releases. Imported streaming rows (!isGoodTunesRelease) are
   // never shown on this page in practice, but we still render them as
   // Prepping for safety so the pill never goes blank.
+  // Task #2574 — Shopify+ middle rung. "Submitted to press" only exists
+  // for sellMode === "shopify_plus" and behaves exactly like Prepping for
+  // every fan gate (isPrepping stays true; submittedToPressAt marks it).
+  const isSubmittedToPress =
+    album.sellMode === "shopify_plus" &&
+    !!album.isPrepping &&
+    !!album.submittedToPressAt;
   const lifecycle = album.isHidden
     ? { label: "Sunset", tone: "amber" as const }
     : !album.isGoodTunesRelease || album.isPrepping
-      ? { label: "Prepping", tone: "slate" as const }
+      ? isSubmittedToPress
+        ? { label: "Submitted to press", tone: "sky" as const }
+        : { label: "Prepping", tone: "slate" as const }
       : { label: "Released", tone: "mint" as const };
 
   // Task #2531 — Option C: dot color for the grouped header STATUS control.
@@ -1186,7 +1214,9 @@ export function AdminAlbum({
       ? "bg-emerald-500"
       : lifecycle.tone === "amber"
         ? "bg-amber-500"
-        : "bg-slate-400";
+        : lifecycle.tone === "sky"
+          ? "bg-sky-500"
+          : "bg-slate-400";
 
   const mainBody = (
     <>
@@ -1419,9 +1449,58 @@ export function AdminAlbum({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel>Release status</DropdownMenuLabel>
-                  {album.isPrepping || !album.isGoodTunesRelease ? (
+                  {/* Task #2574 — Shopify+ albums get the three-state
+                      ladder (Prepping → Submitted to press → Released);
+                      everything else keeps the two-state menu. Leaving
+                      Released always routes through the demote confirm
+                      because fans lose visibility. */}
+                  {album.sellMode === "shopify_plus" && album.isGoodTunesRelease ? (
+                    <>
+                      {(!album.isPrepping || isSubmittedToPress) && (
+                        <DropdownMenuItem
+                          onClick={() => {
+                            if (!album.isPrepping) {
+                              setDemoteTarget("prepping");
+                              setDemoteConfirmOpen(true);
+                            } else {
+                              setPrepping.mutate("prepping");
+                            }
+                          }}
+                          disabled={setPrepping.isPending}
+                          data-testid="button-album-demote"
+                        >
+                          Move to prepping
+                        </DropdownMenuItem>
+                      )}
+                      {!isSubmittedToPress && (
+                        <DropdownMenuItem
+                          onClick={() => {
+                            if (!album.isPrepping) {
+                              setDemoteTarget("submitted_to_press");
+                              setDemoteConfirmOpen(true);
+                            } else {
+                              setPrepping.mutate("submitted_to_press");
+                            }
+                          }}
+                          disabled={setPrepping.isPending}
+                          data-testid="button-album-submit-to-press"
+                        >
+                          Mark as submitted to press
+                        </DropdownMenuItem>
+                      )}
+                      {album.isPrepping && (
+                        <DropdownMenuItem
+                          onClick={() => setPrepping.mutate("released")}
+                          disabled={setPrepping.isPending}
+                          data-testid="button-album-promote"
+                        >
+                          Mark as released
+                        </DropdownMenuItem>
+                      )}
+                    </>
+                  ) : album.isPrepping || !album.isGoodTunesRelease ? (
                     <DropdownMenuItem
-                      onClick={() => setPrepping.mutate(false)}
+                      onClick={() => setPrepping.mutate("released")}
                       disabled={setPrepping.isPending}
                       data-testid="button-album-promote"
                     >
@@ -1429,7 +1508,10 @@ export function AdminAlbum({
                     </DropdownMenuItem>
                   ) : (
                     <DropdownMenuItem
-                      onClick={() => setDemoteConfirmOpen(true)}
+                      onClick={() => {
+                        setDemoteTarget("prepping");
+                        setDemoteConfirmOpen(true);
+                      }}
                       disabled={setPrepping.isPending}
                       data-testid="button-album-demote"
                     >
@@ -2071,7 +2153,8 @@ export function AdminAlbum({
         >
           <DialogHeader className="text-left space-y-1">
             <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
-              Move <span className="italic">{album.title}</span> back to Prepping?
+              Move <span className="italic">{album.title}</span> back to{" "}
+              {demoteTarget === "submitted_to_press" ? "Submitted to press" : "Prepping"}?
             </DialogTitle>
             <DialogDescription className="text-[13px] font-normal text-slate-500">
               Fans will stop seeing this album in Collection, on the
@@ -2092,12 +2175,16 @@ export function AdminAlbum({
             </Button>
             <Button
               type="button"
-              onClick={() => setPrepping.mutate(true)}
+              onClick={() => setPrepping.mutate(demoteTarget)}
               disabled={setPrepping.isPending}
               className="bg-slate-900 hover:bg-slate-800 text-white ml-2"
               data-testid="button-demote-album-confirm"
             >
-              {setPrepping.isPending ? "Moving…" : "Move to Prepping"}
+              {setPrepping.isPending
+                ? "Moving…"
+                : demoteTarget === "submitted_to_press"
+                  ? "Move to Submitted to press"
+                  : "Move to Prepping"}
             </Button>
           </DialogFooter>
         </DialogContent>

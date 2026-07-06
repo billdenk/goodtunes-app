@@ -9098,6 +9098,38 @@ export async function registerRoutes(
     // override the same way).
     if (req.body?.isPrepping !== undefined)
       updates.isPrepping = !!req.body.isPrepping;
+    // Task #2574 — three-state release ladder for Shopify+ albums:
+    // Prepping → Submitted to press → Released. `releaseStatus` is the
+    // explicit transition verb; it derives BOTH isPrepping and
+    // submittedToPressAt so every existing fan gate (which keys off
+    // isPrepping alone) treats "submitted_to_press" exactly like
+    // Prepping. The middle state is Shopify+-only — other sell modes
+    // 400 so the two-state lifecycle stays unchanged. Transitions are
+    // allowed in any direction (pull a submission back to Prepping,
+    // release from either earlier state).
+    if (req.body?.releaseStatus !== undefined) {
+      const status = String(req.body.releaseStatus);
+      if (!["prepping", "submitted_to_press", "released"].includes(status)) {
+        return res.status(400).json({ message: "Invalid releaseStatus" });
+      }
+      if (status === "submitted_to_press") {
+        const target = await storage.getAlbumById(id);
+        if (!target) return res.status(404).json({ message: "Album not found" });
+        if ((target as any).sellMode !== "shopify_plus") {
+          return res.status(400).json({
+            message: "'Submitted to press' is only available for Shopify+ releases.",
+          });
+        }
+        updates.isPrepping = true;
+        updates.submittedToPressAt = new Date();
+      } else if (status === "prepping") {
+        updates.isPrepping = true;
+        updates.submittedToPressAt = null;
+      } else {
+        // released — keep submittedToPressAt as history; isPrepping=false wins.
+        updates.isPrepping = false;
+      }
+    }
     if (req.body?.isExplicit !== undefined) updates.isExplicit = !!req.body.isExplicit;
     // Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
     // marker. Coerced like every other album boolean and rides the same

@@ -449,6 +449,14 @@ export const albums = pgTable("albums", {
   // run to the customer and they fulfill from Shopify themselves.
   shopifyPlusSignedGooddeed: boolean("shopify_plus_signed_gooddeed").notNull().default(true),
   shopifyPlusFulfillment: boolean("shopify_plus_fulfillment").notNull().default(false),
+  // Task #2574 — Shopify+ middle release status: "Submitted to press".
+  // Only meaningful when sellMode = "shopify_plus" AND isPrepping = true:
+  // non-null means the package has been formally submitted to the press
+  // for review while the digital release hasn't happened yet. Every fan
+  // visibility/checkout gate keys off `isPrepping` alone, so this state
+  // is fan-invisible by construction. Cleared when pulled back to
+  // Prepping; kept as history once Released (isPrepping = false wins).
+  submittedToPressAt: timestamp("submitted_to_press_at"),
   // Task #429 — Anticipated track count used to drive the Sell-panel
   // Publishing estimate (`N × $0.254`) BEFORE any masters have been
   // uploaded. NULL means "fall back to the live song count" — the

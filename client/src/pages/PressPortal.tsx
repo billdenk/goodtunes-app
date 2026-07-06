@@ -24,7 +24,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch, useLocation } from "wouter";
-import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign, BookOpen, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Mail } from "lucide-react";
+import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, LayoutDashboard, FileBarChart, CircleDollarSign, BookOpen, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Mail, FileCheck } from "lucide-react";
 import { albumStage, type AlbumStage } from "@shared/albumStage";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
@@ -1379,6 +1379,11 @@ interface PipelineAlbum {
   ownerName: string; ownerId: string; ownerKind: "artist" | "label";
   stage: string;
   stageEnteredAt: string | null;
+  // Task #2574 — Shopify+ "Submitted to press": the operator formally
+  // submitted the package for this press to review (distinct from merely
+  // having a pressing order assigned). Read-only signal.
+  submittedForReview?: boolean;
+  submittedToPressAt?: string | null;
   lockedAt: string | null;
   sunriseDate: string | null;
   windowOpensAt: string | null;
@@ -1633,6 +1638,21 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
           <div data-testid={`text-locked-qty-${a.id}`}>{a.lockedQuantity} locked</div>
         )}
       </div>
+      {/* Task #2574 — formally submitted for this press's review. Layered
+          on top of the derived manufacturing stage; read-only (operator
+          keeps updating the package, press just sees it live). */}
+      {a.submittedForReview && (
+        <div
+          className="mt-2 flex items-center gap-1.5 rounded-md bg-sky-50 ring-1 ring-sky-200 px-2 py-1 text-xs font-semibold text-sky-700"
+          data-testid={`chip-submitted-for-review-${a.id}`}
+        >
+          <FileCheck className="w-3 h-3" />
+          Submitted for review
+          {a.submittedToPressAt && (
+            <span className="font-normal text-sky-600">· {timeAgo(a.submittedToPressAt)}</span>
+          )}
+        </div>
+      )}
       {/* Task #533 — pool-funded early-cut state. "Eligible" means the
           pool covers the floor AND both prior consents are in — a review
           row is now waiting for Bill in the Early Cut queue. "Pool ready"

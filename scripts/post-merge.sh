@@ -9108,3 +9108,28 @@ SQL
 }
 strip_task_2460_apple_music_bios dev  "${DATABASE_URL:-}"
 strip_task_2460_apple_music_bios prod "${PROD_DATABASE_URL:-}"
+
+# Task #2574 — Shopify+ "Submitted to press" middle release status.
+# albums.submitted_to_press_at (nullable timestamp): non-null while
+# isPrepping = true means the package was formally submitted to the press
+# for review, before the digital release. Declared in shared/schema.ts;
+# hand-apply the additive DDL on BOTH dev and prod so the schema-drift
+# guard stays green and the publish dev→prod diff stays empty. Idempotent.
+migrate_submitted_to_press() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping submitted_to_press migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE IF EXISTS albums
+  ADD COLUMN IF NOT EXISTS submitted_to_press_at timestamp;
+SQL
+  then
+    echo "post-merge: submitted_to_press migration ok on $label"
+  else
+    echo "post-merge: WARNING — submitted_to_press migration failed on $label (continuing)"
+  fi
+}
+migrate_submitted_to_press dev  "${DATABASE_URL:-}"
+migrate_submitted_to_press prod "${PROD_DATABASE_URL:-}"

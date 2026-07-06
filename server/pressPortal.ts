@@ -333,6 +333,7 @@ export function sqlPressPipeline(pressId: string): SQL {
              a.cert_batch_shipped_to_fulfillment_at,
              a.fulfillment_heads_up_sent_at, a.fulfillment_heads_up_qty,
              a.primary_artist_id, a.label_id,
+             a.submitted_to_press_at, a.is_prepping,
              por.quantity AS locked_quantity,
              por.total_cents AS locked_total_cents,
              COALESCE(p.name, l.name) AS owner_name,
@@ -795,6 +796,16 @@ export function registerPressPortalRoutes(
         ownerKind: a.owner_kind,
         stage,
         stageEnteredAt,
+        // Task #2574 — Shopify+ "Submitted to press": the operator has
+        // formally submitted the package for this press to review (the
+        // package stays operator-editable; press view stays read-only).
+        // Distinct from merely having a SKU/pressing-order assigned —
+        // this is a deliberate signal layered on top of the derived
+        // manufacturing stage, not a stage of its own. Only shown while
+        // still pre-release (is_prepping) so a released album's history
+        // timestamp doesn't re-badge it.
+        submittedForReview: !!(a.submitted_to_press_at && a.is_prepping),
+        submittedToPressAt: a.is_prepping ? a.submitted_to_press_at : null,
         lockedAt: a.sell_quote_locked_at,
         sunriseDate: a.signed_cert_window_opens_at,
         windowOpensAt: a.signed_cert_window_opens_at,

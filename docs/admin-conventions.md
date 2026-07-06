@@ -325,3 +325,18 @@ Both are operator-gated and never auto-fire. The global announce has three hard 
 **Why:** a global blast to every opted-in fan is the single most damaging thing to send twice or send empty, and an unsubscribe that doesn't work is a compliance problem. The claim-before-send + refuse-zero + working-unsubscribe trio is the contract for any future broadcast.
 
 **How to apply:** the per-album "this release is out" marker lives on `albums.new_music_notified_at` and is added idempotently in `scripts/post-merge.sh` for **both** dev and prod (schema-drift guard). Any new broadcast surface reuses the same shape — count endpoint, claim-before-send, signed unsubscribe — rather than a fresh fire-and-forget loop.
+
+## Shopify+ release status — the "Submitted to press" middle rung (Task #2574)
+
+GoodTunes Shopify+ releases get a **three-state release ladder** — Prepping → **Submitted to press** → Released — where every other sell mode keeps the plain two-state Prepping / Released lifecycle. "Submitted to press" means GoodTunes has formally handed the vinyl package to the press for review on the artist's behalf, but the digital release hasn't happened yet (that unlocks later via the artist's own Shopify presale).
+
+Mechanics:
+
+- **Storage** — `albums.submitted_to_press_at` (nullable timestamp) alongside the existing `is_prepping` boolean. The middle state is `is_prepping = true AND submitted_to_press_at IS NOT NULL`, so **every fan-facing gate (catalog, search, slug resolution, checkout hard-reject, new-music announce) treats it exactly like Prepping without any gate changes** — they all key off `is_prepping` alone. Released clears nothing: `is_prepping = false` wins and the timestamp stays as history.
+- **Server enforcement** — `PUT /api/admin/albums/:id` accepts an explicit `releaseStatus` verb (`prepping` / `submitted_to_press` / `released`) that derives both columns. `submitted_to_press` 400s unless `sell_mode = 'shopify_plus'`. Transitions run in any direction (pull a submission back to Prepping; release from either earlier state). Same `edit_metadata` partner gate + post-sale lock as the old `isPrepping` flip, which still works for callers that use it.
+- **Admin UI** — the AdminAlbum header STATUS pill shows the third state (sky dot) and the dropdown offers the three-state ladder only on Shopify+ albums. Leaving Released always routes through the demote confirm dialog because fans lose visibility.
+- **Press portal** — submitted albums carry a read-only **"Submitted for review"** chip on the pipeline card, distinct from merely having a pressing order assigned. It's a signal layered on top of the derived manufacturing stages (design/selling/locked/…), not a new stage, and the press view stays read-only — operator package updates show up live, but there is no press-side package editing (a per-press "can edit package" verb is deliberately future work).
+
+**Why:** for Shopify+ the press needs to know "this package is formally ready for your review (and may keep changing)" well before the digital release flips, and the old two-state ladder couldn't say that without prematurely releasing.
+
+**How to apply:** don't add new fan gates keyed off `submitted_to_press_at` — keep `is_prepping` the single fan-visibility source of truth and treat the timestamp as an operator/press signal only.
