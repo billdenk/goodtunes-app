@@ -454,6 +454,47 @@ also submits to App Store review (after-approval, phased, cancel-previous).
 > then re-run. The build that hit this still uploaded — internal testers may
 > already have it — only the external beta-review submission failed.
 
+### 2b. "Another build is in review" fails fast instead of retrying for ~8.5 minutes
+
+A **different** deterministic dead end than the one above: App Store Connect
+rejects the beta-review submission with
+
+```
+POST https://api.appstoreconnect.apple.com/v1/betaAppReviewSubmissions returned
+422: Another build is in review. - Another build in the same train is already
+in beta review. Please submit it again once it gets completed.
+```
+
+This means **an earlier build in the same version train** (e.g. an earlier
+build of `3.0.3`) is still sitting in Apple's external TestFlight beta-review
+queue, awaiting a decision. Apple only allows one build per version train in
+review at a time, so this can't be fixed by resubmitting — build 74 hit this
+and burned all 4 retry attempts (~8.5 minutes of backoff) getting the exact
+same 422 every time before this fix.
+
+`scripts/publish-ios.sh` now recognizes this pattern (`is_stale_beta_review_failure`)
+and **fails on the first attempt** instead of retrying, printing:
+
+- Confirmation that the binary (the build number it just stamped) **did**
+  upload and register successfully — this is not an upload problem, only the
+  beta-review submission step failed.
+- The two ways to unblock it: wait for Apple to finish reviewing the pending
+  build (usually 24–48h) and re-run, or cancel that pending review yourself in
+  App Store Connect (**TestFlight → Builds** → the build showing *Waiting for
+  Review* → **⋯** → **Cancel Beta Review**) and re-run immediately.
+- A direct link to the app's TestFlight builds page
+  (`https://appstoreconnect.apple.com/apps/<APP_STORE_APPLE_ID>/testflight/ios`).
+
+**Why this isn't auto-cancelled for you:** the `app-store-connect` CLI this
+pipeline scripts against has no command to cancel or expire a pending Beta App
+Review Submission — its API surface only lets you *create* one. Apple's App
+Store Connect API technically supports deleting a submission that hasn't
+completed review, but there's no reliable, already-authenticated way to invoke
+that from this pipeline's tooling without bolting on a raw, undocumented API
+call whose behavior (and continued support) isn't guaranteed. Canceling the
+stale review in the App Store Connect UI is quick (~10 seconds) and safe, so
+it stays a manual, one-time step rather than something the script guesses at.
+
 ### Android gets the icon guard too (but not the publish retry)
 
 The Android workflow runs the **same two-layer icon protection** iOS gets:
@@ -543,6 +584,7 @@ never produces a false "missing" verdict.
 | Build fails at **"Guard — fail fast if the BUILT .ipa ships Apple's placeholder icon"** | The archive compiled without the app icon (would ship the generic placeholder). Re-run; if it recurs, confirm `Assets.xcassets` is in Copy Bundle Resources and `ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon`. See *Publishing reliability* above. |
 | Build fails at **"Guard — fail fast if TestFlight Test Information is incomplete"** | App Store Connect is missing required Beta App Review Information / Feedback Email. The guard prints the exact fields + the `…/testflight/test-info` URL. Fill them in, then re-run. Catches this in seconds *before* the build. See *Publishing reliability* above. |
 | Publish fails with **"Complete test information is required" / "missing required Beta App Review Information"** | **Not transient** — fill in TestFlight → Test Information (Feedback Email + review contact name/phone/email), then re-run. The up-front guard usually catches this first; if it slipped through (fail-open), this post-upload check is the backstop. See *Publishing reliability* above. |
+| Publish fails immediately with **"Another build is in review" / "Another build in the same train is already in beta review"** | **Not transient — dead end, not a bug.** The binary already uploaded fine; a prior build in this version train is still awaiting Apple's TestFlight beta review decision, and Apple only allows one build per train in review at a time. Either wait for Apple to finish reviewing it (24–48h) and re-run, or cancel that pending review yourself (App Store Connect → TestFlight → Builds → the build showing *Waiting for Review* → **⋯** → **Cancel Beta Review**) and re-run immediately. The script fails on attempt 1 (no 8.5-minute retry loop). See *Publishing reliability* above. |
 | Build fails at **"Guard — fail fast if the App Store listing metadata is incomplete"** (appstore submit) | App Store Connect is missing required listing fields on the in-prep version. The guard prints the exact fields (screenshots / description / keywords / support URL / privacy-policy URL / age rating) + the `…/distribution` URL. Fill them in, then re-run. Catches this in seconds *before* the build. See *Publishing reliability* above. |
 | Publish logged a `500` but the build still made it | Expected — the scripted publish detects an upload that 500'd *after* registering and retries only the submission. No action needed. |
 | Build uploads but never appears in TestFlight | Apple is still processing (give it 20 min), or the **GoGoods Test Group** name doesn't match App Store Connect exactly. |

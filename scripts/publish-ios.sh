@@ -20,7 +20,13 @@
 #        If it did NOT register, we retry the full upload.
 #     3. Fail fast (no pointless retries) on DETERMINISTIC errors that a retry can
 #        never fix — e.g. missing TestFlight "Beta App Review Information", which is
-#        an operator setup task in App Store Connect, not a transient hiccup.
+#        an operator setup task in App Store Connect, not a transient hiccup. This
+#        also covers "Another build is in review" (422) — a prior build in the same
+#        version train is still awaiting Apple's beta review decision, so retrying
+#        the submission just repeats the same 422 every time (build 74 burned all
+#        4 attempts / ~8.5 min this way). That case gets its own actionable message
+#        (see is_stale_beta_review_failure below) with a link to check/cancel the
+#        pending review in App Store Connect.
 #     4. Still fail clearly if the binary genuinely never publishes.
 #
 # AUTH
@@ -103,6 +109,15 @@ is_deterministic_failure() {
     "$log"
 }
 
+# Detects the specific "a prior build in this version train is still awaiting
+# Apple's TestFlight beta review" 422. This is a DIFFERENT dead end from the
+# other deterministic failures above (missing setup info) — it's not something
+# to *fix*, it's something to *wait out or cancel*, so it gets its own message.
+is_stale_beta_review_failure() {
+  local log="$1"
+  grep -qiE "[Aa]nother build is in review|already in beta review" "$log"
+}
+
 SKIP_UPLOAD=""
 LOG="$(mktemp)"
 
@@ -134,6 +149,38 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
   fi
 
   echo "Publish attempt $attempt failed (exit $STATUS)."
+
+  if is_stale_beta_review_failure "$LOG"; then
+    echo "------------------------------------------------------------------------"
+    echo "DEAD END: a prior build in this version train is still in Apple's"
+    echo "TestFlight beta review queue. Retrying the submission can never fix this"
+    echo "-- Apple only allows ONE build per version 'train' in beta review at a"
+    echo "time -- so we fail fast instead of burning ~8.5 minutes of backoff."
+    if build_registered; then
+      echo ""
+      echo "The binary (build $EXPECTED_BUILD) DID upload and register successfully"
+      echo "on App Store Connect -- this is NOT an upload problem. It is only the"
+      echo "external beta-review SUBMISSION that failed, because an earlier build in"
+      echo "the same version train is still awaiting Apple's review decision."
+    fi
+    echo ""
+    echo "To fix it, in App Store Connect either:"
+    echo "  1. Wait for Apple to finish reviewing the pending build (usually 24-48h),"
+    echo "     then re-run this workflow -- it will submit build $EXPECTED_BUILD once"
+    echo "     the train is clear, OR"
+    echo "  2. Cancel that pending beta review yourself (TestFlight -> Builds -> the"
+    echo "     build showing 'Waiting for Review' -> ... -> Cancel Beta Review),"
+    echo "     then re-run this workflow immediately."
+    echo "  https://appstoreconnect.apple.com/apps/$APP_STORE_APPLE_ID/testflight/ios"
+    echo ""
+    echo "(Automatic cancellation was investigated: the 'app-store-connect' CLI this"
+    echo "pipeline uses has no command to cancel/expire a pending Beta App Review"
+    echo "Submission, so this is a manual, one-time step in App Store Connect --"
+    echo "see docs/codemagic-builds.md.)"
+    echo "------------------------------------------------------------------------"
+    rm -f "$LOG"
+    exit 1
+  fi
 
   if is_deterministic_failure "$LOG"; then
     echo "------------------------------------------------------------------------"
