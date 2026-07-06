@@ -500,7 +500,12 @@ export function VinylOrderPanel({
   // ── History controls ──────────────────────────────────────────────
   const canUndo = cursor > 0;
   const canRedo = cursor < snapshots.length - 1;
-  const canReset = snapshots.length > 1 || cursor !== 0;
+  // Reset is only meaningful when the current cursor has actually
+  // drifted from the original (index 0) snapshot — not merely whenever
+  // history has more than one entry. Without the cursor check, undoing
+  // all the way back to the original left Reset (wrongly) enabled,
+  // since the redo tail keeps snapshots.length > 1 even at cursor 0.
+  const canReset = cursor !== 0;
 
   const onUndo = () => {
     if (readOnly || !canUndo) return;
