@@ -805,6 +805,9 @@ export function VinylOrderPanel({
                     {/* Task #2583 — editable per-side catalog number */}
                     {editingSide === side ? (
                       <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-xs font-normal text-slate-400 flex-shrink-0">
+                          Catalog No.:
+                        </span>
                         <input
                           ref={catalogInputRef}
                           type="text"
@@ -832,6 +835,9 @@ export function VinylOrderPanel({
                       </div>
                     ) : (
                       <div className="flex items-center gap-1 group/catnum mt-0.5">
+                        <span className="text-xs font-normal text-slate-400 flex-shrink-0">
+                          Catalog No.:
+                        </span>
                         <span
                           className="text-xs font-normal text-slate-400"
                           data-testid={`text-side-catalog-number-${side}`}
