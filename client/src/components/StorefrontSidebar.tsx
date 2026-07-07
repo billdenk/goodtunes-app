@@ -54,6 +54,7 @@ const STOREFRONT_ROUTE_PREFIXES = [
 
 export function shouldRenderStorefrontSidebar(location: string): boolean {
   if (location === "/album" || location.startsWith("/album/")) return false;
+  if (location.startsWith("/artist/albums/")) return false;
   return STOREFRONT_ROUTE_PREFIXES.some(
     (p) => location === p || location.startsWith(p),
   );
