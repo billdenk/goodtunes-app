@@ -34,6 +34,14 @@ import { useAuth } from "@/hooks/useAuth";
 // sidebar renders; record matches come from /api/admin/search with a
 // ~150ms debounce so we don't spam the API per keystroke. ⌘K / Ctrl-K
 // opens/focuses it from anywhere in the admin shell.
+//
+// Task #2600 — Partner portal scoped search. Three optional props extend
+// this for partner portals:
+//   • searchEndpoint — URL to hit instead of /api/admin/search.
+//   • navPages       — Replaces NAV_PAGES entirely. Pass the portal's own
+//                      tab definitions (with portal-relative hrefs) so page
+//                      shortcuts navigate to the right place in the portal.
+//   • placeholder    — Input placeholder; defaults to "Search admin…".
 
 export type SearchResult = {
   kind:
@@ -96,19 +104,33 @@ const NAV_PAGES: SearchResult[] = [
   { kind: "page", id: "platform-pricing", title: "Platform pricing", badge: "Page", href: "/admin/platform-pricing" },
 ];
 
+// Derive a short stable token from a URL for use in the localStorage key.
+// "/api/partner/search" → "partner-search", "/api/admin/search" → "admin"
+function scopeTokenFromEndpoint(endpoint: string): string {
+  if (endpoint === "/api/admin/search") return "admin";
+  const last = endpoint.split("/").filter(Boolean).slice(-2).join("-");
+  return last || "admin";
+}
+
 const RECENT_KEY_PREFIX = "gt:admin-search-recent:";
 const RECENT_MAX = 5;
 
 type Recent = Pick<SearchResult, "kind" | "id" | "title" | "href" | "badge">;
 
-function recentKey(userId: string | undefined | null): string | null {
+function recentKey(
+  userId: string | undefined | null,
+  scopeToken: string,
+): string | null {
   if (!userId) return null;
-  return `${RECENT_KEY_PREFIX}${userId}`;
+  return `${RECENT_KEY_PREFIX}${scopeToken}:${userId}`;
 }
 
-function readRecents(userId: string | undefined | null): Recent[] {
+function readRecents(
+  userId: string | undefined | null,
+  scopeToken: string,
+): Recent[] {
   if (typeof window === "undefined") return [];
-  const key = recentKey(userId);
+  const key = recentKey(userId, scopeToken);
   if (!key) return [];
   try {
     const raw = window.localStorage.getItem(key);
@@ -121,12 +143,16 @@ function readRecents(userId: string | undefined | null): Recent[] {
   }
 }
 
-function pushRecent(userId: string | undefined | null, entry: Recent) {
+function pushRecent(
+  userId: string | undefined | null,
+  scopeToken: string,
+  entry: Recent,
+) {
   if (typeof window === "undefined") return;
-  const key = recentKey(userId);
+  const key = recentKey(userId, scopeToken);
   if (!key) return;
   try {
-    const existing = readRecents(userId).filter(
+    const existing = readRecents(userId, scopeToken).filter(
       (r) => !(r.kind === entry.kind && r.id === entry.id),
     );
     const next = [entry, ...existing].slice(0, RECENT_MAX);
@@ -135,10 +161,8 @@ function pushRecent(userId: string | undefined | null, entry: Recent) {
 }
 
 // Apple/Linear-style command palette: type is conveyed by a small
-// monochrome leading icon in a fixed gutter, not by a trailing "Page"
-// chip. Every searchable kind maps to one calm Lucide glyph; the icon
-// gutter keeps recents (mixed types under one header) and live results
-// scannable at a glance.
+// monochrome leading icon in a fixed gutter, not by a trailing chip.
+// Every searchable kind maps to one calm Lucide glyph.
 const KIND_ICON: Record<SearchResult["kind"], LucideIcon> = {
   page: FileText,
   person: User,
@@ -156,8 +180,7 @@ const KIND_ICON: Record<SearchResult["kind"], LucideIcon> = {
   pressingOrder: ClipboardList,
 };
 
-// Group order in the dropdown. Pages always sit at the top so an admin
-// hunting for a tab finds it on the first row.
+// Group order in the dropdown. Pages always sit at the top.
 const GROUP_ORDER: Array<{ key: keyof ServerPayload | "pages"; label: string }> = [
   { key: "pages", label: "Pages" },
   { key: "people", label: "People" },
@@ -175,7 +198,46 @@ const GROUP_ORDER: Array<{ key: keyof ServerPayload | "pages"; label: string }> 
   { key: "pressingOrders", label: "Press Orders" },
 ];
 
-export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?: boolean } = {}) {
+export function AdminSearchBar({
+  registerShortcut = true,
+  searchEndpoint = "/api/admin/search",
+  navPages,
+  placeholder = "Search admin…",
+  recentScopeKey,
+  allowedNavIds,
+}: {
+  registerShortcut?: boolean;
+  /**
+   * Override the search API endpoint. Defaults to `/api/admin/search`.
+   * Pass `/api/partner/search` for partner portals so results are
+   * scoped to the caller's role.
+   */
+  searchEndpoint?: string;
+  /**
+   * Explicit localStorage scope key for recently-visited entries.
+   * When provided, overrides the scope token derived from `searchEndpoint`
+   * so two different portals sharing the same endpoint (e.g. artist portal
+   * and label portal both using /api/partner/search) keep separate recent
+   * histories. Should be a stable, human-opaque string like `artist:<id>`.
+   */
+  recentScopeKey?: string;
+  /**
+   * Filter built-in NAV_PAGES to only the IDs listed here. Ignored when
+   * `navPages` is also provided (navPages takes precedence). Use this for
+   * lightweight filtering of the default admin page list.
+   */
+  allowedNavIds?: string[];
+  /**
+   * Custom page definitions to use as instant page shortcuts instead of
+   * the default NAV_PAGES list. Pass the portal's own tab pages (with
+   * portal-relative hrefs such as `/artist?tab=catalog`) so clicking a
+   * shortcut actually lands on the right section of the portal, not on
+   * an /admin/* route the partner may not see.
+   */
+  navPages?: SearchResult[];
+  /** Input placeholder text. Defaults to "Search admin…". */
+  placeholder?: string;
+} = {}) {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const userId = user?.id;
@@ -187,12 +249,30 @@ export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?:
   const inputRef = useRef<HTMLInputElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  // Recents are user-scoped — re-read whenever the logged-in admin
-  // changes so we never bleed one admin's recents into another's
+  // Resolve the effective set of page shortcuts.
+  // Priority: explicit navPages > allowedNavIds-filtered NAV_PAGES > all NAV_PAGES.
+  // navPages provides portal-specific hrefs (e.g. /artist?tab=catalog);
+  // allowedNavIds is a lightweight filter on the default admin NAV_PAGES list.
+  const effectiveNavPages = navPages
+    ?? (allowedNavIds ? NAV_PAGES.filter((p) => allowedNavIds.includes(p.id)) : NAV_PAGES);
+
+  // Stable scope token derived from the endpoint — used to namespace the
+  // localStorage recently-visited key so partner and super-admin histories
+  // never bleed into each other on a shared browser. When the caller
+  // supplies an explicit recentScopeKey (e.g. "artist:<id>"), use that
+  // instead of the endpoint-derived token so multiple portals that share
+  // the same endpoint keep separate recent histories per entity.
+  const scopeToken = useMemo(
+    () => recentScopeKey ?? scopeTokenFromEndpoint(searchEndpoint),
+    [recentScopeKey, searchEndpoint],
+  );
+
+  // Recents are user + scope scoped — re-read whenever the logged-in admin
+  // or the scope changes so we never bleed one admin's recents into another's
   // session on a shared browser.
   useEffect(() => {
-    setRecents(readRecents(userId));
-  }, [userId]);
+    setRecents(readRecents(userId, scopeToken));
+  }, [userId, scopeToken]);
 
   // ~150ms debounce — keeps the API quiet while the admin is mid-word.
   useEffect(() => {
@@ -200,11 +280,10 @@ export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?:
     return () => window.clearTimeout(id);
   }, [query]);
 
-  // ⌘K / Ctrl-K from anywhere in the admin shell focuses (and opens)
-  // the search box. Esc on the box returns focus to the rest of the
-  // page. AdminFrame mounts two copies (sidebar + mobile header) so
-  // only the desktop instance registers the shortcut to avoid two
-  // listeners racing for focus/open state.
+  // ⌘K / Ctrl-K from anywhere in the shell focuses (and opens) the search
+  // box. Esc on the box returns focus to the rest of the page.
+  // AdminFrame mounts two copies (sidebar + mobile header) so only the
+  // desktop instance registers the shortcut to avoid two listeners racing.
   useEffect(() => {
     if (!registerShortcut) return;
     const onKey = (e: KeyboardEvent) => {
@@ -219,8 +298,7 @@ export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?:
     return () => window.removeEventListener("keydown", onKey);
   }, [registerShortcut]);
 
-  // Outside click closes the popover. The input stays mounted because
-  // it lives inside the sidebar — only the dropdown is dismissed.
+  // Outside click closes the popover.
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
@@ -231,46 +309,38 @@ export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?:
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
-  // Close on route change (sidebar nav, recent click, programmatic
-  // navigation, etc.).
+  // Close on route change; stamp recently-visited for top-level nav pages.
   const [location] = useLocation();
   useEffect(() => {
     setOpen(false);
-    // Remember the page the admin actually landed on so the recent
-    // list is useful on first open of a new session. We only stamp
-    // top-level admin nav pages here; detail navigations from the
-    // dropdown stamp themselves on select.
-    const match = NAV_PAGES.find((p) => p.href === location);
-    if (match) pushRecent(userId, { kind: match.kind, id: match.id, title: match.title, href: match.href, badge: match.badge });
-    setRecents(readRecents(userId));
-  }, [location, userId]);
+    const match = effectiveNavPages.find((p) => p.href === location);
+    if (match) pushRecent(userId, scopeToken, { kind: match.kind, id: match.id, title: match.title, href: match.href, badge: match.badge });
+    setRecents(readRecents(userId, scopeToken));
+  }, [location, userId, scopeToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Custom queryFn — the default joins queryKey with "/", which would
   // request `/api/admin/search/<term>` (no such route). We need the
   // `?q=` querystring shape the backend exposes.
   const { data, isFetching } = useQuery<ServerPayload>({
-    queryKey: ["/api/admin/search", debounced],
+    queryKey: [searchEndpoint, debounced],
     enabled: debounced.length >= 1,
     staleTime: 30_000,
     queryFn: async () => {
-      const url = `/api/admin/search?q=${encodeURIComponent(debounced)}&limit=5`;
+      const url = `${searchEndpoint}?q=${encodeURIComponent(debounced)}&limit=5`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
       return res.json();
     },
   });
 
-  // Local nav-page matches — instant, no network. Case-insensitive
-  // substring on the static label.
+  // Local nav-page matches — instant, no network. Case-insensitive substring.
   const pageMatches = useMemo(() => {
     const q = debounced.toLowerCase();
     if (!q) return [];
-    return NAV_PAGES.filter((p) => p.title.toLowerCase().includes(q)).slice(0, 5);
-  }, [debounced]);
+    return effectiveNavPages.filter((p) => p.title.toLowerCase().includes(q)).slice(0, 5);
+  }, [debounced, effectiveNavPages]);
 
-  // Flatten everything into a single ordered list (so ↑/↓ + Enter has
-  // one canonical index) but keep the group boundaries so the render
-  // pass can drop in the headings.
+  // Flatten everything into a single ordered list for ↑/↓ + Enter.
   const groups: Array<{ key: string; label: string; items: SearchResult[] }> = useMemo(() => {
     if (!debounced) {
       if (recents.length === 0) return [];
@@ -298,13 +368,13 @@ export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?:
   useEffect(() => { setActiveIndex(0); }, [debounced, recents.length]);
 
   const onSelect = useCallback((r: SearchResult) => {
-    pushRecent(userId, { kind: r.kind, id: r.id, title: r.title, href: r.href, badge: r.badge });
-    setRecents(readRecents(userId));
+    pushRecent(userId, scopeToken, { kind: r.kind, id: r.id, title: r.title, href: r.href, badge: r.badge });
+    setRecents(readRecents(userId, scopeToken));
     setOpen(false);
     setQuery("");
     setDebounced("");
     navigate(r.href);
-  }, [navigate, userId]);
+  }, [navigate, userId, scopeToken]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Escape") {
@@ -327,9 +397,6 @@ export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?:
     }
   };
 
-  // Render the ⌘K hint only on desktop (where the shortcut works
-  // reliably and the sidebar has room). Mobile uses the magnifying
-  // glass as the visible affordance instead.
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
   let flatIndex = -1;
@@ -344,8 +411,8 @@ export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?:
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          placeholder="Search admin…"
-          aria-label="Search admin"
+          placeholder={placeholder}
+          aria-label="Search"
           aria-autocomplete="list"
           aria-expanded={open}
           aria-controls="admin-search-results"
@@ -361,7 +428,7 @@ export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?:
         <div
           id="admin-search-results"
           role="listbox"
-          aria-label="Admin search results"
+          aria-label="Search results"
           className="absolute left-0 right-0 top-full mt-1 z-50 max-h-[60vh] overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"
           data-testid="admin-search-dropdown"
         >
@@ -385,9 +452,6 @@ export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?:
                     {g.items.map((r) => {
                       flatIndex += 1;
                       const isActive = flatIndex === activeIndex;
-                      // Type is read from the leading icon + section
-                      // header; no per-row "Page" chip or trailing type
-                      // label (Apple/Linear command-palette pattern).
                       const KindIcon = KIND_ICON[r.kind] ?? FileText;
                       return (
                         <li key={`${r.kind}-${r.id}`}>

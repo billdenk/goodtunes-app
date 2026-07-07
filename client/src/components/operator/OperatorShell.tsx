@@ -24,13 +24,15 @@
 // shells that already use OperatorShell are byte-for-byte unchanged.
 
 import * as React from "react";
-import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useLocation } from "wouter";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChevronRight, Circle, Eye, type LucideIcon } from "lucide-react";
 import { DashboardTabs, type TabDef } from "@/components/partner/dashboard-controls";
 import { SECTION_LABELS, type OperatorSectionId } from "@/components/operator/registry";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminSearchBar } from "@/components/admin/AdminSearchBar";
 import { FeedbackLauncher } from "@/components/operator/FeedbackLauncher";
 import { ViewAsBanner } from "@/components/admin/ViewAsBanner";
 import { cn } from "@/lib/utils";
@@ -152,6 +154,28 @@ export function OperatorShell<TabId extends string>({
       if (!had) body.classList.remove("gt-admin");
     };
   }, []);
+
+  // Task #2600 — derive the portal's base path (e.g. "/artist", "/label")
+  // from the current location so navPages hrefs point to portal tabs
+  // (?tab=X) rather than /admin/* operator routes.
+  const [currentLocation] = useLocation();
+  const portalBasePath = currentLocation.split("?")[0];
+
+  // Task #2600 — stable per-entity scope key for AdminSearchBar's recents.
+  // All partner portals share the same /api/partner/search endpoint, so
+  // the endpoint-derived token alone can't distinguish an artist session
+  // from a label session. We query /api/me/role (cheap, cached) to get the
+  // role + roleScopeId pair and build a key like "artist:<uuid>". This
+  // keeps every portal's recent history independent even when the same
+  // admin browses multiple partners in the same browser.
+  const { data: meRole } = useQuery<{ role?: string; roleScopeId?: string | null }>({
+    queryKey: ["/api/me/role"],
+    staleTime: Infinity,
+  });
+  const recentScopeKey =
+    meRole?.role && meRole?.roleScopeId
+      ? `${meRole.role}:${meRole.roleScopeId}`
+      : undefined;
 
   const maxW = maxWidth === "5xl" ? "max-w-5xl" : "max-w-6xl";
   const radius = logoShape === "circle" ? "rounded-full" : "rounded-2xl";
@@ -286,6 +310,31 @@ export function OperatorShell<TabId extends string>({
                 </span>
               </>
             )}
+          </div>
+
+          {/* Task #2600 — Scoped search bar. Sits between the rail header
+              and the nav items, matching AdminFrame's px-2 pt-2 position.
+              Results are scoped to the caller's partner role via the
+              /api/partner/search endpoint. navPages is built from the
+              portal's own tab list so page shortcuts navigate to the
+              portal's tabs (e.g. /artist?tab=catalog) not to /admin/*
+              operator routes that partners can't see.
+              registerShortcut is NOT suppressed — partner portals don't
+              co-mount AdminFrame so ⌘K is safe here. */}
+          <div className="px-2 pt-2 border-r border-slate-200 flex-shrink-0">
+            <AdminSearchBar
+              searchEndpoint="/api/admin/search/scoped"
+              placeholder="Search portal…"
+              recentScopeKey={recentScopeKey}
+              allowedNavIds={tabs.map((t) => t.id)}
+              navPages={tabs.map((t) => ({
+                kind: "page" as const,
+                id: t.id,
+                title: t.label,
+                badge: "Page",
+                href: `${portalBasePath}?tab=${t.id}`,
+              }))}
+            />
           </div>
 
           {/* Task #2085 + #2566 — nav items mirror AdminFrame's SidebarLink
@@ -484,6 +533,26 @@ export function OperatorShell<TabId extends string>({
               <FeedbackLauncher />
               <AdminUserMenu />
             </div>
+          </div>
+
+          {/* Task #2600 — Scoped search bar in the tabs layout. Sits below
+              the entity identity row, above headerExtras / the tab strip.
+              Same navPages derivation as the leftnav variant so portal
+              tab shortcuts work correctly in this layout too. */}
+          <div className="mt-3">
+            <AdminSearchBar
+              searchEndpoint="/api/admin/search/scoped"
+              placeholder="Search portal…"
+              recentScopeKey={recentScopeKey}
+              allowedNavIds={tabs.map((t) => t.id)}
+              navPages={tabs.map((t) => ({
+                kind: "page" as const,
+                id: t.id,
+                title: t.label,
+                badge: "Page",
+                href: `${portalBasePath}?tab=${t.id}`,
+              }))}
+            />
           </div>
 
           {headerExtras}

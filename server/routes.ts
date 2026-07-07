@@ -1159,6 +1159,23 @@ export async function registerRoutes(
           .json({ message: "Out of scope for this partner account." });
       }
     };
+  // ─── Partner-scoped search — EARLY registration ──────────────────
+  // GET /api/admin/search/scoped must be registered HERE, before the
+  // `app.use("/api/admin/search", denyAllReportingPartners)` line below,
+  // because Express prefix-matches that middleware against every path that
+  // starts with /api/admin/search — including /api/admin/search/scoped —
+  // and denyAllReportingPartners would send a 403 before the handler ever
+  // ran. The implementation (a 300-line async handler) is extracted into
+  // the `_partnerScopedSearchImpl` forward-declared variable and assigned
+  // later in this file where /api/partner/search is also registered. Both
+  // paths call the same implementation; /api/partner/search is kept as a
+  // backward-compat alias for clients pinned to the old URL.
+  let _partnerScopedSearchImpl: ((req: any, res: any) => Promise<void>) | null = null;
+  app.get("/api/admin/search/scoped", requireAdmin, (req, res) => {
+    if (!_partnerScopedSearchImpl) return res.status(503).json({ message: "Server initializing" });
+    return _partnerScopedSearchImpl(req, res);
+  });
+
   const denyAllReportingPartners = denyReportingPartnerRegistry(
     REPORTING_PARTNER_PORTAL_ROLES,
   );
@@ -29508,6 +29525,371 @@ export async function registerRoutes(
       searchInflight.delete(cacheKey);
     }
   });
+
+  // ─── Partner-scoped search endpoint ───────────────────────────────
+  // GET /api/partner/search — alias for /api/admin/search/scoped, which is
+  // registered earlier in this file (before the denyAllReportingPartners
+  // middleware block). Both paths call the same _partnerScopedSearchImpl
+  // implementation. /api/partner/search is kept as a backward-compat alias.
+  // No LRU cache: partner result sets are small (≤5 per group) and
+  // per-scope, so cache sharing across sessions would be incorrect.
+  _partnerScopedSearchImpl = async (req: any, res: any) => {
+    const q = String(req.query.q ?? "").trim();
+    const perGroup = Math.min(Math.max(Number(req.query.limit) || 5, 1), 10);
+    const empty = {
+      people: [], vendors: [], labels: [], nonprofits: [], albums: [],
+      gear: [], customers: [], manufacturers: [], fulfillment: [],
+      songs: [], playlists: [], fanOrders: [], pressingOrders: [],
+    };
+    if (q.length < 1) return res.json(empty);
+
+    const { getUserRole } = await import("./auth/roles");
+    const info = await getUserRole(req.session.userId!);
+    if (!info) return res.json(empty);
+
+    const { role, roleScopeId } = info;
+    const pat = `%${q.toLowerCase()}%`;
+    const n = perGroup;
+
+    try {
+      const result = { ...empty };
+
+      if (role === "artist" && roleScopeId) {
+        const [albumRows, songRows, peopleRows, gearRows] = await Promise.all([
+          db.execute<any>(sql`
+            SELECT id, title, artist FROM albums
+            WHERE (primary_artist_id = ${roleScopeId}
+                   OR (payout_owner_kind = 'person' AND payout_owner_id = ${roleScopeId}))
+              AND deleted_at IS NULL AND lower(title) LIKE ${pat}
+            ORDER BY title LIMIT ${n}
+          `),
+          db.execute<any>(sql`
+            SELECT s.id, s.title, s.album_id, a.title AS album_title, a.artist AS album_artist
+            FROM songs s
+            JOIN albums a ON a.id = s.album_id
+            WHERE (a.primary_artist_id = ${roleScopeId}
+                   OR (a.payout_owner_kind = 'person' AND a.payout_owner_id = ${roleScopeId}))
+              AND a.deleted_at IS NULL AND s.deleted_at IS NULL
+              AND lower(s.title) LIKE ${pat}
+            ORDER BY s.title LIMIT ${n}
+          `),
+          db.execute<any>(sql`
+            SELECT DISTINCT p.id, p.name, p.photo_url
+            FROM people p
+            JOIN track_performers tp ON tp.person_id = p.id
+            JOIN songs s ON s.id = tp.song_id
+            JOIN albums a ON a.id = s.album_id
+            WHERE (a.primary_artist_id = ${roleScopeId}
+                   OR (a.payout_owner_kind = 'person' AND a.payout_owner_id = ${roleScopeId}))
+              AND a.deleted_at IS NULL AND s.deleted_at IS NULL AND p.deleted_at IS NULL
+              AND lower(p.name) LIKE ${pat}
+            ORDER BY p.name LIMIT ${n}
+          `),
+          // Gear associated with the artist's tracks: instruments linked via
+          // rig_accessories.instrument_id → rigs → track_rigs → songs → albums.
+          db.execute<any>(sql`
+            SELECT DISTINCT i.id, i.name, i.short_category
+            FROM instruments i
+            JOIN rig_accessories ra ON ra.instrument_id = i.id
+            JOIN track_rigs tr ON tr.rig_id = ra.rig_id
+            JOIN songs s ON s.id = tr.song_id
+            JOIN albums a ON a.id = s.album_id
+            WHERE (a.primary_artist_id = ${roleScopeId}
+                   OR (a.payout_owner_kind = 'person' AND a.payout_owner_id = ${roleScopeId}))
+              AND a.deleted_at IS NULL AND s.deleted_at IS NULL AND i.deleted_at IS NULL
+              AND lower(i.name) LIKE ${pat}
+            ORDER BY i.name LIMIT ${n}
+          `).catch(() => ({ rows: [] } as any)),
+        ]);
+        result.albums = ((albumRows as any).rows ?? []).map((a: any) => ({
+          kind: "album", id: a.id, title: a.title, subtitle: a.artist,
+          badge: "Album", href: `/admin/albums/${a.id}`,
+        }));
+        result.songs = ((songRows as any).rows ?? []).map((s: any) => ({
+          kind: "song", id: s.id, title: s.title,
+          subtitle: `${s.album_title} · ${s.album_artist}`,
+          badge: "Song", href: `/admin/albums/${s.album_id}?track=${s.id}`,
+        }));
+        result.people = ((peopleRows as any).rows ?? []).map((p: any) => ({
+          kind: "person", id: p.id, title: p.name, subtitle: null,
+          badge: "Person", href: `/admin/people/${p.id}`,
+        }));
+        result.gear = ((gearRows as any).rows ?? []).map((g: any) => ({
+          kind: "gear", id: g.id, title: g.name, subtitle: g.short_category,
+          badge: "Gear", href: `/admin/instruments/${g.id}`,
+        }));
+
+      } else if (role === "label" && roleScopeId) {
+        const [albumRows, peopleRows, labelRows] = await Promise.all([
+          db.execute<any>(sql`
+            SELECT id, title, artist FROM albums
+            WHERE label_id = ${roleScopeId} AND deleted_at IS NULL
+              AND lower(title) LIKE ${pat}
+            ORDER BY title LIMIT ${n}
+          `),
+          db.execute<any>(sql`
+            SELECT DISTINCT p.id, p.name
+            FROM people p
+            JOIN albums a ON a.primary_artist_id = p.id
+            WHERE a.label_id = ${roleScopeId} AND a.deleted_at IS NULL AND p.deleted_at IS NULL
+              AND lower(p.name) LIKE ${pat}
+            ORDER BY p.name LIMIT ${n}
+          `),
+          db.execute<any>(sql`
+            SELECT id, name FROM labels
+            WHERE id = ${roleScopeId} AND lower(name) LIKE ${pat}
+            LIMIT 1
+          `),
+        ]);
+        result.albums = ((albumRows as any).rows ?? []).map((a: any) => ({
+          kind: "album", id: a.id, title: a.title, subtitle: a.artist,
+          badge: "Album", href: `/admin/albums/${a.id}`,
+        }));
+        result.people = ((peopleRows as any).rows ?? []).map((p: any) => ({
+          kind: "person", id: p.id, title: p.name, subtitle: null,
+          badge: "Person", href: `/admin/people/${p.id}`,
+        }));
+        result.labels = ((labelRows as any).rows ?? []).map((l: any) => ({
+          kind: "label", id: l.id, title: l.name, subtitle: null,
+          badge: "Label", href: `/admin/labels/${l.id}`,
+        }));
+
+      } else if (role === "manager" && roleScopeId) {
+        const [peopleRows, albumRows] = await Promise.all([
+          db.execute<any>(sql`
+            SELECT id, name FROM people
+            WHERE manager_id = ${roleScopeId} AND deleted_at IS NULL
+              AND lower(name) LIKE ${pat}
+            ORDER BY name LIMIT ${n}
+          `),
+          db.execute<any>(sql`
+            SELECT a.id, a.title, a.artist FROM albums a
+            WHERE a.primary_artist_id IN (
+              SELECT id FROM people WHERE manager_id = ${roleScopeId} AND deleted_at IS NULL
+            ) AND a.deleted_at IS NULL AND lower(a.title) LIKE ${pat}
+            ORDER BY a.title LIMIT ${n}
+          `),
+        ]);
+        result.people = ((peopleRows as any).rows ?? []).map((p: any) => ({
+          kind: "person", id: p.id, title: p.name, subtitle: null,
+          badge: "Person", href: `/admin/people/${p.id}`,
+        }));
+        result.albums = ((albumRows as any).rows ?? []).map((a: any) => ({
+          kind: "album", id: a.id, title: a.title, subtitle: a.artist,
+          badge: "Album", href: `/admin/albums/${a.id}`,
+        }));
+
+      } else if (role === "non_profit" && roleScopeId) {
+        const [npoRows, beneficiaryAlbumRows, donorRows] = await Promise.all([
+          db.execute<any>(sql`
+            SELECT id, name FROM organizations
+            WHERE id = ${roleScopeId} AND lower(name) LIKE ${pat}
+            LIMIT 1
+          `),
+          // Albums that list this NPO as a beneficiary.
+          db.execute<any>(sql`
+            SELECT DISTINCT a.id, a.title, a.artist
+            FROM albums a
+            JOIN album_npo_beneficiaries b ON b.album_id = a.id
+            WHERE b.organization_id = ${roleScopeId}
+              AND a.deleted_at IS NULL AND lower(a.title) LIKE ${pat}
+            ORDER BY a.title LIMIT ${n}
+          `),
+          // Buyers of albums where this NPO is a beneficiary — match on
+          // buyer name, email, or album title so the NPO can look up donors.
+          db.execute<any>(sql`
+            SELECT DISTINCT o.id, o.good_deed_number, o.status,
+                   cu.display_name AS buyer_name, cu.email AS buyer_email,
+                   a.title AS album_title
+            FROM orders o
+            JOIN albums a ON a.id = o.album_id
+            JOIN album_npo_beneficiaries b ON b.album_id = a.id
+            JOIN customer_users cu ON cu.id = o.user_id
+            WHERE b.organization_id = ${roleScopeId}
+              AND o.status = 'paid'
+              AND (lower(a.title) LIKE ${pat}
+                   OR lower(cu.display_name) LIKE ${pat}
+                   OR lower(cu.email) LIKE ${pat})
+            ORDER BY o.created_at DESC LIMIT ${n}
+          `),
+        ]);
+        result.nonprofits = ((npoRows as any).rows ?? []).map((n: any) => ({
+          kind: "nonprofit", id: n.id, title: n.name, subtitle: null,
+          badge: "NPO", href: `/admin/non-profits/${n.id}`,
+        }));
+        result.albums = ((beneficiaryAlbumRows as any).rows ?? []).map((a: any) => ({
+          kind: "album", id: a.id, title: a.title, subtitle: a.artist,
+          badge: "Album", href: `/admin/albums/${a.id}`,
+        }));
+        result.fanOrders = ((donorRows as any).rows ?? []).map((o: any) => {
+          const label = o.good_deed_number != null
+            ? `GoodDeed #${o.good_deed_number}`
+            : `Order ${(o.id as string).slice(0, 8)}`;
+          return {
+            kind: "fanOrder" as const, id: o.id, title: label,
+            subtitle: [o.buyer_name || o.buyer_email, o.album_title].filter(Boolean).join(" · "),
+            badge: "Donor",
+            href: `/admin/fan-orders?orderId=${o.id}`,
+          };
+        });
+
+      } else if (role === "manufacturer" && roleScopeId) {
+        const [albumRows, mfrRows, rosterRows, pressOrderRows] = await Promise.all([
+          db.execute<any>(sql`
+            SELECT id, title, artist FROM albums
+            WHERE submitted_press_id = ${roleScopeId} AND deleted_at IS NULL
+              AND lower(title) LIKE ${pat}
+            ORDER BY title LIMIT ${n}
+          `),
+          db.execute<any>(sql`
+            SELECT id, name FROM manufacturers
+            WHERE id = ${roleScopeId} AND lower(name) LIKE ${pat}
+            LIMIT 1
+          `),
+          // Roster: primary artists of albums submitted to this press.
+          db.execute<any>(sql`
+            SELECT DISTINCT p.id, p.name
+            FROM people p
+            JOIN albums a ON a.primary_artist_id = p.id
+            WHERE a.submitted_press_id = ${roleScopeId}
+              AND a.deleted_at IS NULL AND p.deleted_at IS NULL
+              AND lower(p.name) LIKE ${pat}
+            ORDER BY p.name LIMIT ${n}
+          `),
+          // Pressing orders for albums submitted to this press.
+          db.execute<any>(sql`
+            SELECT por.id, por.album_id, a.title AS album_title,
+                   por.quantity, por.status
+            FROM pressing_order_requests por
+            JOIN albums a ON a.id = por.album_id
+            WHERE a.submitted_press_id = ${roleScopeId}
+              AND (lower(a.title) LIKE ${pat} OR lower(por.status) LIKE ${pat})
+            ORDER BY por.submitted_at DESC LIMIT ${n}
+          `),
+        ]);
+        result.albums = ((albumRows as any).rows ?? []).map((a: any) => ({
+          kind: "album", id: a.id, title: a.title, subtitle: a.artist,
+          badge: "Album", href: `/admin/albums/${a.id}`,
+        }));
+        result.manufacturers = ((mfrRows as any).rows ?? []).map((m: any) => ({
+          kind: "manufacturer", id: m.id, title: m.name, subtitle: null,
+          badge: "Press", href: `/admin/manufacturers/${m.id}`,
+        }));
+        result.people = ((rosterRows as any).rows ?? []).map((p: any) => ({
+          kind: "person", id: p.id, title: p.name, subtitle: null,
+          badge: "Person", href: `/admin/people/${p.id}`,
+        }));
+        result.pressingOrders = ((pressOrderRows as any).rows ?? []).map((o: any) => ({
+          kind: "pressingOrder", id: o.id,
+          title: `Pressing ${(o.id as string).slice(0, 8)}`,
+          subtitle: [o.album_title, `Qty ${o.quantity}`, o.status].filter(Boolean).join(" · "),
+          badge: "Pressing order",
+          href: `/admin/pressing-orders?orderId=${o.id}`,
+        }));
+
+      } else if (role === "vendor" && roleScopeId) {
+        // Quickprinter (cert-printer) vendors also land here because
+        // getUserRole() returns role="vendor" for all vendor accounts —
+        // there is no separate "printer" role value in the auth system.
+        // For quickprinters we also surface recent cert_print_batches so the
+        // printer portal has search coverage over its print queue.
+        // cert_print_batches has no vendor FK so we return the most recent
+        // batches globally (there is always exactly ONE active global printer).
+        const [vendorRows, gearRows] = await Promise.all([
+          db.execute<any>(sql`
+            SELECT id, name, is_maker, is_reseller, is_quickprinter FROM vendors
+            WHERE id = ${roleScopeId} AND lower(name) LIKE ${pat}
+            LIMIT 1
+          `),
+          db.execute<any>(sql`
+            SELECT id, name, short_category FROM instruments
+            WHERE vendor_id = ${roleScopeId} AND deleted_at IS NULL
+              AND lower(name) LIKE ${pat}
+            ORDER BY name LIMIT ${n}
+          `),
+        ]);
+        const vendorRow = ((vendorRows as any).rows ?? [])[0];
+        if (vendorRow?.is_quickprinter) {
+          // Return recent cert print batches. cert_print_batches has no vendor
+          // FK; all batches go to the platform's default printer, which IS this
+          // vendor when is_quickprinter=true.
+          const batchRows = await db.execute<any>(sql`
+            SELECT id, format, cert_count, created_at
+            FROM cert_print_batches
+            WHERE lower(format) LIKE ${pat} OR lower(cert_count::text) LIKE ${pat}
+            ORDER BY created_at DESC LIMIT ${n}
+          `).catch(() => ({ rows: [] } as any));
+          result.pressingOrders = ((batchRows as any).rows ?? []).map((b: any) => ({
+            kind: "pressingOrder" as const, id: b.id,
+            title: `Print batch ${(b.id as string).slice(0, 8)}`,
+            subtitle: `${b.cert_count} cert${b.cert_count !== 1 ? "s" : ""} · ${b.format}`,
+            badge: "Print batch",
+            href: `/admin/printer`,
+          }));
+        }
+        result.vendors = ((vendorRows as any).rows ?? []).map((v: any) => {
+          const roles: string[] = [];
+          if (v.is_maker) roles.push("Maker");
+          if (v.is_reseller) roles.push("Reseller");
+          if (v.is_quickprinter) roles.push("Printer");
+          return {
+            kind: "vendor", id: v.id, title: v.name, subtitle: null,
+            badge: roles.join(" · ") || "Vendor",
+            href: v.is_maker ? `/admin/makers/${v.id}` : `/admin/vendors/${v.id}`,
+          };
+        });
+        result.gear = ((gearRows as any).rows ?? []).map((g: any) => ({
+          kind: "gear", id: g.id, title: g.name, subtitle: g.short_category,
+          badge: "Gear", href: `/admin/instruments/${g.id}`,
+        }));
+
+      } else if (role === "fulfillment" && roleScopeId) {
+        const [fulfillmentRows, orderRows] = await Promise.all([
+          db.execute<any>(sql`
+            SELECT id, name FROM fulfillment_partners
+            WHERE id = ${roleScopeId} AND lower(name) LIKE ${pat}
+            LIMIT 1
+          `),
+          // Orders routed to this fulfillment partner. Match on buyer email,
+          // album title, or good_deed_number cast to text.
+          db.execute<any>(sql`
+            SELECT o.id, o.good_deed_number, o.status,
+                   cu.display_name AS buyer_name, cu.email AS buyer_email,
+                   a.title AS album_title
+            FROM orders o
+            JOIN albums a ON a.id = o.album_id
+            JOIN customer_users cu ON cu.id = o.user_id
+            WHERE o.fulfillment_partner_id = ${roleScopeId}
+              AND (lower(a.title) LIKE ${pat}
+                   OR lower(cu.display_name) LIKE ${pat}
+                   OR lower(cu.email) LIKE ${pat})
+            ORDER BY o.created_at DESC LIMIT ${n}
+          `),
+        ]);
+        result.fulfillment = ((fulfillmentRows as any).rows ?? []).map((f: any) => ({
+          kind: "fulfillment", id: f.id, title: f.name, subtitle: null,
+          badge: "Fulfillment", href: `/admin/fulfillment-partners/${f.id}`,
+        }));
+        result.fanOrders = ((orderRows as any).rows ?? []).map((o: any) => {
+          const label = o.good_deed_number != null
+            ? `GoodDeed #${o.good_deed_number}`
+            : `Order ${(o.id as string).slice(0, 8)}`;
+          return {
+            kind: "fanOrder", id: o.id, title: label,
+            subtitle: [o.buyer_name || o.buyer_email, o.album_title, o.status].filter(Boolean).join(" · "),
+            badge: "Fan order",
+            href: `/admin/fan-orders?orderId=${o.id}`,
+          };
+        });
+      }
+
+      return res.json(result);
+    } catch (err) {
+      return res.status(500).json({ message: (err as Error).message });
+    }
+  };
+  // Backward-compat alias: /api/partner/search forwards to the same impl.
+  app.get("/api/partner/search", requireAdmin, (req: any, res: any) => _partnerScopedSearchImpl!(req, res));
 
   // ─── Task #338 — Admin playlist detail ────────────────────────────
   // Read-only view of any customer playlist (admin override of the
