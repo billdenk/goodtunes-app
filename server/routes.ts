@@ -25615,6 +25615,11 @@ export async function registerRoutes(
       JOIN albums a ON a.id = sku.album_id AND a.deleted_at IS NULL
       WHERE sku.press_id = ${req.params.id}
         AND a.is_goodtunes_release = true
+        -- SPIN Promos are digital-only legacy releases with NO manufacturing
+        -- surfaces (Package/Physical tabs are hidden), so they can never get a
+        -- pressing order — excluding them keeps them out of a press's queue
+        -- instead of stranding them as permanently "Awaiting pressing order".
+        AND a.is_spin_promo = false
         AND NOT EXISTS (
           SELECT 1 FROM pressing_order_requests por
           WHERE por.album_id = a.id

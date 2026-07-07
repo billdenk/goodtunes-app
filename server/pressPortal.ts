@@ -246,6 +246,9 @@ export function sqlPressSummaryCounts(pressId: string): SQL {
         JOIN albums a ON a.id = sku.album_id AND a.deleted_at IS NULL
         WHERE sku.press_id = ${pressId}
           AND a.is_goodtunes_release = true
+          -- SPIN Promos are digital-only legacy releases with no manufacturing
+          -- surfaces, so they never belong in a press's pre-pressing queue.
+          AND a.is_spin_promo = false
           AND NOT EXISTS (
             SELECT 1 FROM pressing_order_requests por
             WHERE por.album_id = a.id
@@ -925,6 +928,9 @@ export function registerPressPortalRoutes(
       ) sold ON true
       WHERE sku.press_id = ${pressId}
         AND a.is_goodtunes_release = true
+        -- SPIN Promos are digital-only legacy releases with no manufacturing
+        -- surfaces, so they never belong in a press's pre-pressing queue.
+        AND a.is_spin_promo = false
         AND NOT EXISTS (
           SELECT 1 FROM pressing_order_requests por
           WHERE por.album_id = a.id
@@ -1022,6 +1028,9 @@ export function registerPressPortalRoutes(
           JOIN albums a ON a.id = sku.album_id AND a.deleted_at IS NULL
          WHERE sku.press_id = ${pressId}
            AND a.is_goodtunes_release = true
+           -- SPIN Promos are digital-only legacy releases with no manufacturing
+           -- surfaces, so they never belong in a press's awaiting-pressing list.
+           AND a.is_spin_promo = false
            AND NOT EXISTS (
              SELECT 1 FROM pressing_order_requests por
               WHERE por.album_id = a.id
