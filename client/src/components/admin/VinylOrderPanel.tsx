@@ -735,7 +735,6 @@ export function VinylOrderPanel({
           </div>
         )}
       </div>
-
       {readOnly && (
         <div
           className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
@@ -745,7 +744,6 @@ export function VinylOrderPanel({
           sequence below is read-only.
         </div>
       )}
-
       {/* Task #583 — the format dropdown was retired with the move into
           the Physical tab; cut format derives from the album's
           Sell-panel `physicalFormat` pick. The disclaimer stays so the
@@ -755,7 +753,6 @@ export function VinylOrderPanel({
         Plays in the app keep using the digital order. Side caps follow
         the album's physical format ({VINYL_FORMAT_RULES[effectiveFormat].label}).
       </p>
-
       {suggestion && (
         <div
           className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900"
@@ -765,7 +762,6 @@ export function VinylOrderPanel({
           <div>{suggestion}</div>
         </div>
       )}
-
       {/* Per-side groups */}
       <div className="space-y-4">
         {sides.map((side) => {
@@ -952,12 +948,7 @@ export function VinylOrderPanel({
           );
         })}
       </div>
-
-      <p className="text-[11px] text-slate-400">
-        Thresholds are industry defaults — Bill will confirm the exact
-        safe-length per format with the press vendors. The digital order
-        on the main Tracks list is unchanged.
-      </p>
+      <p className="text-[11px] text-slate-400">Thresholds are industry defaults.</p>
     </div>
   );
 }
