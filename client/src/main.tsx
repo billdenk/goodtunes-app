@@ -93,7 +93,8 @@ try {
   const lightPortal =
     p === "/artist" || p.indexOf("/artist/albums/") === 0 ||
     p === "/label" || p === "/manager" ||
-    p === "/vendor" || p === "/non-profit" || p === "/publisher" ||
+    p === "/vendor" || p.indexOf("/vendor/albums/") === 0 ||
+    p === "/non-profit" || p === "/publisher" ||
     p === "/invite" || p.indexOf("/invite/") === 0;
   const isAdmin =
     h === "admin.goodtunes.music" || p.indexOf("/admin") === 0 || lightPortal;

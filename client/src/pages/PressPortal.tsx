@@ -23,7 +23,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link, useSearch, useLocation } from "wouter";
+import { Link, useSearch, useLocation, useRoute } from "wouter";
 import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Mail, FileCheck } from "lucide-react";
 import { albumStage, type AlbumStage } from "@shared/albumStage";
 import { useAuth } from "@/hooks/useAuth";
@@ -46,6 +46,7 @@ import {
 import { KpiCard, sparkFromSeries } from "@/components/admin/KpiCard";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ReferralLinkWidget } from "@/components/admin/ReferralLinkWidget";
+import { AdminAlbum } from "@/pages/AdminAlbum";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
 import { AdminReports } from "@/pages/AdminReports";
@@ -158,6 +159,29 @@ const STAGE_DEFS: { id: string; label: string }[] = [
   { id: "shipped",                  label: "Shipped" },
 ];
 
+// Clicking an album inside the press portal opens it embedded at
+// `/vendor/albums/:id` (landing on the Physical tab — internally the "press"
+// tab) instead of the operator `/admin/albums/:id` chrome, which the
+// press-partner route guard bounces straight back to the portal dashboard.
+// Both helpers preserve the super-admin scope query (?scopeId=&scopeKind=) so
+// an operator inspecting a specific press keeps their scope when drilling in.
+function carryScope(carry: URLSearchParams): URLSearchParams {
+  const cur = new URLSearchParams(window.location.search);
+  const scopeId = cur.get("scopeId");
+  const scopeKind = cur.get("scopeKind");
+  if (scopeId) carry.set("scopeId", scopeId);
+  if (scopeKind) carry.set("scopeKind", scopeKind);
+  return carry;
+}
+function pressAlbumHref(albumId: string): string {
+  const carry = carryScope(new URLSearchParams({ tab: "press" }));
+  return `/vendor/albums/${albumId}?${carry.toString()}`;
+}
+function pressPortalHref(tab: string): string {
+  const carry = carryScope(new URLSearchParams({ tab }));
+  return `/vendor?${carry.toString()}`;
+}
+
 export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; isSuperAdminView: boolean }) {
   // Task #2075 — AdminFrame's press rail (shown on the catalog editor) and
   // any other deep link land here as `/vendor?tab=<id>`. Read it on mount so
@@ -172,6 +196,13 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   // person detail view inside the portal (People tab content area), avoiding
   // the /admin/people/:id deny-wall redirect. Cleared when changing tabs.
   const personFromUrl = params.get("person");
+
+  // `/vendor/albums/:id` opens that album's admin page embedded in this portal
+  // shell (Physical tab), mirroring the artist portal. When matched we force
+  // the Albums nav item active and route tab clicks back out to the portal.
+  const [isAlbumView, albumRouteParams] = useRoute<{ id: string }>("/vendor/albums/:id");
+  const [, navigate] = useLocation();
+  const albumViewId = isAlbumView ? (albumRouteParams?.id ?? null) : null;
 
   const resolveTab = (t: string | null, sub: string | null): TabId => {
     if (t === "settings" && sub === "catalog") return "catalog";
@@ -265,9 +296,17 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       hideHeaderIdentity
       fallbackIcon={Factory}
       tabs={tabs}
-      activeTab={tab}
-      onTabChange={handleTabChange}
+      activeTab={albumViewId ? "albums" : tab}
+      onTabChange={albumViewId ? (newTab) => navigate(pressPortalHref(newTab)) : handleTabChange}
     >
+      {albumViewId ? (
+        <AdminAlbum
+          embedded
+          albumId={albumViewId}
+          backHref={pressPortalHref("albums")}
+        />
+      ) : (
+      <>
       {tab === "dashboard" && (
         <PressDashboardTab pressId={pressId} isSuperAdminView={isSuperAdminView} />
       )}
@@ -301,6 +340,8 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       {tab === "reports" && <AdminReports embedded />}
       {tab === "pricing" && <AdminGoodDeedPricing embedded />}
       {tab === "settings" && <SettingsTab pressId={pressId} pressName={me?.name ?? ""} />}
+      </>
+      )}
     </OperatorShell>
   );
 }
@@ -346,7 +387,7 @@ const PRESS_ALBUM_STAGE_TABS: { key: AlbumStage; label: string }[] = [
 ];
 
 function PressAlbumsTab({ pressId }: { pressId: string }) {
-  const [stageTab, setStageTab] = useState<AlbumStage>("prepping");
+  const [stageTab, setStageTab] = useState<AlbumStage>("at_press");
   const [view, setView] = useViewMode("press-albums");
 
   const { data: albums = [], isLoading } = useQuery<PressAlbumLite[]>({
@@ -412,7 +453,7 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
           {visible.map((a) => (
             <Link
               key={a.id}
-              href={`/admin/albums/${a.id}`}
+              href={pressAlbumHref(a.id)}
               data-testid={`card-press-album-${a.id}`}
               className="group rounded-2xl border border-slate-200 bg-white overflow-hidden hover:border-slate-300 hover:shadow-sm transition-all"
             >
@@ -446,7 +487,7 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
             {visible.map((a) => (
               <li key={a.id}>
                 <Link
-                  href={`/admin/albums/${a.id}`}
+                  href={pressAlbumHref(a.id)}
                   data-testid={`row-press-album-${a.id}`}
                   className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors"
                 >
@@ -996,7 +1037,7 @@ export function PressScopedPersonDetail({
                   </div>
                   {a.editableByThisPress && (
                     <Link
-                      href={`/admin/albums/${a.id}`}
+                      href={pressAlbumHref(a.id)}
                       className="text-[color:var(--brand-blue)] text-xs hover:underline flex-shrink-0"
                       data-testid={`link-release-${a.id}`}
                     >

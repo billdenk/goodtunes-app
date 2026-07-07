@@ -926,6 +926,13 @@ function Router() {
         <Route path="/vendor">
           <ProtectedRoute component={VendorPortal} />
         </Route>
+        {/* A press opening one of its albums stays inside the portal shell
+            (PressPortal renders AdminAlbum embedded on the Physical tab)
+            instead of the operator /admin/albums/:id chrome, which the
+            press-partner route guard bounces back to the portal dashboard. */}
+        <Route path="/vendor/albums/:id">
+          <ProtectedRoute component={VendorPortal} />
+        </Route>
         {/* Task #2524 — an artist opening one of their albums stays inside the
             portal shell (ArtistDashboard renders AdminAlbum embedded). Listed
             BEFORE /artist/:slug; the two-segment path can't collide with the
