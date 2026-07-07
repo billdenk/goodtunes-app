@@ -25094,7 +25094,7 @@ export async function registerRoutes(
     title: string;
     artist_name: string | null;
     cover_url: string | null;
-    first_sold_at: Date | null;
+    first_sold_at: Date | string | null;
     is_goodtunes_release: boolean;
     is_prepping: boolean;
     is_hidden: boolean;
@@ -25124,7 +25124,7 @@ export async function registerRoutes(
       title: row.title,
       artistName: row.artist_name,
       coverUrl: row.cover_url,
-      firstSoldAt: row.first_sold_at ? row.first_sold_at.toISOString() : null,
+      firstSoldAt: row.first_sold_at ? new Date(row.first_sold_at).toISOString() : null,
       connectionReason: row.connection_reason,
       state,
       presses: [] as AlbumPressLink[],
