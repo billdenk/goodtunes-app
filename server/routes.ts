@@ -24648,15 +24648,33 @@ export async function registerRoutes(
     // the "Invite pending" chip + reopen the copy-link state without
     // a second round-trip. Matches on lower(email) + role='non_profit'
     // + scope=this NPO; ignores used/revoked/expired rows.
+    //
+    // Task #2624 — some contacts land in entity_contacts(entity_kind=
+    // 'non_profit') via an older path rather than organization_people.
+    // UNION both sources (deduped by person_id — org_people wins for
+    // role when both rows exist) so all contacts surface on the tab.
     const rows = await db.execute<any>(sql`
-      SELECT op.person_id, p.name, p.photo_url, p.contact_email, p.contact_phone, op.role,
+      SELECT p.id AS person_id, p.name, p.photo_url, p.contact_email, p.contact_phone,
+             deduped.role,
              ai.id AS invite_id, ai.token AS invite_token
-      FROM organization_people op
-      JOIN people p ON p.id = op.person_id
+      FROM (
+        SELECT DISTINCT ON (person_id)
+               person_id, role
+        FROM (
+          SELECT person_id, role, 1 AS priority
+          FROM organization_people
+          WHERE organization_id = ${req.params.id}
+          UNION ALL
+          SELECT person_id, role, 2 AS priority
+          FROM entity_contacts
+          WHERE entity_kind = 'non_profit' AND entity_id = ${req.params.id}
+        ) src
+        ORDER BY person_id, priority ASC
+      ) deduped
+      JOIN people p ON p.id = deduped.person_id
       LEFT JOIN admin_invites ai ON lower(ai.email) = lower(COALESCE(p.contact_email, ''))
         AND ai.role = 'non_profit' AND ai.role_scope_id = ${req.params.id}
         AND ai.used_at IS NULL AND ai.revoked_at IS NULL AND ai.expires_at > NOW()
-      WHERE op.organization_id = ${req.params.id}
       ORDER BY p.name ASC
     `);
     const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";

@@ -30,6 +30,7 @@ import {
   Check,
   ExternalLink,
   Unplug,
+  ChevronsUpDown,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ import { InviteToArtistPanel } from "@/components/admin/InviteToArtistPanel";
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
 import { RolePicker } from "@/components/admin/RolePicker";
-import { BusinessTitlePicker } from "@/components/admin/BusinessTitlePicker";
+import { BUSINESS_TITLE_VOCAB } from "@/components/admin/BusinessTitlePicker";
 import { PersonSplitsRail } from "@/components/admin/SplitsPanels";
 import { PersonGearManager } from "@/components/admin/PersonGearManager";
 import { NotificationsCard } from "@/components/admin/NotificationsCard";
@@ -78,6 +79,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 
 // Task #350 — Per-person ambassador toggle. Lives at the bottom of the
 // Permissions tab so it sits next to the other partner verbs. Disabled
@@ -975,7 +985,16 @@ export function AdminPerson() {
                   lists the full set). */}
               {person.shape === "contact"
                 ? (person.attachments && person.attachments.length > 0
-                    ? `${person.attachments[0].role || person.attachments[0].gtRole || "Contact"} at ${person.attachments[0].entityName}`
+                    ? <>
+                        {person.attachments[0].role || person.attachments[0].gtRole || "Contact"}
+                        {" at "}
+                        <Link
+                          href={CONTACT_ATTACHMENT_HREF[person.attachments[0].entityKind as keyof typeof CONTACT_ATTACHMENT_HREF]?.(person.attachments[0].entityId) ?? "#"}
+                          className="hover:underline underline-offset-2"
+                        >
+                          {person.attachments[0].entityName}
+                        </Link>
+                      </>
                     : "Contact")
                 : (labelName ? `Signed to ${labelName}` : "Independent")}
             </div>
@@ -1366,6 +1385,113 @@ const AFFILIATION_SAVE_BASE: Record<NonNullable<PersonFull["attachments"]>[numbe
   non_profit: "/api/non-profits",
 };
 
+// Compact inline combobox for picking/entering a business title.
+// Shows a small trigger button; opens a Popover with a searchable
+// Command list. Free-text: type a custom value and press Enter.
+function TitleCombobox({
+  value,
+  onChange,
+  testIdPrefix,
+}: {
+  value: string | null;
+  onChange: (v: string | null) => void;
+  testIdPrefix: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+
+  const trimmed = q.trim();
+  // Show custom-add option when typed text isn't already in vocab.
+  const showAdd = trimmed.length > 0 && !BUSINESS_TITLE_VOCAB.some(
+    (t) => t.toLowerCase() === trimmed.toLowerCase(),
+  ) && (!value || value.toLowerCase() !== trimmed.toLowerCase());
+
+  function pick(title: string | null) {
+    onChange(title);
+    setQ("");
+    setOpen(false);
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm hover:border-slate-300 max-w-[200px] truncate"
+          data-testid={`button-title-combobox-${testIdPrefix}`}
+        >
+          <span className="truncate">{value ?? <span className="text-slate-400">No title</span>}</span>
+          <ChevronsUpDown className="h-3 w-3 flex-shrink-0 text-slate-400" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-0" align="start">
+        <Command>
+          <CommandInput
+            placeholder="Search or type…"
+            value={q}
+            onValueChange={setQ}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && showAdd) {
+                e.preventDefault();
+                pick(trimmed);
+              }
+            }}
+            data-testid={`input-title-search-${testIdPrefix}`}
+          />
+          <CommandList>
+            <CommandEmpty>
+              {trimmed ? (
+                <button
+                  type="button"
+                  className="w-full px-2 py-1.5 text-left text-xs text-[color:var(--brand-blue)]"
+                  onClick={() => pick(trimmed)}
+                >
+                  Add "{trimmed}"
+                </button>
+              ) : "No titles found."}
+            </CommandEmpty>
+            <CommandGroup>
+              {showAdd && (
+                <CommandItem
+                  value={`__add__${trimmed}`}
+                  onSelect={() => pick(trimmed)}
+                  data-testid={`item-title-add-${testIdPrefix}`}
+                >
+                  <Plus className="h-3 w-3 mr-1.5 text-[color:var(--brand-blue)]" />
+                  <span className="text-[color:var(--brand-blue)]">Add "{trimmed}"</span>
+                </CommandItem>
+              )}
+              {value && (
+                <CommandItem
+                  value="__clear__"
+                  onSelect={() => pick(null)}
+                  data-testid={`item-title-clear-${testIdPrefix}`}
+                >
+                  <X className="h-3 w-3 mr-1.5 text-slate-400" />
+                  <span className="text-slate-500">No title</span>
+                </CommandItem>
+              )}
+              {BUSINESS_TITLE_VOCAB.map((title) => (
+                <CommandItem
+                  key={title}
+                  value={title}
+                  onSelect={() => pick(title)}
+                  data-testid={`item-title-${testIdPrefix}-${title}`}
+                >
+                  {value?.toLowerCase() === title.toLowerCase() && (
+                    <Check className="h-3 w-3 mr-1.5 text-[color:var(--brand-blue)]" />
+                  )}
+                  {title}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function AffiliationRow({
   a,
   personId,
@@ -1388,13 +1514,10 @@ function AffiliationRow({
     mutationFn: async () => {
       await apiRequest("POST", `${AFFILIATION_SAVE_BASE[a.entityKind]}/${a.entityId}/people`, {
         personId,
-        // Send null (not "") to clear the title cleanly.
         role: norm(draft) === "" ? null : draft,
       });
     },
     onSuccess: () => {
-      // Re-fetch the person so attachments[].role reflects the saved
-      // title (and both list + detail caches stay in lock-step).
       queryClient.invalidateQueries({ queryKey: ["/api/admin/people", personId] });
       queryClient.invalidateQueries({ queryKey: ["/api/people", personId] });
       queryClient.invalidateQueries({ queryKey: ["/api/people"] });
@@ -1407,60 +1530,29 @@ function AffiliationRow({
 
   return (
     <li className="px-1 py-2.5" data-testid={`row-overview-attachment-${a.entityId}`}>
-      <div className="flex items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-slate-900 truncate" data-testid={`text-affiliation-role-${a.entityId}`}>
-            {a.role ? (
-              a.role
-            ) : (
-              <span className="font-normal text-slate-400" data-testid={`text-affiliation-no-title-${a.entityId}`}>
-                {canEdit ? "No business title yet" : "Contact"}
-              </span>
-            )}
-            <span className="font-normal text-slate-400"> at </span>
+      {editing ? (
+        // Compact inline editing row — combobox + org link + Save/Cancel
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <TitleCombobox
+              value={draft}
+              onChange={setDraft}
+              testIdPrefix={a.entityId}
+            />
+            <span className="text-sm text-slate-400">at</span>
             <Link
               href={CONTACT_ATTACHMENT_HREF[a.entityKind](a.entityId)}
-              className="font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+              className="text-sm font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
               data-testid={`link-overview-attachment-${a.entityId}`}
             >
               {a.entityName}
             </Link>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">{CONTACT_ATTACHMENT_LABEL[a.entityKind]}</p>
-        </div>
-        {a.gtRole && (
-          <span
-            className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand-purple)] bg-[color:var(--brand-purple)]/10 rounded-full px-2.5 py-1 flex-shrink-0"
-            data-testid={`badge-gtrole-${a.entityId}`}
-          >
-            {a.gtRole}
-          </span>
-        )}
-        {canEdit && !editing && (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-[color:var(--brand-blue)]"
-            data-testid={`button-edit-affiliation-title-${a.entityId}`}
-          >
-            <Pencil className="h-3 w-3" />
-            {a.role ? "Edit title" : "Add title"}
-          </button>
-        )}
-      </div>
-
-      {canEdit && editing && (
-        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-          <BusinessTitlePicker
-            value={draft}
-            onChange={setDraft}
-            testIdPrefix={a.entityId}
-          />
-          <div className="mt-2 flex items-center justify-end gap-1">
+          <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => { setDraft(initial); setEditing(false); }}
-              className="h-8 px-2.5 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-100"
+              className="h-7 px-2 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-100"
               data-testid={`button-cancel-affiliation-title-${a.entityId}`}
             >
               Cancel
@@ -1471,6 +1563,42 @@ function AffiliationRow({
               testId={`button-save-affiliation-title-${a.entityId}`}
             />
           </div>
+          <p className="text-xs text-slate-500">{CONTACT_ATTACHMENT_LABEL[a.entityKind]}</p>
+        </div>
+      ) : (
+        // Read-only display row
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-slate-900 truncate" data-testid={`text-affiliation-role-${a.entityId}`}>
+              {a.role ? (
+                a.role
+              ) : (
+                <span className="font-normal text-slate-400" data-testid={`text-affiliation-no-title-${a.entityId}`}>
+                  {canEdit ? "No business title yet" : "Contact"}
+                </span>
+              )}
+              <span className="font-normal text-slate-400"> at </span>
+              <Link
+                href={CONTACT_ATTACHMENT_HREF[a.entityKind](a.entityId)}
+                className="font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+                data-testid={`link-overview-attachment-${a.entityId}`}
+              >
+                {a.entityName}
+              </Link>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">{CONTACT_ATTACHMENT_LABEL[a.entityKind]}</p>
+          </div>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-[color:var(--brand-blue)]"
+              data-testid={`button-edit-affiliation-title-${a.entityId}`}
+            >
+              <Pencil className="h-3 w-3" />
+              {a.role ? "Edit title" : "Add title"}
+            </button>
+          )}
         </div>
       )}
     </li>
