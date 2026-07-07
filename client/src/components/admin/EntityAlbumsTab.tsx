@@ -5,18 +5,14 @@ import { Loader2 } from "lucide-react";
 import { AlbumCover } from "@/components/ui/AlbumCover";
 import { albumStage, type AlbumStage, type StageInput } from "@shared/albumStage";
 import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
-import {
-  PublishingPipelineStrip,
-  type PublishingAlbumState,
-} from "./PublishingPipelineStrip";
+import { type PublishingAlbumState } from "./PublishingPipelineStrip";
 
 // Task #295 / #2618 — shared "Albums" tab rendered on each entity-detail
 // admin page (NPO / Reseller / Press) and the partner-login portals.
 // The connection logic (which albums tie to this entity, and why) lives
 // server-side; this component renders the same lifecycle chrome as the
 // main catalog: canonical `albumStage` tabs (Prepping → At press →
-// Staged → Released → Sunset) plus a grid/list toggle and a per-row
-// readiness pipeline strip.
+// Staged → Released → Sunset) plus a grid/list toggle.
 
 export type EntityAlbumPress = { id: string; name: string; status: string };
 
@@ -202,9 +198,6 @@ export function EntityAlbumsTab({
                   )}
                 </div>
               </Link>
-              <div className="px-2.5 pb-2.5">
-                <PublishingPipelineStrip state={row.state} />
-              </div>
             </div>
           ))}
         </div>
@@ -251,9 +244,6 @@ export function EntityAlbumsTab({
                     {row.connectionReason}
                   </span>
                 )}
-              </div>
-              <div className="mt-2 pl-15">
-                <PublishingPipelineStrip state={row.state} />
               </div>
             </li>
           ))}
