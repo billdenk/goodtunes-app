@@ -7631,6 +7631,206 @@
   },
   {
     "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoHomeShelf.tsx",
+    "snippet": "const BRAND_BLUE = \"#319ED8\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoHomeShelf.tsx",
+    "snippet": "const BRAND_BG = \"#00062B\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoHomeShelf.tsx",
+    "snippet": "{ title: \"Now or Never\",   artist: \"Nick Carter\",    artFrom: \"#7F10A7\", artTo: \"#319ED8\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoHomeShelf.tsx",
+    "snippet": "{ title: \"I'm Taking Off\", artist: \"Nick Carter\",    artFrom: \"#319ED8\", artTo: \"#4AFFCA\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoHomeShelf.tsx",
+    "snippet": "{ title: \"All American\",   artist: \"Nick Carter\",    artFrom: \"#FF5470\", artTo: \"#FF7C06\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoHomeShelf.tsx",
+    "snippet": "{ title: \"CALIFORNIALAND\", artist: \"Niina Soleil\",   artFrom: \"#4AFFCA\", artTo: \"#7F10A7\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoHomeShelf.tsx",
+    "snippet": "{ title: \"The Sequel\",     artist: \"Various Artists\", artFrom: \"#FF7C06\", artTo: \"#FF5470\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoHomeShelf.tsx",
+    "snippet": "artFrom: \"#7F10A7\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoHomeShelf.tsx",
+    "snippet": "artTo: \"#319ED8\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoNowPlaying.tsx",
+    "snippet": "const BRAND_BLUE = \"#319ED8\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoNowPlaying.tsx",
+    "snippet": "const BRAND_PINK = \"#FF5470\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoNowPlaying.tsx",
+    "snippet": "const BRAND_BG = \"#00062B\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoNowPlaying.tsx",
+    "snippet": "const AUTO_ACCENT = \"#319ED8\";  // GoodTunes blue as the Auto primary accent"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoNowPlaying.tsx",
+    "snippet": "artFrom: \"#7F10A7\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoNowPlaying.tsx",
+    "snippet": "artTo: \"#319ED8\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoQueue.tsx",
+    "snippet": "const BRAND_BLUE = \"#319ED8\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoQueue.tsx",
+    "snippet": "const BRAND_BG = \"#00062B\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoQueue.tsx",
+    "snippet": "artFrom: \"#7F10A7\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/AndroidAutoQueue.tsx",
+    "snippet": "artTo: \"#319ED8\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayAutoCanvas.tsx",
+    "snippet": "const AUTO_ACCENT   = \"#319ED8\";   // GoodTunes blue (matches Auto accent)"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayAutoCanvas.tsx",
+    "snippet": "background: \"#00062B\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayAutoCanvas.tsx",
+    "snippet": "All screens use real Nick Carter / \"Now or Never\" track data. Brand palette: <code style={{ color: \"rgba(255,255,255,0.35)\" }}>#00062B</code> · <code style={{ color: \"#FF7C06\" }}>#FF7C06</code> · <cod"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayHomeTile.tsx",
+    "snippet": "const BRAND_BG = \"#00062B\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayHomeTile.tsx",
+    "snippet": "<rect x=\"8\" y=\"8\" width=\"24\" height=\"24\" rx=\"5\" fill=\"linear-gradient(135deg,#FF5470,#FF7C06)\" />"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayHomeTile.tsx",
+    "snippet": "<stop stopColor=\"#7F10A7\" />"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayHomeTile.tsx",
+    "snippet": "<stop offset=\"1\" stopColor=\"#319ED8\" />"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayHomeTile.tsx",
+    "snippet": "className=\"text-center text-[13px] font-medium\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayNowPlaying.tsx",
+    "snippet": "const BRAND_BLUE = \"#319ED8\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayNowPlaying.tsx",
+    "snippet": "const BRAND_PINK = \"#FF5470\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayNowPlaying.tsx",
+    "snippet": "const BRAND_BG = \"#00062B\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayNowPlaying.tsx",
+    "snippet": "artFrom: \"#7F10A7\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayNowPlaying.tsx",
+    "snippet": "artTo: \"#319ED8\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayNowPlaying.tsx",
+    "snippet": "background: `linear-gradient(90deg, ${BRAND_BLUE}, #4AFFCA)`,"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayNowPlaying.tsx",
+    "snippet": "<button type=\"button\" style={{ marginLeft: 16, padding: 8, flexShrink: 0, marginTop: 2 }}> <HeartIcon filled /> </button>"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayNowPlaying.tsx",
+    "snippet": "<button type=\"button\" style={{ width: 44, height: 44, display: \"flex\", alignItems: \"center\", justifyContent: \"center\" }}> <ShuffleIcon /> </button>"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayNowPlaying.tsx",
+    "snippet": "<button type=\"button\" style={{ width: 44, height: 44, display: \"flex\", alignItems: \"center\", justifyContent: \"center\" }}> <RepeatIcon active /> </button>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayQueue.tsx",
+    "snippet": "const BRAND_BLUE = \"#319ED8\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayQueue.tsx",
+    "snippet": "const BRAND_BG = \"#00062B\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayQueue.tsx",
+    "snippet": "artFrom: \"#7F10A7\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/carplay-auto/CarPlayQueue.tsx",
+    "snippet": "artTo: \"#319ED8\","
+  },
+  {
+    "rule": "brand-hex-literal",
     "file": "artifacts/mockup-sandbox/src/components/mockups/cert-footers/Compact.tsx",
     "snippet": "<div className=\"w-[420px] rounded-3xl overflow-hidden flex flex-col\" style={{ background: \"#00062B\", boxShadow: \"0 30px 80px rgba(0,0,0,0.7)\" }}>"
   },
@@ -12162,7 +12362,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/VinylOrderPanel.tsx",
-    "snippet": "<p className=\"text-[11px] text-slate-400\">"
+    "snippet": "<p className=\"text-[11px] text-slate-400\">Thresholds are industry defaults.</p>"
   },
   {
     "rule": "hardcoded-font-size",

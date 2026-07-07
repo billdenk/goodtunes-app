@@ -262,6 +262,7 @@ The admin tooling and operational process that lets a tiny team run the whole bu
 
 # Coming next / In-flight
 
+- **CarPlay + Android Auto — design approved, implementation pending.** Pixel-accurate mockups of the in-car experience across five screens (CarPlay home tile, CarPlay Now Playing, CarPlay queue, Android Auto Now Playing, Android Auto queue) have been built in the mockup sandbox using real Nick Carter track data and GoodTunes brand colors. Apple has granted the CarPlay Audio App entitlement; native implementation begins after Bill's design sign-off. No Swift, Kotlin, or Capacitor code has been modified.
 - **Push notifications.** The native iOS and Android apps register for push on first launch (after the fan grants permission) and the platform can deliver real alerts to a fan's devices — the first live trigger sends an "Your order has shipped" notification the moment an operator marks an order shipped, now carrying the album's cover art as a rich image (Android big-picture / iOS attachment) so the alert is on-brand and recognizable, falling back to the plain text alert when no artwork is available. Delivery is credential-gated (Apple APNs / Google FCM keys), so it stays dormant until those provider keys are loaded.
 - **Native Mobile Apps.** Full native experience for iOS and Android.
 - **Advanced Analytics.** Deep insights for artists and labels.
