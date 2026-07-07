@@ -12,7 +12,7 @@
 // (see `todayISODate`) so "the moment its date arrives" lines up with the
 // operator's / fan's calendar day rather than a UTC midnight.
 
-export type AlbumStage = "prepping" | "staged" | "released" | "sunset";
+export type AlbumStage = "prepping" | "at_press" | "staged" | "released" | "sunset";
 
 // The minimal album shape the stage rule reads. Both the admin AlbumLite
 // and the full DB album row structurally satisfy this.
@@ -25,6 +25,12 @@ export interface StageInput {
   // streaming. Reaching it surfaces the "Listen on…" links and ends the
   // buy window (sold out).
   streamingReleaseDate?: string | null;
+  // Task #2593 — "At press" stage. Set when the operator advances a
+  // submitted album to digital-open while vinyl is still in manufacturing.
+  // Non-null + isPrepping=false → "at_press" stage (digital live, vinyl
+  // at the plant). Cleared (null) when the album is marked Released so
+  // albumStage() returns "released" rather than staying at "at_press".
+  submittedToPressAt?: string | null;
 }
 
 // Current civil date as `YYYY-MM-DD`. Built from local date parts (not
@@ -145,14 +151,21 @@ export function hasReachedSunset(
 }
 
 // Derive the lifecycle stage. Order matters: Prepping and (hidden) Sunset
-// are hard flags that win over the dates; a still-pending sunrise is Staged;
-// then a reached sunset date sunsets a live album; otherwise Released.
+// are hard flags that win over the dates; "At press" sits between Hidden
+// and Staged — digital is open but vinyl is still being manufactured; a
+// still-pending sunrise is Staged; then a reached sunset date sunsets a
+// live album; otherwise Released.
 export function albumStage(
   album: StageInput,
   today: string = todayISODate(),
 ): AlbumStage {
   if (album.isPrepping) return "prepping";
   if (album.isHidden) return "sunset";
+  // Task #2593 — "At press": isPrepping=false + submittedToPressAt set →
+  // digital is open while vinyl is in manufacturing. Checked after the
+  // isHidden guard and before the sunrise check so the admin stage is
+  // always "at_press" regardless of any scheduled sunrise date.
+  if (album.submittedToPressAt) return "at_press";
   if (isSunrisePending(album.goodTunesReleaseDate, today)) return "staged";
   if (hasReachedSunset(album.streamingReleaseDate, today)) return "sunset";
   return "released";

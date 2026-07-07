@@ -1371,9 +1371,12 @@ interface PipelineAlbum {
   stageEnteredAt: string | null;
   // Task #2574 — Shopify+ "Submitted to press": the operator formally
   // submitted the package for this press to review (distinct from merely
-  // having a pressing order assigned). Read-only signal.
+  // having a pressing order assigned). Read-only signal (is_prepping=true).
   submittedForReview?: boolean;
   submittedToPressAt?: string | null;
+  // Task #2593 — "At press": digital is open while vinyl is at the plant.
+  // isPrepping=false + submittedToPressAt set.
+  isDigitalLive?: boolean;
   lockedAt: string | null;
   sunriseDate: string | null;
   windowOpensAt: string | null;
@@ -1628,6 +1631,15 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
           <div data-testid={`text-locked-qty-${a.id}`}>{a.lockedQuantity} locked</div>
         )}
       </div>
+      {/* Task #2593 — digital sales open while vinyl is at the plant. */}
+      {a.isDigitalLive && (
+        <span
+          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--brand-mint)]/20 text-teal-800"
+          data-testid={`chip-digital-live-${a.id}`}
+        >
+          Digital live
+        </span>
+      )}
       {/* Task #2574 — formally submitted for this press's review. Layered
           on top of the derived manufacturing stage; read-only (operator
           keeps updating the package, press just sees it live). */}

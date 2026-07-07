@@ -9128,25 +9128,42 @@ export async function registerRoutes(
     // release from either earlier state).
     if (req.body?.releaseStatus !== undefined) {
       const status = String(req.body.releaseStatus);
-      if (!["prepping", "submitted_to_press", "released"].includes(status)) {
+      if (!["prepping", "submitted_to_press", "at_press", "released"].includes(status)) {
         return res.status(400).json({ message: "Invalid releaseStatus" });
       }
       if (status === "submitted_to_press") {
+        // Task #2593 — any album with a physical format can use the press
+        // workflow (not Shopify+-only). Guard against digital-only albums.
         const target = await storage.getAlbumById(id);
         if (!target) return res.status(404).json({ message: "Album not found" });
-        if ((target as any).sellMode !== "shopify_plus") {
-          return res.status(400).json({
-            message: "'Submitted to press' is only available for Shopify+ releases.",
-          });
+        if (!(target as any).physicalFormat) {
+          return res.status(400).json({ message: "Press workflow requires a physical format" });
         }
         updates.isPrepping = true;
         updates.submittedToPressAt = new Date();
+      } else if (status === "at_press") {
+        // Task #2593 — "At press": open digital while vinyl is in
+        // manufacturing. isPrepping=false opens the fan store; stamps
+        // submittedToPressAt now if it was never set (e.g. operator
+        // skipped "Submitted to press" and went straight to At press).
+        const target = await storage.getAlbumById(id);
+        if (!target) return res.status(404).json({ message: "Album not found" });
+        if (!(target as any).physicalFormat) {
+          return res.status(400).json({ message: "Press workflow requires a physical format" });
+        }
+        updates.isPrepping = false;
+        if (!(target as any).submittedToPressAt) {
+          updates.submittedToPressAt = new Date();
+        }
       } else if (status === "prepping") {
         updates.isPrepping = true;
         updates.submittedToPressAt = null;
       } else {
-        // released — keep submittedToPressAt as history; isPrepping=false wins.
+        // released — clear submittedToPressAt so albumStage() returns "released"
+        // (the at_press check is `submittedToPressAt != null`, so it must be
+        // wiped here or the album stays classified as "at_press" forever).
         updates.isPrepping = false;
+        updates.submittedToPressAt = null;
       }
     }
     if (req.body?.isExplicit !== undefined) updates.isExplicit = !!req.body.isExplicit;

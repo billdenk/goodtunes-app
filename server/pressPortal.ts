@@ -804,8 +804,12 @@ export function registerPressPortalRoutes(
         // manufacturing stage, not a stage of its own. Only shown while
         // still pre-release (is_prepping) so a released album's history
         // timestamp doesn't re-badge it.
+        // Task #2593 — also expose isDigitalLive when the album has
+        // advanced to "At press" (is_prepping=false + submitted_to_press_at
+        // set) so the press portal can show a "Digital live" chip.
         submittedForReview: !!(a.submitted_to_press_at && a.is_prepping),
-        submittedToPressAt: a.is_prepping ? a.submitted_to_press_at : null,
+        submittedToPressAt: a.submitted_to_press_at ?? null,
+        isDigitalLive: !!(a.submitted_to_press_at && !a.is_prepping),
         lockedAt: a.sell_quote_locked_at,
         sunriseDate: a.signed_cert_window_opens_at,
         windowOpensAt: a.signed_cert_window_opens_at,

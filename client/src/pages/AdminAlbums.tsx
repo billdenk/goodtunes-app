@@ -79,6 +79,9 @@ interface AlbumLite {
   // column). Once reached the release moves to streaming + sells out, so the
   // shared `albumStage` helper buckets it into the Sunset tab.
   streamingReleaseDate: string | null;
+  // Task #2593 — "At press" stage timestamp. Non-null + isPrepping=false
+  // means digital is live while vinyl is still in manufacturing.
+  submittedToPressAt?: string | null;
   // Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
   // marker. Drives the small tile/row badge below. No fan-facing effect.
   isSpinPromo?: boolean;
@@ -99,9 +102,9 @@ interface AlbumLite {
 // `albumStage`); it's a separate scannable table fed by its own server
 // aggregate. It rides in the same tab row + URL so an operator can deep-link
 // / refresh into it, but it renders a dedicated table instead of the grid.
-type TabKey = "prepping" | "staged" | "live" | "sunset" | "attention";
+type TabKey = "prepping" | "at_press" | "staged" | "live" | "sunset" | "attention";
 
-const TAB_KEYS: TabKey[] = ["prepping", "staged", "live", "sunset", "attention"];
+const TAB_KEYS: TabKey[] = ["prepping", "at_press", "staged", "live", "sunset", "attention"];
 
 // Per-track completeness counts for one incomplete GoodTunes release, all
 // aggregated server-side (GET /api/admin/reports/incomplete-albums). The
@@ -437,6 +440,9 @@ export function AdminAlbums() {
       // GoodTunes release that's finished but whose sunrise
       // (`goodTunesReleaseDate`) is still in the future. Derived from the
       // date via the shared `albumStage` helper.
+      at_press: albums.filter(
+        (a) => a.isGoodTunesRelease && albumStage(a) === "at_press",
+      ).length,
       staged: albums.filter(
         (a) => a.isGoodTunesRelease && albumStage(a) === "staged",
       ).length,
@@ -462,6 +468,10 @@ export function AdminAlbums() {
       case "prepping":
         return albums.filter(
           (a) => a.isGoodTunesRelease && albumStage(a) === "prepping",
+        );
+      case "at_press":
+        return albums.filter(
+          (a) => a.isGoodTunesRelease && albumStage(a) === "at_press",
         );
       case "staged":
         return albums.filter(
@@ -601,6 +611,8 @@ export function AdminAlbums() {
     switch (tab) {
       case "prepping":
         return "Nothing in prepping. GoodTunes releases that are still being worked on will show up here once the lifecycle enum lands.";
+      case "at_press":
+        return "No albums at press. Albums with digital sales open while vinyl is in manufacturing will show up here.";
       case "staged":
         return "Nothing staged. Finished releases scheduled for a future date wait here for sunrise, then go live for fans automatically.";
       case "live":
@@ -938,6 +950,9 @@ export function AdminAlbums() {
             <div className="border-b border-slate-200 flex items-center gap-6 overflow-x-auto mt-3">
               <TabBtn active={tab === "prepping"} onClick={() => setTab("prepping")} count={counts.prepping} testId="tab-prepping">
                 Prepping
+              </TabBtn>
+              <TabBtn active={tab === "at_press"} onClick={() => setTab("at_press")} count={counts.at_press} testId="tab-at-press">
+                At press
               </TabBtn>
               <TabBtn active={tab === "staged"} onClick={() => setTab("staged")} count={counts.staged} testId="tab-staged">
                 Staged

@@ -986,18 +986,19 @@ export function AdminAlbum({
   // back is a meaningful state regression; promote is the happy path and
   // fires on click.
   const [demoteConfirmOpen, setDemoteConfirmOpen] = useState(false);
-  // Task #2574 — where the demote confirm lands: back to Prepping, or
-  // (Shopify+ only) back to Submitted-to-press. Both re-hide from fans.
+  // Task #2593 — confirm before promoting to "At press" (opens digital sales).
+  const [atPressConfirmOpen, setAtPressConfirmOpen] = useState(false);
+  // Task #2574 — where the demote confirm lands: back to Prepping, or back
+  // to Submitted-to-press. Both re-hide from fans.
+  // Task #2593 — also "submitted_to_press" when demoting from "At press".
   const [demoteTarget, setDemoteTarget] = useState<
     "prepping" | "submitted_to_press"
   >("prepping");
-  // Task #2574 — the mutation now speaks the explicit three-state
-  // `releaseStatus` verb (prepping / submitted_to_press / released) so
-  // Shopify+ albums get the middle "Submitted to press" rung. The server
-  // derives isPrepping + submittedToPressAt from it and rejects the
-  // middle state for non-Shopify+ sell modes.
+  // Task #2574 / #2593 — the mutation speaks the explicit four-state
+  // `releaseStatus` verb (prepping / submitted_to_press / at_press /
+  // released). The server derives isPrepping + submittedToPressAt from it.
   const setPrepping = useMutation({
-    mutationFn: async (next: "prepping" | "submitted_to_press" | "released") => {
+    mutationFn: async (next: "prepping" | "submitted_to_press" | "at_press" | "released") => {
       const r = await apiRequest("PUT", `/api/admin/albums/${albumId}`, {
         releaseStatus: next,
       });
@@ -1014,7 +1015,9 @@ export function AdminAlbum({
             ? "Moved back to Prepping."
             : next === "submitted_to_press"
               ? "Marked as submitted to press."
-              : "Album marked as released.",
+              : next === "at_press"
+                ? "Marked as at press — digital sales open."
+                : "Album marked as released.",
       });
     },
     onError: (e: any) => {
@@ -1209,30 +1212,36 @@ export function AdminAlbum({
   // GoodTunes releases. Imported streaming rows (!isGoodTunesRelease) are
   // never shown on this page in practice, but we still render them as
   // Prepping for safety so the pill never goes blank.
-  // Task #2574 — Shopify+ middle rung. "Submitted to press" only exists
-  // for sellMode === "shopify_plus" and behaves exactly like Prepping for
+  // Task #2574 — Submitted-to-press middle rung. Any album with a physical
+  // format can use the press workflow; behaves exactly like Prepping for
   // every fan gate (isPrepping stays true; submittedToPressAt marks it).
   const isSubmittedToPress =
-    album.sellMode === "shopify_plus" &&
     !!album.isPrepping &&
     !!album.submittedToPressAt;
+  // Task #2593 — "At press": digital is open while vinyl is at the plant.
+  // isPrepping=false + submittedToPressAt set.
+  const isAtPress = !album.isPrepping && !!album.submittedToPressAt;
   const lifecycle = album.isHidden
     ? { label: "Sunset", tone: "amber" as const }
     : !album.isGoodTunesRelease || album.isPrepping
       ? isSubmittedToPress
         ? { label: "Submitted to press", tone: "sky" as const }
         : { label: "Prepping", tone: "slate" as const }
-      : { label: "Released", tone: "mint" as const };
+      : isAtPress
+        ? { label: "At press", tone: "teal" as const }
+        : { label: "Released", tone: "mint" as const };
 
   // Task #2531 — Option C: dot color for the grouped header STATUS control.
   const statusDotCls =
     lifecycle.tone === "mint"
       ? "bg-emerald-500"
-      : lifecycle.tone === "amber"
-        ? "bg-amber-500"
-        : lifecycle.tone === "sky"
-          ? "bg-sky-500"
-          : "bg-slate-400";
+      : lifecycle.tone === "teal"
+        ? "bg-[var(--brand-mint)]"
+        : lifecycle.tone === "amber"
+          ? "bg-amber-500"
+          : lifecycle.tone === "sky"
+            ? "bg-sky-500"
+            : "bg-slate-400";
 
   const mainBody = (
     <>
@@ -1465,13 +1474,17 @@ export function AdminAlbum({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel>Release status</DropdownMenuLabel>
-                  {/* Task #2574 — Shopify+ albums get the three-state
-                      ladder (Prepping → Submitted to press → Released);
-                      everything else keeps the two-state menu. Leaving
-                      Released always routes through the demote confirm
-                      because fans lose visibility. */}
-                  {album.sellMode === "shopify_plus" && album.isGoodTunesRelease ? (
+                  {/* Task #2574 / #2593 — Albums with a physical format get the
+                      four-state ladder (Prepping → Submitted to press → At
+                      press → Released); everything else keeps the two-state
+                      menu. Moving to any pre-release state from a fan-visible
+                      state routes through the demote confirm because fans lose
+                      visibility. Promoting to At press routes through the
+                      at-press confirm because it opens digital sales. */}
+                  {!!album.physicalFormat && album.isGoodTunesRelease ? (
                     <>
+                      {/* Move to prepping — from Submitted to press (direct),
+                          or from At press / Released (demote confirm). */}
                       {(!album.isPrepping || isSubmittedToPress) && (
                         <DropdownMenuItem
                           onClick={() => {
@@ -1488,23 +1501,43 @@ export function AdminAlbum({
                           Move to prepping
                         </DropdownMenuItem>
                       )}
-                      {!isSubmittedToPress && (
+                      {/* Mark as submitted to press — only from plain Prepping. */}
+                      {album.isPrepping && !isSubmittedToPress && (
                         <DropdownMenuItem
-                          onClick={() => {
-                            if (!album.isPrepping) {
-                              setDemoteTarget("submitted_to_press");
-                              setDemoteConfirmOpen(true);
-                            } else {
-                              setPrepping.mutate("submitted_to_press");
-                            }
-                          }}
+                          onClick={() => setPrepping.mutate("submitted_to_press")}
                           disabled={setPrepping.isPending}
                           data-testid="button-album-submit-to-press"
                         >
                           Mark as submitted to press
                         </DropdownMenuItem>
                       )}
-                      {album.isPrepping && (
+                      {/* Mark as at press — promote from Submitted to press.
+                          Opens digital sales while vinyl is at the plant.
+                          Routes through confirm dialog (consequences named). */}
+                      {isSubmittedToPress && (
+                        <DropdownMenuItem
+                          onClick={() => setAtPressConfirmOpen(true)}
+                          disabled={setPrepping.isPending}
+                          data-testid="button-album-at-press"
+                        >
+                          Mark as at press
+                        </DropdownMenuItem>
+                      )}
+                      {/* Move back to submitted to press — demote from At press. */}
+                      {isAtPress && (
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setDemoteTarget("submitted_to_press");
+                            setDemoteConfirmOpen(true);
+                          }}
+                          disabled={setPrepping.isPending}
+                          data-testid="button-album-back-to-submitted"
+                        >
+                          Move back to submitted to press
+                        </DropdownMenuItem>
+                      )}
+                      {/* Mark as released — from At press or plain Prepping. */}
+                      {(isAtPress || album.isPrepping) && (
                         <DropdownMenuItem
                           onClick={() => setPrepping.mutate("released")}
                           disabled={setPrepping.isPending}
@@ -2154,6 +2187,54 @@ export function AdminAlbum({
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Task #2593 — At-press promote confirm. Flipping to "At press" sets
+          isPrepping=false which opens the GoodTunes buy flow and Shopify
+          presale immediately. Name the consequence before committing. */}
+      <Dialog
+        open={atPressConfirmOpen}
+        onOpenChange={(v) => !setPrepping.isPending && setAtPressConfirmOpen(v)}
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-at-press-album"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+              Mark <span className="italic">{album.title}</span> as at press?
+            </DialogTitle>
+            <DialogDescription className="text-[13px] font-normal text-slate-500">
+              This opens digital sales immediately — fans will be able to buy
+              on GoodTunes and via any active Shopify presale. Vinyl is still
+              being pressed. You can move the album back to Submitted to press
+              if you need to pause digital sales.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-3 sm:gap-3">
+            <Button
+              type="button"
+              onClick={() => setAtPressConfirmOpen(false)}
+              disabled={setPrepping.isPending}
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              data-testid="button-at-press-album-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setAtPressConfirmOpen(false);
+                setPrepping.mutate("at_press");
+              }}
+              disabled={setPrepping.isPending}
+              className="bg-slate-900 hover:bg-slate-800 text-white ml-2"
+              data-testid="button-at-press-album-confirm"
+            >
+              {setPrepping.isPending ? "Marking…" : "Mark as at press"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
