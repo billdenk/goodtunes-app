@@ -23,6 +23,7 @@ export type EntityAlbumRow = {
   firstSoldAt: string | null;
   state: PublishingAlbumState;
   presses?: EntityAlbumPress[];
+  awaitingPressingOrder?: boolean;
 };
 
 export type EntityAlbumsResponse = {
@@ -196,6 +197,14 @@ function AlbumSection({
                 <p className="text-xs text-slate-500 truncate">
                   {row.artistName ?? "—"}
                 </p>
+                {row.awaitingPressingOrder && (
+                  <div
+                    className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                    data-testid={`badge-awaiting-pressing-${row.id}`}
+                  >
+                    Awaiting pressing order
+                  </div>
+                )}
               </div>
               {row.connectionReason && (
                 <span

@@ -25128,6 +25128,7 @@ export async function registerRoutes(
       connectionReason: row.connection_reason,
       state,
       presses: [] as AlbumPressLink[],
+      awaitingPressingOrder: false,
     };
   }
 
@@ -25169,13 +25170,14 @@ export async function registerRoutes(
   async function loadConnectedAlbums(
     albumIds: string[],
     reasonFor: (id: string) => string | null = () => null,
-    opts: { includePresses?: boolean } = {},
+    opts: { includePresses?: boolean; awaitingIds?: Set<string> } = {},
   ) {
     if (albumIds.length === 0) return { inQueue: [], released: [] };
     const rows = await db.execute<AlbumPipelineRow>(sqlConnectedAlbums(albumIds));
     const list = ((rows as any).rows ?? []).map((r: AlbumPipelineRow) => {
       const shaped = shapePipelineAlbum(r);
       shaped.connectionReason = reasonFor(r.id);
+      shaped.awaitingPressingOrder = opts.awaitingIds?.has(r.id) ?? false;
       return shaped;
     });
     if (opts.includePresses) {
@@ -25600,7 +25602,39 @@ export async function registerRoutes(
         reasonMap[row.album_id] = next;
       }
     }
-    res.json(await loadConnectedAlbums(ids, (id) => reasonMap[id] ?? null));
+    // Task #2616 — also surface albums assigned to this press via a stamped
+    // SKU that have no pressing order yet, so the operator Albums tab reaches
+    // parity with the partner press portal (which already badges these as
+    // "Awaiting pressing order"). Reuse the same resolution the portal uses
+    // (SKU press_id = this press, is_goodtunes_release, exclude deleted, and
+    // exclude any album that already has a non-cancelled pressing order for
+    // this press so there are no duplicates with the list above).
+    const awaitingRows = await db.execute<{ album_id: string }>(sql`
+      SELECT DISTINCT sku.album_id
+      FROM album_skus sku
+      JOIN albums a ON a.id = sku.album_id AND a.deleted_at IS NULL
+      WHERE sku.press_id = ${req.params.id}
+        AND a.is_goodtunes_release = true
+        AND NOT EXISTS (
+          SELECT 1 FROM pressing_order_requests por
+          WHERE por.album_id = a.id
+            AND por.status IN ('pending', 'approved')
+            AND (por.package_snapshot->>'pressId') = ${req.params.id}
+        )
+    `).catch(() => ({ rows: [] }) as any);
+    const awaitingIds = new Set<string>();
+    for (const row of ((awaitingRows as any).rows ?? []) as any[]) {
+      if (ids.includes(row.album_id)) continue;
+      ids.push(row.album_id);
+      awaitingIds.add(row.album_id);
+    }
+    res.json(
+      await loadConnectedAlbums(
+        ids,
+        (id) => reasonMap[id] ?? null,
+        { awaitingIds },
+      ),
+    );
   });
 
   app.get("/api/admin/manufacturers/:id/analytics", requireAdmin, async (req, res) => {
