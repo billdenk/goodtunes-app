@@ -31,6 +31,7 @@ import {
   ExternalLink,
   Unplug,
   ChevronsUpDown,
+  UserPlus,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/button";
@@ -400,6 +401,10 @@ interface PersonFull {
     // Task #923 — plain-language GoodTunes role at this org
     // (Ambassador / Staff / Press contact / Label staff / …).
     gtRole?: string | null;
+    // Whether this person already has an active (pending or accepted,
+    // non-revoked) invite for this entity scope. Server-derived from
+    // admin_invites keyed by contactEmail + mapped role + entityId.
+    hasActiveInvite?: boolean;
   }>;
   // Task #923 — artists this contact has invited / referred + status,
   // so a referrer contact reads like a recruiter record.
@@ -1325,6 +1330,15 @@ const CONTACT_ATTACHMENT_LABEL: Record<NonNullable<PersonFull["attachments"]>[nu
   non_profit: "Non-profit",
 };
 
+// entity_kind → the role string expected by POST /api/admin/invites
+const ATTACHMENT_INVITE_ROLE: Record<NonNullable<PersonFull["attachments"]>[number]["entityKind"], string> = {
+  non_profit: "non_profit",
+  manufacturer: "manufacturer",
+  label: "label",
+  vendor: "vendor",
+  fulfillment_partner: "fulfillment",
+};
+
 /* ─── Affiliation panel (Task #968 / #2071) ──────────────────────────
    The partner/business affiliations a Person represents, as deep links.
    Shared by both shapes: the contact shape always renders it (with the
@@ -1495,10 +1509,14 @@ function TitleCombobox({
 function AffiliationRow({
   a,
   personId,
+  personEmail,
+  personName,
   canEdit,
 }: {
   a: NonNullable<PersonFull["attachments"]>[number];
   personId: string;
+  personEmail: string | null;
+  personName: string;
   canEdit: boolean;
 }) {
   const { toast } = useToast();
@@ -1506,6 +1524,11 @@ function AffiliationRow({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<string | null>(initial);
   useEffect(() => { setDraft(initial); }, [initial]);
+
+  // Invite dialog state
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState(personEmail ?? "");
+  useEffect(() => { setInviteEmail(personEmail ?? ""); }, [personEmail]);
 
   const norm = (v: string | null) => (v ?? "").trim();
   const dirty = norm(draft) !== norm(initial);
@@ -1528,80 +1551,160 @@ function AffiliationRow({
       toast({ title: "Couldn't save title", description: e?.message || "Try again.", variant: "destructive" }),
   });
 
+  const sendInvite = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/admin/invites", {
+        email: inviteEmail.trim(),
+        role: ATTACHMENT_INVITE_ROLE[a.entityKind],
+        roleScopeId: a.entityId,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/people", personId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/people", personId] });
+      setInviteOpen(false);
+      toast({ title: "Invite sent", description: `${inviteEmail.trim()} will receive an invite email shortly.` });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't send invite", description: e?.message || "Try again.", variant: "destructive" }),
+  });
+
+  const showInviteButton = canEdit && !a.hasActiveInvite && !!personEmail;
+
   return (
-    <li className="px-1 py-2.5" data-testid={`row-overview-attachment-${a.entityId}`}>
-      {editing ? (
-        // Compact inline editing row — combobox + org link + Save/Cancel
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2 flex-wrap">
-            <TitleCombobox
-              value={draft}
-              onChange={setDraft}
-              testIdPrefix={a.entityId}
-            />
-            <span className="text-sm text-slate-400">at</span>
-            <Link
-              href={CONTACT_ATTACHMENT_HREF[a.entityKind](a.entityId)}
-              className="text-sm font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
-              data-testid={`link-overview-attachment-${a.entityId}`}
-            >
-              {a.entityName}
-            </Link>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => { setDraft(initial); setEditing(false); }}
-              className="h-7 px-2 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-100"
-              data-testid={`button-cancel-affiliation-title-${a.entityId}`}
-            >
-              Cancel
-            </button>
-            <SaveLink
-              dirty={dirty && !save.isPending}
-              onClick={() => save.mutate()}
-              testId={`button-save-affiliation-title-${a.entityId}`}
-            />
-          </div>
-          <p className="text-xs text-slate-500">{CONTACT_ATTACHMENT_LABEL[a.entityKind]}</p>
-        </div>
-      ) : (
-        // Read-only display row
-        <div className="flex items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold text-slate-900 truncate" data-testid={`text-affiliation-role-${a.entityId}`}>
-              {a.role ? (
-                a.role
-              ) : (
-                <span className="font-normal text-slate-400" data-testid={`text-affiliation-no-title-${a.entityId}`}>
-                  {canEdit ? "No business title yet" : "Contact"}
-                </span>
-              )}
-              <span className="font-normal text-slate-400"> at </span>
+    <>
+      <li className="px-1 py-2.5" data-testid={`row-overview-attachment-${a.entityId}`}>
+        {editing ? (
+          // Compact inline editing row — combobox + org link + Save/Cancel
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <TitleCombobox
+                value={draft}
+                onChange={setDraft}
+                testIdPrefix={a.entityId}
+              />
+              <span className="text-sm text-slate-400">at</span>
               <Link
                 href={CONTACT_ATTACHMENT_HREF[a.entityKind](a.entityId)}
-                className="font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+                className="text-sm font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
                 data-testid={`link-overview-attachment-${a.entityId}`}
               >
                 {a.entityName}
               </Link>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">{CONTACT_ATTACHMENT_LABEL[a.entityKind]}</p>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => { setDraft(initial); setEditing(false); }}
+                className="h-7 px-2 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-100"
+                data-testid={`button-cancel-affiliation-title-${a.entityId}`}
+              >
+                Cancel
+              </button>
+              <SaveLink
+                dirty={dirty && !save.isPending}
+                onClick={() => save.mutate()}
+                testId={`button-save-affiliation-title-${a.entityId}`}
+              />
+            </div>
+            <p className="text-xs text-slate-500">{CONTACT_ATTACHMENT_LABEL[a.entityKind]}</p>
           </div>
-          {canEdit && (
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-[color:var(--brand-blue)]"
-              data-testid={`button-edit-affiliation-title-${a.entityId}`}
+        ) : (
+          // Read-only display row
+          <div className="flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-slate-900 truncate" data-testid={`text-affiliation-role-${a.entityId}`}>
+                {a.role ? (
+                  a.role
+                ) : (
+                  <span className="font-normal text-slate-400" data-testid={`text-affiliation-no-title-${a.entityId}`}>
+                    {canEdit ? "No business title yet" : "Contact"}
+                  </span>
+                )}
+                <span className="font-normal text-slate-400"> at </span>
+                <Link
+                  href={CONTACT_ATTACHMENT_HREF[a.entityKind](a.entityId)}
+                  className="font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+                  data-testid={`link-overview-attachment-${a.entityId}`}
+                >
+                  {a.entityName}
+                </Link>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">{CONTACT_ATTACHMENT_LABEL[a.entityKind]}</p>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {showInviteButton && (
+                <button
+                  type="button"
+                  onClick={() => setInviteOpen(true)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-[color:var(--brand-blue)] hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+                  data-testid={`button-invite-affiliation-${a.entityId}`}
+                >
+                  <UserPlus className="h-3 w-3" />
+                  Invite
+                </button>
+              )}
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-[color:var(--brand-blue)]"
+                  data-testid={`button-edit-affiliation-title-${a.entityId}`}
+                >
+                  <Pencil className="h-3 w-3" />
+                  {a.role ? "Edit title" : "Add title"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </li>
+
+      {/* Inline invite dialog — keeps the operator on the person page */}
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent className="max-w-sm" data-testid={`dialog-invite-affiliation-${a.entityId}`}>
+          <DialogHeader>
+            <DialogTitle>Send partner invite</DialogTitle>
+            <DialogDescription>
+              Invite{" "}
+              <span className="font-semibold text-slate-900">{personName}</span> to{" "}
+              <span className="font-semibold text-slate-900">{a.entityName}</span> as a{" "}
+              {CONTACT_ATTACHMENT_LABEL[a.entityKind].toLowerCase()} partner. They'll receive an email with a link to accept.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5 py-1">
+            <label className="text-xs font-medium text-slate-700" htmlFor={`invite-email-${a.entityId}`}>
+              Email
+            </label>
+            <Input
+              id={`invite-email-${a.entityId}`}
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="partner@example.com"
+              data-testid={`input-invite-email-${a.entityId}`}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setInviteOpen(false)}
+              data-testid={`button-cancel-invite-${a.entityId}`}
             >
-              <Pencil className="h-3 w-3" />
-              {a.role ? "Edit title" : "Add title"}
-            </button>
-          )}
-        </div>
-      )}
-    </li>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => sendInvite.mutate()}
+              disabled={!inviteEmail.trim() || sendInvite.isPending}
+              data-testid={`button-send-invite-${a.entityId}`}
+            >
+              {sendInvite.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+              Send invite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -1633,6 +1736,8 @@ function AffiliationPanel({
               key={`${a.entityKind}-${a.entityId}`}
               a={a}
               personId={person.id}
+              personEmail={person.contactEmail ?? null}
+              personName={person.name}
               canEdit={canEdit}
             />
           ))}

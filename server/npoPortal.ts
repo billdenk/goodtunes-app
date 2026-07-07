@@ -27,7 +27,7 @@ import crypto from "crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
 import { storage } from "./storage";
-import { getUserRole, findMembershipForScope } from "./auth/roles";
+import { getUserRole, findMembershipForScope, addMembership } from "./auth/roles";
 import { sqlNpoAlbumLedger } from "./adminAlbumQueries";
 
 const INVITE_TTL_DAYS = 14;
@@ -222,16 +222,10 @@ export function registerNpoPortalRoutes(
       return res.status(403).json({ message: "Not allowed to invite artists" });
     }
 
-    // Reject if an admin user already exists with this email — they'd
-    // need to be re-promoted manually rather than via a new invite.
-    const existingUser = await storage.getUserByEmail(email);
-    if (existingUser) {
-      return res.status(400).json({ message: "An admin with that email already exists" });
-    }
-
-    const token = crypto.randomBytes(32).toString("base64url");
-    const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
-
+    // Resolve role/scope before the existing-user check so we can
+    // fast-path: if the user already has an admin account, add the hat
+    // directly (matching POST /api/admin/invites behavior) rather than
+    // returning a hard error that prevents any further action.
     let role: "artist" | "non_profit";
     let roleScopeId: string;
     let inviteRole: string | null = null;
@@ -271,6 +265,19 @@ export function registerNpoPortalRoutes(
       referrerKind = "non_profit";
       referrerScopeId = npoId;
     }
+
+    // If an admin account already exists for this email, add the hat
+    // directly (matching the system /api/admin/invites fast-path) so
+    // the NPO portal doesn't hard-block the operation with a 400.
+    const existingUser = await storage.getUserByEmail(email);
+    if (existingUser) {
+      await db.execute(sql`UPDATE users SET is_admin = true WHERE id = ${existingUser.id} AND is_admin = false`);
+      await addMembership(existingUser.id, role as any, roleScopeId ?? null, inviteRole ?? null);
+      return res.json({ added: true, userId: existingUser.id, email, kind });
+    }
+
+    const token = crypto.randomBytes(32).toString("base64url");
+    const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
 
     const invite = await storage.createAdminInvite({
       email,

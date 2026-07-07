@@ -948,7 +948,7 @@ export function VinylOrderPanel({
           );
         })}
       </div>
-      <p className="text-[11px] text-slate-400">Thresholds are industry defaults.</p>
+      <p className="text-xs text-slate-400">Thresholds are industry defaults.</p>
     </div>
   );
 }

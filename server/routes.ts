@@ -16588,6 +16588,56 @@ export async function registerRoutes(
     } catch (e: any) {
       console.warn(`[person:${id}] attachments lookup failed: ${e?.message}`);
     }
+    // Probe whether each attachment already has an active or accepted invite
+    // for this person's contact email so the admin page can show a one-click
+    // "Invite" shortcut only when no valid invite exists. A single query covers
+    // all attachments — best-effort, defaults to hasActiveInvite=false on error.
+    if (attachments.length > 0 && (p as any).contactEmail) {
+      const contactEmail = ((p as any).contactEmail as string).trim().toLowerCase();
+      const kindToRole: Record<string, string> = {
+        non_profit: "non_profit",
+        manufacturer: "manufacturer",
+        label: "label",
+        vendor: "vendor",
+        fulfillment_partner: "fulfillment",
+      };
+      try {
+        const inviteRows = await db.execute<{ role: string; scope_id: string }>(sql`
+          SELECT role, role_scope_id AS scope_id
+          FROM admin_invites
+          WHERE LOWER(email) = ${contactEmail}
+            AND revoked_at IS NULL
+            AND (used_at IS NOT NULL OR expires_at > NOW())
+          UNION ALL
+          SELECT
+            CASE WHEN role = 'org' THEN 'non_profit' ELSE role END AS role,
+            role_scope_id AS scope_id
+          FROM users
+          WHERE LOWER(email) = ${contactEmail}
+            AND role IS NOT NULL
+            AND role_scope_id IS NOT NULL
+          UNION ALL
+          SELECT
+            CASE WHEN m.role = 'org' THEN 'non_profit' ELSE m.role END AS role,
+            m.scope_id
+          FROM memberships m
+          JOIN users u ON u.id = m.user_id
+          WHERE LOWER(u.email) = ${contactEmail}
+            AND m.scope_id IS NOT NULL
+        `);
+        const activeKeys = new Set(
+          ((inviteRows as any).rows ?? []).map((row: any) => `${row.role}|${row.scope_id}`),
+        );
+        for (const att of attachments) {
+          const inviteRole = kindToRole[att.entityKind];
+          if (inviteRole) (att as any).hasActiveInvite = activeKeys.has(`${inviteRole}|${att.entityId}`);
+          else (att as any).hasActiveInvite = false;
+        }
+      } catch (e: any) {
+        console.warn(`[person:${id}] invite probe failed: ${e?.message}`);
+        for (const att of attachments) (att as any).hasActiveInvite = false;
+      }
+    }
     // Introductions — artists this person has invited / referred, with
     // status, so a referrer contact (ambassador, press rep) reads like a
     // recruiter record. Source: admin_invites where this person is the
@@ -25487,7 +25537,12 @@ export async function registerRoutes(
       if (routedIds.has(id)) parts.push("GoodDeed");
       return parts.length > 0 ? parts.join(" · ") : null;
     };
-    res.json(await loadConnectedAlbums(allIds, reasonFor));
+    try {
+      res.json(await loadConnectedAlbums(allIds, reasonFor));
+    } catch (e: any) {
+      console.error(`[npo:albums] load failed for ${req.params.id}: ${e?.message}`);
+      res.status(500).json({ message: "Failed to load albums" });
+    }
   });
 
   app.get("/api/admin/non-profits/:id/analytics", requireAdmin, async (req, res) => {
@@ -25539,7 +25594,12 @@ export async function registerRoutes(
     for (const r of ((referredPeople as any).rows ?? []) as any[]) pushPerson(r);
     for (const r of ((routedArtists as any).rows ?? []) as any[]) pushPerson(r);
     const range = parseRangeFromQuery(req.query);
-    res.json(await loadConnectedAnalytics({ albumIds, personIds, albumTitles: titles, personNames: names, ...range }));
+    try {
+      res.json(await loadConnectedAnalytics({ albumIds, personIds, albumTitles: titles, personNames: names, ...range }));
+    } catch (e: any) {
+      console.error(`[npo:analytics] load failed for ${req.params.id}: ${e?.message}`);
+      res.status(500).json({ message: "Failed to load analytics" });
+    }
   });
 
   // Vendor (Reseller) — connected albums = albums whose songs credit
