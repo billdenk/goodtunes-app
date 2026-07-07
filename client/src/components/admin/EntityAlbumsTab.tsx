@@ -1,16 +1,22 @@
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
+import { AlbumCover } from "@/components/ui/AlbumCover";
+import { albumStage, type AlbumStage, type StageInput } from "@shared/albumStage";
+import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
 import {
   PublishingPipelineStrip,
   type PublishingAlbumState,
 } from "./PublishingPipelineStrip";
 
-// Task #295 — shared "Albums" tab rendered on each entity-detail
-// admin page (NPO / Reseller / Press). The connection logic (which
-// albums tie to this entity, and why) lives server-side; this
-// component just renders the In queue / Released split and a
-// pipeline strip per row.
+// Task #295 / #2618 — shared "Albums" tab rendered on each entity-detail
+// admin page (NPO / Reseller / Press) and the partner-login portals.
+// The connection logic (which albums tie to this entity, and why) lives
+// server-side; this component renders the same lifecycle chrome as the
+// main catalog: canonical `albumStage` tabs (Prepping → At press →
+// Staged → Released → Sunset) plus a grid/list toggle and a per-row
+// readiness pipeline strip.
 
 export type EntityAlbumPress = { id: string; name: string; status: string };
 
@@ -21,14 +27,18 @@ export type EntityAlbumRow = {
   coverUrl: string | null;
   connectionReason: string | null;
   firstSoldAt: string | null;
+  // Task #2618 — stage-input fields so each row buckets by the canonical
+  // `albumStage` ladder, matching the main AdminAlbums catalog.
+  submittedToPressAt?: string | null;
+  goodTunesReleaseDate?: string | null;
+  streamingReleaseDate?: string | null;
   state: PublishingAlbumState;
   presses?: EntityAlbumPress[];
   awaitingPressingOrder?: boolean;
 };
 
 export type EntityAlbumsResponse = {
-  inQueue: EntityAlbumRow[];
-  released: EntityAlbumRow[];
+  albums: EntityAlbumRow[];
 };
 
 export interface EntityAlbumsTabProps {
@@ -43,6 +53,25 @@ export interface EntityAlbumsTabProps {
   showPressesSubsection?: boolean;
 }
 
+function stageOf(row: EntityAlbumRow): AlbumStage {
+  const input: StageInput = {
+    isPrepping: row.state.isPrepping,
+    isHidden: row.state.isHidden,
+    submittedToPressAt: row.submittedToPressAt ?? null,
+    goodTunesReleaseDate: row.goodTunesReleaseDate ?? null,
+    streamingReleaseDate: row.streamingReleaseDate ?? null,
+  };
+  return albumStage(input);
+}
+
+const STAGE_TABS: { key: AlbumStage; label: string }[] = [
+  { key: "prepping", label: "Prepping" },
+  { key: "at_press", label: "At press" },
+  { key: "staged", label: "Staged" },
+  { key: "released", label: "Released" },
+  { key: "sunset", label: "Sunset" },
+];
+
 export function EntityAlbumsTab({
   apiPath,
   testIdPrefix,
@@ -52,6 +81,23 @@ export function EntityAlbumsTab({
   const { data, isLoading } = useQuery<EntityAlbumsResponse>({
     queryKey: [apiPath],
   });
+  const [view, setView] = useViewMode(`entity-albums:${testIdPrefix}`);
+
+  const albums = useMemo(() => data?.albums ?? [], [data]);
+  const byStage = useMemo(() => {
+    const map: Record<AlbumStage, EntityAlbumRow[]> = {
+      prepping: [], at_press: [], staged: [], released: [], sunset: [],
+    };
+    for (const a of albums) map[stageOf(a)].push(a);
+    return map;
+  }, [albums]);
+
+  // Default the active tab to the first stage that actually has albums so
+  // the operator never lands on an empty tab.
+  const firstNonEmpty =
+    STAGE_TABS.find((t) => byStage[t.key].length > 0)?.key ?? "prepping";
+  const [tab, setTab] = useState<AlbumStage | null>(null);
+  const activeTab = tab ?? firstNonEmpty;
 
   if (isLoading) {
     return (
@@ -60,10 +106,7 @@ export function EntityAlbumsTab({
       </div>
     );
   }
-  const inQueue = data?.inQueue ?? [];
-  const released = data?.released ?? [];
-  const empty = inQueue.length === 0 && released.length === 0;
-  if (empty) {
+  if (albums.length === 0) {
     return (
       <div
         className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500"
@@ -73,23 +116,152 @@ export function EntityAlbumsTab({
       </div>
     );
   }
+
+  const visible = byStage[activeTab];
+
   return (
-    <div className="space-y-6" data-testid={`tab-${testIdPrefix}-albums`}>
-      <AlbumSection
-        title="In queue"
-        rows={inQueue}
-        testIdPrefix={`${testIdPrefix}-inqueue`}
-      />
-      <AlbumSection
-        title="Released"
-        rows={released}
-        testIdPrefix={`${testIdPrefix}-released`}
-      />
-      {showPressesSubsection && (
-        <PressesSubsection
-          rows={[...inQueue, ...released]}
-          testIdPrefix={testIdPrefix}
+    <div className="space-y-4" data-testid={`tab-${testIdPrefix}-albums`}>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-0 rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
+          {STAGE_TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={[
+                "inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap",
+                activeTab === t.key
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-50",
+              ].join(" ")}
+              data-testid={`tab-${testIdPrefix}-stage-${t.key}`}
+            >
+              {t.label}
+              {byStage[t.key].length > 0 && (
+                <span
+                  className={[
+                    "text-xs font-semibold tabular-nums",
+                    activeTab === t.key ? "opacity-70" : "opacity-50",
+                  ].join(" ")}
+                >
+                  {byStage[t.key].length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        <ViewModeToggle
+          value={view}
+          onChange={setView}
+          testIdPrefix={`view-${testIdPrefix}-albums`}
         />
+      </div>
+
+      {visible.length === 0 ? (
+        <div
+          className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-400"
+          data-testid={`empty-${testIdPrefix}-stage`}
+        >
+          No {STAGE_TABS.find((t) => t.key === activeTab)?.label.toLowerCase()} albums.
+        </div>
+      ) : view === "grid" ? (
+        <div
+          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"
+          data-testid={`grid-${testIdPrefix}-albums`}
+        >
+          {visible.map((row) => (
+            <div
+              key={row.id}
+              className="group rounded-2xl border border-slate-200 bg-white overflow-hidden hover:border-slate-300 hover:shadow-sm transition-all"
+              data-testid={`card-${testIdPrefix}-album-${row.id}`}
+            >
+              <Link href={`/admin/albums/${row.id}`} className="block gt-nav" data-testid={`link-album-${row.id}`}>
+                <div className="aspect-square bg-slate-100 overflow-hidden">
+                  <AlbumCover
+                    title={row.title}
+                    artwork={row.coverUrl}
+                    showName={false}
+                    brandFallback
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="p-2.5">
+                  <div className="text-slate-900 text-xs font-semibold truncate">
+                    {row.title}
+                  </div>
+                  <div className="text-slate-400 text-xs truncate mt-0.5">
+                    {row.artistName ?? "—"}
+                  </div>
+                  {row.awaitingPressingOrder && (
+                    <div
+                      className="mt-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                      data-testid={`badge-awaiting-pressing-${row.id}`}
+                    >
+                      Awaiting pressing order
+                    </div>
+                  )}
+                </div>
+              </Link>
+              <div className="px-2.5 pb-2.5">
+                <PublishingPipelineStrip state={row.state} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <ul className="space-y-2" data-testid={`list-${testIdPrefix}-albums`}>
+          {visible.map((row) => (
+            <li
+              key={row.id}
+              className="rounded-2xl border border-slate-200 bg-white p-3"
+              data-testid={`row-${testIdPrefix}-${row.id}`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-md overflow-hidden bg-slate-100 flex-shrink-0">
+                  <AlbumCover
+                    title={row.title}
+                    artwork={row.coverUrl}
+                    showName={false}
+                    brandFallback
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <Link href={`/admin/albums/${row.id}`} className="block text-sm font-semibold truncate transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2" data-testid={`link-album-${row.id}`}>
+                    {row.title}
+                  </Link>
+                  <p className="text-xs text-slate-500 truncate">
+                    {row.artistName ?? "—"}
+                  </p>
+                  {row.awaitingPressingOrder && (
+                    <div
+                      className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                      data-testid={`badge-awaiting-pressing-${row.id}`}
+                    >
+                      Awaiting pressing order
+                    </div>
+                  )}
+                </div>
+                {row.connectionReason && (
+                  <span
+                    className="hidden md:inline text-xs uppercase tracking-wide font-medium text-slate-400"
+                    data-testid={`reason-${row.id}`}
+                    title={row.connectionReason}
+                  >
+                    {row.connectionReason}
+                  </span>
+                )}
+              </div>
+              <div className="mt-2 pl-15">
+                <PublishingPipelineStrip state={row.state} />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {showPressesSubsection && (
+        <PressesSubsection rows={albums} testIdPrefix={testIdPrefix} />
       )}
     </div>
   );
@@ -146,79 +318,6 @@ function PressesSubsection({
             <p className="mt-1 text-xs text-slate-500 truncate">
               {info.albums.map((a) => a.title).join(" · ")}
             </p>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function AlbumSection({
-  title,
-  rows,
-  testIdPrefix,
-}: {
-  title: string;
-  rows: EntityAlbumRow[];
-  testIdPrefix: string;
-}) {
-  if (rows.length === 0) return null;
-  return (
-    <section data-testid={`section-${testIdPrefix}`}>
-      <div className="flex items-baseline justify-between mb-2">
-        <h3 className="text-xs uppercase tracking-wide font-semibold text-slate-500">
-          {title}
-        </h3>
-        <span className="text-xs text-slate-400 tabular-nums">
-          {rows.length}
-        </span>
-      </div>
-      <ul className="space-y-2">
-        {rows.map((row) => (
-          <li
-            key={row.id}
-            className="rounded-2xl border border-slate-200 bg-white p-3"
-            data-testid={`row-${testIdPrefix}-${row.id}`}
-          >
-            <div className="flex items-center gap-3">
-              {row.coverUrl ? (
-                <img
-                  src={row.coverUrl}
-                  alt=""
-                  className="w-12 h-12 rounded-md object-cover bg-slate-100"
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-md bg-slate-100" />
-              )}
-              <div className="flex-1 min-w-0">
-                <Link href={`/admin/albums/${row.id}`} className="block text-sm font-semibold truncate transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2" data-testid={`link-album-${row.id}`}>
-                  {row.title}
-                </Link>
-                <p className="text-xs text-slate-500 truncate">
-                  {row.artistName ?? "—"}
-                </p>
-                {row.awaitingPressingOrder && (
-                  <div
-                    className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                    data-testid={`badge-awaiting-pressing-${row.id}`}
-                  >
-                    Awaiting pressing order
-                  </div>
-                )}
-              </div>
-              {row.connectionReason && (
-                <span
-                  className="hidden md:inline text-xs uppercase tracking-wide font-medium text-slate-400"
-                  data-testid={`reason-${row.id}`}
-                  title={row.connectionReason}
-                >
-                  {row.connectionReason}
-                </span>
-              )}
-            </div>
-            <div className="mt-2 pl-15">
-              <PublishingPipelineStrip state={row.state} />
-            </div>
           </li>
         ))}
       </ul>

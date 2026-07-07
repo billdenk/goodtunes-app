@@ -1040,6 +1040,7 @@ export function registerPressPortalRoutes(
       )
       SELECT a.id, a.title, a.artwork,
              a.is_prepping                AS "isPrepping",
+             a.submitted_to_press_at      AS "submittedToPressAt",
              a.is_hidden                  AS "isHidden",
              a.good_tunes_release_date    AS "goodTunesReleaseDate",
              a.streaming_release_date     AS "streamingReleaseDate",
@@ -1054,6 +1055,7 @@ export function registerPressPortalRoutes(
       UNION ALL
       SELECT a.id, a.title, a.artwork,
              a.is_prepping                AS "isPrepping",
+             a.submitted_to_press_at      AS "submittedToPressAt",
              a.is_hidden                  AS "isHidden",
              a.good_tunes_release_date    AS "goodTunesReleaseDate",
              a.streaming_release_date     AS "streamingReleaseDate",
@@ -1074,6 +1076,9 @@ export function registerPressPortalRoutes(
         artist: (a.artist as string | null) ?? null,
         isPrepping: Boolean(a.isPrepping),
         isHidden: Boolean(a.isHidden),
+        submittedToPressAt: a.submittedToPressAt
+          ? new Date(a.submittedToPressAt).toISOString()
+          : null,
         goodTunesReleaseDate: (a.goodTunesReleaseDate as string | null) ?? null,
         streamingReleaseDate: (a.streamingReleaseDate as string | null) ?? null,
         awaitingPressingOrder: Boolean(a.awaitingPressingOrder),

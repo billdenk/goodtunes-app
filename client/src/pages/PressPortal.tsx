@@ -331,6 +331,7 @@ interface PressAlbumLite {
   artist: string | null;
   isPrepping: boolean;
   isHidden: boolean;
+  submittedToPressAt: string | null;
   goodTunesReleaseDate: string | null;
   streamingReleaseDate: string | null;
   awaitingPressingOrder?: boolean;
@@ -338,6 +339,7 @@ interface PressAlbumLite {
 
 const PRESS_ALBUM_STAGE_TABS: { key: AlbumStage; label: string }[] = [
   { key: "prepping",  label: "Prepping"  },
+  { key: "at_press",  label: "At press"  },
   { key: "staged",    label: "Staged"    },
   { key: "released",  label: "Released"  },
   { key: "sunset",    label: "Sunset"    },
@@ -353,7 +355,7 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
 
   const byStage = useMemo(() => {
     const map: Record<AlbumStage, PressAlbumLite[]> = {
-      prepping: [], staged: [], released: [], sunset: [],
+      prepping: [], at_press: [], staged: [], released: [], sunset: [],
     };
     for (const a of albums) map[albumStage(a)].push(a);
     return map;

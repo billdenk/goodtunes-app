@@ -25095,6 +25095,9 @@ export async function registerRoutes(
     artist_name: string | null;
     cover_url: string | null;
     first_sold_at: Date | string | null;
+    submitted_to_press_at: Date | string | null;
+    good_tunes_release_date: string | null;
+    streaming_release_date: string | null;
     is_goodtunes_release: boolean;
     is_prepping: boolean;
     is_hidden: boolean;
@@ -25125,6 +25128,20 @@ export async function registerRoutes(
       artistName: row.artist_name,
       coverUrl: row.cover_url,
       firstSoldAt: row.first_sold_at ? new Date(row.first_sold_at).toISOString() : null,
+      // Task #2618 — stage-input fields so the entity Albums tab can bucket
+      // each row by the canonical `albumStage` ladder (client-side) rather
+      // than the old crude In queue / Released split. Dates are sliced to
+      // YYYY-MM-DD so the shared lexicographic stage compare stays correct;
+      // submittedToPressAt is only truthiness-checked so a raw ISO is fine.
+      submittedToPressAt: row.submitted_to_press_at
+        ? new Date(row.submitted_to_press_at).toISOString()
+        : null,
+      goodTunesReleaseDate: row.good_tunes_release_date
+        ? String(row.good_tunes_release_date).slice(0, 10)
+        : null,
+      streamingReleaseDate: row.streaming_release_date
+        ? String(row.streaming_release_date).slice(0, 10)
+        : null,
       connectionReason: row.connection_reason,
       state,
       presses: [] as AlbumPressLink[],
@@ -25172,7 +25189,7 @@ export async function registerRoutes(
     reasonFor: (id: string) => string | null = () => null,
     opts: { includePresses?: boolean; awaitingIds?: Set<string> } = {},
   ) {
-    if (albumIds.length === 0) return { inQueue: [], released: [] };
+    if (albumIds.length === 0) return { albums: [] };
     const rows = await db.execute<AlbumPipelineRow>(sqlConnectedAlbums(albumIds));
     const list = ((rows as any).rows ?? []).map((r: AlbumPipelineRow) => {
       const shaped = shapePipelineAlbum(r);
@@ -25184,13 +25201,10 @@ export async function registerRoutes(
       const map = await pressesForAlbums(list.map((a) => a.id));
       for (const a of list) a.presses = map[a.id] ?? [];
     }
-    const inQueue: any[] = [];
-    const released: any[] = [];
-    for (const a of list) {
-      const isReleased = !!a.firstSoldAt || (a.state.isGoodTunesRelease && !a.state.isPrepping && !a.state.isHidden);
-      (isReleased ? released : inQueue).push(a);
-    }
-    return { inQueue, released };
+    // Task #2618 — return a flat list; the entity Albums tab buckets by the
+    // canonical `albumStage` ladder client-side (matching the main catalog),
+    // rather than the old crude In queue / Released split.
+    return { albums: list };
   }
 
   // Task #2044 — Home an album to a press the same way an artist's "Go to
