@@ -1112,7 +1112,15 @@ export function AdminAlbum({
   // matches keeps identical re-selections from looping the navigate.
   // Existing query params (e.g. the `track`/`onboarding` deep links) are
   // preserved so their first-mount precedence still works.
+  //
+  // Task #2524 — Skip URL rewrite when embedded inside a partner portal
+  // (/artist/albums/:id). Rewriting to /admin/albums/:id would change the
+  // wouter location, causing the Switch to match the operator admin route
+  // and re-render inside the full AdminFrame chrome instead of the portal
+  // OperatorShell. Tab state is still tracked in component state; it just
+  // won't be reflected in the URL (an acceptable trade-off for the portal).
   useEffect(() => {
+    if (embedded) return;
     let params: URLSearchParams;
     try {
       params = new URLSearchParams(search);
@@ -1123,7 +1131,7 @@ export function AdminAlbum({
     params.set("tab", tab);
     const qs = params.toString();
     navigate(`/admin/albums/${albumId}${qs ? `?${qs}` : ""}`, { replace: true });
-  }, [tab, albumId, search, navigate]);
+  }, [tab, albumId, search, navigate, embedded]);
 
   // Auto-open the mode picker once the row arrives without a sellMode.
   // Backfill ran on existing rows, so the modal really only fires for

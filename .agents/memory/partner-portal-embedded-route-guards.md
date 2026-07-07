@@ -38,3 +38,13 @@ Keep the **trailing slash** so a sibling fan slug (e.g. `/artist/albumsforever`)
 still bounces. Fan slug collision is independently impossible — `albums` and
 `artist` are in `RESERVED_SLUGS` (shared/shareSlug.ts) and the single-segment
 `/artist/:slug` route can't match the two-segment `/artist/albums/:id`.
+
+**Third guard — AdminAlbum tab-sync effect:** AdminAlbum has a useEffect
+(Task #674) that mirrors `?tab=` into the URL via `navigate(\`/admin/albums/${albumId}?tab=...\`)`.
+This fires on EVERY MOUNT, including when `embedded=true`. Without `if (embedded) return;`
+at the top of that effect, it silently rewrites the wouter location from
+`/artist/albums/:id` to `/admin/albums/:id` the moment AdminAlbum mounts,
+causing the Switch to re-render the full admin shell. Symptom: artist-portal
+album click opens the correct content but inside the full AdminFrame chrome
+(Partners / Queues / System sidebar) instead of the OperatorShell. Fix: the
+`if (embedded) return;` guard is now at the top of that effect.
