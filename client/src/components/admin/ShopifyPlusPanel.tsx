@@ -4,6 +4,7 @@ import {
   BadgeCheck,
   Truck,
   FileText,
+  Download,
   Trash2,
   Plus,
   CreditCard,
@@ -713,18 +714,20 @@ function ManufacturingLedger({
                     className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2"
                     data-testid={`row-quote-${q.id}`}
                   >
-                    <a
-                      href={q.fileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 text-sm text-slate-700 hover:text-[var(--brand-blue)] hover:underline underline-offset-2 min-w-0"
-                      data-testid={`link-quote-${q.id}`}
-                    >
-                      <FileText className="w-4 h-4 shrink-0 text-slate-400" />
-                      <span className="truncate">
+                    <div className="inline-flex items-center gap-2 min-w-0">
+                      <a
+                        href={q.fileUrl}
+                        download={q.fileName || "Quote.pdf"}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-200 shrink-0 transition-colors"
+                        data-testid={`link-quote-${q.id}`}
+                        aria-label={`Download ${q.fileName || "Quote.pdf"}`}
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
+                      <span className="text-sm text-slate-700 truncate">
                         {q.fileName || "Quote.pdf"}
                       </span>
-                    </a>
+                    </div>
                     {canEdit && (
                       <button
                         onClick={() => removeQuote(q)}
