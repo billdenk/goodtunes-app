@@ -636,3 +636,20 @@ workflows:
         track: internal
         # Submit straight to the internal testing track (testers, not public).
         submit_as_draft: false
+        # WHY: Google's Play Developer API refuses to AUTO-submit a release for
+        # review while the Console still has pending changes it can't review
+        # programmatically — incomplete "App content" declarations (data safety,
+        # content rating, target audience, ads, form factors, etc.) or an
+        # app-level change awaiting manual review. In that state the COMMIT step
+        # (after a successful .aab upload) hard-fails with:
+        #   "Changes cannot be sent for review automatically. Please set the query
+        #    parameter changesNotSentForReview to true. Once committed, the changes
+        #    in this edit can be sent for review from the Google Play Console UI."
+        # So the build succeeds, the bundle uploads, and then the whole publish
+        # fails at the last step. Setting this true commits the edit WITHOUT
+        # auto-submitting: the release is created on the internal track and then an
+        # operator clicks "Send N changes for review" in the Play Console once any
+        # outstanding declarations are complete. This is the same fix fastlane
+        # `supply` exposes as `changes_not_sent_for_review`. See
+        # docs/google-play-setup.md → "Sending a release for review".
+        changes_not_sent_for_review: true

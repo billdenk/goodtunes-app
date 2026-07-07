@@ -323,11 +323,48 @@ track, so duplicates are impossible — you never bump it by hand. `versionName`
 ("1.0") lives in `android/app/build.gradle`; bump it there when you want the
 user-visible version string to change.
 
+### Sending a release for review
+
+The Codemagic publish step commits with `changes_not_sent_for_review: true`
+(`codemagic.yaml` → `publishing.google_play`). This is deliberate. Google's Play
+Developer API **refuses to auto-submit** a release for review whenever the
+Console still has a pending change it can't review programmatically — an
+incomplete **App content** declaration (Data safety, Content rating, Target
+audience, Ads, **Form factors**, etc.) or an app-level change awaiting manual
+review. Without the flag the `.aab` uploads fine and then the very last "set
+release" step hard-fails with:
+
+> Changes cannot be sent for review automatically. Please set the query
+> parameter changesNotSentForReview to true. Once committed, the changes in this
+> edit can be sent for review from the Google Play Console UI.
+
+With the flag, the build succeeds and the release is created on the internal
+track — but it is **not** auto-submitted. To actually ship it:
+
+1. **Finish any red App content declarations** (see *Compliance forms* above).
+   Play lists which ones are incomplete under **App content** and at the top of
+   the release page. The **Form factors** opt-out (e.g. Android Auto) counts as
+   one of these pending changes — resolving/leaving it is part of the same
+   review batch.
+2. **Play Console → Test and release → Internal testing → Edit release →
+   Send N changes for review** (rolling out to internal testing prompts the same
+   review). This is a manual, per-release click by design — the API can't make
+   it for you.
+
+A bundle that already uploaded (e.g. a build whose publish failed at "set
+release" *before* this flag existed — version code stays reserved) is still in
+**App bundle explorer**; you can create the internal release from it by hand
+instead of waiting for a rebuild.
+
 > **If the build fails:** signing errors → check the `goodtunes_keystore`
 > reference name/passwords. Publish/`get-latest-build-number` errors → check the
 > `google_play` group has `GCLOUD_SERVICE_ACCOUNT_CREDENTIALS` and that the
 > service account has release-to-testing permission (and that permissions have
-> propagated). Icon-guard failures → the **source** guard
+> propagated). A publish that **uploads the `.aab` and then fails at "set
+> release"** with a `changesNotSentForReview` message is *not* a credential
+> problem — it's Google declining to auto-review; see
+> [Sending a release for review](#sending-a-release-for-review). Icon-guard
+> failures → the **source** guard
 > (`scripts/verify-android-appicon.py`, before the build) and the **built-`.aab`**
 > guard (`scripts/verify-android-aab-icon.py`, after the build) each print exactly
 > which density/asset is wrong — the latter inspects the produced bundle to prove
