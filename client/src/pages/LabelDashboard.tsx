@@ -208,6 +208,9 @@ export function LabelDashboard() {
   const labelName = me.data?.name ?? "Your dashboard";
   const rosterSize = me.data?.rosterSize ?? 0;
   const albumCount = me.data?.albumCount ?? 0;
+  // The page header names the CURRENT section (not the label) so it always
+  // agrees with the highlighted nav item — mirrors ArtistDashboard pattern.
+  const currentTabLabel = LABEL_TABS.find((t) => t.id === tab)?.label ?? "";
 
   return (
     <OperatorShell
@@ -217,16 +220,17 @@ export function LabelDashboard() {
       logoUrl={me.data?.logoUrl ?? null}
       fallbackIcon={Building2}
       subtitle={`${rosterSize} artist${rosterSize === 1 ? "" : "s"} · ${albumCount} album${albumCount === 1 ? "" : "s"}`}
-      // Reports carries its own "Reports" header, so drop the shell's content
-      // header identity band on that section (parity with ArtistDashboard) —
-      // the rail identity stays. Combined with headerActions=undefined below,
-      // the whole content-header band collapses on Reports.
-      hideHeaderIdentity={tab === "reports"}
+      // Dashboard renders PartnerDashboard (which owns its own section header +
+      // range picker when sectionTitle is set); Reports renders embedded
+      // AdminReports (which carries its own header + range). On both we suppress
+      // the shell's content header entirely to avoid a duplicate title + picker.
+      // All other tabs show the section label as the shell page title.
+      pageTitle={tab === "dashboard" || tab === "reports" ? undefined : currentTabLabel}
+      hideHeaderIdentity={tab === "dashboard" || tab === "reports"}
       headerActions={
-        // Reports renders the embedded AdminReports, which carries its own
-        // "Reports" header + date range, so suppress the shell's range
-        // controls on that section to avoid a duplicate picker.
-        tab === "reports" ? undefined : (
+        // Dashboard and Reports both carry their own date range controls, so
+        // suppress the shell's range controls on those sections.
+        tab === "dashboard" || tab === "reports" ? undefined : (
           <>
             <RangePicker presets={RANGE_PRESETS} value={preset} onChange={applyPreset} />
             <CompareToggle active={compare} onToggle={setCompare} />
@@ -247,6 +251,7 @@ export function LabelDashboard() {
       {tab === "dashboard" && (
         <PartnerDashboard
           scope="label"
+          sectionTitle="Dashboard"
           title={me.data?.name ?? "Your dashboard"}
           subtitle={
             me.data
