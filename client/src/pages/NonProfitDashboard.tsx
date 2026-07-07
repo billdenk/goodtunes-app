@@ -172,7 +172,7 @@ export function NonProfitDashboard() {
         <PartnerDashboard
           scope="npo"
           title={me.data?.name ?? "Your dashboard"}
-          subtitle="Referred-artist activity and payout accrual"
+          subtitle="Donation activity from referred artists"
         />
       )}
       {tab === "artists" && <ArtistsTab />}
@@ -202,8 +202,8 @@ function ArtistsTab() {
           ))
         ) : (
           <>
-            <Kpi label="Pending payout" value={fmt(dash.data?.pendingCents ?? 0)} sub={`${dash.data?.pendingCount ?? 0} unit${(dash.data?.pendingCount ?? 0) === 1 ? "" : "s"}`} testId="kpi-npo-pending" />
-            <Kpi label="Paid out" value={fmt(dash.data?.paidCents ?? 0)} testId="kpi-npo-paid" />
+            <Kpi label="Accrued donations" value={fmt(dash.data?.pendingCents ?? 0)} sub={`${dash.data?.pendingCount ?? 0} unit${(dash.data?.pendingCount ?? 0) === 1 ? "" : "s"}`} testId="kpi-npo-pending" />
+            <Kpi label="Donations disbursed" value={fmt(dash.data?.paidCents ?? 0)} testId="kpi-npo-paid" />
             <Kpi label="Referred artists" value={String(dash.data?.artists.length ?? 0)} testId="kpi-npo-artists" />
           </>
         )}

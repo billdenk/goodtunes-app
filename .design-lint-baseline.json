@@ -10367,7 +10367,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PayoutAccountPanel.tsx",
-    "snippet": "<p className=\"text-slate-700 text-[13.5px] font-medium\">No connected Stripe account yet</p>"
+    "snippet": "<p className=\"text-slate-700 text-[13.5px] font-medium\">{isDonation ? \"No bank account connected yet\" : \"No connected Stripe account yet\"}</p>"
   },
   {
     "rule": "hardcoded-font-size",

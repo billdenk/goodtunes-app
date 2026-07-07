@@ -25389,32 +25389,52 @@ export async function registerRoutes(
     return { fromTs, toTs };
   }
 
-  // NPO — connected albums = albums whose primary artist this NPO referred,
-  // plus any album an order routed to this NPO as gooddeed referrer.
+  // NPO — connected albums = albums whose primary artist this NPO referred
+  // (people.referred_by_org_id), plus albums this NPO is a direct beneficiary
+  // of (album_npo_beneficiaries), plus albums whose orders credited this NPO
+  // via referral_credits. All three sources mirror what the Donation Ledger tab
+  // already aggregates, so this tab is always consistent with it.
   app.get("/api/admin/non-profits/:id/albums", requireAdmin, async (req, res) => {
     const npo = await db.execute(sql`SELECT 1 FROM organizations WHERE id = ${req.params.id} AND kind = 'non_profit' LIMIT 1`);
     if (((npo as any).rows ?? []).length === 0) return res.status(404).json({ message: "Non-profit not found" });
+    // (a) Albums whose primary artist was directly referred by this NPO.
     const referred = await db.execute<{ album_id: string }>(sql`
       SELECT DISTINCT a.id AS album_id
       FROM albums a
       JOIN people p ON p.id = a.primary_artist_id
       WHERE p.referred_by_org_id = ${req.params.id}
     `);
+    // (b) Albums where this NPO is a named beneficiary (album_npo_beneficiaries).
+    //     This is one of the two sources the Donation Ledger uses and was
+    //     previously missing from the Albums tab, causing it to appear empty
+    //     even when the Ledger showed donation activity.
+    const beneficiary = await db.execute<{ album_id: string }>(sql`
+      SELECT DISTINCT album_id FROM album_npo_beneficiaries WHERE organization_id = ${req.params.id}
+    `).catch(() => ({ rows: [] }) as any);
+    // (c) Albums whose paid orders credited this NPO via referral_credits.
+    //     Filter referrer_kind to avoid picking up unrelated org-id collisions.
     const routed = await db.execute<{ album_id: string }>(sql`
-      SELECT DISTINCT album_id FROM orders WHERE album_id IS NOT NULL
-        AND id IN (SELECT order_id FROM referral_credits WHERE referrer_org_id = ${req.params.id})
+      SELECT DISTINCT o.album_id FROM orders o
+      JOIN referral_credits rc ON rc.order_id = o.id
+      WHERE rc.referrer_org_id = ${req.params.id}
+        AND rc.referrer_kind = 'non_profit'
+        AND o.album_id IS NOT NULL
     `).catch(() => ({ rows: [] }) as any);
     const referredIds = new Set<string>(((referred as any).rows ?? []).map((r: any) => r.album_id));
+    const beneficiaryIds = new Set<string>(((beneficiary as any).rows ?? []).map((r: any) => r.album_id));
     const routedIds = new Set<string>(((routed as any).rows ?? []).map((r: any) => r.album_id));
     const allIds: string[] = [];
     const seen = new Set<string>();
-    referredIds.forEach((v) => { if (!seen.has(v)) { seen.add(v); allIds.push(v); } });
-    routedIds.forEach((v) => { if (!seen.has(v)) { seen.add(v); allIds.push(v); } });
+    const addId = (v: string) => { if (!seen.has(v)) { seen.add(v); allIds.push(v); } };
+    referredIds.forEach(addId);
+    beneficiaryIds.forEach(addId);
+    routedIds.forEach(addId);
     const reasonFor = (id: string) => {
-      if (referredIds.has(id) && routedIds.has(id)) return "Referrer · GoodDeed";
-      if (referredIds.has(id)) return "Referrer";
-      if (routedIds.has(id)) return "GoodDeed";
-      return null;
+      const parts: string[] = [];
+      if (referredIds.has(id)) parts.push("Referrer");
+      if (beneficiaryIds.has(id)) parts.push("Beneficiary");
+      if (routedIds.has(id)) parts.push("GoodDeed");
+      return parts.length > 0 ? parts.join(" · ") : null;
     };
     res.json(await loadConnectedAlbums(allIds, reasonFor));
   });

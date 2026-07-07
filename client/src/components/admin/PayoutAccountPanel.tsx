@@ -14,9 +14,12 @@ interface Props {
   ownerId: string;
   ownerName: string;
   ownerEmail?: string | null;
+  /** "donation" swaps payout-centric copy for donation/bank-account language (NPO context). */
+  mode?: "payout" | "donation";
 }
 
-export function PayoutAccountPanel({ ownerKind, ownerId, ownerName, ownerEmail }: Props) {
+export function PayoutAccountPanel({ ownerKind, ownerId, ownerName, ownerEmail, mode = "payout" }: Props) {
+  const isDonation = mode === "donation";
   const qc = useQueryClient();
   const { toast } = useToast();
   const [unlinking, setUnlinking] = useState(false);
@@ -88,7 +91,7 @@ export function PayoutAccountPanel({ ownerKind, ownerId, ownerName, ownerEmail }
     return (
       <section className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6" data-testid="panel-payouts-loading">
         <div className="flex items-center gap-2 text-slate-400 text-[13px]">
-          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading payout details…
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> {isDonation ? "Loading bank account details…" : "Loading payout details…"}
         </div>
       </section>
     );
@@ -100,19 +103,23 @@ export function PayoutAccountPanel({ ownerKind, ownerId, ownerName, ownerEmail }
         <div>
           <h2 className="text-slate-900 text-[14px] font-bold flex items-center gap-2">
             <SiStripe className="w-3.5 h-3.5 text-[#635BFF]" />
-            Stripe Connect payouts
+            {isDonation ? "Donation disbursements — bank account" : "Stripe Connect payouts"}
           </h2>
           <p className="text-slate-500 text-[12px] mt-0.5">
-            When an order on a release tied to {ownerName} ships, the artist share is auto-transferred here.
+            {isDonation
+              ? `GoodTunes wires donations earned by ${ownerName} to the bank account connected here.`
+              : `When an order on a release tied to ${ownerName} ships, the artist share is auto-transferred here.`}
           </p>
         </div>
       </div>
 
       {!account && (
         <div className="rounded-lg border border-dashed border-slate-300 p-5 text-center" data-testid="payouts-no-account">
-          <p className="text-slate-700 text-[13.5px] font-medium">No connected Stripe account yet</p>
+          <p className="text-slate-700 text-[13.5px] font-medium">{isDonation ? "No bank account connected yet" : "No connected Stripe account yet"}</p>
           <p className="text-slate-500 text-[12px] mt-1">
-            Create an Express account, then run the onboarding link to collect KYC + a bank account.
+            {isDonation
+              ? "Connect a bank account so GoodTunes can wire earned donations to your organization."
+              : "Create an Express account, then run the onboarding link to collect KYC + a bank account."}
           </p>
           <button
             type="button"
@@ -127,13 +134,15 @@ export function PayoutAccountPanel({ ownerKind, ownerId, ownerName, ownerEmail }
         </div>
       )}
 
-      {account && <AccountDetails account={account} onboard={onboard} refresh={refresh} onUnlink={() => setUnlinking(true)} />}
+      {account && <AccountDetails account={account} onboard={onboard} refresh={refresh} onUnlink={() => setUnlinking(true)} isDonation={isDonation} />}
 
       {unlinking && account && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 space-y-2" data-testid="payouts-unlink-confirm">
           <p className="text-rose-700 text-[13px] font-medium">Remove this connected account?</p>
           <p className="text-rose-600 text-[12px]">
-            Existing transfers stay in Stripe. Future orders for {ownerName} will land in stuck-cases until you link a new account.
+            {isDonation
+              ? `Existing transfers stay in Stripe. Future donations for ${ownerName} won't be disbursed until you link a new bank account.`
+              : `Existing transfers stay in Stripe. Future orders for ${ownerName} will land in stuck-cases until you link a new account.`}
           </p>
           <div className="flex items-center justify-end gap-2">
             <button
@@ -165,11 +174,13 @@ function AccountDetails({
   onboard,
   refresh,
   onUnlink,
+  isDonation = false,
 }: {
   account: PayoutAccount;
   onboard: ReturnType<typeof useMutation<any, any, string>>;
   refresh: ReturnType<typeof useMutation<any, any, string>>;
   onUnlink: () => void;
+  isDonation?: boolean;
 }) {
   const ready = account.payoutsEnabled && account.detailsSubmitted;
   return (
@@ -181,7 +192,7 @@ function AccountDetails({
         <Field label="KYC status">
           {ready ? (
             <span className="inline-flex items-center gap-1 text-emerald-700 text-[12.5px] font-semibold" data-testid="status-kyc-ready">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Ready to receive payouts
+              <CheckCircle2 className="w-3.5 h-3.5" /> {isDonation ? "Ready to receive donations" : "Ready to receive payouts"}
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 text-amber-700 text-[12.5px] font-semibold" data-testid="status-kyc-pending">
@@ -195,7 +206,7 @@ function AccountDetails({
             {account.chargesEnabled ? "Yes" : "No"}
           </span>
         </Field>
-        <Field label="Payouts enabled">
+        <Field label={isDonation ? "Disbursements enabled" : "Payouts enabled"}>
           <span className={account.payoutsEnabled ? "text-emerald-700" : "text-slate-400"}>
             {account.payoutsEnabled ? "Yes" : "No"}
           </span>

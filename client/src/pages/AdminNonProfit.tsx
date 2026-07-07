@@ -184,7 +184,7 @@ export default function AdminNonProfit() {
               { key: "albums", label: "Albums" },
               { key: "ledger", label: "Donation ledger" },
               { key: "analytics", label: "Analytics" },
-              { key: "payouts", label: "Payouts" },
+              { key: "payouts", label: "Disbursements" },
             ] as const).map((t) => (
               <button
                 key={t.key}
@@ -285,6 +285,7 @@ export default function AdminNonProfit() {
             ownerKind="organization"
             ownerId={npo.id}
             ownerName={npo.name}
+            mode="donation"
           />
         )}
       </div>
