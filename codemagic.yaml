@@ -332,6 +332,30 @@ definitions:
         # scripts/verify-ios-ipa-icon.py.
         pip3 install --quiet --disable-pip-version-check Pillow || true
         python3 scripts/verify-ios-ipa-icon.py
+    - name: Guard — fail fast if the BUILT .ipa has a blank (logo-free) splash screen
+      script: |
+        # WHY THIS EXISTS: around June 9 the three Splash.imageset PNGs were
+        # overwritten with solid-navy (#00062B) images — no GoodTunes wordmark.
+        # Xcode silently compiled the blank splash into the archive, the
+        # LaunchScreen showed plain navy, and the @capacitor/splash-screen plugin
+        # fell through to its own placeholder (the Android Bugdroid robot) visible
+        # in TestFlight. Xcode never warns about this.
+        #
+        # This guard inspects the actual produced .ipa AFTER archiving:
+        #   1. Unzips it and runs `assetutil --info` on Assets.car to confirm a
+        #      Splash rendition is compiled in.
+        #   2. Extracts the splash image from Assets.car (via `assetutil --output`)
+        #      and pixel-samples the centre 100×100 px.
+        #   3. Asserts that at least one centre pixel is NOT the navy background
+        #      (#00062B ± 10 steps). A solid-navy centre means no wordmark was
+        #      baked in, and we HARD-FAIL with a clear regeneration command.
+        #
+        # Source of truth: the splash PNGs are generated from
+        # client/public/goodtunes-logo-white.png (the white GoodTunes wordmark)
+        # composited onto a 2732×2732 navy canvas. See scripts/verify-ios-ipa-splash.py
+        # and docs/native-builds.md (Splash screen section).
+        pip3 install --quiet --disable-pip-version-check Pillow || true
+        python3 scripts/verify-ios-ipa-splash.py
     - name: Publish to App Store Connect (tolerant of transient 500s)
       script: |
         # WHY THIS REPLACES THE DECLARATIVE `publishing:` BLOCK: App Store Connect
