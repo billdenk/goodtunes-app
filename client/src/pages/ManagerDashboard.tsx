@@ -166,6 +166,10 @@ export function ManagerDashboard() {
   const managerName = me.data?.name ?? "Your dashboard";
   const rosterSize = me.data?.rosterSize ?? 0;
   const albumCount = me.data?.albumCount ?? 0;
+  // Show the current section name in the page header (not the manager's name),
+  // mirroring the ArtistDashboard pattern so the header always agrees with the
+  // highlighted nav item. The identity (logo + name) lives only in the left rail.
+  const currentTabLabel = MANAGER_TABS.find((t) => t.id === tab)?.label ?? "";
 
   return (
     <OperatorShell
@@ -175,6 +179,8 @@ export function ManagerDashboard() {
       logoUrl={me.data?.logoUrl ?? null}
       fallbackIcon={Building2}
       subtitle={`${rosterSize} artist${rosterSize === 1 ? "" : "s"} · ${albumCount} album${albumCount === 1 ? "" : "s"}`}
+      pageTitle={currentTabLabel}
+      hideHeaderIdentity
       headerActions={
         <>
           <RangePicker presets={RANGE_PRESETS} value={preset} onChange={setPreset} />

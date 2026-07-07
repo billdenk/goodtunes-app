@@ -261,7 +261,23 @@ async function resolveScope(kind: ScopeKind, req: Request): Promise<ResolvedScop
     let id: string | null = null;
     if (info.role === "super_admin") id = impersonate || null;
     else if (info.role === "artist") id = info.roleScopeId;
-    else return { error: "Insufficient role", status: 403 };
+    else if (info.role === "manager") {
+      // A manager may drill into any artist on their roster. They MUST pass
+      // ?scopeId=<personId> and the person must be tagged with this manager
+      // (people.manager_id = manager's roleScopeId). Same gate as artistReports.ts.
+      if (!info.roleScopeId) return { error: "Manager account has no manager scope", status: 403 };
+      if (!impersonate) return { error: "Manager must pass ?scopeId= to drill into a roster artist", status: 400 };
+      const okRow = await db.execute<{ ok: boolean }>(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM people WHERE id = ${impersonate} AND manager_id = ${info.roleScopeId}
+        ) AS ok
+      `);
+      const ok = ((okRow as any).rows?.[0]?.ok) === true;
+      if (!ok) return { error: "Artist is not on this manager's roster", status: 403 };
+      id = impersonate;
+    } else {
+      return { error: "Insufficient role", status: 403 };
+    }
     if (!id) return { error: "Artist scope required", status: info.role === "super_admin" ? 400 : 403 };
     const r = await db.execute<any>(sql`SELECT id, name, photo_url FROM people WHERE id = ${id} LIMIT 1`);
     const row = ((r as any).rows ?? [])[0];
