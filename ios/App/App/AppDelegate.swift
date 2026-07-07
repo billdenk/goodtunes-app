@@ -3,14 +3,12 @@ import Capacitor
 
 // Brand navy — matches capacitor.config.ts SplashScreen.backgroundColor and
 // the LaunchScreen.storyboard background so there is no colour discontinuity
-// at any point during launch or app load. Internal (not private) because
-// SceneDelegate paints the same navy under the scene lifecycle.
+// at any point during launch or app load.
 let brandNavy = UIColor(red: 0.0, green: 6.0/255.0, blue: 43.0/255.0, alpha: 1.0)
 
 // Walk the view-controller tree to find the Capacitor bridge VC and set its
 // WKWebView background to brand navy so no white ever shows through during a
-// remote-URL load. Top-level (module-internal) so both AppDelegate (legacy
-// lifecycle) and SceneDelegate (scene lifecycle) share one implementation.
+// remote-URL load.
 func applyNavyToWebView(in vc: UIViewController) {
     if let bridgeVC = vc as? CAPBridgeViewController {
         bridgeVC.view.backgroundColor = brandNavy
@@ -30,12 +28,13 @@ func applyNavyToWebView(in vc: UIViewController) {
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
-    // NOTE (Task #2570): the app now runs the UIScene lifecycle — Info.plist
-    // declares a UIWindowSceneSessionRoleApplication configuration backed by
-    // SceneDelegate, which creates/owns the phone window and mirrors it onto
-    // this property so existing window-based code keeps working. At
-    // didFinishLaunching time this is still nil; SceneDelegate assigns it in
-    // scene(_:willConnectTo:), which runs after this returns.
+    // The app runs the LEGACY (non-scene) UIApplication lifecycle: Info.plist
+    // has UIMainStoryboardFile = "Main" and NO UIApplicationSceneManifest, so
+    // UIKit instantiates Main.storyboard's initial VC (Capacitor's
+    // CAPBridgeViewController), builds this window, and assigns it here
+    // automatically before didFinishLaunchingWithOptions returns. (A CarPlay
+    // scene manifest was removed — it black-screened the phone; see
+    // .agents/memory/ios-scene-manifest-black-screen.md.)
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
@@ -45,10 +44,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         //   → Capacitor SplashScreen overlay (navy, already configured)
         //   → WKWebView white flash while my.goodtunes.music loads (~4 s)
         //   → app
-        // Setting backgroundColor here closes that last white gap. (Under the
-        // scene lifecycle `window` is nil here and SceneDelegate does the real
-        // painting; this stays as a harmless no-op fallback for the legacy
-        // lifecycle.)
+        // Setting backgroundColor here closes that last white gap.
         window?.backgroundColor = brandNavy
         if let root = window?.rootViewController {
             root.view.backgroundColor = brandNavy
@@ -59,8 +55,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     // Called every time the app comes back to the foreground — covers the
     // race where the CAPBridgeViewController's view wasn't yet attached
-    // when didFinishLaunchingWithOptions ran. (Not called under the scene
-    // lifecycle — SceneDelegate.sceneDidBecomeActive covers it there.)
+    // when didFinishLaunchingWithOptions ran.
     func applicationDidBecomeActive(_ application: UIApplication) {
         if let root = window?.rootViewController {
             applyNavyToWebView(in: root)

@@ -14,8 +14,6 @@
                 A1B2C3D40003000000000003 /* SecureKeyStorePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40004000000000004 /* SecureKeyStorePlugin.swift */; };
                 A1B2C3D40005000000000005 /* NowPlayingPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40006000000000006 /* NowPlayingPlugin.swift */; };
                 A1B2C3D40007000000000007 /* NowPlayingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40008000000000008 /* NowPlayingStore.swift */; };
-                A1B2C3D40009000000000009 /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4000A00000000000A /* CarPlaySceneDelegate.swift */; };
-                A1B2C3D4000B00000000000B /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4000C00000000000C /* SceneDelegate.swift */; };
                 504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
                 504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
                 504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
@@ -58,8 +56,6 @@
                 A1B2C3D40004000000000004 /* SecureKeyStorePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureKeyStorePlugin.swift; sourceTree = "<group>"; };
                 A1B2C3D40006000000000006 /* NowPlayingPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingPlugin.swift; sourceTree = "<group>"; };
                 A1B2C3D40008000000000008 /* NowPlayingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingStore.swift; sourceTree = "<group>"; };
-                A1B2C3D4000A00000000000A /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
-                A1B2C3D4000C00000000000C /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
                 504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
                 504EC30E1FED79650016851F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
                 504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -134,12 +130,10 @@
                         children = (
                                 50379B222058CBB4000EE86E /* capacitor.config.json */,
                                 504EC3071FED79650016851F /* AppDelegate.swift */,
-                                A1B2C3D4000C00000000000C /* SceneDelegate.swift */,
                                 A1B2C3D40002000000000002 /* SystemVolumePlugin.swift */,
                                 A1B2C3D40004000000000004 /* SecureKeyStorePlugin.swift */,
                                 A1B2C3D40006000000000006 /* NowPlayingPlugin.swift */,
                                 A1B2C3D40008000000000008 /* NowPlayingStore.swift */,
-                                A1B2C3D4000A00000000000A /* CarPlaySceneDelegate.swift */,
                                 504EC30B1FED79650016851F /* Main.storyboard */,
                                 504EC30E1FED79650016851F /* Assets.xcassets */,
                                 504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -306,12 +300,10 @@
                         buildActionMask = 2147483647;
                         files = (
                                 504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
-                                A1B2C3D4000B00000000000B /* SceneDelegate.swift in Sources */,
                                 A1B2C3D40001000000000001 /* SystemVolumePlugin.swift in Sources */,
                                 A1B2C3D40003000000000003 /* SecureKeyStorePlugin.swift in Sources */,
                                 A1B2C3D40005000000000005 /* NowPlayingPlugin.swift in Sources */,
                                 A1B2C3D40007000000000007 /* NowPlayingStore.swift in Sources */,
-                                A1B2C3D40009000000000009 /* CarPlaySceneDelegate.swift in Sources */,
                         );
                         runOnlyForDeploymentPostprocessing = 0;
                 };

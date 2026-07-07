@@ -164,7 +164,7 @@ definitions:
         #    version. The next step ("Guard — ...marketing version...") fails the
         #    build in seconds if you forget, instead of letting Apple reject the
         #    finished upload ten minutes later.
-        MARKETING_VERSION=3.0.3
+        MARKETING_VERSION=3.0.4
         agvtool new-marketing-version "$MARKETING_VERSION"
         #
         # 2) BUILD NUMBER (CFBundleVersion) — an internal counter that must be
@@ -270,49 +270,12 @@ definitions:
         # (alpha is the classic cause of a dropped-to-placeholder icon). Image
         # inspection uses macOS `sips`, which is always present on the runner.
         python3 scripts/verify-ios-appicon.py
-    - name: Gate CarPlay out of the distribution archive until Apple grants it
-      script: |
-        # WHY THIS EXISTS: com.apple.developer.carplay-audio is a RESTRICTED,
-        # request-only Apple entitlement (see
-        # .agents/memory/carplay-restricted-entitlement.md). It's committed in
-        # App.entitlements + the Info.plist CarPlay scene manifest so
-        # device/simulator CarPlay works under a DEVELOPMENT profile — but an App
-        # Store / TestFlight (distribution) archive FAILS signing until Apple
-        # grants CarPlay-audio on the App ID Io.GoGoods.music AND a fresh
-        # distribution profile carrying it is minted. That approval is a manual
-        # Apple review that can take days-to-weeks, so leaving the entitlement in
-        # would SILENTLY BLOCK every iOS build in the meantime — a separate
-        # blocker on TOP of the Xcode archive fix above.
-        #
-        # DEFAULT (CARPLAY_GRANTED unset): strip the entitlement from the copy of
-        # App.entitlements this archive signs. The key stays committed in the repo
-        # (dev/simulator CarPlay is untouched) — we only remove it from the signed
-        # distribution binary so the pipeline is never blocked on the Apple grant.
-        #
-        # AFTER APPLE GRANTS IT: set CARPLAY_GRANTED=true in the Codemagic
-        # `apple_app` variable group (and delete stale App Store profiles for the
-        # App ID so `fetch-signing-files --create` mints one carrying CarPlay).
-        # This step then KEEPS the entitlement and the CarPlay scene ships.
-        ENTITLEMENTS="ios/App/App/App.entitlements"
-        KEY="com.apple.developer.carplay-audio"
-        case "$(printf '%s' "${CARPLAY_GRANTED:-}" | tr '[:upper:]' '[:lower:]')" in
-          true|1|yes|granted)
-            if /usr/libexec/PlistBuddy -c "Print :$KEY" "$ENTITLEMENTS" >/dev/null 2>&1; then
-              echo "CARPLAY_GRANTED is set — KEEPING $KEY in the distribution archive."
-            else
-              echo "WARN: CARPLAY_GRANTED is set but $KEY is not present in $ENTITLEMENTS — nothing to keep."
-            fi
-            ;;
-          *)
-            if /usr/libexec/PlistBuddy -c "Print :$KEY" "$ENTITLEMENTS" >/dev/null 2>&1; then
-              /usr/libexec/PlistBuddy -c "Delete :$KEY" "$ENTITLEMENTS"
-              echo "Stripped $KEY from $ENTITLEMENTS for this distribution archive (CARPLAY_GRANTED not set)."
-              echo "NOTE: the entitlement is still committed in the repo — dev/simulator CarPlay is unaffected."
-            else
-              echo "$KEY already absent from $ENTITLEMENTS — nothing to strip."
-            fi
-            ;;
-        esac
+    # CarPlay was fully removed (scene manifest black-screened the phone app on
+    # TestFlight/App Store). The old "Gate CarPlay out of the distribution
+    # archive" step that stripped com.apple.developer.carplay-audio is gone
+    # because the entitlement + CarPlay scene delegate + Info.plist scene
+    # manifest no longer exist. If CarPlay is revisited, restore that gating step
+    # alongside the entitlement — see .agents/memory/ios-scene-manifest-black-screen.md.
     - name: Build the signed .ipa
       script: |
         # `--archive-flags="-allowProvisioningUpdates"` is THE fix for the Xcode

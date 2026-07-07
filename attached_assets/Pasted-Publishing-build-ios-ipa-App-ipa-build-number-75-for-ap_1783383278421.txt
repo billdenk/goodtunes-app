@@ -1,0 +1,150 @@
+Publishing 'build/ios/ipa/App.ipa' (build number 75) for app ******** in mode 'testflight'.
+=== Publish attempt 1/4 ===
+
+Publish "build/ios/ipa/App.ipa" to App Store Connect
+App name: GoodTunes
+Bundle identifier: Io.GoGoods.music
+Certificate expires: 2027-06-05T14:27:34.000+0000
+Distribution type: App Store
+Min OS version: 13.0
+Provisioned devices: N/A
+Provisions all devices: No
+Supported platforms: iPhoneOS
+Version code: 75
+Version: 3.0.3
+
+Upload "build/ios/ipa/App.ipa" to App Store Connect
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+26.30.4 (173004)
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+2026-07-06 23:25:47.832  INFO: [ContentDelivery.Uploader.806C40640] 
+==========================================
+UPLOAD SUCCEEDED with no errors
+Delivery UUID: d3626376-eaeb-4750-8af3-0f59c6acdf60
+Transferred 49167848 bytes in 0.454 seconds (108.4MB/s, 866.994Mbps)
+==========================================
+{
+  "details" : {
+    "delivery-uuid" : "d3626376-eaeb-4750-8af3-0f59c6acdf60",
+    "transferred" : "49167848 bytes in 0.454 seconds (108.4MB/s, 866.994Mbps)"
+  },
+  "os-version" : "Version 26.4.1 (Build 25E253)",
+  "success-message" : "No errors uploading archive at 'build/ios/ipa/App.ipa'.",
+  "tool-path" : "/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources",
+  "tool-version" : "26.30.4 (173004)"
+}
+
+No errors uploading archive at 'build/ios/ipa/App.ipa'.
+
+Find application entry from App Store Connect for uploaded binary
+Found 1 App matching specified filters: bundleId=Io.GoGoods.music.
+-- App --
+Id: ********
+Type: apps
+Bundle id: Io.GoGoods.music
+Name: GoodTunes
+Primary locale: en-US
+Sku: 20230423gogoods-goodtunes
+Content rights declaration: DOES_NOT_USE_THIRD_PARTY_CONTENT
+Is or ever was made for kids: False
+
+Find uploaded build
+Build has finished uploading but is not available in App Store Connect yet. Could not find the build matching the uploaded version, waiting 30 seconds to try again. Timeout in 10 minutes.
+Could not find the build matching the uploaded version, waiting 30 seconds to try again.
+Could not find the build matching the uploaded version, waiting 30 seconds to try again.
+Could not find the build matching the uploaded version, waiting 30 seconds to try again.
+Could not find the build matching the uploaded version, waiting 30 seconds to try again.
+Could not find the build matching the uploaded version, waiting 30 seconds to try again.
+
+Uploaded build is
+-- Build --
+Id: d3626376-eaeb-4750-8af3-0f59c6acdf60
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/b0/32/f2/b032f2e8-e469-34d2-9ea5-61f37f77b8b7/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 75
+Uses non exempt encryption: False
+Uploaded date: 2026-07-06 16:26:51-07:00
+Expiration date: 2026-10-04 16:26:51-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+
+Wait until build d3626376-eaeb-4750-8af3-0f59c6acdf60 and its beta details are processed
+Processing build d3626376-eaeb-4750-8af3-0f59c6acdf60 is completed
+Processing build d3626376-eaeb-4750-8af3-0f59c6acdf60 beta detail d3626376-eaeb-4750-8af3-0f59c6acdf60 is completed
+
+Processed build and beta details are
+-- Build --
+Id: d3626376-eaeb-4750-8af3-0f59c6acdf60
+Type: builds
+Expired: False
+Icon asset token: 
+	Template url: https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/b0/32/f2/b032f2e8-e469-34d2-9ea5-61f37f77b8b7/AppIcon-0-0-2x_U007epad-0-6-0-85-220.png/{w}x{h}bb.{f}
+	Height: 167
+	Width: 167
+Min os version: 13.0
+Processing state: VALID
+Version: 75
+Uses non exempt encryption: False
+Uploaded date: 2026-07-06 16:26:51-07:00
+Expiration date: 2026-10-04 16:26:51-07:00
+Audience type: APP_STORE_ELIGIBLE
+Computed min macOSversion: 11.0
+Computed min visionOSversion: 1.0
+-- Build Beta Detail --
+Id: d3626376-eaeb-4750-8af3-0f59c6acdf60
+Type: buildBetaDetails
+Auto notify enabled: True
+External build state: READY_FOR_BETA_SUBMISSION
+Internal build state: READY_FOR_BETA_TESTING
+Adding build 'd3626376-eaeb-4750-8af3-0f59c6acdf60' to the following beta groups: GoGoods Test Group.
+Added build 'd3626376-eaeb-4750-8af3-0f59c6acdf60' to 'GoGoods Test Group' beta group
+
+Submit build 'd3626376-eaeb-4750-8af3-0f59c6acdf60' to TestFlight beta review
+Creating new Beta App Review Submission: build: d3626376-eaeb-4750-8af3-0f59c6acdf60
+POST https://api.appstoreconnect.apple.com/v1/betaAppReviewSubmissions returned 422: Another build is in review. - Another build in the same train is already in beta review. Please submit it again once it gets completed.
+Failed to publish build/ios/ipa/App.ipa
+Publish attempt 1 failed (exit 1).
+------------------------------------------------------------------------
+DEAD END: a prior build in this version train is still in Apple's
+TestFlight beta review queue. Retrying the submission can never fix this
+-- Apple only allows ONE build per version 'train' in beta review at a
+time -- so we fail fast instead of burning ~8.5 minutes of backoff.
+  registration check: latest on App Store Connect = '75', this build = '75'
+
+The binary (build 75) DID upload and register successfully
+on App Store Connect -- this is NOT an upload problem. It is only the
+external beta-review SUBMISSION that failed, because an earlier build in
+the same version train is still awaiting Apple's review decision.
+
+To fix it, in App Store Connect either:
+  1. Wait for Apple to finish reviewing the pending build (usually 24-48h),
+     then re-run this workflow -- it will submit build 75 once
+     the train is clear, OR
+  2. Cancel that pending beta review yourself (TestFlight -> Builds -> the
+     build showing 'Waiting for Review' -> ... -> Cancel Beta Review),
+     then re-run this workflow immediately.
+  https://appstoreconnect.apple.com/apps/********/testflight/ios
+
+(Automatic cancellation was investigated: the 'app-store-connect' CLI this
+pipeline uses has no command to cancel/expire a pending Beta App Review
+Submission, so this is a manual, one-time step in App Store Connect --
+see docs/codemagic-builds.md.)
+------------------------------------------------------------------------
+
+
+Build failed :|
+Step 16 script `Publish to App Store Connect (tolerant of transient 500s)` exited with status code 1
+Publishing
+2s
+Cleaning up
+3s
+Step 16 script `Publish to App Store Connect (tolerant of transient 500s)` exited with status code 1

@@ -25,22 +25,11 @@
          rejected at upload (ITMS-90163 invalid aps-environment). -->
     <key>aps-environment</key>
     <string>production</string>
-    <!-- Task #2504 — CarPlay audio. Grants the app the CarPlay audio scene so
-         a head unit can connect and show the now-playing + Up Next templates
-         (CarPlaySceneDelegate). This is a RESTRICTED, request-only entitlement:
-         Apple must approve the CarPlay-audio capability on the App ID before it
-         can be signed for distribution — until then, device/simulator CarPlay
-         testing works with a development profile but App Store / TestFlight
-         builds will FAIL signing if the capability isn't enabled on the
-         provisioning profile.
-         Task #2554 — because that Apple grant can take days-to-weeks and would
-         otherwise silently block every iOS distribution build, the Codemagic
-         pipeline STRIPS this key from the archive it signs by default (see the
-         "Gate CarPlay out of the distribution archive" step in codemagic.yaml).
-         The entitlement stays committed here so dev/simulator CarPlay keeps
-         working; once Apple grants it, set CARPLAY_GRANTED=true in Codemagic's
-         `apple_app` group and the pipeline keeps it in the signed build. -->
-    <key>com.apple.developer.carplay-audio</key>
-    <true/>
+    <!-- CarPlay audio (com.apple.developer.carplay-audio) was REMOVED along with
+         the CarPlay scene delegate + Info.plist scene manifest: the scene
+         manifest black-screened the phone app on TestFlight/App Store. If CarPlay
+         is revisited, re-add this RESTRICTED, request-only entitlement (Apple
+         must grant it on the App ID before a distribution build can sign) AND the
+         phone window scene role, and cold-launch test on a real iPhone first. -->
 </dict>
 </plist>
