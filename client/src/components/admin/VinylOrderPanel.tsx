@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Disc3,
   GripVertical,
+  Pencil,
   RotateCcw,
   Undo2,
   Redo2,
@@ -49,11 +50,36 @@ export interface VinylSongLite {
 
 interface Props {
   albumId: string;
+  // Task #2583 — album title used to auto-generate the per-side catalog
+  // number suggestion (initialism for multi-word titles, word-as-is for
+  // single-word). Optional so existing callers that don't yet pass it
+  // gracefully skip the suggestion.
+  albumTitle?: string;
   songs: VinylSongLite[];
   vinylFormat: VinylFormat | null;
   // Sell-tab format pick — used as a sensible default when the artist
   // hasn't picked a vinyl-cut format yet.
   physicalFormat?: AlbumPhysicalFormat | null;
+  // Task #2583 — previously-saved per-side catalog number overrides.
+  // When a key is absent the side falls back to the auto-generated suggestion.
+  vinylSideCatalogNumbers?: Record<string, string> | null;
+}
+
+// Task #2583 — Build the catalog number stem from the album title.
+// Single-word titles use the word itself; multi-word titles use the
+// initialism of each word's first character (uppercased).
+// e.g. "Love Life Tragedy" → "LLT"
+//      "Californialand"    → "Californialand"
+function catalogStem(title: string | undefined): string {
+  if (!title || !title.trim()) return "ALBUM";
+  const words = title.trim().split(/\s+/);
+  if (words.length === 1) return words[0];
+  return words.map((w) => w[0].toUpperCase()).join("");
+}
+
+// Build the full auto-suggested catalog number for a given side.
+function suggestCatalogNumber(title: string | undefined, side: string): string {
+  return `${catalogStem(title)}-001-${side}`;
 }
 
 // Translate the Sell-panel format (Single LP / Double LP / 7" / Cassette)
@@ -185,9 +211,11 @@ const DRAG_THRESHOLD_PX = 6;
 
 export function VinylOrderPanel({
   albumId,
+  albumTitle,
   songs,
   vinylFormat,
   physicalFormat,
+  vinylSideCatalogNumbers,
 }: Props) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -330,6 +358,64 @@ export function VinylOrderPanel({
       qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
     },
   });
+
+  // Task #2583 — inline catalog-number editing state.
+  // `editingSide` is the side currently in edit mode (null = none).
+  // `editValue` is the live value in the text input while editing.
+  // `catalogCommittingRef` guards against the Enter-key commit also
+  // triggering a second commit via the subsequent onBlur — set true
+  // before the Enter path calls commitCatalog, cleared after blur fires.
+  const [editingSide, setEditingSide] = useState<VinylSide | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const catalogInputRef = useRef<HTMLInputElement | null>(null);
+  const catalogCommittingRef = useRef(false);
+
+  const catalogNumMut = useMutation({
+    mutationFn: async ({ side, catalogNumber }: { side: string; catalogNumber: string }) => {
+      await apiRequest("PUT", `/api/admin/albums/${albumId}/vinyl-catalog-numbers`, {
+        side,
+        catalogNumber,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't save catalog number",
+        description: e?.message ?? "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const startEditCatalog = (side: VinylSide) => {
+    if (readOnly) return;
+    const current =
+      (vinylSideCatalogNumbers ?? {})[side] ??
+      suggestCatalogNumber(albumTitle, side);
+    setEditValue(current);
+    setEditingSide(side);
+    setTimeout(() => catalogInputRef.current?.select(), 0);
+  };
+
+  const commitCatalog = (side: VinylSide) => {
+    setEditingSide(null);
+    const trimmed = editValue.trim();
+    const suggestion = suggestCatalogNumber(albumTitle, side);
+    const existing = (vinylSideCatalogNumbers ?? {})[side] ?? null;
+    // If the value equals the current saved override (or both are effectively
+    // the suggestion), skip the network call.
+    if (trimmed === (existing ?? suggestion) || (trimmed === suggestion && existing === null)) {
+      return;
+    }
+    catalogNumMut.mutate({ side, catalogNumber: trimmed });
+  };
+
+  const cancelCatalog = () => {
+    setEditingSide(null);
+    setEditValue("");
+  };
 
   // The single write path for every state change (drag, undo, redo,
   // reset). `record` controls whether the new state pushes onto the
@@ -716,12 +802,56 @@ export function VinylOrderPanel({
                     <div className="text-[12.5px] font-semibold text-slate-900">
                       Side {side}
                     </div>
-                    <div
-                      className="text-xs font-normal text-slate-400"
-                      data-testid={`text-side-catalog-number-${side}`}
-                    >
-                      Catalog Number: [Title-001-{side}]
-                    </div>
+                    {/* Task #2583 — editable per-side catalog number */}
+                    {editingSide === side ? (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <input
+                          ref={catalogInputRef}
+                          type="text"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              catalogCommittingRef.current = true;
+                              commitCatalog(side);
+                              requestAnimationFrame(() => {
+                                catalogCommittingRef.current = false;
+                              });
+                            }
+                            if (e.key === "Escape") cancelCatalog();
+                          }}
+                          onBlur={() => {
+                            if (catalogCommittingRef.current) return;
+                            commitCatalog(side);
+                          }}
+                          disabled={catalogNumMut.isPending}
+                          className="text-xs border border-[var(--brand-blue)] rounded px-1.5 py-0.5 text-slate-900 bg-white outline-none w-[160px] font-mono"
+                          data-testid={`input-catalog-number-${side}`}
+                          autoFocus
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 group/catnum mt-0.5">
+                        <span
+                          className="text-xs font-normal text-slate-400"
+                          data-testid={`text-side-catalog-number-${side}`}
+                        >
+                          {(vinylSideCatalogNumbers ?? {})[side] ??
+                            suggestCatalogNumber(albumTitle, side)}
+                        </span>
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            aria-label={`Edit catalog number for Side ${side}`}
+                            onClick={() => startEditCatalog(side)}
+                            data-testid={`button-edit-catalog-number-${side}`}
+                            className="opacity-0 group-hover/catnum:opacity-100 focus:opacity-100 flex-shrink-0 text-slate-400 hover:text-[color:var(--brand-blue)] transition-opacity"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-[12px]">

@@ -291,21 +291,26 @@ function GoToPressAction({
 
 export function PressPanel({
   albumId,
+  albumTitle,
   songs,
   physicalFormat,
   vinylFormat,
+  vinylSideCatalogNumbers,
   readyToSend = false,
   sendBlockers = [],
   pressMode = false,
   hideEntityLinks = false,
 }: {
   albumId: string;
+  albumTitle?: string;
   songs: PressPanelSong[];
   // Task #583 — Sell-panel physical-format pick drives whether the Side
   // A / Side B cut block renders inside Masters on file (cassette + no
   // physical format hide the block; the rest of the panel stays).
   physicalFormat?: AlbumPhysicalFormat | null;
   vinylFormat?: VinylFormat | null;
+  // Task #2583 — per-side catalog number overrides, forwarded to VinylOrderPanel.
+  vinylSideCatalogNumbers?: Record<string, string> | null;
   // Task #1530 — completeness gating for the relocated Go-to-Press
   // affordance. `readyToSend` is true only when every section reads
   // complete + preflight is clean + masters are on file; `sendBlockers`
@@ -668,6 +673,7 @@ export function PressPanel({
             <div className="mt-6">
               <VinylOrderPanel
                 albumId={albumId}
+                albumTitle={albumTitle}
                 songs={sorted.map((s) => ({
                   id: s.id,
                   title: s.title,
@@ -678,6 +684,7 @@ export function PressPanel({
                 }))}
                 vinylFormat={vinylFormat ?? null}
                 physicalFormat={physicalFormat ?? null}
+                vinylSideCatalogNumbers={vinylSideCatalogNumbers ?? null}
               />
             </div>
           )}

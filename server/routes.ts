@@ -15412,6 +15412,63 @@ export async function registerRoutes(
     },
   );
 
+  // Task #2583 — Per-side catalog number overrides. Stores the operator's
+  // chosen catalog number for a single vinyl side on the album. When no
+  // override is saved, the client falls back to the live auto-generated
+  // suggestion. Uses the same partner-permission + edit-access gate as
+  // the vinyl-order route above (edit_metadata, no approval divert here).
+  app.put(
+    "/api/admin/albums/:id/vinyl-catalog-numbers",
+    requireAdmin,
+    async (req, res) => {
+      const albumId = String(req.params.id);
+      const { side, catalogNumber } = req.body ?? {};
+      if (!side || typeof side !== "string" || !["A","B","C","D"].includes(side)) {
+        return res.status(400).json({ message: "side must be one of A, B, C, D" });
+      }
+      if (typeof catalogNumber !== "string") {
+        return res.status(400).json({ message: "catalogNumber must be a string" });
+      }
+      const cleaned = catalogNumber.trim();
+      const { resolveAlbumScope, partnerEditGate } = await import(
+        "./auth/partnerPermissions"
+      );
+      const albumScope = await resolveAlbumScope(albumId);
+      if (!albumScope)
+        return res.status(404).json({ message: "Album not found" });
+      if (albumScope.scope) {
+        const outcome = await partnerEditGate(
+          req,
+          res,
+          "edit_metadata",
+          albumScope.scope,
+          { albumIdForLock: albumId },
+        );
+        if (outcome === "deny") return;
+        if (outcome === "divert") {
+          return res.status(403).json({
+            message:
+              "Catalog number edits require direct edit access — submit changes via the approval queue.",
+          });
+        }
+      }
+      const album = await storage.getAlbumById(albumId, { includeHidden: true });
+      if (!album) return res.status(404).json({ message: "Album not found" });
+      const existing: Record<string, string> =
+        (album as any).vinylSideCatalogNumbers ?? {};
+      const updated = { ...existing };
+      if (cleaned === "") {
+        delete updated[side];
+      } else {
+        updated[side] = cleaned;
+      }
+      await storage.updateAlbum(albumId, {
+        vinylSideCatalogNumbers: updated,
+      } as any);
+      return res.json({ albumId, side, catalogNumber: cleaned, all: updated });
+    },
+  );
+
   // ----- Bonus album content: Videos + Photos ------------------------------
   // Reads mirror the album-detail visibility model: requireAuth + an admin
   // check unlocks hidden albums, fans get a 404 for hidden/nonexistent ids

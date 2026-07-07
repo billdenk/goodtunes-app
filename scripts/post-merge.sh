@@ -9133,3 +9133,25 @@ SQL
 }
 migrate_submitted_to_press dev  "${DATABASE_URL:-}"
 migrate_submitted_to_press prod "${PROD_DATABASE_URL:-}"
+
+# Task #2583 — Per-side catalog number overrides (vinyl_side_catalog_numbers jsonb).
+# New nullable JSONB column on albums storing operator-chosen catalog numbers keyed
+# by VinylSide. Unset sides auto-suggest from the album title in VinylOrderPanel.
+migrate_vinyl_side_catalog_numbers() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping vinyl_side_catalog_numbers migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE IF EXISTS albums
+  ADD COLUMN IF NOT EXISTS vinyl_side_catalog_numbers jsonb;
+SQL
+  then
+    echo "post-merge: vinyl_side_catalog_numbers migration ok on $label"
+  else
+    echo "post-merge: WARNING — vinyl_side_catalog_numbers migration failed on $label (continuing)"
+  fi
+}
+migrate_vinyl_side_catalog_numbers dev  "${DATABASE_URL:-}"
+migrate_vinyl_side_catalog_numbers prod "${PROD_DATABASE_URL:-}"

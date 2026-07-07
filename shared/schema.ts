@@ -457,6 +457,13 @@ export const albums = pgTable("albums", {
   // is fan-invisible by construction. Cleared when pulled back to
   // Prepping; kept as history once Released (isPrepping = false wins).
   submittedToPressAt: timestamp("submitted_to_press_at"),
+  // Task #2583 — Per-side catalog number overrides on the vinyl cut order.
+  // Stores operator-chosen catalog numbers keyed by VinylSide ("A","B","C","D").
+  // Only sides where the operator has explicitly set a value appear here —
+  // unset sides fall back to the live auto-generated suggestion computed
+  // from the album title in VinylOrderPanel.
+  // e.g. { "A": "LLT-001-A", "B": "LLT-001-B" }
+  vinylSideCatalogNumbers: jsonb("vinyl_side_catalog_numbers").$type<Record<string, string>>(),
   // Task #429 — Anticipated track count used to drive the Sell-panel
   // Publishing estimate (`N × $0.254`) BEFORE any masters have been
   // uploaded. NULL means "fall back to the live song count" — the

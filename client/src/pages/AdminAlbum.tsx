@@ -256,6 +256,10 @@ interface AlbumFull {
   shopifyPlusFulfillment?: boolean | null;
   physicalFormat?: AlbumPhysicalFormat | null;
   sellQuoteLockedAt?: string | null;
+  // Task #2583 — Per-side catalog number overrides keyed by VinylSide.
+  // Only sides where the operator has explicitly set a value appear here;
+  // unset sides fall back to the auto-generated suggestion in VinylOrderPanel.
+  vinylSideCatalogNumbers?: Record<string, string> | null;
   // Task #541 — Vinyl cut format (12_33_single / 12_33_double / 12_45 /
   // 7_45). Picked on the Tracks → Vinyl-order view; independent of
   // physicalFormat (Sell-panel SKU choice). Null until the artist picks.
@@ -1828,9 +1832,11 @@ export function AdminAlbum({
               {safeTab === "press" && allowed.has("press") && (
                 <PressPanel
                   albumId={album.id}
+                  albumTitle={album.title}
                   songs={album.songs}
                   physicalFormat={album.physicalFormat ?? null}
                   vinylFormat={(album.vinylFormat as any) ?? null}
+                  vinylSideCatalogNumbers={album.vinylSideCatalogNumbers ?? null}
                   readyToSend={completeness?.pressReadyToSend ?? false}
                   sendBlockers={completeness?.press.missing ?? []}
                   pressMode={isPress}
