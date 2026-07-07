@@ -133,15 +133,56 @@
         src: local("SF Pro Text");
     }
 
+    </style>
+    <style>
+    /* Boot splash — shown before React mounts (and replaced the instant it
+       does). Light, 50%-ghosted white GoodTunes logo on the brand navy so a
+       reload / slow cold launch reads as GoodTunes, not a blank screen.
+
+       Structure is split on purpose so the wordmark appears ONCE in a fixed
+       spot on the native iOS webview instead of drifting downward during a
+       slow cold (TestFlight) load:
+
+       - #boot-splash uses plain `inset:0` for the navy fill so it covers BOTH
+         safe-area insets (no white status-bar / home-indicator strip).
+       - #boot-splash-stage centers the logo against a CONSTANT `100vh` (the
+         full-screen large viewport). Unlike the fill's `inset:0` height, 100vh
+         does NOT grow as iOS resolves the `viewport-fit=cover` safe-area insets
+         while the remote page loads, so the centered logo stays pinned rather
+         than shifting down as the viewport settles.
+       - `aspect-ratio` reserves the image box up front so it never pops from
+         0 height when the PNG finishes downloading. */
+    #boot-splash {
+      position: fixed;
+      inset: 0;
+      background: #00062B;
+      z-index: 2147483000;
+    }
+    #boot-splash-stage {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #boot-splash-stage img {
+      width: 160px;
+      max-width: 45vw;
+      aspect-ratio: 436 / 264;
+      height: auto;
+      opacity: 0.5;
+      display: block;
+    }
     </style></head>
   <body>
     <div id="root">
-      <!-- Refresh splash: shown before React mounts (and replaced the
-           instant it does). Light, 50%-ghosted white GoodTunes logo on
-           the brand navy so a reload reads as GoodTunes, not a blank
-           screen. -->
-      <div id="boot-splash" aria-hidden="true" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#00062B;">
-        <img src="/goodtunes-logo-white-sm.png" alt="" style="width:160px;max-width:45vw;height:auto;opacity:0.5;" >
+      <div id="boot-splash" aria-hidden="true">
+        <div id="boot-splash-stage">
+          <img src="/goodtunes-logo-white-sm.png" alt="" >
+        </div>
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>
