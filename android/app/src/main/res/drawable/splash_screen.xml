@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pre-Android-12 launch window background. Instead of stretching the
-     full-screen splash.png (which flashed/letterboxed inconsistently across
-     densities), draw the solid navy brand background with the centered "G"
-     mark on top. This mirrors what the Android 12+ SplashScreen API renders
-     (windowSplashScreenBackground + windowSplashScreenAnimatedIcon) so the
-     launch experience is consistent on every OS version. -->
+<!-- Pre-Android-12 launch window background. Solid navy brand background with
+     the GoodTunes wordmark centered on top. This mirrors what the Android 12+
+     SplashScreen API renders (windowSplashScreenBackground +
+     windowSplashScreenAnimatedIcon in values-v31/styles.xml) so the launch
+     experience is consistent on every OS version. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_background" />
     <item
         android:drawable="@drawable/splash_icon"
         android:gravity="center"
-        android:width="128dp"
-        android:height="128dp" />
+        android:width="256dp"
+        android:height="155dp" />
 </layer-list>
