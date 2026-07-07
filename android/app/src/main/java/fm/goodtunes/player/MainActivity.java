@@ -10,9 +10,8 @@ public class MainActivity extends BridgeActivity {
         // Register the in-tree SecureKeyStore plugin (hardware-backed offline
         // download key + root detection) before the bridge starts.
         registerPlugin(SecureKeyStorePlugin.class);
-        // NowPlaying mirrors the web player's metadata/state/queue into an
-        // app-owned MediaSession that AutoMediaBrowserService exposes to
-        // Android Auto, and forwards Auto's transport back to JS (Task #2504).
+        // NowPlaying is a no-op stub on Android (Android Auto removed due to
+        // Play Console policy; JS bridge still calls it so it must be registered).
         registerPlugin(NowPlayingPlugin.class);
         super.onCreate(savedInstanceState);
     }

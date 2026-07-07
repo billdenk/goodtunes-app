@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Android Auto capability descriptor (Task #2504). Declares GoodTunes as a
-     media app so Android Auto surfaces it in the car media picker and binds to
-     AutoMediaBrowserService. "media" is the only use we support — no messaging
-     or other Auto templates. -->
-<automotiveApp>
-    <uses name="media" />
-</automotiveApp>

@@ -9,9 +9,6 @@ ext {
     androidxFragmentVersion = '1.6.2'
     coreSplashScreenVersion = '1.0.1'
     androidxWebkitVersion = '1.9.0'
-    // androidx.media (MediaSessionCompat + MediaBrowserServiceCompat) backs the
-    // Android Auto now-playing + browse surface (Task #2504).
-    androidxMediaVersion = '1.7.0'
     junitVersion = '4.13.2'
     androidxJunitVersion = '1.1.5'
     androidxEspressoCoreVersion = '3.5.1'

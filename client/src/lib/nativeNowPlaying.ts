@@ -18,16 +18,13 @@
  *     events. This is the reliable lock-screen path on iOS WKWebView, which is
  *     why PlayerContext gates the *web* MediaSession block off on native iOS
  *     and lets the plugin own the now-playing info instead.
- *   - Android (native): the Chromium System WebView still surfaces the web
+ *   - Android (native): the Chromium System WebView surfaces the web
  *     `navigator.mediaSession` metadata as the phone media-style notification
  *     and keeps audio alive in the background (unchanged). The in-tree
- *     `NowPlaying` plugin (`android/.../NowPlayingPlugin.java`) additionally
- *     mirrors the same metadata/state/queue into an app-owned
- *     `MediaSessionCompat` that the `AutoMediaBrowserService` exposes to
- *     Android Auto, and forwards Auto's transport back into the web player.
- *     The native session only goes active while a media browser (Android Auto
- *     / Assistant) is connected, so the phone lock screen keeps showing the
- *     single WebView card when you're not projecting.
+ *     `NowPlaying` plugin (`android/.../NowPlayingPlugin.java`) is a no-op
+ *     stub — Android Auto was removed after a Play Console policy rejection
+ *     (Auto App Quality Guidelines: Login Credentials). All plugin methods
+ *     still resolve so no JS crash occurs.
  *   - Web (any browser / PWA): no native token — every export is a no-op and the
  *     web MediaSession layer handles the mobile-web / PWA lock screen.
  *
@@ -56,8 +53,8 @@ export interface NowPlayingPlaybackState {
   duration: number;
 }
 
-/** A single browsable entry (a queued track) published to CarPlay / Android
- *  Auto so the car head-unit can show + jump around the Up Next list. */
+/** A single browsable entry (a queued track) published to CarPlay (iOS) so
+ *  the car head-unit can show + jump around the Up Next list. */
 export interface NowPlayingQueueItem {
   /** Stable id (the PlayerSong id) echoed back on a `playIndex` command. */
   id: string;
@@ -68,11 +65,11 @@ export interface NowPlayingQueueItem {
 }
 
 /** A transport command originated from the OS lock screen / Control Center or
- *  an in-car surface (CarPlay / Android Auto). */
+ *  the CarPlay in-car surface (iOS). */
 export type RemoteCommand =
   | { action: "play" | "pause" | "toggle" | "next" | "prev" | "stop" }
   | { action: "seek"; value: number }
-  /** The user tapped a row in the CarPlay / Android Auto browse list —
+  /** The user tapped a row in the CarPlay browse list —
    *  `value` is the 0-based index into the queue last published via
    *  {@link setNowPlayingQueue}. */
   | { action: "playIndex"; value: number };
@@ -155,10 +152,10 @@ export function setNowPlayingPlaybackState(state: NowPlayingPlaybackState): void
 }
 
 /**
- * Publish the current Up Next queue so CarPlay / Android Auto can render a
- * browsable list and let the driver jump to any track. `currentIndex` marks
- * the now-playing row. No-op off-native (and on native iOS this is only
- * consumed by the CarPlay scene — the lock screen ignores it). */
+ * Publish the current Up Next queue so CarPlay (iOS) can render a browsable
+ * list and let the driver jump to any track. `currentIndex` marks the
+ * now-playing row. No-op off-native (and on native iOS this is only consumed
+ * by the CarPlay scene — the lock screen ignores it). */
 export function setNowPlayingQueue(
   items: NowPlayingQueueItem[],
   currentIndex: number,
