@@ -467,47 +467,43 @@ export function OperatorShell<TabId extends string>({
                byte-identical to the main dashboard header. The entity identity
                lives in the rail + mobile top strip, so it isn't repeated here. */
             <div className="flex-shrink-0 bg-white px-4 sm:px-6 pt-6">
-              <div className={cn(maxW, "mx-auto")}>
-                <AdminPageHeader
-                  title={pageTitle}
-                  subtitle={subtitle}
-                  actions={headerActions}
-                  testId="text-operator-page-title"
-                />
-                {headerExtras && <div className="mt-4">{headerExtras}</div>}
-              </div>
+              <AdminPageHeader
+                title={pageTitle}
+                subtitle={subtitle}
+                actions={headerActions}
+                testId="text-operator-page-title"
+              />
+              {headerExtras && <div className="mt-4">{headerExtras}</div>}
             </div>
           ) : (!hideHeaderIdentity || headerExtras || headerActions) ? (
             <div className="flex-shrink-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-5">
-              <div className={cn(maxW, "mx-auto")}>
-                {!hideHeaderIdentity && (
-                  <div className="flex items-start gap-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-slate-500 text-xs uppercase tracking-wider font-semibold" data-testid="text-operator-role">
-                        {roleLabel}
-                      </p>
-                      <h1 className="text-xl font-bold text-slate-900 truncate" data-testid="text-operator-name">
-                        {name}
-                      </h1>
-                      {subtitle && (
-                        <div className="text-slate-500 text-sm mt-0.5" data-testid="text-operator-subtitle">
-                          {subtitle}
-                        </div>
-                      )}
-                    </div>
+              {!hideHeaderIdentity && (
+                <div className="flex items-start gap-4">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-slate-500 text-xs uppercase tracking-wider font-semibold" data-testid="text-operator-role">
+                      {roleLabel}
+                    </p>
+                    <h1 className="text-xl font-bold text-slate-900 truncate" data-testid="text-operator-name">
+                      {name}
+                    </h1>
+                    {subtitle && (
+                      <div className="text-slate-500 text-sm mt-0.5" data-testid="text-operator-subtitle">
+                        {subtitle}
+                      </div>
+                    )}
                   </div>
-                )}
-                {headerExtras && <div className={cn(!hideHeaderIdentity && "mt-4")}>{headerExtras}</div>}
-                {headerActions && (
-                  <div className={cn("flex flex-wrap items-center gap-2", !hideHeaderIdentity && "mt-4")}>{headerActions}</div>
-                )}
-              </div>
+                </div>
+              )}
+              {headerExtras && <div className={cn(!hideHeaderIdentity && "mt-4")}>{headerExtras}</div>}
+              {headerActions && (
+                <div className={cn("flex flex-wrap items-center gap-2", !hideHeaderIdentity && "mt-4")}>{headerActions}</div>
+              )}
             </div>
           ) : null}
 
           {/* Scrollable content area. */}
           <div className="flex-1 overflow-y-auto">
-            <div className={cn(maxW, "mx-auto w-full px-4 sm:px-6 mt-6 pb-20", spaceContent && "space-y-6")}>
+            <div className={cn("w-full px-4 sm:px-6 mt-6 pb-20", spaceContent && "space-y-6")}>
               {children}
             </div>
           </div>
