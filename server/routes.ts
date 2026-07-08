@@ -37,7 +37,7 @@ import { resolvePressIdFromCandidates } from "./lib/pressPlaceholders";
 import { findChorusStartMs, findChorusCueIndex } from "./lib/chorusFinder";
 import { planAutoGoodSyncUpdates, decideInstrumental } from "./lib/autoGoodSyncPolicy";
 import { detectExplicitLyrics } from "./lib/explicitLyrics";
-import { hasArtistShape, personShape } from "./lib/personArtistShape";
+import { hasArtistShape, personShape, promotionIsOnlyArtistSignal } from "./lib/personArtistShape";
 import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
 import { isReferralWindowActive, referralWindowEndsAt } from "@shared/referralWindow";
 import {
@@ -29176,6 +29176,70 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Person not found" });
       }
       res.json({ id, isArtistPromoted: true });
+    },
+  );
+
+  // Task #2637 — undo an accidental "promote to artist". Super-admin only.
+  // Refuses (409) unless the promotion override is the ONLY artist signal
+  // on the person — a group flag, any manual creative-credit tag, a
+  // catalog signal (artist role-scope / primary-artist album / discography
+  // row), or any per-track/per-album credit means removing the override
+  // wouldn't (and shouldn't) change their artist shape, so the demote is
+  // never a silent no-op or a way to hide a real artist.
+  app.post(
+    "/api/admin/people/:id/demote-artist",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const id = String(req.params.id);
+      const p = await storage.getPersonById(id);
+      if (!p) return res.status(404).json({ message: "Person not found" });
+      const isPromoted = !!(p as any).isArtistPromoted;
+      if (!isPromoted) {
+        return res.status(409).json({
+          message: `${p.name} has no artist-profile override to remove.`,
+        });
+      }
+      const storedRoles: string[] = Array.isArray((p as any).roles) ? (p as any).roles : [];
+      // Same probe the shape derivation runs (keep in lock-step with the
+      // GET /api/admin/people/:id shape block above).
+      const sig = await db.execute<{ has_role: boolean; has_album: boolean; has_disco: boolean; has_credit: boolean }>(sql`
+        SELECT
+          EXISTS(SELECT 1 FROM users WHERE role = 'artist' AND role_scope_id = ${id}) AS has_role,
+          EXISTS(SELECT 1 FROM albums WHERE primary_artist_id = ${id} AND deleted_at IS NULL) AS has_album,
+          EXISTS(SELECT 1 FROM person_discography WHERE person_id = ${id}) AS has_disco,
+          EXISTS(
+            SELECT 1 FROM track_writers    WHERE person_id = ${id} AND role IS NOT NULL AND role <> ''
+            UNION ALL
+            SELECT 1 FROM track_performers WHERE person_id = ${id} AND role IS NOT NULL AND role <> ''
+            UNION ALL
+            SELECT 1 FROM album_credits    WHERE person_id = ${id} AND role IS NOT NULL AND role <> ''
+          ) AS has_credit
+      `);
+      const row = ((sig as any).rows ?? [])[0];
+      const signals = {
+        isArtistPromoted: true,
+        isGroup: (p as any).isGroup,
+        manualRoles: storedRoles,
+        hasArtistCatalogSignal: !!(row?.has_role || row?.has_album || row?.has_disco),
+        hasDerivedCredit: !!row?.has_credit,
+      };
+      if (!promotionIsOnlyArtistSignal(signals)) {
+        const reasons: string[] = [];
+        if (signals.isGroup) reasons.push("this is a group");
+        if (storedRoles.some((r) => String(r ?? "").trim() !== "")) reasons.push("they carry creative-credit roles");
+        if (row?.has_role) reasons.push("an artist account is scoped to them");
+        if (row?.has_album) reasons.push("they're the primary artist on a release");
+        if (row?.has_disco) reasons.push("they have discography entries");
+        if (row?.has_credit) reasons.push("they hold per-track or per-album credits");
+        return res.status(409).json({
+          message: `Can't remove the artist profile — ${reasons.join("; ")}. Removing the override wouldn't change their artist shape.`,
+        });
+      }
+      await db.execute(sql`
+        UPDATE people SET is_artist_promoted = false WHERE id = ${id}
+      `);
+      res.json({ id, isArtistPromoted: false });
     },
   );
 

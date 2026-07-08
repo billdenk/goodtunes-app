@@ -35,6 +35,17 @@ import {
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { SiApplemusic, SiSpotify, SiTidal, SiPandora, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook, SiShopify } from "react-icons/si";
@@ -2527,7 +2538,87 @@ function OverviewPanel({
         </p>
       </div>
       <PersonShopifyPanel person={person} />
+      <RemoveArtistProfilePanel person={person} />
     </div>
+  );
+}
+
+/* ─── Remove artist profile (Task #2637) ───────────────────────────────
+ * Undo path for an accidental "Add artist profile" click. Shown ONLY when
+ * the operator promotion flag is the sole artist signal the client can
+ * see (promoted, not a group, no creative-credit roles); the server
+ * additionally refuses (409) when catalog signals exist (artist account,
+ * primary-artist album, discography, per-track/album credits), so this
+ * can never hide a real artist. Destructive → AlertDialog confirm. */
+function RemoveArtistProfilePanel({ person }: { person: PersonFull }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const eligible =
+    person.isArtistPromoted === true &&
+    !person.isGroup &&
+    !(person.roles ?? []).some((r) => String(r ?? "").trim() !== "");
+  const invalidate: (readonly unknown[])[] = [
+    ["/api/admin/people", person.id],
+    ["/api/people", person.id],
+    ["/api/people"],
+  ];
+  const demote = useMutation({
+    mutationFn: async () => apiRequest("POST", `/api/admin/people/${person.id}/demote-artist`),
+    onSuccess: () => {
+      toast({
+        title: `Artist profile removed from ${person.name}`,
+        description: "They now render as a business contact. Contact details and partner affiliations are unchanged.",
+      });
+      invalidate.forEach((k) => qc.invalidateQueries({ queryKey: k }));
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't remove artist profile", description: e?.message ?? "Try again in a moment.", variant: "destructive" }),
+  });
+  if (!eligible) return null;
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-overview-demote">
+      <div>
+        <h2 className="text-sm font-bold text-slate-900">Not actually an artist?</h2>
+        <p className="text-xs text-slate-500">
+          This person is an artist only because an operator added an artist profile — they have no
+          releases, credits, or creative roles. Removing it turns the page back into a business-contact
+          page. Contact details and partner affiliations stay intact.
+        </p>
+      </div>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+            disabled={demote.isPending}
+            data-testid="button-demote-artist"
+          >
+            {demote.isPending ? "Removing…" : "Remove artist profile"}
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {person.name}'s artist profile?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The Dashboard, Releases, Streaming, Gear, Splits, and Payouts tabs go away and the page
+              becomes a business-contact page. Their contact details, partner affiliations, and any
+              admin access are unchanged. You can re-add the artist profile later if this was wrong.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-demote-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-rose-600 text-white hover:bg-rose-700"
+              onClick={() => demote.mutate()}
+              data-testid="button-demote-confirm"
+            >
+              Remove artist profile
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </section>
   );
 }
 

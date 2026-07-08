@@ -59,3 +59,16 @@ export function hasArtistShape(s: ArtistShapeSignals): boolean {
 export function personShape(s: ArtistShapeSignals): "artist" | "contact" {
   return hasArtistShape(s) ? "artist" : "contact";
 }
+
+/**
+ * Task #2637 — is the operator "promote to artist" override the ONLY
+ * artist signal on this person? Only then is removing the artist profile
+ * a safe, honest demotion (it can never hide a real credit/catalog
+ * signal). False when the person isn't promoted at all, or when any
+ * other signal (group, manual creative role, catalog signal, derived
+ * credit) would keep them in the artist shape anyway.
+ */
+export function promotionIsOnlyArtistSignal(s: ArtistShapeSignals): boolean {
+  if (!s.isArtistPromoted) return false;
+  return !hasArtistShape({ ...s, isArtistPromoted: false });
+}

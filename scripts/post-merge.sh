@@ -9155,3 +9155,112 @@ SQL
 }
 migrate_vinyl_side_catalog_numbers dev  "${DATABASE_URL:-}"
 migrate_vinyl_side_catalog_numbers prod "${PROD_DATABASE_URL:-}"
+
+# Task #2637 — Mitch Marczewski is NOT an artist; he's an Admin of the
+# Nightbirde LLC label. One-time, marker-guarded data fix on BOTH DBs:
+#   (a) clear the accidental people.is_artist_promoted override (his ONLY
+#       artist signal — roles {}, no albums/credits/discography), and
+#   (b) ADDITIVELY grant his admin account a label membership scoped to
+#       Nightbirde LLC. NEVER via setUserRole-style legacy-column writes —
+#       that would nuke his existing manager hat (see
+#       .agents/memory/unified-identity-hat-switcher.md). We first make sure
+#       his CURRENT legacy hat is mirrored into memberships (ON CONFLICT DO
+#       NOTHING — matches the task-1036 backfill shape) so switching the DB
+#       read path on can't drop the manager hat, then upsert the label hat.
+# Person/user matched by known prod id OR email; label by known prod id OR
+# name (dev clone ids can differ). Missing rows (fresh dev clone) = honest
+# no-op for that DB. Marker-guarded so a later deliberate operator change
+# (e.g. re-promoting him) is never clobbered by a subsequent merge.
+backfill_task_2637_mitch_label_admin() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2637 Mitch label-admin fix on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_person_id varchar;
+  v_user_id   varchar;
+  v_label_id  varchar;
+BEGIN
+  IF EXISTS (SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2637_mitch_label_admin') THEN
+    RAISE NOTICE 'task-2637 fix already applied — skipping';
+    RETURN;
+  END IF;
+
+  SELECT id INTO v_person_id FROM people
+   WHERE id = '019cb95c-007d-4a64-999f-224270317a36'
+      OR lower(contact_email) = 'mitch@nightbirdefoundation.org'
+   LIMIT 1;
+  SELECT id INTO v_user_id FROM users
+   WHERE id = 'd898e62b-99fb-414c-8cc6-ce6db317b536'
+      OR lower(email) = 'mitch@nightbirdefoundation.org'
+   LIMIT 1;
+  SELECT id INTO v_label_id FROM labels
+   WHERE id = 'a175e102-24a2-4f8f-b36d-53f48858a9cf'
+      OR lower(name) = 'nightbirde llc'
+   LIMIT 1;
+
+  -- (a) He is not an artist: clear the operator promotion override.
+  IF v_person_id IS NOT NULL THEN
+    UPDATE people SET is_artist_promoted = false WHERE id = v_person_id;
+    RAISE NOTICE 'task-2637: cleared is_artist_promoted on person %', v_person_id;
+  ELSE
+    RAISE NOTICE 'task-2637: person not found — no promotion flag to clear';
+  END IF;
+
+  -- (b) Additive label-Admin grant on Nightbirde LLC.
+  IF v_user_id IS NOT NULL AND v_label_id IS NOT NULL
+     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'memberships') THEN
+    -- Mirror his CURRENT legacy hat into memberships first (no-op when the
+    -- task-1036 backfill / setUserRole dual-write already did), so the DB
+    -- read path never activates without his manager hat present.
+    INSERT INTO memberships (user_id, role, scope_kind, scope_id)
+    SELECT u.id,
+           CASE WHEN u.role = 'org' THEN 'non_profit'
+                WHEN u.role IN ('super_admin','admin','label','artist','manufacturer','fulfillment','non_profit','vendor','manager') THEN u.role
+                ELSE 'super_admin' END,
+           CASE WHEN u.role IN ('label','artist','manufacturer','fulfillment','non_profit','vendor','manager') THEN u.role ELSE NULL END,
+           u.role_scope_id
+      FROM users u
+     WHERE u.id = v_user_id AND u.role_scope_id IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM memberships m
+          WHERE m.user_id = u.id AND m.scope_id IS NOT DISTINCT FROM u.role_scope_id
+       );
+
+    INSERT INTO memberships (user_id, role, scope_kind, scope_id)
+    SELECT v_user_id, 'label', 'label', v_label_id
+     WHERE NOT EXISTS (
+       SELECT 1 FROM memberships m
+        WHERE m.user_id = v_user_id AND m.role = 'label' AND m.scope_id = v_label_id
+     );
+
+    UPDATE users SET is_admin = true WHERE id = v_user_id;
+    RAISE NOTICE 'task-2637: label-Admin membership granted (user %, label %)', v_user_id, v_label_id;
+  ELSE
+    RAISE NOTICE 'task-2637: user or label not found (user %, label %) — no grant made', v_user_id, v_label_id;
+  END IF;
+
+  INSERT INTO post_merge_data_backfills (name) VALUES ('task_2637_mitch_label_admin');
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2637 Mitch label-admin fix ok on $label"
+    echo "$out" | grep -i 'task-2637' || true
+  else
+    echo "post-merge: WARNING — task-2637 Mitch label-admin fix failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_2637_mitch_label_admin dev  "${DATABASE_URL:-}"
+backfill_task_2637_mitch_label_admin prod "${PROD_DATABASE_URL:-}"

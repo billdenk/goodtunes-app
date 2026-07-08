@@ -381,3 +381,78 @@ test("introductions: an invite row de-dupes its referred-by twin", () => {
   assert.equal(intros.length, 1);
   assert.equal(intros[0].status, "signed");
 });
+
+// ---------------------------------------------------------------------------
+// Task #2637 — demote-artist eligibility: the operator "promote to artist"
+// override may only be removed when it is the SOLE artist signal. These
+// exercise the real shared predicate the POST
+// /api/admin/people/:id/demote-artist route gates on.
+// ---------------------------------------------------------------------------
+
+import { promotionIsOnlyArtistSignal } from "./personArtistShape";
+
+test("demote: promoted with no other signal → removable", () => {
+  assert.equal(
+    promotionIsOnlyArtistSignal({ isArtistPromoted: true, manualRoles: [] }),
+    true,
+  );
+});
+
+test("demote: empty/whitespace roles don't block removal", () => {
+  assert.equal(
+    promotionIsOnlyArtistSignal({ isArtistPromoted: true, manualRoles: ["", "  "] }),
+    true,
+  );
+});
+
+test("demote: not promoted → nothing to remove", () => {
+  assert.equal(promotionIsOnlyArtistSignal({ manualRoles: [] }), false);
+  assert.equal(
+    promotionIsOnlyArtistSignal({ isArtistPromoted: false, manualRoles: [] }),
+    false,
+  );
+});
+
+test("demote: group flag blocks removal", () => {
+  assert.equal(
+    promotionIsOnlyArtistSignal({ isArtistPromoted: true, isGroup: true, manualRoles: [] }),
+    false,
+  );
+});
+
+test("demote: manual creative-credit role blocks removal", () => {
+  assert.equal(
+    promotionIsOnlyArtistSignal({ isArtistPromoted: true, manualRoles: ["Vocals"] }),
+    false,
+  );
+});
+
+test("demote: catalog signal (artist account/album/discography) blocks removal", () => {
+  assert.equal(
+    promotionIsOnlyArtistSignal({
+      isArtistPromoted: true,
+      manualRoles: [],
+      hasArtistCatalogSignal: true,
+    }),
+    false,
+  );
+});
+
+test("demote: derived per-track/album credit blocks removal", () => {
+  assert.equal(
+    promotionIsOnlyArtistSignal({
+      isArtistPromoted: true,
+      manualRoles: [],
+      hasDerivedCredit: true,
+    }),
+    false,
+  );
+});
+
+test("demote: removal flips the shape back to contact", () => {
+  // The whole point — after clearing the override the same person renders
+  // as a contact page again.
+  const base = { manualRoles: [] as string[] };
+  assert.equal(personShape({ ...base, isArtistPromoted: true }), "artist");
+  assert.equal(personShape({ ...base, isArtistPromoted: false }), "contact");
+});
