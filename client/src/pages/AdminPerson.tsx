@@ -2550,13 +2550,23 @@ function OverviewPanel({
  * additionally refuses (409) when catalog signals exist (artist account,
  * primary-artist album, discography, per-track/album credits), so this
  * can never hide a real artist. Destructive → AlertDialog confirm. */
+// Exported for the UI-predicate test (demoteArtistPanel.test.ts) — mirrors
+// the server's promotionIsOnlyArtistSignal over the CLIENT-visible signals
+// (promotion flag, group flag, manual creative-credit roles). Catalog
+// signals (releases/credits/discography/artist account) are enforced
+// server-side with a 409.
+export function demoteArtistEligible(person: Pick<PersonFull, "isArtistPromoted" | "isGroup" | "roles">): boolean {
+  return (
+    person.isArtistPromoted === true &&
+    !person.isGroup &&
+    !(person.roles ?? []).some((r) => String(r ?? "").trim() !== "")
+  );
+}
+
 function RemoveArtistProfilePanel({ person }: { person: PersonFull }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const eligible =
-    person.isArtistPromoted === true &&
-    !person.isGroup &&
-    !(person.roles ?? []).some((r) => String(r ?? "").trim() !== "");
+  const eligible = demoteArtistEligible(person);
   const invalidate: (readonly unknown[])[] = [
     ["/api/admin/people", person.id],
     ["/api/people", person.id],

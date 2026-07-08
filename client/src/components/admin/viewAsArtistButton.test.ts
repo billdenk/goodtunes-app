@@ -215,3 +215,49 @@ test("artist-shape person + non-super admin → the button is hidden", async () 
   );
   await cleanup();
 });
+
+// ── Task #2637 — demote-artist UI eligibility predicate ──────────────
+//
+// RemoveArtistProfilePanel on the artist-shape Overview renders exactly when
+// `demoteArtistEligible(person)` holds: the operator promotion flag is the
+// only CLIENT-visible artist signal (not a group, no non-empty creative
+// roles). Catalog signals are enforced server-side with a 409 — see
+// server/demoteArtist.routes.db.test.ts.
+
+const { demoteArtistEligible } = await import("../../pages/AdminPerson");
+
+test("demoteArtistEligible: promoted, no roles, not a group → eligible", () => {
+  assert.equal(
+    demoteArtistEligible(makePerson({ isArtistPromoted: true })),
+    true,
+  );
+});
+
+test("demoteArtistEligible: empty/whitespace roles don't block", () => {
+  assert.equal(
+    demoteArtistEligible(
+      makePerson({ isArtistPromoted: true, roles: ["", "  "] }),
+    ),
+    true,
+  );
+});
+
+test("demoteArtistEligible: not promoted → hidden", () => {
+  assert.equal(demoteArtistEligible(makePerson()), false);
+});
+
+test("demoteArtistEligible: a creative-credit role → hidden", () => {
+  assert.equal(
+    demoteArtistEligible(
+      makePerson({ isArtistPromoted: true, roles: ["Vocals"] }),
+    ),
+    false,
+  );
+});
+
+test("demoteArtistEligible: a group → hidden", () => {
+  assert.equal(
+    demoteArtistEligible(makePerson({ isArtistPromoted: true, isGroup: true })),
+    false,
+  );
+});
