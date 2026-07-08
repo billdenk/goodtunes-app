@@ -12,21 +12,29 @@ Device/simulator CarPlay testing works under a **development** profile with just
 those committed files. But it is a **restricted** entitlement — NOT a normal
 capability tick-box.
 
-**Rule:** App Store / TestFlight (distribution) signing will FAIL until Apple
-grants CarPlay-audio on the App ID (`Io.GoGoods.music`, Apple ID 6448246869).
+**Status (2026-07-07): GRANTED.** Apple approved the CarPlay-audio managed
+entitlement on 2026-07-07 (email to admin@gogoods.io confirmed). Two portal
+steps remain before a distribution build signs cleanly:
+1. Developer portal → Identifiers → `Io.GoGoods.music` → tick **CarPlay** → Save.
+2. Portal → Profiles → delete stale App Store profiles for `Io.GoGoods.music`.
+3. Run a Codemagic `ios-distribution` (or Xcode archive) build — signs cleanly.
+
+**Rule:** App Store / TestFlight (distribution) signing will FAIL until the
+capability is ticked on the App ID AND stale profiles (minted before the grant)
+are deleted. The `--create` step mints a fresh profile that carries CarPlay.
 
 **Why:** Apple gatekeeps CarPlay behind a manual request form
-(developer.apple.com/contact/carplay/, choose *CarPlay audio app*). Only after
-approval does a "CarPlay" capability appear in the App ID's capability list to
-tick; only then can a distribution provisioning profile carry the entitlement.
-This is a code-side-complete / operator-blocked task: nothing in the repo can
-grant it.
+(developer.apple.com/contact/carplay/). Only after approval does a "CarPlay"
+capability appear in the App ID's capability list to tick; only then can a
+distribution provisioning profile carry the entitlement.
 
 **How to apply:** When a CarPlay build fails signing (or the CarPlay scene won't
 load on a distribution build), don't touch code — it's the Apple-portal grant +
+<<<<<<< HEAD
 profile regen. After Apple grants it, delete stale App Store profiles for the
 App ID so the pipeline's `--create` mints a fresh profile that carries CarPlay
-(a cached profile without it keeps failing). Operator runbook: `docs/codemagic-builds.md` step 3.
+(a cached profile without it keeps failing). Operator runbook: `docs/codemagic-builds.md` step 3,
+`docs/native-builds.md` iOS CarPlay section.
 
 **Pipeline no longer blocks on the grant (Task #2554):** codemagic.yaml's
 "Gate CarPlay out of the distribution archive" step (in the shared iOS scripts,
