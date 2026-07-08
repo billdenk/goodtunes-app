@@ -154,6 +154,10 @@ function ColumnHeader({
 }
 
 export function CarPlayAutoCanvas() {
+  // ?shift=N — screenshot-slicing aid: shifts the content up N px so a
+  // fixed-viewport screenshot service can capture the full page in slices.
+  const shift = Number(new URLSearchParams(window.location.search).get("shift") || 0);
+  if (typeof document !== "undefined") document.body.style.background = CANVAS_BG;
   return (
     <div
       style={{
@@ -161,6 +165,7 @@ export function CarPlayAutoCanvas() {
         background: CANVAS_BG,
         fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif",
         padding: "48px 48px 80px",
+        marginTop: shift ? -shift : undefined,
       }}
     >
       {/* Page header */}
