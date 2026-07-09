@@ -343,11 +343,32 @@ export async function albumEarnings(albumId: string, ctx: AdminReportContext) {
     gte(orders.createdAt, ctx.from),
     lte(orders.createdAt, ctx.to),
   ];
-  const ord = await db.select({ id: orders.id, totalCents: orders.totalCents }).from(orders).where(and(...paidFilters));
+  const ord = await db
+    .select({
+      id: orders.id,
+      totalCents: orders.totalCents,
+      shippingChargedCents: orders.shippingChargedCents,
+      shippingMarkupCents: orders.shippingMarkupCents,
+      taxCents: orders.taxCents,
+    })
+    .from(orders)
+    .where(and(...paidFilters));
   const orderIds = ord.map((o) => o.id);
   const orderCount = ord.length;
   const grossCents = ord.reduce((s, o) => s + o.totalCents, 0);
   const stripeFeeCents = ord.reduce((s, o) => s + cardFeeCents(o.totalCents), 0);
+  // Task #2640 — Bill: shipping and sales tax are collected to cover a
+  // real, separate obligation (postage/fulfillment cost, tax remittance),
+  // never artist/vinyl money. Back both out of "gross sales" before any
+  // artist/foundation split so they can't leak into the vinyl-funding
+  // waterfall. `grossCents` above still matches the dashboard's top-line
+  // "Gross sales" KPI (fan-charged total, tax+shipping inclusive) for
+  // reconciliation; `merchandiseGrossCents` is the true starting point
+  // for this breakdown.
+  const shippingChargedCents = ord.reduce((s, o) => s + (o.shippingChargedCents ?? 0), 0);
+  const shippingMarkupCents = ord.reduce((s, o) => s + (o.shippingMarkupCents ?? 0), 0);
+  const taxCents = ord.reduce((s, o) => s + (o.taxCents ?? 0), 0);
+  const merchandiseGrossCents = grossCents - shippingChargedCents - taxCents;
 
   const copies = orderIds.length
     ? await db.select({ signedCert: orderCopies.signedCert }).from(orderCopies).where(inArray(orderCopies.orderId, orderIds))
@@ -412,10 +433,12 @@ export async function albumEarnings(albumId: string, ctx: AdminReportContext) {
   const foundationOrgNames = Array.from(new Set([...gohOrgNames, ...earmarkOrgNames]));
   const foundationTotalCents = giftOfHopeCents + earmarkCents;
 
-  // Artist-fund ledger: gross minus what was ever the foundation's money
-  // in the first place (Gift of Hope is a pass-through donation, never
-  // artist revenue), then minus processing/platform/cert costs.
-  const artistGrossCents = grossCents - giftOfHopeCents;
+  // Artist-fund ledger: start from merchandise gross (shipping + tax
+  // already excluded above — neither ever belonged to the artist or the
+  // vinyl fund), subtract what was ever the foundation's money in the
+  // first place (Gift of Hope is a pass-through donation, never artist
+  // revenue), then minus processing/platform/cert costs.
+  const artistGrossCents = merchandiseGrossCents - giftOfHopeCents;
   const netTowardVinylCents = artistGrossCents - stripeFeeCents - platformFeeCents - certCostCents;
   const netWithFoundationCents = netTowardVinylCents + foundationTotalCents;
 
@@ -425,6 +448,10 @@ export async function albumEarnings(albumId: string, ctx: AdminReportContext) {
     units,
     signedCerts,
     grossCents,
+    shippingChargedCents,
+    shippingMarkupCents,
+    taxCents,
+    merchandiseGrossCents,
     giftOfHopeCents,
     artistGrossCents,
     stripeFeeCents,

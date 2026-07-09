@@ -1135,14 +1135,25 @@ function OverviewTab({ qs }: { qs: string }) {
 }
 
 function RevenueTab({ qs }: { qs: string }) {
+  const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const { data, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ["/api/admin/reports/revenue", qs],
     queryFn: () => fetchJson(`/api/admin/reports/revenue?${qs}`),
   });
   if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
   if (isLoading || !data) return <LoadingState />;
+  if (selectedAlbumId) {
+    return <AlbumEarningsPanel albumId={selectedAlbumId} qs={qs} onBack={() => setSelectedAlbumId(null)} />;
+  }
   return (
     <div className="space-y-4">
+      <BreakdownTable
+        title="Gross sales by album"
+        rows={data.byAlbum.map((r: any) => ({ key: r.id, name: r.name, units: r.units, cents: r.cents }))}
+        csv={`/api/admin/reports/revenue.csv?dim=album&${qs}`}
+        onRowClick={(key) => setSelectedAlbumId(key)}
+        drillHint="View payout breakdown"
+      />
       <BreakdownTable title="Revenue by SKU kind" rows={data.bySku.map((r: any) => ({ key: r.kind, name: r.kind, units: r.units, cents: r.cents }))} csv={`/api/admin/reports/revenue.csv?dim=sku&${qs}`} />
       <BreakdownTable title="Top labels by revenue" rows={data.byLabel.map((r: any) => ({ key: r.id, name: r.name, units: r.units, cents: r.cents }))} csv={`/api/admin/reports/revenue.csv?dim=label&${qs}`} />
       <BreakdownTable title="Top artists by revenue" rows={data.byArtist.map((r: any) => ({ key: r.id, name: r.name, units: r.units, cents: r.cents }))} csv={`/api/admin/reports/revenue.csv?dim=artist&${qs}`} />
@@ -1151,7 +1162,19 @@ function RevenueTab({ qs }: { qs: string }) {
   );
 }
 
-function BreakdownTable({ title, rows, csv }: { title: string; rows: Array<{ key: string; name: string; units: number; cents: number }>; csv: string }) {
+function BreakdownTable({
+  title,
+  rows,
+  csv,
+  onRowClick,
+  drillHint,
+}: {
+  title: string;
+  rows: Array<{ key: string; name: string; units: number; cents: number }>;
+  csv: string;
+  onRowClick?: (key: string) => void;
+  drillHint?: string;
+}) {
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
@@ -1167,20 +1190,145 @@ function BreakdownTable({ title, rows, csv }: { title: string; rows: Array<{ key
               <th className="py-2 font-bold">Name</th>
               <th className="py-2 font-bold text-right">Units</th>
               <th className="py-2 font-bold text-right">Revenue</th>
+              {onRowClick && <th className="py-2 font-bold text-right"></th>}
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.key} className="border-b border-slate-100" data-testid={`row-breakdown-${r.key}`}>
+              <tr
+                key={r.key}
+                className={`border-b border-slate-100 ${onRowClick ? "cursor-pointer hover:bg-slate-50" : ""}`}
+                data-testid={`row-breakdown-${r.key}`}
+                onClick={onRowClick ? () => onRowClick(r.key) : undefined}
+              >
                 <td className="py-2.5 text-slate-900 font-medium">{r.name || "—"}</td>
                 <td className="py-2.5 text-slate-700 text-right tabular-nums">{r.units.toLocaleString()}</td>
                 <td className="py-2.5 text-slate-900 text-right tabular-nums font-medium">{fmtUsd(r.cents)}</td>
+                {onRowClick && (
+                  <td className="py-2.5 text-right">
+                    <span className="inline-flex items-center gap-1 text-xs text-[var(--brand-blue)] font-medium">
+                      {drillHint}
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </span>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       )}
     </Card>
+  );
+}
+
+function EarningsLine({
+  label,
+  cents,
+  sub,
+  negative,
+  strong,
+  testId,
+}: {
+  label: string;
+  cents: number;
+  sub?: string;
+  negative?: boolean;
+  strong?: boolean;
+  testId: string;
+}) {
+  return (
+    <div className={`flex items-start justify-between py-2 ${strong ? "border-t border-slate-200 pt-3 mt-1" : ""}`}>
+      <div>
+        <div className={`text-sm ${strong ? "font-semibold text-slate-900" : "text-slate-700"}`}>{label}</div>
+        {sub && <div className="text-xs text-slate-400 mt-0.5">{sub}</div>}
+      </div>
+      <div className={`tabular-nums ${strong ? "text-base font-bold text-slate-900" : "text-sm text-slate-900"}`} data-testid={testId}>
+        {negative ? "−" : ""}{fmtUsd(Math.abs(cents))}
+      </div>
+    </div>
+  );
+}
+
+function AlbumEarningsPanel({ albumId, qs, onBack }: { albumId: string; qs: string; onBack: () => void }) {
+  const { data, isLoading, isError, error, refetch } = useQuery<any>({
+    queryKey: ["/api/admin/reports/albums", albumId, "earnings", qs],
+    queryFn: () => fetchJson(`/api/admin/reports/albums/${albumId}/earnings?${qs}`),
+  });
+  return (
+    <div className="space-y-4">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"
+        data-testid="button-back-to-revenue"
+      >
+        <ChevronDown className="w-3.5 h-3.5 rotate-90" />
+        Back to revenue
+      </button>
+      {isError && <ErrorState error={error} onRetry={() => refetch()} />}
+      {(isLoading || !data) && !isError && <LoadingState />}
+      {data && (
+        <>
+          <Card>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-base font-semibold text-slate-900" data-testid="text-earnings-album-title">
+                {data.album.title} — {data.album.artist}
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">
+              {data.units.toLocaleString()} units across {data.orderCount.toLocaleString()} orders · {data.signedCerts.toLocaleString()} signed certs
+            </p>
+
+            <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">What fans paid</div>
+            <EarningsLine label="Gross sales (fan-charged total)" cents={data.grossCents} testId="text-earnings-gross" />
+            <EarningsLine label="Sales tax collected" sub="remitted to state, not artist funds" cents={data.taxCents} negative testId="text-earnings-tax" />
+            <EarningsLine
+              label="Shipping collected"
+              sub={`covers fulfillment/postage${data.shippingMarkupCents ? ` (incl. ${fmtUsd(data.shippingMarkupCents)} platform markup)` : ""}, not artist funds`}
+              cents={data.shippingChargedCents}
+              negative
+              testId="text-earnings-shipping"
+            />
+            <EarningsLine label="Merchandise gross" cents={data.merchandiseGrossCents} strong testId="text-earnings-merch-gross" />
+
+            <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1 mt-5">Artist funds toward vinyl</div>
+            {data.giftOfHopeCents > 0 && (
+              <EarningsLine
+                label="Gift of Hope donations"
+                sub={`pass-through to ${data.foundationOrgNames?.join(", ") || "the Foundation"} — never artist revenue`}
+                cents={data.giftOfHopeCents}
+                negative
+                testId="text-earnings-goh"
+              />
+            )}
+            <EarningsLine label="Artist merchandise gross" cents={data.artistGrossCents} testId="text-earnings-artist-gross" />
+            <EarningsLine label="Stripe processing fee" cents={data.stripeFeeCents} negative testId="text-earnings-stripe-fee" />
+            <EarningsLine label="GoodTunes platform fee" sub={`$4.50 × ${data.units.toLocaleString()} units`} cents={data.platformFeeCents} negative testId="text-earnings-platform-fee" />
+            <EarningsLine
+              label="GoodDeed cert cost"
+              sub={`${data.signedCerts.toLocaleString()} signed certs × ${fmtUsd(data.certPerUnitCents)}`}
+              cents={data.certCostCents}
+              negative
+              testId="text-earnings-cert-cost"
+            />
+            <EarningsLine label="Net toward vinyl (foundation money excluded)" cents={data.netTowardVinylCents} strong testId="text-earnings-net-toward-vinyl" />
+
+            {data.foundationTotalCents > 0 && (
+              <>
+                <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1 mt-5">With foundation money included</div>
+                <EarningsLine
+                  label="Foundation total"
+                  sub={`Gift of Hope ${fmtUsd(data.giftOfHopeCents)} + $1/unit earmark ${fmtUsd(data.earmarkCents)}`}
+                  cents={data.foundationTotalCents}
+                  testId="text-earnings-foundation-total"
+                />
+                <EarningsLine label="Net toward vinyl (with foundation money)" cents={data.netWithFoundationCents} strong testId="text-earnings-net-with-foundation" />
+              </>
+            )}
+          </Card>
+        </>
+      )}
+    </div>
   );
 }
 

@@ -153,3 +153,4 @@
 - [Album-media blurred preview](album-media-blurred-preview.md) — unowned bonus media serves a server-side blurred version via `/api/album-media/:kind/:id/preview` (CSS blur is insufficient/leakable). Owners and admins get the master.
 - [Bulk-revoke grants](bulk-revoke-grants.md) — super-admin can select multiple free-access grants on the Customers tab and revoke them in one action.
 - [Legacy ID resolution](legacy-id-resolution.md) — lookups by legacy goGoods ID are supported across all core entities (Album, Person, Order) to aid migration and support.
+- [orders.total_cents includes tax+shipping](order-total-includes-tax-shipping.md) — any artist/vinyl-fund report must back tax_cents + shipping_charged_cents out of gross before computing net; only the top-line Gross Sales KPI stays inclusive.
