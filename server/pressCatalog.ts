@@ -2357,6 +2357,24 @@ export function registerPressCatalogRoutes(
     res.json({ ok: true });
   });
 
+  // ── 12" LP ↔ 12" Double LP color mirroring ─────────────────────────
+  // A press that offers a color on one 12" disc offers it on two, so any
+  // color add / edit / remove on a 12_lp or 12_double tier is mirrored to
+  // the same-NAMED tier on the sibling 12" format (colors are matched by
+  // display name — the same name-keying the SKU snapshots use). Tiers the
+  // press curates differently simply won't have a same-named sibling, so
+  // nothing is touched. Best-effort: a missing sibling tier is a no-op.
+  const TWELVE_INCH_SIBLING: Record<string, string> = { "12_lp": "12_double", "12_double": "12_lp" };
+  async function siblingTwelveInchTier(tier: { pressId: string; format: string; name: string }) {
+    const sibFormat = TWELVE_INCH_SIBLING[tier.format];
+    if (!sibFormat) return null;
+    const [sib] = await db
+      .select()
+      .from(pressColorTiers)
+      .where(and(eq(pressColorTiers.pressId, tier.pressId), eq(pressColorTiers.format, sibFormat), eq(pressColorTiers.name, tier.name)));
+    return sib ?? null;
+  }
+
   // Create color under a tier.
   app.post("/api/admin/manufacturers/:id/catalog/tiers/:tierId/colors", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
@@ -2367,16 +2385,36 @@ export function registerPressCatalogRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid color" });
     const siblings = await db.select().from(pressColors).where(eq(pressColors.tierId, tierId));
     const position = parsed.data.position ?? siblings.length;
-    const [row] = await db
-      .insert(pressColors)
-      .values({
-        tierId,
-        name: parsed.data.name,
-        swatchHex: parsed.data.swatchHex ?? null,
-        swatchImageUrl: parsed.data.swatchImageUrl ?? null,
-        position,
-      })
-      .returning();
+    const sib = await siblingTwelveInchTier(tier);
+    // Primary insert + sibling mirror commit together (all-or-nothing),
+    // so the two 12" formats can't drift on a partial failure.
+    const row = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(pressColors)
+        .values({
+          tierId,
+          name: parsed.data.name,
+          swatchHex: parsed.data.swatchHex ?? null,
+          swatchImageUrl: parsed.data.swatchImageUrl ?? null,
+          position,
+        })
+        .returning();
+      if (sib) {
+        // Skip if a color with this name already exists on the sibling.
+        const sibColors = await tx.select().from(pressColors).where(eq(pressColors.tierId, sib.id));
+        const exists = sibColors.some((c) => c.name.trim().toLowerCase() === parsed.data.name.trim().toLowerCase());
+        if (!exists) {
+          await tx.insert(pressColors).values({
+            tierId: sib.id,
+            name: parsed.data.name,
+            swatchHex: parsed.data.swatchHex ?? null,
+            swatchImageUrl: parsed.data.swatchImageUrl ?? null,
+            position: sibColors.length,
+          });
+        }
+      }
+      return created;
+    });
     res.json(row);
   });
 
@@ -2397,7 +2435,44 @@ export function registerPressCatalogRoutes(
     if (parsed.data.swatchHex !== undefined) (patch as any).swatchHex = parsed.data.swatchHex;
     if (parsed.data.swatchImageUrl !== undefined) (patch as any).swatchImageUrl = parsed.data.swatchImageUrl;
     if (parsed.data.position !== undefined) (patch as any).position = parsed.data.position;
-    const [row] = await db.update(pressColors).set(patch as any).where(eq(pressColors.id, colorId)).returning();
+    const sib = await siblingTwelveInchTier(tier);
+    // Rename-collision guard: renaming must stay mirrorable, so if the
+    // sibling 12" tier already carries a different color with the target
+    // name, reject up front (instead of silently letting the two formats'
+    // names diverge).
+    if (sib && parsed.data.name !== undefined) {
+      const target = parsed.data.name.trim().toLowerCase();
+      const current = color.name.trim().toLowerCase();
+      if (target !== current) {
+        const sibColors = await db.select().from(pressColors).where(eq(pressColors.tierId, sib.id));
+        if (sibColors.some((c) => c.name.trim().toLowerCase() === target)) {
+          return res.status(409).json({
+            message: `The ${sib.format === "12_double" ? '12" Double LP' : '12" LP'} ${sib.name} group already has a color named "${parsed.data.name}" — rename or remove it there first.`,
+          });
+        }
+      }
+    }
+    // Primary update + sibling mirror commit together (all-or-nothing).
+    // Mirrors name / swatch edits (not position — ordering is per-tier)
+    // to the same-named color on the sibling 12" format's tier, matched
+    // deterministically (lowest position, then id) if names ever duplicate.
+    const row = await db.transaction(async (tx) => {
+      const [updated] = await tx.update(pressColors).set(patch as any).where(eq(pressColors.id, colorId)).returning();
+      if (sib) {
+        const sibPatch: Partial<PressColor> = {};
+        if (parsed.data.name !== undefined) (sibPatch as any).name = parsed.data.name;
+        if (parsed.data.swatchHex !== undefined) (sibPatch as any).swatchHex = parsed.data.swatchHex;
+        if (parsed.data.swatchImageUrl !== undefined) (sibPatch as any).swatchImageUrl = parsed.data.swatchImageUrl;
+        if (Object.keys(sibPatch).length > 0) {
+          const sibColors = await tx.select().from(pressColors).where(eq(pressColors.tierId, sib.id));
+          const match = sibColors
+            .filter((c) => c.name.trim().toLowerCase() === color.name.trim().toLowerCase())
+            .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))[0];
+          if (match) await tx.update(pressColors).set(sibPatch as any).where(eq(pressColors.id, match.id));
+        }
+      }
+      return updated;
+    });
     res.json(row);
   });
 
@@ -2409,7 +2484,18 @@ export function registerPressCatalogRoutes(
     if (!color) return res.json({ ok: true });
     const [tier] = await db.select().from(pressColorTiers).where(eq(pressColorTiers.id, color.tierId));
     if (!tier || tier.pressId !== pressId) return res.status(403).json({ message: "Forbidden" });
-    await db.delete(pressColors).where(eq(pressColors.id, colorId));
+    const sib = await siblingTwelveInchTier(tier);
+    // Primary delete + sibling mirror commit together (all-or-nothing).
+    await db.transaction(async (tx) => {
+      await tx.delete(pressColors).where(eq(pressColors.id, colorId));
+      if (sib) {
+        // Delete every same-named sibling color (handles pre-existing
+        // duplicate names deterministically — removal means removal).
+        const sibColors = await tx.select().from(pressColors).where(eq(pressColors.tierId, sib.id));
+        const matches = sibColors.filter((c) => c.name.trim().toLowerCase() === color.name.trim().toLowerCase());
+        for (const m of matches) await tx.delete(pressColors).where(eq(pressColors.id, m.id));
+      }
+    });
     res.json({ ok: true });
   });
 
