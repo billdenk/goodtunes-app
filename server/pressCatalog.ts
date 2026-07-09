@@ -2432,6 +2432,124 @@ export function registerPressCatalogRoutes(
     return sib ?? null;
   }
 
+  // One-time reconcile of pre-existing 12" LP vs 12" Double LP catalog
+  // differences. Union-merge in BOTH directions: groups that exist on only
+  // one format are created on the other (with all their colors copied);
+  // colors missing inside a same-named group pair are copied over; a
+  // same-named color whose swatch is empty on one side inherits the other
+  // side's swatch. Price ladders, ordering, and swatch CONFLICTS (both
+  // sides set but different) are never touched. Body { apply: true }
+  // performs the writes; otherwise this is a read-only preview.
+  app.post("/api/admin/manufacturers/:id/catalog/sync-twelve-inch", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const apply = req.body?.apply === true;
+    const norm = (s: string) => s.trim().toLowerCase();
+    const fmts = await db.select().from(pressFormats).where(eq(pressFormats.pressId, pressId));
+    const hasLp = fmts.some((f) => f.format === "12_lp");
+    const hasDbl = fmts.some((f) => f.format === "12_double");
+    if (!hasLp || !hasDbl) {
+      return res.status(400).json({ message: 'This press needs both 12" LP and 12" Double LP enabled to sync them.' });
+    }
+    const tiers = await db
+      .select()
+      .from(pressColorTiers)
+      .where(and(eq(pressColorTiers.pressId, pressId), inArray(pressColorTiers.format, ["12_lp", "12_double"])));
+    const tierIds = tiers.map((t) => t.id);
+    const colors = tierIds.length
+      ? await db.select().from(pressColors).where(inArray(pressColors.tierId, tierIds))
+      : [];
+    const colorsByTier = new Map<string, PressColor[]>();
+    for (const c of colors) {
+      const list = colorsByTier.get(c.tierId) ?? [];
+      list.push(c);
+      colorsByTier.set(c.tierId, list);
+    }
+    const FORMAT_LABEL: Record<string, string> = { "12_lp": '12" LP', "12_double": '12" Double LP' };
+    type GroupCreate = { toFormat: string; name: string; colorNames: string[]; fromTierId: string };
+    type ColorCopy = { toFormat: string; groupName: string; colorName: string; fromColorId: string; toTierId: string };
+    type SwatchFill = { toFormat: string; groupName: string; colorName: string; toColorId: string; fromColorId: string };
+    const groupCreates: GroupCreate[] = [];
+    const colorCopies: ColorCopy[] = [];
+    const swatchFills: SwatchFill[] = [];
+    for (const [from, to] of [["12_lp", "12_double"], ["12_double", "12_lp"]] as const) {
+      const fromTiers = tiers.filter((t) => t.format === from);
+      const toTiers = tiers.filter((t) => t.format === to);
+      for (const ft of fromTiers) {
+        const tt = toTiers.find((t) => norm(t.name) === norm(ft.name));
+        const fromColors = colorsByTier.get(ft.id) ?? [];
+        if (!tt) {
+          groupCreates.push({ toFormat: to, name: ft.name, colorNames: fromColors.map((c) => c.name), fromTierId: ft.id });
+          continue;
+        }
+        const toColors = colorsByTier.get(tt.id) ?? [];
+        for (const fc of fromColors) {
+          const match = toColors
+            .filter((c) => norm(c.name) === norm(fc.name))
+            .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))[0];
+          if (!match) {
+            colorCopies.push({ toFormat: to, groupName: ft.name, colorName: fc.name, fromColorId: fc.id, toTierId: tt.id });
+          } else if (!match.swatchHex && !match.swatchImageUrl && (fc.swatchHex || fc.swatchImageUrl)) {
+            swatchFills.push({ toFormat: to, groupName: ft.name, colorName: fc.name, toColorId: match.id, fromColorId: fc.id });
+          }
+        }
+      }
+    }
+    const plan = {
+      hasChanges: groupCreates.length + colorCopies.length + swatchFills.length > 0,
+      groupCreates: groupCreates.map((g) => ({ toFormat: FORMAT_LABEL[g.toFormat], name: g.name, colorCount: g.colorNames.length })),
+      colorCopies: colorCopies.map((c) => ({ toFormat: FORMAT_LABEL[c.toFormat], groupName: c.groupName, colorName: c.colorName })),
+      swatchFills: swatchFills.map((s) => ({ toFormat: FORMAT_LABEL[s.toFormat], groupName: s.groupName, colorName: s.colorName })),
+    };
+    if (!apply) return res.json({ ...plan, applied: false });
+    const colorById = new Map(colors.map((c) => [c.id, c]));
+    // Concurrency safety: neither press_color_tiers nor press_colors carry a
+    // unique name index, so a concurrent apply (or a mirroring write racing
+    // this one) could double-insert. Serialize on a per-press advisory lock
+    // for the transaction, then RE-CHECK "still missing" inside the
+    // transaction before every insert — the plan above is only a proposal.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"sync12:" + pressId}))`);
+      for (const g of groupCreates) {
+        const sibTiers = await tx.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, g.toFormat)));
+        if (sibTiers.some((t) => norm(t.name) === norm(g.name))) continue; // created meanwhile
+        const [created] = await tx
+          .insert(pressColorTiers)
+          .values({ pressId, format: g.toFormat, name: g.name, position: sibTiers.length, priceLadder: [] })
+          .returning();
+        const srcColors = (colorsByTier.get(g.fromTierId) ?? []).sort((a, b) => a.position - b.position);
+        for (let i = 0; i < srcColors.length; i++) {
+          const c = srcColors[i];
+          await tx.insert(pressColors).values({
+            tierId: created.id,
+            name: c.name,
+            swatchHex: c.swatchHex,
+            swatchImageUrl: c.swatchImageUrl,
+            position: i,
+          });
+        }
+      }
+      for (const c of colorCopies) {
+        const src = colorById.get(c.fromColorId)!;
+        const existing = await tx.select().from(pressColors).where(eq(pressColors.tierId, c.toTierId));
+        if (existing.some((e) => norm(e.name) === norm(src.name))) continue; // added meanwhile
+        await tx.insert(pressColors).values({
+          tierId: c.toTierId,
+          name: src.name,
+          swatchHex: src.swatchHex,
+          swatchImageUrl: src.swatchImageUrl,
+          position: existing.length,
+        });
+      }
+      for (const s of swatchFills) {
+        const src = colorById.get(s.fromColorId)!;
+        const [cur] = await tx.select().from(pressColors).where(eq(pressColors.id, s.toColorId));
+        if (!cur || cur.swatchHex || cur.swatchImageUrl) continue; // filled/removed meanwhile
+        await tx.update(pressColors).set({ swatchHex: src.swatchHex, swatchImageUrl: src.swatchImageUrl }).where(eq(pressColors.id, s.toColorId));
+      }
+    });
+    res.json({ ...plan, applied: true });
+  });
+
   // Create color under a tier.
   app.post("/api/admin/manufacturers/:id/catalog/tiers/:tierId/colors", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);

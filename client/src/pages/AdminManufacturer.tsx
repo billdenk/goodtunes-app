@@ -1924,6 +1924,14 @@ function MrpImportDialog({
 // edited CSV, validates every row, shows an added / updated / removed
 // preview, then applies it transactionally on confirm. Round-trips
 // cleanly — re-uploading an unchanged export reports no changes.
+type TwelveInchSyncPlan = {
+  hasChanges: boolean;
+  applied: boolean;
+  groupCreates: { toFormat: string; name: string; colorCount: number }[];
+  colorCopies: { toFormat: string; groupName: string; colorName: string }[];
+  swatchFills: { toFormat: string; groupName: string; colorName: string }[];
+};
+
 type CatalogCsvPlan = {
   errors: { rowNum: number; message: string }[];
   colorGroups: { added: string[]; removed: string[] };
@@ -1999,6 +2007,41 @@ function CatalogCsvButtons({
   const [plan, setPlan] = useState<CatalogCsvPlan | null>(null);
   const [exporting, setExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncPlan, setSyncPlan] = useState<TwelveInchSyncPlan | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const syncPreviewMut = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/sync-twelve-inch`, { apply: false });
+      return (await r.json()) as TwelveInchSyncPlan;
+    },
+    onSuccess: (p) => setSyncPlan(p),
+    onError: (e: any) => setSyncError(e?.message ?? "Couldn't check the 12\" formats."),
+  });
+
+  const syncApplyMut = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/sync-twelve-inch`, { apply: true });
+      return (await r.json()) as TwelveInchSyncPlan;
+    },
+    onSuccess: (p) => {
+      onApplied();
+      setSyncOpen(false);
+      toast({
+        title: '12" formats synced',
+        description: `${p.groupCreates.length} groups created · ${p.colorCopies.length} colors copied · ${p.swatchFills.length} swatches filled`,
+      });
+    },
+    onError: (e: any) => toast({ title: "Sync failed", description: e?.message, variant: "destructive" }),
+  });
+
+  function openSync() {
+    setSyncPlan(null);
+    setSyncError(null);
+    setSyncOpen(true);
+    syncPreviewMut.mutate();
+  }
 
   useEffect(() => {
     if (!open) {
@@ -2127,8 +2170,74 @@ function CatalogCsvButtons({
               Upload CSV
             </DropdownMenuItem>
           )}
+          {canEdit && (
+            <DropdownMenuItem
+              onSelect={openSync}
+              data-testid="button-catalog-sync-12in"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Sync 12&quot; formats
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <Dialog open={syncOpen} onOpenChange={setSyncOpen}>
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto" data-testid="dialog-sync-12in">
+          <DialogHeader>
+            <DialogTitle>Sync 12&quot; formats</DialogTitle>
+            <DialogDescription>
+              Reconciles differences between the 12&quot; LP and 12&quot; Double LP color catalogs in both
+              directions: missing color groups and colors are copied over, and empty swatches inherit
+              the other format&apos;s swatch. Pricing, ordering, and swatches that differ on both sides
+              are never changed. Review the preview before applying.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {syncPreviewMut.isPending && (
+              <div className="text-sm text-slate-600" data-testid="sync-12in-loading">Comparing the two 12&quot; catalogs…</div>
+            )}
+            {syncError && (
+              <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" data-testid="sync-12in-error">
+                {syncError}
+              </div>
+            )}
+            {syncPlan && !syncPlan.hasChanges && (
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600" data-testid="sync-12in-nochange">
+                Already in sync — the two 12&quot; formats match.
+              </div>
+            )}
+            {syncPlan && syncPlan.hasChanges && (
+              <div className="space-y-2" data-testid="sync-12in-plan">
+                <CatalogCsvPlanSection
+                  title="Color groups to create"
+                  added={syncPlan.groupCreates.map((g) => `${g.name} → ${g.toFormat} (${g.colorCount} colors)`)}
+                />
+                <CatalogCsvPlanSection
+                  title="Colors to copy"
+                  added={syncPlan.colorCopies.map((c) => `${c.groupName} — ${c.colorName} → ${c.toFormat}`)}
+                />
+                <CatalogCsvPlanSection
+                  title="Swatches to fill"
+                  updated={syncPlan.swatchFills.map((s) => `${s.groupName} — ${s.colorName} → ${s.toFormat}`)}
+                />
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <Button variant="outline" onClick={() => setSyncOpen(false)} data-testid="button-sync-12in-close">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => syncApplyMut.mutate()}
+              disabled={!syncPlan?.hasChanges || syncPreviewMut.isPending || syncApplyMut.isPending}
+              data-testid="button-sync-12in-apply"
+            >
+              {syncApplyMut.isPending ? "Syncing…" : "Sync now"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="dialog-catalog-csv">
