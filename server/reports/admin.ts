@@ -10,6 +10,8 @@ import {
   labels,
   orders,
   orderItems,
+  orderCopies,
+  albumAddons,
   customerUsers,
   users,
   analyticsEvents,
@@ -19,6 +21,7 @@ import {
 import { isFullAccessEmail } from "@shared/fullAccess";
 import { pgArray } from "../lib/pgArray";
 import { and, eq, ne, gte, lte, inArray, sql, desc, isNull, isNotNull, or, not } from "drizzle-orm";
+import { PLATFORM_MARGIN_CENTS, cardFeeCents } from "@shared/breakEven";
 
 export interface AdminReportContext {
   from: Date;
@@ -200,8 +203,14 @@ export async function platformKpis(ctx: AdminReportContext) {
 }
 
 // ─── Revenue breakdown ─────────────────────────────────────────────────
-export async function revenueBreakdown(ctx: AdminReportContext) {
+// Task #2640 — `opts.albumId` scopes every bucket to a single release so
+// the Dashboard's Gross-sales tile can drill Gross sales → Revenue by
+// album → a single album's own Revenue breakdown (same shape, same
+// buckets, just filtered). Unscoped calls (no opts) keep the existing
+// platform-wide god-view behavior and additionally get a `byAlbum` cut.
+export async function revenueBreakdown(ctx: AdminReportContext, opts?: { albumId?: string }) {
   const paidFilters = [eq(orders.status, "paid"), gte(orders.createdAt, ctx.from), lte(orders.createdAt, ctx.to)];
+  if (opts?.albumId) paidFilters.push(eq(orders.albumId, opts.albumId));
   const ord = await db
     .select({
       id: orders.id,
@@ -255,6 +264,7 @@ export async function revenueBreakdown(ctx: AdminReportContext) {
   const byLabel = new Map<string, { cents: number; units: number; name: string }>();
   const byArtist = new Map<string, { cents: number; units: number; name: string }>();
   const byCountry = new Map<string, { cents: number; units: number }>();
+  const byAlbum = new Map<string, { cents: number; units: number; name: string }>();
 
   // Resolve label + person names in one go.
   const labelIds = Array.from(new Set(ord.map((o) => o.labelSnapshotId ?? o.albumLabelId).filter(Boolean) as string[]));
@@ -288,6 +298,10 @@ export async function revenueBreakdown(ctx: AdminReportContext) {
     const cSlot = byCountry.get(country) ?? { cents: 0, units: 0 };
     cSlot.cents += o.totalCents; cSlot.units += 1;
     byCountry.set(country, cSlot);
+
+    const alSlot = byAlbum.get(o.albumId) ?? { cents: 0, units: 0, name: `${o.albumTitle} — ${o.albumArtist}` };
+    alSlot.cents += o.totalCents; alSlot.units += 1;
+    byAlbum.set(o.albumId, alSlot);
   }
 
   function topN<T extends { cents: number }>(m: Map<string, T>, n: number): Array<{ id: string } & T> {
@@ -302,6 +316,126 @@ export async function revenueBreakdown(ctx: AdminReportContext) {
     byLabel: topN(byLabel, 50),
     byArtist: topN(byArtist, 50),
     byCountry: Array.from(byCountry.entries()).map(([country, v]) => ({ country, ...v })).sort((a, b) => b.cents - a.cents),
+    byAlbum: topN(byAlbum, 50),
+  };
+}
+
+// ─── Per-album earnings breakdown ──────────────────────────────────────
+// Task #2640 — Bill's artist-payout/earmark drill-in: gross sales for a
+// single release, walked down to what actually lands toward pressing the
+// vinyl. Two totals are always returned side-by-side because foundation
+// money (Gift of Hope + the $1/unit NPO earmark) is legally a DIFFERENT
+// pool than artist funds (Nightbirde Foundation org vs. Nightbirde LLC) —
+// see docs/roles-and-permissions.md. Nothing here changes that split;
+// this just makes both framings visible in one place instead of only
+// the "with foundation" blended number the raw order total implies.
+export async function albumEarnings(albumId: string, ctx: AdminReportContext) {
+  const albumRows = await db
+    .select({ id: albums.id, title: albums.title, artist: albums.artist })
+    .from(albums)
+    .where(eq(albums.id, albumId));
+  const album = albumRows[0];
+  if (!album) return null;
+
+  const paidFilters = [
+    eq(orders.albumId, albumId),
+    eq(orders.status, "paid"),
+    gte(orders.createdAt, ctx.from),
+    lte(orders.createdAt, ctx.to),
+  ];
+  const ord = await db.select({ id: orders.id, totalCents: orders.totalCents }).from(orders).where(and(...paidFilters));
+  const orderIds = ord.map((o) => o.id);
+  const orderCount = ord.length;
+  const grossCents = ord.reduce((s, o) => s + o.totalCents, 0);
+  const stripeFeeCents = ord.reduce((s, o) => s + cardFeeCents(o.totalCents), 0);
+
+  const copies = orderIds.length
+    ? await db.select({ signedCert: orderCopies.signedCert }).from(orderCopies).where(inArray(orderCopies.orderId, orderIds))
+    : [];
+  const units = copies.length;
+  const signedCerts = copies.filter((c) => c.signedCert).length;
+  const platformFeeCents = units * PLATFORM_MARGIN_CENTS;
+
+  // GoodDeed cert cost: use the locked per-run pricing snapshot when this
+  // release's signed-cert run has been priced/locked; otherwise fall back
+  // to the price-lock snapshot saved when the artist last set the add-on
+  // (see album_addons.costCentsSnapshot doc comment). Never re-resolve the
+  // live vendor ladder here — that's the prospective/break-even view, not
+  // the "what did this release's certs actually cost" historical report.
+  const addonRows = await db
+    .select({ costCentsSnapshot: albumAddons.costCentsSnapshot, pricingSnapshot: albumAddons.pricingSnapshot })
+    .from(albumAddons)
+    .where(and(eq(albumAddons.albumId, albumId), eq(albumAddons.kind, "signed_cert")))
+    .limit(1);
+  const addon = addonRows[0];
+  const certPerUnitCents = safeNum((addon?.pricingSnapshot as any)?.totalPerUnitCents) || safeNum(addon?.costCentsSnapshot) || 0;
+  const certCostCents = signedCerts * certPerUnitCents;
+
+  // Gift of Hope-style custom add-on revenue attached to this album's
+  // orders (mirrors partnerDashboard.ts `donations()`, scoped by album
+  // instead of by owning org).
+  const gohRes = orderIds.length
+    ? await db.execute<any>(sql`
+        SELECT
+          COALESCE(SUM(oi.unit_price_cents * oi.quantity), 0)::bigint AS cents,
+          array_agg(DISTINCT o2.name) FILTER (WHERE o2.name IS NOT NULL) AS org_names
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        JOIN custom_addons ca ON ca.id = oi.sku
+        JOIN organizations o2 ON o2.id = ca.organization_id
+        WHERE oi.kind = 'custom_addon'
+          AND o.album_id = ${albumId}
+          AND o.status IN ('paid','shipped')
+          AND o.created_at >= ${ctx.from} AND o.created_at <= ${ctx.to}
+      `)
+    : ({ rows: [] } as any);
+  const goh = ((gohRes as any).rows ?? [{}])[0] ?? {};
+  const giftOfHopeCents = safeNum(goh.cents);
+  const gohOrgNames: string[] = goh.org_names ?? [];
+
+  // $1/unit-max NPO earmark credited on this album's paid orders.
+  const earmarkRes = orderIds.length
+    ? await db.execute<any>(sql`
+        SELECT
+          COALESCE(SUM(rc.amount_cents), 0)::bigint AS cents,
+          array_agg(DISTINCT o3.name) FILTER (WHERE o3.name IS NOT NULL) AS org_names
+        FROM referral_credits rc
+        JOIN organizations o3 ON o3.id = rc.referrer_org_id
+        WHERE rc.referrer_kind = 'non_profit'
+          AND rc.order_id IN (${sql.join(orderIds.map((id) => sql`${id}`), sql`, `)})
+      `)
+    : ({ rows: [] } as any);
+  const earmark = ((earmarkRes as any).rows ?? [{}])[0] ?? {};
+  const earmarkCents = safeNum(earmark.cents);
+  const earmarkOrgNames: string[] = earmark.org_names ?? [];
+
+  const foundationOrgNames = Array.from(new Set([...gohOrgNames, ...earmarkOrgNames]));
+  const foundationTotalCents = giftOfHopeCents + earmarkCents;
+
+  // Artist-fund ledger: gross minus what was ever the foundation's money
+  // in the first place (Gift of Hope is a pass-through donation, never
+  // artist revenue), then minus processing/platform/cert costs.
+  const artistGrossCents = grossCents - giftOfHopeCents;
+  const netTowardVinylCents = artistGrossCents - stripeFeeCents - platformFeeCents - certCostCents;
+  const netWithFoundationCents = netTowardVinylCents + foundationTotalCents;
+
+  return {
+    album: { id: album.id, title: album.title, artist: album.artist },
+    orderCount,
+    units,
+    signedCerts,
+    grossCents,
+    giftOfHopeCents,
+    artistGrossCents,
+    stripeFeeCents,
+    platformFeeCents,
+    certCostCents,
+    certPerUnitCents,
+    netTowardVinylCents,
+    earmarkCents,
+    foundationTotalCents,
+    netWithFoundationCents,
+    foundationOrgNames,
   };
 }
 

@@ -7,6 +7,7 @@ import { requireRole } from "../auth/roles";
 import {
   platformKpis,
   revenueBreakdown,
+  albumEarnings,
   topContent,
   opsHealth,
   payoutReconciliation,
@@ -78,12 +79,17 @@ export function registerAdminReportRoutes(app: Express) {
   }));
 
   // ─── Revenue breakdown ───────────────────────────────────────────
+  // Task #2640 — `?albumId=` scopes every bucket to a single release, so
+  // the Dashboard's Gross-sales tile → "By album" row → this same tab,
+  // filtered, reuses one endpoint instead of a parallel single-album API.
   app.get("/api/admin/reports/revenue", adminGuard, wrap(async (req, res) => {
-    const data = await revenueBreakdown(ctxFromReq(req));
+    const albumId = req.query.albumId ? String(req.query.albumId) : undefined;
+    const data = await revenueBreakdown(ctxFromReq(req), { albumId });
     res.json(data);
   }));
   app.get("/api/admin/reports/revenue.csv", adminGuard, wrap(async (req, res) => {
-    const data = await revenueBreakdown(ctxFromReq(req));
+    const albumId = req.query.albumId ? String(req.query.albumId) : undefined;
+    const data = await revenueBreakdown(ctxFromReq(req), { albumId });
     const dim = String(req.query.dim || "sku");
     if (dim === "sku") {
       sendCsv(res, "revenue-by-sku.csv", toCsv(
@@ -100,12 +106,26 @@ export function registerAdminReportRoutes(app: Express) {
         data.byArtist.map((r) => ({ artist: r.name, artistId: r.id, units: r.units, dollars: dollarsFromCents(r.cents) })),
         ["artist", "artistId", "units", "dollars"],
       ));
+    } else if (dim === "album") {
+      sendCsv(res, "revenue-by-album.csv", toCsv(
+        data.byAlbum.map((r) => ({ album: r.name, albumId: r.id, units: r.units, dollars: dollarsFromCents(r.cents) })),
+        ["album", "albumId", "units", "dollars"],
+      ));
     } else {
       sendCsv(res, "revenue-by-country.csv", toCsv(
         data.byCountry.map((r) => ({ country: r.country, units: r.units, dollars: dollarsFromCents(r.cents) })),
         ["country", "units", "dollars"],
       ));
     }
+  }));
+
+  // ─── Per-album earnings breakdown ────────────────────────────────
+  // Task #2640 — Bill's payout/earmark drill-in: gross → artist net
+  // toward vinyl, with and without foundation money folded in.
+  app.get("/api/admin/reports/albums/:albumId/earnings", adminGuard, wrap(async (req, res) => {
+    const data = await albumEarnings(req.params.albumId, ctxFromReq(req));
+    if (!data) return res.status(404).json({ message: "Album not found" });
+    res.json(data);
   }));
 
   // ─── Top content (plays) ─────────────────────────────────────────

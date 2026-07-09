@@ -600,7 +600,7 @@ function KpiGrid({ kpis, loading, qs }: { kpis?: KpisData; loading: boolean; qs:
           format: "currency",
         }}
         testId="tile-gmv"
-        href={`/admin/reports?tab=sales&${qs}`}
+        href={`/admin/reports?tab=revenue&${qs}`}
         spark={series.map((s) => s?.gmvCents ?? 0)}
         color={BLUE}
       />
