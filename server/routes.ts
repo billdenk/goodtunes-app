@@ -198,74 +198,22 @@ function generateToken(): string {
   return randomBytes(32).toString("hex");
 }
 
-// Resolves the {userId, kind} pair from either the session or a Bearer
-// token, then validates that kind matches the request's host-derived
-// authKind. A customer token sent on the admin host (or vice versa)
-// returns undefined — host is the authority on which side a request
-// belongs to.
-type AuthIdentity = { userId: string; kind: "admin" | "customer" };
-
-// Pure host/kind boundary decision, extracted so it can be unit-tested without
-// an HTTP/session/cookie round-trip (see server/authBoundary.test.ts).
-//
-// `sessionAuth` is the identity the session resolves to (checked first, exactly
-// as before); `bearerAuth` is the identity a presented Bearer token resolves to
-// (only meaningful when there's no session or the session mismatches the host).
-//
-// The host/kind boundary is enforced only when the host is canonical (prod). In
-// dev there's no admin/customer host split, so a path-derived authKind would
-// reject an admin session hitting a non-/admin API path (e.g. /api/albums);
-// dev trusts the session/token kind and requireAdmin / requireCustomer still
-// gate role-specific routes.
-export function resolveAuthAcrossBoundary(opts: {
-  sessionAuth: AuthIdentity | undefined;
-  bearerAuth: AuthIdentity | undefined;
-  hostKnown: boolean;
-  authKind: "admin" | "customer";
-}): AuthIdentity | undefined {
-  const found = opts.sessionAuth ?? opts.bearerAuth;
-  if (!found) return undefined;
-  if (opts.hostKnown && found.kind !== opts.authKind) {
-    // Task #1796 — the session is checked before the token, so a linked
-    // account (e.g. an invited platform admin whose login is also a fan
-    // account) whose session's last-used `kind` is `customer` would be
-    // rejected on the admin host even with a valid admin Bearer token in
-    // hand. Before bouncing, honor a Bearer token whose kind matches THIS
-    // host: holding the token proves the caller owns that hat. Everyone
-    // without a matching token is still rejected, so the boundary holds —
-    // a fan-only session can't act as admin, and an admin token can't be
-    // used on the fan host.
-    if (opts.bearerAuth && opts.bearerAuth.kind === opts.authKind) return opts.bearerAuth;
-    return undefined;
-  }
-  return found;
-}
-
-async function getAuthFromRequest(req: Request): Promise<AuthIdentity | undefined> {
-  const auth = req.headers.authorization;
-  const bearerToken = auth && auth.startsWith("Bearer ") ? auth.slice(7) : undefined;
-  const sessionAuth: AuthIdentity | undefined = req.session.userId
-    ? { userId: req.session.userId, kind: (req.session.kind ?? "admin") }
-    : undefined;
-  // Resolve the Bearer token only when it could matter: no session at all, or
-  // a host/kind mismatch we might override with a matching token. The happy
-  // path (session kind matches the host) never pays for the lookup.
-  let bearerAuth: AuthIdentity | undefined;
-  if (bearerToken && (!sessionAuth || (req.hostKnown && sessionAuth.kind !== req.authKind))) {
-    bearerAuth = await storage.getAuthBy(bearerToken);
-  }
-  return resolveAuthAcrossBoundary({
-    sessionAuth,
-    bearerAuth,
-    hostKnown: req.hostKnown,
-    authKind: req.authKind,
-  });
-}
-
-async function getUserIdFromRequest(req: Request): Promise<string | undefined> {
-  const a = await getAuthFromRequest(req);
-  return a?.userId;
-}
+// AuthIdentity / resolveAuthAcrossBoundary / getAuthFromRequest /
+// getUserIdFromRequest moved to ./auth/host so the lower-level requireRole /
+// resolveReportScope gates (server/auth/roles.ts) can also honor a Bearer
+// token instead of session-cookie-only auth — see the comment there for why.
+// Re-exported here so existing imports (e.g. server/authBoundary.test.ts's
+// `import { resolveAuthAcrossBoundary } from "./routes"`) keep working.
+export {
+  type AuthIdentity,
+  resolveAuthAcrossBoundary,
+  getAuthFromRequest,
+  getUserIdFromRequest,
+} from "./auth/host";
+import {
+  getAuthFromRequest,
+  getUserIdFromRequest,
+} from "./auth/host";
 
 // Task #400 — Tear down any session/bearer-token for a customer row
 // that's been merged into another account. Without this, a stale tab

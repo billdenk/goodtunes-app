@@ -24,6 +24,7 @@ import {
 } from "@shared/schema";
 import { getActiveMembershipKey, getDevImpersonationHat, getViewAsHat, membershipKey } from "./activeMembership";
 import { isFullAccessEmail } from "@shared/fullAccess";
+import { getAuthFromRequest } from "./host";
 
 export type { AdminRole };
 export { membershipKey };
@@ -484,8 +485,14 @@ export async function rebuildMembershipOverrides(
 // the 401-vs-403 distinction to stay clean.
 export function requireRole(...roles: AdminRole[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const userId = req.session?.userId;
-    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    // This used to read req.session?.userId directly, which 401'd any admin
+    // whose browser held a valid Bearer token but no (or a stale) session
+    // cookie — the rest of the admin app tolerates that via routes.ts's
+    // requireAdmin (session-OR-bearer through getAuthFromRequest), but this
+    // gate (album dashboard, all of /api/admin/reports/*) didn't.
+    const auth = await getAuthFromRequest(req);
+    if (!auth || auth.kind !== "admin") return res.status(401).json({ message: "Unauthorized" });
+    const userId = auth.userId;
     const user = await storage.getUser(userId);
     if (!user?.isAdmin) return res.status(403).json({ message: "Admin only" });
     const info = await getUserRole(userId);
@@ -493,6 +500,16 @@ export function requireRole(...roles: AdminRole[]) {
       return res.status(403).json({ message: "Insufficient role" });
     }
     (req as any).userRole = info;
+    // Task #1525 (bugfix) — mirror routes.ts's requireAdmin, which backfills
+    // req.session after a Bearer-only resolution. Several handlers gated by
+    // requireRole (resolveArtistScope/resolveAlbumScope in artistReports.ts,
+    // similar helpers elsewhere) re-derive the caller by reading
+    // req.session?.userId directly instead of taking a resolved identity as
+    // an argument. Without this backfill, a Bearer-authenticated admin with
+    // no (or a stale) session cookie would pass this gate but then 401 again
+    // inside the handler itself.
+    req.session.userId = userId;
+    req.session.kind = "admin";
     next();
   };
 }
@@ -565,8 +582,11 @@ export async function getPartnerScope(userId: string): Promise<PartnerScope> {
  * for read-through impersonation. Returns null on missing auth.
  */
 export async function resolveReportScope(req: Request): Promise<PartnerScope | null> {
-  const userId = req.session?.userId;
-  if (!userId) return null;
+  // See requireRole above — session-only lookup 401'd Bearer-authenticated
+  // admins on every partner-reports route.
+  const auth = await getAuthFromRequest(req);
+  if (!auth || auth.kind !== "admin") return null;
+  const userId = auth.userId;
   const user = await storage.getUser(userId);
   if (!user?.isAdmin) return null;
   const scope = await getPartnerScope(userId);
