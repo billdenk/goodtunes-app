@@ -28,13 +28,19 @@ func applyNavyToWebView(in vc: UIViewController) {
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
-    // The app runs the LEGACY (non-scene) UIApplication lifecycle: Info.plist
-    // has UIMainStoryboardFile = "Main" and NO UIApplicationSceneManifest, so
-    // UIKit instantiates Main.storyboard's initial VC (Capacitor's
-    // CAPBridgeViewController), builds this window, and assigns it here
-    // automatically before didFinishLaunchingWithOptions returns. (A CarPlay
-    // scene manifest was removed — it black-screened the phone; see
-    // .agents/memory/ios-scene-manifest-black-screen.md.)
+    // `window` is normally assigned automatically by UIKit before
+    // didFinishLaunchingWithOptions returns, from Info.plist's
+    // UIMainStoryboardFile = "Main" (initial VC = Capacitor's
+    // CAPBridgeViewController). That only happens when Info.plist has NO
+    // UIApplicationSceneManifest. Info.plist now DOES declare a scene
+    // manifest (needed for CarPlay), which flips the whole app onto the
+    // UIScene lifecycle — UIKit no longer assigns this property, and
+    // `SceneDelegate` builds the equivalent window itself and mirrors it here
+    // (see the comment at the top of SceneDelegate.swift for why). Every
+    // method below still runs when a build strips the scene manifest (the
+    // Codemagic "Gate CarPlay out of the distribution archive" step, unless
+    // CARPLAY_GRANTED=true) — that's the proven-good legacy path; see
+    // .agents/memory/ios-scene-manifest-black-screen.md.
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
@@ -44,7 +50,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         //   → Capacitor SplashScreen overlay (navy, already configured)
         //   → WKWebView white flash while my.goodtunes.music loads (~4 s)
         //   → app
-        // Setting backgroundColor here closes that last white gap.
+        // Setting backgroundColor here closes that last white gap. Under the
+        // UIScene lifecycle `window` is nil at this point (SceneDelegate
+        // hasn't run yet) so this is a harmless no-op there — SceneDelegate
+        // applies the identical repaint itself once it builds the window.
         window?.backgroundColor = brandNavy
         if let root = window?.rootViewController {
             root.view.backgroundColor = brandNavy
@@ -55,7 +64,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     // Called every time the app comes back to the foreground — covers the
     // race where the CAPBridgeViewController's view wasn't yet attached
-    // when didFinishLaunchingWithOptions ran.
+    // when didFinishLaunchingWithOptions ran. Under the UIScene lifecycle this
+    // method never fires; SceneDelegate.sceneDidBecomeActive covers the same
+    // race there.
     func applicationDidBecomeActive(_ application: UIApplication) {
         if let root = window?.rootViewController {
             applyNavyToWebView(in: root)

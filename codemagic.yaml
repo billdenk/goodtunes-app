@@ -270,12 +270,55 @@ definitions:
         # (alpha is the classic cause of a dropped-to-placeholder icon). Image
         # inspection uses macOS `sips`, which is always present on the runner.
         python3 scripts/verify-ios-appicon.py
-    # CarPlay was fully removed (scene manifest black-screened the phone app on
-    # TestFlight/App Store). The old "Gate CarPlay out of the distribution
-    # archive" step that stripped com.apple.developer.carplay-audio is gone
-    # because the entitlement + CarPlay scene delegate + Info.plist scene
-    # manifest no longer exist. If CarPlay is revisited, restore that gating step
-    # alongside the entitlement — see .agents/memory/ios-scene-manifest-black-screen.md.
+    - name: Gate CarPlay out of the distribution archive
+      script: |
+        # CarPlay (Task #2633) is real, wired native code: a
+        # UIApplicationSceneManifest in Info.plist (phone window role + CarPlay
+        # role, App.SceneDelegate + App.CarPlaySceneDelegate) and the
+        # com.apple.developer.carplay-audio entitlement in App.entitlements.
+        # Both are sensitive on a signed DISTRIBUTION build for two independent
+        # reasons:
+        #   1. carplay-audio is a RESTRICTED, request-only Apple entitlement — a
+        #      distribution profile that doesn't carry it fails signing outright.
+        #      See .agents/memory/carplay-restricted-entitlement.md.
+        #   2. TWO prior real-device attempts at a scene manifest black-screened
+        #      the store-signed binary. Even a manifest that declares both scene
+        #      roles correctly (this one does) stays UNVERIFIED on a real device
+        #      until a CarPlay Simulator / real-device pass has actually run.
+        #      See .agents/memory/ios-scene-manifest-black-screen.md.
+        #
+        # So BY DEFAULT this step strips BOTH keys before the archive step,
+        # reverting the build to the always-known-good, scene-manifest-free
+        # legacy AppDelegate.window lifecycle. Dev/simulator builds never run
+        # this workflow, so CarPlay stays fully testable there with both keys
+        # committed in source. Set CARPLAY_GRANTED=true (also 1/yes/granted) in
+        # Codemagic's `apple_app` group ONLY once Apple has granted the
+        # entitlement on the App ID AND a CarPlay Simulator / real-device pass
+        # has actually been recorded — see docs/native-builds.md.
+        ENTITLEMENTS="ios/App/App/App.entitlements"
+        INFO_PLIST="ios/App/App/Info.plist"
+        GRANTED=$(echo "${CARPLAY_GRANTED:-false}" | tr '[:upper:]' '[:lower:]')
+
+        if [ "$GRANTED" = "true" ] || [ "$GRANTED" = "1" ] || [ "$GRANTED" = "yes" ] || [ "$GRANTED" = "granted" ]; then
+          echo "CARPLAY_GRANTED is set — keeping the carplay-audio entitlement and scene manifest in this distribution build."
+        else
+          echo "CARPLAY_GRANTED is not set — stripping the carplay-audio entitlement and scene manifest from this distribution build."
+          /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.carplay-audio" "$ENTITLEMENTS" || true
+          /usr/libexec/PlistBuddy -c "Delete :UIApplicationSceneManifest" "$INFO_PLIST" || true
+
+          # Hard-fail rather than silently ship either key: an ungranted
+          # entitlement fails signing anyway, but an unverified scene manifest
+          # would sign FINE and black-screen on-device (the exact failure mode
+          # documented in ios-scene-manifest-black-screen.md).
+          if /usr/libexec/PlistBuddy -c "Print :com.apple.developer.carplay-audio" "$ENTITLEMENTS" >/dev/null 2>&1; then
+            echo "ERROR: com.apple.developer.carplay-audio is still present in App.entitlements after the strip." >&2
+            exit 1
+          fi
+          if /usr/libexec/PlistBuddy -c "Print :UIApplicationSceneManifest" "$INFO_PLIST" >/dev/null 2>&1; then
+            echo "ERROR: UIApplicationSceneManifest is still present in Info.plist after the strip." >&2
+            exit 1
+          fi
+        fi
     - name: Build the signed .ipa
       script: |
         # `--archive-flags="-allowProvisioningUpdates"` is THE fix for the Xcode

@@ -30,17 +30,23 @@ distribution provisioning profile carry the entitlement.
 
 **How to apply:** When a CarPlay build fails signing (or the CarPlay scene won't
 load on a distribution build), don't touch code — it's the Apple-portal grant +
-<<<<<<< HEAD
 profile regen. After Apple grants it, delete stale App Store profiles for the
 App ID so the pipeline's `--create` mints a fresh profile that carries CarPlay
 (a cached profile without it keeps failing). Operator runbook: `docs/codemagic-builds.md` step 3,
 `docs/native-builds.md` iOS CarPlay section.
 
-**Pipeline no longer blocks on the grant (Task #2554):** codemagic.yaml's
-"Gate CarPlay out of the distribution archive" step (in the shared iOS scripts,
-just before build-ipa) PlistBuddy-deletes `com.apple.developer.carplay-audio`
-from `App.entitlements` before signing BY DEFAULT, so TestFlight/App Store builds
-succeed while the Apple request is pending. The key stays committed (dev/simulator
-CarPlay unaffected); only the signed distribution binary drops it. To ship CarPlay
-once granted, set `CARPLAY_GRANTED=true` (also 1/yes/granted) in Codemagic's
-`apple_app` group AND regen the profile — the step then keeps the entitlement.
+**Pipeline no longer blocks on the grant.** codemagic.yaml's "Gate CarPlay out
+of the distribution archive" step (in the shared iOS scripts, just before
+build-ipa) PlistBuddy-deletes BOTH `com.apple.developer.carplay-audio` from
+`App.entitlements` AND the whole `UIApplicationSceneManifest` key from
+`Info.plist` before signing, BY DEFAULT, so TestFlight/App Store builds succeed
+and revert to the known-good legacy (scene-manifest-free) lifecycle while the
+Apple request is pending or unverified. (Earlier version of this gate only
+stripped the entitlement, leaving the manifest — see
+ios-scene-manifest-black-screen.md for why that alone still black-screened.)
+Both keys stay committed in source (dev/simulator CarPlay unaffected); only the
+signed distribution binary drops them, with a post-strip assertion that
+hard-fails the build if either key is still present. To ship CarPlay once
+granted AND real-device verified, set `CARPLAY_GRANTED=true` (also 1/yes/granted)
+in Codemagic's `apple_app` group AND regen the profile — the step then keeps
+both keys.

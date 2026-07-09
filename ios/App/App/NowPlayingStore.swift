@@ -8,6 +8,9 @@ struct NowPlayingQueueEntry {
     let title: String
     let artist: String
     let artworkUrl: String?
+    /// Track length in seconds (0 when unknown) — shown in the CarPlay Up
+    /// Next row's detail text. Unused off-CarPlay.
+    let duration: Double
 }
 
 /**

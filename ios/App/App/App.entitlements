@@ -25,11 +25,14 @@
          rejected at upload (ITMS-90163 invalid aps-environment). -->
     <key>aps-environment</key>
     <string>production</string>
-    <!-- CarPlay audio (com.apple.developer.carplay-audio) was REMOVED along with
-         the CarPlay scene delegate + Info.plist scene manifest: the scene
-         manifest black-screened the phone app on TestFlight/App Store. If CarPlay
-         is revisited, re-add this RESTRICTED, request-only entitlement (Apple
-         must grant it on the App ID before a distribution build can sign) AND the
-         phone window scene role, and cold-launch test on a real iPhone first. -->
+    <!-- CarPlay audio (Task #2633). RESTRICTED, request-only entitlement — Apple
+         must grant it on the App ID before a distribution build can sign (see
+         .agents/memory/carplay-restricted-entitlement.md). Pairs with the
+         Info.plist UIApplicationSceneManifest's CarPlay role +
+         CarPlaySceneDelegate.swift. The Codemagic "Gate CarPlay out of the
+         distribution archive" step strips this key (and the manifest) from
+         distribution builds unless CARPLAY_GRANTED=true. -->
+    <key>com.apple.developer.carplay-audio</key>
+    <true/>
 </dict>
 </plist>

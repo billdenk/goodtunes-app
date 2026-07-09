@@ -158,7 +158,8 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
                 id: dict["id"] as? String ?? "",
                 title: dict["title"] as? String ?? "",
                 artist: dict["artist"] as? String ?? "",
-                artworkUrl: dict["artworkUrl"] as? String
+                artworkUrl: dict["artworkUrl"] as? String,
+                duration: (dict["duration"] as? NSNumber)?.doubleValue ?? 0
             )
         }
         NowPlayingStore.shared.updateQueue(items, currentIndex: currentIndex)

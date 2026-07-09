@@ -1263,6 +1263,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         title: s.title ?? "",
         artist: s.album?.artist ?? "",
         artworkUrl: s.album?.artwork ?? undefined,
+        duration: s.duration ?? 0,
       })),
       currentIndex,
     );

@@ -62,6 +62,9 @@ export interface NowPlayingQueueItem {
   artist: string;
   /** Album artwork URL for the browse row thumbnail; omitted when unavailable. */
   artworkUrl?: string;
+  /** Track length in seconds (0 when unknown) — shown in the CarPlay Up Next
+   *  row's detail text. */
+  duration: number;
 }
 
 /** A transport command originated from the OS lock screen / Control Center or
