@@ -26411,10 +26411,24 @@ export async function registerRoutes(
       return kind && scopeId && name ? scopeId : null;
     }
 
+    // Copy-invite-link (last-resort resend when the email is lost/spammed):
+    // build the absolute accept URL from the request host, same as invite
+    // creation. Exposed ONLY to super-admins, ONLY for rows still in the
+    // "invited" state, and NEVER for held-for-review invites (Task #351 —
+    // a pending_review invite must not leak its accept link anywhere).
+    const dirProto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const dirHost = req.headers["x-forwarded-host"] || req.headers.host;
+    const isSuperAdmin = roleInfo.role === "super_admin";
+
     res.json(rows.map((r: any) => {
       const sm = scopeMeta(r.role, r.roleScopeId);
       const target = r.targetPersonId ? peopleIdx.get(r.targetPersonId) : null;
       const rm = refMeta(r.referrerKind ?? null, r.referrerScopeId ?? null);
+      const status = statusOf(r);
+      const acceptUrl =
+        isSuperAdmin && status === "invited" && r.reviewStatus !== "pending_review" && r.token
+          ? `${dirProto}://${dirHost}/invite/${r.token}`
+          : null;
       return {
         id: r.id,
         email: r.email,
@@ -26427,7 +26441,8 @@ export async function registerRoutes(
         referrerKind: r.referrerKind ?? null,
         ...rm,
         referrerId: referrerLinkId(r.referrerKind ?? null, r.referrerScopeId ?? null, rm.referrerName),
-        status: statusOf(r),
+        status,
+        acceptUrl,
         invitedAt: r.createdAt,
         joinedAt: r.usedAt ?? null,
         unitsSold: unitsFor(r),

@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { ROLE_LABEL } from "@/components/admin/RoleScopePicker";
-import { ArrowUpDown, ArrowDown, ArrowUp, Heart, Search, UserPlus } from "lucide-react";
+import { ArrowUpDown, ArrowDown, ArrowUp, Check, Heart, Link2, Search, UserPlus } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 // Task #1198 — read-only directory of every invite ever sent (pending +
 // joined + revoked + expired). Additive to /admin/invites (pending-only)
@@ -27,6 +28,9 @@ interface DirectoryInvite {
   // Set only when the referrer resolved to a real entity row.
   referrerId: string | null;
   status: "invited" | "joined" | "revoked" | "expired";
+  // Present only for super-admins on live "invited" rows that aren't held
+  // for review — powers the Copy-invite-link last-resort resend.
+  acceptUrl: string | null;
   invitedAt: string;
   joinedAt: string | null;
   unitsSold: number;
@@ -93,6 +97,29 @@ export function AdminInviteDirectory() {
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("invitedAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  // Row id whose invite link was just copied — drives the transient ✓
+  // confirmation on the copy affordance.
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  async function copyInviteLink(inv: DirectoryInvite) {
+    if (!inv.acceptUrl) return;
+    try {
+      await navigator.clipboard.writeText(inv.acceptUrl);
+      setCopiedId(inv.id);
+      toast({
+        title: "Invite link copied",
+        description: `Send it to ${inv.email} directly — same one-time link as the email.`,
+      });
+      window.setTimeout(() => setCopiedId((c) => (c === inv.id ? null : c)), 2000);
+    } catch {
+      toast({
+        title: "Couldn't copy the link",
+        description: "Your browser blocked clipboard access. Try again.",
+        variant: "destructive",
+      });
+    }
+  }
 
   const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
     queryKey: ["/api/me/role"],
@@ -291,6 +318,8 @@ export function AdminInviteDirectory() {
                     <th className="text-left px-4 py-3"><SortHeader label="Invited" k="invitedAt" /></th>
                     <th className="text-left px-4 py-3"><SortHeader label="Joined" k="joinedAt" /></th>
                     <th className="text-right px-4 py-3"><SortHeader label="Units sold" k="unitsSold" className="justify-end" /></th>
+                    {/* Trailing actions (copy invite link) — no header label. */}
+                    <th className="w-10 px-2 py-3" aria-label="Actions" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -379,6 +408,25 @@ export function AdminInviteDirectory() {
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-700" data-testid={`text-units-${inv.id}`}>
                         {inv.unitsSold.toLocaleString()}
+                      </td>
+                      <td className="px-2 py-3 text-right">
+                        {inv.acceptUrl && (
+                          <button
+                            type="button"
+                            onClick={() => copyInviteLink(inv)}
+                            className={[
+                              "p-2 rounded-md transition-colors",
+                              copiedId === inv.id
+                                ? "text-emerald-600 bg-emerald-50"
+                                : "text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100",
+                            ].join(" ")}
+                            title="Copy invite link — send it directly if the email was lost or went to spam"
+                            aria-label="Copy invite link"
+                            data-testid={`button-copy-link-${inv.id}`}
+                          >
+                            {copiedId === inv.id ? <Check className="w-4 h-4" /> : <Link2 className="w-4 h-4" />}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
