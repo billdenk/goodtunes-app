@@ -2321,10 +2321,30 @@ export function registerPressCatalogRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid tier" });
     const siblings = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, format)));
     const position = parsed.data.position ?? siblings.length;
-    const [row] = await db
-      .insert(pressColorTiers)
-      .values({ pressId, format, name: parsed.data.name, position, priceLadder: [] })
-      .returning();
+    // Mirror the new color group onto the sibling 12" format too (if that
+    // format is enabled for this press and doesn't already have a group
+    // with this name). Both inserts commit together.
+    const sibFormat = TWELVE_INCH_SIBLING[format] ?? null;
+    let mirrorTo: string | null = null;
+    if (sibFormat) {
+      const [sibEnabled] = await db.select().from(pressFormats).where(and(eq(pressFormats.pressId, pressId), eq(pressFormats.format, sibFormat)));
+      if (sibEnabled) {
+        const sibTiers = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, sibFormat)));
+        const exists = sibTiers.some((t) => t.name.trim().toLowerCase() === parsed.data.name.trim().toLowerCase());
+        if (!exists) mirrorTo = sibFormat;
+      }
+    }
+    const row = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(pressColorTiers)
+        .values({ pressId, format, name: parsed.data.name, position, priceLadder: [] })
+        .returning();
+      if (mirrorTo) {
+        const sibTiers = await tx.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, mirrorTo)));
+        await tx.insert(pressColorTiers).values({ pressId, format: mirrorTo, name: parsed.data.name, position: sibTiers.length, priceLadder: [] });
+      }
+      return created;
+    });
     res.json(row);
   });
 
@@ -2341,11 +2361,34 @@ export function registerPressCatalogRoutes(
       const [row] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
       return res.json(row);
     }
-    const [row] = await db
-      .update(pressColorTiers)
-      .set(patch as any)
-      .where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)))
-      .returning();
+    const [tier] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
+    if (!tier) return res.status(404).json({ message: "Tier not found" });
+    // Mirror a group rename to the same-named group on the sibling 12"
+    // format (position stays per-format). Reject up front if the rename
+    // would collide with a different group's name over there.
+    const sib = parsed.data.name !== undefined ? await siblingTwelveInchTier(tier) : null;
+    if (sib && parsed.data.name !== undefined) {
+      const target = parsed.data.name.trim().toLowerCase();
+      if (target !== tier.name.trim().toLowerCase()) {
+        const sibTiers = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, sib.format)));
+        if (sibTiers.some((t) => t.id !== sib.id && t.name.trim().toLowerCase() === target)) {
+          return res.status(409).json({
+            message: `The ${sib.format === "12_double" ? '12" Double LP' : '12" LP'} already has a group named "${parsed.data.name}" — rename or remove it there first.`,
+          });
+        }
+      }
+    }
+    const row = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(pressColorTiers)
+        .set(patch as any)
+        .where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)))
+        .returning();
+      if (sib && parsed.data.name !== undefined) {
+        await tx.update(pressColorTiers).set({ name: parsed.data.name }).where(eq(pressColorTiers.id, sib.id));
+      }
+      return updated;
+    });
     res.json(row);
   });
 
@@ -2353,7 +2396,15 @@ export function registerPressCatalogRoutes(
   app.delete("/api/admin/manufacturers/:id/catalog/tiers/:tierId", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const tierId = String(req.params.tierId);
-    await db.delete(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
+    const [tier] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
+    if (!tier) return res.json({ ok: true });
+    // Mirror the group removal onto the sibling 12" format's same-named
+    // group; both deletes commit together.
+    const sib = await siblingTwelveInchTier(tier);
+    await db.transaction(async (tx) => {
+      await tx.delete(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
+      if (sib) await tx.delete(pressColorTiers).where(eq(pressColorTiers.id, sib.id));
+    });
     res.json({ ok: true });
   });
 
@@ -2371,7 +2422,13 @@ export function registerPressCatalogRoutes(
     const [sib] = await db
       .select()
       .from(pressColorTiers)
-      .where(and(eq(pressColorTiers.pressId, tier.pressId), eq(pressColorTiers.format, sibFormat), eq(pressColorTiers.name, tier.name)));
+      .where(
+        and(
+          eq(pressColorTiers.pressId, tier.pressId),
+          eq(pressColorTiers.format, sibFormat),
+          sql`lower(trim(${pressColorTiers.name})) = ${tier.name.trim().toLowerCase()}`,
+        ),
+      );
     return sib ?? null;
   }
 
