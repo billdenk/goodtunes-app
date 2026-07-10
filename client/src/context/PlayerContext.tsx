@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Hls from "hls.js";
 import { Song, Album, getSongById } from "@/data/musicData";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
+import { useFanRecents } from "@/hooks/useRecents";
 import { track } from "@/lib/analytics";
 import { apiRequest } from "@/lib/queryClient";
 import { isNative, isNativeIOS, isWebIOS } from "@/lib/platform";
@@ -10,9 +11,14 @@ import {
   setNowPlayingMetadata,
   setNowPlayingPlaybackState,
   setNowPlayingQueue,
+  setNowPlayingCatalog,
+  setNowPlayingRecents,
+  setNowPlayingFavorite,
   clearNowPlaying,
   onNowPlayingRemoteCommand,
   absolutizeArtwork,
+  type NowPlayingCatalogAlbum,
+  type NowPlayingRecentItem,
 } from "@/lib/nativeNowPlaying";
 import { offlineSrcFor } from "@/lib/nativeDownloads";
 
@@ -167,18 +173,102 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // True ownership set — albums the fan has bought/comped (isPreview=false).
   // Used by Player.tsx to gate "Add to Playlist" regardless of which host
   // surface (AlbumDetail, Collection, Playlists, etc.) queued the songs.
-  const { data: myAlbumsForOwnership } = useQuery<Array<{ albumId: string; isPreview?: boolean }> | null>({
+  const { data: myAlbumsForOwnership } = useQuery<
+    Array<{ albumId: string; isPreview?: boolean; album?: Album }> | null
+  >({
     queryKey: ["/api/my-albums"],
   });
   const trulyOwnedAlbumIds = useMemo(
     () => new Set((myAlbumsForOwnership ?? []).filter((a) => !a.isPreview).map((a) => a.albumId)),
     [myAlbumsForOwnership],
   );
+  // Map of every owned album (id → full Album row), used to build the CarPlay
+  // browse catalog + resolve Recents rows to their album. Owned = any
+  // user_albums grant (purchase, comp, or preview) — the CarPlay Library shows
+  // everything the fan can play, matching the phone Collection.
+  const ownedAlbumById = useMemo(() => {
+    const m = new Map<string, Album>();
+    (myAlbumsForOwnership ?? []).forEach((a) => {
+      if (a.album) m.set(a.album.id, a.album);
+    });
+    return m;
+  }, [myAlbumsForOwnership]);
   const dbSongById = useMemo(() => {
     const m = new Map<string, Song>();
     (dbSongList ?? []).forEach((s) => m.set(s.id, s));
     return m;
   }, [dbSongList]);
+  // songId → albumId lookup, used to resolve a "song" Recents row to the album
+  // it belongs to (CarPlay Recents rows deep-link into the owning album/track).
+  const songAlbumIndex = useMemo(() => {
+    const m = new Map<string, string>();
+    (dbSongList ?? []).forEach((s) => m.set(s.id, s.albumId));
+    return m;
+  }, [dbSongList]);
+  // CarPlay browse catalog — one entry per owned album with its playable
+  // tracklist (trackNumber order, GoodTunes-hosted only; stream-elsewhere
+  // rows can't play in the car). Native iOS only: on web this is [] so the
+  // publish effect below is a no-op and we never do the work.
+  const nativeCatalog = useMemo<NowPlayingCatalogAlbum[]>(() => {
+    if (!isNativeIOS) return [];
+    const byAlbum = new Map<string, Song[]>();
+    (dbSongList ?? []).forEach((s) => {
+      if (s.streamOnly) return;
+      if (!ownedAlbumById.has(s.albumId)) return;
+      const arr = byAlbum.get(s.albumId) ?? [];
+      arr.push(s);
+      byAlbum.set(s.albumId, arr);
+    });
+    const out: NowPlayingCatalogAlbum[] = [];
+    ownedAlbumById.forEach((album, albumId) => {
+      const tracks = (byAlbum.get(albumId) ?? [])
+        .slice()
+        .sort((a, b) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0));
+      if (tracks.length === 0) return;
+      out.push({
+        id: albumId,
+        title: album.title,
+        artist: album.artist,
+        artworkUrl: absolutizeArtwork(album.artwork ?? undefined),
+        tracks: tracks.map((s) => ({
+          id: s.id,
+          title: s.title,
+          artist: album.artist,
+          duration: s.duration ?? 0,
+        })),
+      });
+    });
+    return out;
+  }, [dbSongList, ownedAlbumById]);
+  // Recently-played feed for the CarPlay RECENTS tab. Only fetch on native iOS
+  // (the enabled gate keeps the query cold on web). Each row resolves to an
+  // owned album; unowned/unresolvable rows are dropped so a tap always plays.
+  const { data: fanRecents } = useFanRecents({ enabled: isNativeIOS });
+  const nativeRecents = useMemo<NowPlayingRecentItem[]>(() => {
+    if (!isNativeIOS) return [];
+    const out: NowPlayingRecentItem[] = [];
+    (fanRecents ?? []).forEach((r: any) => {
+      let albumId: string | undefined;
+      let trackId: string | undefined;
+      if (r.entityKind === "album") {
+        albumId = r.entityId;
+      } else if (r.entityKind === "song") {
+        albumId = songAlbumIndex.get(r.entityId);
+        trackId = r.entityId;
+      } else {
+        return; // person/instrument/etc. can't play in the car
+      }
+      if (!albumId || !ownedAlbumById.has(albumId)) return;
+      out.push({
+        albumId,
+        trackId,
+        title: r.title,
+        subtitle: r.subtitle ?? "",
+        artworkUrl: absolutizeArtwork(r.thumbUrl ?? undefined),
+      });
+    });
+    return out;
+  }, [fanRecents, songAlbumIndex, ownedAlbumById]);
   // Merge DB fields onto a PlayerSong without losing its joined `album`
   // (which the static seed surfaces still supply). DB row wins for the
   // playable fields; the album reference is preserved from the caller.
@@ -1119,6 +1209,33 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setRepeat((r) => (r === "none" ? "all" : r === "all" ? "one" : "none"));
   }, []);
 
+  // Start an owned album from the CarPlay browse UI. Builds a fresh queue from
+  // the album's GoodTunes-hosted tracks (trackNumber order) and begins playback.
+  //  - trackId set  → start at that track (tapping a row in the tracklist)
+  //  - shuffle true  → turn shuffle on and start at a random track (Shuffle row)
+  //  - otherwise     → start at track 1 (Play row)
+  const playAlbumFromNative = useCallback(
+    (albumId: string, trackId: string | undefined, shuffleOn: boolean) => {
+      const album = ownedAlbumById.get(albumId);
+      if (!album) return;
+      const songs = (dbSongList ?? [])
+        .filter((s) => s.albumId === albumId && !s.streamOnly)
+        .sort((a, b) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0))
+        .map((s) => ({ ...s, album } as PlayerSong));
+      if (songs.length === 0) return;
+      setShuffle(shuffleOn);
+      let startIdx = 0;
+      if (trackId) {
+        const i = songs.findIndex((s) => s.id === trackId);
+        startIdx = i >= 0 ? i : 0;
+      } else if (shuffleOn) {
+        startIdx = Math.floor(Math.random() * songs.length);
+      }
+      playSong(songs[startIdx], songs);
+    },
+    [ownedAlbumById, dbSongList, playSong],
+  );
+
   // ── Lock-screen / Control Center / media-notification integration ────────
   //
   // Background audio + lock-screen transport (Task #162). Two layers:
@@ -1135,12 +1252,26 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   //
   // Latest control callbacks are read through a ref so the OS action handlers
   // register once and never go stale, without re-subscribing on every render.
+  // Toggle the heart on the currently-playing track (CarPlay Now Playing heart
+  // button). Defined inline here so the ref never reaches for the `toggleFavorite`
+  // const (declared far below — a TDZ trap) and always sees the latest favSongs.
+  const toggleFavoriteCurrent = useCallback(() => {
+    const song = currentSongRef.current;
+    if (!song) return;
+    const wasFav = favSongs.has(song.id);
+    favSongs.toggle(song.id);
+    track(wasFav ? "unfavorite_song" : "favorite_song", { songId: song.id });
+  }, [favSongs]);
   const mediaControlsRef = useRef({
     togglePlay,
     next: handleNext,
     prev: handlePrev,
     seekTo,
     playQueueIndex,
+    toggleShuffle,
+    toggleRepeat,
+    playAlbum: playAlbumFromNative,
+    toggleFavoriteCurrent,
   });
   useEffect(() => {
     mediaControlsRef.current = {
@@ -1149,8 +1280,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       prev: handlePrev,
       seekTo,
       playQueueIndex,
+      toggleShuffle,
+      toggleRepeat,
+      playAlbum: playAlbumFromNative,
+      toggleFavoriteCurrent,
     };
-  }, [togglePlay, handleNext, handlePrev, seekTo, playQueueIndex]);
+  }, [
+    togglePlay,
+    handleNext,
+    handlePrev,
+    seekTo,
+    playQueueIndex,
+    toggleShuffle,
+    toggleRepeat,
+    playAlbumFromNative,
+    toggleFavoriteCurrent,
+  ]);
 
   // Publish current-track metadata to the OS (song change only).
   useEffect(() => {
@@ -1239,17 +1384,24 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // JS↔native bridge is chattier than an in-process call, so throttle the
   // currentTime pushes to whole-second granularity while still reacting
   // immediately to play/pause, duration, and song changes.
-  const nativeSyncRef = useRef({ sec: -1, playing: false, dur: 0, id: "" });
+  const nativeSyncRef = useRef({ sec: -1, playing: false, dur: 0, id: "", shuffle: false, repeat: "none" as string });
   useEffect(() => {
     const st = nativeSyncRef.current;
     const sec = Math.floor(currentTime);
     const id = currentSong?.id ?? "";
-    if (st.sec === sec && st.playing === isPlaying && st.dur === duration && st.id === id) {
+    if (
+      st.sec === sec &&
+      st.playing === isPlaying &&
+      st.dur === duration &&
+      st.id === id &&
+      st.shuffle === shuffle &&
+      st.repeat === repeat
+    ) {
       return;
     }
-    nativeSyncRef.current = { sec, playing: isPlaying, dur: duration, id };
-    setNowPlayingPlaybackState({ isPlaying, elapsed: currentTime, duration });
-  }, [isPlaying, currentTime, duration, currentSong?.id]);
+    nativeSyncRef.current = { sec, playing: isPlaying, dur: duration, id, shuffle, repeat };
+    setNowPlayingPlaybackState({ isPlaying, elapsed: currentTime, duration, shuffle, repeat });
+  }, [isPlaying, currentTime, duration, currentSong?.id, shuffle, repeat]);
 
   // Mirror the Up Next queue to the native plugin so CarPlay / Android Auto can
   // render a browsable list. Only the head-unit (CarPlay scene / Android Auto
@@ -1268,6 +1420,73 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       currentIndex,
     );
   }, [queue, currentIndex]);
+
+  // Publish the CarPlay browse catalog (owned albums + tracklists) to the native
+  // plugin. Native iOS only — nativeCatalog is [] elsewhere, so this is a no-op
+  // off-native and the plugin bridge short-circuits when the app isn't in a car.
+  useEffect(() => {
+    if (!isNativeIOS) return;
+    setNowPlayingCatalog(nativeCatalog);
+  }, [nativeCatalog]);
+
+  // Publish the CarPlay RECENTS list.
+  useEffect(() => {
+    if (!isNativeIOS) return;
+    setNowPlayingRecents(nativeRecents);
+  }, [nativeRecents]);
+
+  // Publish whether the now-playing track is favorited so CarPlay can render the
+  // heart filled/outline. Re-fires on song change and on any favorites mutation.
+  useEffect(() => {
+    if (!isNativeIOS) return;
+    const song = currentSong;
+    setNowPlayingFavorite(!!song && favorites.has(song.id));
+  }, [currentSong?.id, favorites]);
+
+  // Full re-publish of every now-playing surface, invoked when CarPlay connects
+  // mid-session (the head-unit needs the current state, but the per-field effects
+  // above only fire on change). Held in a ref so the once-registered remote-command
+  // listener can call the latest closure without re-subscribing.
+  const resyncRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    resyncRef.current = () => {
+      const song = currentSongRef.current;
+      if (song) {
+        setNowPlayingMetadata({
+          title: song.title ?? "",
+          artist: song.album?.artist ?? "",
+          album: song.album?.title ?? "",
+          artworkUrl: absolutizeArtwork(song.album?.artwork ?? undefined),
+          duration,
+        });
+      }
+      setNowPlayingPlaybackState({ isPlaying, elapsed: currentTime, duration, shuffle, repeat });
+      setNowPlayingQueue(
+        queue.map((s) => ({
+          id: s.id,
+          title: s.title ?? "",
+          artist: s.album?.artist ?? "",
+          artworkUrl: s.album?.artwork ?? undefined,
+          duration: s.duration ?? 0,
+        })),
+        currentIndex,
+      );
+      setNowPlayingCatalog(nativeCatalog);
+      setNowPlayingRecents(nativeRecents);
+      setNowPlayingFavorite(!!song && favorites.has(song.id));
+    };
+  }, [
+    isPlaying,
+    currentTime,
+    duration,
+    shuffle,
+    repeat,
+    queue,
+    currentIndex,
+    nativeCatalog,
+    nativeRecents,
+    favorites,
+  ]);
 
   // Register OS transport action handlers ONCE. All handlers dispatch through
   // mediaControlsRef so they always call the latest player callbacks.
@@ -1328,6 +1547,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           break;
         case "playIndex":
           if (typeof cmd.value === "number") c.playQueueIndex(cmd.value);
+          break;
+        case "playAlbum":
+          if (cmd.albumId) c.playAlbum(cmd.albumId, cmd.trackId, !!cmd.shuffle);
+          break;
+        case "toggleShuffle":
+          c.toggleShuffle();
+          break;
+        case "cycleRepeat":
+          c.toggleRepeat();
+          break;
+        case "toggleFavorite":
+          c.toggleFavoriteCurrent();
+          break;
+        case "resync":
+          resyncRef.current();
           break;
       }
     });

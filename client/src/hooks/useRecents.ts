@@ -21,11 +21,11 @@ export type RecordRecentInput = {
   href: string;
 };
 
-export function useFanRecents() {
+export function useFanRecents(opts?: { enabled?: boolean }) {
   const { user } = useAuth();
   return useQuery<FanRecent[]>({
     queryKey: ["/api/me/recents"],
-    enabled: !!user && user.kind !== "admin",
+    enabled: !!user && user.kind !== "admin" && (opts?.enabled ?? true),
   });
 }
 

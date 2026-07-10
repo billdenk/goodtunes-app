@@ -63,21 +63,35 @@ EXC_CRASH/SIGABRT, voucher `CarPlayTemplateUIHost`) ends in
 **Rule:** `CPTabBarTemplate.validateTemplates:` accepts ONLY
 list / grid / information / point-of-interest / contact templates. Putting
 `CPNowPlayingTemplate.shared` (or any non-container template) into a tab bar — or
-into any container — throws an uncaught NSException → `abort()` on connect. Fix
-was to stop embedding it: configure `CPNowPlayingTemplate.shared` and set the
-root to the "Up Next" `CPListTemplate` directly.
+into any container — throws an uncaught NSException → `abort()` on connect.
+`CPNowPlayingTemplate.shared` must ONLY ever be **pushed** on top of a stack,
+never rooted and never placed in a tab/container.
 
-**Why:** for a `carplay-audio` app CarPlay surfaces Now Playing on its OWN — it
-adds the system Now Playing bar/button once `MPNowPlayingInfoCenter` has active
-info (NowPlayingPlugin already populates it for the lock screen) and pushes
-`CPNowPlayingTemplate.shared` on tap. Nothing to add to the hierarchy.
+**Current architecture (browse experience, supersedes the old "root = Up Next
+list" note):** root is a `CPTabBarTemplate` of THREE `CPListTemplate` tabs —
+Home (owned albums) / Collection (Artists + Songs, 2 sections) / Recents. All
+three are list templates, so the tab bar validates. Opening an album pushes an
+album `CPListTemplate` (Play + Shuffle rows then the tracklist); tapping a track
+(or a Recents row, or Play/Shuffle) calls into `NowPlayingStore` request methods
+→ `NowPlayingPlugin` emit → JS `PlayerContext` acts + republishes, and the scene
+delegate `presentNowPlaying()` PUSHES `CPNowPlayingTemplate.shared`. Its custom
+buttons (shuffle / heart favorite / repeat) route the same way. Do NOT assume
+CarPlay auto-surfaces Now Playing for you — this design pushes it explicitly.
 
-**How to apply:** if you ever want tapping a queue row to jump straight to Now
-Playing, you may `interfaceController.pushTemplate(CPNowPlayingTemplate.shared,…)`
-in the CPListItem handler — but FIRST check it isn't already in
-`interfaceController.templates`; pushing a template already in the hierarchy
-throws the SAME class of uncaught NSException. A CPListTemplate root with zero
-sections is valid, and exceeding `CPListTemplate.maximumItemCount` truncates
-silently (never throws), so an empty or huge queue can't abort. This crash class
-only reproduces on a real head unit / CarPlay simulator, not the plain iOS
-simulator.
+**Why the push must guard the WHOLE stack, not just the top:** pushing a template
+already ANYWHERE in `interfaceController.templates` throws the same uncaught
+NSException class as the original root/tab crash. Guarding only `topTemplate`
+isn't enough: Now Playing pushed → Up Next (`queueListTemplate`) pushed on top →
+Now Playing is now mid-stack → a later track tap would re-push it and abort.
+
+**How to apply:** before ANY `pushTemplate`, check
+`!ic.templates.contains(where: { $0 === theTemplate })` — this guards both
+`presentNowPlaying()` (Now Playing) and the Up Next push (the single persistent
+`queueListTemplate` instance). A `CPListTemplate` root/tab with zero sections is
+valid, and exceeding `CPListTemplate.maximumItemCount` truncates silently (never
+throws), so an empty or huge list can't abort. Also cap tabs at
+`CPTabBarTemplate.maximumTabCount`. Mirror-state writes in `NowPlayingStore`
+(queue/catalog/recents/favorite) must mutate + notify on `DispatchQueue.main`
+(Capacitor calls in on a background thread; the scene delegate reads the arrays
+on main and Swift arrays aren't thread-safe). This crash class only reproduces on
+a real head unit / CarPlay simulator, not the plain iOS simulator.

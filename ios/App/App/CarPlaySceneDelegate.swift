@@ -5,21 +5,56 @@ import CarPlay
  * CarPlaySceneDelegate — GoodTunes' in-car experience under the
  * `com.apple.developer.carplay-audio` entitlement.
  *
- * Playback + browse only, system-drawn chrome:
+ * A genuinely browsable library (Apple rejects carplay-audio apps it doesn't
+ * consider useful — a bare "Up Next" list is not enough), all system-drawn
+ * chrome. The root is a CPTabBarTemplate with three tabs, mirroring the phone
+ * player's shape:
  *
- *   root CPListTemplate ("Up Next") — fed by NowPlayingStore.shared.queue;
- *     tapping a row calls NowPlayingStore.shared.requestPlayIndex(index),
- *     which the plugin forwards to JS as the same `playIndex` remote command
- *     the lock screen's transport buttons already use.
+ *   HOME (house) — the fan's owned GoodTunes releases, fed by
+ *     NowPlayingStore.shared.catalog (mirrored from the web player). Tapping an
+ *     album pushes an album-detail list (Play + Shuffle rows, then the
+ *     tracklist).
+ *
+ *   COLLECTION (square.stack) — an "Artists" section (each artist pushes their
+ *     albums) and a "Songs" section (a flat, tap-to-play list), both derived
+ *     from the same catalog.
+ *
+ *   RECENTS (clock) — the fan's recently-played albums/tracks, fed by
+ *     NowPlayingStore.shared.recents.
+ *
+ *   When the catalog is empty (the phone app hasn't been opened this session,
+ *   so the WebView never published one) a single non-tappable row explains how
+ *   to load it (never mention login — CarPlay review rejects in-car login
+ *   demands).
+ *
+ * Playback taps (album Play/Shuffle rows, a track, an artist's album, a Recents
+ * row) call NowPlayingStore.shared.requestPlayAlbum(albumId:trackId:shuffle:),
+ * which the plugin forwards to JS as a `playAlbum` remote command so the web
+ * player loads that album and starts playing, then surface the system Now
+ * Playing screen.
  *
  *   Now Playing — CPNowPlayingTemplate.shared, the system template that reads
  *     MPNowPlayingInfoCenter / MPRemoteCommandCenter directly (NowPlayingPlugin
  *     already populates those for the lock screen, so metadata + transport need
- *     nothing extra). CarPlay presents it automatically for a carplay-audio app
- *     — it must NOT be embedded in the tab bar or any other container (see the
- *     note in templateApplicationScene(_:didConnect:): doing so throws in
+ *     nothing extra). It is ALWAYS reached by PUSHING it on top of the current
+ *     tab's stack — it must NEVER be the root template and must NEVER be placed
+ *     inside the CPTabBarTemplate (either throws in
  *     -[CPTabBarTemplate validateTemplates:] and SIGABRTs the instant a head
- *     unit connects — the "opens then crashes" bug from the first build).
+ *     unit connects — the "opens then crashes" bug from the first build). We
+ *     add custom Now Playing buttons (shuffle / heart / repeat) whose handlers
+ *     forward to JS; because CarPlay tints button glyphs to the system color,
+ *     the heart cannot render brand-pink in the car.
+ *
+ *   Up Next — still reachable without embedding Now Playing anywhere:
+ *     CPNowPlayingTemplate.shared.isUpNextButtonEnabled is on and this delegate
+ *     is a CPNowPlayingTemplateObserver, so the system Now Playing screen's Up
+ *     Next button pushes our queue list on demand.
+ *
+ * Empty-on-connect fix: iOS resets MPNowPlayingInfoCenter around scene connect,
+ * so on didConnect we call NowPlayingStore.shared.requestResync(), which the
+ * plugin forwards to JS; PlayerContext then re-publishes the current metadata +
+ * playback state + queue + catalog + recents + favorite. (The plugin also
+ * self-heals the now-playing dict in setPlaybackState as a backstop.)
  *
  * No lyrics/commerce/GoodDeed/SuperCredits surfaces — CarPlay is playback +
  * browse only.
@@ -30,10 +65,18 @@ import CarPlay
  * Capacitor plugin instance.
  */
 @available(iOS 14.0, *)
-class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
+class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPNowPlayingTemplateObserver {
 
     private var interfaceController: CPInterfaceController?
+    private var tabBarTemplate: CPTabBarTemplate?
+    private let homeTemplate = CPListTemplate(title: "Home", sections: [])
+    private let collectionTemplate = CPListTemplate(title: "Collection", sections: [])
+    private let recentsTemplate = CPListTemplate(title: "Recents", sections: [])
     private let queueListTemplate = CPListTemplate(title: "Up Next", sections: [])
+
+    /// In-memory album-art cache, keyed by URL. Bounds memory across the whole
+    /// Library list + album-detail rows and avoids re-fetching the same art.
+    private let artworkCache = NSCache<NSString, UIImage>()
 
     func templateApplicationScene(
         _ templateApplicationScene: CPTemplateApplicationScene,
@@ -41,45 +84,340 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     ) {
         self.interfaceController = interfaceController
 
-        // Configure the shared system Now Playing template. CRITICAL: never put
-        // CPNowPlayingTemplate in a CPTabBarTemplate (or any container).
-        // CPTabBarTemplate.validateTemplates: only accepts list / grid /
-        // information / point-of-interest / contact templates and throws an
-        // uncaught NSException for anything else — embedding the now playing
-        // template there SIGABRTs the app the instant a head unit connects
-        // (confirmed crash: -[CPTabBarTemplate validateTemplates:] → abort()).
-        // CarPlay presents Now Playing on its own for a carplay-audio app: it
-        // shows a Now Playing bar/button automatically once MPNowPlayingInfoCenter
-        // is populated (NowPlayingPlugin already does that) and pushes
-        // CPNowPlayingTemplate.shared when tapped, so nothing is added here.
-        // We only keep the system's own Up Next / album-artist buttons off it to
-        // avoid a duplicate entry point to the same list the root already shows.
-        CPNowPlayingTemplate.shared.isUpNextButtonEnabled = false
+        // Now Playing is reached by PUSH only (never rooted, never inside the
+        // tab bar — either SIGABRTs on connect). Enable + observe the Up Next
+        // button so the queue list is pushable from the system Now Playing
+        // screen; the album-artist button stays off (no artist page from Now
+        // Playing in CarPlay v1). Install the custom shuffle/heart/repeat
+        // buttons up front.
+        CPNowPlayingTemplate.shared.isUpNextButtonEnabled = true
         CPNowPlayingTemplate.shared.isAlbumArtistButtonEnabled = false
+        CPNowPlayingTemplate.shared.add(self)
+        rebuildNowPlayingButtons()
 
+        // Tab titles + system icons.
+        homeTemplate.tabTitle = "Home"
+        homeTemplate.tabImage = UIImage(systemName: "house")
+        collectionTemplate.tabTitle = "Collection"
+        collectionTemplate.tabImage = UIImage(systemName: "square.stack")
+        recentsTemplate.tabTitle = "Recents"
+        recentsTemplate.tabImage = UIImage(systemName: "clock")
+
+        rebuildHomeTemplate()
+        rebuildCollectionTemplate()
+        rebuildRecentsTemplate()
         rebuildQueueTemplate()
+
+        // Build the tab bar, guarding the head unit's tab cap (well above 3, but
+        // defensive — an over-cap tab bar throws in validateTemplates:).
+        var tabs: [CPTemplate] = [homeTemplate, collectionTemplate, recentsTemplate]
+        let maxTabs = CPTabBarTemplate.maximumTabCount
+        if tabs.count > maxTabs { tabs = Array(tabs.prefix(maxTabs)) }
+        let tabBar = CPTabBarTemplate(templates: tabs)
+        self.tabBarTemplate = tabBar
+
+        NowPlayingStore.shared.onCatalogChanged = { [weak self] in
+            self?.rebuildHomeTemplate()
+            self?.rebuildCollectionTemplate()
+        }
         NowPlayingStore.shared.onQueueChanged = { [weak self] in
             self?.rebuildQueueTemplate()
         }
+        NowPlayingStore.shared.onRecentsChanged = { [weak self] in
+            self?.rebuildRecentsTemplate()
+        }
+        NowPlayingStore.shared.onFavoriteChanged = { [weak self] in
+            self?.rebuildNowPlayingButtons()
+        }
 
-        // Root is the browsable "Up Next" list; the system Now Playing surface
-        // rides on top of it, matching how Apple Music / Spotify open in CarPlay
-        // (library first, now-playing bar along the bottom).
-        interfaceController.setRootTemplate(queueListTemplate, animated: false, completion: nil)
+        // Root is the browsable tab bar; the system Now Playing surface rides on
+        // top of it, matching how Apple Music / Spotify open in CarPlay (library
+        // first, now-playing bar along the bottom).
+        interfaceController.setRootTemplate(tabBar, animated: false, completion: nil)
+
+        // iOS wipes MPNowPlayingInfoCenter around scene connect, and the WebView
+        // may have connected before its queries resolved — ask JS to re-publish
+        // metadata + playback state + queue + catalog + recents + favorite now
+        // that CarPlay is live.
+        NowPlayingStore.shared.requestResync()
     }
 
     func templateApplicationScene(
         _ templateApplicationScene: CPTemplateApplicationScene,
         didDisconnectInterfaceController interfaceController: CPInterfaceController
     ) {
+        CPNowPlayingTemplate.shared.remove(self)
+        NowPlayingStore.shared.onCatalogChanged = nil
         NowPlayingStore.shared.onQueueChanged = nil
+        NowPlayingStore.shared.onRecentsChanged = nil
+        NowPlayingStore.shared.onFavoriteChanged = nil
+        self.tabBarTemplate = nil
         self.interfaceController = nil
     }
 
+    // MARK: - CPNowPlayingTemplateObserver
+
+    /// System Now Playing "Up Next" tapped → push our queue list. (This is how
+    /// Up Next stays reachable without rooting/embedding Now Playing.)
+    func nowPlayingTemplateUpNextButtonTapped(_ nowPlayingTemplate: CPNowPlayingTemplate) {
+        guard let ic = interfaceController else { return }
+        // Never re-push a template already anywhere in the stack — CarPlay throws
+        // the same uncaught NSException (SIGABRT) as rooting Now Playing did.
+        if !ic.templates.contains(where: { $0 === queueListTemplate }) {
+            ic.pushTemplate(queueListTemplate, animated: true, completion: nil)
+        }
+    }
+
+    // MARK: - Now Playing buttons
+
+    /// (Re)install the custom Now Playing buttons: shuffle, favorite (heart),
+    /// repeat. Each handler forwards to JS via the store. The heart glyph
+    /// reflects the current track's favorite state; CarPlay tints it to the
+    /// system color, so brand-pink never renders in the car.
+    private func rebuildNowPlayingButtons() {
+        let shuffleButton = CPNowPlayingShuffleButton { _ in
+            NowPlayingStore.shared.requestToggleShuffle()
+        }
+        let heartName = NowPlayingStore.shared.isCurrentFavorite ? "heart.fill" : "heart"
+        let heartImage = UIImage(systemName: heartName) ?? UIImage()
+        let favoriteButton = CPNowPlayingImageButton(image: heartImage) { _ in
+            NowPlayingStore.shared.requestToggleFavorite()
+        }
+        let repeatButton = CPNowPlayingRepeatButton { _ in
+            NowPlayingStore.shared.requestCycleRepeat()
+        }
+        CPNowPlayingTemplate.shared.updateNowPlayingButtons([shuffleButton, favoriteButton, repeatButton])
+    }
+
+    // MARK: - Home (owned albums)
+
+    /// Rebuild the Home tab from the shared store's catalog. Each row is an
+    /// album (title + artist detail + async art); tapping it pushes the
+    /// album-detail tracklist. When the catalog is empty, a single non-tappable
+    /// row explains how to load it.
+    private func rebuildHomeTemplate() {
+        let catalog = NowPlayingStore.shared.catalog
+        let section: CPListSection
+
+        if catalog.isEmpty {
+            let placeholder = CPListItem(
+                text: "Open GoodTunes on your iPhone to load your library",
+                detailText: nil
+            )
+            // No handler → non-tappable informational row.
+            section = CPListSection(items: [placeholder])
+        } else {
+            // Respect the head unit's item cap so an oversized library can't
+            // trip CPListTemplate's validation.
+            let maxItems = CPListTemplate.maximumItemCount
+            let albums = catalog.count > maxItems ? Array(catalog.prefix(maxItems)) : catalog
+            let items: [CPListItem] = albums.map { album in
+                let item = CPListItem(
+                    text: album.title,
+                    detailText: album.artist.isEmpty ? nil : album.artist
+                )
+                item.accessoryType = .disclosureIndicator
+                item.handler = { [weak self] _, completion in
+                    self?.pushAlbum(album)
+                    completion()
+                }
+                setThumbnail(item, urlString: album.artworkUrl)
+                return item
+            }
+            section = CPListSection(items: items)
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            self?.homeTemplate.updateSections([section])
+        }
+    }
+
+    // MARK: - Collection (Artists + Songs)
+
+    /// Rebuild the Collection tab: an "Artists" section (each artist drills into
+    /// their albums) and a "Songs" section (flat, tap-to-play). Both derive from
+    /// the same catalog. The two sections share the head unit's item cap so an
+    /// oversized library can't trip validation.
+    private func rebuildCollectionTemplate() {
+        let catalog = NowPlayingStore.shared.catalog
+        var sections: [CPListSection] = []
+
+        if catalog.isEmpty {
+            let placeholder = CPListItem(
+                text: "Open GoodTunes on your iPhone to load your collection",
+                detailText: nil
+            )
+            sections = [CPListSection(items: [placeholder])]
+        } else {
+            let maxItems = CPListTemplate.maximumItemCount
+
+            // Artists — unique by name, first-appearance order.
+            var order: [String] = []
+            var byArtist: [String: [CatalogAlbum]] = [:]
+            for album in catalog {
+                let name = album.artist.isEmpty ? "Unknown Artist" : album.artist
+                if byArtist[name] == nil { order.append(name) }
+                byArtist[name, default: []].append(album)
+            }
+            let artistCap = max(1, maxItems / 2)
+            let artistNames = order.count > artistCap ? Array(order.prefix(artistCap)) : order
+            let artistItems: [CPListItem] = artistNames.map { name in
+                let albums = byArtist[name] ?? []
+                let count = albums.count
+                let item = CPListItem(
+                    text: name,
+                    detailText: count == 1 ? "1 album" : "\(count) albums"
+                )
+                item.accessoryType = .disclosureIndicator
+                item.handler = { [weak self] _, completion in
+                    self?.pushArtist(name: name, albums: albums)
+                    completion()
+                }
+                setThumbnail(item, urlString: albums.first?.artworkUrl)
+                return item
+            }
+            if !artistItems.isEmpty {
+                sections.append(CPListSection(items: artistItems, header: "Artists", sectionIndexTitle: nil))
+            }
+
+            // Songs — flat, capped to whatever's left of the item budget.
+            let songBudget = max(0, maxItems - artistItems.count)
+            var songItems: [CPListItem] = []
+            outer: for album in catalog {
+                for track in album.tracks {
+                    if songItems.count >= songBudget { break outer }
+                    let detail = album.artist.isEmpty ? album.title : album.artist
+                    let item = CPListItem(text: track.title, detailText: detail)
+                    item.handler = { [weak self] _, completion in
+                        NowPlayingStore.shared.requestPlayAlbum(
+                            albumId: album.id, trackId: track.id, shuffle: false
+                        )
+                        self?.presentNowPlaying()
+                        completion()
+                    }
+                    setThumbnail(item, urlString: album.artworkUrl)
+                    songItems.append(item)
+                }
+            }
+            if !songItems.isEmpty {
+                sections.append(CPListSection(items: songItems, header: "Songs", sectionIndexTitle: nil))
+            }
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            self?.collectionTemplate.updateSections(sections)
+        }
+    }
+
+    /// Push a list of one artist's albums. Tapping an album pushes its detail.
+    private func pushArtist(name: String, albums: [CatalogAlbum]) {
+        let maxItems = CPListTemplate.maximumItemCount
+        let list = albums.count > maxItems ? Array(albums.prefix(maxItems)) : albums
+        let items: [CPListItem] = list.map { album in
+            let item = CPListItem(text: album.title, detailText: nil)
+            item.accessoryType = .disclosureIndicator
+            item.handler = { [weak self] _, completion in
+                self?.pushAlbum(album)
+                completion()
+            }
+            setThumbnail(item, urlString: album.artworkUrl)
+            return item
+        }
+        let template = CPListTemplate(title: name, sections: [CPListSection(items: items)])
+        interfaceController?.pushTemplate(template, animated: true, completion: nil)
+    }
+
+    // MARK: - Album detail
+
+    /// Push an album detail list: a Play row and a Shuffle row, then the
+    /// tracklist. Play starts from the top; Shuffle shuffles the album; a track
+    /// starts from that track. Each asks JS to play, then surfaces Now Playing.
+    private func pushAlbum(_ album: CatalogAlbum) {
+        var sections: [CPListSection] = []
+
+        // Play + Shuffle action rows.
+        let playItem = CPListItem(text: "Play", detailText: nil)
+        playItem.setImage(UIImage(systemName: "play.fill"))
+        playItem.handler = { [weak self] _, completion in
+            NowPlayingStore.shared.requestPlayAlbum(albumId: album.id, trackId: nil, shuffle: false)
+            self?.presentNowPlaying()
+            completion()
+        }
+        let shuffleItem = CPListItem(text: "Shuffle", detailText: nil)
+        shuffleItem.setImage(UIImage(systemName: "shuffle"))
+        shuffleItem.handler = { [weak self] _, completion in
+            NowPlayingStore.shared.requestPlayAlbum(albumId: album.id, trackId: nil, shuffle: true)
+            self?.presentNowPlaying()
+            completion()
+        }
+        sections.append(CPListSection(items: [playItem, shuffleItem]))
+
+        // Tracklist — reserve the two action rows against the item cap.
+        let maxItems = CPListTemplate.maximumItemCount
+        let trackCap = max(0, maxItems - 2)
+        let tracks = album.tracks.count > trackCap ? Array(album.tracks.prefix(trackCap)) : album.tracks
+        let trackItems: [CPListItem] = tracks.map { track in
+            let duration = formattedDuration(track.duration)
+            let item = CPListItem(text: track.title, detailText: duration.isEmpty ? nil : duration)
+            item.handler = { [weak self] _, completion in
+                NowPlayingStore.shared.requestPlayAlbum(albumId: album.id, trackId: track.id, shuffle: false)
+                self?.presentNowPlaying()
+                completion()
+            }
+            return item
+        }
+        sections.append(CPListSection(items: trackItems, header: "Tracks", sectionIndexTitle: nil))
+
+        let template = CPListTemplate(title: album.title, sections: sections)
+        interfaceController?.pushTemplate(template, animated: true, completion: nil)
+    }
+
+    // MARK: - Recents
+
+    /// Rebuild the Recents tab from the shared store's recents list. Tapping a
+    /// row asks JS to play that album (starting at the track when the recent was
+    /// a specific track), then surfaces Now Playing.
+    private func rebuildRecentsTemplate() {
+        let recents = NowPlayingStore.shared.recents
+        let section: CPListSection
+
+        if recents.isEmpty {
+            let placeholder = CPListItem(
+                text: "Nothing played yet",
+                detailText: "Your recently played music appears here"
+            )
+            section = CPListSection(items: [placeholder])
+        } else {
+            let maxItems = CPListTemplate.maximumItemCount
+            let list = recents.count > maxItems ? Array(recents.prefix(maxItems)) : recents
+            let items: [CPListItem] = list.map { entry in
+                let item = CPListItem(
+                    text: entry.title,
+                    detailText: entry.subtitle.isEmpty ? nil : entry.subtitle
+                )
+                item.handler = { [weak self] _, completion in
+                    NowPlayingStore.shared.requestPlayAlbum(
+                        albumId: entry.albumId, trackId: entry.trackId, shuffle: false
+                    )
+                    self?.presentNowPlaying()
+                    completion()
+                }
+                setThumbnail(item, urlString: entry.artworkUrl)
+                return item
+            }
+            section = CPListSection(items: items)
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            self?.recentsTemplate.updateSections([section])
+        }
+    }
+
+    // MARK: - Up Next
+
     /// Rebuild the Up Next list's rows from the shared store's current queue.
     /// Plain title + "artist · duration" detail text only — system row
-    /// highlighting is the only "now playing" signal (no hand-drawn playing
-    /// indicator), matching the system-drawn-chrome requirement.
+    /// highlighting is the only "now playing" signal.
     private func rebuildQueueTemplate() {
         let queue = NowPlayingStore.shared.queue
         let items: [CPListItem] = queue.enumerated().map { index, entry in
@@ -103,6 +441,60 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         DispatchQueue.main.async { [weak self] in
             self?.queueListTemplate.updateSections([section])
         }
+    }
+
+    // MARK: - Helpers
+
+    /// Push the system Now Playing screen on top of the current tab's stack —
+    /// but only when it isn't already anywhere in the stack (re-pushing throws).
+    /// Never rooted, never inside the tab bar (both SIGABRT on connect).
+    private func presentNowPlaying() {
+        guard let ic = interfaceController else { return }
+        // Guard the WHOLE stack, not just the top: re-pushing a template already
+        // anywhere in the hierarchy throws the same uncaught NSException (SIGABRT)
+        // as the original root/tab attempts. (e.g. Now Playing pushed → Up Next
+        // pushed on top → a browse row reached from there taps another track.)
+        if !ic.templates.contains(where: { $0 === CPNowPlayingTemplate.shared }) {
+            ic.pushTemplate(CPNowPlayingTemplate.shared, animated: true, completion: nil)
+        }
+    }
+
+    /// Fetch album art off the WebView (native URLSession) and apply it to a list
+    /// row on the main thread, cached + downscaled to CPListItem.maximumImageSize
+    /// so a full Library of thumbnails stays memory-bounded. A slow fetch that
+    /// resolves after the list rebuilds simply lands on a discarded item — the
+    /// next rebuild re-requests from the cache and applies instantly.
+    private func setThumbnail(_ item: CPListItem, urlString: String?) {
+        guard let urlString = urlString, !urlString.isEmpty, let url = URL(string: urlString) else {
+            return
+        }
+        if let cached = artworkCache.object(forKey: urlString as NSString) {
+            item.setImage(cached)
+            return
+        }
+        let maxSize = CPListItem.maximumImageSize
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let self = self,
+                  let data = data,
+                  let raw = UIImage(data: data) else { return }
+            let image = self.downscaled(raw, to: maxSize)
+            self.artworkCache.setObject(image, forKey: urlString as NSString)
+            DispatchQueue.main.async {
+                item.setImage(image)
+            }
+        }.resume()
+    }
+
+    /// Aspect-fit downscale so no dimension exceeds `maxSize`. No-op when the
+    /// image already fits (or sizes are degenerate).
+    private func downscaled(_ image: UIImage, to maxSize: CGSize) -> UIImage {
+        let w = image.size.width, h = image.size.height
+        guard w > 0, h > 0, maxSize.width > 0, maxSize.height > 0 else { return image }
+        let scale = min(maxSize.width / w, maxSize.height / h, 1)
+        if scale >= 1 { return image }
+        let newSize = CGSize(width: w * scale, height: h * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: newSize)) }
     }
 
     private func formattedDuration(_ seconds: Double) -> String {

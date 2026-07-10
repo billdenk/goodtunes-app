@@ -38,6 +38,9 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setMetadata", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPlaybackState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setQueue", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setCatalog", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setRecents", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setFavorite", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clear", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "addListener", returnType: CAPPluginReturnCallback),
         CAPPluginMethod(name: "removeAllListeners", returnType: CAPPluginReturnPromise)
@@ -48,6 +51,22 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
     /// image fetch that resolves after the user has skipped tracks is ignored.
     private var artworkURL: String?
 
+    // MARK: - Last-known now-playing metadata (self-heal cache)
+    //
+    // iOS resets MPNowPlayingInfoCenter.nowPlayingInfo around some lifecycle
+    // events (notably when a CarPlay scene connects). setPlaybackState fires
+    // every tick and would then rebuild the dict with only elapsed/duration/
+    // rate — so the scrubber advances but the head unit shows the app name +
+    // icon instead of the real title/artist/art. We cache the last metadata
+    // here and re-apply it in setPlaybackState whenever the live dict has lost
+    // its title, so the now-playing surface self-heals without waiting for the
+    // next song change (which is the only thing that re-fires setMetadata).
+    private var lastTitle = ""
+    private var lastArtist = ""
+    private var lastAlbum = ""
+    private var lastDuration: Double = 0
+    private var lastArtwork: MPMediaItemArtwork?
+
     public override func load() {
         configureAudioSession()
         wireRemoteCommands()
@@ -56,6 +75,30 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         // remote command, exactly like the transport commands above.
         NowPlayingStore.shared.onPlayIndex = { [weak self] index in
             self?.emitPlayIndex(index)
+        }
+        // A CarPlay catalog/recents tap (album id + optional track id + shuffle)
+        // → `playAlbum`.
+        NowPlayingStore.shared.onPlayAlbum = { [weak self] albumId, trackId, shuffle in
+            self?.emitPlayAlbum(albumId: albumId, trackId: trackId, shuffle: shuffle)
+        }
+        // CarPlay Now Playing button taps → their JS remote commands. These fire
+        // via the store (set by CarPlaySceneDelegate's button handlers), NOT via
+        // MPRemoteCommandCenter targets, so the web player owns shuffle/repeat/
+        // favorite state.
+        NowPlayingStore.shared.onToggleFavorite = { [weak self] in
+            self?.emit("toggleFavorite")
+        }
+        NowPlayingStore.shared.onToggleShuffle = { [weak self] in
+            self?.emit("toggleShuffle")
+        }
+        NowPlayingStore.shared.onCycleRepeat = { [weak self] in
+            self?.emit("cycleRepeat")
+        }
+        // CarPlay connected → ask JS to re-publish everything. iOS wipes
+        // MPNowPlayingInfoCenter around scene connect, so without this the head
+        // unit shows the app name/icon until the next song change.
+        NowPlayingStore.shared.onResync = { [weak self] in
+            self?.emitResync()
         }
     }
 
@@ -83,6 +126,11 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         let duration = call.getDouble("duration") ?? 0
         let artwork = call.getString("artworkUrl")
 
+        // Cache for the setPlaybackState self-heal (see property comment).
+        lastTitle = title
+        lastArtist = artist
+        lastAlbum = album
+        lastDuration = duration
         DispatchQueue.main.async {
             var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [String: Any]()
             info[MPMediaItemPropertyTitle] = title
@@ -119,6 +167,8 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
             let art = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
             DispatchQueue.main.async {
                 guard self.artworkURL == requested else { return }
+                // Cache for the setPlaybackState self-heal (see property comment).
+                self.lastArtwork = art
                 var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [String: Any]()
                 info[MPMediaItemPropertyArtwork] = art
                 MPNowPlayingInfoCenter.default().nowPlayingInfo = info
@@ -130,11 +180,44 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         let isPlaying = call.getBool("isPlaying") ?? false
         let elapsed = call.getDouble("elapsed") ?? 0
         let duration = call.getDouble("duration") ?? 0
+        // Optional shuffle/repeat hints so the CarPlay Now Playing buttons render
+        // the web player's current modes. The buttons themselves drive JS via the
+        // store handlers; these calls only keep the *displayed* state in sync.
+        let shuffle = call.getBool("shuffle")
+        let repeatMode = call.getString("repeat")
         if isPlaying {
             configureAudioSession()
         }
+        let cc = MPRemoteCommandCenter.shared()
+        if let shuffle = shuffle {
+            cc.changeShuffleModeCommand.currentShuffleType = shuffle ? .items : .off
+        }
+        if let repeatMode = repeatMode {
+            switch repeatMode {
+            case "one": cc.changeRepeatModeCommand.currentRepeatType = .one
+            case "all": cc.changeRepeatModeCommand.currentRepeatType = .all
+            default: cc.changeRepeatModeCommand.currentRepeatType = .off
+            }
+        }
         DispatchQueue.main.async {
             var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [String: Any]()
+            // Self-heal: if iOS reset the dict (e.g. on CarPlay connect) it has
+            // no title, so re-apply the cached metadata before we stamp the
+            // position — otherwise the head unit shows the app name/icon with a
+            // live scrubber. A resync from JS also covers this, but this catches
+            // any reset the resync misses and costs nothing when the title's fine.
+            let hasTitle = (info[MPMediaItemPropertyTitle] as? String)?.isEmpty == false
+            if !hasTitle && !self.lastTitle.isEmpty {
+                info[MPMediaItemPropertyTitle] = self.lastTitle
+                info[MPMediaItemPropertyArtist] = self.lastArtist
+                info[MPMediaItemPropertyAlbumTitle] = self.lastAlbum
+                if self.lastDuration > 0 {
+                    info[MPMediaItemPropertyPlaybackDuration] = self.lastDuration
+                }
+                if let art = self.lastArtwork {
+                    info[MPMediaItemPropertyArtwork] = art
+                }
+            }
             info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsed
             if duration > 0 {
                 info[MPMediaItemPropertyPlaybackDuration] = duration
@@ -166,8 +249,65 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve()
     }
 
+    /// Mirror the fan's browsable Library (owned GoodTunes releases + their
+    /// tracklists) into the shared store so the CarPlay root list + album-detail
+    /// screens can render it. Lock-screen-agnostic — CarPlay only.
+    @objc func setCatalog(_ call: CAPPluginCall) {
+        let rawAlbums = call.getArray("albums", [String: Any].self) ?? []
+        let albums: [CatalogAlbum] = rawAlbums.map { a in
+            let rawTracks = a["tracks"] as? [[String: Any]] ?? []
+            let tracks: [CatalogTrack] = rawTracks.map { t in
+                CatalogTrack(
+                    id: t["id"] as? String ?? "",
+                    title: t["title"] as? String ?? "",
+                    artist: t["artist"] as? String ?? "",
+                    duration: (t["duration"] as? NSNumber)?.doubleValue ?? 0
+                )
+            }
+            return CatalogAlbum(
+                id: a["id"] as? String ?? "",
+                title: a["title"] as? String ?? "",
+                artist: a["artist"] as? String ?? "",
+                artworkUrl: a["artworkUrl"] as? String,
+                tracks: tracks
+            )
+        }
+        NowPlayingStore.shared.updateCatalog(albums)
+        call.resolve()
+    }
+
+    /// Mirror the fan's "recently played" list into the shared store so the
+    /// CarPlay Recents tab can render it. Lock-screen-agnostic — CarPlay only.
+    @objc func setRecents(_ call: CAPPluginCall) {
+        let raw = call.getArray("items", [String: Any].self) ?? []
+        let items: [RecentEntry] = raw.map { dict in
+            RecentEntry(
+                albumId: dict["albumId"] as? String ?? "",
+                trackId: dict["trackId"] as? String,
+                title: dict["title"] as? String ?? "",
+                subtitle: dict["subtitle"] as? String ?? "",
+                artworkUrl: dict["artworkUrl"] as? String
+            )
+        }
+        NowPlayingStore.shared.updateRecents(items)
+        call.resolve()
+    }
+
+    /// Mirror whether the current track is a favorite so the CarPlay Now Playing
+    /// heart button can render filled vs outline. Lock-screen-agnostic.
+    @objc func setFavorite(_ call: CAPPluginCall) {
+        let isFavorite = call.getBool("isFavorite") ?? false
+        NowPlayingStore.shared.updateFavorite(isFavorite)
+        call.resolve()
+    }
+
     @objc func clear(_ call: CAPPluginCall) {
         artworkURL = nil
+        lastTitle = ""
+        lastArtist = ""
+        lastAlbum = ""
+        lastDuration = 0
+        lastArtwork = nil
         NowPlayingStore.shared.updateQueue([], currentIndex: 0)
         DispatchQueue.main.async {
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -222,5 +362,21 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func emitPlayIndex(_ index: Int) {
         notifyListeners("remoteCommand", data: ["action": "playIndex", "value": index])
+    }
+
+    private func emitPlayAlbum(albumId: String, trackId: String?, shuffle: Bool) {
+        var data: [String: Any] = [
+            "action": "playAlbum",
+            "albumId": albumId,
+            "shuffle": shuffle,
+        ]
+        if let trackId = trackId {
+            data["trackId"] = trackId
+        }
+        notifyListeners("remoteCommand", data: data)
+    }
+
+    private func emitResync() {
+        notifyListeners("remoteCommand", data: ["action": "resync"])
     }
 }

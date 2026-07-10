@@ -51,6 +51,12 @@ export interface NowPlayingPlaybackState {
   elapsed: number;
   /** Track length in seconds (0 when unknown). */
   duration: number;
+  /** Whether shuffle is on — drives the CarPlay Now Playing shuffle button's
+   *  displayed state (iOS only; omitted = leave unchanged). */
+  shuffle?: boolean;
+  /** Repeat mode — drives the CarPlay Now Playing repeat button's displayed
+   *  state (iOS only; omitted = leave unchanged). */
+  repeat?: "none" | "all" | "one";
 }
 
 /** A single browsable entry (a queued track) published to CarPlay (iOS) so
@@ -67,6 +73,29 @@ export interface NowPlayingQueueItem {
   duration: number;
 }
 
+/** A single track inside a browsable catalog album (CarPlay album-detail row). */
+export interface NowPlayingCatalogTrack {
+  /** Stable id (the PlayerSong id) echoed back on a `playAlbum` command. */
+  id: string;
+  title: string;
+  artist: string;
+  /** Track length in seconds (0 when unknown). */
+  duration: number;
+}
+
+/** A browsable album published to CarPlay (iOS) — the fan's owned GoodTunes
+ *  releases + their tracklists. Drives the CarPlay Library root list and the
+ *  per-album track list. */
+export interface NowPlayingCatalogAlbum {
+  /** Stable album id echoed back on a `playAlbum` command. */
+  id: string;
+  title: string;
+  artist: string;
+  /** Album artwork URL for the browse row thumbnail; omitted when unavailable. */
+  artworkUrl?: string;
+  tracks: NowPlayingCatalogTrack[];
+}
+
 /** A transport command originated from the OS lock screen / Control Center or
  *  the CarPlay in-car surface (iOS). */
 export type RemoteCommand =
@@ -75,16 +104,47 @@ export type RemoteCommand =
   /** The user tapped a row in the CarPlay browse list —
    *  `value` is the 0-based index into the queue last published via
    *  {@link setNowPlayingQueue}. */
-  | { action: "playIndex"; value: number };
+  | { action: "playIndex"; value: number }
+  /** The user tapped a track in the CarPlay Library (album detail), a Play/
+   *  Shuffle row, or a Recents entry. Play `albumId` from the catalog last
+   *  published via {@link setNowPlayingCatalog}: `trackId` present = start at that
+   *  track; absent = start from the top; `shuffle` = shuffle the album. */
+  | { action: "playAlbum"; albumId: string; trackId?: string; shuffle?: boolean }
+  /** CarPlay Now Playing heart tapped — toggle the current track's favorite. */
+  | { action: "toggleFavorite" }
+  /** CarPlay Now Playing shuffle button tapped — toggle shuffle. */
+  | { action: "toggleShuffle" }
+  /** CarPlay Now Playing repeat button tapped — cycle repeat (off→all→one). */
+  | { action: "cycleRepeat" }
+  /** CarPlay connected — re-publish metadata + playback state + queue +
+   *  catalog (iOS resets the now-playing info around scene connect). */
+  | { action: "resync" };
 
 interface PluginListenerHandle {
   remove: () => Promise<void>;
+}
+
+/** A single "recently played" entry published to CarPlay (iOS) — an owned
+ *  album or a track within one. Drives the CarPlay Recents tab. */
+export interface NowPlayingRecentItem {
+  /** Album id echoed back on a `playAlbum` command. */
+  albumId: string;
+  /** Track id echoed back on a `playAlbum` command (absent = play the album
+   *  from the top). */
+  trackId?: string;
+  title: string;
+  subtitle: string;
+  /** Artwork URL for the browse row thumbnail; omitted when unavailable. */
+  artworkUrl?: string;
 }
 
 interface NowPlayingPlugin {
   setMetadata(options: NowPlayingMetadata): Promise<void>;
   setPlaybackState(options: NowPlayingPlaybackState): Promise<void>;
   setQueue(options: { items: NowPlayingQueueItem[]; currentIndex: number }): Promise<void>;
+  setCatalog(options: { albums: NowPlayingCatalogAlbum[] }): Promise<void>;
+  setRecents(options: { items: NowPlayingRecentItem[] }): Promise<void>;
+  setFavorite(options: { isFavorite: boolean }): Promise<void>;
   clear(): Promise<void>;
   addListener(
     eventName: "remoteCommand",
@@ -165,6 +225,34 @@ export function setNowPlayingQueue(
 ): void {
   if (!available()) return;
   NowPlaying.setQueue({ items, currentIndex }).catch(() => {});
+}
+
+/**
+ * Publish the fan's browsable Library (owned GoodTunes releases + tracklists)
+ * so CarPlay (iOS) can render the Library root list + per-album track lists and
+ * let the driver start any track. No-op off-native (and on native iOS this is
+ * only consumed by the CarPlay scene — the lock screen ignores it). */
+export function setNowPlayingCatalog(albums: NowPlayingCatalogAlbum[]): void {
+  if (!available()) return;
+  NowPlaying.setCatalog({ albums }).catch(() => {});
+}
+
+/**
+ * Publish the fan's "recently played" list so CarPlay (iOS) can render the
+ * Recents tab and let the driver resume any album/track. No-op off-native (and
+ * on native iOS this is only consumed by the CarPlay scene — the lock screen
+ * ignores it). */
+export function setNowPlayingRecents(items: NowPlayingRecentItem[]): void {
+  if (!available()) return;
+  NowPlaying.setRecents({ items }).catch(() => {});
+}
+
+/**
+ * Publish whether the current track is a favorite so CarPlay (iOS) can render
+ * the Now Playing heart button filled vs outline. No-op off-native. */
+export function setNowPlayingFavorite(isFavorite: boolean): void {
+  if (!available()) return;
+  NowPlaying.setFavorite({ isFavorite }).catch(() => {});
 }
 
 /** Clear the OS now-playing info (queue emptied / player torn down). */
