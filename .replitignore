@@ -1,0 +1,48 @@
+# Files excluded from the published deployment image (autoscale/cloud_run).
+# Syntax follows .gitignore. Purpose: keep the image under the 8 GiB limit.
+# The deployed app only needs the build inputs (client/, server/, shared/,
+# script/, config, node_modules) plus the handful of attached_assets that the
+# client bundle actually imports, and at runtime only `dist/` + node_modules.
+
+# Git history — never needed in the image; holds multiple GB of committed media.
+.git
+
+# Agent / editor / session tooling and generated caches.
+.local
+.agents
+.canvas
+.cache
+exports
+.upm
+
+# Dev-only mockup sandbox (its own app + workflow; not part of the web build).
+artifacts
+
+# Native mobile projects — built on CI, not by the web server.
+ios
+android
+
+# Throwaway importer backup snapshots.
+scripts/backups
+
+# Misc large one-off docs that ride in the repo root.
+*.tar.gz
+SoulChef-Escapism-Instrumentals-Estimate.docx
+
+# attached_assets is ~4.4 GB, but only ~20 small files are imported by the
+# client build. The rest are historical chat attachments (screen recordings,
+# zip/PSD mockups, PDFs, ~3.6 GB of screenshots). Ignore the directory, then
+# re-include exactly what the build imports.
+attached_assets/*
+!attached_assets/instruments
+!attached_assets/*.jpg
+!attached_assets/*.jpeg
+!attached_assets/*.svg
+!attached_assets/*.webp
+!attached_assets/2025_GoodTunes_Logo-dark.1_1778271422870.png
+!attached_assets/image_1778731986270.png
+# PNGs read from disk at RUNTIME by the server (cert / GoodDeed print PDF
+# generation in server/certificates.ts + server/goodDeedPrintTemplate.ts).
+# These are fs reads, not @assets/ imports, so a build-only check misses them.
+!attached_assets/signature-GoodDeed_1779414807544.png
+!attached_assets/2025_GoodTunes_Logo-icon-dark-02_1778271548074.png
