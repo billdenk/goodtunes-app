@@ -27,6 +27,7 @@ import { Heart, Star, Building2 } from "lucide-react";
 import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { ReferralLinkWidget } from "@/components/admin/ReferralLinkWidget";
 import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
+import { PartnerOrdersTable } from "@/components/partner/PartnerOrdersTable";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
 import { AdminReports } from "@/pages/AdminReports";
@@ -91,15 +92,6 @@ type Tracks = {
   tracks: {
     songId: string; title: string; albumTitle: string; albumArtist: string;
     plays: number; completes: number; favorites: number; playlistAdds: number; shares: number;
-  }[];
-};
-type OrdersPayload = {
-  range: Range;
-  orders: {
-    id: string; createdAt: string; status: string; totalCents: number;
-    labelShareCents: number; country: string | null;
-    albumId: string; albumTitle: string; albumArtist: string;
-    primaryArtistId: string | null;
   }[];
 };
 
@@ -892,8 +884,9 @@ function CatalogTab({ qs }: { qs: string }) {
 }
 
 // ─── Orders tab ───────────────────────────────────────────────────────
+// Task #2643 — Orders tab now renders the shared PartnerOrdersTable
+// (sortable headers, album filter, authenticated Export CSV).
 function OrdersTab({ qs, labelIdParam }: { qs: string; labelIdParam: string | null }) {
-  const orders = useQuery<OrdersPayload>({ queryKey: [`/api/label/orders?${qs}`] });
   const drillHref = (personId: string) => {
     const u = new URLSearchParams();
     u.set("personId", personId);
@@ -901,47 +894,13 @@ function OrdersTab({ qs, labelIdParam }: { qs: string; labelIdParam: string | nu
     return `/artist?${u.toString()}`;
   };
   return (
-    <Card
-      title="Recent orders"
+    <PartnerOrdersTable
+      base="label"
+      qs={qs}
       subtitle="Across the entire roster"
-      testId="table-orders"
-      action={<CsvButton href={`/api/label/orders?${qs}&format=csv`} label="orders.csv" testId="export-orders" />}
-    >
-      <div className="overflow-x-auto">
-        <table className="w-full text-[13px]">
-          <thead className="text-slate-400 text-[11px] uppercase tracking-wider">
-            <tr>
-              <th className="text-left font-medium py-2 pr-3">Date</th>
-              <th className="text-left font-medium px-2">Album</th>
-              <th className="text-left font-medium px-2">Artist</th>
-              <th className="text-left font-medium px-2">Country</th>
-              <th className="text-left font-medium px-2">Status</th>
-              <th className="text-right font-medium pl-2">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.isLoading && <tr><td colSpan={6} className="py-6 text-center text-slate-400">Loading…</td></tr>}
-            {!orders.isLoading && (orders.data?.orders.length ?? 0) === 0 && <tr><td colSpan={6} className="py-6 text-center text-slate-400">No orders in this window.</td></tr>}
-            {orders.data?.orders.map((o) => (
-              <tr key={o.id} className="border-t border-slate-100" data-testid={`row-order-${o.id}`}>
-                <td className="py-2 pr-3 whitespace-nowrap text-slate-700">{new Date(o.createdAt).toLocaleDateString()}</td>
-                <td className="px-2 truncate max-w-[200px]">
-                  <Link href={`/album/${o.albumId}`}><a className="transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2">{o.albumTitle}</a></Link>
-                </td>
-                <td className="px-2 truncate max-w-[160px] text-slate-700">
-                  {o.primaryArtistId ? (
-                    <Link href={drillHref(o.primaryArtistId)}><a className="transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2">{o.albumArtist}</a></Link>
-                  ) : o.albumArtist}
-                </td>
-                <td className="px-2 text-slate-600">{o.country ?? "—"}</td>
-                <td className="px-2"><StatusPill status={o.status} /></td>
-                <td className="pl-2 text-right tabular-nums font-semibold">{dollarsCents(o.totalCents)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+      showArtist
+      artistDrillHref={drillHref}
+    />
   );
 }
 
@@ -969,16 +928,6 @@ function CsvButton({ href, label, testId }: { href: string; label: string; testI
       ↓ {label}
     </a>
   );
-}
-
-function StatusPill({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    paid: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-    shipped: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
-    refunded: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
-    pending: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
-  };
-  return <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${map[status] ?? "bg-slate-100 text-slate-700"}`}>{status}</span>;
 }
 
 function SkeletonBlock() {

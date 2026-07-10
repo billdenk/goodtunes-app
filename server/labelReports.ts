@@ -556,6 +556,23 @@ async function topTracksHandler(req: Request, res: Response) {
   return res.json({ range, tracks });
 }
 
+// Task #2643 — album list powering the Orders-tab filter dropdown. Same
+// resolved scope as the orders query, so every pickable album is one the
+// caller can actually see orders for.
+async function releasesHandler(req: Request, res: Response) {
+  const scope = await resolveLabelScope(req);
+  if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
+  if (!scope.albumIds.length) return res.json({ releases: [] });
+  const rows = await db.execute<any>(sql`
+    SELECT id, title, artist FROM albums
+    WHERE id = ANY(${pgArray(scope.albumIds)})
+    ORDER BY title ASC
+  `);
+  return res.json({
+    releases: ((rows as any).rows || []).map((r: any) => ({ albumId: r.id, title: r.title, artist: r.artist })),
+  });
+}
+
 async function ordersHandler(req: Request, res: Response) {
   const scope = await resolveLabelScope(req);
   if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
@@ -565,6 +582,11 @@ async function ordersHandler(req: Request, res: Response) {
     if (req.query.format === "csv") return sendCsv(res, "orders.csv", []);
     return res.json({ range, orders: [] });
   }
+  // Task #2643 — album filter + sortable columns (shared whitelist parser).
+  const { parseOrdersSort, parseOrdersAlbumFilter } = await import("./artistReports");
+  const albumFilter = parseOrdersAlbumFilter(req, scope.albumIds);
+  if (albumFilter.error) return res.status(403).json({ message: albumFilter.error });
+  const { orderBy } = parseOrdersSort(req);
 
   const rows = await db.execute<any>(sql`
     SELECT o.id, o.created_at, o.status, o.total_cents,
@@ -574,7 +596,8 @@ async function ordersHandler(req: Request, res: Response) {
     JOIN albums a ON a.id = o.album_id
     WHERE ${ordersFilter(scope)}
       AND o.created_at >= ${range.from} AND o.created_at < ${range.to}
-    ORDER BY o.created_at DESC
+      ${albumFilter.clause}
+    ORDER BY ${orderBy}
     LIMIT ${limit}
   `);
 
@@ -627,4 +650,5 @@ export async function registerLabelReportRoutes(app: Express): Promise<void> {
   app.get("/api/label/top-albums", gate, topAlbumsHandler);
   app.get("/api/label/top-tracks", gate, topTracksHandler);
   app.get("/api/label/orders", gate, ordersHandler);
+  app.get("/api/label/releases", gate, releasesHandler);
 }

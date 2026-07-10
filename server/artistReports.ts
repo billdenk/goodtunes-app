@@ -770,6 +770,55 @@ async function topAlbumsHandler(req: Request, res: Response) {
   return res.json({ range, albums });
 }
 
+// Task #2643 — shared sort/filter parsing for the partner Orders tab.
+// `sort`/`dir` are whitelisted (never interpolated raw), `albumId` must be
+// inside the caller's resolved scope so a partner can't filter to (and thus
+// confirm the existence of / export) someone else's album.
+export function parseOrdersSort(req: Request): { orderBy: ReturnType<typeof sql>; } {
+  const dirRaw = String(req.query.dir || "desc").toLowerCase();
+  const asc = dirRaw === "asc";
+  const key = String(req.query.sort || "date");
+  // share == total today (no payout split in live DB yet — see module header)
+  const cols: Record<string, ReturnType<typeof sql>> = {
+    date: sql`o.created_at`,
+    album: sql`a.title`,
+    artist: sql`a.artist`,
+    total: sql`o.total_cents`,
+    share: sql`o.total_cents`,
+  };
+  const col = cols[key] ?? cols.date;
+  // Stable secondary key so equal-value pages don't shuffle.
+  return { orderBy: asc ? sql`${col} ASC, o.created_at ASC` : sql`${col} DESC, o.created_at DESC` };
+}
+
+export function parseOrdersAlbumFilter(
+  req: Request,
+  albumIds: string[],
+): { error?: string; clause: ReturnType<typeof sql> } {
+  const albumId = req.query.albumId ? String(req.query.albumId) : null;
+  if (!albumId) return { clause: sql`` };
+  if (!albumIds.includes(albumId)) return { error: "Album is not in your catalog", clause: sql`` };
+  return { clause: sql`AND o.album_id = ${albumId}` };
+}
+
+// Task #2643 — album list powering the Orders-tab filter dropdown. Uses the
+// SAME resolved scope as the orders query itself (so every album that can
+// appear in the table is pickable, and nothing outside the caller's scope
+// ever is).
+async function releasesHandler(req: Request, res: Response) {
+  const scope = await resolveArtistScope(req);
+  if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
+  if (!scope.albumIds.length) return res.json({ releases: [] });
+  const rows = await db.execute<any>(sql`
+    SELECT id, title, artist FROM albums
+    WHERE id = ANY(${pgArray(scope.albumIds)})
+    ORDER BY title ASC
+  `);
+  return res.json({
+    releases: ((rows as any).rows || []).map((r: any) => ({ albumId: r.id, title: r.title, artist: r.artist })),
+  });
+}
+
 async function ordersHandler(req: Request, res: Response) {
   const scope = await resolveArtistScope(req);
   if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
@@ -779,6 +828,9 @@ async function ordersHandler(req: Request, res: Response) {
     if (req.query.format === "csv") return sendCsv(res, "orders.csv", []);
     return res.json({ range, orders: [] });
   }
+  const albumFilter = parseOrdersAlbumFilter(req, scope.albumIds);
+  if (albumFilter.error) return res.status(403).json({ message: albumFilter.error });
+  const { orderBy } = parseOrdersSort(req);
 
   // sku_kind / origin / fulfillment_status / payout_amount_cents are
   // schema columns from #48 #49 #73 that haven't landed in the live DB
@@ -792,7 +844,8 @@ async function ordersHandler(req: Request, res: Response) {
     JOIN albums a ON a.id = o.album_id
     WHERE ${ordersFilter(scope)}
       AND o.created_at >= ${range.from} AND o.created_at < ${range.to}
-    ORDER BY o.created_at DESC
+      ${albumFilter.clause}
+    ORDER BY ${orderBy}
     LIMIT ${limit}
   `);
 
@@ -1312,6 +1365,7 @@ export async function registerArtistReportRoutes(app: Express): Promise<void> {
   app.get("/api/artist/top-tracks", gate, topTracksHandler);
   app.get("/api/artist/top-albums", gate, topAlbumsHandler);
   app.get("/api/artist/orders", gate, ordersHandler);
+  app.get("/api/artist/releases", gate, releasesHandler);
   app.get("/api/artist/buyers", gate, buyersHandler);
   app.get("/api/artist/buyer-map", gate, buyerMapHandler);
   app.get("/api/artist/audience", gate, audienceHandler);
