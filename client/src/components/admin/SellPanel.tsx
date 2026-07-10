@@ -5824,7 +5824,7 @@ function SkuRow({
                 column below. */}
             {format === "12_lp" && (
               <div
-                className="mt-2 text-xs text-slate-500 text-left"
+                className="mt-2 pl-3 sm:pl-4 text-xs text-slate-500 text-left"
                 data-testid={`text-jacket-standard-${format}`}
               >
                 Every 12&rdquo; LP ships in the standard jacket.
