@@ -200,10 +200,94 @@ function available(): boolean {
   return pluginAvailable;
 }
 
+// --- Now-Playing diagnostic capture (Task #2658) ---------------------------
+// Bill's native lock screen + CarPlay show a generic "GoodTunes" title and the
+// app logo while the scrubber + transport work. That symptom narrows to exactly
+// one of three causes, each with a DIFFERENT fix:
+//   1. the JS side never computes a real title (data-shape bug) — JS fix;
+//   2. the bridge call never reaches the plugin (`available()` === false, e.g.
+//      the plugin isn't registered on this binary), so the scrubber Bill sees
+//      is just iOS auto-managing the WebView <audio> — native/rebuild fix;
+//   3. the bridge delivers real values but iOS ignores the plugin's manual
+//      MPNowPlayingInfoCenter write for the WebView session — fix is to feed
+//      navigator.mediaSession.metadata instead.
+// The deciding fact is device-only (no Xcode / head unit in the container), so
+// this records what the JS side last TRIED to publish and whether the bridge
+// actually delivered it. The native shell loads the remote origin, so it ships
+// to the existing binary via a normal web publish (no CodeMagic build);
+// operators read it in-app via NowPlayingDebugOverlay.
+type DiagMeta = NowPlayingMetadata & { at: number; delivered: boolean; error: string | null };
+type DiagPlayback = NowPlayingPlaybackState & { at: number; delivered: boolean; error: string | null };
+type DiagFavorite = { isFavorite: boolean; at: number; delivered: boolean; error: string | null };
+type DiagCommand = { cmd: RemoteCommand; at: number };
+
+export interface NowPlayingDiag {
+  isNative: boolean;
+  platform: string;
+  /** Live `Capacitor.isPluginAvailable("NowPlaying")` — the (2) vs (3) fork. */
+  pluginAvailable: boolean;
+  lastMetadata: DiagMeta | null;
+  lastPlayback: DiagPlayback | null;
+  lastFavorite: DiagFavorite | null;
+  lastCommand: DiagCommand | null;
+  metadataCalls: number;
+  playbackCalls: number;
+  favoriteCalls: number;
+  commandCount: number;
+}
+
+let diagLastMetadata: DiagMeta | null = null;
+let diagLastPlayback: DiagPlayback | null = null;
+let diagLastFavorite: DiagFavorite | null = null;
+let diagLastCommand: DiagCommand | null = null;
+let diagMetadataCalls = 0;
+let diagPlaybackCalls = 0;
+let diagFavoriteCalls = 0;
+let diagCommandCount = 0;
+
+function emitDiag(): void {
+  try {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("gt:nowplaying-diag"));
+    }
+  } catch {}
+}
+
+/** Snapshot the Now-Playing bridge diagnostic state. Cheap; safe off-native. */
+export function getNowPlayingDiag(): NowPlayingDiag {
+  let platform = "web";
+  let pluginAvailable = false;
+  try {
+    platform = Capacitor.getPlatform();
+  } catch {}
+  try {
+    pluginAvailable = isNative && Capacitor.isPluginAvailable("NowPlaying");
+  } catch {}
+  return {
+    isNative,
+    platform,
+    pluginAvailable,
+    lastMetadata: diagLastMetadata,
+    lastPlayback: diagLastPlayback,
+    lastFavorite: diagLastFavorite,
+    lastCommand: diagLastCommand,
+    metadataCalls: diagMetadataCalls,
+    playbackCalls: diagPlaybackCalls,
+    favoriteCalls: diagFavoriteCalls,
+    commandCount: diagCommandCount,
+  };
+}
+
 /** Publish the current track's metadata to the OS lock screen. No-op off-native. */
 export function setNowPlayingMetadata(meta: NowPlayingMetadata): void {
-  if (!available()) return;
-  NowPlaying.setMetadata(meta).catch(() => {
+  const delivered = available();
+  diagMetadataCalls += 1;
+  diagLastMetadata = { ...meta, at: Date.now(), delivered, error: null };
+  emitDiag();
+  if (!delivered) return;
+  NowPlaying.setMetadata(meta).catch((e: any) => {
+    if (diagLastMetadata) diagLastMetadata.error = String(e?.message ?? e);
+    emitDiag();
     /* best-effort; a failed set just leaves the previous now-playing info */
   });
 }
@@ -211,8 +295,15 @@ export function setNowPlayingMetadata(meta: NowPlayingMetadata): void {
 /** Publish play/pause + elapsed position so the lock-screen scrubber tracks
  *  real playback. No-op off-native. */
 export function setNowPlayingPlaybackState(state: NowPlayingPlaybackState): void {
-  if (!available()) return;
-  NowPlaying.setPlaybackState(state).catch(() => {});
+  const delivered = available();
+  diagPlaybackCalls += 1;
+  // Ticks ~1×/sec, so update the snapshot without dispatching an event (the
+  // overlay polls while open); metadata/favorite/command still emit.
+  diagLastPlayback = { ...state, at: Date.now(), delivered, error: null };
+  if (!delivered) return;
+  NowPlaying.setPlaybackState(state).catch((e: any) => {
+    if (diagLastPlayback) diagLastPlayback.error = String(e?.message ?? e);
+  });
 }
 
 /**
@@ -252,8 +343,15 @@ export function setNowPlayingRecents(items: NowPlayingRecentItem[]): void {
  * Publish whether the current track is a favorite so CarPlay (iOS) can render
  * the Now Playing heart button filled vs outline. No-op off-native. */
 export function setNowPlayingFavorite(isFavorite: boolean): void {
-  if (!available()) return;
-  NowPlaying.setFavorite({ isFavorite }).catch(() => {});
+  const delivered = available();
+  diagFavoriteCalls += 1;
+  diagLastFavorite = { isFavorite, at: Date.now(), delivered, error: null };
+  emitDiag();
+  if (!delivered) return;
+  NowPlaying.setFavorite({ isFavorite }).catch((e: any) => {
+    if (diagLastFavorite) diagLastFavorite.error = String(e?.message ?? e);
+    emitDiag();
+  });
 }
 
 /** Clear the OS now-playing info (queue emptied / player torn down). */
@@ -284,7 +382,16 @@ export function onNowPlayingRemoteCommand(
   if (!available()) return () => {};
   let cancelled = false;
   let handle: PluginListenerHandle | null = null;
-  NowPlaying.addListener("remoteCommand", (data) => handler(data))
+  NowPlaying.addListener("remoteCommand", (data) => {
+    // Record the inbound command (esp. `toggleFavorite`) so an operator can
+    // confirm the CarPlay heart tap actually reaches JS — the "highlights but
+    // doesn't take" symptom is either no command arriving or the favorite echo
+    // (setNowPlayingFavorite) not landing.
+    diagLastCommand = { cmd: data, at: Date.now() };
+    diagCommandCount += 1;
+    emitDiag();
+    handler(data);
+  })
     .then((h) => {
       if (cancelled) h.remove();
       else handle = h;
