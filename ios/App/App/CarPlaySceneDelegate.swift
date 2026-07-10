@@ -27,6 +27,7 @@ import CarPlay
  * instantiates this class when a head unit connects, with no reference to the
  * Capacitor plugin instance.
  */
+@available(iOS 14.0, *)
 class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
 
     private var interfaceController: CPInterfaceController?
