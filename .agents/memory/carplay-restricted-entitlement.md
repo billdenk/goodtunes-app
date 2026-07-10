@@ -50,3 +50,34 @@ hard-fails the build if either key is still present. To ship CarPlay once
 granted AND real-device verified, set `CARPLAY_GRANTED=true` (also 1/yes/granted)
 in Codemagic's `apple_app` group AND regen the profile — the step then keeps
 both keys.
+
+## Runtime crash rule: never embed / double-push CPNowPlayingTemplate
+
+**Symptom:** the granted CARPLAY_GRANTED build installs, the GoodTunes icon shows
+in the CarPlay grid, but the app opens-then-crashes the instant a real head unit
+connects (worst with music already playing). Crash log (`.ips`, bug_type 309,
+EXC_CRASH/SIGABRT, voucher `CarPlayTemplateUIHost`) ends in
+`objc_exception_throw` → `-[CPTabBarTemplate validateTemplates:]` →
+`-[CPTabBarTemplate initWithTemplates:]`.
+
+**Rule:** `CPTabBarTemplate.validateTemplates:` accepts ONLY
+list / grid / information / point-of-interest / contact templates. Putting
+`CPNowPlayingTemplate.shared` (or any non-container template) into a tab bar — or
+into any container — throws an uncaught NSException → `abort()` on connect. Fix
+was to stop embedding it: configure `CPNowPlayingTemplate.shared` and set the
+root to the "Up Next" `CPListTemplate` directly.
+
+**Why:** for a `carplay-audio` app CarPlay surfaces Now Playing on its OWN — it
+adds the system Now Playing bar/button once `MPNowPlayingInfoCenter` has active
+info (NowPlayingPlugin already populates it for the lock screen) and pushes
+`CPNowPlayingTemplate.shared` on tap. Nothing to add to the hierarchy.
+
+**How to apply:** if you ever want tapping a queue row to jump straight to Now
+Playing, you may `interfaceController.pushTemplate(CPNowPlayingTemplate.shared,…)`
+in the CPListItem handler — but FIRST check it isn't already in
+`interfaceController.templates`; pushing a template already in the hierarchy
+throws the SAME class of uncaught NSException. A CPListTemplate root with zero
+sections is valid, and exceeding `CPListTemplate.maximumItemCount` truncates
+silently (never throws), so an empty or huge queue can't abort. This crash class
+only reproduces on a real head unit / CarPlay simulator, not the plain iOS
+simulator.

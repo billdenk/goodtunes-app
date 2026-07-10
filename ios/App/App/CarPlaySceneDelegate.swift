@@ -5,22 +5,24 @@ import CarPlay
  * CarPlaySceneDelegate — GoodTunes' in-car experience under the
  * `com.apple.developer.carplay-audio` entitlement.
  *
- * Playback-only, system-drawn chrome, well under Apple's per-connection
- * template ceiling for audio apps:
+ * Playback + browse only, system-drawn chrome:
  *
- *   root CPTabBarTemplate
- *     ├── "Now Playing" tab — CPNowPlayingTemplate.shared (system template;
- *     │     reads MPNowPlayingInfoCenter / MPRemoteCommandCenter directly,
- *     │     which NowPlayingPlugin already populates for the lock screen —
- *     │     nothing extra to wire for metadata/transport)
- *     └── "Up Next" tab — a single CPListTemplate fed by
- *           NowPlayingStore.shared.queue; tapping a row calls
- *           NowPlayingStore.shared.requestPlayIndex(index), which the plugin
- *           forwards to JS as the same `playIndex` remote command the lock
- *           screen's transport buttons already use.
+ *   root CPListTemplate ("Up Next") — fed by NowPlayingStore.shared.queue;
+ *     tapping a row calls NowPlayingStore.shared.requestPlayIndex(index),
+ *     which the plugin forwards to JS as the same `playIndex` remote command
+ *     the lock screen's transport buttons already use.
  *
- * No pushes, no additional templates, no lyrics/commerce/GoodDeed/
- * SuperCredits surfaces — CarPlay is playback + browse only.
+ *   Now Playing — CPNowPlayingTemplate.shared, the system template that reads
+ *     MPNowPlayingInfoCenter / MPRemoteCommandCenter directly (NowPlayingPlugin
+ *     already populates those for the lock screen, so metadata + transport need
+ *     nothing extra). CarPlay presents it automatically for a carplay-audio app
+ *     — it must NOT be embedded in the tab bar or any other container (see the
+ *     note in templateApplicationScene(_:didConnect:): doing so throws in
+ *     -[CPTabBarTemplate validateTemplates:] and SIGABRTs the instant a head
+ *     unit connects — the "opens then crashes" bug from the first build).
+ *
+ * No lyrics/commerce/GoodDeed/SuperCredits surfaces — CarPlay is playback +
+ * browse only.
  *
  * See NowPlayingStore.swift for why a shared singleton (rather than a direct
  * reference) is the bridge between this scene and NowPlayingPlugin: UIKit
@@ -39,20 +41,31 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     ) {
         self.interfaceController = interfaceController
 
-        let nowPlaying = CPNowPlayingTemplate.shared
-        // We already have a dedicated "Up Next" tab, so keep the system's own
-        // Up Next / album-artist buttons off the Now Playing template to
-        // avoid a duplicate, slightly different entry point to the same list.
-        nowPlaying.isUpNextButtonEnabled = false
-        nowPlaying.isAlbumArtistButtonEnabled = false
+        // Configure the shared system Now Playing template. CRITICAL: never put
+        // CPNowPlayingTemplate in a CPTabBarTemplate (or any container).
+        // CPTabBarTemplate.validateTemplates: only accepts list / grid /
+        // information / point-of-interest / contact templates and throws an
+        // uncaught NSException for anything else — embedding the now playing
+        // template there SIGABRTs the app the instant a head unit connects
+        // (confirmed crash: -[CPTabBarTemplate validateTemplates:] → abort()).
+        // CarPlay presents Now Playing on its own for a carplay-audio app: it
+        // shows a Now Playing bar/button automatically once MPNowPlayingInfoCenter
+        // is populated (NowPlayingPlugin already does that) and pushes
+        // CPNowPlayingTemplate.shared when tapped, so nothing is added here.
+        // We only keep the system's own Up Next / album-artist buttons off it to
+        // avoid a duplicate entry point to the same list the root already shows.
+        CPNowPlayingTemplate.shared.isUpNextButtonEnabled = false
+        CPNowPlayingTemplate.shared.isAlbumArtistButtonEnabled = false
 
         rebuildQueueTemplate()
         NowPlayingStore.shared.onQueueChanged = { [weak self] in
             self?.rebuildQueueTemplate()
         }
 
-        let tabBar = CPTabBarTemplate(templates: [nowPlaying, queueListTemplate])
-        interfaceController.setRootTemplate(tabBar, animated: false, completion: nil)
+        // Root is the browsable "Up Next" list; the system Now Playing surface
+        // rides on top of it, matching how Apple Music / Spotify open in CarPlay
+        // (library first, now-playing bar along the bottom).
+        interfaceController.setRootTemplate(queueListTemplate, animated: false, completion: nil)
     }
 
     func templateApplicationScene(
