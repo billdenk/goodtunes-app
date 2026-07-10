@@ -541,7 +541,7 @@ async function summaryHandler(req: Request, res: Response) {
           SELECT COALESCE(SUM(rc.amount_cents), 0)::text AS total
           FROM referral_credits rc
           JOIN orders o ON o.id = rc.order_id
-          WHERE rc.kind = 'npo'
+          WHERE rc.referrer_kind = 'non_profit'
             AND o.album_id = ANY(${pgArray(scope.albumIds)}::text[])
             AND o.created_at >= ${range.from} AND o.created_at < ${range.to}
         `)
