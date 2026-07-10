@@ -42,6 +42,7 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setRecents", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setFavorite", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clear", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearLibrary", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "addListener", returnType: CAPPluginReturnCallback),
         CAPPluginMethod(name: "removeAllListeners", returnType: CAPPluginReturnPromise)
     ]
@@ -131,6 +132,12 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         lastArtist = artist
         lastAlbum = album
         lastDuration = duration
+        // Mirror to the persisted snapshot so a future COLD CarPlay connect (app
+        // never opened, so this plugin never loads) can restore the Now Playing
+        // metadata instead of the app icon. Art bytes follow from loadArtwork.
+        NowPlayingStore.shared.persistMetadata(
+            title: title, artist: artist, album: album, duration: duration, artworkUrl: artwork
+        )
         DispatchQueue.main.async {
             var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [String: Any]()
             info[MPMediaItemPropertyTitle] = title
@@ -165,6 +172,12 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
             // The user may have skipped to another song while this loaded.
             guard self.artworkURL == requested else { return }
             let art = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            // Persist a bounded, downscaled JPEG of the art so a future COLD
+            // CarPlay connect can render real artwork with no network (a remote
+            // URL fetch would fail in the garage). Best-effort; ignored if the
+            // track changed by the time it lands (url match re-checked in store).
+            let jpeg = self.downscaledJpeg(image, maxDimension: 600)
+            NowPlayingStore.shared.persistArtworkData(jpeg, forUrl: requested)
             DispatchQueue.main.async {
                 guard self.artworkURL == requested else { return }
                 // Cache for the setPlaybackState self-heal (see property comment).
@@ -174,6 +187,24 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
                 MPNowPlayingInfoCenter.default().nowPlayingInfo = info
             }
         }.resume()
+    }
+
+    /// Aspect-fit downscale + JPEG-encode album art for the cold-connect
+    /// snapshot, so persisted bytes stay small (UserDefaults is not for large
+    /// blobs). No upscaling; returns nil on a degenerate image.
+    private func downscaledJpeg(_ image: UIImage, maxDimension: CGFloat) -> Data? {
+        let w = image.size.width, h = image.size.height
+        guard w > 0, h > 0 else { return nil }
+        let scale = min(maxDimension / w, maxDimension / h, 1)
+        let target = CGSize(width: w * scale, height: h * scale)
+        let rendered: UIImage
+        if scale < 1 {
+            let renderer = UIGraphicsImageRenderer(size: target)
+            rendered = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: target)) }
+        } else {
+            rendered = image
+        }
+        return rendered.jpegData(compressionQuality: 0.8)
     }
 
     @objc func setPlaybackState(_ call: CAPPluginCall) {
@@ -309,6 +340,25 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         lastDuration = 0
         lastArtwork = nil
         NowPlayingStore.shared.updateQueue([], currentIndex: 0)
+        DispatchQueue.main.async {
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+            call.resolve()
+        }
+    }
+
+    /// Wipe the persisted cold-connect snapshot (owned catalog/recents/queue +
+    /// last now-playing metadata/art). Called on sign-out so the next fan can't
+    /// see the previous fan's library in the car. Deliberately separate from
+    /// `clear()` — that fires on every launch when nothing is playing, which
+    /// would erase the snapshot cold connect depends on.
+    @objc func clearLibrary(_ call: CAPPluginCall) {
+        artworkURL = nil
+        lastTitle = ""
+        lastArtist = ""
+        lastAlbum = ""
+        lastDuration = 0
+        lastArtwork = nil
+        NowPlayingStore.shared.clearSnapshot()
         DispatchQueue.main.async {
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             call.resolve()

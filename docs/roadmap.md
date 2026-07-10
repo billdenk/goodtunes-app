@@ -265,6 +265,18 @@ Four realistic paths to get this codebase onto mobile, in order of effort:
 - **Adapter layer**: `PlayerContext` already isolates audio + persistence behind a stable API — the RN swap happens behind that interface, the rest of the app doesn't notice.
 - **Genuinely new work**: store accounts/certs/signing, push notifications (artist-drop alerts), CarPlay / Android Auto integration.
 
+---
+
+## CarPlay cold-connect tap-to-play (deferred)
+
+**Status: deferred — device-gated, needs a process-singleton bring-up refactor.** The cold-connect *browse* case is done: connecting to a head unit with the phone app fully quit renders the last-known Home / Collection / Recents and the real last Now Playing track straight from an on-device snapshot (`NowPlayingStore` disk persistence, hydrated on `didConnect`), with no phone interaction and no network. What is **not** done is **starting audio from a true cold connect** — tapping Play / an album / a track when the app was never opened.
+
+Why it's hard (the architectural blocker): all audio is produced by the web player's hidden `<audio>` element inside the Capacitor WebView. On a cold car connect iOS spins up *only* the CarPlay scene — the phone window scene that hosts the web player is never created, so there is no `<audio>`, no signed Mux session, nothing to drive. Transport commands from the car have nothing to talk to and are inert until a web player exists.
+
+The fix is to bring the Capacitor web player up **off-screen** on CarPlay connect (originally step 4 of the cold-connect task): mount a headless `CAPBridgeViewController`, resume the signed-in session, let `PlayerContext` fetch + republish, and route car transport into it. This can't reuse the phone `SceneDelegate`'s window (it doesn't exist on cold connect) and must **not** touch the `UIApplicationSceneManifest` (two prior manifest changes black-screened the store-signed binary — see `.agents/memory/ios-scene-manifest-black-screen.md`). It needs a small **process-singleton bridge**: one shared `CAPBridgeViewController`/webview owned at the app level that either scene (phone or CarPlay) can attach to and publish through, so the car can start the player and the phone can adopt the same instance when it later opens. That refactor is the deferred work.
+
+Verification is device-only (no Xcode / head unit in the container), so this ships behind the existing `CARPLAY_GRANTED` gate alongside the rest of CarPlay. Until it lands, the honest boundary is: **cold connect = browse + metadata; audio still needs the app opened once (warm connect).**
+
 ### Handoff value to the GT coders
 This codebase is a **working reference implementation**, not throwaway prototype. Even if they choose Path 4, what they receive is:
 - Every screen, every interaction, every transition — already designed and validated.

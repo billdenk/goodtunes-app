@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, setAuthToken, getAuthToken } from "@/lib/queryClient";
 import { identifyAnalyticsUser, markInternalDevice, track } from "@/lib/analytics";
 import { isFullAccessEmail } from "@shared/fullAccess";
+import { clearNowPlayingLibrary } from "@/lib/nativeNowPlaying";
 
 interface AuthUser {
   id: string;
@@ -161,6 +162,10 @@ export function useAuth() {
       setAuthToken(null);
       queryClient.setQueryData(["/api/me"], null);
       queryClient.clear();
+      // Wipe the persisted CarPlay cold-connect snapshot (owned catalog/recents +
+      // last now-playing track) so the next fan on this device can't see the
+      // previous fan's library in the car. No-op off native iOS.
+      clearNowPlayingLibrary();
       identifyAnalyticsUser(null);
     },
   });

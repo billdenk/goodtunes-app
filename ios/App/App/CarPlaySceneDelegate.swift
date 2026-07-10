@@ -22,10 +22,14 @@ import CarPlay
  *   RECENTS (clock) — the fan's recently-played albums/tracks, fed by
  *     NowPlayingStore.shared.recents.
  *
- *   When the catalog is empty (the phone app hasn't been opened this session,
- *   so the WebView never published one) a single non-tappable row explains how
- *   to load it (never mention login — CarPlay review rejects in-car login
- *   demands).
+ *   Cold connect: on didConnect we call NowPlayingStore.shared.hydrateFromDisk()
+ *   BEFORE building any template, so even when the phone app was never opened
+ *   this session (no WebView, no plugin, nothing ever published) the tabs render
+ *   the fan's owned catalog/recents + Now Playing shows the real last track from
+ *   the on-device snapshot — not empty rows + the app icon. Only if the snapshot
+ *   is also empty (brand-new install, or signed out) does a single non-tappable
+ *   row stand in (neutral copy only — never mention login/iPhone-open, which
+ *   CarPlay review rejects as an in-car login/setup demand).
  *
  * Playback taps (album Play/Shuffle rows, a track, an artist's album, a Recents
  * row) call NowPlayingStore.shared.requestPlayAlbum(albumId:trackId:shuffle:),
@@ -84,6 +88,16 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
     ) {
         self.interfaceController = interfaceController
 
+        // COLD-CONNECT HYDRATION: on a cold connect (phone app never opened this
+        // session) the WebView + NowPlayingPlugin never load, so nothing was ever
+        // pushed into the store. Reload the fan's owned catalog/recents/queue +
+        // last now-playing metadata/art from the on-device snapshot BEFORE any
+        // template is built, so the tabs + Now Playing show real content instead
+        // of empty placeholders + the app icon. This only sets in-memory arrays
+        // and restores MPNowPlayingInfoCenter (when empty) — it never pushes a
+        // template or roots Now Playing, so it is SIGABRT-safe here.
+        NowPlayingStore.shared.hydrateFromDisk()
+
         // Now Playing is reached by PUSH only (never rooted, never inside the
         // tab bar — either SIGABRTs on connect). Enable + observe the Up Next
         // button so the queue list is pushable from the system Now Playing
@@ -135,11 +149,11 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
         // first, now-playing bar along the bottom).
         interfaceController.setRootTemplate(tabBar, animated: false, completion: nil)
 
-        // iOS wipes MPNowPlayingInfoCenter around scene connect, and the WebView
-        // may have connected before its queries resolved — ask JS to re-publish
-        // metadata + playback state + queue + catalog + recents + favorite now
-        // that CarPlay is live.
-        NowPlayingStore.shared.requestResync()
+        // iOS wipes MPNowPlayingInfoCenter around scene connect, and on a WARM
+        // connect the WebView may have connected before its queries resolved — ask
+        // JS to re-publish metadata + playback state + queue + catalog + recents +
+        // favorite, retrying on a bounded schedule until the catalog is non-empty.
+        scheduleResync(attempt: 0)
     }
 
     func templateApplicationScene(
@@ -153,6 +167,36 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
         NowPlayingStore.shared.onFavoriteChanged = nil
         self.tabBarTemplate = nil
         self.interfaceController = nil
+    }
+
+    // MARK: - Resync
+
+    /// Ask JS to re-publish now-playing metadata + queue + catalog + recents +
+    /// favorite, retrying on a bounded schedule. On a WARM connect the WebView
+    /// may have connected before its queries resolved, so a single resync can
+    /// land while the catalog is still empty; re-fire every 2s until the catalog
+    /// is non-empty, the head unit disconnects, or ~30s (15 attempts) elapses.
+    /// On a true COLD connect there is no web player yet, so `onResync` is a
+    /// no-op and these ticks harmlessly do nothing — `hydrateFromDisk()` already
+    /// populated the lists from the on-device snapshot.
+    ///
+    /// `hydrateFromDisk()` runs BEFORE this, so on any connect after first use
+    /// the catalog is already non-empty from the snapshot. We must therefore fire
+    /// the FIRST resync (attempt 0) UNCONDITIONALLY — otherwise a warm connect
+    /// (a live web player behind a hydrated catalog) never asks JS to re-publish,
+    /// so iOS's connect-time MPNowPlayingInfoCenter wipe is only ever repaired by
+    /// the paused-tick self-heal (and a paused track, producing no ticks, would
+    /// be stuck at the hydrated 0:00 presentation). The catalog-non-empty stop
+    /// applies only to RETRIES (attempt > 0), so a warm connect fires exactly
+    /// once and a still-empty cold/first connect keeps retrying to the ceiling.
+    private func scheduleResync(attempt: Int) {
+        guard interfaceController != nil else { return }          // disconnected
+        if attempt > 0 && !NowPlayingStore.shared.catalog.isEmpty { return }  // retry got real data
+        NowPlayingStore.shared.requestResync()
+        if attempt >= 15 { return }                              // ~30s ceiling
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.scheduleResync(attempt: attempt + 1)
+        }
     }
 
     // MARK: - CPNowPlayingTemplateObserver
@@ -201,8 +245,8 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
 
         if catalog.isEmpty {
             let placeholder = CPListItem(
-                text: "Open GoodTunes on your iPhone to load your library",
-                detailText: nil
+                text: "Your library",
+                detailText: "Your GoodTunes albums appear here"
             )
             // No handler → non-tappable informational row.
             section = CPListSection(items: [placeholder])
@@ -244,8 +288,8 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
 
         if catalog.isEmpty {
             let placeholder = CPListItem(
-                text: "Open GoodTunes on your iPhone to load your collection",
-                detailText: nil
+                text: "Your collection",
+                detailText: "Your artists and songs appear here"
             )
             sections = [CPListSection(items: [placeholder])]
         } else {

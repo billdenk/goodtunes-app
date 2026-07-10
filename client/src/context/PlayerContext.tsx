@@ -1426,14 +1426,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // off-native and the plugin bridge short-circuits when the app isn't in a car.
   useEffect(() => {
     if (!isNativeIOS) return;
+    // Wait until the source queries have RESOLVED before publishing. Both fold
+    // `undefined` (still loading) into `[]`, so publishing eagerly on a warm
+    // start would push an empty catalog that clears the in-memory list the
+    // CarPlay scene just hydrated from disk. (The native snapshot save also
+    // skip-empty-guards, but don't rely on that here.)
+    if (dbSongList === undefined || myAlbumsForOwnership === undefined) return;
     setNowPlayingCatalog(nativeCatalog);
-  }, [nativeCatalog]);
+  }, [nativeCatalog, dbSongList, myAlbumsForOwnership]);
 
-  // Publish the CarPlay RECENTS list.
+  // Publish the CarPlay RECENTS list. Same wait-for-resolve guard as the catalog.
   useEffect(() => {
     if (!isNativeIOS) return;
+    if (fanRecents === undefined) return;
     setNowPlayingRecents(nativeRecents);
-  }, [nativeRecents]);
+  }, [nativeRecents, fanRecents]);
 
   // Publish whether the now-playing track is favorited so CarPlay can render the
   // heart filled/outline. Re-fires on song change and on any favorites mutation.
@@ -1471,8 +1478,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         })),
         currentIndex,
       );
-      setNowPlayingCatalog(nativeCatalog);
-      setNowPlayingRecents(nativeRecents);
+      // Only re-publish these when we actually have data — a resync that lands
+      // before the queries resolve must not push an empty catalog/recents over
+      // what the CarPlay scene hydrated from disk on a cold connect.
+      if (nativeCatalog.length > 0) setNowPlayingCatalog(nativeCatalog);
+      if (nativeRecents.length > 0) setNowPlayingRecents(nativeRecents);
       setNowPlayingFavorite(!!song && favorites.has(song.id));
     };
   }, [

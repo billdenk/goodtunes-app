@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import MediaPlayer
 
 /// A single browsable queue entry mirrored from the web player (PlayerContext's
 /// Up Next). Kept deliberately flat — only what a CarPlay list row needs.
@@ -88,6 +89,66 @@ final class NowPlayingStore {
     /// Drives the CarPlay Now Playing heart button's filled/outline state.
     private(set) var isCurrentFavorite: Bool = false
 
+    // MARK: - Cold-connect snapshot (on-device persistence)
+    //
+    // A COLD head-unit connect (the phone app was never opened this session)
+    // spins up ONLY the CarPlay scene — the phone UIWindowScene that hosts the
+    // WebView + NowPlayingPlugin is never created, so JS never runs and nothing
+    // is ever pushed into this store. Without persistence the three tabs render
+    // empty placeholders and Now Playing shows the app icon.
+    //
+    // So we write-through a compact snapshot (owned catalog + recents + queue +
+    // last now-playing metadata/art + favorite) to UserDefaults whenever the
+    // web player publishes it, and `hydrateFromDisk()` reloads it into these
+    // in-memory arrays (and restores MPNowPlayingInfoCenter) at the TOP of the
+    // CarPlay scene's didConnect — before any template is built — so the car
+    // shows the fan's real library/recents/last track instantly, offline.
+    //
+    // NEVER put tokens/secrets in the snapshot: it is unencrypted UserDefaults,
+    // and it is wiped on sign-out (`clearSnapshot()`) so one fan can't see the
+    // previous fan's library in the car.
+    private let snapshotKey = "nowPlayingSnapshot.v1"
+    // Last now-playing metadata, mirrored from the plugin's setMetadata so a
+    // cold connect can restore MPNowPlayingInfoCenter (title/artist/art) instead
+    // of the generic app icon. Populated only while the app is warm + playing;
+    // read back on the next cold connect.
+    private var metaTitle = ""
+    private var metaArtist = ""
+    private var metaAlbum = ""
+    private var metaDuration: Double = 0
+    private var metaArtworkUrl: String?
+    /// Downscaled JPEG bytes of the last now-playing art, so the car shows real
+    /// artwork even with no network in the garage (a remote URL fetch would
+    /// fail). Bounded small (see `NowPlayingPlugin`'s downscale before persist).
+    private var metaArtworkData: Data?
+    /// Set true by `clearSnapshot()` (sign-out) and cleared only by a fresh
+    /// NON-empty `updateCatalog(...)` publish. While true, `saveSnapshot()` is a
+    /// no-op — so a signed-out fan whose audio keeps auto-advancing can't have a
+    /// stray `persistMetadata` (or queue/favorite update) re-mint a snapshot with
+    /// their track after the wipe. The next fan's first catalog publish re-arms
+    /// persistence.
+    private var suppressPersistUntilFreshCatalog = false
+
+    /// Codable mirror of the browsable state + last now-playing metadata. Flat
+    /// on purpose — only what the CarPlay lists + Now Playing surface need.
+    private struct Snapshot: Codable {
+        struct Track: Codable { let id: String; let title: String; let artist: String; let duration: Double }
+        struct Album: Codable { let id: String; let title: String; let artist: String; let artworkUrl: String?; let tracks: [Track] }
+        struct Recent: Codable { let albumId: String; let trackId: String?; let title: String; let subtitle: String; let artworkUrl: String? }
+        struct QueueItem: Codable { let id: String; let title: String; let artist: String; let artworkUrl: String?; let duration: Double }
+        var catalog: [Album] = []
+        var recents: [Recent] = []
+        var queue: [QueueItem] = []
+        var currentIndex: Int = 0
+        var isFavorite: Bool = false
+        var metaTitle: String = ""
+        var metaArtist: String = ""
+        var metaAlbum: String = ""
+        var metaDuration: Double = 0
+        var metaArtworkUrl: String?
+        var metaArtworkData: Data?
+    }
+
     /// Set by `NowPlayingPlugin` on load — forwards a CarPlay Up Next row tap
     /// back into JS as a `playIndex` remote command. nil when the plugin isn't
     /// loaded.
@@ -136,14 +197,21 @@ final class NowPlayingStore {
             self?.queue = items
             self?.currentIndex = currentIndex
             self?.onQueueChanged?()
+            self?.saveSnapshot()
         }
     }
 
     /// Replace the mirrored catalog and notify any connected CarPlay scene.
     func updateCatalog(_ albums: [CatalogAlbum]) {
         DispatchQueue.main.async { [weak self] in
-            self?.catalog = albums
-            self?.onCatalogChanged?()
+            guard let self = self else { return }
+            self.catalog = albums
+            // A fresh NON-empty catalog publish means a real (re-)authenticated
+            // session — re-arm persistence that sign-out suppressed. An empty
+            // publish (e.g. the logout catalog effect) must NOT re-arm it.
+            if !albums.isEmpty { self.suppressPersistUntilFreshCatalog = false }
+            self.onCatalogChanged?()
+            self.saveSnapshot()
         }
     }
 
@@ -152,6 +220,7 @@ final class NowPlayingStore {
         DispatchQueue.main.async { [weak self] in
             self?.recents = entries
             self?.onRecentsChanged?()
+            self?.saveSnapshot()
         }
     }
 
@@ -161,6 +230,7 @@ final class NowPlayingStore {
         DispatchQueue.main.async { [weak self] in
             self?.isCurrentFavorite = isFavorite
             self?.onFavoriteChanged?()
+            self?.saveSnapshot()
         }
     }
 
@@ -197,5 +267,164 @@ final class NowPlayingStore {
     /// (CarPlay connected — recover from iOS's scene-connect info reset).
     func requestResync() {
         onResync?()
+    }
+
+    // MARK: - Cold-connect snapshot persistence
+
+    /// Mirror the last now-playing metadata from the plugin's setMetadata so a
+    /// future cold connect can restore MPNowPlayingInfoCenter. Text only — the
+    /// art bytes arrive separately via `persistArtworkData` once the async image
+    /// fetch resolves. Changing tracks clears the stale art until the new one
+    /// loads. Call from the plugin (background thread ok — hops to main).
+    func persistMetadata(title: String, artist: String, album: String, duration: Double, artworkUrl: String?) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.metaTitle = title
+            self.metaArtist = artist
+            self.metaAlbum = album
+            self.metaDuration = duration
+            if artworkUrl != self.metaArtworkUrl {
+                self.metaArtworkUrl = artworkUrl
+                self.metaArtworkData = nil
+            }
+            self.saveSnapshot()
+        }
+    }
+
+    /// Persist downscaled JPEG bytes for the current now-playing art, so a cold
+    /// connect renders real artwork offline. Ignored if the track changed while
+    /// the image loaded (url no longer matches). Call from the plugin.
+    func persistArtworkData(_ data: Data?, forUrl url: String) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, url == self.metaArtworkUrl else { return }
+            self.metaArtworkData = data
+            self.saveSnapshot()
+        }
+    }
+
+    /// Serialize the current browsable state + last now-playing metadata to
+    /// UserDefaults. Skips writing an all-empty snapshot so the mount-time
+    /// empty-publish race can't wipe a good one (the JS side also guards).
+    /// Must run on main (all callers already hop there).
+    private func saveSnapshot() {
+        // Post sign-out: stay wiped until a fresh non-empty catalog publish, so a
+        // signed-out fan's still-playing/auto-advancing audio can't re-mint a
+        // snapshot with their track (see suppressPersistUntilFreshCatalog).
+        guard !suppressPersistUntilFreshCatalog else { return }
+        guard !catalog.isEmpty || !recents.isEmpty || !metaTitle.isEmpty else { return }
+        var snap = Snapshot()
+        snap.catalog = catalog.map { album in
+            Snapshot.Album(
+                id: album.id, title: album.title, artist: album.artist,
+                artworkUrl: album.artworkUrl,
+                tracks: album.tracks.map {
+                    Snapshot.Track(id: $0.id, title: $0.title, artist: $0.artist, duration: $0.duration)
+                }
+            )
+        }
+        snap.recents = recents.map {
+            Snapshot.Recent(albumId: $0.albumId, trackId: $0.trackId, title: $0.title, subtitle: $0.subtitle, artworkUrl: $0.artworkUrl)
+        }
+        snap.queue = queue.map {
+            Snapshot.QueueItem(id: $0.id, title: $0.title, artist: $0.artist, artworkUrl: $0.artworkUrl, duration: $0.duration)
+        }
+        snap.currentIndex = currentIndex
+        snap.isFavorite = isCurrentFavorite
+        snap.metaTitle = metaTitle
+        snap.metaArtist = metaArtist
+        snap.metaAlbum = metaAlbum
+        snap.metaDuration = metaDuration
+        snap.metaArtworkUrl = metaArtworkUrl
+        snap.metaArtworkData = metaArtworkData
+        if let data = try? JSONEncoder().encode(snap) {
+            UserDefaults.standard.set(data, forKey: snapshotKey)
+        }
+    }
+
+    /// Load the persisted snapshot into the in-memory arrays + last-metadata
+    /// cache and restore MPNowPlayingInfoCenter (only when it is currently nil,
+    /// so a warm connect is never stomped). Sets arrays only — never pushes a
+    /// template or roots Now Playing — so it is safe to call at the very top of
+    /// the CarPlay scene's didConnect, before templates are built. Main-thread.
+    func hydrateFromDisk() {
+        guard let data = UserDefaults.standard.data(forKey: snapshotKey),
+              let snap = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
+
+        catalog = snap.catalog.map { album in
+            CatalogAlbum(
+                id: album.id, title: album.title, artist: album.artist,
+                artworkUrl: album.artworkUrl,
+                tracks: album.tracks.map {
+                    CatalogTrack(id: $0.id, title: $0.title, artist: $0.artist, duration: $0.duration)
+                }
+            )
+        }
+        recents = snap.recents.map {
+            RecentEntry(albumId: $0.albumId, trackId: $0.trackId, title: $0.title, subtitle: $0.subtitle, artworkUrl: $0.artworkUrl)
+        }
+        queue = snap.queue.map {
+            NowPlayingQueueEntry(id: $0.id, title: $0.title, artist: $0.artist, artworkUrl: $0.artworkUrl, duration: $0.duration)
+        }
+        currentIndex = snap.currentIndex
+        isCurrentFavorite = snap.isFavorite
+        metaTitle = snap.metaTitle
+        metaArtist = snap.metaArtist
+        metaAlbum = snap.metaAlbum
+        metaDuration = snap.metaDuration
+        metaArtworkUrl = snap.metaArtworkUrl
+        metaArtworkData = snap.metaArtworkData
+
+        // Restore the Now Playing surface's metadata/art so the car shows the
+        // real last track instead of the app icon. Only when the live dict is
+        // empty (a warm connect already has real, currently-playing info — don't
+        // overwrite it). Paused presentation: rate + elapsed 0. Transport stays
+        // inert on a true cold connect (no web player yet) until the deferred
+        // background-bring-up work lands — see docs/roadmap.md.
+        if MPNowPlayingInfoCenter.default().nowPlayingInfo == nil, !metaTitle.isEmpty {
+            var info: [String: Any] = [
+                MPMediaItemPropertyTitle: metaTitle,
+                MPMediaItemPropertyArtist: metaArtist,
+                MPMediaItemPropertyAlbumTitle: metaAlbum,
+                MPNowPlayingInfoPropertyPlaybackRate: 0.0,
+                MPNowPlayingInfoPropertyElapsedPlaybackTime: 0.0,
+            ]
+            if metaDuration > 0 {
+                info[MPMediaItemPropertyPlaybackDuration] = metaDuration
+            }
+            if let bytes = metaArtworkData, let image = UIImage(data: bytes) {
+                info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            }
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        }
+    }
+
+    /// Wipe the persisted snapshot + in-memory mirror on sign-out — a privacy
+    /// requirement so the next fan can't see the previous fan's library in the
+    /// car. Deliberately NOT coupled to the plugin's `clear()` (that fires on
+    /// every launch when nothing is playing, which would defeat cold connect).
+    func clearSnapshot() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            // Stay wiped until a fresh non-empty catalog publish (re-login), so a
+            // still-playing signed-out session can't re-persist its track.
+            self.suppressPersistUntilFreshCatalog = true
+            UserDefaults.standard.removeObject(forKey: self.snapshotKey)
+            self.catalog = []
+            self.recents = []
+            self.queue = []
+            self.currentIndex = 0
+            self.isCurrentFavorite = false
+            self.metaTitle = ""
+            self.metaArtist = ""
+            self.metaAlbum = ""
+            self.metaDuration = 0
+            self.metaArtworkUrl = nil
+            self.metaArtworkData = nil
+            // Refresh any connected CarPlay scene so the car clears immediately.
+            self.onCatalogChanged?()
+            self.onRecentsChanged?()
+            self.onQueueChanged?()
+            self.onFavoriteChanged?()
+        }
     }
 }

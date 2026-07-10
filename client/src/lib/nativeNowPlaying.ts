@@ -146,6 +146,7 @@ interface NowPlayingPlugin {
   setRecents(options: { items: NowPlayingRecentItem[] }): Promise<void>;
   setFavorite(options: { isFavorite: boolean }): Promise<void>;
   clear(): Promise<void>;
+  clearLibrary(): Promise<void>;
   addListener(
     eventName: "remoteCommand",
     listenerFunc: (data: RemoteCommand) => void,
@@ -259,6 +260,17 @@ export function setNowPlayingFavorite(isFavorite: boolean): void {
 export function clearNowPlaying(): void {
   if (!available()) return;
   NowPlaying.clear().catch(() => {});
+}
+
+/**
+ * Wipe the persisted cold-connect snapshot (owned catalog/recents/queue + last
+ * now-playing metadata/art) that CarPlay reloads when the phone app was never
+ * opened. Call on sign-out so the next fan can't see the previous fan's library
+ * in the car. No-op off-native (and on native binaries predating the plugin
+ * method, the rejected promise is swallowed). */
+export function clearNowPlayingLibrary(): void {
+  if (!available()) return;
+  NowPlaying.clearLibrary().catch(() => {});
 }
 
 /**
