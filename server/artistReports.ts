@@ -1028,6 +1028,52 @@ async function resolveAlbumScope(req: Request, albumId: string): Promise<AlbumSc
       `);
       allowed = ((r as any).rows?.[0]?.ok) === true;
     }
+  } else if (info.role === "manufacturer") {
+    // Task #2660 — a press may read the break-even for an album it's
+    // attached to. This branch is ONLY reachable via the break-even
+    // route (the dashboard/add-on-buyers/export routes keep excluding
+    // `manufacturer` at the gate), so opening a press branch here does
+    // not widen access to the PII-bearing consumers of this resolver.
+    //
+    // A press has no album column, so ownership is derived from the same
+    // sources the rest of the codebase already trusts, covering BOTH the
+    // pre-pressing-order Prepping case shown in the portal and submitted
+    // runs:
+    //   • a non-cancelled pressing_order_request assigned to this press
+    //     (reports/index.ts + assertAlbumBelongsToPress), and
+    //   • the saved vinyl SKU's tier press / SKU press (earlyCut.ts's
+    //     resolveAlbumSkuPressTier — the Prepping "At press" case with no
+    //     POR yet), and
+    //   • the INVITED-press stamp on the album's artist or label
+    //     (commerce.ts /invited-press).
+    if (info.roleScopeId) {
+      const pressId = info.roleScopeId;
+      const r = await db.execute<{ ok: boolean }>(sql`
+        SELECT (
+          EXISTS(
+            SELECT 1 FROM pressing_order_requests por
+            WHERE por.album_id = ${albumId}
+              AND por.status <> 'cancelled'
+              AND por.package_snapshot ->> 'pressId' = ${pressId}
+          )
+          OR EXISTS(
+            SELECT 1 FROM album_skus s
+            LEFT JOIN press_color_tiers pct ON pct.id = s.press_tier_id
+            WHERE s.album_id = ${albumId}
+              AND (pct.press_id = ${pressId} OR s.press_id = ${pressId})
+          )
+          OR EXISTS(
+            SELECT 1 FROM people p
+            WHERE p.id = ${album.primary_artist_id} AND p.invited_by_press_id = ${pressId}
+          )
+          OR EXISTS(
+            SELECT 1 FROM labels l
+            WHERE l.id = ${album.label_id} AND l.invited_by_press_id = ${pressId}
+          )
+        ) AS ok
+      `);
+      allowed = ((r as any).rows?.[0]?.ok) === true;
+    }
   }
   if (!allowed) return { error: "You don't have access to this album", status: 403 };
 
@@ -1377,7 +1423,15 @@ export async function registerArtistReportRoutes(app: Express): Promise<void> {
   app.get("/api/admin/albums/:id/dashboard", albumGate, albumDashboardHandler);
   // Task #1963 — derived break-even readout (operators for any album,
   // artist/label/manager for their own via resolveAlbumScope).
-  app.get("/api/admin/albums/:id/break-even", albumGate, albumBreakEvenHandler);
+  // Task #2660 — a press (manufacturer) may also read the break-even for
+  // its OWN albums so the Package-tab bar fills in inside the press
+  // portal. This gate is DELIBERATELY wider than `albumGate`: the
+  // break-even readout carries no fan/buyer PII, so a press is allowed
+  // here, but the sibling dashboard / add-on-buyers / export handlers
+  // (which expose buyer rows) keep excluding `manufacturer`. The per-
+  // album ownership check for a press lives in resolveAlbumScope.
+  const breakEvenGate = requireRole("artist", "label", "manager", "manufacturer", "super_admin", "admin");
+  app.get("/api/admin/albums/:id/break-even", breakEvenGate, albumBreakEvenHandler);
   app.get("/api/admin/albums/:id/dashboard/addon-buyers", albumGate, albumAddonBuyersHandler);
   // Task #1528 — CSV downloads for the dashboard tables (addon-buyers|top-songs|cities).
   app.get("/api/admin/albums/:id/dashboard/export", albumGate, albumExportHandler);
