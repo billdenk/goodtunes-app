@@ -17531,15 +17531,23 @@ export async function registerRoutes(
         )`
       : sql``;
 
-    // GoodDeed status accounts for per-copy entitlements: a multi-quantity
-    // order fans out into `order_copies`, each carrying its own
-    // good_deed_number, so checking only orders.good_deed_number would
-    // under-report. (See per-copy-entitlements memo.)
+    // Task #2645 — "GoodDeed" means the Signed (Printed) cert add-on, not the
+    // digital GoodDeed number (every paid copy gets one of those, so the old
+    // any-number check read "Yes" for everything). Modern orders carry the
+    // flag on order_copies.signed_cert; legacy orders (incl. legacy:gogoods
+    // imports) predate per-copy rows, so fall back to the signed_cert add-on
+    // line item when the order has no copies at all.
     const hasGoodDeedExpr = sql`(
-      o.good_deed_number IS NOT NULL
-      OR EXISTS (
+      EXISTS (
         SELECT 1 FROM order_copies oc
-        WHERE oc.order_id = o.id AND oc.good_deed_number IS NOT NULL
+        WHERE oc.order_id = o.id AND oc.signed_cert = TRUE
+      )
+      OR (
+        NOT EXISTS (SELECT 1 FROM order_copies oc2 WHERE oc2.order_id = o.id)
+        AND EXISTS (
+          SELECT 1 FROM order_items oi
+          WHERE oi.order_id = o.id AND oi.kind = 'addon' AND oi.sku = 'signed_cert'
+        )
       )
     )`;
     const nameExpr = sql`COALESCE(NULLIF(TRIM(cu.display_name), ''), NULLIF(TRIM(cu.real_name), ''), o.buyer_name, cu.email, o.buyer_email)`;
