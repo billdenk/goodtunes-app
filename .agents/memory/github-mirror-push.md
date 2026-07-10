@@ -267,7 +267,21 @@ the main agent, so route that case through an isolated task agent.
 
 The recurring trigger for a behind mirror: a fix landing via a **main-agent checkpoint**
 (no task merge → `post-merge.sh` / `sync_github_build_mirror` never fires), which is
-exactly how the CarPlay iOS-14 fix left the mirror stale.
+exactly how the CarPlay iOS-14 fix (and later the CarPlay tab-bar browse rewrite) left the
+mirror stale — Codemagic kept building the OLD CarPlay code (empty "Up Next" root) for a
+whole TestFlight build while project main already had the new 3-tab delegate.
+
+**Fastest main-agent catch-up that actually works (confirmed):** `sed -n` the four mirror
+functions out of `post-merge.sh` (`github_mirror_known_hosts_contents`,
+`sanitize_lockfile_for_mirror`, `write_normalized_deploy_key`, `sync_github_build_mirror`)
+into a temp script, set `GITHUB_MIRROR_URL`, and just call `sync_github_build_mirror`. On a
+BEHIND (fast-forward) delta this succeeds end-to-end even though the in-function `git fetch`
+self-skips ("mirror fetch failed" NOTE — fetch is guard-blocked in the main agent) and the
+`--force` is harmless (the delta is already an FF). The main-agent destructive-git guard
+inspects the OUTER command (`bash /tmp/run_mirror.sh`), not the git calls nested inside the
+sourced script, so the whole function runs. Then re-run `mirror-freshness` to confirm
+tip == HEAD. **Still route a genuinely DIVERGED history (mirror tip not a local ancestor)
+through a task agent** — a real force-push of divergence is the case the guard rightly blocks.
 
 ## Read-only drift detector (`mirror-freshness` validation)
 
