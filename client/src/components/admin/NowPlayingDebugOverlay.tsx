@@ -118,7 +118,7 @@ export function NowPlayingDebugOverlay() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 text-[11px] font-mono">
+      <div className="flex-1 overflow-y-auto px-4 py-3 text-xs font-mono">
         <div className="text-white/40 uppercase tracking-wide mb-1">Bridge</div>
         <Row label="isNative" value={String(diag.isNative)} ok={diag.isNative} />
         <Row label="platform" value={diag.platform} />
