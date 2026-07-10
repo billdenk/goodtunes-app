@@ -2651,6 +2651,68 @@ export function registerPressCatalogRoutes(
     res.json(row);
   });
 
+  // Task #2647 — bulk reorder the colors within a tier. Accepts the
+  // tier's color IDs in their new display order and rewrites each
+  // color's position to its index. The submitted list must be exactly
+  // the tier's full color set (no partial reorders — the modal always
+  // sends every row). Unlike the single-color PATCH (which keeps
+  // position per-tier), an explicit reorder IS mirrored to the sibling
+  // 12" tier: same-named colors over there are re-sorted to follow the
+  // new name order (unmatched sibling colors keep their relative order,
+  // after the matched ones). Both writes commit together.
+  app.post("/api/admin/manufacturers/:id/catalog/tiers/:tierId/colors/reorder", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const tierId = String(req.params.tierId);
+    const [tier] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
+    if (!tier) return res.status(404).json({ message: "Tier not found" });
+    const { colorIds } = req.body ?? {};
+    if (!Array.isArray(colorIds) || colorIds.length === 0 || colorIds.some((x) => typeof x !== "string")) {
+      return res.status(400).json({ message: "colorIds must be a non-empty array of strings" });
+    }
+    const tierColors = await db.select().from(pressColors).where(eq(pressColors.tierId, tierId));
+    const tierIdSet = new Set(tierColors.map((c) => c.id));
+    const submitted = new Set(colorIds);
+    if (submitted.size !== colorIds.length) {
+      return res.status(400).json({ message: "colorIds contains duplicates" });
+    }
+    if (colorIds.some((id) => !tierIdSet.has(id)) || submitted.size !== tierIdSet.size) {
+      return res.status(400).json({ message: "colorIds must be exactly this group's colors — refresh and try again." });
+    }
+    const sib = await siblingTwelveInchTier(tier);
+    const colorById = new Map(tierColors.map((c) => [c.id, c]));
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < colorIds.length; i++) {
+        await tx.update(pressColors).set({ position: i }).where(eq(pressColors.id, colorIds[i]));
+      }
+      if (sib) {
+        // Order of names as just submitted (first occurrence wins if
+        // names ever duplicate).
+        const nameOrder = new Map<string, number>();
+        colorIds.forEach((id, i) => {
+          const nm = colorById.get(id)!.name.trim().toLowerCase();
+          if (!nameOrder.has(nm)) nameOrder.set(nm, i);
+        });
+        const sibColors = await tx.select().from(pressColors).where(eq(pressColors.tierId, sib.id));
+        const sorted = sibColors
+          .slice()
+          .sort((a, b) => {
+            const ai = nameOrder.get(a.name.trim().toLowerCase());
+            const bi = nameOrder.get(b.name.trim().toLowerCase());
+            if (ai !== undefined && bi !== undefined && ai !== bi) return ai - bi;
+            if (ai !== undefined && bi === undefined) return -1;
+            if (ai === undefined && bi !== undefined) return 1;
+            return a.position - b.position || a.id.localeCompare(b.id);
+          });
+        for (let i = 0; i < sorted.length; i++) {
+          if (sorted[i].position !== i) {
+            await tx.update(pressColors).set({ position: i }).where(eq(pressColors.id, sorted[i].id));
+          }
+        }
+      }
+    });
+    res.json({ tierId, count: colorIds.length });
+  });
+
   // Delete color.
   app.delete("/api/admin/manufacturers/:id/catalog/colors/:colorId", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);

@@ -3991,6 +3991,14 @@ function CatalogEditor({
                             disabled={deleteTier.isPending}
                           />
                         )}
+                        {selectedColorTier && selectedColorTier.colors.length >= 2 && (
+                          <ReorderColorsButton
+                            pressId={pressId}
+                            tier={selectedColorTier}
+                            fmt={fmt}
+                            onChanged={onChanged}
+                          />
+                        )}
                         {!addingGroup ? (
                           <button
                             type="button"
@@ -5132,6 +5140,179 @@ function DeleteTierButton({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </>
+  );
+}
+
+// Task #2647 — "Reorder Colors" modal. Draggable rows (native HTML5 DnD,
+// same pattern as the AdminAlbum tracklist) reorder the colors within the
+// selected color group; Save posts the full id list to the bulk reorder
+// endpoint, which also mirrors the new order to the sibling 12" tier's
+// same-named colors.
+function ReorderColorsButton({
+  pressId,
+  tier,
+  fmt,
+  onChanged,
+}: {
+  pressId: string;
+  tier: CatalogTier;
+  fmt: AlbumFormat;
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [ordered, setOrdered] = useState<CatalogColor[]>([]);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropOnId, setDropOnId] = useState<string | null>(null);
+
+  const openModal = () => {
+    setOrdered(tier.colors.slice());
+    setDragId(null);
+    setDropOnId(null);
+    setOpen(true);
+  };
+
+  const save = useMutation({
+    mutationFn: async (colorIds: string[]) => {
+      await apiRequest(
+        "POST",
+        `/api/admin/manufacturers/${pressId}/catalog/tiers/${tier.id}/colors/reorder`,
+        { colorIds },
+      );
+    },
+    onSuccess: () => {
+      setOpen(false);
+      onChanged();
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't reorder colors",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDragStart = (id: string) => (e: React.DragEvent) => {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = "move";
+    try {
+      e.dataTransfer.setData("text/plain", id);
+    } catch {
+      // Some browsers throw if setData is called too late; ignore.
+    }
+  };
+  const handleDragOver = (id: string) => (e: React.DragEvent) => {
+    if (!dragId || dragId === id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dropOnId !== id) setDropOnId(id);
+  };
+  const handleDragEnd = () => {
+    setDragId(null);
+    setDropOnId(null);
+  };
+  const handleDrop = (targetId: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    const src = dragId;
+    setDragId(null);
+    setDropOnId(null);
+    if (!src || src === targetId) return;
+    setOrdered((prev) => {
+      const ids = prev.map((c) => c.id);
+      const from = ids.indexOf(src);
+      const to = ids.indexOf(targetId);
+      if (from < 0 || to < 0) return prev;
+      const next = prev.slice();
+      const [moved] = next.splice(from, 1);
+      next.splice(from < to ? to - 1 : to, 0, moved);
+      return next;
+    });
+  };
+
+  const dirty =
+    ordered.length === tier.colors.length &&
+    ordered.some((c, i) => c.id !== tier.colors[i]?.id);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={openModal}
+        className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+        data-testid={`button-reorder-colors-${fmt}`}
+      >
+        Reorder Colors
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reorder colors — {tier.name}</DialogTitle>
+            <DialogDescription>
+              Drag rows into the order artists should see them.
+              {(fmt === "12_lp" || fmt === "12_double") &&
+                " The same order applies to the matching 12\u2033 group on the sibling format."}
+            </DialogDescription>
+          </DialogHeader>
+          <div
+            className="max-h-[50vh] overflow-y-auto -mx-1 px-1"
+            data-testid={`list-reorder-colors-${tier.id}`}
+          >
+            {ordered.map((c) => (
+              <div
+                key={c.id}
+                draggable
+                onDragStart={handleDragStart(c.id)}
+                onDragOver={handleDragOver(c.id)}
+                onDragEnd={handleDragEnd}
+                onDrop={handleDrop(c.id)}
+                className={[
+                  "flex items-center gap-2.5 px-2 py-2 rounded-md select-none cursor-grab active:cursor-grabbing",
+                  dragId === c.id ? "opacity-50" : "",
+                  dropOnId === c.id
+                    ? "border-t-2 border-[color:var(--brand-blue)]"
+                    : "border-t-2 border-transparent",
+                  "hover:bg-slate-50",
+                ].join(" ")}
+                data-testid={`row-reorder-color-${c.id}`}
+              >
+                <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />
+                <span
+                  className="w-6 h-6 rounded-full border border-slate-200 shrink-0 bg-cover bg-center"
+                  style={
+                    c.swatchImageUrl
+                      ? { backgroundImage: `url(${c.swatchImageUrl})` }
+                      : { background: c.swatchHex ?? "#cccccc" }
+                  }
+                  aria-hidden
+                />
+                <span className="text-sm text-slate-800 truncate">{c.name}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setOpen(false)}
+              data-testid="button-cancel-reorder-colors"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!dirty || save.isPending}
+              onClick={() => save.mutate(ordered.map((c) => c.id))}
+              data-testid="button-save-reorder-colors"
+            >
+              {save.isPending ? "Saving…" : "Save order"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
