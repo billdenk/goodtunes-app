@@ -4001,9 +4001,19 @@ export async function materializeOrderFromSession(
   const piCharge = pi && typeof pi.latest_charge === "object" ? pi.latest_charge : null;
   const receiptUrl = (piCharge as any)?.receipt_url ?? null;
   const billing = addressFromStripe(full.customer_details?.address ?? null, buyerName);
+  // Stripe's Basil API (2025-08-27.basil) moved the checkout-session shipping
+  // snapshot from `session.shipping_details` to
+  // `session.collected_information.shipping_details`. Read the new location
+  // first, falling back to the legacy field for older-shaped payloads. (The
+  // previous expression here also had a `??`/`?:` precedence bug that made the
+  // address effectively always null.)
+  const shipDetails =
+    (full as any).collected_information?.shipping_details ??
+    (full as any).shipping_details ??
+    null;
   const shipping = addressFromStripe(
-    (full as any).shipping_details?.address ?? full.shipping_cost ? (full as any).shipping_details?.address : null,
-    (full as any).shipping_details?.name ?? buyerName,
+    shipDetails?.address ?? null,
+    shipDetails?.name ?? buyerName,
   );
 
   const isPaid = full.payment_status === "paid";

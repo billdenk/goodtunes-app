@@ -9264,3 +9264,29 @@ SQL
 }
 backfill_task_2637_mitch_label_admin dev  "${DATABASE_URL:-}"
 backfill_task_2637_mitch_label_admin prod "${PROD_DATABASE_URL:-}"
+
+# Task #2642 — Fix missing shipping addresses on orders. The API fix lives in
+# materializeOrderFromSession (collected_information.shipping_details under
+# Basil); this is the one-shot backfill for orders already materialized with
+# a name-only shipping snapshot. Re-derives the address from Stripe keyed on
+# the order's own stripe_checkout_session_id / stripe_payment_intent_id, using
+# the Stripe connector for THIS DB's environment (dev=test key, prod=live
+# key) — never REPLIT_DEPLOYMENT, which reflects the task-agent's own context
+# regardless of which DATABASE_URL is targeted. Marker-guarded in
+# post_merge_data_backfills; the script itself FATALs (nonzero exit) rather
+# than stamping the marker on a partial run if any order errors out or the
+# connector is unreachable.
+backfill_task_2642_shipping_addresses() {
+  local label="$1" url="$2" env="$3"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2642 shipping-address backfill on $label (no URL set)"
+    return 0
+  fi
+  if DATABASE_URL="$url" npx tsx scripts/backfill-shipping-addresses.ts --env="$env"; then
+    echo "post-merge: task-2642 shipping-address backfill ok on $label"
+  else
+    echo "post-merge: WARNING — task-2642 shipping-address backfill failed on $label (continuing)"
+  fi
+}
+backfill_task_2642_shipping_addresses dev  "${DATABASE_URL:-}" development
+backfill_task_2642_shipping_addresses prod "${PROD_DATABASE_URL:-}" production
