@@ -1,0 +1,339 @@
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+2026-07-10 01:26:05.850 ERROR: [ContentDelivery.Uploader.A8EC4C640] 
+=======================================
+UPLOAD FAILED with 2 errors
+=======================================
+2026-07-10 01:26:05.856 ERROR: [altool.101A12D80] ExitFailure (31)
+{
+  "os-version" : "Version 26.4.1 (Build 25E253)",
+  "product-errors" : [
+    {
+      "code" : 90062,
+      "message" : "This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring",
+      "underlying-errors" : [
+        {
+          "code" : -19241,
+          "message" : "A server error occurred.",
+          "underlying-errors" : [
+
+          ],
+          "user-info" : {
+            "NSLocalizedDescription" : "A server error occurred.",
+            "code" : "90062",
+            "description" : "This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring"
+          }
+        }
+      ],
+      "user-info" : {
+        "NSLocalizedDescription" : "This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring",
+        "NSLocalizedFailureReason" : "The server’s response was: ‘{\n    code = 90062;\n    description = \"This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring\";\n}’.",
+        "NSUnderlyingError" : "Error Domain=IrisAPI Code=-19241 \"A server error occurred.\" UserInfo={code=90062, NSLocalizedDescription=A server error occurred., description=This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring}",
+        "iris-code" : "90062"
+      }
+    },
+    {
+      "code" : 90186,
+      "message" : "Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions",
+      "underlying-errors" : [
+        {
+          "code" : -19241,
+          "message" : "A server error occurred.",
+          "underlying-errors" : [
+
+          ],
+          "user-info" : {
+            "NSLocalizedDescription" : "A server error occurred.",
+            "code" : "90186",
+            "description" : "Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions"
+          }
+        }
+      ],
+      "user-info" : {
+        "NSLocalizedDescription" : "Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions",
+        "NSLocalizedFailureReason" : "The server’s response was: ‘{\n    code = 90186;\n    description = \"Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions\";\n}’.",
+        "NSUnderlyingError" : "Error Domain=IrisAPI Code=-19241 \"A server error occurred.\" UserInfo={code=90186, NSLocalizedDescription=A server error occurred., description=Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions}",
+        "iris-code" : "90186"
+      }
+    }
+  ],
+  "tool-path" : "/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources",
+  "tool-version" : "26.30.4 (173004)"
+}
+
+Failed to upload archive at "build/ios/ipa/App.ipa"
+Failed to publish build/ios/ipa/App.ipa
+Publish attempt 1 failed (exit 1).
+Checking whether the binary registered despite the failure (transient 500 case)…
+  registration check: latest on App Store Connect = '78', this build = '79'
+Binary build 79 is NOT registered yet. Will retry the full upload.
+Backing off 30s before the next attempt…
+=== Publish attempt 2/4 ===
+
+Publish "build/ios/ipa/App.ipa" to App Store Connect
+App name: GoodTunes
+Bundle identifier: Io.GoGoods.music
+Certificate expires: 2027-06-05T14:27:34.000+0000
+Distribution type: App Store
+Min OS version: 13.0
+Provisioned devices: N/A
+Provisions all devices: No
+Supported platforms: iPhoneOS
+Version code: 79
+Version: 3.0.4
+
+Upload "build/ios/ipa/App.ipa" to App Store Connect
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+26.30.4 (173004)
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+2026-07-10 01:27:46.139 ERROR: [ContentDelivery.Uploader.9C4C4C640] 
+=======================================
+UPLOAD FAILED with 2 errors
+=======================================
+2026-07-10 01:27:46.145 ERROR: [altool.101052D80] ExitFailure (31)
+{
+  "os-version" : "Version 26.4.1 (Build 25E253)",
+  "product-errors" : [
+    {
+      "code" : 90062,
+      "message" : "This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring",
+      "underlying-errors" : [
+        {
+          "code" : -19241,
+          "message" : "A server error occurred.",
+          "underlying-errors" : [
+
+          ],
+          "user-info" : {
+            "NSLocalizedDescription" : "A server error occurred.",
+            "code" : "90062",
+            "description" : "This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring"
+          }
+        }
+      ],
+      "user-info" : {
+        "NSLocalizedDescription" : "This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring",
+        "NSLocalizedFailureReason" : "The server’s response was: ‘{\n    code = 90062;\n    description = \"This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring\";\n}’.",
+        "NSUnderlyingError" : "Error Domain=IrisAPI Code=-19241 \"A server error occurred.\" UserInfo={code=90062, NSLocalizedDescription=A server error occurred., description=This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring}",
+        "iris-code" : "90062"
+      }
+    },
+    {
+      "code" : 90186,
+      "message" : "Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions",
+      "underlying-errors" : [
+        {
+          "code" : -19241,
+          "message" : "A server error occurred.",
+          "underlying-errors" : [
+
+          ],
+          "user-info" : {
+            "NSLocalizedDescription" : "A server error occurred.",
+            "code" : "90186",
+            "description" : "Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions"
+          }
+        }
+      ],
+      "user-info" : {
+        "NSLocalizedDescription" : "Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions",
+        "NSLocalizedFailureReason" : "The server’s response was: ‘{\n    code = 90186;\n    description = \"Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions\";\n}’.",
+        "NSUnderlyingError" : "Error Domain=IrisAPI Code=-19241 \"A server error occurred.\" UserInfo={code=90186, NSLocalizedDescription=A server error occurred., description=Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions}",
+        "iris-code" : "90186"
+      }
+    }
+  ],
+  "tool-path" : "/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources",
+  "tool-version" : "26.30.4 (173004)"
+}
+
+Failed to upload archive at "build/ios/ipa/App.ipa"
+Failed to publish build/ios/ipa/App.ipa
+Publish attempt 2 failed (exit 1).
+Checking whether the binary registered despite the failure (transient 500 case)…
+  registration check: latest on App Store Connect = '78', this build = '79'
+Binary build 79 is NOT registered yet. Will retry the full upload.
+Backing off 60s before the next attempt…
+=== Publish attempt 3/4 ===
+
+Publish "build/ios/ipa/App.ipa" to App Store Connect
+App name: GoodTunes
+Bundle identifier: Io.GoGoods.music
+Certificate expires: 2027-06-05T14:27:34.000+0000
+Distribution type: App Store
+Min OS version: 13.0
+Provisioned devices: N/A
+Provisions all devices: No
+Supported platforms: iPhoneOS
+Version code: 79
+Version: 3.0.4
+
+Upload "build/ios/ipa/App.ipa" to App Store Connect
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+26.30.4 (173004)
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+2026-07-10 01:30:00.771 ERROR: [ContentDelivery.Uploader.888C4C640] 
+=======================================
+UPLOAD FAILED with 2 errors
+=======================================
+2026-07-10 01:30:00.776 ERROR: [altool.103636D80] ExitFailure (31)
+{
+  "os-version" : "Version 26.4.1 (Build 25E253)",
+  "product-errors" : [
+    {
+      "code" : 90186,
+      "message" : "Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions",
+      "underlying-errors" : [
+        {
+          "code" : -19241,
+          "message" : "A server error occurred.",
+          "underlying-errors" : [
+
+          ],
+          "user-info" : {
+            "NSLocalizedDescription" : "A server error occurred.",
+            "code" : "90186",
+            "description" : "Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions"
+          }
+        }
+      ],
+      "user-info" : {
+        "NSLocalizedDescription" : "Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions",
+        "NSLocalizedFailureReason" : "The server’s response was: ‘{\n    code = 90186;\n    description = \"Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions\";\n}’.",
+        "NSUnderlyingError" : "Error Domain=IrisAPI Code=-19241 \"A server error occurred.\" UserInfo={code=90186, NSLocalizedDescription=A server error occurred., description=Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions}",
+        "iris-code" : "90186"
+      }
+    },
+    {
+      "code" : 90062,
+      "message" : "This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring",
+      "underlying-errors" : [
+        {
+          "code" : -19241,
+          "message" : "A server error occurred.",
+          "underlying-errors" : [
+
+          ],
+          "user-info" : {
+            "NSLocalizedDescription" : "A server error occurred.",
+            "code" : "90062",
+            "description" : "This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring"
+          }
+        }
+      ],
+      "user-info" : {
+        "NSLocalizedDescription" : "This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring",
+        "NSLocalizedFailureReason" : "The server’s response was: ‘{\n    code = 90062;\n    description = \"This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring\";\n}’.",
+        "NSUnderlyingError" : "Error Domain=IrisAPI Code=-19241 \"A server error occurred.\" UserInfo={code=90062, NSLocalizedDescription=A server error occurred., description=This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring}",
+        "iris-code" : "90062"
+      }
+    }
+  ],
+  "tool-path" : "/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources",
+  "tool-version" : "26.30.4 (173004)"
+}
+
+Failed to upload archive at "build/ios/ipa/App.ipa"
+Failed to publish build/ios/ipa/App.ipa
+Publish attempt 3 failed (exit 1).
+Checking whether the binary registered despite the failure (transient 500 case)…
+  registration check: latest on App Store Connect = '78', this build = '79'
+Binary build 79 is NOT registered yet. Will retry the full upload.
+Backing off 120s before the next attempt…
+=== Publish attempt 4/4 ===
+
+Publish "build/ios/ipa/App.ipa" to App Store Connect
+App name: GoodTunes
+Bundle identifier: Io.GoGoods.music
+Certificate expires: 2027-06-05T14:27:34.000+0000
+Distribution type: App Store
+Min OS version: 13.0
+Provisioned devices: N/A
+Provisions all devices: No
+Supported platforms: iPhoneOS
+Version code: 79
+Version: 3.0.4
+
+Upload "build/ios/ipa/App.ipa" to App Store Connect
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+26.30.4 (173004)
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+2026-07-10 01:33:12.734 ERROR: [ContentDelivery.Uploader.C92C4C640] 
+=======================================
+UPLOAD FAILED with 2 errors
+=======================================
+2026-07-10 01:33:12.740 ERROR: [altool.100BCAD80] ExitFailure (31)
+{
+  "os-version" : "Version 26.4.1 (Build 25E253)",
+  "product-errors" : [
+    {
+      "code" : 90062,
+      "message" : "This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring",
+      "underlying-errors" : [
+        {
+          "code" : -19241,
+          "message" : "A server error occurred.",
+          "underlying-errors" : [
+
+          ],
+          "user-info" : {
+            "NSLocalizedDescription" : "A server error occurred.",
+            "code" : "90062",
+            "description" : "This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring"
+          }
+        }
+      ],
+      "user-info" : {
+        "NSLocalizedDescription" : "This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring",
+        "NSLocalizedFailureReason" : "The server’s response was: ‘{\n    code = 90062;\n    description = \"This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring\";\n}’.",
+        "NSUnderlyingError" : "Error Domain=IrisAPI Code=-19241 \"A server error occurred.\" UserInfo={code=90062, NSLocalizedDescription=A server error occurred., description=This bundle is invalid. The value for key CFBundleShortVersionString [3.0.4] in the Info.plist file must contain a higher version than that of the previously approved version [3.0.4]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring}",
+        "iris-code" : "90062"
+      }
+    },
+    {
+      "code" : 90186,
+      "message" : "Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions",
+      "underlying-errors" : [
+        {
+          "code" : -19241,
+          "message" : "A server error occurred.",
+          "underlying-errors" : [
+
+          ],
+          "user-info" : {
+            "NSLocalizedDescription" : "A server error occurred.",
+            "code" : "90186",
+            "description" : "Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions"
+          }
+        }
+      ],
+      "user-info" : {
+        "NSLocalizedDescription" : "Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions",
+        "NSLocalizedFailureReason" : "The server’s response was: ‘{\n    code = 90186;\n    description = \"Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions\";\n}’.",
+        "NSUnderlyingError" : "Error Domain=IrisAPI Code=-19241 \"A server error occurred.\" UserInfo={code=90186, NSLocalizedDescription=A server error occurred., description=Invalid Pre-Release Train. The train version '3.0.4' is closed for new build submissions}",
+        "iris-code" : "90186"
+      }
+    }
+  ],
+  "tool-path" : "/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources",
+  "tool-version" : "26.30.4 (173004)"
+}
+
+Failed to upload archive at "build/ios/ipa/App.ipa"
+Failed to publish build/ios/ipa/App.ipa
+Publish attempt 4 failed (exit 1).
+Checking whether the binary registered despite the failure (transient 500 case)…
+  registration check: latest on App Store Connect = '78', this build = '79'
+Binary build 79 is NOT registered yet. Will retry the full upload.
+ERROR: publishing failed after 4 attempts.
+  registration check: latest on App Store Connect = '78', this build = '79'
+
+
+Build failed :|
+Step 17 script `Publish to App Store Connect (tolerant of transient 500s)` exited with status code 1
