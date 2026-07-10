@@ -28,7 +28,7 @@ import { BreakEvenBar } from "@/components/BreakEvenBar";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen, Award, BookOpen, Disc3, Loader2, Copy, Share, Gift } from "lucide-react";
+import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen, Award, BookOpen, Disc3, Loader2, Copy, Share, Gift, Search } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { uploadImageFile as uploadAdminImage } from "@/lib/adminUpload";
@@ -1880,7 +1880,7 @@ function PressInfoPopover({ press }: { press: Manufacturer }) {
               {press.specialties.map((s, i) => (
                 <span
                   key={`${press.id}-spec-${i}`}
-                  className="text-[11px] rounded-full bg-slate-100 text-slate-700 px-2 py-0.5"
+                  className="text-xs rounded-full bg-slate-100 text-slate-700 px-2 py-0.5"
                 >
                   {s}
                 </span>
@@ -2328,7 +2328,7 @@ function CostTooltip({
         align="start"
         data-testid={`tooltip-cost-${format}`}
       >
-        <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-2">
+        <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2">
           Cost breakdown
         </div>
         <Row label="Manufacturing" cents={breakdown.manufacturingCents} />
@@ -2355,7 +2355,7 @@ function CostTooltip({
           </div>
         )}
         {breakdown.source === "placeholder" && (
-          <div className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100">
+          <div className="text-xs text-slate-400 mt-2 pt-2 border-t border-slate-100">
             {"Placeholder — add rates in Admin → Presses to price this row"}
           </div>
         )}
@@ -2725,6 +2725,19 @@ function SkuRow({
         : DEFAULT_VINYL_COLOR_ID,
   );
   const vinylColor: VinylColorOption = VINYL_COLOR_BY_ID[vinylColorId] ?? VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
+  // Task #2659 — color-picker search. Rather than opening each section
+  // dropdown and hovering swatches, an operator can type (e.g. "Ruby")
+  // and jump straight to a matching swatch across ALL sections/tiers.
+  // Reuses the admin expand-on-click search pattern (AdminAlbums). State
+  // is local per FormatRow so parallel format rows don't share a query;
+  // only one of the catalog/legacy picker branches renders per row so the
+  // single pair of state vars is safe for both.
+  const [colorSearchOpen, setColorSearchOpen] = useState(false);
+  const [colorSearchQuery, setColorSearchQuery] = useState("");
+  const closeColorSearch = () => {
+    setColorSearchOpen(false);
+    setColorSearchQuery("");
+  };
   // Task #385 — legacy color "section" (tier). Picking a section
   // filters the swatch row to that tier and auto-selects its first
   // color.
@@ -2760,6 +2773,33 @@ function SkuRow({
   // Same trick for color via `vinylColor` (snapshotted as the color's
   // display name on save).
   const tiers = catalogFormat?.tiers ?? [];
+  // Task #2659 — flatten every section/tier's swatches into one
+  // case-insensitive name-matched result list for the color search.
+  // Catalog path scans the invited press's tiers; legacy path scans the
+  // static VINYL_COLORS, restricted to the sections the section dropdown
+  // actually offers (7" trims to Black + Opaque) so search can't pick a
+  // color the dropdown would then hide.
+  const colorSearchTrimmed = colorSearchQuery.trim().toLowerCase();
+  const catalogColorMatches = useMemo(() => {
+    if (!colorSearchTrimmed) return [];
+    return tiers.flatMap((t) =>
+      t.colors
+        .filter((c) => c.name.toLowerCase().includes(colorSearchTrimmed))
+        .map((c) => ({ tier: t, color: c })),
+    );
+  }, [colorSearchTrimmed, tiers]);
+  const legacyColorMatches = useMemo(() => {
+    if (!colorSearchTrimmed) return [];
+    const visibleTiers = sevenInch
+      ? VINYL_COLOR_TIER_ORDER.filter((t) => SEVEN_INCH_VISIBLE_TIERS.includes(t))
+      : VINYL_COLOR_TIER_ORDER;
+    return VINYL_COLORS.filter(
+      (c) =>
+        visibleTiers.includes(c.tier) &&
+        c.name.toLowerCase().includes(colorSearchTrimmed),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colorSearchTrimmed, sevenInch]);
   // Task #1025 — a color WAS saved on this row if either the exact
   // catalog id (new snapshots) or the legacy display-name snapshot is
   // present. Drives the "unresolved" state below so we never silently
@@ -5934,9 +5974,92 @@ function SkuRow({
             </div>
           ) : usingCatalog && pickedTier ? (
             <div className="space-y-2">
-              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-                Color
+              <div className="flex items-center justify-between gap-2 min-h-7">
+                <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                  Color
+                </span>
+                {colorSearchOpen ? (
+                  <div className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md bg-white border border-slate-200 shadow-sm">
+                    <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                    <input
+                      autoFocus
+                      value={colorSearchQuery}
+                      onChange={(e) => setColorSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") closeColorSearch();
+                      }}
+                      placeholder="Search colors…"
+                      className="w-32 bg-transparent text-xs text-slate-700 placeholder-slate-400 focus:outline-none"
+                      data-testid={`input-color-search-${format}`}
+                    />
+                    <IconButton
+                      variant="ghost"
+                      label="Close color search"
+                      onClick={closeColorSearch}
+                      className="!w-6 !h-6 text-slate-400 hover:text-slate-700"
+                      data-testid={`button-color-search-close-${format}`}
+                    >
+                      <X />
+                    </IconButton>
+                  </div>
+                ) : (
+                  <IconButton
+                    variant="ghost"
+                    label="Search colors"
+                    onClick={() => setColorSearchOpen(true)}
+                    className="!w-7 !h-7 text-slate-400 hover:text-slate-700"
+                    data-testid={`button-color-search-${format}`}
+                  >
+                    <Search />
+                  </IconButton>
+                )}
               </div>
+              {colorSearchOpen && (
+                <div
+                  className="rounded-md border border-slate-200 bg-white max-h-48 overflow-y-auto divide-y divide-slate-100"
+                  data-testid={`list-color-search-results-${format}`}
+                >
+                  {colorSearchTrimmed === "" ? (
+                    <div className="px-2.5 py-2 text-xs text-slate-400">
+                      Type to search all colors…
+                    </div>
+                  ) : catalogColorMatches.length === 0 ? (
+                    <div
+                      className="px-2.5 py-2 text-xs text-slate-400"
+                      data-testid={`text-color-search-empty-${format}`}
+                    >
+                      No colors match "{colorSearchQuery.trim()}".
+                    </div>
+                  ) : (
+                    catalogColorMatches.map(({ tier: t, color: c }) => (
+                      <button
+                        key={`${t.id}-${c.id}`}
+                        type="button"
+                        onClick={() => {
+                          setPressTierId(t.id);
+                          setPressColorId(c.id);
+                          closeColorSearch();
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-slate-50 transition-colors"
+                        data-testid={`result-color-search-${format}-${c.id}`}
+                      >
+                        <span
+                          className="w-5 h-5 rounded-full border border-slate-200 flex-shrink-0 bg-cover bg-center"
+                          style={
+                            c.swatchImageUrl
+                              ? { backgroundImage: `url(${c.swatchImageUrl})` }
+                              : { background: c.swatchHex ?? "#ccc" }
+                          }
+                        />
+                        <span className="text-xs text-slate-700 truncate">
+                          {c.name}{" "}
+                          <span className="text-slate-400">({t.name})</span>
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
               <Select
                 value={pickedTier.id}
                 onValueChange={(v) => setPressTierId(v)}
@@ -6023,9 +6146,90 @@ function SkuRow({
             </div>
           ) : (
             <div className="space-y-2">
-              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-                Color
+              <div className="flex items-center justify-between gap-2 min-h-7">
+                <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                  Color
+                </span>
+                {colorSearchOpen ? (
+                  <div className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md bg-white border border-slate-200 shadow-sm">
+                    <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                    <input
+                      autoFocus
+                      value={colorSearchQuery}
+                      onChange={(e) => setColorSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") closeColorSearch();
+                      }}
+                      placeholder="Search colors…"
+                      className="w-32 bg-transparent text-xs text-slate-700 placeholder-slate-400 focus:outline-none"
+                      data-testid={`input-color-search-${format}`}
+                    />
+                    <IconButton
+                      variant="ghost"
+                      label="Close color search"
+                      onClick={closeColorSearch}
+                      className="!w-6 !h-6 text-slate-400 hover:text-slate-700"
+                      data-testid={`button-color-search-close-${format}`}
+                    >
+                      <X />
+                    </IconButton>
+                  </div>
+                ) : (
+                  <IconButton
+                    variant="ghost"
+                    label="Search colors"
+                    onClick={() => setColorSearchOpen(true)}
+                    className="!w-7 !h-7 text-slate-400 hover:text-slate-700"
+                    data-testid={`button-color-search-${format}`}
+                  >
+                    <Search />
+                  </IconButton>
+                )}
               </div>
+              {colorSearchOpen && (
+                <div
+                  className="rounded-md border border-slate-200 bg-white max-h-48 overflow-y-auto divide-y divide-slate-100"
+                  data-testid={`list-color-search-results-${format}`}
+                >
+                  {colorSearchTrimmed === "" ? (
+                    <div className="px-2.5 py-2 text-xs text-slate-400">
+                      Type to search all colors…
+                    </div>
+                  ) : legacyColorMatches.length === 0 ? (
+                    <div
+                      className="px-2.5 py-2 text-xs text-slate-400"
+                      data-testid={`text-color-search-empty-${format}`}
+                    >
+                      No colors match "{colorSearchQuery.trim()}".
+                    </div>
+                  ) : (
+                    legacyColorMatches.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setLegacyColorTier(c.tier);
+                          setVinylColorId(c.id);
+                          closeColorSearch();
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-slate-50 transition-colors"
+                        data-testid={`result-color-search-${format}-${c.id}`}
+                      >
+                        <span
+                          className="w-5 h-5 rounded-full border border-slate-200 flex-shrink-0"
+                          style={{ background: c.swatch }}
+                        />
+                        <span className="text-xs text-slate-700 truncate">
+                          {c.name}{" "}
+                          <span className="text-slate-400">
+                            ({VINYL_COLOR_TIER_LABEL[c.tier]})
+                          </span>
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
               <Select
                 value={legacyColorTier}
                 onValueChange={(v) =>
@@ -6874,7 +7078,7 @@ function SkuRow({
             render for artists too, at full super-admin parity, alongside
             the Price field and Artist Net. */}
         <div className="space-y-3">
-          <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+          <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
             Price · Cost · Profit
           </div>
 
@@ -6939,7 +7143,7 @@ function SkuRow({
               3. No invited press at all: show a soft placeholder note. */}
           {!isVinyl && !usingCatalog && (
             <div
-              className="text-[11px] text-slate-400 leading-snug -mt-1.5"
+              className="text-xs text-slate-400 leading-snug -mt-1.5"
               data-testid={`text-cost-nonvinyl-note-${format}`}
             >
               {invitedPressRow?.press && !catalogFormat
@@ -6961,7 +7165,7 @@ function SkuRow({
           <div className="flex items-center justify-between gap-3">
             <span className="text-slate-500 text-xs">
               Profit ${" "}
-              <span className="text-slate-400 text-[11px]">Per unit sold</span>
+              <span className="text-slate-400 text-xs">Per unit sold</span>
             </span>
             <span
               className={[
@@ -7000,7 +7204,7 @@ function SkuRow({
             table so the operator can price different run sizes. */}
         {(isVinyl || usingCatalog) ? (
         <div className="space-y-3">
-          <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+          <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
             Quantity · Estimated sold · Total
           </div>
 
@@ -7048,7 +7252,7 @@ function SkuRow({
               case falls through to the standalone Profit/Total below. */}
           {estimateTableRows.length > 1 && (
             <div className="rounded-md border border-slate-200 bg-slate-50/60 p-2" data-testid={`table-sku-estimates-${format}`}>
-              <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5">
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1.5">
                 Estimates by quantity
               </div>
               <div className="overflow-x-auto">
@@ -7155,7 +7359,7 @@ function SkuRow({
               <div className="flex items-center justify-between gap-3 pt-1">
                 <span className="text-slate-500 text-xs">
                   Profit ${" "}
-                  <span className="text-slate-400 text-[11px]">Per unit sold</span>
+                  <span className="text-slate-400 text-xs">Per unit sold</span>
                 </span>
                 <span
                   className={[
@@ -7200,7 +7404,7 @@ function SkuRow({
         </div>
         ) : (
         <div className="space-y-3">
-          <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+          <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
             Sold · Profit · Total
           </div>
           <div
@@ -7248,7 +7452,7 @@ function SkuRow({
           <div className="flex items-center justify-between gap-3 pt-1">
             <span className="text-slate-500 text-xs">
               Profit ${" "}
-              <span className="text-slate-400 text-[11px]">Per unit sold</span>
+              <span className="text-slate-400 text-xs">Per unit sold</span>
             </span>
             <span
               className={[
@@ -9685,7 +9889,7 @@ function VinylPicksBlock({
       data-testid={`vinyl-picks-${format}`}
     >
       <div className="space-y-3">
-        <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+        <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
           Vinyl
         </div>
 
@@ -9803,7 +10007,7 @@ function VinylPicksBlock({
       {/* Live preview — album jacket + colored disc peeking out. The
           same mock will surface on the fan Preview & Purchase page. */}
       <div className="w-full sm:w-72">
-        <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5">
+        <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1.5">
           Fan preview
         </div>
         <VinylPreview
@@ -9920,7 +10124,7 @@ function AddonForm({
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
-        <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold pt-1">
+        <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold pt-1">
           Price · Cost · Profit
         </div>
         <SaveLink dirty={dirty} onClick={submit} testId="button-save-addon" />
@@ -9958,7 +10162,7 @@ function AddonForm({
           <div className="flex items-center justify-between gap-3">
             <span className="text-slate-500 text-xs">
               Cost ${" "}
-              <span className="text-slate-400 text-[11px]">
+              <span className="text-slate-400 text-xs">
                 ({lockedCost === null ? "live" : "locked at last save"})
               </span>
             </span>
@@ -9973,7 +10177,7 @@ function AddonForm({
           <div className="flex items-center justify-between gap-3">
             <span className="text-slate-500 text-xs">
               Profit ${" "}
-              <span className="text-slate-400 text-[11px]">Per unit sold</span>
+              <span className="text-slate-400 text-xs">Per unit sold</span>
             </span>
             <span
               className={[
@@ -9989,7 +10193,7 @@ function AddonForm({
 
         {/* Right column — Quantity / Total */}
         <div className="space-y-3">
-          <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+          <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
             Quantity
           </div>
           <div
@@ -10037,7 +10241,7 @@ function AddonForm({
           <div className="flex items-center justify-between gap-3 pt-1">
             <span className="text-slate-500 text-xs">
               Profit ${" "}
-              <span className="text-slate-400 text-[11px]">Per unit sold</span>
+              <span className="text-slate-400 text-xs">Per unit sold</span>
             </span>
             <span
               className={[
@@ -10101,7 +10305,7 @@ function AddonForm({
           className={`w-20 ${fieldClass} text-xs`}
           data-testid="input-addon-floor"
         />
-        <span className="text-slate-400 text-[11px]">
+        <span className="text-slate-400 text-xs">
           (advanced — per-album floor used by Shopify bundles)
         </span>
       </div>
