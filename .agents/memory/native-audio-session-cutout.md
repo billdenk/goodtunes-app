@@ -61,7 +61,13 @@ on `.ended` and emits `play` if iOS sets `.shouldResume`. `.playback` category +
 the native fix works with it OFF once the new build lands.
 
 **Do NOT ever re-add `setActive(true)` on a per-tick metadata/playback push** —
-that is the proven cutout. The one legitimate re-activation is interruption-end.
+that is the proven cutout. The two legitimate re-activations are: (1) interruption-end,
+and (2) `.newDeviceAvailable` route change (CarPlay/BT head unit connecting — this is
+NOT a per-tick push). For CarPlay, the WKWebView `<audio>` stalls at readyState=4
+(full buffer) when the audio route changes to the car head-unit because the session
+is no longer active on the new output. The fix: `handleRouteChange` detects
+`.newDeviceAvailable`, calls `configureAudioSession(activate: true)` once, then after
+a 300ms route-settle delay emits `play` so the web player resumes.
 
 **Kill-switch ON is NOT a safe permanent setting — it desyncs CarPlay + lock
 screen (expected, not a new bug).** Suppressing the metadata + playback-state

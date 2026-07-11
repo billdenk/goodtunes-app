@@ -459,31 +459,76 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
 
     // MARK: - Up Next
 
-    /// Rebuild the Up Next list's rows from the shared store's current queue.
-    /// Plain title + "artist · duration" detail text only — system row
-    /// highlighting is the only "now playing" signal.
+    /// Rebuild the Up Next list: a "Now Playing" section (single row for the
+    /// current track, marked with the system now-playing indicator) followed by
+    /// an "Up Next" section (only the tracks coming AFTER the current one).
+    /// Tapping any row plays that entry and surfaces the Now Playing screen.
+    /// The index passed to `requestPlayIndex` is always the full-queue index so
+    /// the web player's queue offset matches.
     private func rebuildQueueTemplate() {
         let queue = NowPlayingStore.shared.queue
-        let items: [CPListItem] = queue.enumerated().map { index, entry in
-            let duration = formattedDuration(entry.duration)
-            let detail: String
-            if entry.artist.isEmpty {
-                detail = duration
-            } else if duration.isEmpty {
-                detail = entry.artist
-            } else {
-                detail = "\(entry.artist) · \(duration)"
+        let currentIndex = NowPlayingStore.shared.currentIndex
+        var sections: [CPListSection] = []
+
+        if queue.isEmpty {
+            let placeholder = CPListItem(text: "Nothing playing", detailText: nil)
+            sections = [CPListSection(items: [placeholder])]
+        } else {
+            // -- Now Playing row (current track, marked with isPlaying) --
+            if currentIndex < queue.count {
+                let cur = queue[currentIndex]
+                let dur = formattedDuration(cur.duration)
+                let detail: String
+                if cur.artist.isEmpty { detail = dur }
+                else if dur.isEmpty    { detail = cur.artist }
+                else                   { detail = "\(cur.artist) · \(dur)" }
+                let nowItem = CPListItem(text: cur.title, detailText: detail)
+                nowItem.isPlaying = true
+                nowItem.handler = { [weak self] _, completion in
+                    NowPlayingStore.shared.requestPlayIndex(currentIndex)
+                    self?.presentNowPlaying()
+                    completion()
+                }
+                sections.append(CPListSection(
+                    items: [nowItem], header: "Now Playing", sectionIndexTitle: nil))
             }
-            let item = CPListItem(text: entry.title, detailText: detail)
-            item.handler = { _, completion in
-                NowPlayingStore.shared.requestPlayIndex(index)
-                completion()
+
+            // -- Upcoming tracks (indices strictly after currentIndex) --
+            let upcomingStart = currentIndex + 1
+            if upcomingStart < queue.count {
+                let maxItems = CPListTemplate.maximumItemCount
+                // Reserve one slot for the now-playing row above.
+                let budget = max(0, maxItems - 1)
+                let upcomingSlice = queue[upcomingStart...].prefix(budget)
+                let upcomingItems: [CPListItem] = upcomingSlice.enumerated().map { offset, entry in
+                    let queueIndex = upcomingStart + offset   // full-queue index
+                    let dur = formattedDuration(entry.duration)
+                    let detail: String
+                    if entry.artist.isEmpty { detail = dur }
+                    else if dur.isEmpty    { detail = entry.artist }
+                    else                   { detail = "\(entry.artist) · \(dur)" }
+                    let item = CPListItem(text: entry.title, detailText: detail)
+                    item.handler = { [weak self] _, completion in
+                        NowPlayingStore.shared.requestPlayIndex(queueIndex)
+                        self?.presentNowPlaying()
+                        completion()
+                    }
+                    return item
+                }
+                if !upcomingItems.isEmpty {
+                    sections.append(CPListSection(
+                        items: upcomingItems, header: "Up Next", sectionIndexTitle: nil))
+                }
             }
-            return item
+
+            if sections.isEmpty {
+                let placeholder = CPListItem(text: "Nothing playing", detailText: nil)
+                sections = [CPListSection(items: [placeholder])]
+            }
         }
-        let section = CPListSection(items: items)
+
         DispatchQueue.main.async { [weak self] in
-            self?.queueListTemplate.updateSections([section])
+            self?.queueListTemplate.updateSections(sections)
         }
     }
 

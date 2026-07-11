@@ -175,9 +175,35 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc private func handleRouteChange(_ notification: Notification) {
-        // iOS already pauses the <audio> on an unplug; we only make sure the
-        // category is still `.playback` so the next play routes correctly.
-        ensurePlaybackCategory()
+        guard let info = notification.userInfo,
+              let raw = info[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: raw) else {
+            ensurePlaybackCategory()
+            return
+        }
+        switch reason {
+        case .newDeviceAvailable:
+            // A new audio output connected (CarPlay head unit, Bluetooth, headphones).
+            // Re-activate the session on the new route so the WKWebView <audio>
+            // element doesn't stall mid-track. A new device appearing is a
+            // legitimate single activation point — the same class as an
+            // interruption ending — NOT a per-tick metadata/playback push.
+            configureAudioSession(activate: true)
+            // Give the new route ~300 ms to settle (driver stack negotiation),
+            // then ask the web player to resume. Without this the <audio>
+            // element can land in readyState=4 / stalled / emptied when the
+            // car head-unit first takes over the audio bus.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.emit("play")
+            }
+        case .oldDeviceUnavailable:
+            // A device was removed (headphones unplugged, CarPlay disconnected).
+            // iOS already pauses the <audio> element; ensure the category stays
+            // .playback so the next play() routes to the new default output.
+            ensurePlaybackCategory()
+        default:
+            ensurePlaybackCategory()
+        }
     }
 
     deinit {
@@ -315,6 +341,13 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
                 }
                 if let art = self.lastArtwork {
                     info[MPMediaItemPropertyArtwork] = art
+                } else if let url = self.artworkURL, !url.isEmpty {
+                    // Art URL is known but the async fetch hasn't landed yet
+                    // (or was abandoned because the track changed then came
+                    // back). Re-kick the load so the car head-unit gets real
+                    // artwork on the next tick instead of staying on the
+                    // generic music-note placeholder.
+                    self.loadArtwork(url)
                 }
             }
             info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsed
