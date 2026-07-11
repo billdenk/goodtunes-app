@@ -62,3 +62,15 @@ the native fix works with it OFF once the new build lands.
 
 **Do NOT ever re-add `setActive(true)` on a per-tick metadata/playback push** —
 that is the proven cutout. The one legitimate re-activation is interruption-end.
+
+**Kill-switch ON is NOT a safe permanent setting — it desyncs CarPlay + lock
+screen (expected, not a new bug).** Suppressing the metadata + playback-state
+pushes ALSO starves `MPNowPlayingInfoCenter`, which feeds BOTH the lock-screen
+scrubber AND the CarPlay Now Playing template + its transport buttons. Observed
+on-device with the switch ON: CarPlay shows the WRONG/stale track (or a blank
+music-note placeholder) while the phone plays the real one, and tapping play on
+CarPlay does nothing (state never reflects back). So on the diagnostic build it's
+a trade-off — ON = audio plays but CarPlay/lock go stale; OFF = CarPlay syncs but
+the ~2s cutout returns. The native fix removes the trade-off: switch OFF gives
+BOTH. Check `BUILD.commit` in the overlay before interpreting — if it isn't the
+fix commit, the binary predates the fix (iOS build is a MANUAL Codemagic step).
