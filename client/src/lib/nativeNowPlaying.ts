@@ -226,6 +226,22 @@ export interface NowPlayingDiag {
   platform: string;
   /** Live `Capacitor.isPluginAvailable("NowPlaying")` — the (2) vs (3) fork. */
   pluginAvailable: boolean;
+  /**
+   * Every native plugin the installed binary registered (from the bridge-injected
+   * `Capacitor.PluginHeaders`). This distinguishes a STALE build (predates the
+   * NowPlaying plugin → the list lacks it AND the two working siblings would
+   * still be present on a recent build) from a NowPlaying-specific registration
+   * bug (siblings present, NowPlaying absent) — without needing Xcode.
+   */
+  registeredPlugins: string[];
+  /**
+   * Availability of the two other in-tree Capacitor plugins that use the exact
+   * same registration pattern as NowPlaying. If these read `true` on the same
+   * binary where NowPlaying reads `false`, the binary is NOT stale and the fault
+   * is NowPlaying-specific (not a missing rebuild).
+   */
+  siblingSystemVolume: boolean;
+  siblingSecureKeyStore: boolean;
   lastMetadata: DiagMeta | null;
   lastPlayback: DiagPlayback | null;
   lastFavorite: DiagFavorite | null;
@@ -257,16 +273,42 @@ function emitDiag(): void {
 export function getNowPlayingDiag(): NowPlayingDiag {
   let platform = "web";
   let pluginAvailable = false;
+  let registeredPlugins: string[] = [];
+  let siblingSystemVolume = false;
+  let siblingSecureKeyStore = false;
   try {
     platform = Capacitor.getPlatform();
   } catch {}
   try {
     pluginAvailable = isNative && Capacitor.isPluginAvailable("NowPlaying");
   } catch {}
+  try {
+    // The native bridge injects `Capacitor.PluginHeaders` — the authoritative
+    // list of plugins the installed binary actually registered. Absent on web.
+    const headers = (Capacitor as unknown as {
+      PluginHeaders?: Array<{ name?: string }>;
+    }).PluginHeaders;
+    if (Array.isArray(headers)) {
+      registeredPlugins = headers
+        .map((h) => h?.name)
+        .filter((n): n is string => typeof n === "string")
+        .sort();
+    }
+  } catch {}
+  try {
+    siblingSystemVolume = isNative && Capacitor.isPluginAvailable("SystemVolume");
+  } catch {}
+  try {
+    siblingSecureKeyStore =
+      isNative && Capacitor.isPluginAvailable("SecureKeyStore");
+  } catch {}
   return {
     isNative,
     platform,
     pluginAvailable,
+    registeredPlugins,
+    siblingSystemVolume,
+    siblingSecureKeyStore,
     lastMetadata: diagLastMetadata,
     lastPlayback: diagLastPlayback,
     lastFavorite: diagLastFavorite,

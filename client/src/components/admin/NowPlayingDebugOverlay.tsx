@@ -125,6 +125,27 @@ export function NowPlayingDebugOverlay() {
         <Row label="pluginAvailable" value={String(diag.pluginAvailable)} ok={diag.pluginAvailable} />
 
         <div className="text-white/40 uppercase tracking-wide mt-3 mb-1">
+          Native plugins ({diag.registeredPlugins.length})
+        </div>
+        <Row
+          label="SystemVolume"
+          value={String(diag.siblingSystemVolume)}
+          ok={diag.siblingSystemVolume}
+        />
+        <Row
+          label="SecureKeyStore"
+          value={String(diag.siblingSecureKeyStore)}
+          ok={diag.siblingSecureKeyStore}
+        />
+        <Row
+          label="registered"
+          value={
+            diag.registeredPlugins.length ? diag.registeredPlugins.join(", ") : "(none)"
+          }
+          ok={diag.registeredPlugins.includes("NowPlaying")}
+        />
+
+        <div className="text-white/40 uppercase tracking-wide mt-3 mb-1">
           Last metadata ({diag.metadataCalls})
         </div>
         <Row label="title" value={m?.title ? m.title : "(empty)"} ok={!!m?.title} />
