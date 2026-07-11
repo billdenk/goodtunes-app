@@ -16,6 +16,7 @@
                 A1B2C3D40007000000000007 /* NowPlayingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40008000000000008 /* NowPlayingStore.swift */; };
                 A1B2C3D40009000000000009 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4000A00000000000A /* SceneDelegate.swift */; };
                 A1B2C3D4000B00000000000B /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4000C00000000000C /* CarPlaySceneDelegate.swift */; };
+                A1B2C3D5000D00000000000D /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D5000E00000000000E /* MainViewController.swift */; };
                 504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
                 504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
                 504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
@@ -60,6 +61,7 @@
                 A1B2C3D40008000000000008 /* NowPlayingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingStore.swift; sourceTree = "<group>"; };
                 A1B2C3D4000A00000000000A /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
                 A1B2C3D4000C00000000000C /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
+                A1B2C3D5000E00000000000E /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
                 504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
                 504EC30E1FED79650016851F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
                 504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -140,6 +142,7 @@
                                 A1B2C3D40008000000000008 /* NowPlayingStore.swift */,
                                 A1B2C3D4000A00000000000A /* SceneDelegate.swift */,
                                 A1B2C3D4000C00000000000C /* CarPlaySceneDelegate.swift */,
+                                A1B2C3D5000E00000000000E /* MainViewController.swift */,
                                 504EC30B1FED79650016851F /* Main.storyboard */,
                                 504EC30E1FED79650016851F /* Assets.xcassets */,
                                 504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -312,6 +315,7 @@
                                 A1B2C3D40007000000000007 /* NowPlayingStore.swift in Sources */,
                                 A1B2C3D40009000000000009 /* SceneDelegate.swift in Sources */,
                                 A1B2C3D4000B00000000000B /* CarPlaySceneDelegate.swift in Sources */,
+                                A1B2C3D5000D00000000000D /* MainViewController.swift in Sources */,
                         );
                         runOnlyForDeploymentPostprocessing = 0;
                 };

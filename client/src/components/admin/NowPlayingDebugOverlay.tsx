@@ -19,7 +19,11 @@
 // the fork is resolved.
 
 import { useEffect, useState } from "react";
-import { getNowPlayingDiag, type NowPlayingDiag } from "@/lib/nativeNowPlaying";
+import {
+  getNowPlayingDiag,
+  fetchNowPlayingBuildInfo,
+  type NowPlayingDiag,
+} from "@/lib/nativeNowPlaying";
 
 function fmt(at: number | undefined): string {
   if (!at) return "—";
@@ -61,6 +65,12 @@ export function NowPlayingDebugOverlay() {
       window.removeEventListener("gt:nowplaying-diag", tick);
       if (iv) window.clearInterval(iv);
     };
+  }, [open]);
+
+  // Read the native build's commit provenance when the panel opens so an
+  // operator can confirm which source produced the installed binary.
+  useEffect(() => {
+    if (open) void fetchNowPlayingBuildInfo();
   }, [open]);
 
   const copy = async () => {
@@ -123,6 +133,11 @@ export function NowPlayingDebugOverlay() {
         <Row label="isNative" value={String(diag.isNative)} ok={diag.isNative} />
         <Row label="platform" value={diag.platform} />
         <Row label="pluginAvailable" value={String(diag.pluginAvailable)} ok={diag.pluginAvailable} />
+
+        <div className="text-white/40 uppercase tracking-wide mt-3 mb-1">Build</div>
+        <Row label="commit" value={diag.buildInfo?.commit || "—"} ok={diag.buildInfo?.commit ? true : undefined} />
+        <Row label="version" value={diag.buildInfo?.version || "—"} />
+        <Row label="build" value={diag.buildInfo?.build || "—"} />
 
         <div className="text-white/40 uppercase tracking-wide mt-3 mb-1">
           Native plugins ({diag.registeredPlugins.length})

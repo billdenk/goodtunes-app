@@ -319,6 +319,19 @@ definitions:
             exit 1
           fi
         fi
+    - name: Stamp the git commit into Info.plist (build provenance)
+      script: |
+        # Bake the exact source commit into the built binary so an operator can
+        # confirm IN-APP (the Now Playing diagnostic overlay → NowPlaying.getBuildInfo)
+        # exactly which commit produced the installed build. The native shell loads
+        # a REMOTE origin, so JS ships via a normal web publish and "is this build
+        # stale?" is otherwise unanswerable on-device. Runs AFTER the CarPlay-gating
+        # step (so its Info.plist edits can't clobber this) and BEFORE the archive.
+        INFO_PLIST="ios/App/App/Info.plist"
+        COMMIT="${CM_COMMIT:-unknown}"
+        /usr/libexec/PlistBuddy -c "Delete :GTGitCommit" "$INFO_PLIST" 2>/dev/null || true
+        /usr/libexec/PlistBuddy -c "Add :GTGitCommit string $COMMIT" "$INFO_PLIST"
+        echo "Stamped GTGitCommit=$COMMIT into $INFO_PLIST"
     - name: Build the signed .ipa
       script: |
         # `--archive-flags="-allowProvisioningUpdates"` is THE fix for the Xcode

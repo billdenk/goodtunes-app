@@ -138,6 +138,21 @@ export interface NowPlayingRecentItem {
   artworkUrl?: string;
 }
 
+/** Native build provenance returned by the NowPlaying plugin's `getBuildInfo`.
+ *  Lets an operator confirm IN-APP which source commit produced the installed
+ *  binary — the remote-origin shell otherwise makes "is this build stale?"
+ *  unanswerable on-device. */
+export interface NowPlayingBuildInfo {
+  /** The git commit the native binary was built from (Info.plist `GTGitCommit`,
+   *  stamped by the Codemagic archive step). Empty on a binary built before the
+   *  stamp step / where the key is absent. */
+  commit: string;
+  /** `CFBundleShortVersionString` — the marketing version (e.g. "3.0.6"). */
+  version: string;
+  /** `CFBundleVersion` — the build number. */
+  build: string;
+}
+
 interface NowPlayingPlugin {
   setMetadata(options: NowPlayingMetadata): Promise<void>;
   setPlaybackState(options: NowPlayingPlaybackState): Promise<void>;
@@ -147,6 +162,7 @@ interface NowPlayingPlugin {
   setFavorite(options: { isFavorite: boolean }): Promise<void>;
   clear(): Promise<void>;
   clearLibrary(): Promise<void>;
+  getBuildInfo(): Promise<NowPlayingBuildInfo>;
   addListener(
     eventName: "remoteCommand",
     listenerFunc: (data: RemoteCommand) => void,
@@ -250,9 +266,17 @@ export interface NowPlayingDiag {
   playbackCalls: number;
   favoriteCalls: number;
   commandCount: number;
+  /**
+   * Native build provenance (git commit + version/build) read back through the
+   * now-registered NowPlaying plugin. Null until fetched, on web, or on a native
+   * binary predating `getBuildInfo`. A non-empty `commit` confirms exactly which
+   * source produced the installed build AND proves the plugin registered.
+   */
+  buildInfo: NowPlayingBuildInfo | null;
 }
 
 let diagLastMetadata: DiagMeta | null = null;
+let diagBuildInfo: NowPlayingBuildInfo | null = null;
 let diagLastPlayback: DiagPlayback | null = null;
 let diagLastFavorite: DiagFavorite | null = null;
 let diagLastCommand: DiagCommand | null = null;
@@ -317,7 +341,29 @@ export function getNowPlayingDiag(): NowPlayingDiag {
     playbackCalls: diagPlaybackCalls,
     favoriteCalls: diagFavoriteCalls,
     commandCount: diagCommandCount,
+    buildInfo: diagBuildInfo,
   };
+}
+
+/**
+ * Read the native build's provenance (commit/version/build) through the plugin
+ * and cache it for the diagnostic overlay. No-op off-native / when the plugin is
+ * unavailable (older binary without the method). Safe to call repeatedly — the
+ * overlay calls it on open. Emits the diag event so the overlay re-renders.
+ */
+export async function fetchNowPlayingBuildInfo(): Promise<void> {
+  if (!available()) return;
+  try {
+    const info = await NowPlaying.getBuildInfo();
+    diagBuildInfo = {
+      commit: String(info?.commit ?? ""),
+      version: String(info?.version ?? ""),
+      build: String(info?.build ?? ""),
+    };
+    emitDiag();
+  } catch {
+    /* older binary without getBuildInfo — leave buildInfo null */
+  }
 }
 
 /** Publish the current track's metadata to the OS lock screen. No-op off-native. */

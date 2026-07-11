@@ -43,6 +43,7 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setFavorite", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clear", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clearLibrary", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getBuildInfo", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "addListener", returnType: CAPPluginReturnCallback),
         CAPPluginMethod(name: "removeAllListeners", returnType: CAPPluginReturnPromise)
     ]
@@ -363,6 +364,23 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             call.resolve()
         }
+    }
+
+    /// Return the native build's provenance so an operator can confirm, from
+    /// inside the app, exactly which source commit produced the installed binary.
+    /// The native shell loads a REMOTE origin (JS ships via web publish), so
+    /// without this "is this build stale or genuinely broken?" is unanswerable
+    /// on-device. `commit` is the Info.plist `GTGitCommit` stamped by the
+    /// Codemagic archive step from `CM_COMMIT`; version/build are the standard
+    /// bundle strings. Because this only resolves once the plugin is registered,
+    /// a non-empty readback also proves the registration fix landed.
+    @objc func getBuildInfo(_ call: CAPPluginCall) {
+        let info = Bundle.main.infoDictionary
+        call.resolve([
+            "commit": (info?["GTGitCommit"] as? String) ?? "",
+            "version": (info?["CFBundleShortVersionString"] as? String) ?? "",
+            "build": (info?["CFBundleVersion"] as? String) ?? ""
+        ])
     }
 
     // MARK: - Remote commands
