@@ -9290,3 +9290,29 @@ backfill_task_2642_shipping_addresses() {
 }
 backfill_task_2642_shipping_addresses dev  "${DATABASE_URL:-}" development
 backfill_task_2642_shipping_addresses prod "${PROD_DATABASE_URL:-}" production
+
+# Task #2676 — ONE-TIME backfill of missing/name-only shipping+billing address
+# snapshots on customer_users from their Stripe Customer records. During a window
+# when the Stripe Basil API moved the shipping snapshot from
+# `session.shipping_details` to `session.collected_information.shipping_details`,
+# the webhook handler wrote only the buyer name into the local customer snapshot
+# (all address lines null). Stripe's own Customer object (written via
+# `customer_update: "auto"`) always has the full address. This script pulls it
+# back and writes it into customer_users. Marker-guarded in
+# post_merge_data_backfills; the script FATALs (nonzero exit) rather than
+# stamping the marker on a partial run if any customer errors out or the Stripe
+# connector is unreachable.
+backfill_task_2676_customer_addresses() {
+  local label="$1" url="$2" env="$3"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2676 customer-address backfill on $label (no URL set)"
+    return 0
+  fi
+  if DATABASE_URL="$url" npx tsx scripts/backfill-customer-addresses.ts --env="$env"; then
+    echo "post-merge: task-2676 customer-address backfill ok on $label"
+  else
+    echo "post-merge: WARNING — task-2676 customer-address backfill failed on $label (continuing)"
+  fi
+}
+backfill_task_2676_customer_addresses dev  "${DATABASE_URL:-}" development
+backfill_task_2676_customer_addresses prod "${PROD_DATABASE_URL:-}" production

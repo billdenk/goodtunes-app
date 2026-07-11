@@ -1857,7 +1857,13 @@ function AddressCard({
         snapshot.country,
       ].filter(Boolean)
     : [];
-  const hasAddress = !!snapshot && (lines.length > 0 || !!snapshot.name);
+  // A name-only snapshot (all address lines null) means the Basil API migration
+  // dropped the actual address — treat it as absent so we don't render a
+  // floating name with no street. Guard on specific meaningful fields, not
+  // lines.length, so a line2-only snapshot can't slip through either.
+  const hasAddress =
+    !!snapshot &&
+    !!(snapshot.line1 || snapshot.city || snapshot.state || snapshot.postalCode || snapshot.country);
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid={testId}>
       <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
