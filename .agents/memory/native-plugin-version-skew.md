@@ -50,6 +50,24 @@ name + icon with a working scrubber = iOS auto-managing the WebView `<audio>`,
 NOT our plugin. That pinned it to plugin-absent (rebuild), not a data-shape or
 mediaSession bug — before spending a rebuild cycle on a guess.
 
+**Sharper fork-decider — probe the SIBLING in-tree plugins too:** a single
+`pluginAvailable:false` can't tell "stale install" from "this-plugin-specific
+registration bug." Add the full native inventory to the diagnostic: the bridge
+`Capacitor.PluginHeaders` name list + `isPluginAvailable` probes of the OTHER
+hand-registered in-tree plugins (SystemVolume, SecureKeyStore). All the in-tree
+Swift plugins compile & auto-register together (same CAPBridgedPlugin path), so
+they share fate:
+- ALL in-tree customs absent (PluginHeaders shows ONLY stock npm/core:
+  App/CapacitorCookies/CapacitorHttp/Console/Filesystem/PushNotifications/
+  SplashScreen/StatusBar/WebView) → the installed binary is STALE (predates the
+  builds that compiled them) → Codemagic rebuild + reinstall IS the fix.
+- siblings present but the one plugin absent → genuinely plugin-SPECIFIC bug →
+  fix source, rebuild won't help by itself.
+The Now Playing case resolved as the FIRST branch: on-device readout showed all
+three customs (SystemVolume/SecureKeyStore/NowPlaying) missing while the 9 stock
+plugins registered — even though the two siblings were added weeks earlier —
+proving a stale install, not a NowPlaying wiring bug.
+
 **Confirming source is correct (so a rebuild WILL fix it), all in-repo:**
 in-tree iOS Swift plugin conforms to `CAPBridgedPlugin` with `jsName` matching
 the JS `registerPlugin("<Name>")`; it's in the Xcode target in all 4 pbxproj
