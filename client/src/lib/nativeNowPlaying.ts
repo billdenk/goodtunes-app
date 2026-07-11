@@ -15,9 +15,14 @@
  *     category (so audio keeps going with the screen locked / app backgrounded),
  *     populates `MPNowPlayingInfoCenter` (title/artist/album/artwork/elapsed/
  *     duration), and forwards `MPRemoteCommandCenter` play/pause/next/prev/seek
- *     events. This is the reliable lock-screen path on iOS WKWebView, which is
- *     why PlayerContext gates the *web* MediaSession block off on native iOS
- *     and lets the plugin own the now-playing info instead.
+ *     events. NOTE: on iOS 15+ WKWebView ALSO publishes the playing <audio>
+ *     element's own now-playing info and wins arbitration over this plugin's
+ *     writes for the phone lock screen, so PlayerContext ALSO sets the *web*
+ *     `navigator.mediaSession` on native iOS — that is what actually surfaces
+ *     the real title/artist/art there. This plugin still owns AVAudioSession
+ *     `.playback` (background audio) plus the CarPlay browse + cold-connect
+ *     snapshot surfaces, and its `MPRemoteCommandCenter` targets stay wired for
+ *     CarPlay (inert for the lock screen, which routes to WebKit's session).
  *   - Android (native): the Chromium System WebView surfaces the web
  *     `navigator.mediaSession` metadata as the phone media-style notification
  *     and keeps audio alive in the background (unchanged). The in-tree

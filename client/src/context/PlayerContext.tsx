@@ -1241,14 +1241,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // Background audio + lock-screen transport (Task #162). Two layers:
   //   1. Web `navigator.mediaSession` — drives mobile-web/PWA now-playing AND,
   //      inside the Android Chromium System WebView, the media-style
-  //      notification + background playback for the native Android app. Gated
-  //      OFF on native iOS so the native plugin (below) is the sole owner of
-  //      the WKWebView lock-screen info (WKWebView's own MediaSession would
-  //      otherwise fight MPNowPlayingInfoCenter).
+  //      notification + background playback for the native Android app. Runs on
+  //      native iOS too: on iOS 15+ WKWebView publishes the playing <audio>
+  //      element's OWN now-playing info to the shared system slot and WINS
+  //      arbitration over the native plugin (it owns the audio session), so we
+  //      MUST set metadata / position / action handlers here — otherwise the
+  //      lock screen falls back to the app name ("GoodTunes") with WebKit's
+  //      default skip-10 transport. (The old "gate this off on iOS so the plugin
+  //      owns the WKWebView lock screen" design was invalid: WebKit publishes
+  //      regardless, and it, not MPNowPlayingInfoCenter, drives the display.)
   //   2. Native `NowPlaying` plugin — iOS only; sets AVAudioSession `.playback`
-  //      (keeps audio alive when locked/backgrounded), populates the lock
-  //      screen with artwork/metadata/position, and forwards MPRemoteCommand
-  //      transport back here. No-op on Android/web (plugin absent).
+  //      (keeps audio alive when locked/backgrounded) and mirrors metadata /
+  //      queue / catalog / recents / favorite into MPNowPlayingInfoCenter +
+  //      NowPlayingStore for CarPlay browse + the cold-connect snapshot. Its
+  //      MPRemoteCommandCenter targets stay wired for CarPlay but are inert for
+  //      the phone lock screen (iOS routes those taps to WebKit's session).
+  //      No-op on Android/web (plugin absent).
   //
   // Latest control callbacks are read through a ref so the OS action handlers
   // register once and never go stale, without re-subscribing on every render.
@@ -1325,8 +1333,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     // fetchable URL; already-absolute URLs pass through unchanged.
     const artwork = absolutizeArtwork(song.album?.artwork ?? undefined);
 
-    // Web MediaSession — skip on native iOS (native plugin owns the lock screen).
-    if (ms && !isNativeIOS && typeof (window as any)?.MediaMetadata === "function") {
+    // Web MediaSession — set on ALL platforms incl. native iOS. On iOS 15+
+    // WKWebView publishes the playing <audio> element's now-playing info to the
+    // shared system slot and wins over the native plugin's writes, so if we
+    // leave this unset the lock screen shows the app name ("GoodTunes"). Setting
+    // it here is what actually surfaces the real title/artist/art on iOS.
+    if (ms && typeof (window as any)?.MediaMetadata === "function") {
       try {
         ms.metadata = new (window as any).MediaMetadata({
           title,
@@ -1361,7 +1373,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const ms: any =
       typeof navigator !== "undefined" ? (navigator as any).mediaSession : undefined;
-    if (!ms || isNativeIOS) return;
+    if (!ms) return;
     try {
       ms.playbackState = isPlaying ? "playing" : "paused";
     } catch {}
@@ -1504,7 +1516,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     // Web MediaSession action handlers (Android WebView + mobile web/PWA).
     const ms: any =
       typeof navigator !== "undefined" ? (navigator as any).mediaSession : undefined;
-    const wiredWeb = ms && !isNativeIOS && typeof ms.setActionHandler === "function";
+    const wiredWeb = ms && typeof ms.setActionHandler === "function";
     if (wiredWeb) {
       const set = (action: string, fn: ((d?: any) => void) | null) => {
         try {
