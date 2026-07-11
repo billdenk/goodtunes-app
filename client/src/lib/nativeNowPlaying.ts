@@ -278,6 +278,23 @@ export interface NowPlayingDiag {
    * source produced the installed build AND proves the plugin registered.
    */
   buildInfo: NowPlayingBuildInfo | null;
+  /**
+   * Ring buffer of the most recent HTMLAudioElement lifecycle events + web
+   * MediaSession action invocations (audio-cutout diagnostic). On native iOS the
+   * audio can silence ~2s after play; this timeline distinguishes the three
+   * causes with different fixes: an element `error` (real MediaError → stream
+   * fault), a bare `pause`/`ms-pause` with no error (OS AVAudioSession
+   * interruption pausing the WebView element), or a `play-reject` (autoplay
+   * block). Populated by PlayerContext; read in NowPlayingDebugOverlay.
+   */
+  events: DiagEvent[];
+  /**
+   * Whether the operator kill-switch is suppressing the two native pushes that
+   * re-activate the AVAudioSession (setMetadata + setPlaybackState). Flipping it
+   * ON and hearing audio play through is the decisive A/B proof that the native
+   * session churn is the cutout cause — no Codemagic rebuild needed to confirm.
+   */
+  nativePushSuppressed: boolean;
 }
 
 let diagLastMetadata: DiagMeta | null = null;
@@ -296,6 +313,86 @@ function emitDiag(): void {
       window.dispatchEvent(new Event("gt:nowplaying-diag"));
     }
   } catch {}
+}
+
+// --- Audio-cutout event ring buffer (native iOS audio-silences-after-~2s) ----
+// The deciding fact is device-only. This captures the HTMLAudioElement lifecycle
+// (pause/playing/waiting/stalled/suspend/emptied/error/ended), play() rejections,
+// and every web MediaSession action so ONE on-device reproduction reveals whether
+// the cutout is a real MediaError (stream fault), an OS-interruption pause (no
+// error → AVAudioSession churn), or an autoplay block. PlayerContext feeds it.
+export interface DiagEvent {
+  /** Wall-clock ms when the event fired. */
+  at: number;
+  /** Event kind: element event name, `play-reject`, `ms-<action>`, or `suppress`. */
+  kind: string;
+  /** HTMLAudioElement.currentTime at the moment (seconds), when known. */
+  t?: number;
+  /** HTMLAudioElement.readyState (0–4) at the moment, when known. */
+  rs?: number;
+  /** HTMLAudioElement.networkState (0–3) at the moment, when known. */
+  ns?: number;
+  /** Free-form detail — MediaError name/message, rejection name, action, etc. */
+  detail?: string;
+}
+
+const diagEvents: DiagEvent[] = [];
+const DIAG_EVENTS_MAX = 30;
+
+/**
+ * Record a playback-lifecycle event into the diagnostic ring buffer and notify
+ * the overlay. Cheap; safe off-native (the overlay is operators-only). Kept to
+ * the last {@link DIAG_EVENTS_MAX} entries so it never grows unbounded.
+ */
+export function logPlaybackEvent(e: Omit<DiagEvent, "at">): void {
+  diagEvents.push({ ...e, at: Date.now() });
+  if (diagEvents.length > DIAG_EVENTS_MAX) {
+    diagEvents.splice(0, diagEvents.length - DIAG_EVENTS_MAX);
+  }
+  emitDiag();
+}
+
+// --- Native-push kill-switch (decisive A/B for the audio cutout) -------------
+// On native iOS the NowPlaying plugin re-activates the AVAudioSession on every
+// setMetadata + setPlaybackState (the latter ticks ~1×/sec during playback),
+// which can interrupt the WebView's separate media-process session and silence
+// audio. Suppressing those two pushes stops the churn WITHOUT a rebuild: if Bill
+// flips this ON and audio plays through, the session churn is confirmed. Persisted
+// so it survives the reload a re-test triggers. CarPlay browse/queue/favorite
+// pushes stay live (they don't touch the session), so only the lock-screen
+// scrubber goes stale while the switch is on.
+const SUPPRESS_KEY = "gt:np-suppress-native-push";
+let nativePushSuppressed: boolean | null = null;
+
+function isNativePushSuppressed(): boolean {
+  if (nativePushSuppressed === null) {
+    try {
+      nativePushSuppressed =
+        typeof localStorage !== "undefined" &&
+        localStorage.getItem(SUPPRESS_KEY) === "1";
+    } catch {
+      nativePushSuppressed = false;
+    }
+  }
+  return nativePushSuppressed;
+}
+
+/** Toggle the native-push kill-switch. Persists across reloads; logs the flip
+ *  into the event ring buffer so the timeline shows exactly when it changed. */
+export function setNativePushSuppressed(v: boolean): void {
+  nativePushSuppressed = v;
+  try {
+    if (typeof localStorage !== "undefined") {
+      if (v) localStorage.setItem(SUPPRESS_KEY, "1");
+      else localStorage.removeItem(SUPPRESS_KEY);
+    }
+  } catch {}
+  logPlaybackEvent({ kind: "suppress", detail: v ? "on" : "off" });
+}
+
+/** Whether the native-push kill-switch is currently on. */
+export function getNativePushSuppressed(): boolean {
+  return isNativePushSuppressed();
 }
 
 /** Snapshot the Now-Playing bridge diagnostic state. Cheap; safe off-native. */
@@ -347,6 +444,8 @@ export function getNowPlayingDiag(): NowPlayingDiag {
     favoriteCalls: diagFavoriteCalls,
     commandCount: diagCommandCount,
     buildInfo: diagBuildInfo,
+    events: diagEvents.slice(),
+    nativePushSuppressed: isNativePushSuppressed(),
   };
 }
 
@@ -373,9 +472,15 @@ export async function fetchNowPlayingBuildInfo(): Promise<void> {
 
 /** Publish the current track's metadata to the OS lock screen. No-op off-native. */
 export function setNowPlayingMetadata(meta: NowPlayingMetadata): void {
-  const delivered = available();
+  const suppressed = isNativePushSuppressed();
+  const delivered = available() && !suppressed;
   diagMetadataCalls += 1;
-  diagLastMetadata = { ...meta, at: Date.now(), delivered, error: null };
+  diagLastMetadata = {
+    ...meta,
+    at: Date.now(),
+    delivered,
+    error: suppressed ? "suppressed (kill-switch)" : null,
+  };
   emitDiag();
   if (!delivered) return;
   NowPlaying.setMetadata(meta).catch((e: any) => {
@@ -388,11 +493,17 @@ export function setNowPlayingMetadata(meta: NowPlayingMetadata): void {
 /** Publish play/pause + elapsed position so the lock-screen scrubber tracks
  *  real playback. No-op off-native. */
 export function setNowPlayingPlaybackState(state: NowPlayingPlaybackState): void {
-  const delivered = available();
+  const suppressed = isNativePushSuppressed();
+  const delivered = available() && !suppressed;
   diagPlaybackCalls += 1;
   // Ticks ~1×/sec, so update the snapshot without dispatching an event (the
   // overlay polls while open); metadata/favorite/command still emit.
-  diagLastPlayback = { ...state, at: Date.now(), delivered, error: null };
+  diagLastPlayback = {
+    ...state,
+    at: Date.now(),
+    delivered,
+    error: suppressed ? "suppressed (kill-switch)" : null,
+  };
   if (!delivered) return;
   NowPlaying.setPlaybackState(state).catch((e: any) => {
     if (diagLastPlayback) diagLastPlayback.error = String(e?.message ?? e);

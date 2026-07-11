@@ -17,6 +17,7 @@ import {
   clearNowPlaying,
   onNowPlayingRemoteCommand,
   absolutizeArtwork,
+  logPlaybackEvent,
   type NowPlayingCatalogAlbum,
   type NowPlayingRecentItem,
 } from "@/lib/nativeNowPlaying";
@@ -778,7 +779,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         // another song before the manifest fetch completes.
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (isPlayingRef.current && srcTokenRef.current === token) {
-            a.play().catch(() => setIsPlaying(false));
+            a.play().catch((e) => {
+              logPlaybackEvent({ kind: "play-reject", detail: `hls: ${String((e as any)?.name ?? e)}` });
+              setIsPlaying(false);
+            });
           }
         });
         hls.loadSource(url);
@@ -807,7 +811,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         // and the native apps are untouched.
         if (!isWebIOS) a.load();
         if (isPlayingRef.current) {
-          a.play().catch(() => setIsPlaying(false));
+          a.play().catch((e) => {
+            logPlaybackEvent({ kind: "play-reject", detail: `attach: ${String((e as any)?.name ?? e)}` });
+            setIsPlaying(false);
+          });
         }
       }
       setAudioDuration(null);
@@ -924,7 +931,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       (!!a.src && !a.src.startsWith("data:audio/wav")) || !!hlsRef.current;
     if (!hasAttachedSrc) return;
     if (isPlaying) {
-      a.play().catch(() => setIsPlaying(false));
+      a.play().catch((e) => {
+        logPlaybackEvent({ kind: "play-reject", detail: `resume: ${String((e as any)?.name ?? e)}` });
+        setIsPlaying(false);
+      });
     } else {
       a.pause();
     }
@@ -1013,9 +1023,45 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // advance it past the track the user just tapped — producing no audio. Skip
       // the advancement for the silent bless clip; only react to a real source.
       if (a.src.startsWith("data:audio/wav")) return;
+      logPlaybackEvent({ kind: "ended", t: a.currentTime, rs: a.readyState, ns: a.networkState });
       milestonesRef.current.completed = true;
       handleNext(false);
     };
+    // Audio-cutout diagnostic (native iOS silences ~2s in). These lifecycle
+    // events + the augmented onError below let ONE on-device reproduction show
+    // whether the cutout is a real MediaError, an OS-interruption `pause` with
+    // no error (AVAudioSession churn), or a `waiting`/`stalled` buffering stall.
+    // The gesture-bless silent WAV pauses/emptes constantly on iOS web, so tag
+    // (never suppress) it to keep the timeline readable.
+    const isBless = () => a.src.startsWith("data:audio/wav");
+    const onPause = () =>
+      logPlaybackEvent({
+        kind: "pause",
+        t: a.currentTime,
+        rs: a.readyState,
+        ns: a.networkState,
+        detail: isBless() ? "bless-clip" : undefined,
+      });
+    const onWaiting = () =>
+      logPlaybackEvent({ kind: "waiting", t: a.currentTime, rs: a.readyState, ns: a.networkState });
+    const onStalled = () =>
+      logPlaybackEvent({ kind: "stalled", t: a.currentTime, rs: a.readyState, ns: a.networkState });
+    const onSuspend = () =>
+      logPlaybackEvent({
+        kind: "suspend",
+        t: a.currentTime,
+        rs: a.readyState,
+        ns: a.networkState,
+        detail: isBless() ? "bless-clip" : undefined,
+      });
+    const onEmptied = () =>
+      logPlaybackEvent({
+        kind: "emptied",
+        t: a.currentTime,
+        rs: a.readyState,
+        ns: a.networkState,
+        detail: isBless() ? "bless-clip" : undefined,
+      });
     const onError = () => {
       // Surface the actual MediaError so prod-side playback failures
       // stop being silent. Without this `<audio>` swallows the error
@@ -1031,15 +1077,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         3: "MEDIA_ERR_DECODE",
         4: "MEDIA_ERR_SRC_NOT_SUPPORTED",
       };
+      const errName = err ? codeMap[err.code] || "UNKNOWN" : "no MediaError";
       console.error("[player] audio error", {
         code: err?.code,
-        name: err ? codeMap[err.code] || "UNKNOWN" : "no MediaError",
+        name: errName,
         message: err?.message || "(empty)",
         src: a.currentSrc || a.src,
         readyState: a.readyState,
         networkState: a.networkState,
         songId: song?.id,
         songTitle: song?.title,
+      });
+      logPlaybackEvent({
+        kind: "error",
+        t: a.currentTime,
+        rs: a.readyState,
+        ns: a.networkState,
+        detail: `${errName}${err?.code != null ? ` (${err.code})` : ""}${err?.message ? `: ${err.message}` : ""}`,
       });
       setIsPlaying(false);
     };
@@ -1050,6 +1104,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         m.started = true;
         track("play_start", { ...songMeta(song), duration: Number.isFinite(a.duration) ? Math.floor(a.duration) : undefined });
       }
+      if (!isBless()) {
+        logPlaybackEvent({ kind: "playing", t: a.currentTime, rs: a.readyState, ns: a.networkState });
+      }
     };
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("seeked", onSeeked);
@@ -1058,6 +1115,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     a.addEventListener("ended", onEnded);
     a.addEventListener("error", onError);
     a.addEventListener("playing", onPlaying);
+    a.addEventListener("pause", onPause);
+    a.addEventListener("waiting", onWaiting);
+    a.addEventListener("stalled", onStalled);
+    a.addEventListener("suspend", onSuspend);
+    a.addEventListener("emptied", onEmptied);
     return () => {
       a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("seeked", onSeeked);
@@ -1066,6 +1128,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       a.removeEventListener("ended", onEnded);
       a.removeEventListener("error", onError);
       a.removeEventListener("playing", onPlaying);
+      a.removeEventListener("pause", onPause);
+      a.removeEventListener("waiting", onWaiting);
+      a.removeEventListener("stalled", onStalled);
+      a.removeEventListener("suspend", onSuspend);
+      a.removeEventListener("emptied", onEmptied);
     };
   }, [handleNext]);
 
@@ -1524,14 +1591,26 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         } catch {}
       };
       set("play", () => {
+        logPlaybackEvent({ kind: "ms-play" });
         if (!isPlayingRef.current) mediaControlsRef.current.togglePlay();
       });
       set("pause", () => {
+        // On native iOS an AVAudioSession interruption can surface here as a
+        // synthetic "pause" action (rather than a MediaError) — this is the
+        // audio-cutout smoking gun to look for on Bill's device timeline.
+        logPlaybackEvent({ kind: "ms-pause" });
         if (isPlayingRef.current) mediaControlsRef.current.togglePlay();
       });
-      set("previoustrack", () => mediaControlsRef.current.prev());
-      set("nexttrack", () => mediaControlsRef.current.next());
+      set("previoustrack", () => {
+        logPlaybackEvent({ kind: "ms-prev" });
+        mediaControlsRef.current.prev();
+      });
+      set("nexttrack", () => {
+        logPlaybackEvent({ kind: "ms-next" });
+        mediaControlsRef.current.next();
+      });
       set("seekto", (d?: any) => {
+        logPlaybackEvent({ kind: "ms-seekto", detail: d && typeof d.seekTime === "number" ? String(Math.round(d.seekTime)) : undefined });
         if (d && typeof d.seekTime === "number") mediaControlsRef.current.seekTo(d.seekTime);
       });
       // iOS/WebKit exposes a FIXED number of lock-screen transport slots and

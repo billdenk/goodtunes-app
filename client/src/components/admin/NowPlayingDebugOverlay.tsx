@@ -17,11 +17,21 @@
 // Ships to the existing native binary via a normal web publish (the shell loads
 // the remote origin). Gated to operators on native iOS in App.tsx. Remove once
 // the fork is resolved.
+//
+// It ALSO carries the audio-cutout diagnostic (native iOS silences audio ~2s
+// after play). The "Events" timeline records the HTMLAudioElement lifecycle +
+// web MediaSession actions so ONE reproduction shows the cause: an `error`
+// (MediaError → stream fault), a bare `pause`/`ms-pause` with no error (OS
+// AVAudioSession interruption from the plugin's session churn), or a
+// `play-reject` (autoplay block). The "Suppress native pushes" kill-switch stops
+// the two native pushes that re-activate the AVAudioSession — flip it ON and, if
+// audio plays through, the session churn is the confirmed cause (no rebuild).
 
 import { useEffect, useState } from "react";
 import {
   getNowPlayingDiag,
   fetchNowPlayingBuildInfo,
+  setNativePushSuppressed,
   type NowPlayingDiag,
 } from "@/lib/nativeNowPlaying";
 
@@ -134,6 +144,34 @@ export function NowPlayingDebugOverlay() {
         <Row label="platform" value={diag.platform} />
         <Row label="pluginAvailable" value={String(diag.pluginAvailable)} ok={diag.pluginAvailable} />
 
+        <div className="text-white/40 uppercase tracking-wide mt-3 mb-1">
+          Audio-cutout A/B
+        </div>
+        <div className="flex items-center justify-between gap-3 py-1">
+          <span className="text-white/50">Suppress native pushes</span>
+          <button
+            type="button"
+            onClick={() => {
+              setNativePushSuppressed(!diag.nativePushSuppressed);
+              setDiag(getNowPlayingDiag());
+            }}
+            data-testid="button-nowplaying-suppress-toggle"
+            className={[
+              "px-2.5 py-1 rounded-lg text-xs font-semibold",
+              diag.nativePushSuppressed
+                ? "bg-amber-500 text-slate-900"
+                : "bg-white/10 text-white hover:bg-white/20",
+            ].join(" ")}
+          >
+            {diag.nativePushSuppressed ? "ON (suppressed)" : "OFF"}
+          </button>
+        </div>
+        <div className="text-white/30 text-xs leading-snug pb-1">
+          ON stops the metadata + playback pushes that re-activate the iOS audio
+          session. If audio plays through with this ON, the native session churn
+          is the cutout cause. Lock-screen scrubber goes stale while ON.
+        </div>
+
         <div className="text-white/40 uppercase tracking-wide mt-3 mb-1">Build</div>
         <Row label="commit" value={diag.buildInfo?.commit || "—"} ok={diag.buildInfo?.commit ? true : undefined} />
         <Row label="version" value={diag.buildInfo?.version || "—"} />
@@ -192,6 +230,48 @@ export function NowPlayingDebugOverlay() {
         </div>
         <Row label="last" value={c ? JSON.stringify(c.cmd) : "none"} />
         <Row label="at" value={fmt(c?.at)} />
+
+        <div className="text-white/40 uppercase tracking-wide mt-3 mb-1">
+          Events ({diag.events.length}) — newest first
+        </div>
+        {diag.events.length === 0 ? (
+          <div className="text-white/40 py-1">(none yet — play a track)</div>
+        ) : (
+          <div className="space-y-0.5">
+            {diag.events
+              .slice()
+              .reverse()
+              .map((e, i) => (
+                <div
+                  key={`${e.at}-${i}`}
+                  className="flex items-start justify-between gap-2 py-0.5 border-b border-white/5"
+                  data-testid={`row-nowplaying-event-${i}`}
+                >
+                  <span
+                    className={[
+                      "font-semibold shrink-0",
+                      e.kind === "error"
+                        ? "text-red-300"
+                        : e.kind === "pause" || e.kind === "ms-pause"
+                          ? "text-amber-300"
+                          : e.kind === "playing"
+                            ? "text-emerald-300"
+                            : "text-white/80",
+                    ].join(" ")}
+                  >
+                    {e.kind}
+                  </span>
+                  <span className="text-white/40 text-right break-all">
+                    {fmt(e.at)}
+                    {e.t !== undefined ? ` · t=${e.t.toFixed(1)}` : ""}
+                    {e.rs !== undefined ? ` rs=${e.rs}` : ""}
+                    {e.ns !== undefined ? ` ns=${e.ns}` : ""}
+                    {e.detail ? ` · ${e.detail}` : ""}
+                  </span>
+                </div>
+              ))}
+          </div>
+        )}
       </div>
     </div>
   );
