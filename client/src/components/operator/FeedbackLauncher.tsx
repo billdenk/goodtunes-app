@@ -182,9 +182,11 @@ export function FeedbackLauncher({ className }: { className?: string }) {
     <>
       <Button
         type="button"
-        variant="outline"
         size="sm"
-        className={cn("gap-1.5", className)}
+        className={cn(
+          "gap-1.5 bg-[var(--brand-blue)] text-white hover:bg-[var(--brand-blue-hover)] border-0 shadow-sm",
+          className
+        )}
         onClick={() => {
           setView("report");
           setOpen(true);
