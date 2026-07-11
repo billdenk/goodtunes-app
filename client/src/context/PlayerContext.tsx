@@ -1534,14 +1534,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       set("seekto", (d?: any) => {
         if (d && typeof d.seekTime === "number") mediaControlsRef.current.seekTo(d.seekTime);
       });
-      set("seekbackward", (d?: any) => {
-        const off = d && typeof d.seekOffset === "number" ? d.seekOffset : 10;
-        mediaControlsRef.current.seekTo(Math.max(0, currentTimeRef.current - off));
-      });
-      set("seekforward", (d?: any) => {
-        const off = d && typeof d.seekOffset === "number" ? d.seekOffset : 10;
-        mediaControlsRef.current.seekTo(currentTimeRef.current + off);
-      });
+      // iOS/WebKit exposes a FIXED number of lock-screen transport slots and
+      // prioritizes seekbackward/seekforward (±10s skip) OVER previoustrack/
+      // nexttrack when BOTH are registered — so on iOS we deliberately do NOT
+      // wire the seek-offset handlers, letting the system surface real
+      // previous/next-track buttons (Apple-Music style). `seekto` stays wired
+      // so the lock-screen scrubber still works. Android/other webviews keep
+      // the skip handlers (they have room for both).
+      if (!isNativeIOS && !isWebIOS) {
+        set("seekbackward", (d?: any) => {
+          const off = d && typeof d.seekOffset === "number" ? d.seekOffset : 10;
+          mediaControlsRef.current.seekTo(Math.max(0, currentTimeRef.current - off));
+        });
+        set("seekforward", (d?: any) => {
+          const off = d && typeof d.seekOffset === "number" ? d.seekOffset : 10;
+          mediaControlsRef.current.seekTo(currentTimeRef.current + off);
+        });
+      }
     }
 
     // Native iOS remote commands (MPRemoteCommandCenter → here).

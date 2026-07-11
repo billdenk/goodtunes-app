@@ -23,8 +23,18 @@ every timeupdate with generic info (falls back to the app/document name when
 `navigator.mediaSession` on native iOS too — metadata, `playbackState` /
 `setPositionState`, and the transport action handlers. In PlayerContext.tsx this
 meant removing three `isNativeIOS` gates that had deliberately disabled the web
-MediaSession on iOS. Registering `nexttrack`/`previoustrack` handlers is also
-what makes WebKit swap its default skip-10 buttons for real next/prev.
+MediaSession on iOS. This surfaced the real artwork/title/artist on the lock
+screen — **verified on-device** in TestFlight.
+
+**Transport buttons (skip-10 vs next/prev) are a SEPARATE iOS quirk:** merely
+registering `nexttrack`/`previoustrack` is NOT enough. iOS/WebKit exposes a FIXED
+number of lock-screen transport slots and, when BOTH the seek-offset
+(`seekbackward`/`seekforward`) AND track (`previoustrack`/`nexttrack`) handlers
+are set, it shows the ±10s SKIP buttons and DROPS next/prev. On-device proof:
+metadata rendered correctly yet the transport was still ±10s skip. Fix = on iOS
+do NOT register `seekbackward`/`seekforward` at all (keep `seekto` so the
+lock-screen scrubber still works); the system then surfaces real previous/next
+track buttons. Android/other webviews keep the seek handlers (room for both).
 
 **Why the old design was wrong:** the prior rationale was "stay silent on iOS so
 the native plugin is the sole owner of the WKWebView lock screen — the web
