@@ -266,6 +266,24 @@ export const albums = pgTable("albums", {
     (): any => fulfillmentPartners.id,
     { onDelete: "set null" },
   ),
+  // Per-album fulfillment manufacturer override — when a press also does
+  // fulfillment (doesFulfillment=true) the operator can point this album
+  // at that press instead of a fulfillment_partners warehouse. Cleared to
+  // null when the manufacturer is soft-deleted.
+  fulfillmentManufacturerId: varchar("fulfillment_manufacturer_id").references(
+    (): any => manufacturers.id,
+    { onDelete: "set null" },
+  ),
+  // Task #2670 — per-album custom-address override: unified destination FK
+  // so the single-dest panel can point an album at a custom shipping address
+  // (fulfillment_destinations.kind = 'custom') as well as partner/manufacturer.
+  // Exactly one of fulfillmentPartnerId / fulfillmentManufacturerId /
+  // fulfillmentDestinationId should be set at a time (enforced by the PUT
+  // route), or all three null for "platform default".
+  fulfillmentDestinationId: varchar("fulfillment_destination_id").references(
+    (): any => fulfillmentDestinations.id,
+    { onDelete: "set null" },
+  ),
   // Demo show/hide flag. When true the album is excluded from public catalog
   // reads (album list + detail) AND from the fan-facing credits surface,
   // effectively hiding the artist + all their songs/credits in one toggle.
@@ -4256,6 +4274,18 @@ export const manufacturers = pgTable("manufacturers", {
     (): any => fulfillmentPartners.id,
     { onDelete: "set null" },
   ),
+  // When doesFulfillment=true the press can self-fulfill — this FK lets
+  // the press nominate itself (or another press) as the default fulfillment
+  // handler instead of a fulfillment_partners warehouse. SET NULL so removing
+  // the target press falls through to the normal partner resolution.
+  defaultFulfillmentManufacturerId: varchar("default_fulfillment_manufacturer_id").references(
+    (): any => manufacturers.id,
+    { onDelete: "set null" },
+  ),
+  // Ad-hoc fulfillment destination the press ships to by default.
+  // Covers non-integrated destinations (e.g. Amped Distribution) that
+  // have no fulfillment_partners row yet. SET NULL if destination deleted.
+  defaultFulfillmentDestinationId: varchar("default_fulfillment_destination_id"),
   // Task #533 — One-time super-admin consent that GoodTunes may
   // auto-stage an early masters cut for this press's albums once their
   // per-album pool covers the picked tier's minimum-run floor (gate #1
@@ -4375,6 +4405,67 @@ export const shippingRates = pgTable("shipping_rates", {
 export const insertShippingRateSchema = createInsertSchema(shippingRates).omit({ id: true, createdAt: true });
 export type InsertShippingRate = z.infer<typeof insertShippingRateSchema>;
 export type ShippingRate = typeof shippingRates.$inferSelect;
+
+// ─── Ad-hoc fulfillment destinations ────────────────────────────────
+// Reusable shipping addresses for destinations that don't have a
+// fulfillment_partners row yet — e.g. Amped Distribution, a label's own
+// warehouse, a tour drop-ship address. Created via the admin UI and
+// referenced by album_fulfillment_splits. No API integration today;
+// an operator prints/emails the carton label manually.
+export const fulfillmentDestinations = pgTable("fulfillment_destinations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  addressLine1: text("address_line1"),
+  addressLine2: text("address_line2"),
+  city: text("city"),
+  state: text("state"),
+  postalCode: text("postal_code"),
+  country: text("country"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFulfillmentDestinationSchema = createInsertSchema(fulfillmentDestinations).omit({ id: true, createdAt: true });
+export type InsertFulfillmentDestination = z.infer<typeof insertFulfillmentDestinationSchema>;
+export type FulfillmentDestination = typeof fulfillmentDestinations.$inferSelect;
+
+// ─── Per-album split shipments ───────────────────────────────────────
+// When an order needs to be split across multiple destinations (e.g. 500
+// to the artist, 800 to Spinney for fan fulfillment, 700 to Amped for
+// retail), the operator creates one row per destination here. Exactly one
+// of the three FK columns must be non-null per row (checked at the API
+// layer, not a DB constraint, for flexibility). When any split rows exist
+// for an album, downstream routing (Order Desk / Odoo push) generates one
+// entry per split instead of the single-destination fallback.
+export const albumFulfillmentSplits = pgTable("album_fulfillment_splits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  // Exactly one of the three destination FKs should be non-null:
+  fulfillmentPartnerId: varchar("fulfillment_partner_id").references(
+    (): any => fulfillmentPartners.id,
+    { onDelete: "set null" },
+  ),
+  fulfillmentManufacturerId: varchar("fulfillment_manufacturer_id").references(
+    (): any => manufacturers.id,
+    { onDelete: "set null" },
+  ),
+  fulfillmentDestinationId: varchar("fulfillment_destination_id").references(
+    (): any => fulfillmentDestinations.id,
+    { onDelete: "set null" },
+  ),
+  // How many finished units to route here. Nullable — operator can leave
+  // blank and fill in at pressing time once the run count is confirmed.
+  quantity: integer("quantity"),
+  notes: text("notes"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => ({
+  byAlbum: index("album_fulfillment_splits_album_idx").on(t.albumId),
+}));
+
+export const insertAlbumFulfillmentSplitSchema = createInsertSchema(albumFulfillmentSplits).omit({ id: true, createdAt: true });
+export type InsertAlbumFulfillmentSplit = z.infer<typeof insertAlbumFulfillmentSplitSchema>;
+export type AlbumFulfillmentSplit = typeof albumFulfillmentSplits.$inferSelect;
 
 // One open quote request from a label/artist out to N manufacturers.
 // `albumId` is the album being pressed; the broadcast list (rfqReplies

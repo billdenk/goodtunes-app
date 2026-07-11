@@ -5,7 +5,7 @@ import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
 import { registerPublishingSettlementRoutes, registerPublisherPortalRoutes } from "./publishingSettlementRoutes";
 import { sql, and, eq, ne, or, ilike, isNull, isNotNull, desc, inArray, gt } from "drizzle-orm";
-import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, fulfillmentPartners, albumPreviewGrants, TERMS_VERSION } from "@shared/schema";
+import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, fulfillmentPartners, fulfillmentDestinations, albumPreviewGrants, TERMS_VERSION } from "@shared/schema";
 import {
   MRP_DOMAIN,
   HELLBENDER_DOMAIN,
@@ -8980,6 +8980,10 @@ export async function registerRoutes(
       // routing config (which warehouse ships this album), not fan-facing
       // metadata, so it stays editable after first sale like vendor pricing.
       "fulfillmentPartnerId",
+      // Task #2670 — per-album single-dest self-fulfill override (press
+      // ships direct when doesFulfillment=true). Same operational tier
+      // as fulfillmentPartnerId — editable after first sale.
+      "fulfillmentManufacturerId",
       // Task #2428 — GoodTunes Shopify+ album toggles (signed-GoodDeed
       // on/off, GoodTunes-fulfills on/off). Operational manufacturing
       // config, editable after first sale like the routing override above.
@@ -9064,6 +9068,53 @@ export async function registerRoutes(
         }
       }
       updates.fulfillmentPartnerId = normalized;
+      // Task #2670 — mutual exclusion: exactly one single-dest FK at a time.
+      if (normalized) updates.fulfillmentManufacturerId = null;
+    }
+    // Task #2670 — per-album self-fulfill override: press ships directly
+    // when doesFulfillment=true. Operational field (bypasses post-sale lock).
+    if (req.body?.fulfillmentManufacturerId !== undefined) {
+      const raw = req.body.fulfillmentManufacturerId;
+      const normalized = raw ? String(raw) : null;
+      if (normalized) {
+        const mfr = await db
+          .select({ id: manufacturers.id })
+          .from(manufacturers)
+          .where(and(eq(manufacturers.id, normalized), isNull(manufacturers.deletedAt)))
+          .limit(1);
+        if (!mfr[0]) {
+          return res.status(400).json({ message: "Unknown fulfillmentManufacturerId" });
+        }
+      }
+      updates.fulfillmentManufacturerId = normalized;
+      // Mutual exclusion — clear the other two single-dest FKs.
+      if (normalized) {
+        updates.fulfillmentPartnerId = null;
+        updates.fulfillmentDestinationId = null;
+      }
+    }
+    // Task #2670 — custom-address single-dest override (unified picker).
+    // Saves albums.fulfillment_destination_id when the operator picks a
+    // custom address from the UnifiedFulfillmentDestPicker in the single-dest
+    // panel. Mutual exclusion: setting this clears partner + manufacturer.
+    if (req.body?.fulfillmentDestinationId !== undefined) {
+      const raw = req.body.fulfillmentDestinationId;
+      const normalized = raw ? String(raw) : null;
+      if (normalized) {
+        const dest = await db
+          .select({ id: fulfillmentDestinations.id })
+          .from(fulfillmentDestinations)
+          .where(eq(fulfillmentDestinations.id, normalized))
+          .limit(1);
+        if (!dest[0]) {
+          return res.status(400).json({ message: "Unknown fulfillmentDestinationId" });
+        }
+      }
+      updates.fulfillmentDestinationId = normalized;
+      if (normalized) {
+        updates.fulfillmentPartnerId = null;
+        updates.fulfillmentManufacturerId = null;
+      }
     }
     if (req.body?.managerId !== undefined) {
       const normalizedManagerId = req.body.managerId ? String(req.body.managerId) : null;
@@ -19079,8 +19130,30 @@ export async function registerRoutes(
         ? b.specialties.map((s: unknown) => String(s)).filter(Boolean)
         : [];
     }
+    // Task #2670 — mutual exclusion: setting any one destination FK to a
+    // non-null value server-side clears the other two so only one is ever
+    // active. The UI sends only the changed field, but an operator could
+    // POST all three; enforce the invariant here regardless of call shape.
     if (b.defaultFulfillmentPartnerId !== undefined) {
       u.defaultFulfillmentPartnerId = strOrNull(b.defaultFulfillmentPartnerId);
+      if (u.defaultFulfillmentPartnerId) {
+        (u as any).defaultFulfillmentManufacturerId = null;
+        (u as any).defaultFulfillmentDestinationId = null;
+      }
+    }
+    if (b.defaultFulfillmentManufacturerId !== undefined) {
+      (u as any).defaultFulfillmentManufacturerId = strOrNull(b.defaultFulfillmentManufacturerId);
+      if ((u as any).defaultFulfillmentManufacturerId) {
+        u.defaultFulfillmentPartnerId = null;
+        (u as any).defaultFulfillmentDestinationId = null;
+      }
+    }
+    if (b.defaultFulfillmentDestinationId !== undefined) {
+      (u as any).defaultFulfillmentDestinationId = strOrNull(b.defaultFulfillmentDestinationId);
+      if ((u as any).defaultFulfillmentDestinationId) {
+        u.defaultFulfillmentPartnerId = null;
+        (u as any).defaultFulfillmentManufacturerId = null;
+      }
     }
     // Task #916 — capability flags. The admin UI auto-saves one toggle at a
     // time, so the at-least-one guard must merge the incoming patch over the
@@ -19240,6 +19313,166 @@ export async function registerRoutes(
     } catch (e: any) {
       return res.status(502).json({ message: e?.message || "Failed to read page" });
     }
+  });
+
+  // ---- Unified fulfillment destinations list -------------------------
+  // Returns a merged list of all three source types tagged with kind:
+  //   "partner"      → fulfillment_partners warehouse
+  //   "manufacturer" → press that doesFulfillment=true (self-fulfill)
+  //   "custom"       → ad-hoc fulfillment_destinations address
+  // Used by the Default Fulfillment Destination pickers on
+  // AdminManufacturer and the per-album routing panel in AdminAlbum.
+  // Manufacturer visibility: only appears for super_admin users OR when
+  // the requester's own press ID matches (self-fulfill within own portal).
+  // Press-to-press cross-routing is deferred per task spec.
+  app.get("/api/fulfillment-destinations", requireAdmin, async (req, res) => {
+    const isSuperAdmin = ["super_admin", "admin"].includes(
+      (req.session as any)?.role ?? "",
+    );
+    const myPressId: string | null = (req.session as any)?.roleScopeId ?? null;
+
+    const [partners, allMfrs, customs] = await Promise.all([
+      storage.getFulfillmentPartners(),
+      storage.getManufacturers({ doesFulfillment: true }),
+      storage.getFulfillmentDestinations(),
+    ]);
+
+    const mfrs = isSuperAdmin
+      ? allMfrs
+      : allMfrs.filter((m) => m.id === myPressId);
+
+    const list = [
+      ...partners.map((p) => ({
+        kind: "partner" as const,
+        id: p.id,
+        name: p.name,
+        isDefault: p.isDefault,
+        city: null,
+        country: null,
+      })),
+      ...mfrs.map((m) => ({
+        kind: "manufacturer" as const,
+        id: m.id,
+        name: `${m.name} (self-fulfill)`,
+        isDefault: false,
+        city: null,
+        country: null,
+      })),
+      ...customs.map((d) => ({
+        kind: "custom" as const,
+        id: d.id,
+        name: d.name,
+        isDefault: false,
+        city: d.city,
+        country: d.country,
+      })),
+    ];
+    return res.json(list);
+  });
+
+  // CRUD for ad-hoc fulfillment_destinations entries.
+  app.post("/api/admin/fulfillment-destinations", requireAdmin, async (req, res) => {
+    const b = req.body ?? {};
+    const name = String(b.name ?? "").trim();
+    if (!name) return res.status(400).json({ message: "Name is required" });
+    const d = await storage.createFulfillmentDestination({
+      name,
+      addressLine1: b.addressLine1 ? String(b.addressLine1).trim() : null,
+      addressLine2: b.addressLine2 ? String(b.addressLine2).trim() : null,
+      city: b.city ? String(b.city).trim() : null,
+      state: b.state ? String(b.state).trim() : null,
+      postalCode: b.postalCode ? String(b.postalCode).trim() : null,
+      country: b.country ? String(b.country).trim() : null,
+      notes: b.notes ? String(b.notes).trim() : null,
+    });
+    return res.status(201).json(d);
+  });
+  app.put("/api/admin/fulfillment-destinations/:id", requireAdmin, async (req, res) => {
+    const b = req.body ?? {};
+    const update: Record<string, unknown> = {};
+    if (b.name !== undefined) {
+      const name = String(b.name).trim();
+      if (!name) return res.status(400).json({ message: "Name is required" });
+      update.name = name;
+    }
+    if (b.addressLine1 !== undefined) update.addressLine1 = b.addressLine1 ? String(b.addressLine1).trim() : null;
+    if (b.addressLine2 !== undefined) update.addressLine2 = b.addressLine2 ? String(b.addressLine2).trim() : null;
+    if (b.city !== undefined) update.city = b.city ? String(b.city).trim() : null;
+    if (b.state !== undefined) update.state = b.state ? String(b.state).trim() : null;
+    if (b.postalCode !== undefined) update.postalCode = b.postalCode ? String(b.postalCode).trim() : null;
+    if (b.country !== undefined) update.country = b.country ? String(b.country).trim() : null;
+    if (b.notes !== undefined) update.notes = b.notes ? String(b.notes).trim() : null;
+    const d = await storage.updateFulfillmentDestination(String(req.params.id), update as any);
+    if (!d) return res.status(404).json({ message: "Destination not found" });
+    return res.json(d);
+  });
+  app.delete("/api/admin/fulfillment-destinations/:id", requireAdmin, async (req, res) => {
+    await storage.deleteFulfillmentDestination(String(req.params.id));
+    return res.json({ message: "Deleted" });
+  });
+
+  // ---- Per-album fulfillment split CRUD ----------------------------------
+  app.get("/api/admin/albums/:id/fulfillment-splits", requireAdmin, async (req, res) => {
+    const splits = await storage.getAlbumFulfillmentSplits(String(req.params.id));
+    return res.json(splits);
+  });
+  app.post("/api/admin/albums/:id/fulfillment-splits", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.id);
+    const b = req.body ?? {};
+    const partnerId = b.fulfillmentPartnerId ? String(b.fulfillmentPartnerId) : null;
+    const manufacturerId = b.fulfillmentManufacturerId ? String(b.fulfillmentManufacturerId) : null;
+    const destinationId = b.fulfillmentDestinationId ? String(b.fulfillmentDestinationId) : null;
+    const nonNullCount = [partnerId, manufacturerId, destinationId].filter(Boolean).length;
+    if (nonNullCount !== 1) {
+      return res.status(400).json({
+        message: "Exactly one of fulfillmentPartnerId, fulfillmentManufacturerId, or fulfillmentDestinationId must be set",
+      });
+    }
+    const split = await storage.createAlbumFulfillmentSplit({
+      albumId,
+      fulfillmentPartnerId: partnerId,
+      fulfillmentManufacturerId: manufacturerId,
+      fulfillmentDestinationId: destinationId,
+      quantity: b.quantity != null ? Number(b.quantity) || null : null,
+      notes: b.notes ? String(b.notes).trim() : null,
+      sortOrder: b.sortOrder != null ? Number(b.sortOrder) || 0 : 0,
+    });
+    return res.status(201).json(split);
+  });
+  app.put("/api/admin/albums/:id/fulfillment-splits/:splitId", requireAdmin, async (req, res) => {
+    const b = req.body ?? {};
+    const update: Record<string, unknown> = {};
+    if (b.fulfillmentPartnerId !== undefined) update.fulfillmentPartnerId = b.fulfillmentPartnerId ? String(b.fulfillmentPartnerId) : null;
+    if (b.fulfillmentManufacturerId !== undefined) update.fulfillmentManufacturerId = b.fulfillmentManufacturerId ? String(b.fulfillmentManufacturerId) : null;
+    if (b.fulfillmentDestinationId !== undefined) update.fulfillmentDestinationId = b.fulfillmentDestinationId ? String(b.fulfillmentDestinationId) : null;
+    if (b.quantity !== undefined) update.quantity = b.quantity != null ? Number(b.quantity) || null : null;
+    if (b.notes !== undefined) update.notes = b.notes ? String(b.notes).trim() : null;
+    if (b.sortOrder !== undefined) update.sortOrder = Number(b.sortOrder) || 0;
+    // Task #2670 — enforce exactly one destination FK per split row.
+    // Reject multi-dest collisions and apply mutual exclusion so the
+    // invariant holds even if the client sends only one field.
+    const destFields = ["fulfillmentPartnerId", "fulfillmentManufacturerId", "fulfillmentDestinationId"];
+    const incoming = destFields.filter((k) => update[k] != null);
+    if (incoming.length > 1) {
+      return res.status(400).json({ message: "Exactly one of fulfillmentPartnerId, fulfillmentManufacturerId, or fulfillmentDestinationId must be set per split row" });
+    }
+    if (update.fulfillmentPartnerId) {
+      update.fulfillmentManufacturerId = null;
+      update.fulfillmentDestinationId = null;
+    } else if (update.fulfillmentManufacturerId) {
+      update.fulfillmentPartnerId = null;
+      update.fulfillmentDestinationId = null;
+    } else if (update.fulfillmentDestinationId) {
+      update.fulfillmentPartnerId = null;
+      update.fulfillmentManufacturerId = null;
+    }
+    const split = await storage.updateAlbumFulfillmentSplit(String(req.params.splitId), update as any);
+    if (!split) return res.status(404).json({ message: "Split not found" });
+    return res.json(split);
+  });
+  app.delete("/api/admin/albums/:id/fulfillment-splits/:splitId", requireAdmin, async (req, res) => {
+    await storage.deleteAlbumFulfillmentSplit(String(req.params.splitId));
+    return res.json({ message: "Deleted" });
   });
 
   app.get("/api/fulfillment-partners", requireAdmin, async (_req, res) => {

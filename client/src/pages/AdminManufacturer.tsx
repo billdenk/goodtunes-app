@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { formatUsdCents } from "@shared/money";
 import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
 import { Link, useLocation, useRoute } from "wouter";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Award,
   BadgeCheck,
@@ -736,6 +736,171 @@ function PressCapabilitiesCard({
   );
 }
 
+// Task #2670 — unified fulfillment destination picker reused on
+// PartnerProfileForm (press default) and, via export, on AdminAlbum
+// split rows. Loads from /api/fulfillment-destinations which merges
+// partners + self-fulfilling presses + ad-hoc custom addresses.
+interface UnifiedFulfillmentDest {
+  id: string;
+  kind: "partner" | "manufacturer" | "custom";
+  name: string;
+  city?: string | null;
+  country?: string | null;
+}
+export function UnifiedFulfillmentDestPicker({
+  value,
+  onChange,
+  label,
+  testId,
+  allowAddNew,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label?: string;
+  testId?: string;
+  allowAddNew?: boolean;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: dests = [] } = useQuery<UnifiedFulfillmentDest[]>({
+    queryKey: ["/api/fulfillment-destinations"],
+  });
+  const INPUT_CLS =
+    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)] disabled:opacity-60";
+
+  const [creatingAddr, setCreatingAddr] = useState(false);
+  const [addrName, setAddrName] = useState("");
+  const [addrLine1, setAddrLine1] = useState("");
+  const [addrLine2, setAddrLine2] = useState("");
+  const [addrCity, setAddrCity] = useState("");
+  const [addrState, setAddrState] = useState("");
+  const [addrPostal, setAddrPostal] = useState("");
+  const [addrCountry, setAddrCountry] = useState("");
+  const [savingAddr, setSavingAddr] = useState(false);
+
+  const saveAddr = async () => {
+    if (!addrName.trim()) {
+      toast({ title: "Name is required", variant: "destructive" });
+      return;
+    }
+    setSavingAddr(true);
+    try {
+      const res = await apiRequest("POST", "/api/admin/fulfillment-destinations", {
+        name: addrName.trim(),
+        addressLine1: addrLine1.trim() || null,
+        addressLine2: addrLine2.trim() || null,
+        city: addrCity.trim() || null,
+        state: addrState.trim() || null,
+        postalCode: addrPostal.trim() || null,
+        country: addrCountry.trim() || null,
+      });
+      const newDest = await res.json();
+      await qc.invalidateQueries({ queryKey: ["/api/fulfillment-destinations"] });
+      onChange(newDest.id ?? "");
+      setCreatingAddr(false);
+      setAddrName(""); setAddrLine1(""); setAddrLine2(""); setAddrCity("");
+      setAddrState(""); setAddrPostal(""); setAddrCountry("");
+      toast({ title: "Address saved." });
+    } catch {
+      toast({ title: "Could not save address", variant: "destructive" });
+    } finally {
+      setSavingAddr(false);
+    }
+  };
+
+  const sel = (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={INPUT_CLS}
+      data-testid={testId ?? "select-unified-fulfillment-dest"}
+    >
+      <option value="">— Platform default —</option>
+      {dests.filter((d) => d.kind === "partner").length > 0 && (
+        <optgroup label="Fulfillment warehouses">
+          {dests
+            .filter((d) => d.kind === "partner")
+            .map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+        </optgroup>
+      )}
+      {dests.filter((d) => d.kind === "manufacturer").length > 0 && (
+        <optgroup label="Press (self-fulfill)">
+          {dests
+            .filter((d) => d.kind === "manufacturer")
+            .map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+        </optgroup>
+      )}
+      {dests.filter((d) => d.kind === "custom").length > 0 && (
+        <optgroup label="Custom addresses">
+          {dests
+            .filter((d) => d.kind === "custom")
+            .map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+                {d.city ? ` — ${d.city}` : ""}
+                {d.country ? `, ${d.country}` : ""}
+              </option>
+            ))}
+        </optgroup>
+      )}
+    </select>
+  );
+
+  const inner = (
+    <div className="space-y-1">
+      {sel}
+      {allowAddNew && !creatingAddr && (
+        <button
+          type="button"
+          className="text-xs text-[var(--brand-blue)] hover:underline"
+          onClick={() => setCreatingAddr(true)}
+          data-testid="btn-picker-add-custom-addr"
+        >
+          + New custom address…
+        </button>
+      )}
+      {allowAddNew && creatingAddr && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2 mt-1">
+          <p className="text-xs font-semibold text-slate-700">New custom address</p>
+          <input placeholder="Name (required)" value={addrName} onChange={(e) => setAddrName(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-name" />
+          <input placeholder="Address line 1" value={addrLine1} onChange={(e) => setAddrLine1(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-line1" />
+          <input placeholder="Address line 2 (optional)" value={addrLine2} onChange={(e) => setAddrLine2(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-line2" />
+          <div className="grid grid-cols-2 gap-2">
+            <input placeholder="City" value={addrCity} onChange={(e) => setAddrCity(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-city" />
+            <input placeholder="State" value={addrState} onChange={(e) => setAddrState(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-state" />
+            <input placeholder="Postal code" value={addrPostal} onChange={(e) => setAddrPostal(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-postal" />
+            <input placeholder="Country" value={addrCountry} onChange={(e) => setAddrCountry(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-country" />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button type="button" size="sm" onClick={saveAddr} disabled={savingAddr || !addrName.trim()} data-testid="btn-picker-save-addr">
+              {savingAddr ? "Saving…" : "Save address"}
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setCreatingAddr(false)} data-testid="btn-picker-cancel-addr">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  if (!label) return inner;
+  return (
+    <div className="space-y-1">
+      <label className="block text-xs font-semibold text-slate-700">{label}</label>
+      {inner}
+    </div>
+  );
+}
+
 function PartnerProfileForm({
   initial,
   partners,
@@ -787,7 +952,20 @@ function PartnerProfileForm({
   const [turnaroundWeeksMax, setTurnaroundWeeksMax] = useState(derivedWeeks.max);
   const [specialties, setSpecialties] = useState<string[]>(initial.specialties ?? []);
   const [specInput, setSpecInput] = useState("");
-  const [defaultFp, setDefaultFp] = useState<string>(initial.defaultFulfillmentPartnerId ?? "");
+  // Task #2670 — unified default fulfillment dest. Resolves which FK to
+  // write on save by looking up the kind from the /api/fulfillment-destinations
+  // list; clears the other two columns so there's only ever one set.
+  const { data: _allDests = [] } = useQuery<UnifiedFulfillmentDest[]>({
+    queryKey: ["/api/fulfillment-destinations"],
+  });
+  // Seed the unified picker from whichever FK is set on the row.
+  const initialDestId = (() => {
+    if ((initial as any).defaultFulfillmentDestinationId) return (initial as any).defaultFulfillmentDestinationId as string;
+    if ((initial as any).defaultFulfillmentManufacturerId) return (initial as any).defaultFulfillmentManufacturerId as string;
+    if (initial.defaultFulfillmentPartnerId) return initial.defaultFulfillmentPartnerId;
+    return "";
+  })();
+  const [defaultFulfillmentDestId, setDefaultFulfillmentDestId] = useState<string>(initialDestId);
   // Task #624 — broker / wholesale discount we've negotiated with this
   // press. Stored as a whole-number percentage 0–100. Internal only;
   // the artist-facing catalog price never changes — the discount
@@ -805,6 +983,14 @@ function PartnerProfileForm({
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    // Task #2670 — resolve which FK to write based on the unified dest kind;
+    // clear the other two so only one is ever set at a time.
+    const destEntry = _allDests.find((d) => d.id === defaultFulfillmentDestId);
+    const resolvedPartnerDest = destEntry?.kind === "partner" ? defaultFulfillmentDestId : null;
+    const resolvedMfrDest = destEntry?.kind === "manufacturer" ? defaultFulfillmentDestId : null;
+    const resolvedCustomDest = destEntry?.kind === "custom" ? defaultFulfillmentDestId : null;
+    // If nothing is selected, clear all three
+    const noneSelected = !defaultFulfillmentDestId;
     onSave({
       name: name.trim(),
       domain: domain.trim() || null,
@@ -823,7 +1009,10 @@ function PartnerProfileForm({
       turnaroundWeeksMin: turnaroundWeeksMin === "" ? null : Number(turnaroundWeeksMin),
       turnaroundWeeksMax: turnaroundWeeksMax === "" ? null : Number(turnaroundWeeksMax),
       specialties,
-      defaultFulfillmentPartnerId: defaultFp || null,
+      // Task #2670 — write exactly one FK, clear the others
+      defaultFulfillmentPartnerId: noneSelected ? null : (resolvedPartnerDest || null),
+      defaultFulfillmentManufacturerId: noneSelected ? null : (resolvedMfrDest || null),
+      defaultFulfillmentDestinationId: noneSelected ? null : (resolvedCustomDest || null),
       // Task #624 — clamp to 0–100; blank treated as 0.
       brokerDiscountPct: Math.max(0, Math.min(100, Number(brokerDiscountPct) || 0)),
     } as Partial<Manufacturer>);
@@ -962,21 +1151,18 @@ function PartnerProfileForm({
         </div>
       </Field>
 
-      <Field label="Default fulfillment partner">
-        <select
-          value={defaultFp}
-          onChange={(e) => setDefaultFp(e.target.value)}
-          className={INPUT}
-          data-testid="select-mfr-default-fp"
-        >
-          <option value="">— None —</option>
-          {partners.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </Field>
+      {/* Task #2670 — unified default fulfillment destination. Covers
+          warehouse partners, self-fulfill presses, and custom addresses.
+          allowAddNew surfaces an inline "New custom address…" form so
+          operators don't have to navigate away. On save the submit()
+          resolves the kind and writes exactly one FK column. */}
+      <UnifiedFulfillmentDestPicker
+        value={defaultFulfillmentDestId}
+        onChange={setDefaultFulfillmentDestId}
+        label="Default fulfillment destination"
+        testId="select-mfr-default-dest"
+        allowAddNew
+      />
 
       {/* Task #624 — vendor-level broker discount. The artist-facing
           catalog price never shifts; this discount becomes GoodTunes

@@ -39,6 +39,8 @@ import {
 } from "@shared/schema";
 import {
   pickFulfillmentPartner,
+  pickAllFulfillmentPartners,
+  hasAnySplitsForAlbum,
   dispatchShippingEmail,
   isPhysicalSkuKind,
 } from "./orderDesk";
@@ -220,19 +222,66 @@ export async function pushOrderToOdoo(orderId: string): Promise<{
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
   const [customer] = await db.select().from(customerUsers).where(eq(customerUsers.id, order.customerId));
 
-  // Routing: honor the precedence chain (per-order override → per-album →
-  // default → first), then fall back to the designated Odoo printer when
-  // nothing else resolves. Operational routing stays editable post-sale
-  // (only fan-facing metadata respects the partner-permissions lock), so a
-  // push can re-route even after the first sale.
-  const partnerId = (await pickFulfillmentPartner(order)) ?? (await pickOdooPrinter());
-
   const shipName =
     (order.shippingAddress as any)?.name ||
     customer?.realName ||
     customer?.displayName ||
     "";
   const email = customer?.email ?? order.buyerEmail ?? "";
+
+  // Helper: build the standard order lines for one Odoo sale.order.
+  function buildOrderLines(splitNote?: string): any[] {
+    return [
+      [
+        0,
+        0,
+        {
+          display_type: "line_note",
+          name: `GoodTunes order ${order.id} — ${album.artist} · ${album.title}${splitNote ? ` [${splitNote}]` : ""}`,
+        },
+      ],
+      ...items.map((it: { label: string; quantity: number; unitPriceCents: number }) => [
+        0,
+        0,
+        {
+          display_type: "line_note",
+          name: `${it.label} ×${it.quantity} — $${(it.unitPriceCents / 100).toFixed(2)} ea`,
+        },
+      ]),
+    ];
+  }
+
+  // Helper: create one Odoo sale.order and return its id.
+  async function createOdooOrder(
+    uid: number,
+    odooPartnerId: number,
+    orderLines: any[],
+    refSuffix?: string,
+  ): Promise<string> {
+    const created = await odooExecuteKw(creds, uid, "sale.order", "create", [
+      {
+        partner_id: odooPartnerId,
+        client_order_ref: refSuffix ? `${order.id}/${refSuffix}` : order.id,
+        order_line: orderLines,
+        note: `GoodDeed #${order.goodDeedNumber ?? "—"} · ${album.artist} — ${album.title}`,
+      },
+    ]);
+    const odooId: string | undefined =
+      created != null ? String(Array.isArray(created) ? created[0] : created) : undefined;
+    if (!odooId) throw new Error("Odoo sale.order create returned no id");
+    return odooId;
+  }
+
+  // Task #2670 — multi-split routing: when the album has partner-kind splits,
+  // push one Odoo sale.order per split destination so each warehouse/printer
+  // gets its own routable record. Allocation is annotated in the order
+  // line header note and the client_order_ref suffix. Non-partner splits
+  // (manufacturer self-fulfill, custom address) are skipped here — they
+  // have no Odoo account.
+  // Split precedence: if ANY splits exist, don't fall back to legacy
+  // single-destination routing — even when all splits are non-partner-kind.
+  const hasAnySplits = order.albumId ? await hasAnySplitsForAlbum(order.albumId) : false;
+  const splitPartners = order.albumId ? await pickAllFulfillmentPartners(order.albumId) : [];
 
   try {
     const uid = await odooAuthenticate(creds);
@@ -242,38 +291,70 @@ export async function pushOrderToOdoo(orderId: string): Promise<{
       order,
     });
 
-    // Header note line carrying the GoodTunes back-reference, then one
-    // note line per ordered item (label · qty · unit price).
-    const orderLines: any[] = [
-      [
-        0,
-        0,
-        {
-          display_type: "line_note",
-          name: `GoodTunes order ${order.id} — ${album.artist} · ${album.title}`,
-        },
-      ],
-      ...items.map((it) => [
-        0,
-        0,
-        {
-          display_type: "line_note",
-          name: `${it.label} ×${it.quantity} — $${(it.unitPriceCents / 100).toFixed(2)} ea`,
-        },
-      ]),
-    ];
+    if (hasAnySplits && splitPartners.length === 0) {
+      // All splits are non-partner (manufacturer/custom). Odoo has no account
+      // for these — the operator routes them outside Odoo.
+      log(`[odoo] order ${orderId}: splits configured but none are Odoo-routable (manufacturer/custom only); skipping Odoo push`);
+      await db
+        .update(orders)
+        .set({ fulfillmentStatus: "pending", fulfillmentError: "Splits are non-Odoo destinations (manufacturer/custom) — route manually" })
+        .where(eq(orders.id, order.id));
+      return { ok: true, odooOrderId: undefined };
+    }
 
-    const created = await odooExecuteKw(creds, uid, "sale.order", "create", [
-      {
-        partner_id: odooPartnerId,
-        client_order_ref: order.id,
-        order_line: orderLines,
-        note: `GoodDeed #${order.goodDeedNumber ?? "—"} · ${album.artist} — ${album.title}`,
-      },
-    ]);
-    const odooId: string | undefined =
-      created != null ? String(Array.isArray(created) ? created[0] : created) : undefined;
-    if (!odooId) throw new Error("Odoo sale.order create returned no id");
+    if (splitPartners.length > 0) {
+      let firstOdooId: string | undefined;
+      let firstPartnerId: string | undefined;
+      const errors: string[] = [];
+
+      for (let i = 0; i < splitPartners.length; i++) {
+        const split = splitPartners[i];
+        const allocationNote = split.quantity != null
+          ? `dest ${i + 1}/${splitPartners.length}, ${split.quantity} copies${split.notes ? ` — ${split.notes}` : ""}`
+          : `dest ${i + 1}/${splitPartners.length}${split.notes ? ` — ${split.notes}` : ""}`;
+        try {
+          const odooId = await createOdooOrder(
+            uid,
+            odooPartnerId,
+            buildOrderLines(allocationNote),
+            String(i + 1),
+          );
+          if (!firstOdooId) {
+            firstOdooId = odooId;
+            firstPartnerId = split.partnerId;
+          }
+        } catch (e: any) {
+          errors.push(e?.message ?? String(e));
+        }
+      }
+
+      if (!firstOdooId) {
+        const errMsg = errors.join("; ") || "All split pushes failed";
+        console.error(`[odoo] multi-split push failed for order ${orderId}`, errMsg);
+        await db
+          .update(orders)
+          .set({ fulfillmentStatus: "pending", fulfillmentError: errMsg })
+          .where(eq(orders.id, order.id));
+        return { ok: false, error: errMsg };
+      }
+
+      await db
+        .update(orders)
+        .set({
+          odooOrderId: firstOdooId,
+          fulfillmentPartnerId: firstPartnerId ?? null,
+          fulfillmentStatus: "submitted",
+          submittedToFulfillmentAt: new Date(),
+          odooLastSyncedAt: new Date(),
+          fulfillmentError: null,
+        })
+        .where(eq(orders.id, order.id));
+      return { ok: true, odooOrderId: firstOdooId };
+    }
+
+    // ── Single-destination path (no partner-kind splits configured) ────────────
+    const partnerId = (await pickFulfillmentPartner(order)) ?? (await pickOdooPrinter());
+    const odooId = await createOdooOrder(uid, odooPartnerId, buildOrderLines());
 
     await db
       .update(orders)
@@ -283,7 +364,7 @@ export async function pushOrderToOdoo(orderId: string): Promise<{
         fulfillmentStatus: "submitted",
         submittedToFulfillmentAt: new Date(),
         odooLastSyncedAt: new Date(),
-        fulfillmentError: null, // clear any previous error on success
+        fulfillmentError: null,
       })
       .where(eq(orders.id, order.id));
     return { ok: true, odooOrderId: odooId };

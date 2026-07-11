@@ -11,8 +11,8 @@
 // our own Buy sheet; we price from that and lock the Stripe session's
 // allowed_countries to it (see server/commerce.ts).
 import { db } from "./db";
-import { and, eq } from "drizzle-orm";
-import { fulfillmentPartners, shippingRates } from "@shared/schema";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import { albumFulfillmentSplits, albums, fulfillmentPartners, shippingRates } from "@shared/schema";
 
 // Spinney's published weight bands, by upper bound in ounces (incl.
 // mailer). band1 "up to 8oz (1-2 CDs)", band2 "up to 1lb (4-5 CDs, 1
@@ -103,6 +103,53 @@ export async function getShippingPartnerId(): Promise<string | null> {
     return cachedPartnerId;
   }
   return null;
+}
+
+// Task #2670 — split-aware shipping partner lookup. When an album has
+// fulfillment splits, fans should be quoted from the first partner-kind
+// split's rate card (matching the warehouse their copy will ship from).
+// Falls back to the per-album fulfillment_partner_id, then the global
+// getShippingPartnerId() default. Call this anywhere you have an albumId.
+export async function getAlbumShippingPartnerId(albumId: string): Promise<string | null> {
+  // Check partner-kind splits first — sorted by sort_order so the "primary"
+  // warehouse wins (same priority as pickFulfillmentPartner in orderDesk.ts).
+  const splits = await db
+    .select({ fpId: albumFulfillmentSplits.fulfillmentPartnerId })
+    .from(albumFulfillmentSplits)
+    .where(
+      sql`${albumFulfillmentSplits.albumId} = ${albumId}
+        AND ${albumFulfillmentSplits.fulfillmentPartnerId} IS NOT NULL`,
+    )
+    .orderBy(sql`${albumFulfillmentSplits.sortOrder} ASC, ${albumFulfillmentSplits.createdAt} ASC`);
+  for (const s of splits) {
+    if (!s.fpId) continue;
+    // Confirm the partner is live and has active shipping rates.
+    const [live] = await db
+      .select({ id: fulfillmentPartners.id })
+      .from(fulfillmentPartners)
+      .where(and(eq(fulfillmentPartners.id, s.fpId), isNull(fulfillmentPartners.deletedAt)))
+      .limit(1);
+    if (live?.id) return live.id;
+  }
+  // Task #2670 — honor the album's per-album single-destination override
+  // (fulfillment_partner_id) before falling back to the platform default.
+  // This mirrors the precedence chain in pickFulfillmentPartner (orderDesk.ts):
+  //   splits (partner-kind) → per-album fulfillmentPartnerId → global default.
+  const [albumRow] = await db
+    .select({ fulfillmentPartnerId: albums.fulfillmentPartnerId })
+    .from(albums)
+    .where(eq(albums.id, albumId))
+    .limit(1);
+  if (albumRow?.fulfillmentPartnerId) {
+    const [live] = await db
+      .select({ id: fulfillmentPartners.id })
+      .from(fulfillmentPartners)
+      .where(and(eq(fulfillmentPartners.id, albumRow.fulfillmentPartnerId), isNull(fulfillmentPartners.deletedAt)))
+      .limit(1);
+    if (live?.id) return live.id;
+  }
+  // Fall back to the global default (Spinney today).
+  return getShippingPartnerId();
 }
 
 export interface ShippingQuote {

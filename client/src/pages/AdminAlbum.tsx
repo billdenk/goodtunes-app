@@ -213,6 +213,8 @@ interface AlbumFull {
   label?: { id: string; name: string } | null;
   // Task #1918 — per-album fulfillment routing override (warehouse).
   fulfillmentPartnerId?: string | null;
+  // Task #2670 — self-fulfill override: a press that ships its own orders.
+  fulfillmentManufacturerId?: string | null;
   goodTunesReleaseDate?: string | null;
   streamingReleaseDate?: string | null;
   // Task #1078 — Apple-style album footer fields.
@@ -3013,6 +3015,552 @@ function formatPatchValue(v: unknown): string {
  * retired, delete this component, its render in OverviewPanel, the header
  * badge, the AdminAlbums tile/row badges, and the schema column together.
  */
+// Task #2670 — per-album single fulfillment destination panel.
+// Replaces the old EditablePanel for fulfillmentPartnerId. Uses the unified
+// picker so operators can pick a warehouse partner OR a self-fulfill press.
+// Hidden when split rows exist (splits take precedence).
+function AlbumFulfillmentSingleDestPanel({
+  album,
+  disabled,
+  disabledReason,
+}: {
+  album: AlbumFull;
+  disabled: boolean;
+  disabledReason?: string;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const splitKey = ["/api/admin/albums", album.id, "fulfillment-splits"];
+
+  const { data: splits = [] } = useQuery<{ id: string }[]>({
+    queryKey: splitKey,
+  });
+  const { data: dests = [] } = useQuery<UnifiedFulfillmentDest[]>({
+    queryKey: ["/api/fulfillment-destinations"],
+  });
+
+  // Resolve current value: partner, manufacturer, or custom destination
+  const currentId = album.fulfillmentPartnerId ?? album.fulfillmentManufacturerId ?? (album as any).fulfillmentDestinationId ?? "";
+  const [selectedId, setSelectedId] = useState<string>(currentId);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Re-seed when album changes
+  useEffect(() => {
+    setSelectedId(album.fulfillmentPartnerId ?? album.fulfillmentManufacturerId ?? (album as any).fulfillmentDestinationId ?? "");
+    setEditing(false);
+  }, [album.id, album.fulfillmentPartnerId, album.fulfillmentManufacturerId, (album as any).fulfillmentDestinationId]);
+
+  // When splits exist they take precedence — hide this panel
+  if (splits.length > 0) return null;
+
+  // Display name for read mode
+  const resolvedDest = dests.find((d) => d.id === currentId);
+  const displayName = resolvedDest?.name ?? (currentId ? currentId : "Platform default");
+
+  async function handleSave() {
+    const dest = dests.find((d) => d.id === selectedId);
+    const body: Record<string, string | null> = {
+      fulfillmentPartnerId: null,
+      fulfillmentManufacturerId: null,
+      fulfillmentDestinationId: null,
+    };
+    if (selectedId && dest) {
+      if (dest.kind === "partner") body.fulfillmentPartnerId = selectedId;
+      else if (dest.kind === "manufacturer") body.fulfillmentManufacturerId = selectedId;
+      else if (dest.kind === "custom") body.fulfillmentDestinationId = selectedId;
+    }
+    setSaving(true);
+    try {
+      await apiRequest("PUT", `/api/admin/albums/${album.id}`, body);
+      await qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
+      setEditing(false);
+      toast({ title: "Fulfillment destination saved." });
+    } catch {
+      toast({ title: "Could not save fulfillment destination", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Show all unified destination kinds (partner, manufacturer, custom) —
+  // the unified picker is the same across single-dest and split rows.
+  const filteredDests = dests;
+
+  const SELECT_CLS =
+    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)] disabled:opacity-60";
+
+  return (
+    <div
+      className="rounded-xl border border-slate-200 bg-white p-4"
+      data-testid="panel-overview-fulfillment"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            Fulfillment
+          </p>
+          {!editing && (
+            <p className="text-sm text-slate-900 mt-1">{displayName}</p>
+          )}
+        </div>
+        {!editing && !disabled && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 text-slate-400"
+            onClick={() => setEditing(true)}
+            data-testid="btn-edit-fulfillment-single"
+          >
+            <Pencil className="w-4 h-4" />
+          </Button>
+        )}
+      </div>
+
+      {editing && (
+        <div className="mt-3 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Destination
+            </label>
+            <select
+              value={selectedId}
+              onChange={(e) => setSelectedId(e.target.value)}
+              className={SELECT_CLS}
+              data-testid="select-fulfillment-single-dest"
+            >
+              <option value="">— Platform default —</option>
+              {filteredDests.filter((d) => d.kind === "partner").length > 0 && (
+                <optgroup label="Fulfillment warehouses">
+                  {filteredDests
+                    .filter((d) => d.kind === "partner")
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                </optgroup>
+              )}
+              {filteredDests.filter((d) => d.kind === "manufacturer").length > 0 && (
+                <optgroup label="Press (self-fulfill)">
+                  {filteredDests
+                    .filter((d) => d.kind === "manufacturer")
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                </optgroup>
+              )}
+            </select>
+            <p className="text-xs text-slate-400 mt-1">
+              For multiple destinations, add split rows below.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSave}
+              disabled={saving || disabled}
+              data-testid="btn-save-fulfillment-single"
+            >
+              {saving ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSelectedId(currentId);
+                setEditing(false);
+              }}
+              data-testid="btn-cancel-fulfillment-single"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {disabled && disabledReason && !editing && (
+        <p className="text-xs text-slate-400 mt-1">{disabledReason}</p>
+      )}
+    </div>
+  );
+}
+
+// Task #2670 — per-album split shipments editor.
+// Operators add multiple destinations per pressing order. The routing
+// in orderDesk.ts checks this table first; albums without splits
+// fall back to the single fulfillmentPartnerId above.
+interface FulfillmentSplit {
+  id: string;
+  albumId: string;
+  fulfillmentPartnerId: string | null;
+  fulfillmentManufacturerId: string | null;
+  fulfillmentDestinationId: string | null;
+  quantity: number | null;
+  notes: string | null;
+  sortOrder: number;
+}
+interface UnifiedFulfillmentDest {
+  id: string;
+  kind: "partner" | "manufacturer" | "custom";
+  name: string;
+  city?: string | null;
+  country?: string | null;
+}
+function AlbumFulfillmentSplitsPanel({
+  albumId,
+  pressedQty,
+}: {
+  albumId: string;
+  pressedQty?: number | null;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const splitKey = ["/api/admin/albums", albumId, "fulfillment-splits"];
+
+  const { data: splits = [], isLoading } = useQuery<FulfillmentSplit[]>({
+    queryKey: splitKey,
+  });
+  const { data: dests = [] } = useQuery<UnifiedFulfillmentDest[]>({
+    queryKey: ["/api/fulfillment-destinations"],
+  });
+
+  const [adding, setAdding] = useState(false);
+  const [newDestId, setNewDestId] = useState("");
+  const [newQty, setNewQty] = useState("");
+  const [newNotes, setNewNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Inline "Add custom address" state (shown inside the Add form)
+  const [creatingAddr, setCreatingAddr] = useState(false);
+  const [newAddrName, setNewAddrName] = useState("");
+  const [newAddrLine1, setNewAddrLine1] = useState("");
+  const [newAddrLine2, setNewAddrLine2] = useState("");
+  const [newAddrCity, setNewAddrCity] = useState("");
+  const [newAddrState, setNewAddrState] = useState("");
+  const [newAddrPostal, setNewAddrPostal] = useState("");
+  const [newAddrCountry, setNewAddrCountry] = useState("");
+  const [savingAddr, setSavingAddr] = useState(false);
+
+  const saveNewAddress = async () => {
+    if (!newAddrName.trim()) {
+      toast({ title: "Name is required", variant: "destructive" });
+      return;
+    }
+    setSavingAddr(true);
+    try {
+      const res = await apiRequest("POST", `/api/admin/fulfillment-destinations`, {
+        name: newAddrName.trim(),
+        addressLine1: newAddrLine1.trim() || null,
+        addressLine2: newAddrLine2.trim() || null,
+        city: newAddrCity.trim() || null,
+        state: newAddrState.trim() || null,
+        postalCode: newAddrPostal.trim() || null,
+        country: newAddrCountry.trim() || null,
+      });
+      const newDest = await res.json();
+      await qc.invalidateQueries({ queryKey: ["/api/fulfillment-destinations"] });
+      setNewDestId(newDest.id ?? "");
+      setCreatingAddr(false);
+      setNewAddrName(""); setNewAddrLine1(""); setNewAddrLine2("");
+      setNewAddrCity(""); setNewAddrState("");
+      setNewAddrPostal(""); setNewAddrCountry("");
+      toast({ title: "Address saved." });
+    } catch {
+      toast({ title: "Could not save address", variant: "destructive" });
+    } finally {
+      setSavingAddr(false);
+    }
+  };
+
+  const addSplit = async () => {
+    if (!newDestId) {
+      toast({ title: "Choose a destination", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const dest = dests.find((d) => d.id === newDestId);
+      const body: Record<string, unknown> = {
+        quantity: newQty ? Number(newQty) : null,
+        notes: newNotes.trim() || null,
+        sortOrder: splits.length,
+      };
+      if (dest?.kind === "partner") body.fulfillmentPartnerId = newDestId;
+      else if (dest?.kind === "manufacturer") body.fulfillmentManufacturerId = newDestId;
+      else body.fulfillmentDestinationId = newDestId;
+      await apiRequest("POST", `/api/admin/albums/${albumId}/fulfillment-splits`, body);
+      await qc.invalidateQueries({ queryKey: splitKey });
+      setAdding(false);
+      setNewDestId("");
+      setNewQty("");
+      setNewNotes("");
+      toast({ title: "Split destination added." });
+    } catch {
+      toast({ title: "Could not add destination", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeSplit = async (id: string) => {
+    try {
+      await apiRequest("DELETE", `/api/admin/albums/${albumId}/fulfillment-splits/${id}`);
+      await qc.invalidateQueries({ queryKey: splitKey });
+      toast({ title: "Split removed." });
+    } catch {
+      toast({ title: "Could not remove split", variant: "destructive" });
+    }
+  };
+
+  const resolveDestName = (s: FulfillmentSplit) => {
+    const destId = s.fulfillmentPartnerId ?? s.fulfillmentManufacturerId ?? s.fulfillmentDestinationId;
+    if (!destId) return "Unknown destination";
+    const d = dests.find((x) => x.id === destId);
+    return d?.name ?? destId;
+  };
+
+  const SELECT_CLS =
+    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)] disabled:opacity-60";
+  const INPUT_CLS =
+    "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)] disabled:opacity-60";
+
+  return (
+    <div
+      className="rounded-xl border border-slate-200 bg-white p-4 space-y-3"
+      data-testid="panel-fulfillment-splits"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">Split shipments</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            When set, orders route to each destination below instead of the single fulfillment partner above.
+          </p>
+        </div>
+        {!adding && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setAdding(true)}
+            data-testid="btn-add-fulfillment-split"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Add destination
+          </Button>
+        )}
+      </div>
+
+      {isLoading && (
+        <p className="text-xs text-slate-400">Loading…</p>
+      )}
+
+      {splits.length > 0 && (
+        <div className="space-y-2">
+          {splits.map((s) => (
+            <div
+              key={s.id}
+              className="flex items-start justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+              data-testid={`split-row-${s.id}`}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-slate-900 truncate">{resolveDestName(s)}</p>
+                <div className="flex items-center gap-3 mt-0.5">
+                  {s.quantity != null && (
+                    <span className="text-xs text-slate-500">{s.quantity.toLocaleString()} copies</span>
+                  )}
+                  {s.notes && (
+                    <span className="text-xs text-slate-400 truncate">{s.notes}</span>
+                  )}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 flex-shrink-0"
+                onClick={() => removeSplit(s.id)}
+                data-testid={`btn-remove-split-${s.id}`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          ))}
+          {/* Soft quantity total — only shown when all rows have a quantity set */}
+          {splits.every((s) => s.quantity != null) && splits.length > 1 && (() => {
+            const splitTotal = splits.reduce((acc, s) => acc + (s.quantity ?? 0), 0);
+            const overLimit = pressedQty != null && splitTotal > pressedQty;
+            return (
+              <>
+                <p className={`text-xs text-right ${overLimit ? "text-amber-600 font-medium" : "text-slate-500"}`}>
+                  Total: {splitTotal.toLocaleString()} copies across {splits.length} destinations
+                  {pressedQty != null && (
+                    <span className="ml-1">
+                      {overLimit
+                        ? `— exceeds pressed quantity (${pressedQty.toLocaleString()})`
+                        : `of ${pressedQty.toLocaleString()} pressed`}
+                    </span>
+                  )}
+                </p>
+              </>
+            );
+          })()}
+          {splits.some((s) => s.quantity != null) && splits.some((s) => s.quantity == null) && (
+            <p className="text-xs text-amber-600">
+              Some rows have no copy count — confirm totals match your pressed quantity.
+            </p>
+          )}
+        </div>
+      )}
+
+      {splits.length === 0 && !adding && !isLoading && (
+        <p className="text-xs text-slate-400">No split destinations — single fulfillment destination above applies.</p>
+      )}
+
+      {adding && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+          {!creatingAddr ? (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Destination</label>
+                <select
+                  value={newDestId}
+                  onChange={(e) => setNewDestId(e.target.value)}
+                  className={SELECT_CLS}
+                  data-testid="select-new-split-dest"
+                >
+                  <option value="">— Choose destination —</option>
+                  {dests.filter((d) => d.kind === "partner").length > 0 && (
+                    <optgroup label="Fulfillment warehouses">
+                      {dests.filter((d) => d.kind === "partner").map((d) => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {dests.filter((d) => d.kind === "manufacturer").length > 0 && (
+                    <optgroup label="Press (self-fulfill)">
+                      {dests.filter((d) => d.kind === "manufacturer").map((d) => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {dests.filter((d) => d.kind === "custom").length > 0 && (
+                    <optgroup label="Custom addresses">
+                      {dests.filter((d) => d.kind === "custom").map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}{d.city ? ` — ${d.city}` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                <button
+                  type="button"
+                  className="mt-1 text-xs text-[var(--brand-blue)] hover:underline"
+                  onClick={() => { setCreatingAddr(true); setNewDestId(""); }}
+                  data-testid="btn-add-custom-address"
+                >
+                  + New custom address…
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Copies (optional)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={newQty}
+                    onChange={(e) => setNewQty(e.target.value)}
+                    className={INPUT_CLS + " w-full"}
+                    placeholder="e.g. 300"
+                    data-testid="input-new-split-qty"
+                  />
+                </div>
+                <div className="flex-[2]">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Notes (optional)</label>
+                  <input
+                    type="text"
+                    value={newNotes}
+                    onChange={(e) => setNewNotes(e.target.value)}
+                    className={INPUT_CLS + " w-full"}
+                    placeholder="e.g. fan orders, retail stock…"
+                    data-testid="input-new-split-notes"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={addSplit}
+                  disabled={saving || !newDestId}
+                  data-testid="btn-confirm-add-split"
+                >
+                  {saving ? "Saving…" : "Add"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setAdding(false); setNewDestId(""); setNewQty(""); setNewNotes(""); }}
+                  data-testid="btn-cancel-add-split"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </>
+          ) : (
+            /* Inline "Add custom address" sub-form */
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-slate-700">New custom address</p>
+              <input
+                placeholder="Name (required)"
+                value={newAddrName}
+                onChange={(e) => setNewAddrName(e.target.value)}
+                className={INPUT_CLS + " w-full"}
+                data-testid="input-custom-addr-name"
+              />
+              <input
+                placeholder="Address line 1"
+                value={newAddrLine1}
+                onChange={(e) => setNewAddrLine1(e.target.value)}
+                className={INPUT_CLS + " w-full"}
+                data-testid="input-custom-addr-line1"
+              />
+              <input
+                placeholder="Address line 2 (optional)"
+                value={newAddrLine2}
+                onChange={(e) => setNewAddrLine2(e.target.value)}
+                className={INPUT_CLS + " w-full"}
+                data-testid="input-custom-addr-line2"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <input placeholder="City" value={newAddrCity} onChange={(e) => setNewAddrCity(e.target.value)} className={INPUT_CLS} data-testid="input-custom-addr-city" />
+                <input placeholder="State" value={newAddrState} onChange={(e) => setNewAddrState(e.target.value)} className={INPUT_CLS} data-testid="input-custom-addr-state" />
+                <input placeholder="Postal code" value={newAddrPostal} onChange={(e) => setNewAddrPostal(e.target.value)} className={INPUT_CLS} data-testid="input-custom-addr-postal" />
+                <input placeholder="Country" value={newAddrCountry} onChange={(e) => setNewAddrCountry(e.target.value)} className={INPUT_CLS} data-testid="input-custom-addr-country" />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button type="button" size="sm" onClick={saveNewAddress} disabled={savingAddr || !newAddrName.trim()} data-testid="btn-save-custom-addr">
+                  {savingAddr ? "Saving…" : "Save address"}
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setCreatingAddr(false)} data-testid="btn-cancel-custom-addr">
+                  Back
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SpinPromoPanel({
   album,
   disabled,
@@ -4459,26 +5007,19 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           metadata, so it saves through the same PUT but rides the
           operational-bypass path (stays editable after first sale). Empty =
           platform default partner. */}
-      <EditablePanel
-        title="Fulfillment"
-        testId="panel-overview-fulfillment"
-        endpoint={endpoint}
+      {/* Task #2670 — unified single-destination picker. Hidden when
+          split rows exist (they take precedence). Uses the same
+          UnifiedFulfillmentDest list as the splits editor below so
+          warehouse partners AND self-fulfill presses both appear. */}
+      <AlbumFulfillmentSingleDestPanel
+        album={album}
         disabled={disabled}
         disabledReason={disabledReason}
-        values={{
-          fulfillmentPartnerId: album.fulfillmentPartnerId ?? "",
-        }}
-        invalidate={invalidate}
-        fields={[
-          {
-            key: "fulfillmentPartnerId",
-            label: "Fulfillment partner",
-            type: "select",
-            options: fulfillmentOptions,
-            placeholder: "Platform default",
-          },
-        ]}
       />
+      {/* Task #2670 — split shipments editor. Multiple destinations per
+          pressing order. When at least one split row exists, the single-dest
+          panel above hides and orderDesk.ts routes via the splits table. */}
+      <AlbumFulfillmentSplitsPanel albumId={album.id} pressedQty={(album as any).mechanicalUnitsPressed ?? null} />
       {/* Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only
           legacy)" toggle. Self-contained block: when this flag is retired,
           delete this single component + its render here and the schema

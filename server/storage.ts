@@ -153,6 +153,12 @@ import {
   pressAudioSpecs,
   type PressAudioSpec,
   type InsertPressAudioSpec,
+  fulfillmentDestinations,
+  type FulfillmentDestination,
+  type InsertFulfillmentDestination,
+  albumFulfillmentSplits,
+  type AlbumFulfillmentSplit,
+  type InsertAlbumFulfillmentSplit,
 } from "@shared/schema";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -878,6 +884,17 @@ export interface IStorage {
   createFulfillmentPartner(data: InsertFulfillmentPartner & { id?: string }): Promise<FulfillmentPartner>;
   updateFulfillmentPartner(id: string, data: Partial<FulfillmentPartner>): Promise<FulfillmentPartner | undefined>;
   deleteFulfillmentPartner(id: string): Promise<void>;
+
+  // Task #2670 — fulfillment destinations + album splits
+  getFulfillmentDestinations(): Promise<FulfillmentDestination[]>;
+  getFulfillmentDestinationById(id: string): Promise<FulfillmentDestination | undefined>;
+  createFulfillmentDestination(data: InsertFulfillmentDestination): Promise<FulfillmentDestination>;
+  updateFulfillmentDestination(id: string, data: Partial<FulfillmentDestination>): Promise<FulfillmentDestination | undefined>;
+  deleteFulfillmentDestination(id: string): Promise<void>;
+  getAlbumFulfillmentSplits(albumId: string): Promise<AlbumFulfillmentSplit[]>;
+  createAlbumFulfillmentSplit(data: InsertAlbumFulfillmentSplit): Promise<AlbumFulfillmentSplit>;
+  updateAlbumFulfillmentSplit(id: string, data: Partial<AlbumFulfillmentSplit>): Promise<AlbumFulfillmentSplit | undefined>;
+  deleteAlbumFulfillmentSplit(id: string): Promise<void>;
 
   // RFQ flow — basic data layer. UI for the comparison + accept flow
   // lands in a follow-up; today the routes expose CRUD so plants can
@@ -4976,10 +4993,11 @@ export class DbStorage implements IStorage {
   }
 
   // ----- Manufacturer ENTITY CRUD (Task #69) --------------------------
-  async getManufacturers(): Promise<Manufacturer[]> {
-    return await db.select().from(manufacturers)
-      .where(isNull(manufacturers.deletedAt))
-      .orderBy(asc(manufacturers.name));
+  async getManufacturers(opts?: { doesFulfillment?: boolean }): Promise<Manufacturer[]> {
+    let q = db.select().from(manufacturers).$dynamic();
+    const conds = [isNull(manufacturers.deletedAt)];
+    if (opts?.doesFulfillment) conds.push(eq((manufacturers as any).doesFulfillment, true));
+    return await q.where(and(...conds)).orderBy(asc(manufacturers.name));
   }
   async getManufacturerById(id: string): Promise<Manufacturer | undefined> {
     const [m] = await db.select().from(manufacturers)
@@ -5035,6 +5053,53 @@ export class DbStorage implements IStorage {
   }
   async deleteFulfillmentPartner(id: string, userId?: string | null): Promise<void> {
     await softDeleteEntity("fulfillment_partner", id, userId ?? null);
+  }
+
+  // ----- Fulfillment destinations (ad-hoc reusable addresses) ---------
+  async getFulfillmentDestinations(): Promise<FulfillmentDestination[]> {
+    return await db.select().from(fulfillmentDestinations)
+      .orderBy(asc(fulfillmentDestinations.name));
+  }
+  async getFulfillmentDestinationById(id: string): Promise<FulfillmentDestination | undefined> {
+    const [d] = await db.select().from(fulfillmentDestinations)
+      .where(eq(fulfillmentDestinations.id, id));
+    return d;
+  }
+  async createFulfillmentDestination(data: InsertFulfillmentDestination): Promise<FulfillmentDestination> {
+    const [d] = await db.insert(fulfillmentDestinations).values(data).returning();
+    return d;
+  }
+  async updateFulfillmentDestination(id: string, data: Partial<FulfillmentDestination>): Promise<FulfillmentDestination | undefined> {
+    const { id: _i, createdAt: _c, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) return this.getFulfillmentDestinationById(id);
+    const [d] = await db.update(fulfillmentDestinations).set(rest).where(eq(fulfillmentDestinations.id, id)).returning();
+    return d;
+  }
+  async deleteFulfillmentDestination(id: string): Promise<void> {
+    await db.delete(fulfillmentDestinations).where(eq(fulfillmentDestinations.id, id));
+  }
+
+  // ----- Album fulfillment splits ------------------------------------
+  async getAlbumFulfillmentSplits(albumId: string): Promise<AlbumFulfillmentSplit[]> {
+    return await db.select().from(albumFulfillmentSplits)
+      .where(eq(albumFulfillmentSplits.albumId, albumId))
+      .orderBy(asc(albumFulfillmentSplits.sortOrder), asc(albumFulfillmentSplits.createdAt));
+  }
+  async createAlbumFulfillmentSplit(data: InsertAlbumFulfillmentSplit): Promise<AlbumFulfillmentSplit> {
+    const [s] = await db.insert(albumFulfillmentSplits).values(data).returning();
+    return s;
+  }
+  async updateAlbumFulfillmentSplit(id: string, data: Partial<AlbumFulfillmentSplit>): Promise<AlbumFulfillmentSplit | undefined> {
+    const { id: _i, albumId: _a, createdAt: _c, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) {
+      const [s] = await db.select().from(albumFulfillmentSplits).where(eq(albumFulfillmentSplits.id, id));
+      return s;
+    }
+    const [s] = await db.update(albumFulfillmentSplits).set(rest).where(eq(albumFulfillmentSplits.id, id)).returning();
+    return s;
+  }
+  async deleteAlbumFulfillmentSplit(id: string): Promise<void> {
+    await db.delete(albumFulfillmentSplits).where(eq(albumFulfillmentSplits.id, id));
   }
 
   // ----- RFQ flow (Task #69) ------------------------------------------

@@ -27,6 +27,7 @@ import {
   albums,
   customerUsers,
   fulfillmentPartners,
+  albumFulfillmentSplits,
   orderDeskWebhookEvents,
   type Order,
   type StripeAddressSnapshot,
@@ -63,20 +64,103 @@ export function orderDeskAutoPushEnabled(): boolean {
 // ─── Routing: SKU → fulfillment partner ──────────────────────────────
 // Routing rule (deterministic, in priority order):
 //   1. Per-order operator override (`fulfillment_partner_id` on the order).
-//   2. Task #1918 — per-album override (`albums.fulfillment_partner_id`) so
-//      operators can route a whole release (e.g. all Nightbirde orders) to a
-//      specific warehouse without touching every order.
-//   3. First fulfillment_partner with `is_default = true`.
-//   4. First fulfillment_partner row (fallback when no default is set yet).
-// This replaces the old "first row wins" ambiguity that made Spinney vs
-// PacPack a coin-flip as soon as both rows existed in the table.
+//   2. Task #2670 — per-album split shipments table. When splits exist the
+//      first partner-kind split row wins (manufacturer/custom destinations are
+//      an operator display concept; OD routing resolves to a partner id only).
+//   3. Task #1918 — per-album override (`albums.fulfillment_partner_id`).
+//   4. First fulfillment_partner with `is_default = true`.
+//   5. First fulfillment_partner row (fallback when no default is set yet).
+// Returns ALL live partner-kind split destinations for an album, in sort
+// order. Each entry corresponds to one Order Desk routing payload when
+// pushing a multi-split order. Non-partner splits (manufacturer self-fulfill,
+// custom address) are excluded — they have no OD account to receive.
+// Returns an empty array when no partner-kind splits are configured.
+// Returns true when the album has ANY fulfillment split rows configured
+// (regardless of kind). Used to enforce split precedence: when splits
+// exist they take precedence over legacy single-destination routing, even
+// if none of them are partner-kind (OD/Odoo can't push to a manufacturer
+// or custom address — the operator routes those outside OD/Odoo).
+export async function hasAnySplitsForAlbum(albumId: string): Promise<boolean> {
+  const row = await db
+    .select({ id: albumFulfillmentSplits.id })
+    .from(albumFulfillmentSplits)
+    .where(sql`${albumFulfillmentSplits.albumId} = ${albumId}`)
+    .limit(1);
+  return row.length > 0;
+}
+
+export async function pickAllFulfillmentPartners(albumId: string): Promise<
+  Array<{ partnerId: string; quantity: number | null; notes: string | null }>
+> {
+  const splits = await db
+    .select({
+      fulfillmentPartnerId: albumFulfillmentSplits.fulfillmentPartnerId,
+      quantity: albumFulfillmentSplits.quantity,
+      notes: albumFulfillmentSplits.notes,
+    })
+    .from(albumFulfillmentSplits)
+    .where(
+      sql`${albumFulfillmentSplits.albumId} = ${albumId}
+        AND ${albumFulfillmentSplits.fulfillmentPartnerId} IS NOT NULL`,
+    )
+    .orderBy(sql`${albumFulfillmentSplits.sortOrder} ASC, ${albumFulfillmentSplits.createdAt} ASC`);
+
+  const result: Array<{ partnerId: string; quantity: number | null; notes: string | null }> = [];
+  for (const split of splits) {
+    if (!split.fulfillmentPartnerId) continue;
+    const live = await db
+      .select({ id: fulfillmentPartners.id })
+      .from(fulfillmentPartners)
+      .where(
+        sql`${fulfillmentPartners.id} = ${split.fulfillmentPartnerId} AND ${fulfillmentPartners.deletedAt} IS NULL`,
+      )
+      .limit(1);
+    if (live[0]?.id) {
+      result.push({
+        partnerId: live[0].id,
+        quantity: split.quantity ?? null,
+        notes: split.notes ?? null,
+      });
+    }
+  }
+  return result;
+}
+
 export async function pickFulfillmentPartner(order: Order): Promise<string | null> {
   if (order.fulfillmentPartnerId) return order.fulfillmentPartnerId;
-  // Per-album override. Resolve the order's album, then honor its
-  // fulfillmentPartnerId only when it still points at a live (non-trashed)
-  // partner — otherwise fall through to the platform default so a deleted
-  // warehouse never strands the carton.
   if (order.albumId) {
+    // Task #2670 — check album_fulfillment_splits first. Only partner-kind
+    // splits carry an OD-routable fulfillment_partner_id. Non-partner splits
+    // (manufacturer self-fulfill, custom address) are handled outside OD
+    // and are skipped here so we fall through to the per-album override or
+    // the platform default.
+    // Task #2670 — iterate ALL partner-kind splits in sort order and
+    // return the first one that resolves to a live fulfillment partner.
+    // Manufacturer and custom-address splits are not OD-routable and are
+    // skipped here; the caller (operator push UI) handles them separately.
+    const splits = await db
+      .select({
+        fulfillmentPartnerId: albumFulfillmentSplits.fulfillmentPartnerId,
+      })
+      .from(albumFulfillmentSplits)
+      .where(
+        sql`${albumFulfillmentSplits.albumId} = ${order.albumId}
+          AND ${albumFulfillmentSplits.fulfillmentPartnerId} IS NOT NULL`,
+      )
+      .orderBy(sql`${albumFulfillmentSplits.sortOrder} ASC, ${albumFulfillmentSplits.createdAt} ASC`);
+    for (const split of splits) {
+      if (!split.fulfillmentPartnerId) continue;
+      const live = await db
+        .select({ id: fulfillmentPartners.id })
+        .from(fulfillmentPartners)
+        .where(
+          sql`${fulfillmentPartners.id} = ${split.fulfillmentPartnerId} AND ${fulfillmentPartners.deletedAt} IS NULL`,
+        )
+        .limit(1);
+      if (live[0]?.id) return live[0].id;
+    }
+
+    // Task #1918 — per-album single-destination override.
     const albumRows = await db
       .select({ fulfillmentPartnerId: albums.fulfillmentPartnerId })
       .from(albums)
@@ -226,12 +310,109 @@ export async function pushOrderToOrderDesk(orderId: string): Promise<{
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
   const [customer] = await db.select().from(customerUsers).where(eq(customerUsers.id, order.customerId));
 
+  const mappedItems = items.map((i) => ({
+    kind: i.kind,
+    sku: i.sku,
+    label: i.label,
+    unitPriceCents: i.unitPriceCents,
+    quantity: i.quantity,
+  }));
+  const albumInfo = { id: album.id, title: album.title, artist: album.artist };
+  const customerInfo = { email: customer?.email ?? null };
+
+  // Task #2670 — multi-split routing: when the album has partner-kind splits,
+  // push one Order Desk order per split destination so each warehouse receives
+  // its own routable payload (with per-split allocation in the metadata).
+  // Non-partner splits (manufacturer self-fulfill, custom address) have no OD
+  // account and are skipped here; the operator handles them outside OD.
+  // Split precedence: if ANY split rows exist, don't fall back to legacy
+  // single-destination routing — even if none are partner-kind (the operator
+  // routes manufacturer/custom splits outside OD).
+  const hasAnySplits = order.albumId ? await hasAnySplitsForAlbum(order.albumId) : false;
+  const splitPartners = order.albumId ? await pickAllFulfillmentPartners(order.albumId) : [];
+
+  if (hasAnySplits && splitPartners.length === 0) {
+    // All splits are non-partner (manufacturer/custom). OD has no account for
+    // these — the operator routes them outside OD. Return ok so the push
+    // isn't retried; the operator sees the reason in the UI.
+    log(`[orderdesk] order ${orderId}: splits configured but none are OD-routable (manufacturer/custom only); skipping OD push`);
+    await db
+      .update(orders)
+      .set({ fulfillmentStatus: "pending", fulfillmentError: "Splits are non-OD destinations (manufacturer/custom) — route manually" })
+      .where(eq(orders.id, order.id));
+    return { ok: true, orderDeskOrderId: undefined };
+  }
+
+  if (splitPartners.length > 0) {
+    let firstOdId: string | undefined;
+    let firstPartnerId: string | undefined;
+    const errors: string[] = [];
+
+    for (const split of splitPartners) {
+      const splitPayload = buildOdPayload({
+        order,
+        items: mappedItems,
+        album: albumInfo,
+        customer: customerInfo,
+        partnerId: split.partnerId,
+      });
+      // Annotate each split's allocation so the warehouse knows its portion.
+      if (split.quantity != null) {
+        splitPayload.order_metadata.gt_split_quantity = String(split.quantity);
+      }
+      if (split.notes) {
+        splitPayload.order_metadata.gt_split_notes = split.notes;
+      }
+      try {
+        const body = await odFetch("/orders", { method: "POST", body: JSON.stringify(splitPayload) });
+        const odId: string | undefined = body?.order?.id
+          ? String(body.order.id)
+          : body?.id
+            ? String(body.id)
+            : undefined;
+        if (!odId) {
+          errors.push(`No OD id returned for partner ${split.partnerId}`);
+          continue;
+        }
+        if (!firstOdId) {
+          firstOdId = odId;
+          firstPartnerId = split.partnerId;
+        }
+      } catch (e: any) {
+        errors.push(e?.message ?? String(e));
+      }
+    }
+
+    if (!firstOdId) {
+      const errMsg = errors.join("; ") || "All split pushes failed";
+      console.error(`[orderdesk] multi-split push failed for order ${orderId}`, errMsg);
+      await db
+        .update(orders)
+        .set({ fulfillmentStatus: "pending", fulfillmentError: errMsg })
+        .where(eq(orders.id, order.id));
+      return { ok: false, error: errMsg };
+    }
+
+    await db
+      .update(orders)
+      .set({
+        orderDeskOrderId: firstOdId,
+        fulfillmentPartnerId: firstPartnerId ?? null,
+        fulfillmentStatus: "submitted",
+        submittedToFulfillmentAt: new Date(),
+        fulfillmentError: null,
+      })
+      .where(eq(orders.id, order.id));
+    return { ok: true, orderDeskOrderId: firstOdId };
+  }
+
+  // ── Single-destination path (no partner-kind splits configured) ────────────
   const partnerId = await pickFulfillmentPartner(order);
   const payload = buildOdPayload({
     order,
-    items: items.map((i) => ({ kind: i.kind, sku: i.sku, label: i.label, unitPriceCents: i.unitPriceCents, quantity: i.quantity })),
-    album: { id: album.id, title: album.title, artist: album.artist },
-    customer: { email: customer?.email ?? null },
+    items: mappedItems,
+    album: albumInfo,
+    customer: customerInfo,
     partnerId,
   });
 

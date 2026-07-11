@@ -15,7 +15,7 @@ import type { Express, Request, Response } from "express";
 import { randomBytes, scrypt as _scrypt, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { db } from "./db";
-import { quoteShipping, normalizeCountry } from "./shipping";
+import { quoteShipping, normalizeCountry, getAlbumShippingPartnerId } from "./shipping";
 import {
   albums,
   albumSkus,
@@ -2753,6 +2753,11 @@ export function registerCommerceRoutes(app: Express) {
           signedCertCount,
           bookletCount,
           country: shipCountry,
+          // Task #2670 — resolve shipping rates from the album's split
+          // partner when splits are configured, falling back to the platform
+          // default when not. This ensures the quoted rate matches the
+          // warehouse that will actually fulfill this album's orders.
+          partnerId: album.id ? await getAlbumShippingPartnerId(album.id) : undefined,
         });
       } catch (e) {
         console.error("[checkout] shipping quote failed", e);
@@ -2947,7 +2952,15 @@ export function registerCommerceRoutes(app: Express) {
       return res.json({ shippable: false, chargedCents: 0 });
     }
     try {
-      const quote = await quoteShipping({ format, quantity, signedCertCount, bookletCount, country });
+      const quote = await quoteShipping({
+        format,
+        quantity,
+        signedCertCount,
+        bookletCount,
+        country,
+        // Task #2670 — use the album's split partner rates when configured.
+        partnerId: albumId ? await getAlbumShippingPartnerId(albumId) : undefined,
+      });
       if (!quote) return res.json({ shippable: true, available: false, chargedCents: 0 });
       res.json({
         shippable: true,
@@ -3087,6 +3100,8 @@ export function registerCommerceRoutes(app: Express) {
           signedCertCount: certCount,
           bookletCount,
           country,
+          // Task #2670 — use the album's split partner rates when configured.
+          partnerId: albumId ? await getAlbumShippingPartnerId(albumId) : undefined,
         });
         if (quote) shippingCents = quote.chargedCents;
       } catch (e) {

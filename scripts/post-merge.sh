@@ -9316,3 +9316,70 @@ backfill_task_2676_customer_addresses() {
 }
 backfill_task_2676_customer_addresses dev  "${DATABASE_URL:-}" development
 backfill_task_2676_customer_addresses prod "${PROD_DATABASE_URL:-}" production
+
+# Task #2670 — Press fulfillment routing: splits, destinations, self-fulfill.
+# Adds new schema objects:
+#   - fulfillment_destinations table (ad-hoc reusable addresses)
+#   - album_fulfillment_splits table (per-album multi-destination routing)
+#   - albums.fulfillment_manufacturer_id column (self-fulfill override)
+#   - albums.fulfillment_destination_id column (custom-address single-dest)
+#   - manufacturers.default_fulfillment_manufacturer_id column
+#   - manufacturers.default_fulfillment_destination_id column
+# All idempotent; safe to run on every merge.
+migrate_task_2670_fulfillment_routing() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2670 fulfillment routing migration on $label (no URL set)"
+    return 0
+  fi
+  local tmpf
+  tmpf=$(mktemp /tmp/post-merge-2670.XXXXXX.sql)
+  cat > "$tmpf" << 'EOSQL'
+BEGIN;
+CREATE TABLE IF NOT EXISTS fulfillment_destinations (
+  id            varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  name          text    NOT NULL,
+  address_line1 text,
+  address_line2 text,
+  city          text,
+  state         text,
+  postal_code   text,
+  country       text,
+  notes         text,
+  created_at    timestamp DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS album_fulfillment_splits (
+  id                          varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id                    varchar NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  fulfillment_partner_id      varchar REFERENCES fulfillment_partners(id) ON DELETE SET NULL,
+  fulfillment_manufacturer_id varchar REFERENCES manufacturers(id) ON DELETE SET NULL,
+  fulfillment_destination_id  varchar REFERENCES fulfillment_destinations(id) ON DELETE SET NULL,
+  quantity                    integer,
+  notes                       text,
+  sort_order                  integer NOT NULL DEFAULT 0,
+  created_at                  timestamp DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS album_fulfillment_splits_album_idx
+  ON album_fulfillment_splits(album_id);
+ALTER TABLE albums
+  ADD COLUMN IF NOT EXISTS fulfillment_manufacturer_id varchar
+    REFERENCES manufacturers(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS fulfillment_destination_id varchar
+    REFERENCES fulfillment_destinations(id) ON DELETE SET NULL;
+ALTER TABLE manufacturers
+  ADD COLUMN IF NOT EXISTS default_fulfillment_manufacturer_id varchar
+    REFERENCES manufacturers(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS default_fulfillment_destination_id varchar;
+COMMIT;
+EOSQL
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -f "$tmpf" 2>&1); then
+    echo "post-merge: task-2670 fulfillment routing migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-2670 fulfillment routing migration failed on $label (continuing)"
+    echo "$out" | tail -10
+  fi
+  rm -f "$tmpf"
+}
+migrate_task_2670_fulfillment_routing dev  "${DATABASE_URL:-}"
+migrate_task_2670_fulfillment_routing prod "${PROD_DATABASE_URL:-}"
