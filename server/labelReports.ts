@@ -28,6 +28,7 @@ import { sql } from "drizzle-orm";
 import { pgArray } from "./lib/pgArray";
 import { LOC_COUNTRY } from "./reports/buyers";
 import { getUserRole } from "./auth/roles";
+import { nonFanListen } from "./artistReports";
 import { storage } from "./storage";
 
 // ─── Date range helpers ─────────────────────────────────────────────────
@@ -129,19 +130,54 @@ async function computeKpis(scope: LabelScope, r: Range) {
   `) : ({ rows: [{ gross: "0", units: "0", buyers: "0", refunded: "0" }] } as any);
   const rev = (revRow as any).rows?.[0] ?? { gross: "0", units: "0", buyers: "0", refunded: "0" };
 
+  // Task #2673 — same owner-vs-preview split as computeLifetime in artistReports.ts
+  // so label numbers reconcile with per-album artist numbers.
+  const emptyPlays = {
+    starts: "0", completes: "0", listeners: "0", excluded: "0",
+    owner_plays: "0", unique_owners: "0", owner_completes: "0",
+    preview_plays: "0", unique_preview_sessions: "0",
+  };
   const playRow = scope.songIds.length ? await db.execute<{
-    starts: string; completes: string; listeners: string;
+    starts: string; completes: string; listeners: string; excluded: string;
+    owner_plays: string; unique_owners: string; owner_completes: string;
+    preview_plays: string; unique_preview_sessions: string;
   }>(sql`
     SELECT
-      COUNT(*) FILTER (WHERE e.name = 'play_start')::text AS starts,
-      COUNT(*) FILTER (WHERE e.name = 'play_complete')::text AS completes,
-      COUNT(DISTINCT COALESCE(e.user_id, e.session_id))
-        FILTER (WHERE e.name = 'play_start')::text AS listeners
-    FROM analytics_events e
-    WHERE ${playsFilter(scope)}
-      AND e.ts >= ${r.from} AND e.ts < ${r.to}
-  `) : ({ rows: [{ starts: "0", completes: "0", listeners: "0" }] } as any);
-  const p = (playRow as any).rows?.[0] ?? { starts: "0", completes: "0", listeners: "0" };
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS starts,
+      COUNT(*) FILTER (WHERE t.name = 'play_complete' AND NOT t.nonfan)::text AS completes,
+      COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
+        FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS listeners,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.nonfan)::text AS excluded,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND t.is_owner)::text AS owner_plays,
+      COUNT(DISTINCT t.user_id)
+        FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND t.is_owner AND t.user_id IS NOT NULL)::text AS unique_owners,
+      COUNT(*) FILTER (WHERE t.name = 'play_complete' AND NOT t.nonfan AND t.is_owner)::text AS owner_completes,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND NOT t.is_owner)::text AS preview_plays,
+      COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
+        FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND NOT t.is_owner)::text AS unique_preview_sessions
+    FROM (
+      SELECT e.name, e.user_id, e.session_id, ${nonFanListen()} AS nonfan,
+        (
+          e.user_id IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM user_albums ua
+            JOIN songs sg ON sg.id = (e.payload->>'songId')
+            WHERE ua.album_id = sg.album_id
+              AND ua.user_id = e.user_id
+              AND EXISTS (
+                SELECT 1 FROM orders o2
+                WHERE o2.customer_id = e.user_id
+                  AND o2.album_id = sg.album_id
+                  AND o2.status IN ('paid','shipped','complete','completed')
+              )
+          )
+        ) AS is_owner
+      FROM analytics_events e
+      WHERE ${playsFilter(scope)}
+        AND e.ts >= ${r.from} AND e.ts < ${r.to}
+    ) t
+  `) : ({ rows: [emptyPlays] } as any);
+  const p = (playRow as any).rows?.[0] ?? emptyPlays;
 
   // New fans = listeners (signed-in or anon) whose FIRST EVER play on a
   // scope-song falls inside the window. Mirrors the audience-tab logic.
@@ -172,6 +208,13 @@ async function computeKpis(scope: LabelScope, r: Range) {
     completions: completes,
     completionRate: starts > 0 ? completes / starts : 0,
     listeners: Number(p.listeners),
+    excludedPlays: Number(p.excluded),
+    // Task #2673 — owner vs preview split (mirrors artistReports computeLifetime)
+    ownerPlays: Number(p.owner_plays),
+    uniqueOwners: Number(p.unique_owners),
+    ownerCompletes: Number(p.owner_completes),
+    previewPlays: Number(p.preview_plays),
+    uniquePreviewSessions: Number(p.unique_preview_sessions),
     newFans,
     rosterSize: scope.rosterPersonIds.length,
     albumCount: scope.albumIds.length,
@@ -182,7 +225,10 @@ function emptyKpis() {
   return {
     grossCents: 0, labelShareCents: 0, refundedCents: 0,
     units: 0, buyers: 0, plays: 0, completions: 0, completionRate: 0,
-    listeners: 0, newFans: 0, rosterSize: 0, albumCount: 0,
+    listeners: 0, excludedPlays: 0,
+    ownerPlays: 0, uniqueOwners: 0, ownerCompletes: 0,
+    previewPlays: 0, uniquePreviewSessions: 0,
+    newFans: 0, rosterSize: 0, albumCount: 0,
   };
 }
 

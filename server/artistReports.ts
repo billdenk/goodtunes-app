@@ -240,7 +240,7 @@ function internalDeviceIds(): string[] {
 // only the internal stamp can exclude them. This mirrors the funnel's
 // internal detection and extends it with the comp/preview signal, so every
 // fan metric that ANDs `NOT (this)` stays in lock-step.
-function nonFanListen() {
+export function nonFanListen() {
   const devices = internalDeviceIds();
   const emails = FULL_ACCESS_EMAILS.map((x) => x.toLowerCase().trim()).filter(Boolean);
   // COALESCE(..., FALSE): an absent `_internal` key or a NULL user_id makes
@@ -404,12 +404,20 @@ export type LifetimeTotals = {
   plays: number;
   listeners: number;
   excludedPlays: number;
+  // Task #2673 — owner vs preview play split (per-album dashboard)
+  ownerPlays: number;
+  uniqueOwners: number;
+  ownerCompletes: number;
+  previewPlays: number;
+  uniquePreviewSessions: number;
 };
 
 export async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotals> {
   const empty: LifetimeTotals = {
     grossCents: 0, units: 0, orders: 0, buyers: 0,
     refundedCents: 0, plays: 0, listeners: 0, excludedPlays: 0,
+    ownerPlays: 0, uniqueOwners: 0, ownerCompletes: 0,
+    previewPlays: 0, uniquePreviewSessions: 0,
   };
   if (scope.albumIds.length === 0 && scope.songIds.length === 0) return empty;
 
@@ -430,21 +438,53 @@ export async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotal
   `) : ({ rows: [{ gross: "0", units: "0", orders: "0", buyers: "0", refunded: "0" }] } as any);
   const rev = (revRow as any).rows?.[0] ?? { gross: "0", units: "0", orders: "0", buyers: "0", refunded: "0" };
 
+  // Task #2673 — extend the play sub-query to classify each event as
+  // "owner" (authenticated user with a paid order for the album) vs
+  // "preview" (anon or logged-in without ownership). Both buckets exclude
+  // nonFanListen() events (comp holders / staff / internal); those are
+  // surfaced separately as excludedPlays and shown on the Previews card.
+  const emptyPlays = { starts: "0", listeners: "0", excluded: "0",
+    owner_plays: "0", unique_owners: "0", owner_completes: "0",
+    preview_plays: "0", unique_preview_sessions: "0" };
   const playRow = scope.songIds.length ? await db.execute<{
     starts: string; listeners: string; excluded: string;
+    owner_plays: string; unique_owners: string; owner_completes: string;
+    preview_plays: string; unique_preview_sessions: string;
   }>(sql`
     SELECT
       COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS starts,
       COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
         FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS listeners,
-      COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.nonfan)::text AS excluded
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.nonfan)::text AS excluded,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND t.is_owner)::text AS owner_plays,
+      COUNT(DISTINCT t.user_id)
+        FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND t.is_owner AND t.user_id IS NOT NULL)::text AS unique_owners,
+      COUNT(*) FILTER (WHERE t.name = 'play_complete' AND NOT t.nonfan AND t.is_owner)::text AS owner_completes,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND NOT t.is_owner)::text AS preview_plays,
+      COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
+        FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND NOT t.is_owner)::text AS unique_preview_sessions
     FROM (
-      SELECT e.name, e.user_id, e.session_id, ${nonFanListen()} AS nonfan
+      SELECT e.name, e.user_id, e.session_id, ${nonFanListen()} AS nonfan,
+        (
+          e.user_id IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM user_albums ua
+            JOIN songs sg ON sg.id = (e.payload->>'songId')
+            WHERE ua.album_id = sg.album_id
+              AND ua.user_id = e.user_id
+              AND EXISTS (
+                SELECT 1 FROM orders o2
+                WHERE o2.customer_id = e.user_id
+                  AND o2.album_id = sg.album_id
+                  AND o2.status IN ('paid','shipped','complete','completed')
+              )
+          )
+        ) AS is_owner
       FROM analytics_events e
       WHERE ${playsFilter(scope)}
     ) t
-  `) : ({ rows: [{ starts: "0", listeners: "0", excluded: "0" }] } as any);
-  const p = (playRow as any).rows?.[0] ?? { starts: "0", listeners: "0", excluded: "0" };
+  `) : ({ rows: [emptyPlays] } as any);
+  const p = (playRow as any).rows?.[0] ?? emptyPlays;
 
   return {
     grossCents: Number(rev.gross),
@@ -455,6 +495,11 @@ export async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotal
     plays: Number(p.starts),
     listeners: Number(p.listeners),
     excludedPlays: Number(p.excluded),
+    ownerPlays: Number(p.owner_plays),
+    uniqueOwners: Number(p.unique_owners),
+    ownerCompletes: Number(p.owner_completes),
+    previewPlays: Number(p.preview_plays),
+    uniquePreviewSessions: Number(p.unique_preview_sessions),
   };
 }
 

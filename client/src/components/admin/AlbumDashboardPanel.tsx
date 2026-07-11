@@ -6,7 +6,6 @@ import {
   DollarSign,
   Play,
   Heart,
-  Headphones,
   Package,
   ChevronDown,
   ChevronRight,
@@ -15,7 +14,9 @@ import {
   UserPlus,
   Repeat,
   Download,
+  Eye,
 } from "lucide-react";
+import { PieChart, Pie, Cell } from "recharts";
 import { Link } from "wouter";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import {
@@ -41,6 +42,12 @@ type Lifetime = {
   plays: number;
   listeners: number;
   excludedPlays?: number;
+  // Task #2673 — owner vs preview split
+  ownerPlays?: number;
+  uniqueOwners?: number;
+  ownerCompletes?: number;
+  previewPlays?: number;
+  uniquePreviewSessions?: number;
 };
 type Addon = { sku: string; label: string; count: number; revenueCents: number };
 type TopSong = {
@@ -249,6 +256,95 @@ function NewVsReturning({ newBuyers, returning }: { newBuyers: number; returning
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Task #2673 — Owner plays vs previews split section.
+// "Full plays" = authenticated users with a paid order for the album; shows
+// a compact doughnut (completed vs dropped).
+// "Previews" = play_start events from non-owners (anon or logged-in without
+// ownership). The comp/internal excluded note lives here because those events
+// are non-owner by definition.
+function PlaysAndPreviews({ lifetime }: { lifetime: Lifetime }) {
+  const ownerPlays = lifetime.ownerPlays ?? 0;
+  const ownerCompletes = lifetime.ownerCompletes ?? 0;
+  const uniqueOwners = lifetime.uniqueOwners ?? 0;
+  const ownerDrops = Math.max(0, ownerPlays - ownerCompletes);
+  const previewPlays = lifetime.previewPlays ?? 0;
+  const uniquePreviewSessions = lifetime.uniquePreviewSessions ?? 0;
+  const excludedPlays = lifetime.excludedPlays ?? 0;
+  const completionPct = ownerPlays > 0 ? Math.round((ownerCompletes / ownerPlays) * 100) : 0;
+
+  const donutData = [
+    { name: "Completed", value: ownerCompletes > 0 ? ownerCompletes : ownerPlays === 0 ? 1 : 0 },
+    { name: "Dropped", value: ownerDrops },
+  ];
+  const donutColors = ["var(--brand-blue)", "#e2e8f0"];
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="section-plays-previews">
+      {/* Full plays sub-card */}
+      <div
+        className="relative rounded-xl border border-slate-200 bg-white p-4"
+        data-testid="kpi-plays"
+      >
+        <Play className="absolute top-4 right-4 w-4 h-4 text-slate-300" strokeWidth={1.6} />
+        <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Full plays</div>
+        <div className="text-2xl font-bold text-slate-900 tabular-nums mt-1" data-testid="kpi-plays-value">
+          {ownerPlays.toLocaleString()}
+        </div>
+        <div className="text-xs text-slate-400 mt-0.5">
+          {uniqueOwners.toLocaleString()} owner{uniqueOwners !== 1 ? "s" : ""}
+        </div>
+        {ownerPlays > 0 && (
+          <div className="mt-3 flex items-center gap-3">
+            <PieChart width={56} height={56}>
+              <Pie
+                data={donutData}
+                cx={24}
+                cy={24}
+                innerRadius={16}
+                outerRadius={26}
+                dataKey="value"
+                strokeWidth={0}
+                startAngle={90}
+                endAngle={-270}
+              >
+                {donutData.map((_d, i) => (
+                  <Cell key={i} fill={donutColors[i]} />
+                ))}
+              </Pie>
+            </PieChart>
+            <div className="text-xs text-slate-500 leading-snug">
+              <div className="font-semibold text-slate-700">{completionPct}% completed</div>
+              <div>
+                {ownerCompletes.toLocaleString()} finished&nbsp;·&nbsp;{ownerDrops.toLocaleString()} dropped
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Previews sub-card */}
+      <div
+        className="relative rounded-xl border border-slate-200 bg-white p-4"
+        data-testid="kpi-listeners"
+      >
+        <Eye className="absolute top-4 right-4 w-4 h-4 text-slate-300" strokeWidth={1.6} />
+        <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Previews</div>
+        <div className="text-2xl font-bold text-slate-900 tabular-nums mt-1" data-testid="kpi-listeners-value">
+          {previewPlays.toLocaleString()}
+        </div>
+        <div className="text-xs text-slate-400 mt-0.5">
+          {uniquePreviewSessions.toLocaleString()} session{uniquePreviewSessions !== 1 ? "s" : ""}
+        </div>
+        {excludedPlays > 0 && (
+          <div className="text-xs text-slate-400 mt-2" data-testid="kpi-listeners-excluded">
+            {excludedPlays.toLocaleString()} comp/internal excluded
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -585,24 +681,10 @@ export function AlbumDashboardPanel({
           icon={Package}
           testId="kpi-orders"
         />
-        {!pressMode && (
-          <StatCard
-            label="Plays"
-            value={lifetime.plays.toLocaleString()}
-            icon={Play}
-            testId="kpi-plays"
-            note={lifetime.excludedPlays && lifetime.excludedPlays > 0 ? `${lifetime.excludedPlays.toLocaleString()} comp/internal excluded` : undefined}
-          />
-        )}
-        {!pressMode && (
-          <StatCard
-            label="Listeners"
-            value={lifetime.listeners.toLocaleString()}
-            icon={Headphones}
-            testId="kpi-listeners"
-          />
-        )}
       </div>
+
+      {/* Task #2673 — Owner plays vs Previews split section */}
+      {!pressMode && <PlaysAndPreviews lifetime={lifetime} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* (3) New vs. returning fans — hidden for press partners. */}
