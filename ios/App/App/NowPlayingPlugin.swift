@@ -70,7 +70,8 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
     private var lastArtwork: MPMediaItemArtwork?
 
     public override func load() {
-        configureAudioSession()
+        configureAudioSession(activate: true)
+        registerSessionObservers()
         wireRemoteCommands()
         // Register with the shared store so a CarPlay row tap (which reaches
         // NowPlayingStore, not this plugin) is forwarded to JS as a `playIndex`
@@ -105,23 +106,88 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     /// Put the shared audio session in `.playback` so the WebView's <audio>
-    /// keeps playing when backgrounded / locked. WKWebView can reset the
-    /// category, so this is re-applied on metadata + play-state updates too.
-    private func configureAudioSession() {
+    /// keeps playing when backgrounded / locked.
+    ///
+    /// CRITICAL: `setActive(true)` must NOT be called on the recurring metadata /
+    /// playback-state pushes. The web player lives in WKWebView, which owns its
+    /// own media AVAudioSession; re-activating a second session ~1×/sec races it
+    /// and silences the <audio> element ~2s after playback starts (confirmed
+    /// on-device, iPhone + CarPlay). So we activate ONCE here on load and again
+    /// only when a genuine interruption ends (see handleInterruption); the hot
+    /// path only repairs a drifted category via ensurePlaybackCategory(), which
+    /// never activates.
+    private func configureAudioSession(activate: Bool) {
+        let session = AVAudioSession.sharedInstance()
         do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, options: [])
-            try session.setActive(true)
+            if session.category != .playback {
+                try session.setCategory(.playback, mode: .default, options: [])
+            }
+            if activate {
+                try session.setActive(true)
+            }
         } catch {
             // Best-effort — a failure here just means the OS keeps the default
             // (ambient) category; playback still works while foregrounded.
         }
     }
 
+    /// Repair ONLY the category if something (e.g. WKWebView) reset it away from
+    /// `.playback`. No `setActive` — safe to call from the recurring pushes and
+    /// route changes. A no-op in the common case (category already `.playback`).
+    private func ensurePlaybackCategory() {
+        let session = AVAudioSession.sharedInstance()
+        guard session.category != .playback else { return }
+        try? session.setCategory(.playback, mode: .default, options: [])
+    }
+
+    /// Observe the two moments the OS can pull our session out from under the
+    /// web player, so we re-assert it at the RIGHT times instead of blindly every
+    /// tick: an interruption ending (phone call / Siri / other app) is the one
+    /// legitimate place to re-`setActive(true)`; a route change (headphones out,
+    /// CarPlay / Bluetooth connect) can leave the category drifted, which we
+    /// repair without re-activating.
+    private func registerSessionObservers() {
+        let nc = NotificationCenter.default
+        nc.addObserver(
+            self, selector: #selector(handleInterruption(_:)),
+            name: AVAudioSession.interruptionNotification, object: nil
+        )
+        nc.addObserver(
+            self, selector: #selector(handleRouteChange(_:)),
+            name: AVAudioSession.routeChangeNotification, object: nil
+        )
+    }
+
+    @objc private func handleInterruption(_ notification: Notification) {
+        guard let info = notification.userInfo,
+              let raw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+        guard type == .ended else { return }
+        // The interruption is over — re-activate our session (the ONE legitimate
+        // place to call setActive(true) again) and, if iOS says we may resume,
+        // ask the web player to start playing again.
+        configureAudioSession(activate: true)
+        let shouldResume = (info[AVAudioSessionInterruptionOptionKey] as? UInt)
+            .map { AVAudioSession.InterruptionOptions(rawValue: $0).contains(.shouldResume) } ?? false
+        if shouldResume {
+            emit("play")
+        }
+    }
+
+    @objc private func handleRouteChange(_ notification: Notification) {
+        // iOS already pauses the <audio> on an unplug; we only make sure the
+        // category is still `.playback` so the next play routes correctly.
+        ensurePlaybackCategory()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     // MARK: - Now-playing info
 
     @objc func setMetadata(_ call: CAPPluginCall) {
-        configureAudioSession()
+        ensurePlaybackCategory()
         let title = call.getString("title") ?? ""
         let artist = call.getString("artist") ?? ""
         let album = call.getString("album") ?? ""
@@ -217,9 +283,10 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         // store handlers; these calls only keep the *displayed* state in sync.
         let shuffle = call.getBool("shuffle")
         let repeatMode = call.getString("repeat")
-        if isPlaying {
-            configureAudioSession()
-        }
+        // Deliberately NOT re-activating the audio session here. This fires
+        // ~1×/sec while playing; re-`setActive(true)` on that cadence races the
+        // WKWebView media session and cuts the audio ~2s in (confirmed on-device).
+        // Session activation lives in load() + interruption recovery only.
         let cc = MPRemoteCommandCenter.shared()
         if let shuffle = shuffle {
             cc.changeShuffleModeCommand.currentShuffleType = shuffle ? .items : .off
