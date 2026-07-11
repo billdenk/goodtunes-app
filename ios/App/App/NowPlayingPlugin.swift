@@ -247,6 +247,17 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
                 if artwork != self.artworkURL {
                     self.artworkURL = artwork
                     self.loadArtwork(artwork)
+                } else if let art = self.lastArtwork {
+                    // Same artwork URL — no network refetch needed, but iOS
+                    // resets MPNowPlayingInfoCenter.nowPlayingInfo to nil
+                    // around every track transition (emptied → waiting →
+                    // playing). The cached MPMediaItemArtwork object is gone
+                    // from the dict we read above, so re-inject it here.
+                    // Without this, CPNowPlayingTemplate freezes on the first
+                    // track's panel because CarPlay requires an artwork object
+                    // in the dict to trigger a full Now Playing re-render.
+                    info[MPMediaItemPropertyArtwork] = art
+                    MPNowPlayingInfoCenter.default().nowPlayingInfo = info
                 }
             } else {
                 self.artworkURL = nil
@@ -349,6 +360,15 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
                     // generic music-note placeholder.
                     self.loadArtwork(url)
                 }
+            }
+            // Belt-and-suspenders: even when the title was written correctly
+            // by setMetadata, the artwork key may have been dropped in the iOS
+            // dict-reset window between setMetadata and this call (specifically
+            // the same-artwork-URL path, which re-injects the key but there is
+            // a race between that write and the emptied/waiting lifecycle). If
+            // artwork is absent and we have a cached object, inject it now.
+            if info[MPMediaItemPropertyArtwork] == nil, let art = self.lastArtwork {
+                info[MPMediaItemPropertyArtwork] = art
             }
             info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsed
             if duration > 0 {
