@@ -28,6 +28,47 @@ rejections (the stack is on `my.goodtunes.music`, so it counts as "ours").
 (web deploy) fixes the banner on the already-installed old binary** — you do
 NOT need a new TestFlight/Codemagic build for the guard to take effect.
 
+# Version-SKEW (republish) vs plugin-ABSENT (rebuild) — don't conflate
+
+Two different failure modes with OPPOSITE fixes:
+- **Skew** (above): plugin IS in the binary, JS is newer, an un-awaited
+  reject paints the banner → a **web republish** fixes it.
+- **Absent:** `Capacitor.isPluginAvailable("<Name>")` returns `false` on a
+  native binary. The plugin is simply NOT in that build, so every bridge call
+  no-ops silently (no banner if you gated correctly). A web publish can NEVER
+  add a native plugin — this needs a fresh **Codemagic native rebuild**,
+  regardless of how correct the source is.
+
+**How to tell them apart without a Mac:** ship an operator-only, native-only
+on-device DIAGNOSTIC via a normal web publish (the remote-origin shell picks
+it up with no rebuild) that reads back `isNative`/`platform`/`isPluginAvailable`
+plus the last args + `delivered = available()` for each bridge setter. This
+resolved the Now Playing lock-screen/CarPlay fork: readout showed JS computing
+100% correct title/artist/album/artwork but `pluginAvailable:false` +
+`delivered:false` everywhere, and the lock screen showing the generic app
+name + icon with a working scrubber = iOS auto-managing the WebView `<audio>`,
+NOT our plugin. That pinned it to plugin-absent (rebuild), not a data-shape or
+mediaSession bug — before spending a rebuild cycle on a guess.
+
+**Confirming source is correct (so a rebuild WILL fix it), all in-repo:**
+in-tree iOS Swift plugin conforms to `CAPBridgedPlugin` with `jsName` matching
+the JS `registerPlugin("<Name>")`; it's in the Xcode target in all 4 pbxproj
+spots (PBXBuildFile, PBXFileReference, group children, Sources build phase) —
+mirror a known-working sibling like `SystemVolumePlugin`; and no build-time gate
+strips it (the CarPlay gate in codemagic.yaml strips only the carplay-audio
+entitlement + `UIApplicationSceneManifest`, never the plugin sources).
+`git log -S "<File>.swift in Sources" -- ...pbxproj` proving one add / never
+removed = registration has been continuously present. **Keep the diagnostic in
+place until the rebuild is installed and the readout flips to
+`pluginAvailable:true` / `delivered:true` — that's the on-device proof; only
+then remove the scaffolding.**
+
+**iOS build trigger:** `ios-testflight` in codemagic.yaml has NO auto-trigger
+(its `triggering:` block is commented out) — it's a MANUAL "Start new build"
+in the Codemagic UI (unlike `android-internal`, which auto-builds on push). So
+a native fix waits on an operator starting that build + App Store Connect
+processing + the tester installing it.
+
 # iOS app icon blank/generic in TestFlight
 
 **Symptom:** home-screen + TestFlight tile is the blank/generic placeholder
