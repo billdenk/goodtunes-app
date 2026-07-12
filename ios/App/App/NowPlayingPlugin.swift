@@ -223,11 +223,6 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         let duration = call.getDouble("duration") ?? 0
         let artwork = call.getString("artworkUrl")
 
-        // Cache for the setPlaybackState self-heal (see property comment).
-        lastTitle = title
-        lastArtist = artist
-        lastAlbum = album
-        lastDuration = duration
         // Mirror to the persisted snapshot so a future COLD CarPlay connect (app
         // never opened, so this plugin never loads) can restore the Now Playing
         // metadata instead of the app icon. Art bytes follow from loadArtwork.
@@ -235,6 +230,27 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
             title: title, artist: artist, album: album, duration: duration, artworkUrl: artwork
         )
         DispatchQueue.main.async {
+            // All self-heal cache mutations happen on the main thread so
+            // setPlaybackState's mismatch guard (also main-thread) reads a
+            // consistent view — no cross-thread race on these properties.
+            let previousTitle = self.lastTitle
+            self.lastTitle = title
+            self.lastArtist = artist
+            self.lastAlbum = album
+            self.lastDuration = duration
+
+            // When the track changes, wipe nowPlayingInfo BEFORE writing the
+            // new values. This forces CPNowPlayingTemplate to treat it as a
+            // new-track event and re-render title/artist/album/art. Without
+            // this clear, CarPlay caches the previous panel and ignores
+            // in-place field updates (the "frozen title" bug). The nil + write
+            // happen synchronously in the same main-thread block, so no visible
+            // blank ever reaches the head unit's display — the RunLoop hasn't
+            // ticked between the two assignments.
+            if !previousTitle.isEmpty && title != previousTitle {
+                MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+            }
+
             var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [String: Any]()
             info[MPMediaItemPropertyTitle] = title
             info[MPMediaItemPropertyArtist] = artist
@@ -339,6 +355,23 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
             }
         }
         DispatchQueue.main.async {
+            // Mismatch guard: if setPlaybackState arrived on the main queue
+            // BEFORE setMetadata for the new track (which updates lastDuration
+            // on the main thread), the JS duration won't match lastDuration.
+            // Writing elapsed/rate now would pair the OLD title with the NEW
+            // track's scrubber — the "frozen title" state CarPlay locks on.
+            // Bail out and wipe the dict instead; setMetadata's main-async
+            // block (already queued ahead of or concurrent with this one) will
+            // write the correct title+duration, and the next setPlaybackState
+            // tick will add elapsed/rate on top of it. lastDuration is only
+            // mutated on the main thread (inside setMetadata's async block) so
+            // this comparison is race-free.
+            if duration > 0 && self.lastDuration > 0 && abs(duration - self.lastDuration) > 1.0 {
+                MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+                call.resolve()
+                return
+            }
+
             var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [String: Any]()
             // Self-heal: if iOS reset the dict (e.g. on CarPlay connect) it has
             // no title, so re-apply the cached metadata before we stamp the

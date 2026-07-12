@@ -80,3 +80,51 @@ scrubber AND the CarPlay Now Playing template + its transport buttons. Kill-swit
 ON = audio plays but CarPlay/lock go stale. OFF = CarPlay syncs and (after the
 route-change fix) audio plays without stalling. Check `BUILD.commit` in the overlay
 before interpreting — if it isn't the fix commit, the binary predates the fix.
+
+---
+
+## THIRD BUG: CarPlay Now Playing "frozen title" at every track transition
+
+**Confirmed in build 94 via diagnostics screenshots.** CarPlay Now Playing
+screen shows the PREVIOUS track's title/artist/art while the scrubber's total
+duration has already been updated to the NEW track's duration. Example:
+CarPlay shows "Welcome to the Dream" (221s) but the scrubber shows 0:04/2:32
+(152s = "Ramblin'"). The title is frozen; the duration reflects the new track.
+
+**Root cause:** `setPlaybackState` fires ~1/sec from the JS player. At every
+track boundary the JS sends `setPlaybackState(duration: newTrackDuration)`
+BEFORE `setMetadata(title: newTitle, duration: newTrackDuration)` fires. In
+`setPlaybackState`'s `DispatchQueue.main.async` block, the dict still has the
+OLD title (carried over from the previous track — iOS doesn't always wipe it at
+transition). `setPlaybackState` writes `duration=newTrack` into the dict without
+touching the title → OLD title + NEW duration → `CPNowPlayingTemplate` caches
+this pairing and ignores all subsequent writes (it considers it the same track).
+
+A secondary issue: the `lastTitle/Artist/Album/Duration` self-heal cache was
+mutated OUTSIDE `DispatchQueue.main.async` (on the Capacitor background thread),
+creating a data race with `setPlaybackState`'s main-thread read of those vars.
+
+**Fix (NowPlayingPlugin.swift):**
+
+1. **`setMetadata`**: Move ALL self-heal cache mutations (`lastTitle = ...` etc.)
+   INSIDE `DispatchQueue.main.async` — now race-free since both read and write
+   happen on the main thread. Track `previousTitle` inside the block; when the
+   title changes, do `nowPlayingInfo = nil` BEFORE writing new values. The nil
+   and new-values write happen in the same synchronous main-thread block (no
+   RunLoop tick between them) → no visible blank on the head unit. Forces
+   `CPNowPlayingTemplate` to treat it as a new-track event and re-render.
+
+2. **`setPlaybackState`**: At the top of `DispatchQueue.main.async`, compare
+   `duration` (from JS) vs `self.lastDuration` (now safely main-thread-only).
+   If they differ by > 1s, the new track's `setMetadata` hasn't landed yet —
+   clear `nowPlayingInfo = nil` and bail. `setMetadata`'s already-queued
+   main.async block writes the correct title+duration atomically. Next
+   `setPlaybackState` tick sees matching duration and proceeds normally.
+
+**Safe edges:**
+- Cold start: `lastDuration = 0`, guard condition `self.lastDuration > 0` is
+  false → falls through to normal self-heal. First `setMetadata` sets
+  `lastDuration = newValue`, subsequent `setPlaybackState` matches.
+- Same album (artwork URL unchanged): artwork re-inject path unchanged.
+- CarPlay connect dict-wipe: `hasTitle=false` self-heal still fires (duration
+  matches, no mismatch), re-injects correct `lastTitle/Art` as before.
