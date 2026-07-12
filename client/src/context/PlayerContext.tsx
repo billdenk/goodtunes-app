@@ -13,6 +13,7 @@ import {
   setNowPlayingQueue,
   setNowPlayingCatalog,
   setNowPlayingRecents,
+  setNowPlayingPlaylists,
   setNowPlayingFavorite,
   clearNowPlaying,
   onNowPlayingRemoteCommand,
@@ -20,6 +21,7 @@ import {
   logPlaybackEvent,
   type NowPlayingCatalogAlbum,
   type NowPlayingRecentItem,
+  type NowPlayingPlaylist,
 } from "@/lib/nativeNowPlaying";
 import { offlineSrcFor } from "@/lib/nativeDownloads";
 
@@ -244,6 +246,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // Recently-played feed for the CarPlay RECENTS tab. Only fetch on native iOS
   // (the enabled gate keeps the query cold on web). Each row resolves to an
   // owned album; unowned/unresolvable rows are dropped so a tap always plays.
+  // Fan's playlists for the CarPlay Collection tab "Playlists" row. Only
+  // metadata (id/name/artwork) is pushed; tracks are fetched on demand by the
+  // `playPlaylist` remote command handler below.
+  const { data: fanPlaylists } = useQuery<
+    { id: string; name: string; artworks?: string[]; songCount?: number }[]
+  >({ queryKey: ["/api/playlists"], enabled: isNativeIOS, staleTime: Infinity });
+  const nativePlaylists = useMemo<NowPlayingPlaylist[]>(() => {
+    if (!isNativeIOS) return [];
+    return (fanPlaylists ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      artworkUrl: absolutizeArtwork(p.artworks?.[0]),
+    }));
+  }, [fanPlaylists]);
+
   const { data: fanRecents } = useFanRecents({ enabled: isNativeIOS });
   const nativeRecents = useMemo<NowPlayingRecentItem[]>(() => {
     if (!isNativeIOS) return [];
@@ -1337,6 +1354,28 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     favSongs.toggle(song.id);
     track(wasFav ? "unfavorite_song" : "favorite_song", { songId: song.id });
   }, [favSongs]);
+  // Ask the web player to load and start a CarPlay playlist tap. Fetches the
+  // playlist's songs from the API (best-effort; no-op on network failure) and
+  // plays from the first track.
+  const playPlaylistFromNative = useCallback(
+    (playlistId: string) => {
+      (async () => {
+        try {
+          const res = await apiRequest("GET", `/api/playlists/${playlistId}/songs`);
+          const data: { song: Song & { album: Album } }[] = await res.json();
+          const songs: PlayerSong[] = data
+            .filter((d) => d.song && d.song.album)
+            .map((d) => ({ ...d.song, album: d.song.album } as PlayerSong));
+          if (songs.length > 0) {
+            playSong(songs[0], songs);
+          }
+        } catch {
+          // best-effort — network failure in the car is expected
+        }
+      })();
+    },
+    [playSong],
+  );
   const mediaControlsRef = useRef({
     togglePlay,
     next: handleNext,
@@ -1346,6 +1385,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     toggleShuffle,
     toggleRepeat,
     playAlbum: playAlbumFromNative,
+    playPlaylist: playPlaylistFromNative,
     toggleFavoriteCurrent,
   });
   useEffect(() => {
@@ -1358,6 +1398,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       toggleShuffle,
       toggleRepeat,
       playAlbum: playAlbumFromNative,
+      playPlaylist: playPlaylistFromNative,
       toggleFavoriteCurrent,
     };
   }, [
@@ -1369,6 +1410,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     toggleShuffle,
     toggleRepeat,
     playAlbumFromNative,
+    playPlaylistFromNative,
     toggleFavoriteCurrent,
   ]);
 
@@ -1521,6 +1563,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setNowPlayingRecents(nativeRecents);
   }, [nativeRecents, fanRecents]);
 
+  // Publish the CarPlay PLAYLISTS list (Collection tab "Playlists" row).
+  useEffect(() => {
+    if (!isNativeIOS) return;
+    if (fanPlaylists === undefined) return;
+    setNowPlayingPlaylists(nativePlaylists);
+  }, [nativePlaylists, fanPlaylists]);
+
   // Publish whether the now-playing track is favorited so CarPlay can render the
   // heart filled/outline. Re-fires on song change and on any favorites mutation.
   useEffect(() => {
@@ -1562,6 +1611,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // what the CarPlay scene hydrated from disk on a cold connect.
       if (nativeCatalog.length > 0) setNowPlayingCatalog(nativeCatalog);
       if (nativeRecents.length > 0) setNowPlayingRecents(nativeRecents);
+      if (nativePlaylists.length > 0) setNowPlayingPlaylists(nativePlaylists);
       setNowPlayingFavorite(!!song && favorites.has(song.id));
     };
   }, [
@@ -1574,6 +1624,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     currentIndex,
     nativeCatalog,
     nativeRecents,
+    nativePlaylists,
     favorites,
   ]);
 
@@ -1660,6 +1711,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           break;
         case "playAlbum":
           if (cmd.albumId) c.playAlbum(cmd.albumId, cmd.trackId, !!cmd.shuffle);
+          break;
+        case "playPlaylist":
+          if (cmd.playlistId) c.playPlaylist(cmd.playlistId);
           break;
         case "toggleShuffle":
           c.toggleShuffle();

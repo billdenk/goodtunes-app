@@ -11337,11 +11337,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className=\"text-[11px] rounded-full bg-slate-100 text-slate-700 px-2 py-0.5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">Selling through Shopify</div>"
   },
   {
@@ -11352,37 +11347,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<div className=\"text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-2\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<div className=\"text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "<span className=\"text-[13.5px] font-semibold text-slate-900\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<div className=\"text-[11px] uppercase tracking-wider text-slate-400 font-semibold\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "\"w-28 text-right tabular-nums text-[13.5px]\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className=\"text-[11px] text-slate-400 leading-snug -mt-1.5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<span className=\"text-slate-400 text-[11px]\">Per unit sold</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -11393,11 +11363,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "<span className=\"text-slate-400 text-[11.5px]\">Stock</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<div className=\"text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -11422,17 +11387,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<div className=\"text-[11px] uppercase tracking-wider text-slate-400 font-semibold pt-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "<span className=\"text-[13.5px] font-medium text-slate-900\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<span className=\"text-slate-400 text-[11px]\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -12358,11 +12313,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/VinylOrderPanel.tsx",
     "snippet": "<div className=\"text-[11.5px] tabular-nums text-slate-500\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/VinylOrderPanel.tsx",
-    "snippet": "<p className=\"text-[11px] text-slate-400\">Thresholds are industry defaults.</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -19432,11 +19382,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "return <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${map[status] ?? \"bg-slate-100 text-slate-700\"}`}>{status}</span>;"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/ArtistDashboard.tsx",
     "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-slate-400 text-[13px]\">No revenue in this window.</p>;"
   },
   {
@@ -20507,11 +20452,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/LabelDashboard.tsx",
-    "snippet": "return <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${map[status] ?? \"bg-slate-100 text-slate-700\"}`}>{status}</span>;"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/LabelDashboard.tsx",
     "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-slate-400 text-[13px]\">No revenue in this window.</p>;"
   },
   {
@@ -20668,11 +20608,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ManagerDashboard.tsx",
     "snippet": "{subtitle && <p className=\"text-slate-400 text-[12px] mt-0.5\">{subtitle}</p>}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/ManagerDashboard.tsx",
-    "snippet": "return <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${map[status] ?? \"bg-slate-100 text-slate-700\"}`}>{status}</span>;"
   },
   {
     "rule": "hardcoded-font-size",

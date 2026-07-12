@@ -40,6 +40,7 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setQueue", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setCatalog", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setRecents", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setPlaylists", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setFavorite", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clear", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clearLibrary", returnType: CAPPluginReturnPromise),
@@ -102,6 +103,11 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         // unit shows the app name/icon until the next song change.
         NowPlayingStore.shared.onResync = { [weak self] in
             self?.emitResync()
+        }
+        // CarPlay Collection Playlists row tap → ask JS to load + play the
+        // playlist. JS fetches the track list and starts playback.
+        NowPlayingStore.shared.onPlayPlaylist = { [weak self] playlistId in
+            self?.emitPlayPlaylist(playlistId: playlistId)
         }
     }
 
@@ -464,6 +470,23 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve()
     }
 
+    /// Mirror the fan's playlist list into the shared store so the CarPlay
+    /// Collection tab can render a "Playlists" drill-down row. Lock-screen-
+    /// agnostic — CarPlay only. Only playlist metadata (id/name/artwork) is
+    /// pushed; tracks are fetched by JS when the driver taps a row.
+    @objc func setPlaylists(_ call: CAPPluginCall) {
+        let raw = call.getArray("playlists", [String: Any].self) ?? []
+        let items: [CatalogPlaylist] = raw.map { dict in
+            CatalogPlaylist(
+                id: dict["id"] as? String ?? "",
+                name: dict["name"] as? String ?? "",
+                artworkUrl: dict["artworkUrl"] as? String
+            )
+        }
+        NowPlayingStore.shared.updatePlaylists(items)
+        call.resolve()
+    }
+
     /// Mirror the fan's "recently played" list into the shared store so the
     /// CarPlay Recents tab can render it. Lock-screen-agnostic — CarPlay only.
     @objc func setRecents(_ call: CAPPluginCall) {
@@ -602,5 +625,9 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func emitResync() {
         notifyListeners("remoteCommand", data: ["action": "resync"])
+    }
+
+    private func emitPlayPlaylist(playlistId: String) {
+        notifyListeners("remoteCommand", data: ["action": "playPlaylist", "playlistId": playlistId])
     }
 }

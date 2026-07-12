@@ -143,6 +143,9 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
         NowPlayingStore.shared.onFavoriteChanged = { [weak self] in
             self?.rebuildNowPlayingButtons()
         }
+        NowPlayingStore.shared.onPlaylistsChanged = { [weak self] in
+            self?.rebuildCollectionTemplate()
+        }
 
         // Root is the browsable tab bar; the system Now Playing surface rides on
         // top of it, matching how Apple Music / Spotify open in CarPlay (library
@@ -165,6 +168,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
         NowPlayingStore.shared.onQueueChanged = nil
         NowPlayingStore.shared.onRecentsChanged = nil
         NowPlayingStore.shared.onFavoriteChanged = nil
+        NowPlayingStore.shared.onPlaylistsChanged = nil
         self.tabBarTemplate = nil
         self.interfaceController = nil
     }
@@ -278,80 +282,76 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
 
     // MARK: - Collection (Artists + Songs)
 
-    /// Rebuild the Collection tab: an "Artists" section (each artist drills into
-    /// their albums) and a "Songs" section (flat, tap-to-play). Both derive from
-    /// the same catalog. The two sections share the head unit's item cap so an
-    /// oversized library can't trip validation.
+    /// Rebuild the Collection tab — Apple-Music-style Library layout:
+    ///   Section 1 (no header): "Playlists" row + "Songs" row — each pushes a
+    ///     sub-list derived from the fan's owned catalog.
+    ///   Section 2 "Albums": owned catalog albums as browse rows with artwork;
+    ///     tapping one pushes the album detail list (Play / Shuffle / tracklist).
     private func rebuildCollectionTemplate() {
         let catalog = NowPlayingStore.shared.catalog
+        let playlists = NowPlayingStore.shared.playlists
         var sections: [CPListSection] = []
 
-        if catalog.isEmpty {
+        if catalog.isEmpty && playlists.isEmpty {
             let placeholder = CPListItem(
                 text: "Your collection",
-                detailText: "Your artists and songs appear here"
+                detailText: "Your music appears here"
             )
             sections = [CPListSection(items: [placeholder])]
         } else {
-            let maxItems = CPListTemplate.maximumItemCount
-
-            // Artists — unique by name, sorted alphabetically.
-            // Sort key strips a leading "The " (case-sensitive) so e.g.
-            // "The Beatles" sorts under B, while "Van Halen" stays under V.
-            var order: [String] = []
-            var byArtist: [String: [CatalogAlbum]] = [:]
-            for album in catalog {
-                let name = album.artist.isEmpty ? "Unknown Artist" : album.artist
-                if byArtist[name] == nil { order.append(name) }
-                byArtist[name, default: []].append(album)
+            // --- Section 1: category navigator rows (Playlists + Songs) -------
+            let playlistCount = playlists.count
+            let playlistItem = CPListItem(
+                text: "Playlists",
+                detailText: playlistCount == 0 ? nil
+                    : playlistCount == 1 ? "1 playlist" : "\(playlistCount) playlists"
+            )
+            playlistItem.accessoryType = .disclosureIndicator
+            if let artUrl = playlists.first?.artworkUrl {
+                setThumbnail(playlistItem, urlString: artUrl)
+            } else {
+                playlistItem.setImage(UIImage(systemName: "music.note.list"))
             }
-            order.sort {
-                let keyA = $0.hasPrefix("The ") ? String($0.dropFirst(4)) : $0
-                let keyB = $1.hasPrefix("The ") ? String($1.dropFirst(4)) : $1
-                return keyA.localizedCaseInsensitiveCompare(keyB) == .orderedAscending
-            }
-            let artistCap = max(1, maxItems / 2)
-            let artistNames = order.count > artistCap ? Array(order.prefix(artistCap)) : order
-            let artistItems: [CPListItem] = artistNames.map { name in
-                let albums = byArtist[name] ?? []
-                let count = albums.count
-                let item = CPListItem(
-                    text: name,
-                    detailText: count == 1 ? "1 album" : "\(count) albums"
-                )
-                item.accessoryType = .disclosureIndicator
-                item.handler = { [weak self] _, completion in
-                    self?.pushArtist(name: name, albums: albums)
-                    completion()
-                }
-                setThumbnail(item, urlString: albums.first?.artworkUrl)
-                return item
-            }
-            if !artistItems.isEmpty {
-                sections.append(CPListSection(items: artistItems, header: "Artists", sectionIndexTitle: nil))
+            playlistItem.handler = { [weak self] _, completion in
+                self?.pushPlaylists()
+                completion()
             }
 
-            // Songs — flat, capped to whatever's left of the item budget.
-            let songBudget = max(0, maxItems - artistItems.count)
-            var songItems: [CPListItem] = []
-            outer: for album in catalog {
-                for track in album.tracks {
-                    if songItems.count >= songBudget { break outer }
-                    let detail = album.artist.isEmpty ? album.title : album.artist
-                    let item = CPListItem(text: track.title, detailText: detail)
+            let songCount = catalog.reduce(0) { $0 + $1.tracks.count }
+            let songsItem = CPListItem(
+                text: "Songs",
+                detailText: songCount == 0 ? nil
+                    : songCount == 1 ? "1 song" : "\(songCount) songs"
+            )
+            songsItem.accessoryType = .disclosureIndicator
+            songsItem.setImage(UIImage(systemName: "music.note"))
+            songsItem.handler = { [weak self] _, completion in
+                self?.pushSongs()
+                completion()
+            }
+
+            sections.append(CPListSection(items: [playlistItem, songsItem]))
+
+            // --- Section 2: "Albums" — owned catalog albums with artwork ------
+            if !catalog.isEmpty {
+                let maxItems = CPListTemplate.maximumItemCount
+                // Reserve the two category rows against the template item cap.
+                let albumCap = max(0, maxItems - 2)
+                let display = catalog.count > albumCap ? Array(catalog.prefix(albumCap)) : catalog
+                let albumItems: [CPListItem] = display.map { album in
+                    let item = CPListItem(
+                        text: album.title,
+                        detailText: album.artist.isEmpty ? nil : album.artist
+                    )
+                    item.accessoryType = .disclosureIndicator
                     item.handler = { [weak self] _, completion in
-                        NowPlayingStore.shared.requestPlayAlbum(
-                            albumId: album.id, trackId: track.id, shuffle: false
-                        )
-                        self?.presentNowPlaying()
+                        self?.pushAlbum(album)
                         completion()
                     }
                     setThumbnail(item, urlString: album.artworkUrl)
-                    songItems.append(item)
+                    return item
                 }
-            }
-            if !songItems.isEmpty {
-                sections.append(CPListSection(items: songItems, header: "Songs", sectionIndexTitle: nil))
+                sections.append(CPListSection(items: albumItems, header: "Albums", sectionIndexTitle: nil))
             }
         }
 
@@ -360,21 +360,64 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
         }
     }
 
-    /// Push a list of one artist's albums. Tapping an album pushes its detail.
-    private func pushArtist(name: String, albums: [CatalogAlbum]) {
-        let maxItems = CPListTemplate.maximumItemCount
-        let list = albums.count > maxItems ? Array(albums.prefix(maxItems)) : albums
-        let items: [CPListItem] = list.map { album in
-            let item = CPListItem(text: album.title, detailText: nil)
-            item.accessoryType = .disclosureIndicator
-            item.handler = { [weak self] _, completion in
-                self?.pushAlbum(album)
-                completion()
+    /// Push the Playlists sub-list. Each row sends a `playPlaylist` remote
+    /// command back to JS, which fetches the track list and starts playback.
+    private func pushPlaylists() {
+        let playlists = NowPlayingStore.shared.playlists
+        var sections: [CPListSection] = []
+
+        if playlists.isEmpty {
+            let placeholder = CPListItem(
+                text: "No playlists",
+                detailText: "Create a playlist in the GoodTunes app"
+            )
+            sections = [CPListSection(items: [placeholder])]
+        } else {
+            let maxItems = CPListTemplate.maximumItemCount
+            let display = playlists.count > maxItems ? Array(playlists.prefix(maxItems)) : playlists
+            let items: [CPListItem] = display.map { playlist in
+                let item = CPListItem(text: playlist.name, detailText: nil)
+                item.handler = { _, completion in
+                    NowPlayingStore.shared.requestPlayPlaylist(playlistId: playlist.id)
+                    completion()
+                }
+                setThumbnail(item, urlString: playlist.artworkUrl)
+                return item
             }
-            setThumbnail(item, urlString: album.artworkUrl)
-            return item
+            sections = [CPListSection(items: items)]
         }
-        let template = CPListTemplate(title: name, sections: [CPListSection(items: items)])
+
+        let template = CPListTemplate(title: "Playlists", sections: sections)
+        interfaceController?.pushTemplate(template, animated: true, completion: nil)
+    }
+
+    /// Push the Songs sub-list — all tracks across the owned catalog, flat.
+    private func pushSongs() {
+        let catalog = NowPlayingStore.shared.catalog
+        let maxItems = CPListTemplate.maximumItemCount
+        var items: [CPListItem] = []
+
+        outer: for album in catalog {
+            for track in album.tracks {
+                if items.count >= maxItems { break outer }
+                let detail = album.artist.isEmpty ? album.title : album.artist
+                let item = CPListItem(text: track.title, detailText: detail)
+                item.handler = { [weak self] _, completion in
+                    NowPlayingStore.shared.requestPlayAlbum(
+                        albumId: album.id, trackId: track.id, shuffle: false
+                    )
+                    self?.presentNowPlaying()
+                    completion()
+                }
+                setThumbnail(item, urlString: album.artworkUrl)
+                items.append(item)
+            }
+        }
+
+        let sections: [CPListSection] = items.isEmpty
+            ? [CPListSection(items: [CPListItem(text: "No songs", detailText: "Your library is empty")])]
+            : [CPListSection(items: items)]
+        let template = CPListTemplate(title: "Songs", sections: sections)
         interfaceController?.pushTemplate(template, animated: true, completion: nil)
     }
 

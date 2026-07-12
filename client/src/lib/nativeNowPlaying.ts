@@ -123,10 +123,24 @@ export type RemoteCommand =
   | { action: "cycleRepeat" }
   /** CarPlay connected — re-publish metadata + playback state + queue +
    *  catalog (iOS resets the now-playing info around scene connect). */
-  | { action: "resync" };
+  | { action: "resync" }
+  /** The driver tapped a playlist row in the CarPlay Collection tab. JS should
+   *  fetch + play the playlist identified by `playlistId`. */
+  | { action: "playPlaylist"; playlistId: string };
 
 interface PluginListenerHandle {
   remove: () => Promise<void>;
+}
+
+/** A browsable playlist published to CarPlay (iOS) — the fan's playlists from
+ *  their GoodTunes library. Only metadata is pushed; tracks are fetched on
+ *  demand by JS when the driver taps a row (via a `playPlaylist` command). */
+export interface NowPlayingPlaylist {
+  /** Stable playlist id echoed back on a `playPlaylist` command. */
+  id: string;
+  name: string;
+  /** Artwork URL for the browse row thumbnail; omitted when unavailable. */
+  artworkUrl?: string;
 }
 
 /** A single "recently played" entry published to CarPlay (iOS) — an owned
@@ -164,6 +178,7 @@ interface NowPlayingPlugin {
   setQueue(options: { items: NowPlayingQueueItem[]; currentIndex: number }): Promise<void>;
   setCatalog(options: { albums: NowPlayingCatalogAlbum[] }): Promise<void>;
   setRecents(options: { items: NowPlayingRecentItem[] }): Promise<void>;
+  setPlaylists(options: { playlists: NowPlayingPlaylist[] }): Promise<void>;
   setFavorite(options: { isFavorite: boolean }): Promise<void>;
   clear(): Promise<void>;
   clearLibrary(): Promise<void>;
@@ -541,6 +556,16 @@ export function setNowPlayingCatalog(albums: NowPlayingCatalogAlbum[]): void {
 export function setNowPlayingRecents(items: NowPlayingRecentItem[]): void {
   if (!available()) return;
   NowPlaying.setRecents({ items }).catch(() => {});
+}
+
+/**
+ * Publish the fan's playlist list so CarPlay (iOS) can render the Collection
+ * tab's "Playlists" category row and sub-list. Only playlist metadata (id/
+ * name/artwork) is sent — tracks are fetched by JS on demand when the driver
+ * taps a row (a `playPlaylist` remote command fires back). No-op off-native. */
+export function setNowPlayingPlaylists(playlists: NowPlayingPlaylist[]): void {
+  if (!available()) return;
+  NowPlaying.setPlaylists({ playlists }).catch(() => {});
 }
 
 /**

@@ -33,6 +33,16 @@ struct CatalogAlbum {
     let tracks: [CatalogTrack]
 }
 
+/// A browsable playlist in the CarPlay Collection tab. Kept flat — only what
+/// a CarPlay list row needs. Tapping one sends a `playPlaylist` remote command
+/// back to JS, which fetches + plays the playlist without needing pre-pushed
+/// track data.
+struct CatalogPlaylist {
+    let id: String
+    let name: String
+    let artworkUrl: String?
+}
+
 /// A single "recently played" entry mirrored from the web player (Recents
 /// tab). Tapping it asks JS to play `albumId` — starting at `trackId` when the
 /// recent was a specific track, else the album from the top. Kept flat — only
@@ -85,6 +95,10 @@ final class NowPlayingStore {
     /// The fan's "recently played" list (albums + tracks), mirrored from JS.
     /// Empty until the phone WebView publishes it.
     private(set) var recents: [RecentEntry] = []
+    /// The fan's playlists, mirrored from JS. Only metadata (id/name/artwork)
+    /// is pushed — tracks are loaded on demand when the driver taps a playlist
+    /// row, which sends a `playPlaylist` command back to JS.
+    private(set) var playlists: [CatalogPlaylist] = []
     /// Whether the *current* now-playing track is one of the fan's favorites.
     /// Drives the CarPlay Now Playing heart button's filled/outline state.
     private(set) var isCurrentFavorite: Bool = false
@@ -136,9 +150,11 @@ final class NowPlayingStore {
         struct Album: Codable { let id: String; let title: String; let artist: String; let artworkUrl: String?; let tracks: [Track] }
         struct Recent: Codable { let albumId: String; let trackId: String?; let title: String; let subtitle: String; let artworkUrl: String? }
         struct QueueItem: Codable { let id: String; let title: String; let artist: String; let artworkUrl: String?; let duration: Double }
+        struct Playlist: Codable { let id: String; let name: String; let artworkUrl: String? }
         var catalog: [Album] = []
         var recents: [Recent] = []
         var queue: [QueueItem] = []
+        var playlists: [Playlist] = []
         var currentIndex: Int = 0
         var isFavorite: Bool = false
         var metaTitle: String = ""
@@ -186,6 +202,14 @@ final class NowPlayingStore {
     /// the main thread whenever the current track's favorite state changes so
     /// the Now Playing heart button can be rebuilt (outline ↔ filled).
     var onFavoriteChanged: (() -> Void)?
+    /// Set by `CarPlaySceneDelegate` while a head unit is connected — invoked on
+    /// the main thread whenever the playlists list changes so the Collection
+    /// Playlists sub-list can refresh.
+    var onPlaylistsChanged: (() -> Void)?
+    /// Set by `NowPlayingPlugin` on load — forwards a CarPlay playlist tap back
+    /// to JS as a `playPlaylist` remote command with the playlist id. JS fetches
+    /// the tracks and starts playing. nil when the plugin isn't loaded.
+    var onPlayPlaylist: ((String) -> Void)?
 
     /// Replace the mirrored queue and notify any connected CarPlay scene.
     func updateQueue(_ items: [NowPlayingQueueEntry], currentIndex: Int) {
@@ -232,6 +256,20 @@ final class NowPlayingStore {
             self?.onFavoriteChanged?()
             self?.saveSnapshot()
         }
+    }
+
+    /// Replace the mirrored playlists list and notify any connected CarPlay scene.
+    func updatePlaylists(_ items: [CatalogPlaylist]) {
+        DispatchQueue.main.async { [weak self] in
+            self?.playlists = items
+            self?.onPlaylistsChanged?()
+            self?.saveSnapshot()
+        }
+    }
+
+    /// Ask the web player to load and play `playlistId` (CarPlay playlist tap).
+    func requestPlayPlaylist(playlistId: String) {
+        onPlayPlaylist?(playlistId)
     }
 
     /// Ask the web player to jump to `index` in the queue (CarPlay Up Next tap).
@@ -325,6 +363,9 @@ final class NowPlayingStore {
         snap.recents = recents.map {
             Snapshot.Recent(albumId: $0.albumId, trackId: $0.trackId, title: $0.title, subtitle: $0.subtitle, artworkUrl: $0.artworkUrl)
         }
+        snap.playlists = playlists.map {
+            Snapshot.Playlist(id: $0.id, name: $0.name, artworkUrl: $0.artworkUrl)
+        }
         snap.queue = queue.map {
             Snapshot.QueueItem(id: $0.id, title: $0.title, artist: $0.artist, artworkUrl: $0.artworkUrl, duration: $0.duration)
         }
@@ -361,6 +402,9 @@ final class NowPlayingStore {
         }
         recents = snap.recents.map {
             RecentEntry(albumId: $0.albumId, trackId: $0.trackId, title: $0.title, subtitle: $0.subtitle, artworkUrl: $0.artworkUrl)
+        }
+        playlists = snap.playlists.map {
+            CatalogPlaylist(id: $0.id, name: $0.name, artworkUrl: $0.artworkUrl)
         }
         queue = snap.queue.map {
             NowPlayingQueueEntry(id: $0.id, title: $0.title, artist: $0.artist, artworkUrl: $0.artworkUrl, duration: $0.duration)
@@ -412,6 +456,7 @@ final class NowPlayingStore {
             self.catalog = []
             self.recents = []
             self.queue = []
+            self.playlists = []
             self.currentIndex = 0
             self.isCurrentFavorite = false
             self.metaTitle = ""
@@ -425,6 +470,7 @@ final class NowPlayingStore {
             self.onRecentsChanged?()
             self.onQueueChanged?()
             self.onFavoriteChanged?()
+            self.onPlaylistsChanged?()
         }
     }
 }
