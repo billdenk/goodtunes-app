@@ -5328,13 +5328,13 @@ function SkuRow({
           const blockLoss = econ.profit !== null && econ.profit < 0;
           const blockProfitLabel =
             econ.profit === null
-              ? "$0.00"
+              ? "—"
               : econ.profit < 0
                 ? `-${dollars(Math.abs(econ.profit))}`
                 : dollars(econ.profit);
           const blockTotalLabel =
             econ.total === null
-              ? "$0.00"
+              ? "—"
               : econ.total < 0
                 ? `-${dollars(Math.abs(econ.total))}`
                 : dollars(econ.total);
@@ -5495,11 +5495,13 @@ function SkuRow({
                   <span
                     className={[
                       "tabular-nums text-base font-semibold",
-                      blockProfitPending
-                        ? "text-slate-300"
-                        : blockLoss
-                          ? "text-[color:var(--brand-pink)]"
-                          : "text-slate-900",
+                      blockNeedsQuote && blockProfitPending
+                        ? "text-[color:var(--brand-blue)]"
+                        : blockProfitPending
+                          ? "text-slate-300"
+                          : blockLoss
+                            ? "text-[color:var(--brand-pink)]"
+                            : "text-slate-900",
                     ].join(" ")}
                     data-testid={`text-profit-${idSuffix}`}
                   >
@@ -5614,11 +5616,13 @@ function SkuRow({
                   <span
                     className={[
                       "tabular-nums text-base font-semibold",
-                      econ.total === null
-                        ? "text-slate-300"
-                        : econ.total < 0
-                          ? "text-[color:var(--brand-pink)]"
-                          : "text-slate-900",
+                      blockNeedsQuote && econ.total === null
+                        ? "text-[color:var(--brand-blue)]"
+                        : econ.total === null
+                          ? "text-slate-300"
+                          : econ.total < 0
+                            ? "text-[color:var(--brand-pink)]"
+                            : "text-slate-900",
                     ].join(" ")}
                     data-testid={`text-total-${idSuffix}`}
                   >

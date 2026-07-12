@@ -77,10 +77,23 @@ export function BreakEvenBar({
   }
 
   // No live, priced press tier yet — nothing to break even against.
-  if (!data || !data.hasPressTier || !data.computable || data.vinylBreakEvenUnits == null) {
+  if (!data || !data.computable || data.vinylBreakEvenUnits == null) {
     if (variant === "compact") {
       return <span className={`text-xs ${t.label}`} data-testid={`break-even-na-${albumId}`}>—</span>;
     }
+    // Tier is selected but the press hasn't entered pricing rungs yet.
+    // Only show this when pressName is set — hasPressTier+!computable can
+    // also fire when retail is missing, which is the artist's action item.
+    if (data?.pressName) {
+      const pressLabel = data.pressName;
+      return (
+        <div className={`flex items-center gap-1.5 text-xs ${t.label} ${className}`} data-testid={`break-even-na-${albumId}`}>
+          <Hourglass className="w-3.5 h-3.5 shrink-0 opacity-70" aria-hidden="true" />
+          <span>Break-even fills in once {pressLabel} adds pricing for this tier.</span>
+        </div>
+      );
+    }
+    // No tier selected at all.
     return (
       <div className={`flex items-center gap-1.5 text-xs ${t.label} ${className}`} data-testid={`break-even-na-${albumId}`}>
         <Hourglass className="w-3.5 h-3.5 shrink-0 opacity-70" aria-hidden="true" />

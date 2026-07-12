@@ -101,6 +101,10 @@ export type AlbumBreakEven = BreakEvenResult & {
   albumId: string;
   // False when the album has no live, priced press tier.
   hasPressTier: boolean;
+  // Name of the press whose catalog is missing pricing rungs, when a
+  // tier IS selected but has no confirmed price ladder. Null when there
+  // is no tier at all, or when the tier is fully priced and computable.
+  pressName: string | null;
   format: string | null;
   tierName: string | null;
   // Paid, un-refunded format units sold so far.

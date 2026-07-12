@@ -15,12 +15,17 @@ import { computeBreakEven, type AlbumBreakEven } from "@shared/breakEven";
 
 export type { AlbumBreakEven };
 
-function emptyBreakEven(albumId: string, unitsSold: number): AlbumBreakEven {
+function emptyBreakEven(
+  albumId: string,
+  unitsSold: number,
+  opts: { hasPressTier?: boolean; pressName?: string | null; tierName?: string | null; format?: string | null } = {},
+): AlbumBreakEven {
   return {
     albumId,
-    hasPressTier: false,
-    format: null,
-    tierName: null,
+    hasPressTier: opts.hasPressTier ?? false,
+    pressName: opts.pressName ?? null,
+    format: opts.format ?? null,
+    tierName: opts.tierName ?? null,
     unitsSold,
     vinylRetailCents: null,
     pressFloorUnits: 0,
@@ -33,6 +38,40 @@ function emptyBreakEven(albumId: string, unitsSold: number): AlbumBreakEven {
     vinylBreakEvenUnits: null,
     goodDeed: null,
   };
+}
+
+// When albumPressTierFromRow returns null (empty/all-zero price ladder),
+// check whether a press_color_tiers row IS linked to the album's SKU
+// (tier selected but unpriced) and return the press name for a helpful
+// client message. Returns null when no tier row exists at all.
+async function resolveUnpricedPressTierInfo(
+  albumId: string,
+): Promise<{ pressName: string; tierName: string; format: string } | null> {
+  const r = await db.execute<{
+    press_name: string;
+    tier_name: string;
+    format: string;
+  }>(sql`
+    SELECT m.name AS press_name,
+           pct.name AS tier_name,
+           pct.format AS format
+    FROM album_skus s
+    JOIN press_color_tiers pct
+      ON pct.id = s.press_tier_id
+      OR (s.press_tier_id IS NULL
+          AND s.press_id IS NOT NULL
+          AND pct.press_id = s.press_id
+          AND pct.format   = s.format
+          AND pct.name     = s.vinyl_color_tier)
+    JOIN manufacturers m ON m.id = pct.press_id
+    WHERE s.album_id = ${albumId}
+    ORDER BY (s.press_tier_id IS NOT NULL) DESC, (s.active = true) DESC,
+             s.created_at DESC NULLS LAST, s.id DESC
+    LIMIT 1
+  `);
+  const row = ((r as any).rows ?? [])[0];
+  if (!row) return null;
+  return { pressName: String(row.press_name), tierName: String(row.tier_name), format: String(row.format) };
 }
 
 async function unitsSoldForAlbum(albumId: string): Promise<number> {
@@ -54,7 +93,24 @@ export async function computeAlbumBreakEven(albumId: string): Promise<AlbumBreak
   // POR for the same tier.
   const tier =
     (await resolveAlbumSkuPressTier(albumId)) ?? (await resolveAlbumPressTier(albumId));
-  if (!tier) return emptyBreakEven(albumId, unitsSold);
+  if (!tier) {
+    // Distinguish "no tier selected" from "tier selected but unpriced".
+    // The resolvers above return null for BOTH cases because
+    // albumPressTierFromRow rejects rows with no confirmed price rungs.
+    // When an unpriced tier row exists, surface hasPressTier:true + the
+    // press name so the client can render an actionable message instead
+    // of the misleading "save a priced press tier" copy.
+    const unpricedInfo = await resolveUnpricedPressTierInfo(albumId);
+    if (unpricedInfo) {
+      return emptyBreakEven(albumId, unitsSold, {
+        hasPressTier: true,
+        pressName: unpricedInfo.pressName,
+        tierName: unpricedInfo.tierName,
+        format: unpricedInfo.format,
+      });
+    }
+    return emptyBreakEven(albumId, unitsSold);
+  }
 
   // Vinyl SKU for the picked tier's format — retail price + the track
   // count snapshot locked at last save (falls back to the live song
@@ -137,6 +193,7 @@ export async function computeAlbumBreakEven(albumId: string): Promise<AlbumBreak
   return {
     albumId,
     hasPressTier: true,
+    pressName: null,
     format: tier.format,
     tierName: tier.tierName,
     unitsSold,
