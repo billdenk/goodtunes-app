@@ -295,13 +295,20 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
         } else {
             let maxItems = CPListTemplate.maximumItemCount
 
-            // Artists — unique by name, first-appearance order.
+            // Artists — unique by name, sorted alphabetically.
+            // Sort key strips a leading "The " (case-sensitive) so e.g.
+            // "The Beatles" sorts under B, while "Van Halen" stays under V.
             var order: [String] = []
             var byArtist: [String: [CatalogAlbum]] = [:]
             for album in catalog {
                 let name = album.artist.isEmpty ? "Unknown Artist" : album.artist
                 if byArtist[name] == nil { order.append(name) }
                 byArtist[name, default: []].append(album)
+            }
+            order.sort {
+                let keyA = $0.hasPrefix("The ") ? String($0.dropFirst(4)) : $0
+                let keyB = $1.hasPrefix("The ") ? String($1.dropFirst(4)) : $1
+                return keyA.localizedCaseInsensitiveCompare(keyB) == .orderedAscending
             }
             let artistCap = max(1, maxItems / 2)
             let artistNames = order.count > artistCap ? Array(order.prefix(artistCap)) : order

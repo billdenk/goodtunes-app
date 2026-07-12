@@ -184,11 +184,14 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         switch reason {
         case .newDeviceAvailable:
             // A new audio output connected (CarPlay head unit, Bluetooth, headphones).
-            // Re-activate the session on the new route so the WKWebView <audio>
-            // element doesn't stall mid-track. A new device appearing is a
-            // legitimate single activation point — the same class as an
-            // interruption ending — NOT a per-tick metadata/playback push.
-            configureAudioSession(activate: true)
+            // The audio session is ALREADY active (set in load() and only
+            // re-activated after genuine interruptions). Calling setActive(true)
+            // here races WKWebView's own media session at the moment the car head
+            // unit takes over the audio bus, producing a MEDIA_ERR_DECODE / stall
+            // at t=0.0 before the first track starts. Only repair the category
+            // in case something drifted — never deactivate/reactivate the session
+            // on a route change.
+            ensurePlaybackCategory()
             // Give the new route ~300 ms to settle (driver stack negotiation),
             // then ask the web player to resume. Without this the <audio>
             // element can land in readyState=4 / stalled / emptied when the

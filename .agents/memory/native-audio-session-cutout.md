@@ -48,35 +48,35 @@ it can deactivate/interrupt the other session. Session config must happen ONCE
 - Keep the scaffolding INERT by default — logging only, no per-tick diag events,
   native pushes unchanged unless the operator flips the switch.
 
-**The native fix (IMPLEMENTED — needs a Codemagic `ios-testflight` rebuild to
-reach a device; unverified until Bill confirms on-device with the kill-switch
-OFF):** `setActive(true)` now happens ONCE on `load()` and again only when a
-genuine `AVAudioSession` interruption ends. The `~1Hz` `setPlaybackState`
-re-activation was deleted outright; `setMetadata` + a routeChange observer now
-call `ensurePlaybackCategory()` (setCategory only-if-drifted, NEVER setActive) as
-a safety net for a WKWebView category reset. An interruption observer re-activates
-on `.ended` and emits `play` if iOS sets `.shouldResume`. `.playback` category +
-`UIBackgroundModes=audio` (unchanged) is what keeps background/lock playback alive
-— NOT repeated activation. Keep the JS kill-switch INERT (OFF) so Bill can verify
-the native fix works with it OFF once the new build lands.
+**The native fix (IMPLEMENTED):** `setActive(true)` now happens ONCE on `load()`
+and again only when a genuine `AVAudioSession` interruption ends. The `~1Hz`
+`setPlaybackState` re-activation was deleted outright; `setMetadata` + a
+routeChange observer now call `ensurePlaybackCategory()` (setCategory only-if-
+drifted, NEVER setActive) as a safety net for a WKWebView category reset. An
+interruption observer re-activates on `.ended` and emits `play` if iOS sets
+`.shouldResume`.
 
-**Do NOT ever re-add `setActive(true)` on a per-tick metadata/playback push** —
-that is the proven cutout. The two legitimate re-activations are: (1) interruption-end,
-and (2) `.newDeviceAvailable` route change (CarPlay/BT head unit connecting — this is
-NOT a per-tick push). For CarPlay, the WKWebView `<audio>` stalls at readyState=4
-(full buffer) when the audio route changes to the car head-unit because the session
-is no longer active on the new output. The fix: `handleRouteChange` detects
-`.newDeviceAvailable`, calls `configureAudioSession(activate: true)` once, then after
-a 300ms route-settle delay emits `play` so the web player resumes.
+**SECOND CONFIRMED BUG: `.newDeviceAvailable` route change also calls
+`setActive(true)` and causes MEDIA_ERR_DECODE at t=0.0 on CarPlay connect.**
+On-device (build 93, kill switch OFF): MEDIA_ERR_DECODE at exactly t=0.0, rs=1,
+ns=1 fires when CarPlay head unit first connects — the same `setActive(true)` race,
+but this time at the very first track load rather than mid-track. After the decode
+error, the 300ms `emit("play")` fires and playback recovers fine. Fix: replace
+`configureAudioSession(activate: true)` with `ensurePlaybackCategory()` in the
+`.newDeviceAvailable` branch. Session is already active from `load()` — a route
+change means the audio output changed, NOT that the session needs deactivating/
+reactivating. Keep the 300ms `emit("play")` delay for route-settle before resuming.
+
+**RULE: NEVER call `setActive(true)` in `handleRouteChange`.** The two and ONLY
+two legitimate `setActive(true)` call sites are:
+1. `load()` — initial session setup.
+2. `handleInterruption(.ended)` — after a genuine OS interruption (phone call, Siri).
+All other sites use `ensurePlaybackCategory()` (category repair, no activation).
 
 **Kill-switch ON is NOT a safe permanent setting — it desyncs CarPlay + lock
 screen (expected, not a new bug).** Suppressing the metadata + playback-state
 pushes ALSO starves `MPNowPlayingInfoCenter`, which feeds BOTH the lock-screen
-scrubber AND the CarPlay Now Playing template + its transport buttons. Observed
-on-device with the switch ON: CarPlay shows the WRONG/stale track (or a blank
-music-note placeholder) while the phone plays the real one, and tapping play on
-CarPlay does nothing (state never reflects back). So on the diagnostic build it's
-a trade-off — ON = audio plays but CarPlay/lock go stale; OFF = CarPlay syncs but
-the ~2s cutout returns. The native fix removes the trade-off: switch OFF gives
-BOTH. Check `BUILD.commit` in the overlay before interpreting — if it isn't the
-fix commit, the binary predates the fix (iOS build is a MANUAL Codemagic step).
+scrubber AND the CarPlay Now Playing template + its transport buttons. Kill-switch
+ON = audio plays but CarPlay/lock go stale. OFF = CarPlay syncs and (after the
+route-change fix) audio plays without stalling. Check `BUILD.commit` in the overlay
+before interpreting — if it isn't the fix commit, the binary predates the fix.
