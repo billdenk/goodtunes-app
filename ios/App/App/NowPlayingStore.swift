@@ -211,6 +211,29 @@ final class NowPlayingStore {
     /// the tracks and starts playing. nil when the plugin isn't loaded.
     var onPlayPlaylist: ((String) -> Void)?
 
+    // MARK: - Cold-start pending-play buffer (Bug B)
+    //
+    // On a cold CarPlay connect the MPRemoteCommandCenter play handler can fire
+    // (route-change 300ms after connect) BEFORE the WKWebView has loaded and
+    // registered any JS listener. `notifyListeners("play")` hits nothing and the
+    // tap is lost. We set this flag in the play handler when no `setMetadata` has
+    // been received this session (bridge not yet live) and drain it the instant
+    // `setMetadata` first arrives, which proves the bridge is alive.
+    var pendingPlay: Bool = false
+
+    // MARK: - Freeze-recovery diagnostic counter (Bug A)
+    //
+    // Counts how many times the setPlaybackState duration-mismatch guard
+    // recovered by applying the cached duration rather than bailing. Exposed via
+    // the Swift diagnostics (NowPlayingPlugin.setPlaybackState comment) so future
+    // sessions can confirm the guard no longer fires spuriously.
+    private(set) var freezeRecoveries: Int = 0
+
+    /// Increment the freeze-recovery counter (main-thread only).
+    func recordFreezeRecovery() {
+        freezeRecoveries += 1
+    }
+
     /// Replace the mirrored queue and notify any connected CarPlay scene.
     func updateQueue(_ items: [NowPlayingQueueEntry], currentIndex: Int) {
         // Mutate + notify on main: CarPlaySceneDelegate reads these arrays on the

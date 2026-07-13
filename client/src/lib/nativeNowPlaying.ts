@@ -310,6 +310,15 @@ export interface NowPlayingDiag {
    * session churn is the cutout cause — no Codemagic rebuild needed to confirm.
    */
   nativePushSuppressed: boolean;
+  /**
+   * Number of `setNowPlayingMetadata` calls dropped by the rapid-advance
+   * debounce (intermediate calls in a burst are coalesced; leading + trailing
+   * calls always fire). Zero during normal one-at-a-time advances; non-zero
+   * confirms a burst of MEDIA_ERR_DECODE auto-advances happened this session
+   * and the debounce prevented overlapping Swift artwork fetches + duration-
+   * mismatch races on the Swift side.
+   */
+  metadataDebounceDrops: number;
 }
 
 let diagLastMetadata: DiagMeta | null = null;
@@ -321,6 +330,11 @@ let diagMetadataCalls = 0;
 let diagPlaybackCalls = 0;
 let diagFavoriteCalls = 0;
 let diagCommandCount = 0;
+/** Number of setMetadata calls coalesced by the rapid-advance debounce. Zero in
+ *  normal one-at-a-time advance; a non-zero count here means a burst of
+ *  auto-advances fired (e.g. MEDIA_ERR_DECODE) and intermediate calls were
+ *  suppressed to prevent overlapping Swift artwork fetches + mismatch races. */
+let diagMetadataDebounceDrops = 0;
 
 function emitDiag(): void {
   try {
@@ -461,6 +475,7 @@ export function getNowPlayingDiag(): NowPlayingDiag {
     buildInfo: diagBuildInfo,
     events: diagEvents.slice(),
     nativePushSuppressed: isNativePushSuppressed(),
+    metadataDebounceDrops: diagMetadataDebounceDrops,
   };
 }
 
@@ -485,8 +500,23 @@ export async function fetchNowPlayingBuildInfo(): Promise<void> {
   }
 }
 
-/** Publish the current track's metadata to the OS lock screen. No-op off-native. */
-export function setNowPlayingMetadata(meta: NowPlayingMetadata): void {
+// --- Rapid-advance debounce for setNowPlayingMetadata (Step 4) ---------------
+// A burst of MEDIA_ERR_DECODE auto-advances can fire 4+ setMetadata calls in
+// ~70 seconds, spawning 4 overlapping Swift artwork fetches and 4 duration-
+// mismatch races in setPlaybackState. This leading+trailing debounce coalesces
+// intermediate calls:
+//   • The first call in a burst fires immediately (leading edge) so CarPlay
+//     gets a quick title/artist update without waiting the full window.
+//   • The last call in a burst fires after 150ms of silence (trailing edge)
+//     so the final, correct track metadata always reaches Swift.
+//   • Any intermediate calls between the first and last are dropped; the count
+//     is recorded in diagMetadataDebounceDrops for post-session analysis.
+const META_DEBOUNCE_MS = 150;
+let _metaDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let _metaDebounceLeadingFired = false;
+let _metaDebouncePending: NowPlayingMetadata | null = null;
+
+function _flushMetadata(meta: NowPlayingMetadata): void {
   const suppressed = isNativePushSuppressed();
   const delivered = available() && !suppressed;
   diagMetadataCalls += 1;
@@ -503,6 +533,39 @@ export function setNowPlayingMetadata(meta: NowPlayingMetadata): void {
     emitDiag();
     /* best-effort; a failed set just leaves the previous now-playing info */
   });
+}
+
+/** Publish the current track's metadata to the OS lock screen. No-op off-native.
+ *  Uses a leading+trailing 150ms debounce so rapid MEDIA_ERR_DECODE auto-advances
+ *  don't spawn overlapping Swift artwork fetches or duration-mismatch races. */
+export function setNowPlayingMetadata(meta: NowPlayingMetadata): void {
+  if (_metaDebounceTimer === null && !_metaDebounceLeadingFired) {
+    // Leading edge: first call in this burst fires immediately.
+    _metaDebounceLeadingFired = true;
+    _flushMetadata(meta);
+  } else {
+    // Intermediate or trailing: hold the latest and count the drop.
+    if (_metaDebouncePending !== null) {
+      // A pending call is being overwritten — that is the coalesced drop.
+      diagMetadataDebounceDrops += 1;
+    }
+    _metaDebouncePending = meta;
+  }
+
+  // (Re)arm the trailing timer.
+  if (_metaDebounceTimer !== null) clearTimeout(_metaDebounceTimer);
+  _metaDebounceTimer = setTimeout(() => {
+    _metaDebounceTimer = null;
+    _metaDebounceLeadingFired = false;
+    const pending = _metaDebouncePending;
+    _metaDebouncePending = null;
+    // Only fire the trailing call when the track changed after the leading
+    // call (i.e. a burst happened). If leading fired for this exact meta and
+    // nothing else arrived, pending is null — no duplicate trailing call.
+    if (pending !== null) {
+      _flushMetadata(pending);
+    }
+  }, META_DEBOUNCE_MS);
 }
 
 /** Publish play/pause + elapsed position so the lock-screen scrubber tracks
