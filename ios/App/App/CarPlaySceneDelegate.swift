@@ -319,7 +319,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
             if let artUrl = playlists.first?.artworkUrl {
                 setThumbnail(playlistItem, urlString: artUrl)
             } else {
-                playlistItem.setImage(UIImage(systemName: "music.note.list"))
+                playlistItem.setImage(listRowImage(systemName: "music.note.list"))
             }
             playlistItem.handler = { [weak self] _, completion in
                 self?.pushPlaylists()
@@ -333,7 +333,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
                     : songCount == 1 ? "1 song" : "\(songCount) songs"
             )
             songsItem.accessoryType = .disclosureIndicator
-            songsItem.setImage(UIImage(systemName: "music.note"))
+            songsItem.setImage(listRowImage(systemName: "music.note"))
             songsItem.handler = { [weak self] _, completion in
                 self?.pushSongs()
                 completion()
@@ -430,6 +430,20 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
         interfaceController?.pushTemplate(template, animated: true, completion: nil)
     }
 
+    // MARK: - List-row glyphs
+
+    /// Render an SF Symbol for use as a CPListItem image. Unlike CarPlay
+    /// buttons and tab images, list-row images are drawn as-is (template
+    /// black) — the system does NOT auto-tint them, so on the dark CarPlay
+    /// background they're nearly invisible until the row highlights. Bake in
+    /// an explicit white tint at a consistent size/weight so every action row
+    /// glyph matches the play iconography used elsewhere.
+    private func listRowImage(systemName: String) -> UIImage? {
+        let config = UIImage.SymbolConfiguration(pointSize: 22, weight: .semibold)
+        return UIImage(systemName: systemName, withConfiguration: config)?
+            .withTintColor(.white, renderingMode: .alwaysOriginal)
+    }
+
     // MARK: - Album detail
 
     /// Push an album detail list: a Play row and a Shuffle row, then the
@@ -440,14 +454,14 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
 
         // Play + Shuffle action rows.
         let playItem = CPListItem(text: "Play", detailText: nil)
-        playItem.setImage(UIImage(systemName: "play.fill"))
+        playItem.setImage(listRowImage(systemName: "play.fill"))
         playItem.handler = { [weak self] _, completion in
             NowPlayingStore.shared.requestPlayAlbum(albumId: album.id, trackId: nil, shuffle: false)
             self?.presentNowPlaying()
             completion()
         }
         let shuffleItem = CPListItem(text: "Shuffle", detailText: nil)
-        shuffleItem.setImage(UIImage(systemName: "shuffle"))
+        shuffleItem.setImage(listRowImage(systemName: "shuffle"))
         shuffleItem.handler = { [weak self] _, completion in
             NowPlayingStore.shared.requestPlayAlbum(albumId: album.id, trackId: nil, shuffle: true)
             self?.presentNowPlaying()
