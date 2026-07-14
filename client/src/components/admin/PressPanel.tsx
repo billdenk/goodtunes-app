@@ -622,6 +622,13 @@ export function PressPanel({
           </div>
         )}
 
+        {/* ── Completed Art card grid (Task #2705) ────────────────────
+            Leads the Art tab per Bill's mockup: download the templates,
+            drop the finished art on the cards, and the system validates
+            each file. The plant tooling below (vendor readout, master
+            checks, legacy art preflight, print PDFs) supports it. */}
+        <CompletedTemplatePanel albumId={albumId} vendor={vendorId} />
+
         {/* ── Single Press-tab vendor picker (Task #597) ──────────────
             Vendor is the only field lifted to the top of the tab —
             size / RPM / template / side vary per file and stay on
@@ -831,9 +838,6 @@ export function PressPanel({
 
         {/* ── Print-ready PDFs (Task #327, moved from Sell) ──────────── */}
         <PrintPdfsPanel albumId={albumId} vendor={vendorId} pressName={resolvedPressName} />
-
-        {/* ── Completed-template confirmation (Task #2109) ───────────── */}
-        <CompletedTemplatePanel albumId={albumId} vendor={vendorId} />
 
         {/* ── Press print templates (Task #2115) ─────────────────────── */}
         {(() => {

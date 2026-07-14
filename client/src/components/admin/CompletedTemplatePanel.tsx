@@ -1,7 +1,7 @@
 // Task #2109 → rebuilt for Task #2705 — "Completed Art" card grid.
 //
-// Mounted in the Art sub-tab of AdminAlbum (Physical → Art), below the
-// source-art preflight surfaces. One card per print element the chosen
+// Mounted in the Art sub-tab of AdminAlbum (Physical → Art), leading the
+// tab per Bill's mockup. One card per print element the chosen
 // package needs (Cover/jacket, Center labels, Booklet when the package
 // includes one, printed inner sleeve per disc), derived server-side from
 // the press's template catalog merged over the measured baseline.
