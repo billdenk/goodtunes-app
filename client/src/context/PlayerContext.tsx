@@ -1466,8 +1466,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     // Native iOS lock screen.
     setNowPlayingMetadata({ title, artist, album: albumTitle, artworkUrl: artwork, duration });
-    // duration is intentionally excluded from deps — the position effect below
-    // republishes it once loadedmetadata resolves the real length.
+    lastNativeMetaRef.current = { id: currentSong?.id ?? "", dur: duration };
+    // duration is intentionally excluded from deps — the corrective effect
+    // below re-publishes the METADATA once loadedmetadata resolves the real
+    // length (the playback-state pushes alone can't fix it: the native side
+    // keeps `lastDuration` from setMetadata and its mismatch guard clamps the
+    // CarPlay scrubber to that stale value — Bill's 152s-metadata vs 221s-real
+    // "Ramblin'" screenshot, build 97).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     currentSong?.id,
@@ -1476,6 +1481,31 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     currentSong?.album?.title,
     currentSong?.album?.artwork,
   ]);
+
+  // Tracks what the native metadata push last sent, so the duration-correction
+  // effect below only re-publishes when the REAL duration (from loadedmetadata)
+  // differs from what native currently believes.
+  const lastNativeMetaRef = useRef({ id: "", dur: 0 });
+
+  // Stale-duration correction: the metadata effect above often fires before the
+  // <audio> element has resolved the track's real length, sending a stale/cached
+  // duration. Re-publish metadata (same title — native updates the dict in
+  // place, no wipe/flicker) once the real duration lands, so the native
+  // mismatch guard stops clamping the lock-screen/CarPlay scrubber.
+  useEffect(() => {
+    const song = currentSongRef.current;
+    if (!song || !Number.isFinite(duration) || duration <= 0) return;
+    const last = lastNativeMetaRef.current;
+    if (last.id !== song.id || Math.abs(last.dur - duration) < 1) return;
+    lastNativeMetaRef.current = { id: song.id, dur: duration };
+    setNowPlayingMetadata({
+      title: song.title ?? "",
+      artist: song.album?.artist ?? "",
+      album: song.album?.title ?? "",
+      artworkUrl: absolutizeArtwork(song.album?.artwork ?? undefined),
+      duration,
+    });
+  }, [duration]);
 
   // Keep the web MediaSession playback-state + scrubber position live. Cheap
   // (in-process), so it runs on every currentTime tick.
@@ -1726,6 +1756,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           break;
         case "resync":
           resyncRef.current();
+          break;
+        case "diag":
+          // Native AVAudioSession lifecycle event (interruption/route change) —
+          // log it into the playback ring buffer so on-device dropout reports
+          // show whether the OS pulled the session out from under the player.
+          logPlaybackEvent({ kind: `native-${cmd.detail ?? "event"}` });
           break;
       }
     });

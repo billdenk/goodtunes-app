@@ -124,6 +124,9 @@ export type RemoteCommand =
   /** CarPlay connected — re-publish metadata + playback state + queue +
    *  catalog (iOS resets the now-playing info around scene connect). */
   | { action: "resync" }
+  /** Native AVAudioSession lifecycle event (interruption began/ended, route
+   *  change) forwarded for the playback diagnostic ring buffer. */
+  | { action: "diag"; detail?: string }
   /** The driver tapped a playlist row in the CarPlay Collection tab. JS should
    *  fetch + play the playlist identified by `playlistId`. */
   | { action: "playPlaylist"; playlistId: string };

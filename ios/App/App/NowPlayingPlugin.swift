@@ -69,6 +69,12 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
     private var lastAlbum = ""
     private var lastDuration: Double = 0
     private var lastArtwork: MPMediaItemArtwork?
+    /// Raw decoded image behind `lastArtwork`. Kept so a track change with the
+    /// SAME artwork URL (common: songs on one album share the cover) can mint a
+    /// FRESH MPMediaItemArtwork instance — CPNowPlayingTemplate keys its
+    /// re-render on artwork object identity, so re-using the old instance makes
+    /// CarPlay treat the new track as "no change" and freeze the panel.
+    private var lastArtworkImage: UIImage?
 
     public override func load() {
         configureAudioSession(activate: true)
@@ -168,6 +174,11 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         guard let info = notification.userInfo,
               let raw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
               let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+        // Surface BOTH edges of the interruption into the JS diagnostic ring
+        // buffer (visible in the operator debug overlay). If Bill's mid-drive
+        // audio dropouts line up with `native-interruption-began` events, the
+        // cause is OS-level session arbitration, not the web player.
+        emitDiagEvent(type == .began ? "interruption-began" : "interruption-ended")
         guard type == .ended else { return }
         // The interruption is over — re-activate our session (the ONE legitimate
         // place to call setActive(true) again) and, if iOS says we may resume,
@@ -186,6 +197,15 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
               let reason = AVAudioSession.RouteChangeReason(rawValue: raw) else {
             ensurePlaybackCategory()
             return
+        }
+        // Route changes into the JS diagnostic ring buffer too — a dropout that
+        // lines up with `native-route-…` (CarPlay/Bluetooth renegotiating the
+        // audio bus) is a different failure than an interruption.
+        switch reason {
+        case .newDeviceAvailable: emitDiagEvent("route-new-device")
+        case .oldDeviceUnavailable: emitDiagEvent("route-device-gone")
+        case .categoryChange: emitDiagEvent("route-category-change")
+        default: emitDiagEvent("route-other-\(raw)")
         }
         switch reason {
         case .newDeviceAvailable:
@@ -245,33 +265,58 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
             self.lastAlbum = album
             self.lastDuration = duration
 
-            // --- PHASE 1: write text fields immediately ---
-            // When the track changes, wipe nowPlayingInfo BEFORE writing the
-            // new values. This forces CPNowPlayingTemplate to treat it as a
-            // new-track event and re-render title/artist/album/art. Without
-            // this clear, CarPlay caches the previous panel and ignores
-            // in-place field updates (the "frozen title" bug). The nil + write
-            // happen synchronously in the same main-thread block, so no visible
-            // blank ever reaches the head unit's display — the RunLoop hasn't
-            // ticked between the two assignments.
-            if !previousTitle.isEmpty && title != previousTitle {
-                MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
-                // Track changed — stale artwork no longer applies.
-                // lastArtwork is cleared below when the URL changes.
+            // --- PHASE 1: forced screen refresh on track change ---
+            // When the track changes, wipe nowPlayingInfo and write the new
+            // values on the NEXT main-thread hop. Build 97 did the nil + write
+            // synchronously in one RunLoop tick — but iOS coalesces the two
+            // assignments, so when the artwork is the same object (songs on
+            // one album share the cover) CPNowPlayingTemplate observed *no
+            // change at all* and kept the previous track's panel (Bill's
+            // "frozen on fast-forward / auto-advance" bug, build 97 on-device).
+            // Deferring the rewrite by one hop makes the wipe observable: the
+            // head unit sees a real new-track event and re-renders text +
+            // scrubber. The blank lasts one RunLoop tick — an intentional,
+            // barely-visible "refresh" (exactly what Bill asked for).
+            let trackChanged = !previousTitle.isEmpty && title != previousTitle
+
+            let applyMetadata: () -> Void = { [weak self] in
+                guard let self = self else { return }
+                // Track may have changed AGAIN while this hop was queued
+                // (rapid double-skip) — the newer setMetadata owns the dict.
+                guard self.lastTitle == title else { return }
+                var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [String: Any]()
+                info[MPMediaItemPropertyTitle] = title
+                info[MPMediaItemPropertyArtist] = artist
+                info[MPMediaItemPropertyAlbumTitle] = album
+                if duration > 0 {
+                    info[MPMediaItemPropertyPlaybackDuration] = duration
+                }
+                if trackChanged {
+                    // Reset the scrubber immediately — the next
+                    // setPlaybackState corrects it, but without this the head
+                    // unit briefly shows the OLD track's elapsed on the new
+                    // title.
+                    info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = 0.0
+                }
+                // Same artwork URL as the previous track (album playback):
+                // mint a FRESH MPMediaItemArtwork from the cached image.
+                // CarPlay keys its re-render on artwork object identity, so
+                // re-injecting the old instance reads as "nothing changed".
+                if let artwork = artwork, !artwork.isEmpty,
+                   artwork == self.artworkURL, let img = self.lastArtworkImage {
+                    let freshArt = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+                    self.lastArtwork = freshArt
+                    info[MPMediaItemPropertyArtwork] = freshArt
+                }
+                MPNowPlayingInfoCenter.default().nowPlayingInfo = info
             }
 
-            var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [String: Any]()
-            info[MPMediaItemPropertyTitle] = title
-            info[MPMediaItemPropertyArtist] = artist
-            info[MPMediaItemPropertyAlbumTitle] = album
-            if duration > 0 {
-                info[MPMediaItemPropertyPlaybackDuration] = duration
+            if trackChanged {
+                MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+                DispatchQueue.main.async(execute: applyMetadata)
+            } else {
+                applyMetadata()
             }
-            // Write text fields to the head unit immediately — artwork follows
-            // asynchronously. CarPlay renders title/artist/album the instant
-            // this dict hits MPNowPlayingInfoCenter; artwork appears once it
-            // loads (~network RTT). Never blank during that window.
-            MPNowPlayingInfoCenter.default().nowPlayingInfo = info
 
             // --- PHASE 2: load artwork asynchronously, merge when ready ---
             // Only apply it if the track hasn't changed by the time the image
@@ -279,26 +324,18 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
             if let artwork = artwork, !artwork.isEmpty {
                 if artwork != self.artworkURL {
                     self.artworkURL = artwork
-                    // New track → stale cached object must not be re-used.
+                    // New art URL → stale cached object/image must not be re-used.
                     self.lastArtwork = nil
+                    self.lastArtworkImage = nil
                     self.loadArtwork(artwork)
-                } else if let art = self.lastArtwork {
-                    // Same artwork URL — no network refetch needed, but iOS
-                    // resets MPNowPlayingInfoCenter.nowPlayingInfo to nil
-                    // around every track transition (emptied → waiting →
-                    // playing). The cached MPMediaItemArtwork object is gone
-                    // from the dict we read above, so re-inject it here.
-                    // Without this, CPNowPlayingTemplate freezes on the first
-                    // track's panel because CarPlay requires an artwork object
-                    // in the dict to trigger a full Now Playing re-render.
-                    info[MPMediaItemPropertyArtwork] = art
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = info
                 }
-                // else: same URL, image not yet loaded — artworkURL is set,
-                // loadArtwork's completion will merge it when it arrives.
+                // else: same URL — applyMetadata above minted a fresh artwork
+                // instance from the cached image (or, if the image hasn't
+                // loaded yet, loadArtwork's completion will merge it).
             } else {
                 self.artworkURL = nil
                 self.lastArtwork = nil
+                self.lastArtworkImage = nil
             }
 
             // --- Pending-play drain (cold-start Bug B) ---
@@ -363,8 +400,11 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
             NowPlayingStore.shared.persistArtworkData(jpeg, forUrl: requested)
             DispatchQueue.main.async {
                 guard self.artworkURL == requested else { return }
-                // Cache for the setPlaybackState self-heal (see property comment).
+                // Cache for the setPlaybackState self-heal (see property comment)
+                // and the raw image so a same-album track change can mint a
+                // FRESH MPMediaItemArtwork (CarPlay re-render key).
                 self.lastArtwork = art
+                self.lastArtworkImage = image
                 // Merge artwork into the existing dict (Phase 2 of the two-phase
                 // write): read whatever text + elapsed fields are already there and
                 // add the artwork key. Never re-write from scratch — avoids nuking
@@ -589,6 +629,7 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         lastAlbum = ""
         lastDuration = 0
         lastArtwork = nil
+        lastArtworkImage = nil
         NowPlayingStore.shared.updateQueue([], currentIndex: 0)
         DispatchQueue.main.async {
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -608,6 +649,7 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         lastAlbum = ""
         lastDuration = 0
         lastArtwork = nil
+        lastArtworkImage = nil
         NowPlayingStore.shared.clearSnapshot()
         DispatchQueue.main.async {
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -681,6 +723,14 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func emit(_ action: String) {
         notifyListeners("remoteCommand", data: ["action": action])
+    }
+
+    /// Forward a native audio-session lifecycle event to JS so it lands in the
+    /// playback diagnostic ring buffer (operator debug overlay). Rides the
+    /// existing `remoteCommand` channel with action "diag" — older JS bundles
+    /// simply ignore the unknown action.
+    private func emitDiagEvent(_ detail: String) {
+        notifyListeners("remoteCommand", data: ["action": "diag", "detail": detail])
     }
 
     private func emitSeek(_ time: Double) {
