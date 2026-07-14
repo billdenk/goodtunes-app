@@ -11,6 +11,9 @@ import {
   Loader2,
   AlertCircle,
   Factory,
+  Lock,
+  Undo2,
+  Check,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -272,6 +275,8 @@ interface LedgerQuote {
   fileUrl: string;
   fileName: string | null;
   notes: string | null;
+  totalCents: number | null;
+  isActive: boolean;
   createdAt: string;
 }
 
@@ -293,10 +298,13 @@ interface LedgerData {
   steps: LedgerStep[];
   totals: {
     quotedCents: number;
+    quotedSource: "quote" | "system" | "steps";
+    systemCents: number | null;
     paidCents: number;
     processingCents: number;
     outstandingCents: number;
   };
+  runClosedAt: string | null;
 }
 
 const STATUS_STYLES: Record<LedgerStep["status"], string> = {
@@ -306,11 +314,20 @@ const STATUS_STYLES: Record<LedgerStep["status"], string> = {
   unpaid: "bg-slate-100 text-slate-600 ring-1 ring-slate-200",
 };
 
+// Task #2697 — the ledger reads as customer-facing "payment requests":
+// a request starts out Requested, moves to Paying while the ACH clears,
+// and lands on Paid (or Needs retry when the debit fails).
 const STATUS_LABELS: Record<LedgerStep["status"], string> = {
   paid: "Paid",
-  processing: "Processing",
-  failed: "Retry needed",
-  unpaid: "Unpaid",
+  processing: "Paying",
+  failed: "Needs retry",
+  unpaid: "Requested",
+};
+
+const QUOTED_SOURCE_CAPTION: Record<LedgerData["totals"]["quotedSource"], string> = {
+  quote: "From the active quote",
+  system: "System-computed manufacturing cost (no active quote total)",
+  steps: "Sum of payment requests (no quote or system cost yet)",
 };
 
 function ManufacturingLedger({
@@ -328,6 +345,12 @@ function ManufacturingLedger({
   const { data, isLoading, error } = useQuery<LedgerData>({
     queryKey: ledgerKey,
   });
+
+  // Task #2697 — close-out is a super-admin-only reversible action.
+  const { data: myRole } = useQuery<{ role: string | null }>({
+    queryKey: ["/api/me/role"],
+  });
+  const isSuperAdmin = myRole?.role === "super_admin";
 
   const [busy, setBusy] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -445,6 +468,60 @@ function ManufacturingLedger({
     }
   }
 
+  // Task #2697 — save an edited quote total (dollars string → cents) or
+  // flip the active quote.
+  async function patchQuote(
+    quote: LedgerQuote,
+    body: { totalCents?: number | null; isActive?: boolean },
+    busyKey: string,
+  ) {
+    setBusy(busyKey);
+    try {
+      await apiRequest(
+        "PATCH",
+        `/api/admin/albums/${albumId}/manufacturing-ledger/quotes/${quote.id}`,
+        body,
+      );
+      await refresh();
+    } catch (e: any) {
+      toast({
+        title: "Couldn't save quote",
+        description: String(e?.message ?? e),
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Task #2697 — super-admin reversible close-out.
+  async function setRunClosed(close: boolean) {
+    if (
+      close &&
+      !window.confirm(
+        "Close out this run? No new payment requests can be added until it's reopened. Existing requests — including paying them — are unaffected.",
+      )
+    ) {
+      return;
+    }
+    setBusy("close");
+    try {
+      await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/manufacturing-ledger/${close ? "close" : "reopen"}`,
+      );
+      await refresh();
+    } catch (e: any) {
+      toast({
+        title: close ? "Couldn't close out the run" : "Couldn't reopen the run",
+        description: String(e?.message ?? e),
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   // Two-step signed upload: ask for a PUT url, stream the PDF to storage,
   // then record the /objects/... path. Mirrors the press-invoice uploader.
   async function uploadQuote(file: File) {
@@ -489,10 +566,13 @@ function ManufacturingLedger({
   const totals =
     data?.totals ?? {
       quotedCents: 0,
+      quotedSource: "steps" as const,
+      systemCents: null,
       paidCents: 0,
       processingCents: 0,
       outstandingCents: 0,
     };
+  const runClosed = Boolean(data?.runClosedAt);
 
   return (
     <div
@@ -552,20 +632,125 @@ function ManufacturingLedger({
               </div>
             </div>
           </div>
+          <p className="text-xs text-slate-400 mt-1.5" data-testid="text-quoted-source">
+            Quoted: {QUOTED_SOURCE_CAPTION[totals.quotedSource]}. Outstanding =
+            quoted − paid. The quoted figure is the plant's estimate and may
+            change with the press's ±10% run tolerance.
+          </p>
           {totals.processingCents > 0 && (
             <p className="text-xs text-amber-700 mt-2" data-testid="text-ledger-processing">
               {formatUsdCents(totals.processingCents)} is clearing the bank now.
             </p>
           )}
 
-          {/* Steps */}
-          <div className="mt-5">
+          {/* Task #2697 — closed-out banner + super-admin close/reopen. */}
+          {(runClosed || isSuperAdmin) && (
+            <div
+              className={`mt-3 flex items-center justify-between gap-3 rounded-lg px-3 py-2 ${
+                runClosed
+                  ? "bg-amber-50 ring-1 ring-amber-200"
+                  : "bg-slate-50 ring-1 ring-slate-200"
+              }`}
+              data-testid="banner-run-closed"
+            >
+              <p className={`text-xs ${runClosed ? "text-amber-800" : "text-slate-500"}`}>
+                {runClosed
+                  ? "This run is closed out — no new payment requests can be added. Existing requests can still be paid."
+                  : "Closing out the run blocks new payment requests. Reversible."}
+              </p>
+              {isSuperAdmin && (
+                <button
+                  onClick={() => setRunClosed(!runClosed)}
+                  disabled={busy === "close"}
+                  className={`h-9 shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold disabled:opacity-50 ${
+                    runClosed
+                      ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      : "border border-amber-200 bg-white text-amber-800 hover:bg-amber-50"
+                  }`}
+                  data-testid="button-toggle-run-closed"
+                >
+                  {busy === "close" ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : runClosed ? (
+                    <Undo2 className="w-3.5 h-3.5" />
+                  ) : (
+                    <Lock className="w-3.5 h-3.5" />
+                  )}
+                  {runClosed ? "Reopen run" : "Close out run"}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Task #2697 — Quotes block: the plant's quote PDFs, each with
+              an editable dollar total and a single Active flag driving the
+              Quoted stat. */}
+          <div className="mt-5 pt-4 border-t border-slate-100">
             <div className="text-xs font-semibold text-slate-700 mb-2">
-              Payment steps
+              Quotes
+            </div>
+            {quotes.length === 0 ? (
+              <p className="text-xs text-slate-400" data-testid="text-no-quotes">
+                No quotes on file. Upload the plant's quote PDF to drive the
+                Quoted total.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {quotes.map((q) => (
+                  <QuoteRow
+                    key={q.id}
+                    quote={q}
+                    canEdit={canEdit}
+                    busy={busy}
+                    onSaveTotal={(cents) =>
+                      patchQuote(q, { totalCents: cents }, `total-${q.id}`)
+                    }
+                    onActivate={() =>
+                      patchQuote(q, { isActive: true }, `activate-${q.id}`)
+                    }
+                    onRemove={() => removeQuote(q)}
+                  />
+                ))}
+              </div>
+            )}
+            {canEdit && (
+              <label
+                className="mt-2 inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer w-fit"
+                data-testid="button-upload-quote"
+              >
+                {uploading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <FileText className="w-3.5 h-3.5" />
+                )}
+                {uploading ? "Uploading…" : "Upload quote PDF"}
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadQuote(f);
+                    e.target.value = "";
+                  }}
+                  data-testid="input-quote-file"
+                />
+              </label>
+            )}
+          </div>
+
+          {/* Task #2697 — Payment requests block (formerly "payment steps"):
+              each request emails the album's artist/label scope when created
+              and is settled by an ACH debit. */}
+          <div className="mt-5 pt-4 border-t border-slate-100">
+            <div className="text-xs font-semibold text-slate-700 mb-2">
+              Payment requests
             </div>
             {steps.length === 0 ? (
               <p className="text-xs text-slate-400" data-testid="text-no-steps">
-                No payment steps yet. Add the first one below.
+                No payment requests yet.
+                {canEdit && !runClosed ? " Request the first one below." : ""}
               </p>
             ) : (
               <div className="divide-y divide-slate-100 border border-slate-100 rounded-lg">
@@ -624,7 +809,7 @@ function ManufacturingLedger({
                           <button
                             onClick={() => removeStep(step)}
                             disabled={busy === `del-${step.id}`}
-                            aria-label="Remove step"
+                            aria-label="Remove payment request"
                             className="h-9 inline-flex items-center justify-center rounded-lg px-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50"
                             data-testid={`button-remove-step-${step.id}`}
                           >
@@ -637,12 +822,12 @@ function ManufacturingLedger({
               </div>
             )}
 
-            {/* Add step */}
-            {canEdit && (
+            {/* Request payment — hidden once the run is closed out. */}
+            {canEdit && !runClosed && (
               <div className="mt-3 flex flex-wrap items-end gap-2" data-testid="form-add-step">
                 <div className="flex-1 min-w-[160px]">
                   <label className="block text-xs text-slate-500 mb-1">
-                    Step
+                    Reason
                   </label>
                   <input
                     value={desc}
@@ -691,86 +876,138 @@ function ManufacturingLedger({
                   ) : (
                     <Plus className="w-3.5 h-3.5" />
                   )}
-                  Add step
+                  Request payment
                 </button>
               </div>
             )}
-          </div>
-
-          {/* Quotes */}
-          <div className="mt-5 pt-4 border-t border-slate-100">
-            <div className="text-xs font-semibold text-slate-700 mb-2">
-              Quote PDFs
-            </div>
-            {quotes.length === 0 ? (
-              <p className="text-xs text-slate-400" data-testid="text-no-quotes">
-                No quotes on file.
+            {canEdit && !runClosed && (
+              <p className="text-xs text-slate-400 mt-1.5">
+                Requesting a payment emails the release's artist/label team.
               </p>
-            ) : (
-              <div className="space-y-1.5">
-                {quotes.map((q) => (
-                  <div
-                    key={q.id}
-                    className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2"
-                    data-testid={`row-quote-${q.id}`}
-                  >
-                    <div className="inline-flex items-center gap-2 min-w-0">
-                      <a
-                        href={q.fileUrl}
-                        download={q.fileName || "Quote.pdf"}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-200 shrink-0 transition-colors"
-                        data-testid={`link-quote-${q.id}`}
-                        aria-label={`Download ${q.fileName || "Quote.pdf"}`}
-                      >
-                        <Download className="w-4 h-4" />
-                      </a>
-                      <span className="text-sm text-slate-700 truncate">
-                        {q.fileName || "Quote.pdf"}
-                      </span>
-                    </div>
-                    {canEdit && (
-                      <button
-                        onClick={() => removeQuote(q)}
-                        disabled={busy === `delq-${q.id}`}
-                        aria-label="Remove quote"
-                        className="h-9 inline-flex items-center justify-center rounded-lg px-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                        data-testid={`button-remove-quote-${q.id}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-            {canEdit && (
-              <label
-                className="mt-2 inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer w-fit"
-                data-testid="button-upload-quote"
-              >
-                {uploading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <FileText className="w-3.5 h-3.5" />
-                )}
-                {uploading ? "Uploading…" : "Upload quote PDF"}
-                <input
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  className="hidden"
-                  disabled={uploading}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) uploadQuote(f);
-                    e.target.value = "";
-                  }}
-                  data-testid="input-quote-file"
-                />
-              </label>
             )}
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Task #2697 — one quote PDF row: download link, editable dollar total
+// (saved on blur/Enter), Active pill or Make-active button, delete.
+function QuoteRow({
+  quote,
+  canEdit,
+  busy,
+  onSaveTotal,
+  onActivate,
+  onRemove,
+}: {
+  quote: LedgerQuote;
+  canEdit: boolean;
+  busy: string | null;
+  onSaveTotal: (cents: number | null) => void;
+  onActivate: () => void;
+  onRemove: () => void;
+}) {
+  const [total, setTotal] = useState(
+    quote.totalCents != null ? (quote.totalCents / 100).toFixed(2) : "",
+  );
+
+  function commitTotal() {
+    const trimmed = total.trim();
+    if (trimmed === "") {
+      if (quote.totalCents != null) onSaveTotal(null);
+      return;
+    }
+    const cents = Math.round(parseFloat(trimmed) * 100);
+    if (!Number.isFinite(cents) || cents <= 0) {
+      setTotal(
+        quote.totalCents != null ? (quote.totalCents / 100).toFixed(2) : "",
+      );
+      return;
+    }
+    if (cents !== quote.totalCents) onSaveTotal(cents);
+  }
+
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2"
+      data-testid={`row-quote-${quote.id}`}
+    >
+      <div className="inline-flex items-center gap-2 min-w-0 flex-1">
+        <a
+          href={quote.fileUrl}
+          download={quote.fileName || "Quote.pdf"}
+          className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-200 shrink-0 transition-colors"
+          data-testid={`link-quote-${quote.id}`}
+          aria-label={`Download ${quote.fileName || "Quote.pdf"}`}
+        >
+          <Download className="w-4 h-4" />
+        </a>
+        <span className="text-sm text-slate-700 truncate">
+          {quote.fileName || "Quote.pdf"}
+        </span>
+        {quote.isActive && (
+          <span
+            className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 shrink-0"
+            data-testid={`badge-quote-active-${quote.id}`}
+          >
+            Active
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <div className="relative">
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">
+            $
+          </span>
+          <input
+            value={total}
+            onChange={(e) => setTotal(e.target.value)}
+            onBlur={commitTotal}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            }}
+            type="number"
+            step="0.01"
+            placeholder="Total"
+            disabled={!canEdit || busy === `total-${quote.id}`}
+            className="w-28 rounded-lg border border-slate-200 bg-white pl-6 pr-2 py-1.5 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)] disabled:opacity-60"
+            data-testid={`input-quote-total-${quote.id}`}
+          />
+        </div>
+        {canEdit && !quote.isActive && (
+          <button
+            onClick={onActivate}
+            disabled={busy === `activate-${quote.id}` || quote.totalCents == null}
+            title={
+              quote.totalCents == null
+                ? "Set a total before making this the active quote"
+                : "Use this quote's total as the Quoted amount"
+            }
+            className="h-9 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            data-testid={`button-activate-quote-${quote.id}`}
+          >
+            {busy === `activate-${quote.id}` ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Check className="w-3.5 h-3.5" />
+            )}
+            Make active
+          </button>
+        )}
+        {canEdit && (
+          <button
+            onClick={onRemove}
+            disabled={busy === `delq-${quote.id}`}
+            aria-label="Remove quote"
+            className="h-9 inline-flex items-center justify-center rounded-lg px-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+            data-testid={`button-remove-quote-${quote.id}`}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

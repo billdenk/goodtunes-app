@@ -467,6 +467,13 @@ export const albums = pgTable("albums", {
   // run to the customer and they fulfill from Shopify themselves.
   shopifyPlusSignedGooddeed: boolean("shopify_plus_signed_gooddeed").notNull().default(true),
   shopifyPlusFulfillment: boolean("shopify_plus_fulfillment").notNull().default(false),
+  // Task #2697 — reversible "close out run" flag on the Shopify+ prepaid
+  // manufacturing ledger. Non-null = the run is closed out: no new payment
+  // requests can be added (paying an already-requested step stays allowed).
+  // Super-admin only, reversible (reopen nulls both columns). Never
+  // touches paid/paying amounts.
+  shopifyPlusRunClosedAt: timestamp("shopify_plus_run_closed_at"),
+  shopifyPlusRunClosedByUserId: varchar("shopify_plus_run_closed_by_user_id"),
   // Task #2574 — Shopify+ middle release status: "Submitted to press".
   // Only meaningful when sellMode = "shopify_plus" AND isPrepping = true:
   // non-null means the package has been formally submitted to the press
@@ -4072,6 +4079,14 @@ export const albumManufacturerQuotes = pgTable(
     fileUrl: text("file_url").notNull(),
     fileName: text("file_name"),
     notes: text("notes"),
+    // Task #2697 — captured quote total (cents). Best-effort auto-extracted
+    // from the PDF text on upload, always operator-editable. NULL = no
+    // total captured yet (extraction found nothing and nobody typed one).
+    totalCents: integer("total_cents"),
+    // Task #2697 — at most one quote per album is the "active" quote; its
+    // totalCents drives the ledger's Quoted stat. Setting a quote active
+    // clears the flag on the album's other quotes in the same transaction.
+    isActive: boolean("is_active").notNull().default(false),
     uploadedByUserId: varchar("uploaded_by_user_id"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },

@@ -47,6 +47,160 @@ import {
   checkPartnerVerbForScope,
 } from "./auth/partnerPermissions";
 import { absoluteOrigin } from "./certificates";
+import { sql } from "drizzle-orm";
+import { getUserRole } from "./auth/roles";
+import { sendPartnerNotificationEmail } from "./mail";
+import { partnerEmailHtml } from "./partnerNotifications";
+import { formatUsdCents } from "@shared/money";
+
+// ── Quote-PDF total extraction (Task #2697) ───────────────────────────
+// Best-effort: pull the dollar total out of an uploaded quote PDF's text.
+// Looks for the LAST "total"-labelled dollar amount (quotes usually stack
+// subtotal → freight → TOTAL), falling back to the largest dollar amount
+// on the page. Returns integer cents or null; never throws.
+export function extractQuoteTotalCents(text: string): number | null {
+  if (!text) return null;
+  const money = /\$?\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)(\.[0-9]{2})\b/g;
+  const parse = (m: RegExpMatchArray): number | null => {
+    const dollars = Number(m[1].replace(/,/g, ""));
+    const cents = Number(m[2].slice(1));
+    if (!Number.isFinite(dollars) || !Number.isFinite(cents)) return null;
+    const v = dollars * 100 + cents;
+    // Sanity band: a manufacturing run quote is between $10 and $1M.
+    return v >= 1000 && v <= 100_000_000 ? v : null;
+  };
+  // Pass 1 — lines that mention "total" (but not "subtotal").
+  let best: number | null = null;
+  for (const line of text.split(/\n/)) {
+    if (!/total/i.test(line) || /sub\s*-?\s*total/i.test(line)) continue;
+    // Array.from — tsconfig targets ES5, direct iteration of matchAll fails tsc.
+    for (const m of Array.from(line.matchAll(money))) {
+      const v = parse(m as RegExpMatchArray);
+      if (v != null) best = v; // keep the LAST total-labelled amount
+    }
+  }
+  if (best != null) return best;
+  // Pass 2 — largest dollar amount anywhere (requires an explicit $).
+  for (const m of Array.from(
+    text.matchAll(/\$\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)(\.[0-9]{2})\b/g),
+  )) {
+    const v = parse(m as RegExpMatchArray);
+    if (v != null && (best == null || v > best)) best = v;
+  }
+  return best;
+}
+
+// Read an /objects/... quote PDF back out of storage and try to extract
+// its total. Best-effort — any failure returns null.
+async function tryExtractPdfTotalCents(fileUrl: string): Promise<number | null> {
+  try {
+    if (!fileUrl.startsWith("/objects/")) return null;
+    const mod = await import("./replit_integrations/object_storage/objectStorage");
+    const oss = new (mod as any).ObjectStorageService();
+    const file = await oss.getObjectEntityFile(fileUrl);
+    const [buf] = await file.download();
+    // @ts-ignore — direct inner-module import (see import-lyrics handler).
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({ data: buf });
+    const parsed = await parser.getText();
+    return extractQuoteTotalCents(parsed.text || "");
+  } catch (e) {
+    console.warn(
+      "[shopify-plus] quote PDF total extraction failed:",
+      (e as Error)?.message ?? e,
+    );
+    return null;
+  }
+}
+
+// ── System-computed manufacturing cost (Task #2697) ───────────────────
+// The same figure the Package (Sell) tab shows for the run: effective
+// per-unit manufacturing cost (broker-discounted snapshot when present,
+// retail snapshot otherwise) × planned quantity, summed over active SKUs.
+// Returns null when no SKU carries both a cost snapshot and a planned
+// quantity — the ledger then falls back to summing the payment requests.
+export async function computeSystemManufacturingCents(
+  albumId: string,
+): Promise<number | null> {
+  const rows = await db.execute<{ total: string | null }>(sql`
+    SELECT SUM(
+      COALESCE(cost_snapshot_manufacturing_discounted_cents,
+               cost_snapshot_manufacturing_cents) * planned_quantity
+    )::bigint AS total
+    FROM album_skus
+    WHERE album_id = ${albumId}
+      AND active = true
+      AND planned_quantity IS NOT NULL AND planned_quantity > 0
+      AND COALESCE(cost_snapshot_manufacturing_discounted_cents,
+                   cost_snapshot_manufacturing_cents) IS NOT NULL
+  `);
+  const raw = ((rows as any).rows ?? [])[0]?.total;
+  const total = raw == null ? null : Number(raw);
+  return total != null && Number.isFinite(total) && total > 0 ? total : null;
+}
+
+// ── Payment-request notification (Task #2697) ─────────────────────────
+// When an operator posts a payment request on a Shopify+ ledger, email
+// the album's owning artist/label scope members (the "customer") so they
+// know there's something to pay. Best-effort: never throws, and a send
+// failure must not break the request insert.
+async function notifyScopeOfPaymentRequest(opts: {
+  req: Request;
+  albumId: string;
+  description: string;
+  totalCents: number;
+}): Promise<void> {
+  try {
+    const resolved = await resolveAlbumScope(opts.albumId);
+    const scope = resolved?.scope ?? null;
+    if (!scope) return; // unscoped album — operator-only, nobody to notify
+    const [album] = await db
+      .select({ title: albums.title })
+      .from(albums)
+      .where(eq(albums.id, opts.albumId));
+    const albumTitle = (album as any)?.title ?? "your release";
+    const r = await db.execute<{ email: string; username: string | null }>(sql`
+      SELECT DISTINCT u.email, u.username
+      FROM memberships m
+      JOIN users u ON u.id = m.user_id
+      WHERE m.scope_kind = ${scope.kind} AND m.scope_id = ${scope.id}
+        AND u.email IS NOT NULL AND u.email <> ''
+    `);
+    const rows = ((r as any).rows ?? []) as { email: string; username: string | null }[];
+    if (rows.length === 0) return;
+    const origin = absoluteOrigin(opts.req);
+    const portalUrl =
+      scope.kind === "artist"
+        ? `${origin}/artist/albums/${opts.albumId}?tab=payments`
+        : `${origin}/admin/albums/${opts.albumId}?tab=payments`;
+    const amount = formatUsdCents(opts.totalCents);
+    const subject = `Payment requested: ${amount} for ${albumTitle}`;
+    const bodyLines = [
+      `GoodTunes has requested a manufacturing payment of ${amount} for ${albumTitle}.`,
+      `Reason: ${opts.description}`,
+      `Open the release's Payments tab to review and pay by bank transfer (ACH).`,
+    ];
+    const html = partnerEmailHtml({
+      heading: "Payment requested",
+      bodyLines,
+      partnerName: albumTitle,
+      cta: { label: "Review & pay", url: portalUrl },
+    });
+    const text = [...bodyLines, portalUrl].join("\n\n");
+    const seen = new Set<string>();
+    for (const row of rows) {
+      const addr = row.email.trim().toLowerCase();
+      if (!addr || seen.has(addr)) continue;
+      seen.add(addr);
+      await sendPartnerNotificationEmail(row.email.trim(), subject, html, text);
+    }
+  } catch (e) {
+    console.error(
+      "[shopify-plus] payment-request notification failed:",
+      (e as Error)?.message ?? e,
+    );
+  }
+}
 
 // ── Manufacturer resolution ───────────────────────────────────────────
 // Which plant this album's manufacturing run pays. Resolved the same way
@@ -357,27 +511,54 @@ export function registerShopifyPlusRoutes(app: Express) {
       const userId = await gatePayouts(req, res, albumId);
       if (!userId) return;
 
-      const [manufacturer, quotes, steps] = await Promise.all([
-        resolveAlbumManufacturer(albumId),
-        db
-          .select()
-          .from(albumManufacturerQuotes)
-          .where(eq(albumManufacturerQuotes.albumId, albumId))
-          .orderBy(desc(albumManufacturerQuotes.createdAt)),
-        db
-          .select()
-          .from(manufacturerPaymentSteps)
-          .where(eq(manufacturerPaymentSteps.albumId, albumId))
-          .orderBy(
-            asc(manufacturerPaymentSteps.sortOrder),
-            asc(manufacturerPaymentSteps.createdAt),
-          ),
-      ]);
+      const [manufacturer, quotes, steps, systemCents, albumRow] =
+        await Promise.all([
+          resolveAlbumManufacturer(albumId),
+          db
+            .select()
+            .from(albumManufacturerQuotes)
+            .where(eq(albumManufacturerQuotes.albumId, albumId))
+            .orderBy(desc(albumManufacturerQuotes.createdAt)),
+          db
+            .select()
+            .from(manufacturerPaymentSteps)
+            .where(eq(manufacturerPaymentSteps.albumId, albumId))
+            .orderBy(
+              asc(manufacturerPaymentSteps.sortOrder),
+              asc(manufacturerPaymentSteps.createdAt),
+            ),
+          computeSystemManufacturingCents(albumId),
+          db
+            .select({
+              runClosedAt: albums.shopifyPlusRunClosedAt,
+            })
+            .from(albums)
+            .where(eq(albums.id, albumId))
+            .then((r) => r[0] ?? null),
+        ]);
 
-      const quotedCents = steps.reduce(
+      // Task #2697 — Quoted resolves in priority order:
+      //   1. the ACTIVE quote's captured total,
+      //   2. the system-computed manufacturing cost (same source as the
+      //      Package tab: effective per-unit cost × planned quantity),
+      //   3. legacy fallback — the sum of the payment requests.
+      const activeQuote = quotes.find((q) => q.isActive) ?? null;
+      const stepsSumCents = steps.reduce(
         (s, r) => s + r.amountCents + r.marginCents,
         0,
       );
+      let quotedCents: number;
+      let quotedSource: "quote" | "system" | "steps";
+      if (activeQuote?.totalCents != null && activeQuote.totalCents > 0) {
+        quotedCents = activeQuote.totalCents;
+        quotedSource = "quote";
+      } else if (systemCents != null) {
+        quotedCents = systemCents;
+        quotedSource = "system";
+      } else {
+        quotedCents = stepsSumCents;
+        quotedSource = "steps";
+      }
       const paidCents = steps
         .filter((r) => r.status === "paid")
         .reduce((s, r) => s + r.amountCents + r.marginCents, 0);
@@ -390,7 +571,15 @@ export function registerShopifyPlusRoutes(app: Express) {
         manufacturer,
         quotes,
         steps,
-        totals: { quotedCents, paidCents, processingCents, outstandingCents },
+        totals: {
+          quotedCents,
+          quotedSource,
+          systemCents,
+          paidCents,
+          processingCents,
+          outstandingCents,
+        },
+        runClosedAt: albumRow?.runClosedAt ?? null,
       });
     },
   );
@@ -515,6 +704,7 @@ export function registerShopifyPlusRoutes(app: Express) {
           ),
         fileName: z.string().trim().max(200).optional(),
         notes: z.string().trim().max(1000).optional(),
+        totalCents: z.number().int().min(1).optional(),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
@@ -522,6 +712,29 @@ export function registerShopifyPlusRoutes(app: Express) {
           .status(400)
           .json({ message: parsed.error.issues[0]?.message ?? "Invalid quote" });
       }
+      // Task #2697 — best-effort auto-extract the quote total from the
+      // uploaded PDF when the caller didn't supply one. Never blocks the
+      // insert; a null just means the operator types it in later.
+      let totalCents = parsed.data.totalCents ?? null;
+      let totalExtracted = false;
+      if (totalCents == null && parsed.data.fileUrl.startsWith("/objects/")) {
+        const extracted = await tryExtractPdfTotalCents(parsed.data.fileUrl);
+        if (extracted != null) {
+          totalCents = extracted;
+          totalExtracted = true;
+        }
+      }
+      // First quote with a usable total auto-activates when the album has
+      // no active quote yet.
+      const [existingActive] = await db
+        .select({ id: albumManufacturerQuotes.id })
+        .from(albumManufacturerQuotes)
+        .where(
+          and(
+            eq(albumManufacturerQuotes.albumId, albumId),
+            eq(albumManufacturerQuotes.isActive, true),
+          ),
+        );
       const [row] = await db
         .insert(albumManufacturerQuotes)
         .values({
@@ -529,10 +742,67 @@ export function registerShopifyPlusRoutes(app: Express) {
           fileUrl: parsed.data.fileUrl,
           fileName: parsed.data.fileName ?? null,
           notes: parsed.data.notes ?? null,
+          totalCents,
+          isActive: !existingActive && totalCents != null,
           uploadedByUserId: userId,
         })
         .returning();
-      res.json({ ok: true, quote: row });
+      res.json({ ok: true, quote: row, totalExtracted });
+    },
+  );
+
+  // Task #2697 — edit a quote's captured total / notes, or flip which
+  // quote is the ACTIVE one (at most one active per album; activating a
+  // quote clears the flag on the others in the same transaction).
+  app.patch(
+    "/api/admin/albums/:albumId/manufacturing-ledger/quotes/:quoteId",
+    async (req, res) => {
+      const albumId = String(req.params.albumId);
+      const quoteId = String(req.params.quoteId);
+      const userId = await gateEditMetadata(req, res, albumId);
+      if (!userId) return;
+
+      const [row] = await db
+        .select()
+        .from(albumManufacturerQuotes)
+        .where(eq(albumManufacturerQuotes.id, quoteId));
+      if (!row || row.albumId !== albumId) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+      const schema = z.object({
+        totalCents: z.number().int().min(1).nullable().optional(),
+        notes: z.string().trim().max(1000).nullable().optional(),
+        isActive: z.boolean().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ message: parsed.error.issues[0]?.message ?? "Invalid quote" });
+      }
+      const updated = await db.transaction(async (tx) => {
+        if (parsed.data.isActive === true) {
+          await tx
+            .update(albumManufacturerQuotes)
+            .set({ isActive: false })
+            .where(eq(albumManufacturerQuotes.albumId, albumId));
+        }
+        const [u] = await tx
+          .update(albumManufacturerQuotes)
+          .set({
+            ...(parsed.data.totalCents !== undefined && {
+              totalCents: parsed.data.totalCents,
+            }),
+            ...(parsed.data.notes !== undefined && { notes: parsed.data.notes }),
+            ...(parsed.data.isActive !== undefined && {
+              isActive: parsed.data.isActive,
+            }),
+          })
+          .where(eq(albumManufacturerQuotes.id, quoteId))
+          .returning();
+        return u;
+      });
+      res.json({ ok: true, quote: updated });
     },
   );
 
@@ -565,6 +835,20 @@ export function registerShopifyPlusRoutes(app: Express) {
       const userId = await gateEditMetadata(req, res, albumId);
       if (!userId) return;
 
+      // Task #2697 — no new payment requests once the run is closed out.
+      // Paying an already-requested step stays allowed (the pay route is
+      // deliberately not gated on this).
+      const [album] = await db
+        .select({ runClosedAt: albums.shopifyPlusRunClosedAt })
+        .from(albums)
+        .where(eq(albums.id, albumId));
+      if (album?.runClosedAt) {
+        return res.status(409).json({
+          message:
+            "This run has been closed out — reopen it before adding a new payment request.",
+        });
+      }
+
       const schema = z.object({
         description: z.string().trim().min(1).max(200),
         amountCents: z.number().int().min(1),
@@ -587,6 +871,16 @@ export function registerShopifyPlusRoutes(app: Express) {
           sortOrder: parsed.data.sortOrder ?? 0,
         })
         .returning();
+      // Task #2697 — tell the customer (the album's owning artist/label
+      // scope) there's a new payment request. Best-effort; never blocks
+      // the response.
+      void notifyScopeOfPaymentRequest({
+        req,
+        albumId,
+        description: parsed.data.description,
+        totalCents:
+          parsed.data.amountCents + (parsed.data.marginCents ?? 0),
+      });
       res.json({ ok: true, step: row });
     },
   );
@@ -670,6 +964,56 @@ export function registerShopifyPlusRoutes(app: Express) {
         .delete(manufacturerPaymentSteps)
         .where(eq(manufacturerPaymentSteps.id, stepId));
       res.json({ ok: true });
+    },
+  );
+
+  // Task #2697 — reversible close-out of the manufacturing run. Super-
+  // admin only (an operator-of-operators call, not a partner verb).
+  // Closing blocks NEW payment requests; existing steps — including
+  // paying an already-requested one — are untouched. Reopen reverses it.
+  app.post(
+    "/api/admin/albums/:albumId/manufacturing-ledger/close",
+    async (req, res) => {
+      const albumId = String(req.params.albumId);
+      const ctx = await resolveAdmin(req, res);
+      if (!ctx) return;
+      const role = await getUserRole(ctx.userId);
+      if (role?.role !== "super_admin") {
+        return res.status(403).json({ message: "Super admin only" });
+      }
+      const [row] = await db
+        .update(albums)
+        .set({
+          shopifyPlusRunClosedAt: new Date(),
+          shopifyPlusRunClosedByUserId: ctx.userId,
+        })
+        .where(eq(albums.id, albumId))
+        .returning({ runClosedAt: albums.shopifyPlusRunClosedAt });
+      if (!row) return res.status(404).json({ message: "Album not found" });
+      res.json({ ok: true, runClosedAt: row.runClosedAt });
+    },
+  );
+
+  app.post(
+    "/api/admin/albums/:albumId/manufacturing-ledger/reopen",
+    async (req, res) => {
+      const albumId = String(req.params.albumId);
+      const ctx = await resolveAdmin(req, res);
+      if (!ctx) return;
+      const role = await getUserRole(ctx.userId);
+      if (role?.role !== "super_admin") {
+        return res.status(403).json({ message: "Super admin only" });
+      }
+      const [row] = await db
+        .update(albums)
+        .set({
+          shopifyPlusRunClosedAt: null,
+          shopifyPlusRunClosedByUserId: null,
+        })
+        .where(eq(albums.id, albumId))
+        .returning({ id: albums.id });
+      if (!row) return res.status(404).json({ message: "Album not found" });
+      res.json({ ok: true, runClosedAt: null });
     },
   );
 

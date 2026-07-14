@@ -9383,3 +9383,38 @@ EOSQL
 }
 migrate_task_2670_fulfillment_routing dev  "${DATABASE_URL:-}"
 migrate_task_2670_fulfillment_routing prod "${PROD_DATABASE_URL:-}"
+
+# --- Task #2697: Shopify+ ledger — quote totals + active flag + run close-out
+# Adds:
+#   - album_manufacturer_quotes.total_cents + is_active columns
+#   - albums.shopify_plus_run_closed_at + shopify_plus_run_closed_by_user_id
+# All idempotent; safe to run on every merge.
+migrate_task_2697_shopify_plus_ledger() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2697 shopify+ ledger migration on $label (no URL set)"
+    return 0
+  fi
+  local tmpf
+  tmpf=$(mktemp /tmp/post-merge-2697.XXXXXX.sql)
+  cat > "$tmpf" << 'EOSQL'
+BEGIN;
+ALTER TABLE album_manufacturer_quotes
+  ADD COLUMN IF NOT EXISTS total_cents integer,
+  ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT false;
+ALTER TABLE albums
+  ADD COLUMN IF NOT EXISTS shopify_plus_run_closed_at timestamp,
+  ADD COLUMN IF NOT EXISTS shopify_plus_run_closed_by_user_id varchar;
+COMMIT;
+EOSQL
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -f "$tmpf" 2>&1); then
+    echo "post-merge: task-2697 shopify+ ledger migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-2697 shopify+ ledger migration failed on $label (continuing)"
+    echo "$out" | tail -10
+  fi
+  rm -f "$tmpf"
+}
+migrate_task_2697_shopify_plus_ledger dev  "${DATABASE_URL:-}"
+migrate_task_2697_shopify_plus_ledger prod "${PROD_DATABASE_URL:-}"

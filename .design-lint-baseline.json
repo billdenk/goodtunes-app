@@ -11670,6 +11670,11 @@
     "snippet": "<ol className=\"mt-3 text-[12px] text-slate-500 space-y-1 list-decimal list-inside leading-snug\">"
   },
   {
+    "rule": "naked-icon-button",
+    "file": "client/src/components/admin/ShopifyPlusPanel.tsx",
+    "snippet": "<button onClick={onRemove} disabled={busy === `delq-${quote.id}`} aria-label=\"Remove quote\" className=\"h-9 inline-flex items-center justify-center rounded-lg px-2 text-slate-400 hover:text-rose-600 ho"
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
     "snippet": "className=\"flex-1 bg-transparent text-[13px] focus:outline-none\""
