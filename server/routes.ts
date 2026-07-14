@@ -448,16 +448,28 @@ const campaignTier = (
 };
 
 // Playback-url is normally requireAuth (a signed-in fan's ownership decides
-// full vs 30s-preview access). The single exception: a curated pre-launch
-// campaign album may be 30s-previewed by an ANONYMOUS visitor — but only when
-// they present a valid campaign token (the `?k=` / `k` from the unguessable
-// share link), and only for its non-embargoed, Mux-ready tracks. The token —
-// NOT mere knowledge of the song id — is the capability: a bare or wrong token
-// resolves to tier "none" and is rejected, so a leaked song id alone can never
-// mint a signed preview. The embargoed title track and every non-campaign
-// album keep the hard requireAuth gate. An anonymous caller never gets a
-// session, so the handler computes fullAccess=false and the client caps
-// playback at 30s.
+// full vs 30s-preview access). Two anonymous exceptions, both preview-only
+// (an anonymous caller never gets a session, so the handler computes
+// fullAccess=false and the client caps playback at the 30s preview window):
+//
+//   1. Campaign token — a curated pre-launch campaign album may be
+//      30s-previewed by an ANONYMOUS visitor when they present a valid
+//      campaign token (the `?k=` / `k` from the unguessable share link).
+//      The token — NOT mere knowledge of the song id — is the capability:
+//      a bare or wrong token resolves to tier "none" and is rejected. This
+//      path works even while the campaign album is still prepping/staged.
+//
+//   2. Publicly live album (Task #2711) — any track whose album is fully
+//      public (not prepping, not hidden, not trashed, sunrise passed) and
+//      whose track is non-embargoed + Mux-ready may be 30s-previewed
+//      anonymously. This is exactly the content an anonymous visitor can
+//      already SEE on a share page (get.goodtunes.music/<artist>/<album>);
+//      the signed URL only ever unlocks the client-capped preview, never a
+//      full master (fullAccess stays false without ownership).
+//
+// Embargoed (previewHidden) tracks, non-Mux-ready tracks, and every
+// prepping/hidden/trashed/sunrise-pending album keep the hard requireAuth
+// gate for anonymous callers.
 async function requireAuthOrCampaignPreview(
   req: Request,
   res: Response,
@@ -467,20 +479,31 @@ async function requireAuthOrCampaignPreview(
   if (a) return requireAuth(req, res, next);
   const song = await storage.getSongById(req.params.id as string);
   const albumId = (song as any)?.albumId as string | undefined;
+  const trackPreviewable =
+    !!song &&
+    song.muxStatus === "ready" &&
+    !!song.muxPlaybackId &&
+    !(song as any).previewHidden;
+  if (!trackPreviewable) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  // Path 1 — campaign token (works even while the album is prepping).
   const campaign = CAMPAIGN_PREVIEWS.find((c) => c.albumId === albumId);
   const token =
     (typeof req.body?.k === "string" && req.body.k) ||
     (typeof req.query.k === "string" && (req.query.k as string)) ||
     null;
-  if (
-    song &&
-    campaign &&
-    campaignTier(campaign, token) !== "none" &&
-    song.muxStatus === "ready" &&
-    !!song.muxPlaybackId &&
-    !(song as any).previewHidden
-  ) {
+  if (campaign && campaignTier(campaign, token) !== "none") {
     return next();
+  }
+  // Path 2 — publicly live album. Default getAlbumById opts already gate
+  // hidden, trashed, and sunrise-pending (all read as undefined); prepping
+  // is checked explicitly since it's a separate storefront flag.
+  if (albumId) {
+    const album = await storage.getAlbumById(albumId);
+    if (album && !(album as any).isPrepping) {
+      return next();
+    }
   }
   return res.status(401).json({ message: "Unauthorized" });
 }

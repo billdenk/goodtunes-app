@@ -9438,3 +9438,27 @@ migrate_task_2705_min_ppi() {
 }
 migrate_task_2705_min_ppi dev  "${DATABASE_URL:-}"
 migrate_task_2705_min_ppi prod "${PROD_DATABASE_URL:-}"
+
+# --- Task #2711: re-kick Mux ingest for stuck masters on two live albums
+# (Crashing Dream Deluxe — 26 tracks stuck "preparing"; CALIFORNIALAND —
+# tracks 12–13 never ingested). Heals webhook-dropped ready assets in place
+# and creates fresh Mux assets for the truly dead ones from the stored
+# /objects/ masters. Idempotent + marker-guarded
+# (post_merge_data_backfills / task_2711_reingest_stuck_masters, per DB);
+# missing Mux secrets FATAL inside the script without stamping the marker,
+# so a later merge retries. A DB without either album writes nothing and
+# leaves the marker unset.
+reingest_task_2711_masters() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2711 mux re-ingest on $label (no URL set)"
+    return 0
+  fi
+  if DATABASE_URL="$url" npx tsx scripts/reingest-task-2711-masters.ts; then
+    echo "post-merge: task-2711 mux re-ingest ok on $label"
+  else
+    echo "post-merge: WARNING — task-2711 mux re-ingest failed on $label (continuing)"
+  fi
+}
+reingest_task_2711_masters dev  "${DATABASE_URL:-}"
+reingest_task_2711_masters prod "${PROD_DATABASE_URL:-}"
