@@ -4498,12 +4498,13 @@ function CatalogEditor({
 type PressTemplateSpec = {
   id: string;
   format: AlbumFormat;
-  componentKey: "jacket" | "labels" | "inner_sleeve";
+  componentKey: "jacket" | "labels" | "inner_sleeve" | "booklet";
   variantKey: string;
   discCount: number;
   artboardWInches: number | null;
   artboardHInches: number | null;
   expectedPages: number | null;
+  minPpi: number | null;
   color: "process-4c" | "cmyk-or-pms" | null;
   fontsRule: string | null;
   templateFileUrl: string | null;
@@ -4516,6 +4517,7 @@ const TEMPLATE_COMPONENTS: {
   { key: "jacket", label: "Jacket", hint: "Outer sleeve / cover artwork" },
   { key: "inner_sleeve", label: "Inner Sleeve", hint: "Printed inner sleeve / bag" },
   { key: "labels", label: "Center Labels", hint: "On-disc label artwork" },
+  { key: "booklet", label: "Booklet", hint: "Printed booklet / insert pages" },
 ];
 
 function PressTemplateSpecsCard({ pressId, fmt }: { pressId: string; fmt: AlbumFormat }) {
@@ -4577,6 +4579,7 @@ function PressTemplateSpecsCard({ pressId, fmt }: { pressId: string; fmt: AlbumF
                 artboardWInches: existing?.artboardWInches ?? null,
                 artboardHInches: existing?.artboardHInches ?? null,
                 expectedPages: existing?.expectedPages ?? null,
+                minPpi: existing?.minPpi ?? null,
                 color: existing?.color ?? null,
                 fontsRule: existing?.fontsRule ?? null,
                 ...body,
@@ -5015,33 +5018,42 @@ function TemplateComponentRow({
   const [wDraft, setWDraft] = useState(numOrEmpty(spec?.artboardWInches));
   const [hDraft, setHDraft] = useState(numOrEmpty(spec?.artboardHInches));
   const [pagesDraft, setPagesDraft] = useState(numOrEmpty(spec?.expectedPages));
+  const [minPpiDraft, setMinPpiDraft] = useState(numOrEmpty(spec?.minPpi));
   const [colorDraft, setColorDraft] = useState<string>(spec?.color ?? "");
   useEffect(() => {
     setWDraft(numOrEmpty(spec?.artboardWInches));
     setHDraft(numOrEmpty(spec?.artboardHInches));
     setPagesDraft(numOrEmpty(spec?.expectedPages));
+    setMinPpiDraft(numOrEmpty(spec?.minPpi));
     setColorDraft(spec?.color ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spec?.artboardWInches, spec?.artboardHInches, spec?.expectedPages, spec?.color]);
+  }, [spec?.artboardWInches, spec?.artboardHInches, spec?.expectedPages, spec?.minPpi, spec?.color]);
 
   const dimsDirty =
     wDraft !== numOrEmpty(spec?.artboardWInches) ||
     hDraft !== numOrEmpty(spec?.artboardHInches) ||
     pagesDraft !== numOrEmpty(spec?.expectedPages) ||
+    minPpiDraft !== numOrEmpty(spec?.minPpi) ||
     colorDraft !== (spec?.color ?? "");
 
   const saveDims = () => {
     const w = wDraft.trim() === "" ? null : Number(wDraft);
     const h = hDraft.trim() === "" ? null : Number(hDraft);
     const pages = pagesDraft.trim() === "" ? null : Number(pagesDraft);
-    if ((w != null && !Number.isFinite(w)) || (h != null && !Number.isFinite(h)) || (pages != null && !Number.isFinite(pages))) {
+    const minPpi = minPpiDraft.trim() === "" ? null : Number(minPpiDraft);
+    if ((w != null && !Number.isFinite(w)) || (h != null && !Number.isFinite(h)) || (pages != null && !Number.isFinite(pages)) || (minPpi != null && !Number.isFinite(minPpi))) {
       toast({ title: "Enter valid numbers for the check dimensions.", variant: "destructive" });
+      return;
+    }
+    if (minPpi != null && (minPpi < 72 || minPpi > 2400)) {
+      toast({ title: "Minimum resolution must be between 72 and 2400 PPI.", variant: "destructive" });
       return;
     }
     onSave({
       artboardWInches: w,
       artboardHInches: h,
       expectedPages: pages,
+      minPpi: minPpi != null ? Math.round(minPpi) : null,
       color: (colorDraft || null) as PressTemplateSpec["color"],
     });
   };
@@ -5230,6 +5242,16 @@ function TemplateComponentRow({
             className={INPUT}
             disabled={busy}
             data-testid={`input-template-pages-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          />
+          <input
+            value={minPpiDraft}
+            onChange={(e) => setMinPpiDraft(e.target.value)}
+            inputMode="numeric"
+            placeholder="Min PPI"
+            title="Minimum embedded-image resolution (PPI) — advisory check, blank = no check"
+            className={INPUT}
+            disabled={busy}
+            data-testid={`input-template-minppi-${label.toLowerCase().replace(/\s+/g, "-")}`}
           />
           <select
             value={colorDraft}

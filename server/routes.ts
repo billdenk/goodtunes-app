@@ -106,7 +106,7 @@ import {
   type CompletedTemplateComponent,
   type CompletedTemplateVerdict,
 } from "@shared/uploadValidation";
-import { validateCompletedComponent, fetchAndScanPdf } from "./validators/completedTemplate";
+import { validateCompletedComponent, fetchAndScanPdf, CompletedPdfScanner } from "./validators/completedTemplate";
 
 const scryptAsync = promisify(scrypt);
 
@@ -32187,6 +32187,9 @@ export async function registerRoutes(
     jacket: z.enum(["single", "gatefold", "gatefold_oldstyle", "widespine"]),
     innerSleeves: z.enum(["none", "printed", "generic"]),
     labelColor: z.enum(["process-4c", "spot-1c", "none"]),
+    // Task #2705 — whether the package includes a printed booklet. Older
+    // clients / persisted configs omit it → false.
+    booklet: z.boolean().optional().default(false),
   });
 
   async function requireOperator(req: Request, res: Response): Promise<boolean> {
@@ -32309,6 +32312,90 @@ export async function registerRoutes(
     return resolveFinishedComponents({ vendorId, config, storeRows });
   }
 
+  // Task #2705 — scan a direct-uploaded print-ready PDF already sitting in
+  // OUR object storage (`/objects/uploads/<id>`), streaming it through the
+  // same bounded scanner the paste-a-URL path uses. No SSRF surface (never
+  // fetches an external host).
+  async function scanObjectPdf(objectPath: string) {
+    const file = await objectStorage.getObjectEntityFile(objectPath);
+    const scanner = new CompletedPdfScanner();
+    await new Promise<void>((resolve, reject) => {
+      const rs = file.createReadStream();
+      rs.on("data", (chunk: Buffer) => scanner.push(chunk));
+      rs.on("end", () => resolve());
+      rs.on("error", (e: Error) => reject(e));
+    });
+    return scanner.finish();
+  }
+
+  // Task #2705 — best-effort first-page thumbnail for a direct-uploaded
+  // completed-art PDF: download to /tmp, rasterize page 1 with pdftoppm,
+  // shrink with sharp, store the PNG back in object storage (public ACL).
+  // Only ever runs against our own objects (never a pasted external URL —
+  // those get the client's generic PDF tile). Returns null on any failure;
+  // the check itself never fails because a preview couldn't be produced.
+  const PREVIEW_MAX_SOURCE_BYTES = 300 * 1024 * 1024;
+  async function generateCompletedPreview(objectPath: string): Promise<string | null> {
+    const fsp = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const run = promisify(execFile);
+    let tmpDir: string | null = null;
+    try {
+      const file = await objectStorage.getObjectEntityFile(objectPath);
+      const [meta] = await file.getMetadata();
+      const size = Number(meta?.size ?? 0);
+      if (!Number.isFinite(size) || size <= 0 || size > PREVIEW_MAX_SOURCE_BYTES) return null;
+      tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "completed-art-"));
+      const pdfPath = path.join(tmpDir, "src.pdf");
+      await file.download({ destination: pdfPath });
+      const outBase = path.join(tmpDir, "page1");
+      await run("pdftoppm", ["-f", "1", "-l", "1", "-png", "-r", "96", pdfPath, outBase], {
+        timeout: 60_000,
+      });
+      // pdftoppm names the output page1-1.png (or page1-01.png etc.)
+      const files = await fsp.readdir(tmpDir);
+      const pageFile = files.find((f) => f.startsWith("page1") && f.endsWith(".png"));
+      if (!pageFile) return null;
+      const sharp = (await import("sharp")).default;
+      const png = await sharp(path.join(tmpDir, pageFile))
+        .resize(1000, 1000, { fit: "inside", withoutEnlargement: true })
+        .png()
+        .toBuffer();
+      const id = `${randomUUID()}.png`;
+      const { bucketName, objectName } = uploadDestination(id);
+      const putUrl = await signGcsUrl(bucketName, objectName, "PUT", 900);
+      const putRes = await fetch(putUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "image/png" },
+        body: png,
+      });
+      if (!putRes.ok) return null;
+      const finalPath = `/objects/uploads/${id}`;
+      const stored = await objectStorage.getObjectEntityFile(finalPath);
+      try {
+        await stored.setMetadata({ contentType: "image/png" });
+      } catch {
+        /* non-fatal */
+      }
+      await setObjectAclPolicy(stored, { owner: "admin", visibility: "public" });
+      return finalPath;
+    } catch (e) {
+      console.warn(`[completed-art] preview generation failed for ${objectPath}`, e);
+      return null;
+    } finally {
+      if (tmpDir) {
+        try {
+          await (await import("node:fs/promises")).rm(tmpDir, { recursive: true, force: true });
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
   // Shape the persisted row (+ a default when none exists) into the panel
   // payload: the configured vendor/config, the required-slot specs the
   // operator must satisfy, the supplied components (presence re-tagged),
@@ -32324,6 +32411,7 @@ export async function registerRoutes(
         components: [] as CompletedTemplateComponent[],
         status: "empty" as CompletedTemplateVerdict,
         updatedAt: null as string | null,
+        pressPlaceholderUrl: null as string | null,
       };
     }
     const vendorId = row.vendorId as VendorId;
@@ -32333,6 +32421,18 @@ export async function registerRoutes(
       (row.components ?? []) as CompletedTemplateComponent[],
       required.map((r) => r.id),
     );
+    // Task #2705 — the press's branded placeholder art for empty card
+    // slots (manufacturers.vinyl_placeholder_url); null = generic tile.
+    let pressPlaceholderUrl: string | null = null;
+    try {
+      const pressId = await pressIdForVendor(vendorId);
+      if (pressId) {
+        const press = await storage.getManufacturerById(pressId);
+        pressPlaceholderUrl = press?.vinylPlaceholderUrl ?? null;
+      }
+    } catch {
+      /* cosmetic only — never fail the payload */
+    }
     return {
       configured: true,
       vendorId,
@@ -32341,6 +32441,7 @@ export async function registerRoutes(
       components,
       status,
       updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
+      pressPlaceholderUrl,
     };
   }
 
@@ -32388,7 +32489,13 @@ export async function registerRoutes(
     const album = await storage.getAlbumById(req.params.id, { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
     const body = z
-      .object({ componentId: z.string().trim().min(1), url: z.string().trim().min(1) })
+      .object({
+        componentId: z.string().trim().min(1),
+        url: z.string().trim().min(1),
+        // Task #2705 — the original file name for direct uploads (the
+        // /objects path itself is an opaque uuid).
+        fileName: z.string().trim().max(300).optional(),
+      })
       .safeParse(req.body);
     if (!body.success) return res.status(400).json({ message: body.error.message });
 
@@ -32402,16 +32509,45 @@ export async function registerRoutes(
     const spec = required.find((r) => r.id === body.data.componentId);
     if (!spec) return res.status(400).json({ message: "That component isn't required for this configuration." });
 
-    const fetched = await fetchAndScanPdf(body.data.url);
-    if (!fetched.ok) return res.status(400).json({ message: fetched.error });
+    // Task #2705 — two intake paths: a direct upload already in OUR object
+    // storage (scan the object stream, then rasterize a real first-page
+    // thumbnail) vs. a pasted external URL (SSRF-guarded streamed fetch,
+    // no preview — the client shows a generic PDF tile, never a fake).
+    let scan: Awaited<ReturnType<typeof scanObjectPdf>>;
+    let assetUrl: string;
+    let fileName: string | null;
+    let previewUrl: string | null = null;
+    const isOwnObject = /^\/objects\/uploads\/[a-zA-Z0-9._-]+$/.test(body.data.url);
+    if (isOwnObject) {
+      try {
+        scan = await scanObjectPdf(body.data.url);
+      } catch (e) {
+        if (e instanceof ObjectNotFoundError) {
+          return res.status(404).json({ message: "That uploaded file could not be found." });
+        }
+        console.error("[completed-art] object scan failed", e);
+        return res.status(500).json({ message: "Couldn't read the uploaded file — try again." });
+      }
+      if (!scan.isPdf) return res.status(400).json({ message: "That file isn't a PDF — supply the print-ready PDF." });
+      assetUrl = body.data.url;
+      fileName = body.data.fileName || null;
+      previewUrl = await generateCompletedPreview(body.data.url);
+    } else {
+      const fetched = await fetchAndScanPdf(body.data.url);
+      if (!fetched.ok) return res.status(400).json({ message: fetched.error });
+      scan = fetched.scan;
+      assetUrl = fetched.finalUrl;
+      fileName = fetched.fileName;
+    }
 
-    const checks = validateCompletedComponent(fetched.scan, spec);
+    const checks = validateCompletedComponent(scan, spec);
     const component: CompletedTemplateComponent = {
       componentId: spec.id,
       label: spec.label,
       presence: "present",
-      assetUrl: fetched.finalUrl,
-      fileName: fetched.fileName,
+      assetUrl,
+      fileName,
+      previewUrl,
       checks,
       status: rollupStatus(checks),
       override: null,
@@ -32506,7 +32642,7 @@ export async function registerRoutes(
   // NEVER fetched server-side (no SSRF surface).
   const templateSpecBodySchema = z.object({
     format: z.enum(["7_inch", "12_lp", "12_double", "cassette", "cd"]),
-    componentKey: z.enum(["jacket", "labels", "inner_sleeve"]),
+    componentKey: z.enum(["jacket", "labels", "inner_sleeve", "booklet"]),
     variantKey: z.string().trim().max(40).optional().default(""),
     discCount: z.number().int().min(0).max(12).optional().default(0),
     artboardWInches: z.number().positive().max(120).nullable().optional(),
@@ -32514,6 +32650,8 @@ export async function registerRoutes(
     expectedPages: z.number().int().min(1).max(64).nullable().optional(),
     color: z.enum(["process-4c", "cmyk-or-pms"]).nullable().optional(),
     fontsRule: z.string().trim().max(200).nullable().optional(),
+    // Task #2705 — minimum placed-image resolution (PPI); null = no check.
+    minPpi: z.number().int().min(72).max(2400).nullable().optional(),
     // Accept either a pasted absolute URL (http/https) OR a relative
     // object path (e.g. `/objects/uploads/<id>`) returned by the
     // upload-doc finalize flow — `z.string().url()` would reject the
@@ -32560,6 +32698,7 @@ export async function registerRoutes(
         color: body.data.color ?? null,
         fontsRule: body.data.fontsRule ?? null,
         templateFileUrl: body.data.templateFileUrl ?? null,
+        minPpi: body.data.minPpi ?? null,
       },
       req.session.userId ?? null,
     );

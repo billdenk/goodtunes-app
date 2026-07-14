@@ -73,6 +73,13 @@ export type CompletedPdfScan = {
   hasEmbeddedFonts: boolean;
   /** A dieline / template / "do not print" token appears anywhere. */
   hasDieline: boolean;
+  /**
+   * Task #2705 — pixel dimensions of embedded raster images (`/Subtype
+   * /Image` XObjects whose /Width + /Height appear near the token).
+   * Best-effort: placement (the `cm` matrix) is NOT parsed, so these give
+   * only a lower-bound PPI estimate assuming full-artboard placement.
+   */
+  imageDimsPx: { w: number; h: number }[];
 };
 
 // CARRY must exceed the longest token/match we look for so a match that
@@ -87,6 +94,12 @@ const BOX_RE = (name: string) =>
 const MEDIABOX_RE = BOX_RE("MediaBox");
 const TRIMBOX_RE = BOX_RE("TrimBox");
 const BLEEDBOX_RE = BOX_RE("BleedBox");
+const IMAGE_SUBTYPE_RE = /\/Subtype\s*\/Image\b/g;
+// Image dicts are small; /Width and /Height sit within a few hundred bytes
+// of /Subtype /Image in either order. IMG_DICT_RADIUS must stay < CARRY so
+// the inspection window is fully present in the carried overlap.
+const IMG_DICT_RADIUS = 400;
+const MAX_IMAGE_DIMS = 2000;
 
 export class CompletedPdfScanner {
   private carry = "";
@@ -106,6 +119,7 @@ export class CompletedPdfScanner {
   private fontDicts = false;
   private embedded = false;
   private dieline = false;
+  private readonly imageDims: { w: number; h: number }[] = [];
 
   constructor(opts?: { maxBytes?: number }) {
     this.maxBytes = opts?.maxBytes ?? 800 * 1024 * 1024; // 800MB hard ceiling
@@ -151,6 +165,7 @@ export class CompletedPdfScanner {
       hasFontDicts: this.fontDicts,
       hasEmbeddedFonts: this.embedded,
       hasDieline: this.dieline,
+      imageDimsPx: this.imageDims,
     };
   }
 
@@ -175,6 +190,27 @@ export class CompletedPdfScanner {
     this.collectBoxes(MEDIABOX_RE, s, commit, this.media);
     this.collectBoxes(TRIMBOX_RE, s, commit, this.trim);
     this.collectBoxes(BLEEDBOX_RE, s, commit, this.bleed);
+
+    // Embedded raster image dims (best-effort, for the min-PPI estimate).
+    if (this.imageDims.length < MAX_IMAGE_DIMS) {
+      IMAGE_SUBTYPE_RE.lastIndex = 0;
+      let im: RegExpExecArray | null;
+      while ((im = IMAGE_SUBTYPE_RE.exec(s)) !== null) {
+        if (im.index < commit && this.imageDims.length < MAX_IMAGE_DIMS) {
+          const win = s.slice(Math.max(0, im.index - IMG_DICT_RADIUS), im.index + IMG_DICT_RADIUS);
+          const wMatch = /\/Width\s+(\d+)/.exec(win);
+          const hMatch = /\/Height\s+(\d+)/.exec(win);
+          if (wMatch && hMatch) {
+            const w = parseInt(wMatch[1], 10);
+            const h = parseInt(hMatch[1], 10);
+            if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+              this.imageDims.push({ w, h });
+            }
+          }
+        }
+        if (im.index === IMAGE_SUBTYPE_RE.lastIndex) IMAGE_SUBTYPE_RE.lastIndex++;
+      }
+    }
   }
 
   private collectBoxes(re: RegExp, s: string, commit: number, into: BoxInches[]): void {
@@ -252,7 +288,19 @@ export function validateCompletedComponent(
   // 1. Page / face count.
   const isLabels = spec.id === "labels";
   const unit = isLabels ? "face" : "page";
-  if (scan.pageCount === 0) {
+  if (spec.expectedPages <= 0) {
+    // No authoritative page count for this slot (e.g. a booklet whose page
+    // count isn't specified in the press catalog) — advisory only.
+    checks.push({
+      key: "tmpl.pages",
+      label: isLabels ? "Faces" : "Pages",
+      status: scan.pageCount === 0 ? "warn" : "pass",
+      message:
+        scan.pageCount === 0
+          ? "Couldn't read a page count, and no expected count is on file — verify against the plant's spec."
+          : `${scan.pageCount} ${unit}${scan.pageCount === 1 ? "" : "s"} read — no expected count on file for this component; verify against the plant's spec.`,
+    });
+  } else if (scan.pageCount === 0) {
     checks.push({
       key: "tmpl.pages",
       label: isLabels ? "Faces" : "Pages",
@@ -430,6 +478,59 @@ export function validateCompletedComponent(
       status: "pass",
       message: "No dieline/template layer detected.",
     });
+  }
+
+  // 6. Minimum image resolution — best-effort estimate, ADVISORY ONLY.
+  // The scanner reads embedded image pixel dimensions but NOT placement
+  // (no content-stream matrix parsing), so we estimate a lower-bound PPI
+  // by assuming the largest embedded image spans the full artboard. A
+  // smaller placement only raises the effective PPI, so a passing estimate
+  // is safe; a failing estimate can only WARN (never hard-fail) because
+  // the image may genuinely be placed smaller.
+  if (spec.minPpi != null && spec.minPpi > 0) {
+    const target: BoxInches = spec.templatePageInches ?? {
+      w: spec.finishedInches.w + spec.bleedInches * 2,
+      h: spec.finishedInches.h + spec.bleedInches * 2,
+    };
+    const dims = scan.imageDimsPx;
+    if (dims.length === 0) {
+      checks.push({
+        key: "tmpl.min_ppi",
+        label: `Image resolution (min ${spec.minPpi} PPI)`,
+        status: "warn",
+        message: `Couldn't measure any embedded images — verify placed images are at least ${spec.minPpi} PPI.`,
+      });
+    } else {
+      // Lower-bound PPI for an image assumed to span the artboard: per
+      // orientation, the effective PPI is the SMALLER of px-width/in-width
+      // and px-height/in-height (the constrained axis governs). Allow the
+      // better of the two orientations (image may be rotated 90°), then
+      // take the best (largest) estimate across embedded images.
+      let best = 0;
+      for (const d of dims) {
+        const est = Math.max(
+          Math.min(d.w / target.w, d.h / target.h),
+          Math.min(d.w / target.h, d.h / target.w),
+        );
+        if (est > best) best = est;
+      }
+      const rounded = Math.round(best);
+      if (best >= spec.minPpi) {
+        checks.push({
+          key: "tmpl.min_ppi",
+          label: `Image resolution (min ${spec.minPpi} PPI)`,
+          status: "pass",
+          message: `Largest embedded image ≈${rounded} PPI at full-artboard placement — meets the ${spec.minPpi} PPI minimum (placement not measured; estimate only).`,
+        });
+      } else {
+        checks.push({
+          key: "tmpl.min_ppi",
+          label: `Image resolution (min ${spec.minPpi} PPI)`,
+          status: "warn",
+          message: `Largest embedded image ≈${rounded} PPI if placed full-artboard — below the ${spec.minPpi} PPI minimum. Placement isn't measured, so verify the actual placed resolution.`,
+        });
+      }
+    }
   }
 
   return checks;

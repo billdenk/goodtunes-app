@@ -35,6 +35,7 @@ function fakePdf(opts: {
   color?: "cmyk" | "rgb" | "spot" | "cmyk+spot";
   fonts?: "embedded" | "live-unembedded" | "outlined";
   dieline?: boolean;
+  imageDims?: { w: number; h: number }[];
 }): Buffer {
   const w = (opts.wIn * 72).toFixed(4);
   const h = (opts.hIn * 72).toFixed(4);
@@ -50,6 +51,9 @@ function fakePdf(opts: {
   for (let i = 0; i < opts.pages; i++) {
     s += `/Type /Page /MediaBox [ 0 0 ${w} ${h} ] /TrimBox [ 0 0 ${w} ${h} ]\n${colorTok}\n${fontTok}\n`;
     if (opts.dieline) s += "/OCG /Name (Dieline) /template-do-not-print\n";
+  }
+  for (const d of opts.imageDims ?? []) {
+    s += `/Subtype /Image /Width ${d.w} /Height ${d.h}\n`;
   }
   s += "%%EOF";
   return Buffer.from(s, "latin1");
@@ -152,6 +156,56 @@ describe("validateCompletedComponent", () => {
     assert.equal(checks.find((c) => c.key === "tmpl.dieline")!.status, "warn");
     // Everything else passes → roll-up is "warn" (still sendable), not fail.
     assert.equal(rollupStatus(checks), "warn");
+  });
+
+  // ── Task #2705 — min-PPI advisory: orientation-safe lower-bound math ──
+  const RECT_SPEC = {
+    ...SPECS["jacket"],
+    minPpi: 300,
+    templatePageInches: { w: 10, h: 20 },
+  };
+  const rectPdf = (imageDims: { w: number; h: number }[]) =>
+    scanBuffer(fakePdf({ pages: 1, wIn: 10, hIn: 20, color: "cmyk", fonts: "outlined", imageDims }));
+  const ppiCheck = (dims: { w: number; h: number }[]) =>
+    validateCompletedComponent(rectPdf(dims), RECT_SPEC).find((c) => c.key === "tmpl.min_ppi")!;
+
+  test("min-PPI: square image on a rectangular target must NOT falsely pass", () => {
+    // 1000×1000 px on a 10×20 in artboard is at best 50 PPI (constrained by
+    // the 20 in axis) — the old formula fabricated 100 PPI. Must warn.
+    const c = ppiCheck([{ w: 1000, h: 1000 }]);
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /50 PPI/);
+  });
+
+  test("min-PPI: per-orientation estimate uses the constrained axis", () => {
+    // 3200×6200 px on 10×20 in: w-axis 320, h-axis 310 → lower bound 310.
+    const c = ppiCheck([{ w: 3200, h: 6200 }]);
+    assert.equal(c.status, "pass");
+    assert.match(c.message, /310 PPI/);
+  });
+
+  test("min-PPI: rotated placement (90°) is allowed the better orientation", () => {
+    // 6200×3200 px is the same image rotated — must yield the same 310 PPI.
+    const c = ppiCheck([{ w: 6200, h: 3200 }]);
+    assert.equal(c.status, "pass");
+    assert.match(c.message, /310 PPI/);
+  });
+
+  test("min-PPI: below-minimum image warns (advisory, never blocks)", () => {
+    const checks = validateCompletedComponent(rectPdf([{ w: 500, h: 1000 }]), RECT_SPEC);
+    const c = checks.find((x) => x.key === "tmpl.min_ppi")!;
+    assert.equal(c.status, "warn");
+    assert.notEqual(rollupStatus(checks), "fail");
+  });
+
+  test("min-PPI: no measurable images warns, spec without minPpi skips the check", () => {
+    const none = validateCompletedComponent(rectPdf([]), RECT_SPEC);
+    assert.equal(none.find((x) => x.key === "tmpl.min_ppi")!.status, "warn");
+    const off = validateCompletedComponent(rectPdf([{ w: 100, h: 100 }]), {
+      ...RECT_SPEC,
+      minPpi: undefined,
+    });
+    assert.equal(off.find((x) => x.key === "tmpl.min_ppi"), undefined);
   });
 
   test("non-PDF link returns a single filetype failure", () => {

@@ -451,10 +451,15 @@ export type CompletedTemplateConfig = {
   jacket: JacketKind;
   innerSleeves: InnerSleeveKind;
   labelColor: LabelColorKind;
+  /**
+   * Task #2705 — whether the package includes a printed booklet. Older
+   * persisted configs predate this field; absent = false.
+   */
+  booklet?: boolean;
 };
 
 export function defaultCompletedTemplateConfig(): CompletedTemplateConfig {
-  return { size: '12"', discs: 1, jacket: "single", innerSleeves: "none", labelColor: "process-4c" };
+  return { size: '12"', discs: 1, jacket: "single", innerSleeves: "none", labelColor: "process-4c", booklet: false };
 }
 
 /** Plate requirement for a finished component. */
@@ -475,9 +480,25 @@ export type FinishedComponentSpec = {
   /** Computed fallback basis (finished trim) when no template on file. */
   finishedInches: { w: number; h: number };
   bleedInches: number;
-  /** Pages/faces the completed file for this slot must contain. */
+  /**
+   * Pages/faces the completed file for this slot must contain.
+   * 0 = not specified (no measured baseline and no catalog value) — the
+   * page-count check becomes advisory instead of pass/fail.
+   */
   expectedPages: number;
   color: FinishedComponentColor;
+  /**
+   * Task #2705 — minimum effective raster resolution (PPI) the press
+   * requires for placed images. Null = not specified (no check). Sourced
+   * only from an operator-entered catalog value — never fabricated.
+   */
+  minPpi: number | null;
+  /**
+   * Task #2705 — downloadable template file for this slot, threaded from
+   * the press catalog row (press_template_specs.template_file_url) so the
+   * Completed Art card can offer a "Template ↓" link. Null = none on file.
+   */
+  templateFileUrl: string | null;
 };
 
 // Measured flat artboard sizes (inches) keyed by
@@ -554,6 +575,8 @@ export function requiredFinishedComponents(
     bleedInches: 0.125,
     expectedPages: jacketExpectedPages(config.jacket),
     color: "cmyk-or-pms",
+    minPpi: null,
+    templateFileUrl: null,
   });
 
   // Center labels — one component, two faces per disc, delivered as one
@@ -568,6 +591,26 @@ export function requiredFinishedComponents(
       bleedInches: 0.125,
       expectedPages: faces,
       color: config.labelColor === "process-4c" ? "process-4c" : "cmyk-or-pms",
+      minPpi: null,
+      templateFileUrl: null,
+    });
+  }
+
+  // Booklet — one component when the package includes one. No measured
+  // baseline exists (page count and artboard come only from the press
+  // catalog row), so expectedPages 0 = advisory page count and the size
+  // check falls back to the computed jacket face + bleed as a WARN target.
+  if (config.booklet) {
+    out.push({
+      id: "booklet",
+      label: "Booklet",
+      templatePageInches: null,
+      finishedInches: SINGLE_JACKET_FINISHED[config.size],
+      bleedInches: 0.125,
+      expectedPages: 0,
+      color: "cmyk-or-pms",
+      minPpi: null,
+      templateFileUrl: null,
     });
   }
 
@@ -584,6 +627,8 @@ export function requiredFinishedComponents(
         bleedInches: 0.125,
         expectedPages: 1,
         color: "cmyk-or-pms",
+        minPpi: null,
+        templateFileUrl: null,
       });
     }
   }
@@ -622,6 +667,8 @@ export type PressTemplateSpecRow = {
   color: string | null;
   fontsRule?: string | null;
   templateFileUrl?: string | null;
+  /** Task #2705 — minimum placed-image resolution (PPI); null = no check. */
+  minPpi?: number | null;
 };
 
 /**
@@ -650,6 +697,7 @@ function specLookupCoords(
 ): { componentKey: string; variantKey: string } {
   if (specId === "jacket") return { componentKey: "jacket", variantKey: config.jacket };
   if (specId === "labels") return { componentKey: "labels", variantKey: "" };
+  if (specId === "booklet") return { componentKey: "booklet", variantKey: "" };
   if (specId.startsWith("inner_sleeve")) return { componentKey: "inner_sleeve", variantKey: "" };
   return { componentKey: specId, variantKey: "" };
 }
@@ -696,6 +744,8 @@ export function resolveFinishedComponents(args: {
     }
     if (match.expectedPages != null) next.expectedPages = match.expectedPages;
     if (match.color === "process-4c" || match.color === "cmyk-or-pms") next.color = match.color;
+    if (match.minPpi != null && match.minPpi > 0) next.minPpi = match.minPpi;
+    if (match.templateFileUrl) next.templateFileUrl = match.templateFileUrl;
     return next;
   });
 }

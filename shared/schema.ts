@@ -2565,6 +2565,9 @@ export const pressTemplateSpecs = pgTable(
     color: text("color"),
     fontsRule: text("fonts_rule"),
     templateFileUrl: text("template_file_url"),
+    // Task #2705 — minimum placed-image resolution (PPI) the press requires
+    // for this component; null = no check (never fabricated).
+    minPpi: integer("min_ppi"),
     updatedByUserId: varchar("updated_by_user_id"),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

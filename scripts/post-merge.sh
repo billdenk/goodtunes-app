@@ -9418,3 +9418,23 @@ EOSQL
 }
 migrate_task_2697_shopify_plus_ledger dev  "${DATABASE_URL:-}"
 migrate_task_2697_shopify_plus_ledger prod "${PROD_DATABASE_URL:-}"
+
+# --- Task #2705: press_template_specs.min_ppi (Completed Art min image PPI)
+# Adds the operator-editable minimum placed-image resolution column the
+# Completed Art card grid + validator read. Idempotent; both DBs.
+migrate_task_2705_min_ppi() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2705 min_ppi migration on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -c "ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS min_ppi integer;" 2>&1); then
+    echo "post-merge: task-2705 min_ppi migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-2705 min_ppi migration failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+migrate_task_2705_min_ppi dev  "${DATABASE_URL:-}"
+migrate_task_2705_min_ppi prod "${PROD_DATABASE_URL:-}"

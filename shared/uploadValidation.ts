@@ -63,6 +63,13 @@ export type CompletedTemplateComponent = {
   /** Source URL of the print-ready file (we persist the link, not the blob). */
   assetUrl: string | null;
   fileName: string | null;
+  /**
+   * Task #2705 — first-page raster thumbnail (/objects/uploads/… path)
+   * generated server-side for direct-uploaded files. Null when no preview
+   * could be produced (pasted external links are never fetched twice) —
+   * the client shows a generic PDF tile, never a fake.
+   */
+  previewUrl?: string | null;
   /** Per-rule finished-template check results (empty for a missing slot). */
   checks: CheckResult[];
   /** Worst status across `checks`; null when nothing has been run yet. */
