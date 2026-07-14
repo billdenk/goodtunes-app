@@ -369,6 +369,32 @@ export async function injectOgForUrl(
     }
   }
 
+  // Task #2709 — one-word per-release share link
+  // (get.goodtunes.music/<slug>). The Share button hands out this clean
+  // single-segment link, so it must unfurl with the same album card the
+  // two-part link gets (standing lockstep rule — the two share surfaces
+  // must behave the same). Reserved segments (login/welcome/staging/…)
+  // skip the album lookup entirely so the auth-walled noindex handling
+  // below keeps its current behavior; injectAlbumOgBySlug already gates
+  // hidden/prepping releases, so staged releases still fall through to
+  // the branded default card.
+  const oneSegMatch = pathOnly.match(/^\/([^/]+)\/?$/);
+  if (oneSegMatch) {
+    // Malformed percent-encoding must fall through to the default card,
+    // not throw out of the SSR middleware.
+    let decoded = oneSegMatch[1];
+    try {
+      decoded = decodeURIComponent(oneSegMatch[1]);
+    } catch {
+      // keep the raw segment; normalizeShareSlug strips anything unsafe
+    }
+    const slugSeg = normalizeShareSlug(decoded);
+    if (slugSeg && !RESERVED_SLUGS.has(slugSeg)) {
+      const out = await injectAlbumOgBySlug(template, req, slugSeg);
+      if (out) return out;
+    }
+  }
+
   if (isAuthWalledPath(pathOnly)) {
     return injectDefaultOg(template, req, { noindex: true });
   }
