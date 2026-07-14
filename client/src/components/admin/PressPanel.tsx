@@ -55,6 +55,15 @@ export type PressPanelSong = {
   vinylOrder?: number | null;
 };
 
+// Task #2705 follow-up — Bill: the legacy plant tooling under the Completed
+// Art grid (Pressing plant readout, Check masters against plant specs + its
+// re-probe banner, the file-picker Art preflight, and Print-ready PDFs) is
+// HIDDEN on the Physical → Art tab. The Completed Art cards + per-card
+// template downloads are the whole surface now. Code kept so flipping this
+// back on restores everything (masters preflight also still runs from the
+// View Masters dialog).
+const SHOW_LEGACY_PLANT_TOOLING = false;
+
 function fmtBytes(b: number | null | undefined): string {
   if (!b || b <= 0) return "—";
   if (b < 1024) return `${b} B`;
@@ -584,7 +593,7 @@ export function PressPanel({
             rate / bit-depth on the songs row. Kicks the existing per-
             song probe pipeline for just those tracks, then auto-
             re-runs preflight so the warn rows clear. */}
-        {staleSpecs.length > 0 && (
+        {SHOW_LEGACY_PLANT_TOOLING && staleSpecs.length > 0 && (
           <div
             ref={bannerRef}
             id="press-reprobe-banner"
@@ -625,8 +634,9 @@ export function PressPanel({
         {/* ── Completed Art card grid (Task #2705) ────────────────────
             Leads the Art tab per Bill's mockup: download the templates,
             drop the finished art on the cards, and the system validates
-            each file. The plant tooling below (vendor readout, master
-            checks, legacy art preflight, print PDFs) supports it. */}
+            each file. The legacy plant tooling below (vendor readout,
+            master checks, art preflight, print PDFs) is hidden behind
+            SHOW_LEGACY_PLANT_TOOLING per Bill. */}
         <CompletedTemplatePanel albumId={albumId} vendor={vendorId} />
 
         {/* ── Single Press-tab vendor picker (Task #597) ──────────────
@@ -636,6 +646,7 @@ export function PressPanel({
             inline). Default lands on the album's invited press when
             it matches a VENDOR_SPECS entry, otherwise the first
             non-hidden vendor. */}
+        {SHOW_LEGACY_PLANT_TOOLING && (
         <div className="mb-10" data-testid="section-press-vendor-picker">
           <h2 className="text-base font-semibold text-slate-900 mb-1">Pressing plant</h2>
           <p className="text-xs text-slate-500 mb-4">
@@ -749,6 +760,7 @@ export function PressPanel({
             </div>
           )}
         </div>
+        )}
 
         {/* ── Check masters against plant specs (Task #597) ──────────
             Merges the old "Run preflight on masters" runner with the
@@ -756,6 +768,7 @@ export function PressPanel({
             and the per-track rows render directly below it. The
             clarifier reminds operators that upload-time probing
             already ran, so this step is the plant-spec check. */}
+        {SHOW_LEGACY_PLANT_TOOLING && (
         <div className="mb-10" data-testid="section-check-masters">
           <h2 className="text-[15px] font-semibold text-slate-900 mb-1">
             Check masters against plant specs
@@ -825,8 +838,10 @@ export function PressPanel({
             />
           </div>
         </div>
+        )}
 
         {/* ── Art preflight (file-picker path) ────────────────────────── */}
+        {SHOW_LEGACY_PLANT_TOOLING && (
         <UploadValidationsPanel
           albumId={albumId}
           kindFilter="art"
@@ -835,9 +850,12 @@ export function PressPanel({
           vendor={vendorId}
           pressName={resolvedPressName}
         />
+        )}
 
         {/* ── Print-ready PDFs (Task #327, moved from Sell) ──────────── */}
+        {SHOW_LEGACY_PLANT_TOOLING && (
         <PrintPdfsPanel albumId={albumId} vendor={vendorId} pressName={resolvedPressName} />
+        )}
 
         {/* ── Press print templates (Task #2115) ─────────────────────── */}
         {(() => {
