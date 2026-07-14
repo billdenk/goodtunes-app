@@ -32181,17 +32181,6 @@ export async function registerRoutes(
   // never pollutes the upload_validations art/audio rollup feeding the
   // Orders preflight badge. We persist the pasted URL + filename + the
   // measured check results only — never the (350–530MB) blob.
-  const completedConfigSchema = z.object({
-    size: z.enum(['7"', '10"', '12"']),
-    discs: z.number().int().min(1).max(8),
-    jacket: z.enum(["single", "gatefold", "gatefold_oldstyle", "widespine"]),
-    innerSleeves: z.enum(["none", "printed", "generic"]),
-    labelColor: z.enum(["process-4c", "spot-1c", "none"]),
-    // Task #2705 — whether the package includes a printed booklet. Older
-    // clients / persisted configs omit it → false.
-    booklet: z.boolean().optional().default(false),
-  });
-
   async function requireOperator(req: Request, res: Response): Promise<boolean> {
     const role = (await getUserRole(req.session.userId!))?.role;
     if (role !== "super_admin" && role !== "admin") {
@@ -32396,15 +32385,138 @@ export async function registerRoutes(
     }
   }
 
-  // Shape the persisted row (+ a default when none exists) into the panel
-  // payload: the configured vendor/config, the required-slot specs the
-  // operator must satisfy, the supplied components (presence re-tagged),
-  // and the rolled-up verdict.
+  // Bill's rework — the package configuration is no longer hand-picked per
+  // album. It is DERIVED from the album's Sell-tab vinyl SKUs (the source
+  // of truth for what's actually being pressed):
+  //   • size / discs ← the first active vinyl SKU by position
+  //                    (7_inch → 7"×1, 12_lp → 12"×1, 12_double → 12"×2)
+  //   • jacket       ← that SKU's jacketUpgrade (gatefold* → gatefold)
+  //   • booklet      ← an album_addons kind='booklet' row exists
+  //   • innerSleeves / labelColor ← carried from the stored check row when
+  //     one exists (the retired picker was the only writer; there is no
+  //     Sell-tab source for these yet), else the defaults (none / 4c).
+  // The vendor is the album's resolved press (the same invited → default →
+  // unambiguous-SKU chain the Press panel credits) bridged by name to a
+  // VendorId; when no press resolves we keep the stored row's vendor, else
+  // the platform default spec. Albums with NO active vinyl SKU fall back
+  // to a legacy stored row (pre-rework uploads stay reachable) and are
+  // otherwise "not configured" — the panel points at the Sell tab.
+  const COMPLETED_VINYL_FORMATS: Record<string, { size: CompletedTemplateConfig["size"]; discs: number }> = {
+    "7_inch": { size: '7"', discs: 1 },
+    "12_lp": { size: '12"', discs: 1 },
+    "12_double": { size: '12"', discs: 2 },
+  };
+
+  async function resolveCompletedContext(albumId: string): Promise<{
+    vendorId: VendorId;
+    config: CompletedTemplateConfig;
+    row: Awaited<ReturnType<typeof storage.getCompletedTemplateCheck>> | null;
+  } | null> {
+    const row = (await storage.getCompletedTemplateCheck(albumId)) ?? null;
+    const stored = (row?.config ?? null) as CompletedTemplateConfig | null;
+    const album = await storage.getAlbumById(albumId, { includeHidden: true });
+
+    let vinylSku: { format: string; jacketUpgrade: string | null } | null = null;
+    let skuPressIds: string[] = [];
+    if (album) {
+      const skuRes = await db.execute<{ format: string; jacket_upgrade: string | null; press_id: string | null }>(sql`
+        SELECT format, jacket_upgrade, press_id FROM album_skus
+        WHERE album_id = ${albumId} AND active = TRUE
+        ORDER BY position ASC
+      `);
+      const skuRows = ((skuRes as any).rows ?? []) as { format: string; jacket_upgrade: string | null; press_id: string | null }[];
+      const vinyl = skuRows.find((r) => COMPLETED_VINYL_FORMATS[r.format]);
+      if (vinyl) vinylSku = { format: vinyl.format, jacketUpgrade: vinyl.jacket_upgrade };
+      skuPressIds = [...new Set(skuRows.map((r) => r.press_id).filter((p): p is string => !!p))];
+    }
+
+    if (!vinylSku) {
+      // No active vinyl SKU — a legacy row (configured before the picker
+      // was retired) keeps working so already-uploaded art stays reachable.
+      if (row?.vendorId) {
+        return { vendorId: row.vendorId as VendorId, config: row.config as CompletedTemplateConfig, row };
+      }
+      return null;
+    }
+
+    const base = COMPLETED_VINYL_FORMATS[vinylSku.format];
+    const jacket: CompletedTemplateConfig["jacket"] =
+      vinylSku.jacketUpgrade === "gatefold" || vinylSku.jacketUpgrade === "gatefold_insert"
+        ? "gatefold"
+        : "single";
+    let booklet = false;
+    try {
+      const bookletRes = await db.execute(sql`
+        SELECT 1 FROM album_addons WHERE album_id = ${albumId} AND kind = 'booklet' LIMIT 1
+      `);
+      booklet = (((bookletRes as any).rows ?? []) as unknown[]).length > 0;
+    } catch (e) {
+      // Best-effort — no addon row read = no booklet card. Log so a transient
+      // DB failure that quietly drops the booklet card is at least visible.
+      console.warn(`[completed-template] booklet addon lookup failed for album ${albumId}:`, e);
+    }
+
+    const config: CompletedTemplateConfig = {
+      size: base.size,
+      discs: base.discs,
+      jacket,
+      innerSleeves: stored?.innerSleeves ?? "none",
+      labelColor: stored?.labelColor ?? "process-4c",
+      booklet,
+    };
+
+    // Vendor ← the album's resolved press (mirrors the Press panel chain).
+    let vendorId: VendorId | null = null;
+    try {
+      let artistInvited: string | null = null;
+      let artistDefault: string | null = null;
+      let labelInvited: string | null = null;
+      let labelDefault: string | null = null;
+      if (album?.primaryArtistId) {
+        const r = await db.execute<{ invited_by_press_id: string | null; default_press_id: string | null }>(sql`
+          SELECT invited_by_press_id, default_press_id FROM people WHERE id = ${album.primaryArtistId}
+        `);
+        const p = ((r as any).rows ?? [])[0];
+        artistInvited = p?.invited_by_press_id ?? null;
+        artistDefault = p?.default_press_id ?? null;
+      }
+      if (album?.labelId) {
+        const r = await db.execute<{ invited_by_press_id: string | null; default_press_id: string | null }>(sql`
+          SELECT invited_by_press_id, default_press_id FROM labels WHERE id = ${album.labelId}
+        `);
+        const l = ((r as any).rows ?? [])[0];
+        labelInvited = l?.invited_by_press_id ?? null;
+        labelDefault = l?.default_press_id ?? null;
+      }
+      const pressId = resolvePressIdFromCandidates({
+        artistInvitedPressId: artistInvited,
+        labelInvitedPressId: labelInvited,
+        artistDefaultPressId: artistDefault,
+        labelDefaultPressId: labelDefault,
+        distinctSkuPressIds: skuPressIds,
+      });
+      if (pressId) {
+        const press = await storage.getManufacturerById(pressId);
+        if (press) vendorId = resolveVendorIdForPress(press.name);
+      }
+    } catch (e) {
+      console.warn("[completed-art] press→vendor resolution failed", e);
+    }
+    if (!vendorId) vendorId = (row?.vendorId as VendorId | null) ?? resolveVendorIdForPress(null);
+
+    return { vendorId, config, row };
+  }
+
+  // Shape the derived context (+ any persisted row) into the panel payload:
+  // the derived vendor/config, the required-slot specs the operator must
+  // satisfy, the supplied components (presence re-tagged), and the
+  // rolled-up verdict.
   async function completedTemplatePayload(albumId: string) {
-    const row = await storage.getCompletedTemplateCheck(albumId);
-    if (!row || !row.vendorId) {
+    const ctx = await resolveCompletedContext(albumId);
+    if (!ctx) {
       return {
         configured: false,
+        reason: "no_vinyl_sku" as string | null,
         vendorId: null as VendorId | null,
         config: defaultCompletedTemplateConfig(),
         requiredComponents: [] as ReturnType<typeof requiredFinishedComponents>,
@@ -32414,11 +32526,10 @@ export async function registerRoutes(
         pressPlaceholderUrl: null as string | null,
       };
     }
-    const vendorId = row.vendorId as VendorId;
-    const config = row.config as CompletedTemplateConfig;
+    const { vendorId, config, row } = ctx;
     const required = await resolveRequired(vendorId, config);
     const { components, status } = retagCompleted(
-      (row.components ?? []) as CompletedTemplateComponent[],
+      (row?.components ?? []) as CompletedTemplateComponent[],
       required.map((r) => r.id),
     );
     // Task #2705 — the press's branded placeholder art for empty card
@@ -32435,12 +32546,13 @@ export async function registerRoutes(
     }
     return {
       configured: true,
+      reason: null as string | null,
       vendorId,
       config,
       requiredComponents: required,
       components,
       status,
-      updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
+      updatedAt: row?.updatedAt ? new Date(row.updatedAt).toISOString() : null,
       pressPlaceholderUrl,
     };
   }
@@ -32454,32 +32566,8 @@ export async function registerRoutes(
     res.json(await completedTemplatePayload(req.params.id));
   });
 
-  // Set / update the vendor + product configuration. Recomputes presence
-  // for any already-supplied files against the new required-slot set
-  // (a file that no longer maps to a slot becomes "extra", never lost).
-  app.post("/api/admin/albums/:id/completed-template/config", requireAdminBearer, async (req, res) => {
-    if (!(await requireOperator(req, res))) return;
-    const album = await storage.getAlbumById(req.params.id, { includeHidden: true });
-    if (!album) return res.status(404).json({ message: "Album not found" });
-    const vendor = z.enum(VENDOR_IDS).safeParse(req.body?.vendorId);
-    if (!vendor.success) return res.status(400).json({ message: "Pick a valid vendor (MRP, PMP, Hellbender, or a generic spec)." });
-    const cfg = completedConfigSchema.safeParse(req.body?.config);
-    if (!cfg.success) return res.status(400).json({ message: cfg.error.message });
-    const existing = await storage.getCompletedTemplateCheck(req.params.id);
-    const required = await resolveRequired(vendor.data, cfg.data);
-    const { components, status } = retagCompleted(
-      (existing?.components ?? []) as CompletedTemplateComponent[],
-      required.map((r) => r.id),
-    );
-    await storage.saveCompletedTemplateCheck({
-      albumId: req.params.id,
-      vendorId: vendor.data,
-      config: cfg.data,
-      components,
-      status,
-    });
-    res.json(await completedTemplatePayload(req.params.id));
-  });
+  // (The per-album vendor + package-config POST route is gone — Bill's
+  // rework derives the configuration from the Sell tab's SKUs instead.)
 
   // Match a pasted (Dropbox/etc.) print-ready PDF URL to a required slot,
   // stream-scan it, run the finished-template checks, and persist the
@@ -32499,12 +32587,11 @@ export async function registerRoutes(
       .safeParse(req.body);
     if (!body.success) return res.status(400).json({ message: body.error.message });
 
-    const existing = await storage.getCompletedTemplateCheck(req.params.id);
-    if (!existing || !existing.vendorId) {
-      return res.status(400).json({ message: "Pick a vendor and product configuration first." });
+    const ctx = await resolveCompletedContext(req.params.id);
+    if (!ctx) {
+      return res.status(400).json({ message: "Add a vinyl format on the Sell tab first — the required art is derived from the album's formats." });
     }
-    const vendorId = existing.vendorId as VendorId;
-    const config = existing.config as CompletedTemplateConfig;
+    const { vendorId, config } = ctx;
     const required = await resolveRequired(vendorId, config);
     const spec = required.find((r) => r.id === body.data.componentId);
     if (!spec) return res.status(400).json({ message: "That component isn't required for this configuration." });
@@ -32552,7 +32639,7 @@ export async function registerRoutes(
       status: rollupStatus(checks),
       override: null,
     };
-    const merged = ((existing.components ?? []) as CompletedTemplateComponent[]).filter(
+    const merged = ((ctx.row?.components ?? []) as CompletedTemplateComponent[]).filter(
       (c) => c.componentId !== component.componentId,
     );
     merged.push(component);
@@ -32573,12 +32660,11 @@ export async function registerRoutes(
     if (!(await requireOperator(req, res))) return;
     const body = z.object({ componentId: z.string().trim().min(1) }).safeParse(req.body);
     if (!body.success) return res.status(400).json({ message: body.error.message });
-    const existing = await storage.getCompletedTemplateCheck(req.params.id);
-    if (!existing || !existing.vendorId) return res.status(404).json({ message: "Nothing to remove." });
-    const vendorId = existing.vendorId as VendorId;
-    const config = existing.config as CompletedTemplateConfig;
+    const ctx = await resolveCompletedContext(req.params.id);
+    if (!ctx || !ctx.row) return res.status(404).json({ message: "Nothing to remove." });
+    const { vendorId, config } = ctx;
     const required = await resolveRequired(vendorId, config);
-    const remaining = ((existing.components ?? []) as CompletedTemplateComponent[]).filter(
+    const remaining = ((ctx.row.components ?? []) as CompletedTemplateComponent[]).filter(
       (c) => c.componentId !== body.data.componentId,
     );
     const { components, status } = retagCompleted(remaining, required.map((r) => r.id));
@@ -32604,9 +32690,9 @@ export async function registerRoutes(
       })
       .safeParse(req.body);
     if (!body.success) return res.status(400).json({ message: body.error.message });
-    const existing = await storage.getCompletedTemplateCheck(req.params.id);
-    if (!existing || !existing.vendorId) return res.status(404).json({ message: "Nothing to override yet." });
-    const components = (existing.components ?? []) as CompletedTemplateComponent[];
+    const ctx = await resolveCompletedContext(req.params.id);
+    if (!ctx || !ctx.row) return res.status(404).json({ message: "Nothing to override yet." });
+    const components = (ctx.row.components ?? []) as CompletedTemplateComponent[];
     const target = components.find((c) => c.componentId === body.data.componentId);
     if (!target) return res.status(404).json({ message: "No file matched to that component yet." });
     const user = await storage.getUser(req.session.userId!);
@@ -32616,8 +32702,7 @@ export async function registerRoutes(
       justification: body.data.justification,
       at: new Date().toISOString(),
     };
-    const vendorId = existing.vendorId as VendorId;
-    const config = existing.config as CompletedTemplateConfig;
+    const { vendorId, config } = ctx;
     const required = await resolveRequired(vendorId, config);
     const { components: retagged, status } = retagCompleted(components, required.map((r) => r.id));
     await storage.saveCompletedTemplateCheck({

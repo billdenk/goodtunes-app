@@ -17,7 +17,7 @@
 //
 // Operator surface → light admin slate chrome (never the fan navy).
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Check,
@@ -46,10 +46,6 @@ import {
   defaultCompletedTemplateConfig,
   type VendorId,
   type CompletedTemplateConfig,
-  type JacketKind,
-  type InnerSleeveKind,
-  type LabelColorKind,
-  type VinylSize,
   type FinishedComponentSpec,
 } from "@shared/vendorSpecs";
 import type {
@@ -60,6 +56,8 @@ import type {
 
 type CompletedTemplateResponse = {
   configured: boolean;
+  /** Why the panel is unconfigured ("no_vinyl_sku") — null when configured. */
+  reason?: string | null;
   vendorId: VendorId | null;
   config: CompletedTemplateConfig;
   requiredComponents: FinishedComponentSpec[];
@@ -81,32 +79,27 @@ function StatusIcon({ s, className = "w-3 h-3" }: { s: CheckStatus; className?: 
   return <X className={className} />;
 }
 
-const JACKET_OPTIONS: { value: JacketKind; label: string }[] = [
-  { value: "single", label: "Single jacket" },
-  { value: "gatefold", label: "Gatefold" },
-  { value: "gatefold_oldstyle", label: "Gatefold (old-style tip-on)" },
-  { value: "widespine", label: "Widespine" },
-];
-const INNER_SLEEVE_OPTIONS: { value: InnerSleeveKind; label: string }[] = [
-  { value: "none", label: "None / plain" },
-  { value: "printed", label: "Printed (one per disc)" },
-  { value: "generic", label: "Generic (no art)" },
-];
-const LABEL_COLOR_OPTIONS: { value: LabelColorKind; label: string }[] = [
-  { value: "process-4c", label: "4-color process (CMYK)" },
-  { value: "spot-1c", label: "Spot / PMS" },
-  { value: "none", label: "No printed labels" },
-];
-
-function sameConfig(a: CompletedTemplateConfig, b: CompletedTemplateConfig): boolean {
-  return (
-    a.size === b.size &&
-    a.discs === b.discs &&
-    a.jacket === b.jacket &&
-    a.innerSleeves === b.innerSleeves &&
-    a.labelColor === b.labelColor &&
-    !!a.booklet === !!b.booklet
-  );
+// One-line human summary of the derived package ("12" vinyl · 2 discs ·
+// Gatefold jacket · Booklet") for the header — the config itself is now
+// derived server-side from the album's Sell-tab formats, never picked here.
+function packageSummary(config: CompletedTemplateConfig): string {
+  const discs = Math.max(1, Math.floor(Number(config.discs) || 1));
+  const jacket =
+    config.jacket === "gatefold"
+      ? "Gatefold jacket"
+      : config.jacket === "gatefold_oldstyle"
+        ? "Gatefold (tip-on) jacket"
+        : config.jacket === "widespine"
+          ? "Widespine jacket"
+          : "Standard jacket";
+  const parts = [
+    `${config.size} vinyl`,
+    discs === 1 ? "1 disc" : `${discs} discs`,
+    jacket,
+  ];
+  if (config.booklet) parts.push("Booklet");
+  if (config.innerSleeves === "printed") parts.push("Printed inner sleeves");
+  return parts.join(" · ");
 }
 
 // Friendly card titles per Bill's mocks: "Cover: 7" (no spine)",
@@ -152,45 +145,23 @@ function cardNoun(spec: FinishedComponentSpec | null, component: CompletedTempla
 }
 
 export function CompletedTemplatePanel({ albumId, vendor }: { albumId: string; vendor: VendorId }) {
-  const { toast } = useToast();
-  const vendorLabel = VENDOR_SPECS[vendor]?.label ?? vendor.toUpperCase();
-
   const query = useQuery<CompletedTemplateResponse>({
     queryKey: ["/api/admin/albums", albumId, "completed-template"],
   });
 
-  // Local config state seeds from the persisted row once it loads.
-  const [config, setConfig] = useState<CompletedTemplateConfig | null>(null);
-  useEffect(() => {
-    if (query.data && config === null) setConfig(query.data.config);
-  }, [query.data, config]);
-
   const data = query.data;
-  const serverConfig = data?.config ?? null;
-  const dirty = !!config && !!serverConfig && !sameConfig(config, serverConfig);
   const configured = !!data?.configured;
 
-  const saveConfig = useMutation({
-    mutationFn: async (c: CompletedTemplateConfig) => {
-      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/completed-template/config`, {
-        vendorId: vendor,
-        config: c,
-      });
-      return r.json() as Promise<CompletedTemplateResponse>;
-    },
-    onSuccess: (resp) => {
-      queryClient.setQueryData(["/api/admin/albums", albumId, "completed-template"], resp);
-      setConfig(resp.config);
-    },
-    onError: (e: any) =>
-      toast({ title: "Couldn't update configuration", description: e?.message, variant: "destructive" }),
-  });
+  // Prefer the server-derived vendor (press-resolved) over the prop the
+  // Press tab happened to pass — they should agree, but the payload wins.
+  const effectiveVendor = data?.vendorId ?? vendor;
+  const vendorLabel = VENDOR_SPECS[effectiveVendor]?.label ?? effectiveVendor.toUpperCase();
 
   const required = data?.requiredComponents ?? [];
   const components = data?.components ?? [];
   const byId = useMemo(() => new Map(components.map((c) => [c.componentId, c])), [components]);
   const extras = components.filter((c) => c.presence === "extra");
-  const effectiveConfig = serverConfig ?? defaultCompletedTemplateConfig();
+  const effectiveConfig = data?.config ?? defaultCompletedTemplateConfig();
 
   const suppliedFiles = components.filter((c) => c.presence !== "missing" && c.assetUrl);
 
@@ -215,12 +186,6 @@ export function CompletedTemplatePanel({ albumId, vendor }: { albumId: string; v
     });
   };
 
-  const updateConfig = (patch: Partial<CompletedTemplateConfig>) =>
-    setConfig((c) => ({ ...(c ?? data?.config ?? defaultCompletedTemplateConfig()), ...patch }));
-
-  const selectCls =
-    "mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm";
-
   return (
     <div className="mb-10" data-testid="panel-completed-template">
       {/* ── Section header ────────────────────────────────────────────── */}
@@ -230,6 +195,12 @@ export function CompletedTemplatePanel({ albumId, vendor }: { albumId: string; v
           <p className="text-sm text-slate-500">
             Download the templates. Then drag and drop the art. The system will automatically validate the files.
           </p>
+          {configured && (
+            <p className="mt-1 text-xs text-slate-500" data-testid="text-completed-package-summary">
+              {packageSummary(effectiveConfig)}
+              <span className="text-slate-400"> — from this album's formats on the Sell tab</span>
+            </p>
+          )}
         </div>
         <button
           type="button"
@@ -243,111 +214,19 @@ export function CompletedTemplatePanel({ albumId, vendor }: { albumId: string; v
         </button>
       </div>
 
-      {/* ── Package configuration ─────────────────────────────────────── */}
-      <div className="rounded-md border border-slate-200 bg-white p-4 space-y-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <label className="text-xs text-slate-600">
-            Record size
-            <select
-              value={config?.size ?? '12"'}
-              onChange={(e) => updateConfig({ size: e.target.value as VinylSize })}
-              className={selectCls}
-              data-testid="select-completed-size"
-            >
-              <option value={'7"'}>7"</option>
-              <option value={'10"'}>10"</option>
-              <option value={'12"'}>12"</option>
-            </select>
-          </label>
-          <label className="text-xs text-slate-600">
-            Discs in package
-            <select
-              value={config?.discs ?? 1}
-              onChange={(e) => updateConfig({ discs: Number(e.target.value) })}
-              className={selectCls}
-              data-testid="select-completed-discs"
-            >
-              {[1, 2, 3, 4].map((n) => (
-                <option key={n} value={n}>
-                  {n === 1 ? "1 (single LP)" : `${n} discs`}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs text-slate-600">
-            Jacket
-            <select
-              value={config?.jacket ?? "single"}
-              onChange={(e) => updateConfig({ jacket: e.target.value as JacketKind })}
-              className={selectCls}
-              data-testid="select-completed-jacket"
-            >
-              {JACKET_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs text-slate-600">
-            Inner sleeves
-            <select
-              value={config?.innerSleeves ?? "none"}
-              onChange={(e) => updateConfig({ innerSleeves: e.target.value as InnerSleeveKind })}
-              className={selectCls}
-              data-testid="select-completed-inner-sleeves"
-            >
-              {INNER_SLEEVE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs text-slate-600">
-            Center labels
-            <select
-              value={config?.labelColor ?? "process-4c"}
-              onChange={(e) => updateConfig({ labelColor: e.target.value as LabelColorKind })}
-              className={selectCls}
-              data-testid="select-completed-label-color"
-            >
-              {LABEL_COLOR_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs text-slate-600">
-            Booklet
-            <select
-              value={config?.booklet ? "yes" : "no"}
-              onChange={(e) => updateConfig({ booklet: e.target.value === "yes" })}
-              className={selectCls}
-              data-testid="select-completed-booklet"
-            >
-              <option value="no">No booklet</option>
-              <option value="yes">Includes booklet</option>
-            </select>
-          </label>
-        </div>
-
-        {(!configured || dirty) && (
-          <button
-            type="button"
-            onClick={() => config && saveConfig.mutate(config)}
-            disabled={saveConfig.isPending || !config}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--brand-blue)] text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50"
-            data-testid="button-completed-set-config"
-          >
-            {saveConfig.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-            {configured ? "Update package" : "Start confirmation"}
-          </button>
-        )}
-      </div>
-
       {query.isLoading && <div className="mt-4 text-sm text-slate-500">Loading…</div>}
+
+      {/* No vinyl SKU on the Sell tab (and no legacy confirmation) → the
+          required-art set can't be derived yet. Point at the Sell tab. */}
+      {!query.isLoading && data && !configured && (
+        <div
+          className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600"
+          data-testid="text-completed-unconfigured"
+        >
+          Add a vinyl format on the Sell tab first — the required art here is
+          derived from the album's formats.
+        </div>
+      )}
 
       {/* ── Verdict + card grid ───────────────────────────────────────── */}
       {configured && (
