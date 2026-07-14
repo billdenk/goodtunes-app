@@ -20,11 +20,13 @@
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { formatUsdCents } from "@shared/money";
-import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2, Send, AlertCircle } from "lucide-react";
+import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2, Check, X, AudioLines, Palette, Truck } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, resolveVendorIdForPress, isGenericVendor, defaultPreflightVendor, type VendorId } from "@shared/vendorSpecs";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import type { UploadValidationResult } from "@shared/uploadValidation";
 import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
 import { CompletedTemplatePanel } from "@/components/admin/CompletedTemplatePanel";
 import { PressTemplateDownloads, type PressTemplate } from "@/components/admin/PressTemplateDownloads";
@@ -156,137 +158,18 @@ function EarlyCutPoolReadout({ albumId }: { albumId: string }) {
   );
 }
 
-// Task #1530 — the relocated "Go to Press" affordance. Quiet by design:
-// while the album isn't ready it shows a muted helper line naming what's
-// outstanding (no loud CTA); once every section reads complete the submit
-// turns on. After submission it mirrors the strip's old status states
-// (Awaiting review / Approved / Rejected note + resubmit).
-function GoToPressAction({
-  status,
-  rejectionNote,
-  readyToSend,
-  blockers,
-  isPending,
-  onSubmit,
-}: {
-  status: string | null;
-  rejectionNote: string | null;
-  readyToSend: boolean;
-  blockers: string[];
-  isPending: boolean;
-  onSubmit: () => void;
-}) {
-  const pending = status === "pending";
-  const approved = status === "approved";
-  const rejected = status === "rejected";
-
-  if (pending || approved) {
-    return (
-      <div
-        className="mb-6 rounded-lg border border-slate-200 bg-white p-4 flex items-center justify-between gap-3"
-        data-testid="gotopress-action"
-      >
-        <div className="min-w-0">
-          <div className="text-[14px] font-semibold text-slate-900">
-            {approved ? "Approved — going to press" : "Sent to GoodTunes"}
-          </div>
-          <div className="text-[12px] text-slate-500">
-            {approved
-              ? "GoodTunes approved this run; it's headed to the plant."
-              : "Awaiting GoodTunes review — you'll see it flip to Approved here."}
-          </div>
-        </div>
-        <span
-          className={[
-            "shrink-0 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border",
-            approved
-              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-              : "bg-amber-50 text-amber-700 border-amber-200",
-          ].join(" ")}
-          data-testid="badge-pressing-status"
-        >
-          {approved ? "Approved" : "Awaiting review"}
-        </span>
-      </div>
-    );
-  }
-
-  // Not yet sent (or rejected → resubmit). Submit is enabled only when
-  // every section reads complete.
-  return (
-    <div
-      className="mb-6 rounded-lg border border-slate-200 bg-white p-4"
-      data-testid="gotopress-action"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[14px] font-semibold text-slate-900">
-            {rejected ? "Resubmit to GoodTunes" : "Send the order to GoodTunes"}
-          </div>
-          <div className="text-[12px] text-slate-500">
-            {readyToSend
-              ? "Everything's ready — send this run to GoodTunes for review."
-              : "Finish the sections below before this run can be sent."}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={!readyToSend || isPending}
-          title={
-            readyToSend
-              ? "Send this run to GoodTunes for review."
-              : "Complete every section first."
-          }
-          className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[var(--brand-blue-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
-          data-testid="button-go-to-press"
-        >
-          {isPending ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Send className="w-3.5 h-3.5" />
-          )}
-          {rejected ? "Resubmit" : "Go to Press"}
-        </button>
-      </div>
-
-      {!readyToSend && blockers.length > 0 && (
-        <ul
-          className="mt-3 space-y-1 border-t border-slate-100 pt-3"
-          data-testid="gotopress-blockers"
-        >
-          {blockers.map((b, i) => (
-            <li
-              key={i}
-              className="text-[12px] text-slate-500 flex items-center gap-1.5"
-            >
-              <span className="inline-block h-[5px] w-[5px] rounded-full bg-slate-300" />
-              {b}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {rejected && (
-        <div className="mt-3 rounded-md border border-[color:var(--brand-heart)]/40 bg-[color:var(--brand-heart)]/5 p-3 flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 text-[color:var(--brand-heart)] flex-shrink-0 mt-0.5" />
-          <div className="min-w-0">
-            <div className="text-[12.5px] font-semibold text-slate-900">
-              GoodTunes asked for changes
-            </div>
-            {rejectionNote && (
-              <div className="text-[12px] text-slate-700 mt-0.5">
-                “{rejectionNote}”
-              </div>
-            )}
-            <div className="text-[11.5px] text-slate-500 mt-1">
-              Make the change and resubmit — your prior request is archived.
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+// Task #2701 — sub-tab split of the Physical tab. Audio is the default;
+// the active sub-tab persists in the URL as `ptab` merged with the
+// page's existing `?tab=` handling so refresh + deep links restore it.
+type PhysicalSubTab = "audio" | "art" | "fulfillment";
+const PHYSICAL_SUB_TABS: Array<{ id: PhysicalSubTab; label: string; Icon: typeof AudioLines }> = [
+  { id: "audio", label: "Audio", Icon: AudioLines },
+  { id: "art", label: "Art", Icon: Palette },
+  { id: "fulfillment", label: "Fulfillment", Icon: Truck },
+];
+function readSubTabFromUrl(): PhysicalSubTab {
+  const v = new URLSearchParams(window.location.search).get("ptab");
+  return v === "art" || v === "fulfillment" ? v : "audio";
 }
 
 export function PressPanel({
@@ -372,9 +255,9 @@ export function PressPanel({
   // `defaultPreflightVendor()` (MRP) — the same platform-wide default —
   // so the two panels cannot diverge in either the set or unset case.
   const { data: invitedPress } = useQuery<{
-    press: { name: string | null } | null;
+    press: { name: string | null; logoUrl?: string | null } | null;
     // Task #1837 — effective plant from saved SKUs when no invited-by-press stamp.
-    effectivePress?: { id: string; name: string } | null;
+    effectivePress?: { id: string; name: string; logoUrl?: string | null } | null;
     // Origin of the resolved plant: "invited" = invitedByPressId explicitly set
     // on the artist/label; "artist_default" / "label_default" = homed via
     // default_press_id; "sku_derived" = derived from this album's vinyl SKUs.
@@ -511,185 +394,191 @@ export function PressPanel({
     });
   }
 
-  // Task #1530 — the "Go to Press" submit + status lives here now (the
-  // old top-of-page Path-to-press strip is gone). Same endpoint + query
-  // key the strip used, so an order submitted from either surface keeps
-  // its status in sync. The submit is gated on `readyToSend` (every
-  // section complete + preflight clean + masters on file).
-  const { data: pressingOrder } = useQuery<{
-    status?: string | null;
-    rejectionNote?: string | null;
-  } | null>({
-    queryKey: ["/api/admin/albums", albumId, "pressing-order"],
+  // Task #2701 — the "Send the order to GoodTunes" card (all states) is
+  // hidden for now. UI-only: the submit endpoint + pressing-order flow
+  // stay intact server-side, and `readyToSend` / `sendBlockers` keep
+  // arriving from AdminAlbum so re-enabling is a render change.
+  void readyToSend;
+  void sendBlockers;
+
+  // Task #2701 — Audio | Art | Fulfillment sub-tabs, persisted in the
+  // URL as `ptab` merged with the page's existing query params (never
+  // clobbers `?tab=`).
+  const [subTab, setSubTabState] = useState<PhysicalSubTab>(() => readSubTabFromUrl());
+  function setSubTab(t: PhysicalSubTab) {
+    setSubTabState(t);
+    const params = new URLSearchParams(window.location.search);
+    if (t === "audio") params.delete("ptab");
+    else params.set("ptab", t);
+    const qs = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`,
+    );
+  }
+
+  // Task #2701 — audio-preflight rollup for the Side Breaks header chip
+  // and the per-track chips inside the View Masters dialog. Same query
+  // key UploadValidationsPanel uses, so a run from either surface
+  // refreshes both.
+  const { data: validationRows } = useQuery<UploadValidationResult[]>({
+    queryKey: ["/api/admin/albums", albumId, "upload-validations"],
   });
-  const submitMutation = useMutation({
-    mutationFn: async () => {
-      const r = await apiRequest(
-        "POST",
-        `/api/admin/albums/${albumId}/pressing-order`,
-        {},
-      );
-      return r.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["/api/admin/albums", albumId, "pressing-order"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["/api/admin/pressing-orders"],
-      });
-      toast({
-        title: "Order sent to GoodTunes.",
-        description: "You'll see it switch to Approved once GoodTunes reviews it.",
-      });
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Couldn't submit",
-        description: e?.message || "Try again.",
-        variant: "destructive",
-      });
-    },
-  });
-  const orderStatus = pressingOrder?.status ?? null;
+  const audioRows = useMemo(
+    () => (validationRows ?? []).filter((r) => r.kind === "audio"),
+    [validationRows],
+  );
+  const preflightState: "pass" | "fail" | "none" =
+    audioRows.length === 0
+      ? "none"
+      : audioRows.some((r) => r.status === "fail" && !r.override)
+        ? "fail"
+        : "pass";
+  function rowForSong(s: PressPanelSong): UploadValidationResult | undefined {
+    const padded = String(s.trackNumber ?? 0).padStart(2, "0");
+    return audioRows.find((r) => (r.fileName ?? "").startsWith(`${padded} `));
+  }
+  const [mastersOpen, setMastersOpen] = useState(false);
+
+  // Task #2701 — right-aligned "Press:" readout on the sub-tab row.
+  const pressReadoutName =
+    resolvedPressName ?? VENDOR_SPECS[vendorId]?.label ?? vendorId;
+  const pressLogoUrl =
+    invitedPress?.press?.logoUrl ?? invitedPress?.effectivePress?.logoUrl ?? null;
+
+  const preflightChip =
+    preflightState === "pass" ? (
+      <span
+        className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200"
+        data-testid="chip-audio-preflight"
+      >
+        <Check className="w-3 h-3" /> Pass
+      </span>
+    ) : preflightState === "fail" ? (
+      <span
+        className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-rose-50 text-rose-700 border-rose-200"
+        data-testid="chip-audio-preflight"
+      >
+        <X className="w-3 h-3" /> Fail
+      </span>
+    ) : (
+      <span
+        className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-slate-50 text-slate-500 border-slate-200"
+        data-testid="chip-audio-preflight"
+      >
+        Not checked
+      </span>
+    );
 
   return (
     <div className="py-6" data-testid="panel-press">
       <div>
         <MastersApprovalBanner albumId={albumId} />
-        <GoToPressAction
-          status={orderStatus}
-          rejectionNote={pressingOrder?.rejectionNote ?? null}
-          readyToSend={readyToSend}
-          blockers={sendBlockers}
-          isPending={submitMutation.isPending}
-          onSubmit={() => submitMutation.mutate()}
-        />
         {/* Task #533 — pool-funded early-cut ledger readout. */}
         <EarlyCutPoolReadout albumId={albumId} />
-        {/* ── Masters on file ─────────────────────────────────────────── */}
-        <div className="mb-10" data-testid="section-masters-on-file">
-          {/* Task #583 / #618 — header is a flex row: title + subhead
-              on the left, "Download all masters" pinned bottom-right
-              so its bottom edge sits on the subhead's last-line
-              baseline (title still sits at the top of its own
-              column). The title block reserves right padding (pr-4 +
-              max-w) so the subhead's wrap line never crowds the
-              button. */}
-          <div className="flex items-end justify-between gap-4 mb-4">
-            <div className="min-w-0 flex-1 pr-4 max-w-[calc(100%-12rem)]">
-              <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Masters on file</h2>
-              <p className="text-xs text-slate-500">
-                Confirm what's uploaded for this album before preflighting it against a pressing
-                plant. {sorted.length} track{sorted.length === 1 ? "" : "s"} · {withMaster.length} with
-                master · {missing.length > 0 ? <span className="text-rose-700">{missing.length} missing</span> : "all present"} · {fmtBytes(totalBytes)} · {fmtDur(totalDur)}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={downloadAll}
-              disabled={withMaster.length === 0}
-              className="shrink-0 inline-flex items-center gap-2 px-3 h-9 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              data-testid="button-download-all-masters"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Download all masters
-            </button>
-          </div>
 
-          <div className="rounded-md border border-slate-200 bg-white overflow-hidden">
-            <table className="w-full text-[12.5px]">
-              <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
-                <tr>
-                  <th className="px-3 py-2 text-left w-8">#</th>
-                  <th className="px-3 py-2 text-left">Title</th>
-                  <th className="px-3 py-2 text-left">Format</th>
-                  <th className="px-3 py-2 text-left">Rate / Depth</th>
-                  <th className="px-3 py-2 text-left">Duration</th>
-                  <th className="px-3 py-2 text-left">Size</th>
-                  <th className="px-3 py-2 text-right">File</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((s, i) => {
-                  const present = !!s.audioUrl;
-                  return (
-                    <tr
-                      key={s.id}
-                      className="group border-t border-slate-100"
-                      data-testid={`row-master-${s.id}`}
-                    >
-                      <td className="px-3 py-2 text-slate-500 font-mono tabular-nums">
-                        {String(i + 1).padStart(2, "0")}
-                      </td>
-                      <td className="px-3 py-2 text-slate-800 font-medium">{s.title}</td>
-                      <td className="px-3 py-2 text-slate-700 font-mono tabular-nums">
-                        {present ? fmtFmt(s.audioFormat, s.audioContainerExt, s.audioUrl) : (
-                          <span className="inline-flex items-center gap-1 text-rose-700">
-                            <AlertTriangle className="w-3 h-3" /> missing
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-slate-700 font-mono tabular-nums">
-                        {present ? `${fmtSr(s.audioSampleRate)}${s.audioBitDepth ? ` · ${s.audioBitDepth}-bit` : ""}` : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-slate-700 font-mono tabular-nums">{fmtDur(s.duration)}</td>
-                      <td className="px-3 py-2 text-slate-700 font-mono tabular-nums">
-                        {present ? fmtBytes(s.audioBytes) : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {present ? (
-                          <a
-                            href={s.audioUrl!}
-                            download={`${String(s.trackNumber).padStart(2, "0")} ${s.title}${urlExt(s.audioUrl) ?? ""}`}
-                            className="inline-flex items-center gap-1 text-[var(--brand-blue)] hover:underline opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 transition-opacity"
-                            data-testid={`link-download-master-${s.id}`}
-                          >
-                            <Download className="w-3 h-3" /> download
-                          </a>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {sorted.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-3 py-6 text-center text-slate-500 italic">
-                      No tracks on this album yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        {/* ── Audio | Art | Fulfillment sub-tabs (Task #2701) ─────────
+            Quiet text tabs with small leading icons; the "Press:"
+            readout (name + round logo avatar) sits far right on the
+            same line. */}
+        <div
+          className="flex items-center justify-between gap-4 mb-8 border-b border-slate-200 pb-2"
+          data-testid="press-subtabs"
+        >
+          <div className="flex items-center gap-5">
+            {PHYSICAL_SUB_TABS.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setSubTab(id)}
+                className={[
+                  "inline-flex items-center gap-1.5 text-[13px] py-1",
+                  subTab === id
+                    ? "font-semibold text-slate-900"
+                    : "font-medium text-slate-500 hover:text-slate-700",
+                ].join(" ")}
+                data-testid={`subtab-${id}`}
+              >
+                <Icon className={`w-3.5 h-3.5 ${subTab === id ? "text-slate-700" : "text-slate-400"}`} />
+                {label}
+              </button>
+            ))}
           </div>
-
-          {/* Task #583 — Side A / Side B cut-order block, lifted out of
-              the Tracks tab so the artist sees what's uploaded AND how
-              it'll be cut in one place. Hidden when no physical format
-              is picked or the format is cassette (no sides to cut). */}
-          {showVinylSides && sorted.length > 0 && (
-            <div className="mt-6">
-              <VinylOrderPanel
-                albumId={albumId}
-                albumTitle={albumTitle}
-                songs={sorted.map((s) => ({
-                  id: s.id,
-                  title: s.title,
-                  trackNumber: s.trackNumber,
-                  duration: s.duration ?? 0,
-                  vinylSide: s.vinylSide ?? null,
-                  vinylOrder: s.vinylOrder ?? null,
-                }))}
-                vinylFormat={vinylFormat ?? null}
-                physicalFormat={physicalFormat ?? null}
-                vinylSideCatalogNumbers={vinylSideCatalogNumbers ?? null}
+          <div className="flex items-center gap-2 min-w-0" data-testid="press-readout">
+            <span className="text-[12.5px] text-slate-400 shrink-0">Press:</span>
+            <span className="text-[12.5px] font-semibold text-slate-900 truncate" data-testid="text-press-readout-name">
+              {pressReadoutName}
+            </span>
+            {pressLogoUrl && (
+              <img
+                src={pressLogoUrl}
+                alt=""
+                className="w-6 h-6 rounded-full object-cover border border-slate-200 shrink-0"
+                data-testid="img-press-readout-logo"
               />
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
+        {/* ── AUDIO sub-tab ──────────────────────────────────────────── */}
+        {subTab === "audio" && (
+          <div data-testid="press-subtab-audio">
+            <div className="mb-10" data-testid="section-side-breaks">
+              <div className="flex items-center justify-between gap-4 flex-wrap mb-3">
+                <h2 className="text-[15px] font-semibold text-slate-900">Side Breaks</h2>
+                <div className="flex items-center gap-2">
+                  {preflightChip}
+                  <button
+                    type="button"
+                    onClick={() => setMastersOpen(true)}
+                    className="shrink-0 inline-flex items-center gap-2 px-3 h-9 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    data-testid="button-view-masters"
+                  >
+                    View Masters
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadAll}
+                    disabled={withMaster.length === 0}
+                    className="shrink-0 inline-flex items-center gap-2 px-3 h-9 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    data-testid="button-download-all-masters"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download all masters
+                  </button>
+                </div>
+              </div>
+              {showVinylSides && sorted.length > 0 ? (
+                <VinylOrderPanel
+                  albumId={albumId}
+                  albumTitle={albumTitle}
+                  songs={sorted.map((s) => ({
+                    id: s.id,
+                    title: s.title,
+                    trackNumber: s.trackNumber,
+                    duration: s.duration ?? 0,
+                    vinylSide: s.vinylSide ?? null,
+                    vinylOrder: s.vinylOrder ?? null,
+                  }))}
+                  vinylFormat={vinylFormat ?? null}
+                  physicalFormat={physicalFormat ?? null}
+                  vinylSideCatalogNumbers={vinylSideCatalogNumbers ?? null}
+                />
+              ) : (
+                <p className="text-xs text-slate-500" data-testid="text-no-side-breaks">
+                  {sorted.length === 0
+                    ? "No tracks on this album yet — add tracks on the Tracks tab to plan side breaks."
+                    : "This album's physical format has no sides to cut — side breaks apply to vinyl formats."}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── ART sub-tab (moved as-is, Task #2701) ──────────────────── */}
+        {subTab === "art" && (
+        <div data-testid="press-subtab-art">
         {/* ── Re-probe banner (Task #337) ─────────────────────────────
             Shown when any uploaded master is missing format / sample-
             rate / bit-depth on the songs row. Kicks the existing per-
@@ -963,6 +852,168 @@ export function PressPanel({
             />
           );
         })()}
+        </div>
+        )}
+
+        {/* ── FULFILLMENT sub-tab — quiet placeholder (Task #2701) ───── */}
+        {subTab === "fulfillment" && (
+          <div
+            className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center"
+            data-testid="press-subtab-fulfillment"
+          >
+            <Truck className="w-6 h-6 text-slate-300 mx-auto mb-3" />
+            <p className="text-sm font-medium text-slate-500">Fulfillment lives here soon.</p>
+            <p className="text-xs text-slate-400 mt-1">
+              Shipping and fulfillment handoff for this release will move into this tab.
+            </p>
+          </div>
+        )}
+
+        {/* ── View Masters dialog (Task #2701) ─────────────────────────
+            The old Masters-on-file table, tucked behind the Side Breaks
+            header. Adds a per-track preflight chip column and hosts the
+            preflight runner (size / RPM move in here); results refresh
+            both the chips here and the header chip. */}
+        <Dialog open={mastersOpen} onOpenChange={setMastersOpen}>
+          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto" data-testid="dialog-view-masters">
+            <DialogHeader>
+              <DialogTitle>Masters on file</DialogTitle>
+              <DialogDescription>
+                {sorted.length} track{sorted.length === 1 ? "" : "s"} · {withMaster.length} with
+                master · {missing.length > 0 ? `${missing.length} missing` : "all present"} · {fmtBytes(totalBytes)} · {fmtDur(totalDur)}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex flex-wrap items-end gap-3" data-testid="dialog-preflight-runner">
+              <label className="text-[12px] text-slate-600">
+                Size
+                <select
+                  value={vinylSize}
+                  onChange={(e) => setVinylSize(e.target.value as any)}
+                  className="mt-1 block w-28 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
+                  data-testid="select-dialog-size"
+                >
+                  <option value={'7"'}>7"</option>
+                  <option value={'10"'}>10"</option>
+                  <option value={'12"'}>12"</option>
+                </select>
+              </label>
+              <label className="text-[12px] text-slate-600">
+                RPM
+                <select
+                  value={rpm}
+                  onChange={(e) => setRpm(Number(e.target.value) as 33 | 45)}
+                  className="mt-1 block w-24 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
+                  data-testid="select-dialog-rpm"
+                >
+                  <option value={33}>33</option>
+                  <option value={45}>45</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => runOnFile.mutate()}
+                disabled={runOnFile.isPending}
+                className="inline-flex items-center gap-2 px-3 h-9 rounded-md bg-[var(--brand-blue)] text-white text-[13px] font-semibold hover:opacity-90 disabled:opacity-50"
+                data-testid="button-dialog-run-preflight"
+              >
+                {runOnFile.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                {runOnFile.isPending
+                  ? "Validating masters…"
+                  : `Run preflight on ${withMaster.length} master${withMaster.length === 1 ? "" : "s"}`}
+              </button>
+            </div>
+
+            <div className="rounded-md border border-slate-200 bg-white overflow-hidden">
+              <table className="w-full text-[12.5px]">
+                <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2 text-left w-8">#</th>
+                    <th className="px-3 py-2 text-left">Title</th>
+                    <th className="px-3 py-2 text-left">Format</th>
+                    <th className="px-3 py-2 text-left">Rate / Depth</th>
+                    <th className="px-3 py-2 text-left">Duration</th>
+                    <th className="px-3 py-2 text-left">Size</th>
+                    <th className="px-3 py-2 text-left">Preflight</th>
+                    <th className="px-3 py-2 text-right">File</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((s, i) => {
+                    const present = !!s.audioUrl;
+                    const vRow = rowForSong(s);
+                    return (
+                      <tr
+                        key={s.id}
+                        className="group border-t border-slate-100"
+                        data-testid={`row-master-${s.id}`}
+                      >
+                        <td className="px-3 py-2 text-slate-500 font-mono tabular-nums">
+                          {String(i + 1).padStart(2, "0")}
+                        </td>
+                        <td className="px-3 py-2 text-slate-800 font-medium">{s.title}</td>
+                        <td className="px-3 py-2 text-slate-700 font-mono tabular-nums">
+                          {present ? fmtFmt(s.audioFormat, s.audioContainerExt, s.audioUrl) : (
+                            <span className="inline-flex items-center gap-1 text-rose-700">
+                              <AlertTriangle className="w-3 h-3" /> missing
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700 font-mono tabular-nums">
+                          {present ? `${fmtSr(s.audioSampleRate)}${s.audioBitDepth ? ` · ${s.audioBitDepth}-bit` : ""}` : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700 font-mono tabular-nums">{fmtDur(s.duration)}</td>
+                        <td className="px-3 py-2 text-slate-700 font-mono tabular-nums">
+                          {present ? fmtBytes(s.audioBytes) : "—"}
+                        </td>
+                        <td className="px-3 py-2" data-testid={`chip-track-preflight-${s.id}`}>
+                          {vRow ? (
+                            vRow.status === "fail" && !vRow.override ? (
+                              <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full border bg-rose-50 text-rose-700 border-rose-200">
+                                <X className="w-2.5 h-2.5" /> Fail
+                              </span>
+                            ) : vRow.status === "warn" ? (
+                              <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200">
+                                <AlertTriangle className="w-2.5 h-2.5" /> Warn
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
+                                <Check className="w-2.5 h-2.5" /> {vRow.override ? "Override" : "Pass"}
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {present ? (
+                            <a
+                              href={s.audioUrl!}
+                              download={`${String(s.trackNumber).padStart(2, "0")} ${s.title}${urlExt(s.audioUrl) ?? ""}`}
+                              className="inline-flex items-center gap-1 text-[var(--brand-blue)] hover:underline opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 transition-opacity"
+                              data-testid={`link-download-master-${s.id}`}
+                            >
+                              <Download className="w-3 h-3" /> download
+                            </a>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {sorted.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="px-3 py-6 text-center text-slate-500 italic">
+                        No tracks on this album yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

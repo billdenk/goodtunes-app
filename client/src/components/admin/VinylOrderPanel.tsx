@@ -659,82 +659,6 @@ export function VinylOrderPanel({
 
   return (
     <div className="space-y-4" data-testid="panel-vinyl-order">
-      {/* Task #594 — Undo / Redo / Reset toolbar. Keeps the chrome
-          quiet (ghost buttons, h-8) so it sits above the side list
-          without competing with the per-side cards. */}
-      <div
-        className="flex items-center gap-1.5"
-        data-testid="toolbar-vinyl-history"
-      >
-        {!resetConfirm ? (
-          <>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2 text-slate-700"
-              disabled={!canUndo || readOnly}
-              onClick={onUndo}
-              data-testid="button-vinyl-undo"
-            >
-              <Undo2 className="w-3.5 h-3.5 mr-1" />
-              Undo
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2 text-slate-700"
-              disabled={!canRedo || readOnly}
-              onClick={onRedo}
-              data-testid="button-vinyl-redo"
-            >
-              <Redo2 className="w-3.5 h-3.5 mr-1" />
-              Redo
-            </Button>
-            <div className="flex-1" />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2 text-slate-600"
-              disabled={!canReset || readOnly}
-              onClick={onResetRequest}
-              data-testid="button-vinyl-reset"
-            >
-              <RotateCcw className="w-3.5 h-3.5 mr-1" />
-              Reset to original
-            </Button>
-          </>
-        ) : (
-          <div
-            className="flex items-center gap-2 text-xs text-slate-700 w-full"
-            data-testid="confirm-vinyl-reset"
-          >
-            <span>Revert to the saved vinyl order?</span>
-            <div className="flex-1" />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2"
-              onClick={onResetCancel}
-              data-testid="button-vinyl-reset-cancel"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 px-3"
-              onClick={onResetConfirm}
-              data-testid="button-vinyl-reset-confirm"
-            >
-              Reset
-            </Button>
-          </div>
-        )}
-      </div>
       {readOnly && (
         <div
           className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
@@ -768,6 +692,10 @@ export function VinylOrderPanel({
           const totalSec = sideTotalSeconds(side);
           const overBudget = totalSec / 60 > rule.maxMinutesPerSide;
           const ids = working[side];
+          // Task #2701 — the circle badge shows the DISC number (sides
+          // A/B live on disc 1, C/D on disc 2) since "Side A" already
+          // names the side right next to it.
+          const discNumber = Math.floor(sides.indexOf(side) / 2) + 1;
           return (
             <div
               key={side}
@@ -791,8 +719,10 @@ export function VinylOrderPanel({
                         ? "bg-amber-100 text-amber-800"
                         : "bg-slate-100 text-slate-700",
                     )}
+                    title={`Disc ${discNumber}`}
+                    data-testid={`badge-disc-number-${side}`}
                   >
-                    {side}
+                    {discNumber}
                   </div>
                   <div>
                     <div className="text-[12.5px] font-semibold text-slate-900">
@@ -948,7 +878,81 @@ export function VinylOrderPanel({
           );
         })}
       </div>
-      <p className="text-xs text-slate-400">Thresholds are industry defaults.</p>
+      {/* Task #594 / #2701 — Undo / Redo / Reset toolbar, now at the
+          bottom-right below the side cards (thresholds footnote sits
+          bottom-left on the same row). */}
+      <div
+        className="flex items-center justify-between gap-3"
+        data-testid="toolbar-vinyl-history"
+      >
+        <p className="text-xs text-slate-400">Thresholds are industry defaults.</p>
+        {!resetConfirm ? (
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-slate-700"
+              disabled={!canUndo || readOnly}
+              onClick={onUndo}
+              data-testid="button-vinyl-undo"
+            >
+              <Undo2 className="w-3.5 h-3.5 mr-1" />
+              Undo
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-slate-700"
+              disabled={!canRedo || readOnly}
+              onClick={onRedo}
+              data-testid="button-vinyl-redo"
+            >
+              <Redo2 className="w-3.5 h-3.5 mr-1" />
+              Redo
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-slate-600"
+              disabled={!canReset || readOnly}
+              onClick={onResetRequest}
+              data-testid="button-vinyl-reset"
+            >
+              <RotateCcw className="w-3.5 h-3.5 mr-1" />
+              Reset to original
+            </Button>
+          </div>
+        ) : (
+          <div
+            className="flex items-center gap-2 text-xs text-slate-700"
+            data-testid="confirm-vinyl-reset"
+          >
+            <span>Revert to the saved vinyl order?</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2"
+              onClick={onResetCancel}
+              data-testid="button-vinyl-reset-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 px-3"
+              onClick={onResetConfirm}
+              data-testid="button-vinyl-reset-confirm"
+            >
+              Reset
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

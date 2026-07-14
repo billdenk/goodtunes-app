@@ -10832,57 +10832,37 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">"
+    "snippet": "className=\"inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-500\">"
+    "snippet": "className=\"inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-rose-50 text-rose-700 border-rose-200\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "\"shrink-0 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border\","
+    "snippet": "className=\"inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-slate-50 text-slate-500 border-slate-200\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "className=\"shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[var(--brand-blue-hover)] disabled:opacity-50 disabled:cur"
+    "snippet": "\"inline-flex items-center gap-1.5 text-[13px] py-1\","
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "className=\"text-[12px] text-slate-500 flex items-center gap-1.5\""
+    "snippet": "<span className=\"text-[12.5px] text-slate-400 shrink-0\">Press:</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "<div className=\"text-[12.5px] font-semibold text-slate-900\">"
+    "snippet": "<span className=\"text-[12.5px] font-semibold text-slate-900 truncate\" data-testid=\"text-press-readout-name\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-700 mt-0.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "<div className=\"text-[11.5px] text-slate-500 mt-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">Masters on file</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "<table className=\"w-full text-[12.5px]\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "<thead className=\"bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500\">"
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Side Breaks</h2>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -10913,6 +10893,46 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
     "snippet": "<p className=\"text-[11px] text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "className=\"mt-1 block w-28 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "className=\"mt-1 block w-24 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "className=\"inline-flex items-center gap-2 px-3 h-9 rounded-md bg-[var(--brand-blue)] text-white text-[13px] font-semibold hover:opacity-90 disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "<table className=\"w-full text-[12.5px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "<thead className=\"bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full border bg-rose-50 text-rose-700 border-rose-200\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200\">"
   },
   {
     "rule": "brand-hex-literal",
