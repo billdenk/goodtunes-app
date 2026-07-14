@@ -136,6 +136,11 @@ export interface AlbumDetailMobileSurfaceProps {
   onShuffle?: () => void;
   onPlaySong?: (song: AlbumDetailMobileSurfaceSong) => void;
   onOpenBuy?: () => void;
+  /** Task #2714 — Shopify+ external Sale URL is set: the Buy CTA hands the
+   *  fan to the artist's own store (new tab, via onOpenBuy), so the pill
+   *  reads a plain "Buy Now" (no price — the store owns pricing) and a small
+   *  trust cue renders beneath the transport row. */
+  externalSale?: boolean;
   /** Task #1628 — staged release whose sales-begin (sunrise) date hasn't
    *  arrived. When set (and the fan doesn't own the album), the Buy CTA is
    *  replaced by a disabled "Sales Begin {label}" pill (e.g. "Sales Begin
@@ -222,6 +227,7 @@ export function AlbumDetailMobileSurface({
   onShuffle,
   onPlaySong,
   onOpenBuy,
+  externalSale = false,
   salesBeginLabel,
   soldOut = false,
   lockedPreview = false,
@@ -889,7 +895,7 @@ export function AlbumDetailMobileSurface({
                   <circle cx="20" cy="21" r="1" />
                   <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
                 </svg>
-                Buy {formatUsdCents(album.priceCents)}
+                {externalSale ? "Buy Now" : `Buy ${formatUsdCents(album.priceCents)}`}
               </button>
             ))}
           {/* Task #1784 — "Get Details" re-opens the offer modal. It used to sit
@@ -943,6 +949,26 @@ export function AlbumDetailMobileSurface({
             </button>
           )}
         </div>
+
+        {/* Task #2714 — trust cue under the transport row when the Buy CTA
+            reroutes to the artist's own store. Only renders alongside a live
+            Buy CTA (not owned / sold out / sales-pending). */}
+        {externalSale &&
+          ownedNums.length === 0 &&
+          album.priceCents != null &&
+          !soldOut &&
+          onOpenBuy &&
+          !salesBeginLabel &&
+          !(lockedPreview && (salesBeginLabel || notifyOnly)) && (
+            <div className="bg-[color:var(--brand-bg)] flex justify-center px-5 pt-2">
+              <p
+                className="text-fan-faint text-xs text-center"
+                data-testid="text-external-sale-cue"
+              >
+                You'll complete your purchase on the artist's store.
+              </p>
+            </div>
+          )}
 
         {/* "Get Details" — centered on its own line beneath the Play + Buy
             buttons so the transport row stays a clean, balanced pair of pills.

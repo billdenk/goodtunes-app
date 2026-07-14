@@ -9212,6 +9212,28 @@ export async function registerRoutes(
     // usual). No fan-facing behavior — purely a CMS tag.
     if (req.body?.isSpinPromo !== undefined)
       updates.isSpinPromo = !!req.body.isSpinPromo;
+    // Task #2714 — Shopify+ external Sale URL. When set, the public
+    // Preview & Purchase page reroutes every Buy affordance to the
+    // artist's own Shopify product page (new tab) instead of the
+    // GoodTunes Buy sheet. Must be a valid https URL; empty/null clears.
+    if (req.body?.externalSaleUrl !== undefined) {
+      const raw = req.body.externalSaleUrl;
+      const trimmed = raw ? String(raw).trim() : "";
+      if (!trimmed) {
+        updates.externalSaleUrl = null;
+      } else {
+        let parsed: URL;
+        try {
+          parsed = new URL(trimmed);
+        } catch {
+          return res.status(400).json({ message: "Sale URL must be a valid https URL." });
+        }
+        if (parsed.protocol !== "https:") {
+          return res.status(400).json({ message: "Sale URL must be a valid https URL." });
+        }
+        updates.externalSaleUrl = trimmed;
+      }
+    }
     if (req.body?.appleMusicUrl !== undefined) updates.appleMusicUrl = req.body.appleMusicUrl ? String(req.body.appleMusicUrl) : null;
     if (req.body?.spotifyUrl !== undefined) updates.spotifyUrl = req.body.spotifyUrl ? String(req.body.spotifyUrl) : null;
     // Task #816 — four additional streaming-service handoff URLs. Same

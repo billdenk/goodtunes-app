@@ -474,6 +474,12 @@ export const albums = pgTable("albums", {
   // touches paid/paying amounts.
   shopifyPlusRunClosedAt: timestamp("shopify_plus_run_closed_at"),
   shopifyPlusRunClosedByUserId: varchar("shopify_plus_run_closed_by_user_id"),
+  // Task #2714 — operator-entered external Sale URL. Only meaningful when
+  // sellMode = "shopify_plus": the artist/label sells on their own Shopify,
+  // so when set the public Preview & Purchase page reroutes every Buy
+  // affordance to this URL (new tab) instead of opening the GoodTunes Buy
+  // sheet. Nullable; null = normal GoodTunes checkout. Must be https.
+  externalSaleUrl: text("external_sale_url"),
   // Task #2574 — Shopify+ middle release status: "Submitted to press".
   // Only meaningful when sellMode = "shopify_plus" AND isPrepping = true:
   // non-null means the package has been formally submitted to the press

@@ -94,6 +94,12 @@ export type LockedOfferModalProps = {
    *  (skipping the overview) when launched from the Buy CTA. At that entry
    *  step the bottom-left Back button is hidden; the X closes the sheet. */
   startAtBundle?: boolean;
+  /** Task #2714 — Shopify+ external Sale URL. When set (and the release is
+   *  live), the Buy CTA opens the artist's own store in a new tab instead of
+   *  handing off to the GoodTunes Buy sheet, with a trust cue underneath.
+   *  The in-modal format/signed-cert selection is skipped — the artist's
+   *  store owns those choices. Null/undefined = normal Buy-sheet handoff. */
+  externalSaleUrl?: string | null;
 };
 
 const CARD_BG = "#0B1547";
@@ -841,15 +847,28 @@ export function LockedOfferModal({
   accentMint,
   dismissLabel,
   startAtBundle,
+  externalSaleUrl,
 }: LockedOfferModalProps) {
   // Lead with the notify flow either pre-launch (sunrise pending) OR when the
   // campaign fan link forces notify-only on an otherwise-live release.
   // Task #1784 — the /staging dry-run forces the Buy CTA past both gates so a
   // reviewer can reach the Stripe card screen on a still-prepping release.
   const leadNotify = !forceBuy && (salesPending || !!notifyOnly);
+  // Task #2714 — Shopify+ external Sale URL: the sale happens on the artist's
+  // own store, so the Buy CTA opens that URL in a new tab and the in-modal
+  // format/signed-cert selection (the campaign flow) is skipped entirely.
+  const externalBuy = !leadNotify && !!externalSaleUrl;
+  const openExternalSale = () => {
+    if (!externalSaleUrl) return;
+    // Popup blockers can swallow window.open — fall back to same-tab
+    // navigation so the Buy tap never silently no-ops.
+    const win = window.open(externalSaleUrl, "_blank", "noopener");
+    if (!win) window.location.assign(externalSaleUrl);
+    onClose();
+  };
   // Task #1816 — does this release map to a rich campaign in Hope.tsx?
   const campaign = getCampaignRelease(artist ?? undefined, title);
-  const richBuy = !!campaign && !leadNotify;
+  const richBuy = !!campaign && !leadNotify && !externalBuy;
 
   // Task #1784 — mint primary treatment for the preview surfaces. Brand vars
   // only (design-system.md): mint fill + deep-navy text, never raw hex.
@@ -1557,20 +1576,32 @@ export function LockedOfferModal({
                   Get Early Access
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => onBuy()}
-                  className={`mt-6 w-full h-12 rounded-full font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-transform ${accentMint ? "" : "text-white"}`}
-                  style={
-                    primaryAccentStyle ?? {
-                      background: "linear-gradient(135deg, #1D5E8F, var(--brand-blue))",
+                <>
+                  <button
+                    type="button"
+                    onClick={() => (externalBuy ? openExternalSale() : onBuy())}
+                    className={`mt-6 w-full h-12 rounded-full font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-transform ${accentMint ? "" : "text-white"}`}
+                    style={
+                      primaryAccentStyle ?? {
+                        background: "linear-gradient(135deg, #1D5E8F, var(--brand-blue))",
+                      }
                     }
-                  }
-                  data-testid="button-offer-buy"
-                >
-                  <ShoppingCart className="w-[18px] h-[18px]" strokeWidth={2.2} />
-                  {priceLabel ? `Buy ${priceLabel}` : "Buy Now"}
-                </button>
+                    data-testid="button-offer-buy"
+                  >
+                    <ShoppingCart className="w-[18px] h-[18px]" strokeWidth={2.2} />
+                    {externalBuy ? "Buy Now" : priceLabel ? `Buy ${priceLabel}` : "Buy Now"}
+                  </button>
+                  {/* Task #2714 — trust cue: the hand-off to the artist's own
+                      store shouldn't feel jarring. */}
+                  {externalBuy && (
+                    <p
+                      className="text-fan-faint text-xs mt-2 text-center"
+                      data-testid="text-external-sale-cue"
+                    >
+                      You'll complete your purchase on the artist's store.
+                    </p>
+                  )}
+                </>
               )}
               <button
                 type="button"

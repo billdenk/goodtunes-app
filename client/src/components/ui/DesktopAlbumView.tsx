@@ -98,6 +98,11 @@ export type DesktopAlbumViewProps = {
   /** Buy CTA. Receives the current add-on selection so the host can
    *  open BuySheet with the matching toggles pre-checked. */
   onBuyBundle?: (opts?: { signedCert?: boolean }) => void;
+  /** Task #2714 — Shopify+ external Sale URL is set: onBuyBundle hands the
+   *  fan to the artist's own store (new tab), so the Buy CTA reads a plain
+   *  "Buy Now" (no price/signed-cert chip — the store owns pricing) and a
+   *  trust cue renders beneath the transport row. */
+  externalSale?: boolean;
   /** Task #1628 — staged release whose sales-begin (sunrise) date hasn't
    *  arrived. When set (and the album isn't owned), the Buy pill is replaced
    *  by a disabled "Sales Begin {label}" pill (e.g. "Sales Begin 6/8");
@@ -327,6 +332,7 @@ export function DesktopAlbumView({
   onPlayAll,
   onShuffle,
   onBuyBundle,
+  externalSale = false,
   salesBeginLabel,
   soldOut = false,
   notifyOnly = false,
@@ -858,7 +864,7 @@ export function DesktopAlbumView({
                       }}
                     >
                       <ShoppingCart className="w-4 h-4" strokeWidth={2.2} />
-                      Buy {formatPrice(album.priceCents)}
+                      {externalSale ? "Buy Now" : `Buy ${formatPrice(album.priceCents)}`}
                     </button>
                   ) : salesBeginLabel || notifyOnly ? (
                     <button
@@ -890,7 +896,7 @@ export function DesktopAlbumView({
                       }}
                     >
                       <ShoppingCart className="w-4 h-4" strokeWidth={2.2} />
-                      Buy {formatPrice(album.priceCents)}
+                      {externalSale ? "Buy Now" : `Buy ${formatPrice(album.priceCents)}`}
                     </button>
                   ) : null}
                   {/* Task #1784 — "Get Details" re-opens the offer modal; sits
@@ -968,6 +974,23 @@ export function DesktopAlbumView({
                         </svg>
                         Sales Begin {salesBeginLabel}
                       </button>
+                    ) : externalSale ? (
+                      /* Task #2714 — external Sale URL: plain "Buy Now" pill
+                         (no hover-price / signed-cert chip — pricing and
+                         add-ons live on the artist's own store). */
+                      <button
+                        type="button"
+                        onClick={() => onBuyBundle?.()}
+                        data-testid="button-buy-bundle"
+                        className="h-11 px-5 rounded-full inline-flex items-center gap-2 font-semibold text-sm text-white transition-transform active:scale-[0.97]"
+                        style={{
+                          background: "#070B22",
+                          border: "1px solid rgba(255,255,255,0.12)",
+                        }}
+                      >
+                        <ShoppingCart className="w-4 h-4" strokeWidth={2.2} />
+                        Buy Now
+                      </button>
                     ) : (
                       <BuyPricePill
                         priceLabel={formatPrice(album.priceCents)}
@@ -982,6 +1005,22 @@ export function DesktopAlbumView({
                 </>
               )}
             </div>
+            {/* Task #2714 — trust cue under the transport row when the Buy
+                CTA reroutes to the artist's own store. Only renders alongside
+                a live Buy CTA (not owned / sold out / sales-pending). */}
+            {externalSale &&
+              !isOwned &&
+              !soldOut &&
+              onBuyBundle &&
+              album.priceCents != null &&
+              !salesBeginLabel && (
+                <p
+                  className="text-fan-faint text-xs mt-2"
+                  data-testid="text-external-sale-cue"
+                >
+                  You'll complete your purchase on the artist's store.
+                </p>
+              )}
           </div>
         </section>
 

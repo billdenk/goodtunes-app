@@ -350,6 +350,7 @@ function ShareSlugStaging() {
     <AlbumDetail
       albumId={data.id}
       publicPreview={data.isPrepping ? "buy" : undefined}
+      stagingCheckout
     />
   );
 }
@@ -385,7 +386,9 @@ function Testing() {
 
   if (isLoading) return <AlbumDetailMobileSkeleton />;
   if (isError || !data) return <AlbumNotFound variant="mobile" />;
-  return <AlbumDetail albumId={data.id} />;
+  // stagingCheckout — the /testing dry-run must keep the real GoodTunes
+  // Buy sheet + Stripe path even when an external Sale URL is set.
+  return <AlbumDetail albumId={data.id} stagingCheckout />;
 }
 
 function Router() {

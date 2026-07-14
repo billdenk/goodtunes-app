@@ -978,6 +978,30 @@ SQL
 migrate_push_devices dev  "${DATABASE_URL:-}"
 migrate_push_devices prod "${PROD_DATABASE_URL:-}"
 
+# Task #2714 — Shopify+ external Sale URL. `albums.external_sale_url`
+# (nullable text): operator-pasted Shopify product URL that reroutes the
+# public Preview & Purchase Buy CTAs to the artist's own store. Hand-apply
+# the additive DDL on BOTH dev and prod so the schema-drift guard stays
+# green and the publish dev→prod diff stays empty. Idempotent.
+migrate_external_sale_url() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping external_sale_url migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE IF EXISTS albums
+  ADD COLUMN IF NOT EXISTS external_sale_url text;
+SQL
+  then
+    echo "post-merge: external_sale_url migration ok on $label"
+  else
+    echo "post-merge: WARNING — external_sale_url migration failed on $label (continuing)"
+  fi
+}
+migrate_external_sale_url dev  "${DATABASE_URL:-}"
+migrate_external_sale_url prod "${PROD_DATABASE_URL:-}"
+
 # Publishing-payout settlement columns — `organizations.pay_to_org_id`
 # (administered-by routing, e.g. Songs of Kaotic → Hipgnosis),
 # `payout_settings.mechanical_rate_micros` (statutory $0.127/unit default),

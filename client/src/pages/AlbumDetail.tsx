@@ -294,6 +294,7 @@ export function AlbumDetail({
   albumId,
   notifyOnly = false,
   publicPreview,
+  stagingCheckout = false,
 }: {
   albumId?: string;
   notifyOnly?: boolean;
@@ -302,6 +303,10 @@ export function AlbumDetail({
   // flow to the Stripe card screen). Undefined elsewhere so normal owned/store
   // album views are untouched.
   publicPreview?: "notify" | "buy";
+  // Task #2714 — set only by the operator/reviewer dry-run routes (/staging,
+  // /testing). Disarms the external Sale URL reroute so those flows keep
+  // walking the real GoodTunes Buy sheet + Stripe path.
+  stagingCheckout?: boolean;
 } = {}) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   // /hope leads with the notify (email-capture) flow; /staging stays buy-
@@ -325,12 +330,14 @@ export function AlbumDetail({
       albumId={albumId}
       notifyOnly={effectiveNotifyOnly}
       publicPreview={publicPreview}
+      stagingCheckout={stagingCheckout}
     />
   ) : (
     <AlbumDetailMobile
       albumId={albumId}
       notifyOnly={effectiveNotifyOnly}
       publicPreview={publicPreview}
+      stagingCheckout={stagingCheckout}
     />
   );
   // FanPreviewProvider keeps the fan-preview lens wiring intact (read via
@@ -393,7 +400,8 @@ function AlbumDetailMobile({
   albumId,
   notifyOnly = false,
   publicPreview,
-}: { albumId?: string; notifyOnly?: boolean; publicPreview?: "notify" | "buy" }) {
+  stagingCheckout = false,
+}: { albumId?: string; notifyOnly?: boolean; publicPreview?: "notify" | "buy"; stagingCheckout?: boolean }) {
   const params = useParams<{ id: string }>();
   const id = albumId ?? params.id;
   const _recordRecent = useRecordRecent();
@@ -582,6 +590,9 @@ function AlbumDetailMobile({
     pandoraUrl: string | null;
     // Task #970 — clean per-release share slug (get.goodtunes.music/<slug>).
     shareSlug: string | null;
+    // Task #2714 — Shopify+ external Sale URL. When set, every Buy affordance
+    // reroutes to the artist's own store (new tab) instead of the Buy sheet.
+    externalSaleUrl?: string | null;
     // Denormalized record-label entity (or null). Comes from the album's
     // LEFT JOIN on `labels` so we render name/logo without a second fetch.
     label: {
@@ -645,9 +656,29 @@ function AlbumDetailMobile({
   // (e.g. a 7" single at $25.00), NOT the legacy albums.price_cents column,
   // which can be a stale placeholder (Hope's is 25¢). Mirrors the desktop
   // page's buy-options fetch; shares the same cache key.
+  // Task #2714 — Shopify+ external Sale URL: the sale happens on the artist's
+  // own store, so every Buy affordance opens this URL in a new tab instead of
+  // the GoodTunes Buy sheet. Only meaningful when buying is possible at all
+  // (web, not owned) — native/owned surfaces never reach a Buy affordance.
+  // The /staging + /testing dry-runs (stagingCheckout) must keep walking the
+  // real GoodTunes Buy sheet + Stripe path for operator/reviewer QA, so the
+  // external reroute is disarmed there (fan-facing surfaces only).
+  const externalSaleUrl = stagingCheckout
+    ? null
+    : (apiAlbum?.externalSaleUrl ?? null);
+  const openExternalSale = useCallback(() => {
+    if (!externalSaleUrl) return;
+    // Popup blockers can return null when this fires outside a user gesture
+    // (the ?buy=1 deep-link effect) — fall back to same-tab navigation so the
+    // reroute never silently no-ops.
+    const win = window.open(externalSaleUrl, "_blank", "noopener");
+    if (!win) window.location.assign(externalSaleUrl);
+  }, [externalSaleUrl]);
   const { data: buyOptions } = useQuery<{ skus?: { priceCents: number }[] }>({
     queryKey: ["/api/albums", id, "buy-options"],
-    enabled: !!id && buyEnabled && !isOwned,
+    // Task #2714 — skip the sheet's buy-options prefetch when the sale is
+    // rerouted to the artist's own store (the sheet never opens).
+    enabled: !!id && buyEnabled && !isOwned && !externalSaleUrl,
     staleTime: 60_000,
   });
   const buyPriceCents = ((): number | null => {
@@ -932,8 +963,12 @@ function AlbumDetailMobile({
       setShowOfferModal(true);
       return;
     }
+    // Task #2714 — external Sale URL: never auto-open the Buy sheet (and
+    // never auto-pop a new tab — browsers block non-gesture window.open).
+    // The fan buys via the page's own Buy CTA, which opens the store.
+    if (externalSaleUrl) return;
     setShowBuySheet(true);
-  }, [isPlaying, previewMode, queue.length, currentIndex, currentTime, previewEndSec, isOwned, apiAlbum?.goodTunesReleaseDate, lockedPreview, publicPreview]);
+  }, [isPlaying, previewMode, queue.length, currentIndex, currentTime, previewEndSec, isOwned, apiAlbum?.goodTunesReleaseDate, lockedPreview, publicPreview, externalSaleUrl]);
 
   // Leaving the album shouldn't leave preview-mode armed on whatever
   // the fan plays next (a downloaded album from their library, a
@@ -1005,6 +1040,17 @@ function AlbumDetailMobile({
       !isOwned && isSunrisePending(apiAlbum?.goodTunesReleaseDate);
     if (pending && showBuySheet) setShowBuySheet(false);
   }, [isOwned, apiAlbum?.goodTunesReleaseDate, showBuySheet, publicPreview]);
+
+  // Task #2714 — external Sale URL: the Buy sheet must never open for these
+  // albums, no matter how it was triggered (the `?buy=1` deep link initializes
+  // showBuySheet before the album data has loaded). Reroute to the artist's
+  // store instead. Same hook-order constraint as the effect above: MUST run
+  // before the loading / not-found guards.
+  useEffect(() => {
+    if (!externalSaleUrl || !showBuySheet || isOwned) return;
+    setShowBuySheet(false);
+    openExternalSale();
+  }, [externalSaleUrl, showBuySheet, isOwned, openExternalSale]);
 
   // Task #1766 — the get-host preview/purchase page now renders the full rich
   // album layout (hero, metadata, tracklist, Videos) instead of fronting it
@@ -1225,6 +1271,12 @@ function AlbumDetailMobile({
           onOpenBuy={
             buyEnabled && !isSunset
               ? () => {
+                  // Task #2714 — external Sale URL: the Buy trigger hands the
+                  // fan straight to the artist's own store (new tab).
+                  if (externalSaleUrl) {
+                    openExternalSale();
+                    return;
+                  }
                   if (lockedPreview || publicPreview) {
                     setOfferStartAtBundle(true);
                     setShowOfferModal(true);
@@ -1234,6 +1286,7 @@ function AlbumDetailMobile({
                 }
               : undefined
           }
+          externalSale={!!externalSaleUrl}
           salesBeginLabel={salesBeginLabel}
           lockedPreview={lockedPreview}
           notifyOnly={notifyOnly}
@@ -1309,8 +1362,16 @@ function AlbumDetailMobile({
             accentMint={!!publicPreview}
             dismissLabel={publicPreview ? "Preview the Music" : undefined}
             startAtBundle={offerStartAtBundle}
+            externalSaleUrl={externalSaleUrl}
             onBuy={(opts) => {
               setShowOfferModal(false);
+              // Task #2714 — external Sale URL: the modal handles the reroute
+              // itself; this is a belt-and-suspenders guard so the Buy sheet
+              // can never open for an externally-sold release.
+              if (externalSaleUrl) {
+                openExternalSale();
+                return;
+              }
               setBuySheetSignedDefault(!!opts?.signedCert);
               setBuySheetSelection(opts?.selection);
               setShowBuySheet(true);

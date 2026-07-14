@@ -45,6 +45,9 @@ export type ShopifyPanelAlbum = {
   artist: string;
   artwork: string;
   priceCents?: number | null;
+  // Task #2714 — Shopify+ external Sale URL (fan Buy affordances reroute to
+  // the artist's own store). Threaded from AdminAlbum's album row.
+  externalSaleUrl?: string | null;
   songs: ShopifyPanelSong[];
 };
 
@@ -156,6 +159,33 @@ export function ShopifyPanel({
   // fulfillment-only). Not shown for plain "shopify" (a mapping always mints).
   const isShopifyPlus = sellMode === "shopify_plus";
   const [offerUnlock, setOfferUnlock] = useState(false);
+
+  // Task #2714 — operator-entered "Sale URL" (shopify_plus only). When set,
+  // the public Preview & Purchase page reroutes every Buy affordance to this
+  // URL in a new tab instead of opening the GoodTunes Buy sheet.
+  const [saleUrl, setSaleUrl] = useState<string>(album?.externalSaleUrl ?? "");
+  const [saleUrlDirty, setSaleUrlDirty] = useState(false);
+  useEffect(() => {
+    // Re-seed only while the operator hasn't typed (sibling saves refetch the
+    // shared album query — don't wipe in-progress edits).
+    if (!saleUrlDirty) setSaleUrl(album?.externalSaleUrl ?? "");
+  }, [album?.externalSaleUrl, saleUrlDirty]);
+  const saveSaleUrl = useMutation({
+    mutationFn: async () => {
+      const trimmed = saleUrl.trim();
+      const r = await apiRequest("PUT", `/api/admin/albums/${albumId}`, {
+        externalSaleUrl: trimmed === "" ? null : trimmed,
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      setSaleUrlDirty(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId] });
+      toast({ title: "Sale URL saved" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't save Sale URL", description: e?.message, variant: "destructive" }),
+  });
 
   // Push-to-Shopify (Task #242) — locally-edited fields. Initialized
   // from /shopify-push so the inputs reflect the persisted album row
@@ -315,6 +345,48 @@ export function ShopifyPanel({
             behind it — map each of their Shopify products to this album below so incoming
             orders route here. A mapped product is fulfillment-only by default; tick “Also mint
             the GoodTunes digital unlock + GoodDeed” to also hand buyers the app.
+          </div>
+        )}
+        {/* Task #2714 — Sale URL (shopify_plus only). Reroutes the public
+            Preview & Purchase page's Buy affordances to the artist's own
+            store in a new tab. Empty clears (Buy sheet returns). */}
+        {isShopifyPlus && (
+          <div
+            className="rounded-lg border border-slate-200 bg-white p-4 mb-6"
+            data-testid="section-external-sale-url"
+          >
+            <h2 className="text-sm font-semibold text-slate-900 mb-1">Sale URL</h2>
+            <p className="text-sm text-slate-500 mb-3 leading-snug">
+              Where fans buy this release. When set, every Buy button on the public
+              preview page opens this link in a new tab instead of GoodTunes checkout.
+              Leave empty to use GoodTunes checkout.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="url"
+                value={saleUrl}
+                onChange={(e) => {
+                  setSaleUrl(e.target.value);
+                  setSaleUrlDirty(true);
+                }}
+                placeholder="https://the-artists-store.com/products/album"
+                className="flex-1 h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]"
+                data-testid="input-external-sale-url"
+              />
+              <button
+                type="button"
+                onClick={() => saveSaleUrl.mutate()}
+                disabled={saveSaleUrl.isPending || !saleUrlDirty}
+                className="h-9 px-4 rounded-md bg-slate-900 text-white text-sm font-medium disabled:opacity-50"
+                data-testid="button-save-external-sale-url"
+              >
+                {saveSaleUrl.isPending ? "Saving…" : "Save"}
+              </button>
+            </div>
+            <p className="text-xs text-slate-400 mt-2">
+              Must start with https://. Fans see “You'll complete your purchase on the
+              artist's store.”
+            </p>
           </div>
         )}
         {!isShopifyPlus && (

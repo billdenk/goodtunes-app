@@ -11,6 +11,17 @@ The whole flow is: **album page → Buy sheet → (cert step, when offered) → 
 > are called out inline with **"Only when…"** so this doc doesn't oversell what
 > every fan sees.
 
+> **Shopify+ Sale-URL reroute (Task #2714):** when a `shopify_plus` release has an
+> operator-entered **Sale URL** (album's admin Shopify tab → "Sale URL" card,
+> https-only, empty clears), the whole flow below is bypassed on that release's
+> public Preview & Purchase page. Every Buy affordance — the locked-offer modal's
+> Buy button, the desktop Buy pill, the mobile buy trigger, and the `?buy=1`
+> shortcut — reads **"Buy Now"** and opens the artist's own store in a new tab
+> instead of the GoodTunes Buy sheet, with a small trust cue underneath:
+> *"You'll complete your purchase on the artist's store."* Owned copies, native
+> apps (Buy hidden anyway), and preview-pass behavior are unchanged, and the
+> Buy-sheet data (`/buy-options`) isn't even fetched while the URL is set.
+
 ---
 
 ## Step 1 — Entry point: the album page
