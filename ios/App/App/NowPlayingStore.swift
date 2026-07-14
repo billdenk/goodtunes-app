@@ -221,6 +221,35 @@ final class NowPlayingStore {
     // `setMetadata` first arrives, which proves the bridge is alive.
     var pendingPlay: Bool = false
 
+    // MARK: - Cold-start pending play-INTENT buffer (tap-to-play)
+    //
+    // A cold CarPlay connect now boots the web player headless
+    // (HeadlessWebPlayer, MainViewController.swift), but the boot takes
+    // ~10-15s. Any browse tap landing in that window hits a nil onPlayAlbum /
+    // onPlayIndex / onPlayPlaylist and used to be silently lost. Buffer the
+    // LAST intent (a newer tap replaces an older one — the driver changed
+    // their mind) with its timestamp; NowPlayingPlugin.load() drains it right
+    // after registering the callbacks. Stale intents (> pendingIntentMaxAge)
+    // are dropped at drain so a buffered tap from a boot that never finished
+    // can't blast audio out of nowhere much later.
+    enum PendingPlayIntent {
+        case album(albumId: String, trackId: String?, shuffle: Bool)
+        case index(Int)
+        case playlist(String)
+    }
+    private(set) var pendingIntent: PendingPlayIntent?
+    private(set) var pendingIntentAt: Date?
+    static let pendingIntentMaxAge: TimeInterval = 120
+
+    /// Pop the buffered play intent if it is still fresh; nil otherwise.
+    func drainPendingIntent() -> PendingPlayIntent? {
+        defer { pendingIntent = nil; pendingIntentAt = nil }
+        guard let intent = pendingIntent, let at = pendingIntentAt,
+              Date().timeIntervalSince(at) <= NowPlayingStore.pendingIntentMaxAge
+        else { return nil }
+        return intent
+    }
+
     // MARK: - Freeze-recovery diagnostic counter (Bug A)
     //
     // Counts how many times the setPlaybackState duration-mismatch guard
@@ -291,20 +320,37 @@ final class NowPlayingStore {
     }
 
     /// Ask the web player to load and play `playlistId` (CarPlay playlist tap).
+    /// Plugin not loaded yet (cold connect, web player still booting) → buffer
+    /// the intent for NowPlayingPlugin.load() to drain.
     func requestPlayPlaylist(playlistId: String) {
-        onPlayPlaylist?(playlistId)
+        guard let cb = onPlayPlaylist else {
+            pendingIntent = .playlist(playlistId)
+            pendingIntentAt = Date()
+            return
+        }
+        cb(playlistId)
     }
 
     /// Ask the web player to jump to `index` in the queue (CarPlay Up Next tap).
     func requestPlayIndex(_ index: Int) {
-        onPlayIndex?(index)
+        guard let cb = onPlayIndex else {
+            pendingIntent = .index(index)
+            pendingIntentAt = Date()
+            return
+        }
+        cb(index)
     }
 
     /// Ask the web player to play `albumId`. `trackId` nil = start from the top;
     /// `shuffle` true = shuffle the album (CarPlay album Play/Shuffle rows, a
     /// track tap, or a Recents tap).
     func requestPlayAlbum(albumId: String, trackId: String?, shuffle: Bool) {
-        onPlayAlbum?(albumId, trackId, shuffle)
+        guard let cb = onPlayAlbum else {
+            pendingIntent = .album(albumId: albumId, trackId: trackId, shuffle: shuffle)
+            pendingIntentAt = Date()
+            return
+        }
+        cb(albumId, trackId, shuffle)
     }
 
     /// Ask the web player to toggle the current track's favorite (CarPlay Now

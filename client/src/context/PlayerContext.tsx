@@ -17,6 +17,7 @@ import {
   setNowPlayingFavorite,
   clearNowPlaying,
   onNowPlayingRemoteCommand,
+  configureHeadlessBringUp,
   absolutizeArtwork,
   logPlaybackEvent,
   type NowPlayingCatalogAlbum,
@@ -1293,6 +1294,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setRepeat((r) => (r === "none" ? "all" : r === "all" ? "one" : "none"));
   }, []);
 
+  // Cold-boot stash for a native CarPlay playAlbum command that arrived before
+  // the library queries resolved (headless cold-connect bring-up: the retained
+  // native command is delivered the instant the listener attaches, which is
+  // usually BEFORE /api/my-albums and the song list land — without this the
+  // driver's tap would be silently dropped). Replayed by the effect below the
+  // moment both queries resolve; dropped if older than the same 2-minute
+  // staleness window the native side uses.
+  const pendingNativePlayRef = useRef<{
+    albumId: string;
+    trackId: string | undefined;
+    shuffle: boolean;
+    at: number;
+  } | null>(null);
+
   // Start an owned album from the CarPlay browse UI. Builds a fresh queue from
   // the album's GoodTunes-hosted tracks (trackNumber order) and begins playback.
   //  - trackId set  → start at that track (tapping a row in the tracklist)
@@ -1301,12 +1316,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const playAlbumFromNative = useCallback(
     (albumId: string, trackId: string | undefined, shuffleOn: boolean) => {
       const album = ownedAlbumById.get(albumId);
-      if (!album) return;
-      const songs = (dbSongList ?? [])
-        .filter((s) => s.albumId === albumId && !s.streamOnly)
-        .sort((a, b) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0))
-        .map((s) => ({ ...s, album } as PlayerSong));
-      if (songs.length === 0) return;
+      const songs = album
+        ? (dbSongList ?? [])
+            .filter((s) => s.albumId === albumId && !s.streamOnly)
+            .sort((a, b) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0))
+            .map((s) => ({ ...s, album } as PlayerSong))
+        : [];
+      if (!album || songs.length === 0) {
+        // Library not loaded yet → stash for replay. Both queries resolved →
+        // the album genuinely isn't playable (not owned / no hosted tracks);
+        // drop it like before.
+        if (myAlbumsForOwnership === undefined || dbSongList === undefined) {
+          pendingNativePlayRef.current = { albumId, trackId, shuffle: shuffleOn, at: Date.now() };
+        }
+        return;
+      }
+      pendingNativePlayRef.current = null;
       setShuffle(shuffleOn);
       let startIdx = 0;
       if (trackId) {
@@ -1317,8 +1342,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }
       playSong(songs[startIdx], songs);
     },
-    [ownedAlbumById, dbSongList, playSong],
+    [ownedAlbumById, dbSongList, myAlbumsForOwnership, playSong],
   );
+
+  // Replay a stashed cold-boot playAlbum command once the library queries have
+  // resolved. Runs at most once per stash: the ref is cleared before replay,
+  // and a replay that still can't find the album (both queries resolved) drops
+  // it inside playAlbumFromNative rather than re-stashing.
+  useEffect(() => {
+    const pending = pendingNativePlayRef.current;
+    if (!pending) return;
+    if (myAlbumsForOwnership === undefined || dbSongList === undefined) return;
+    pendingNativePlayRef.current = null;
+    if (Date.now() - pending.at > 2 * 60_000) return;
+    playAlbumFromNative(pending.albumId, pending.trackId, pending.shuffle);
+  }, [myAlbumsForOwnership, dbSongList, playAlbumFromNative]);
 
   // ── Lock-screen / Control Center / media-notification integration ────────
   //
@@ -1712,6 +1750,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         });
       }
     }
+
+    // Persist the cold-CarPlay headless bring-up switch into native
+    // UserDefaults (best-effort no-op off-iOS / on older binaries) so a web
+    // publish can disable the feature without a native rebuild.
+    configureHeadlessBringUp();
 
     // Native iOS remote commands (MPRemoteCommandCenter → here).
     const unsubscribeNative = onNowPlayingRemoteCommand((cmd) => {

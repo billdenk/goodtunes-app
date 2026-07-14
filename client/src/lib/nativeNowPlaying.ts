@@ -108,13 +108,14 @@ export type RemoteCommand =
   | { action: "seek"; value: number }
   /** The user tapped a row in the CarPlay browse list —
    *  `value` is the 0-based index into the queue last published via
-   *  {@link setNowPlayingQueue}. */
-  | { action: "playIndex"; value: number }
+   *  {@link setNowPlayingQueue}. `ts` (ms epoch, newer binaries) lets JS drop
+   *  a stale retained command — see the staleness guard below. */
+  | { action: "playIndex"; value: number; ts?: number }
   /** The user tapped a track in the CarPlay Library (album detail), a Play/
    *  Shuffle row, or a Recents entry. Play `albumId` from the catalog last
    *  published via {@link setNowPlayingCatalog}: `trackId` present = start at that
    *  track; absent = start from the top; `shuffle` = shuffle the album. */
-  | { action: "playAlbum"; albumId: string; trackId?: string; shuffle?: boolean }
+  | { action: "playAlbum"; albumId: string; trackId?: string; shuffle?: boolean; ts?: number }
   /** CarPlay Now Playing heart tapped — toggle the current track's favorite. */
   | { action: "toggleFavorite" }
   /** CarPlay Now Playing shuffle button tapped — toggle shuffle. */
@@ -129,7 +130,7 @@ export type RemoteCommand =
   | { action: "diag"; detail?: string }
   /** The driver tapped a playlist row in the CarPlay Collection tab. JS should
    *  fetch + play the playlist identified by `playlistId`. */
-  | { action: "playPlaylist"; playlistId: string };
+  | { action: "playPlaylist"; playlistId: string; ts?: number };
 
 interface PluginListenerHandle {
   remove: () => Promise<void>;
@@ -186,6 +187,7 @@ interface NowPlayingPlugin {
   clear(): Promise<void>;
   clearLibrary(): Promise<void>;
   getBuildInfo(): Promise<NowPlayingBuildInfo>;
+  setHeadlessBringUp(options: { enabled: boolean }): Promise<void>;
   addListener(
     eventName: "remoteCommand",
     listenerFunc: (data: RemoteCommand) => void,
@@ -666,6 +668,27 @@ export function clearNowPlayingLibrary(): void {
   NowPlaying.clearLibrary().catch(() => {});
 }
 
+/** How old a timestamped (retained) native play command may be before JS
+ *  refuses to act on it. Capacitor retains undelivered events FOREVER, so a
+ *  CarPlay tap buffered during a cold-connect boot that never finished could
+ *  otherwise blast audio when the phone app opens hours later. Matches the
+ *  native NowPlayingStore.pendingIntentMaxAge (2 min). */
+const STALE_COMMAND_MS = 2 * 60_000;
+
+/**
+ * Cold-CarPlay headless bring-up master switch (see HeadlessWebPlayer in
+ * ios/App/App/MainViewController.swift). Persisted to native UserDefaults on
+ * every boot, so flipping this constant to `false` and web-publishing disables
+ * the feature in the field WITHOUT a native rebuild — same escape-hatch
+ * pattern as the playback diagnostics. Best-effort no-op on web/Android and on
+ * native binaries predating the `setHeadlessBringUp` method.
+ */
+const HEADLESS_BRINGUP_ENABLED = true;
+export function configureHeadlessBringUp(): void {
+  if (!available()) return;
+  NowPlaying.setHeadlessBringUp({ enabled: HEADLESS_BRINGUP_ENABLED }).catch(() => {});
+}
+
 /**
  * Subscribe to lock-screen / Control Center transport commands. Returns a
  * cleanup function that removes the listener. No-op (returns a noop cleanup)
@@ -678,6 +701,15 @@ export function onNowPlayingRemoteCommand(
   let cancelled = false;
   let handle: PluginListenerHandle | null = null;
   NowPlaying.addListener("remoteCommand", (data) => {
+    // Staleness guard for retained play intents (playAlbum/playIndex/
+    // playPlaylist carry `ts` on newer binaries; commands without one — older
+    // binaries, live taps from all other actions — pass through untouched).
+    const ts = (data as { ts?: unknown }).ts;
+    if (typeof ts === "number" && Date.now() - ts > STALE_COMMAND_MS) {
+      diagLastCommand = { cmd: data, at: Date.now() };
+      emitDiag();
+      return;
+    }
     // Record the inbound command (esp. `toggleFavorite`) so an operator can
     // confirm the CarPlay heart tap actually reaches JS — the "highlights but
     // doesn't take" symptom is either no command arriving or the favorite echo

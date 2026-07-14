@@ -43,8 +43,19 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let windowScene = scene as? UIWindowScene else { return }
 
         let window = UIWindow(windowScene: windowScene)
-        let storyboard = UIStoryboard(name: "Main", bundle: nil)
-        window.rootViewController = storyboard.instantiateInitialViewController()
+        // ADOPT the headless-booted web player when one exists (cold CarPlay
+        // connect booted it off-window — see HeadlessWebPlayer in
+        // MainViewController.swift). Instantiating a fresh storyboard VC here
+        // would create a SECOND WKWebView with its own <audio> element →
+        // double audio + a from-scratch reload killing in-car playback. On the
+        // normal launch path adoptForWindow() returns nil and this line is
+        // byte-for-byte the legacy behaviour.
+        if let headless = HeadlessWebPlayer.shared.adoptForWindow() {
+            window.rootViewController = headless
+        } else {
+            let storyboard = UIStoryboard(name: "Main", bundle: nil)
+            window.rootViewController = storyboard.instantiateInitialViewController()
+        }
 
         // Same white-flash fix AppDelegate used to apply directly — see the
         // comment on `applyNavyToWebView` in AppDelegate.swift.

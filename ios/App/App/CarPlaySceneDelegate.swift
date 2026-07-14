@@ -98,6 +98,15 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
         // template or roots Now Playing, so it is SIGABRT-safe here.
         NowPlayingStore.shared.hydrateFromDisk()
 
+        // COLD-CONNECT TAP-TO-PLAY: if no web player is alive (true cold
+        // connect), boot one OFF-WINDOW now so a browse tap ~10-15s from now
+        // has something to play — otherwise every tap is silently lost (the
+        // App Store rejection risk Bill flagged). No-op on a warm connect, and
+        // a no-op when the JS kill switch disabled it. Plain app code — no
+        // scene-manifest change. Taps that land BEFORE the web player finishes
+        // booting are buffered (NowPlayingStore.pendingIntent) and replayed.
+        HeadlessWebPlayer.shared.bringUpIfNeeded()
+
         // Now Playing is reached by PUSH only (never rooted, never inside the
         // tab bar — either SIGABRTs on connect). Enable + observe the Up Next
         // button so the queue list is pushable from the system Now Playing

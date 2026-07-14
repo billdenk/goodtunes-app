@@ -45,6 +45,7 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "clear", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clearLibrary", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getBuildInfo", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setHeadlessBringUp", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "addListener", returnType: CAPPluginReturnCallback),
         CAPPluginMethod(name: "removeAllListeners", returnType: CAPPluginReturnPromise)
     ]
@@ -77,7 +78,14 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
     private var lastArtworkImage: UIImage?
 
     public override func load() {
-        configureAudioSession(activate: true)
+        // HEADLESS BOOT (cold CarPlay connect, no phone window): defer
+        // `setActive(true)` until a real play intent. Activating here would
+        // interrupt whatever the fan is listening to (Spotify, radio) the
+        // moment the car connects, before they tapped anything. The normal
+        // phone launch keeps the shipped activate-on-load behaviour unchanged.
+        let headless = HeadlessWebPlayer.shared.isHeadlessBoot
+        deferSessionActivation = headless
+        configureAudioSession(activate: !headless)
         registerSessionObservers()
         wireRemoteCommands()
         // Register with the shared store so a CarPlay row tap (which reaches
@@ -115,6 +123,46 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         NowPlayingStore.shared.onPlayPlaylist = { [weak self] playlistId in
             self?.emitPlayPlaylist(playlistId: playlistId)
         }
+        // Cold-connect tap-to-play: a browse tap that landed while the web
+        // player was still booting was buffered by the store (the on* above
+        // were nil). Drain it now — the emits use retainUntilConsumed, so the
+        // command survives the remaining gap until JS attaches its
+        // `remoteCommand` listener. Stale (>2min) intents were already dropped
+        // by drainPendingIntent().
+        switch NowPlayingStore.shared.drainPendingIntent() {
+        case .album(let albumId, let trackId, let shuffle):
+            emitPlayAlbum(albumId: albumId, trackId: trackId, shuffle: shuffle)
+        case .index(let index):
+            emitPlayIndex(index)
+        case .playlist(let playlistId):
+            emitPlayPlaylist(playlistId: playlistId)
+        case nil:
+            break
+        }
+    }
+
+    /// True while a headless (cold-CarPlay) boot has NOT yet activated the
+    /// audio session — see load(). Flipped off by the first play intent.
+    private var deferSessionActivation = false
+
+    /// One-shot: activate the deferred audio session the moment a genuine play
+    /// intent flows through (CarPlay tap forwarded to JS, or the web player
+    /// reporting isPlaying). No-op on the normal phone-boot path and after the
+    /// first activation — this is NOT a recurring-push activation site (see
+    /// the configureAudioSession comment for why that would be fatal).
+    private func activateSessionForPlayIntent() {
+        guard deferSessionActivation else { return }
+        deferSessionActivation = false
+        configureAudioSession(activate: true)
+    }
+
+    /// JS-settable kill switch for the cold-CarPlay headless bring-up
+    /// (HeadlessWebPlayer). Persisted so it applies to the NEXT cold connect;
+    /// a web publish can flip it without a native rebuild.
+    @objc func setHeadlessBringUp(_ call: CAPPluginCall) {
+        let enabled = call.getBool("enabled") ?? true
+        UserDefaults.standard.set(!enabled, forKey: HeadlessWebPlayer.killSwitchKey)
+        call.resolve()
     }
 
     /// Put the shared audio session in `.playback` so the WebView's <audio>
@@ -447,6 +495,13 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         // ~1×/sec while playing; re-`setActive(true)` on that cadence races the
         // WKWebView media session and cuts the audio ~2s in (confirmed on-device).
         // Session activation lives in load() + interruption recovery only.
+        // ONE exception: after a headless (cold-CarPlay) boot the load()-time
+        // activation was deferred; the first isPlaying=true is a genuine play
+        // signal, and activateSessionForPlayIntent() is one-shot — it can never
+        // re-fire on the recurring pushes.
+        if isPlaying {
+            activateSessionForPlayIntent()
+        }
         let cc = MPRemoteCommandCenter.shared()
         if let shuffle = shuffle {
             cc.changeShuffleModeCommand.currentShuffleType = shuffle ? .items : .off
@@ -737,20 +792,38 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
         notifyListeners("remoteCommand", data: ["action": "seek", "value": time])
     }
 
+    // The three play-intent emits are RETAINED (retainUntilConsumed: true):
+    // on a cold-connect headless boot they fire from load()'s pending-intent
+    // drain BEFORE the page has loaded, so without retention the command would
+    // hit zero listeners and vanish. Capacitor holds retained events forever,
+    // so each carries a "ts" (ms epoch) and JS drops commands older than ~2min
+    // — otherwise a tap buffered during a boot that never finished could blast
+    // audio when the phone app opens hours later. They also activate a
+    // deferred (headless-boot) audio session — a real play intent is the
+    // signal it's ours to take. Everything else (pause/diag/resync/seek)
+    // stays non-retained: replaying those late is wrong, not helpful.
+
     private func emitPlayIndex(_ index: Int) {
-        notifyListeners("remoteCommand", data: ["action": "playIndex", "value": index])
+        activateSessionForPlayIntent()
+        notifyListeners(
+            "remoteCommand",
+            data: ["action": "playIndex", "value": index, "ts": Date().timeIntervalSince1970 * 1000],
+            retainUntilConsumed: true
+        )
     }
 
     private func emitPlayAlbum(albumId: String, trackId: String?, shuffle: Bool) {
+        activateSessionForPlayIntent()
         var data: [String: Any] = [
             "action": "playAlbum",
             "albumId": albumId,
             "shuffle": shuffle,
+            "ts": Date().timeIntervalSince1970 * 1000,
         ]
         if let trackId = trackId {
             data["trackId"] = trackId
         }
-        notifyListeners("remoteCommand", data: data)
+        notifyListeners("remoteCommand", data: data, retainUntilConsumed: true)
     }
 
     private func emitResync() {
@@ -758,6 +831,11 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func emitPlayPlaylist(playlistId: String) {
-        notifyListeners("remoteCommand", data: ["action": "playPlaylist", "playlistId": playlistId])
+        activateSessionForPlayIntent()
+        notifyListeners(
+            "remoteCommand",
+            data: ["action": "playPlaylist", "playlistId": playlistId, "ts": Date().timeIntervalSince1970 * 1000],
+            retainUntilConsumed: true
+        )
     }
 }
