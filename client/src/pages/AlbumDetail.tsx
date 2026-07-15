@@ -1311,6 +1311,7 @@ function AlbumDetailMobile({
       <section className="relative w-full h-screen text-fan-primary flex flex-col">
         <AlbumDetailMobileSurface
           scrollRef={scrollRef}
+          fixedChrome={true}
           notYetReleased={notYetReleased}
           album={{
             id: album.id,

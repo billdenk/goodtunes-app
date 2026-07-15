@@ -88,6 +88,13 @@ export interface AlbumDetailMobileSurfaceProps {
   songs: AlbumDetailMobileSurfaceSong[];
   label?: AlbumDetailMobileSurfaceLabel | null;
   ownedNums?: number[];
+  /** When true the floating back/share/⋯ chrome and the top ChromeScrim
+   *  use `position: fixed` so they remain anchored to the CSS viewport
+   *  even when iOS WKWebView's native UIScrollView bounces the canvas.
+   *  Set to true on the live fan route; leave false (default) for admin
+   *  phone-preview components where the surface sits inside a contained
+   *  PhoneBezel and fixed positioning would escape the bezel frame. */
+  fixedChrome?: boolean;
   /** Fan owns the album (full playback). Owned albums never lock rows —
    *  matches the desktop `isOwned ? "full"` branch. */
   isOwned?: boolean;
@@ -212,6 +219,7 @@ export function AlbumDetailMobileSurface({
   nativeDownloadsEnabled = false,
   hasAlbumCredits = false,
   onOpenAlbumCredits,
+  fixedChrome = false,
   hasSuperCredits = false,
   isStreamOnlyAlbum = false,
   onStreamSong,
@@ -332,14 +340,14 @@ export function AlbumDetailMobileSurface({
       <ChromeScrim
         edge="top"
         active={showMenu && !searchOwnsTop}
-        className="absolute inset-x-0 top-0 z-40"
+        className={`${fixedChrome ? "fixed" : "absolute"} inset-x-0 top-0 z-40`}
         style={{ height: TOP_SCRIM_PX }}
       />
       <IconButton
         variant="glass"
         label="Back to collection"
         onClick={onBack}
-        className="absolute left-4 z-50"
+        className={`${fixedChrome ? "fixed" : "absolute"} left-4 z-50`}
         style={{ top: FAN_TOP_CHROME_INSET }}
         data-testid="button-back-album"
       >
@@ -347,7 +355,7 @@ export function AlbumDetailMobileSurface({
       </IconButton>
 
       <div
-        className="absolute right-4 z-50 flex items-center rounded-full"
+        className={`${fixedChrome ? "fixed" : "absolute"} right-4 z-50 flex items-center rounded-full`}
         style={capsuleStyle}
       >
         <button
@@ -531,7 +539,7 @@ export function AlbumDetailMobileSurface({
 
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto scrollbar-hide"
+        className="flex-1 overflow-y-auto overscroll-y-none scrollbar-hide"
         style={{ paddingBottom: 160 }}
         data-testid="scroll-album"
       >

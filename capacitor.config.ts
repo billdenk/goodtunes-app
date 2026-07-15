@@ -63,6 +63,14 @@ const config: CapacitorConfig = {
   },
   ios: {
     contentInset: "always",
+    // Disable the WKWebView root UIScrollView so it cannot bounce the entire
+    // rendered canvas during a pull-down gesture. Without this, iOS moves
+    // the whole WebView frame — including `position: fixed` and `absolute`
+    // elements — and they don't reliably snap back. CSS `overflow-y: auto`
+    // scroll containers are unaffected because they own their own UIScrollView
+    // instances separate from the root WKWebView scroll view.
+    // NOTE: takes effect on the NEXT Codemagic native rebuild.
+    scrollEnabled: false,
     // Background-audio + universal-links capabilities are declared in
     // Info.plist (UIBackgroundModes=audio) and the Xcode project's
     // Associated Domains (applinks:my.goodtunes.music — the bare apex is the
