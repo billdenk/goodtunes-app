@@ -652,7 +652,7 @@ export function PressPanel({
             each file. The legacy plant tooling below (vendor readout,
             master checks, art preflight, print PDFs) is hidden behind
             SHOW_LEGACY_PLANT_TOOLING per Bill. */}
-        <CompletedTemplatePanel albumId={albumId} vendor={vendorId} />
+        <CompletedTemplatePanel albumId={albumId} vendor={vendorId} canOperate={!pressMode} />
 
         {/* ── Single Press-tab vendor picker (Task #597) ──────────────
             Vendor is the only field lifted to the top of the tab —
@@ -872,8 +872,11 @@ export function PressPanel({
         <PrintPdfsPanel albumId={albumId} vendor={vendorId} pressName={resolvedPressName} />
         )}
 
-        {/* ── Press print templates (Task #2115) ─────────────────────── */}
-        {(() => {
+        {/* ── Press print templates (Task #2115; press-portal-only since
+            Task #2725 — operators/artists work from the Completed Art
+            cards' per-card template links instead; the Package tab keeps
+            its own copy). ─────────────────────────────────────────────── */}
+        {pressMode && (() => {
           const albumFormat: AlbumFormat | null = physicalFormat
             ? PHYSICAL_FORMAT_TO_ALBUM_FORMAT[
                 physicalFormat as keyof typeof PHYSICAL_FORMAT_TO_ALBUM_FORMAT

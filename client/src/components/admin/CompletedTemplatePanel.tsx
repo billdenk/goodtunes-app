@@ -144,7 +144,21 @@ function cardNoun(spec: FinishedComponentSpec | null, component: CompletedTempla
   return spec?.label ?? component?.label ?? id;
 }
 
-export function CompletedTemplatePanel({ albumId, vendor }: { albumId: string; vendor: VendorId }) {
+// Task #2725 — `canOperate` (default true) gates the operator-only
+// affordances: the per-card trash (remove) and the override-with-
+// justification block in the preview window. The press portal renders the
+// same grid with canOperate=false — press users can view, download,
+// upload/replace and re-check, but never remove a file or wave a failing
+// check through (the server 403s those verbs for press accounts anyway).
+export function CompletedTemplatePanel({
+  albumId,
+  vendor,
+  canOperate = true,
+}: {
+  albumId: string;
+  vendor: VendorId;
+  canOperate?: boolean;
+}) {
   const query = useQuery<CompletedTemplateResponse>({
     queryKey: ["/api/admin/albums", albumId, "completed-template"],
   });
@@ -248,6 +262,7 @@ export function CompletedTemplatePanel({ albumId, vendor }: { albumId: string; v
                 component={byId.get(spec.id) ?? null}
                 config={effectiveConfig}
                 pressPlaceholderUrl={data?.pressPlaceholderUrl ?? null}
+                canOperate={canOperate}
                 onUpload={() => setUploadFor(spec.id)}
                 onPreview={() => setPreviewFor(spec.id)}
               />
@@ -268,6 +283,7 @@ export function CompletedTemplatePanel({ albumId, vendor }: { albumId: string; v
                     component={c}
                     config={effectiveConfig}
                     pressPlaceholderUrl={data?.pressPlaceholderUrl ?? null}
+                    canOperate={canOperate}
                     onUpload={() => {}}
                     onPreview={() => setPreviewFor(c.componentId)}
                   />
@@ -295,6 +311,7 @@ export function CompletedTemplatePanel({ albumId, vendor }: { albumId: string; v
                 byId.get(previewFor) ?? extras.find((c) => c.componentId === previewFor) ?? null
               }
               config={effectiveConfig}
+              canOperate={canOperate}
               onClose={() => setPreviewFor(null)}
             />
           )}
@@ -383,6 +400,7 @@ function ArtCard({
   component,
   config,
   pressPlaceholderUrl,
+  canOperate,
   onUpload,
   onPreview,
 }: {
@@ -391,6 +409,7 @@ function ArtCard({
   component: CompletedTemplateComponent | null;
   config: CompletedTemplateConfig;
   pressPlaceholderUrl: string | null;
+  canOperate: boolean;
   onUpload: () => void;
   onPreview: () => void;
 }) {
@@ -482,7 +501,7 @@ function ArtCard({
             >
               {present ? <RefreshCw className="w-5 h-5" /> : <Upload className="w-5 h-5" />}
             </button>
-            {present && (
+            {present && canOperate && (
               <button
                 type="button"
                 onClick={() => remove.mutate()}
@@ -500,8 +519,8 @@ function ArtCard({
             )}
           </div>
         )}
-        {/* Extra (unmatched) file: trash only. */}
-        {!spec && component && (
+        {/* Extra (unmatched) file: trash only — operator-only. */}
+        {!spec && component && canOperate && (
           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               type="button"
@@ -763,12 +782,14 @@ function PreviewArtDialog({
   spec,
   component,
   config,
+  canOperate,
   onClose,
 }: {
   albumId: string;
   spec: FinishedComponentSpec | null;
   component: CompletedTemplateComponent | null;
   config: CompletedTemplateConfig;
+  canOperate: boolean;
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -797,7 +818,9 @@ function PreviewArtDialog({
   });
 
   if (!component) return null;
-  const canOverride = (status === "fail" || status === "warn") && !component.override;
+  // Override is an operator-only verb (the server 403s press accounts) —
+  // hide the affordance entirely when the viewer can't operate.
+  const canOverride = canOperate && (status === "fail" || status === "warn") && !component.override;
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>

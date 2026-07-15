@@ -32318,6 +32318,79 @@ export async function registerRoutes(
     return true;
   }
 
+  // Task #2725 — the album's resolved press (the same invited → default →
+  // unambiguous-SKU chain the Press panel credits), as a manufacturers.id.
+  // Used by resolveCompletedContext (vendor + inner-sleeve derivation) and
+  // the press-portal completed-art gate. Callers that already hold the
+  // album row + SKU press ids pass them in to skip the re-reads.
+  async function resolveAlbumPressId(
+    albumId: string,
+    pre?: { album?: Awaited<ReturnType<typeof storage.getAlbumById>> | null; skuPressIds?: string[] },
+  ): Promise<string | null> {
+    const album = pre?.album !== undefined ? pre.album : await storage.getAlbumById(albumId, { includeHidden: true });
+    if (!album) return null;
+    let skuPressIds = pre?.skuPressIds;
+    if (!skuPressIds) {
+      const skuRes = await db.execute<{ press_id: string | null }>(sql`
+        SELECT press_id FROM album_skus WHERE album_id = ${albumId} AND active = TRUE
+      `);
+      const skuRows = ((skuRes as any).rows ?? []) as { press_id: string | null }[];
+      skuPressIds = [...new Set(skuRows.map((r) => r.press_id).filter((p): p is string => !!p))];
+    }
+    let artistInvited: string | null = null;
+    let artistDefault: string | null = null;
+    let labelInvited: string | null = null;
+    let labelDefault: string | null = null;
+    if (album.primaryArtistId) {
+      const r = await db.execute<{ invited_by_press_id: string | null; default_press_id: string | null }>(sql`
+        SELECT invited_by_press_id, default_press_id FROM people WHERE id = ${album.primaryArtistId}
+      `);
+      const p = ((r as any).rows ?? [])[0];
+      artistInvited = p?.invited_by_press_id ?? null;
+      artistDefault = p?.default_press_id ?? null;
+    }
+    if (album.labelId) {
+      const r = await db.execute<{ invited_by_press_id: string | null; default_press_id: string | null }>(sql`
+        SELECT invited_by_press_id, default_press_id FROM labels WHERE id = ${album.labelId}
+      `);
+      const l = ((r as any).rows ?? [])[0];
+      labelInvited = l?.invited_by_press_id ?? null;
+      labelDefault = l?.default_press_id ?? null;
+    }
+    return resolvePressIdFromCandidates({
+      artistInvitedPressId: artistInvited,
+      labelInvitedPressId: labelInvited,
+      artistDefaultPressId: artistDefault,
+      labelDefaultPressId: labelDefault,
+      distinctSkuPressIds: skuPressIds,
+    });
+  }
+
+  // Task #2725 — the press portal renders the same Completed Art grid, so
+  // the READ + the check (upload/replace) admit a press-scoped manufacturer
+  // membership for the album's OWN resolved press. Fail-closed: no resolved
+  // press (or a different press) → 403. Override / remove stay operator-only
+  // (requireOperator) — a press must never wave through its own failing art.
+  async function requireOperatorOrAlbumPress(
+    req: Request,
+    res: Response,
+    albumId: string,
+  ): Promise<boolean> {
+    const role = (await getUserRole(req.session.userId!))?.role;
+    if (role === "super_admin" || role === "admin") return true;
+    try {
+      const pressId = await resolveAlbumPressId(albumId);
+      if (pressId) {
+        const { findMembershipForScope } = await import("./auth/roles");
+        if (await findMembershipForScope(req.session.userId!, "manufacturer", pressId)) return true;
+      }
+    } catch (e) {
+      console.warn("[completed-art] press gate resolution failed", e);
+    }
+    res.status(403).json({ message: "Only an operator or this album's press can access the completed-art check." });
+    return false;
+  }
+
   // Task #2115 — catalog Specs (template uploads) are managed from the
   // press Catalog panel, which a press-scoped manufacturer admin can reach
   // (mirrors commerce.ts:requirePressScope on every other catalog route).
@@ -32595,42 +32668,38 @@ export async function registerRoutes(
 
     // Vendor ← the album's resolved press (mirrors the Press panel chain).
     let vendorId: VendorId | null = null;
+    let resolvedPressId: string | null = null;
     try {
-      let artistInvited: string | null = null;
-      let artistDefault: string | null = null;
-      let labelInvited: string | null = null;
-      let labelDefault: string | null = null;
-      if (album?.primaryArtistId) {
-        const r = await db.execute<{ invited_by_press_id: string | null; default_press_id: string | null }>(sql`
-          SELECT invited_by_press_id, default_press_id FROM people WHERE id = ${album.primaryArtistId}
-        `);
-        const p = ((r as any).rows ?? [])[0];
-        artistInvited = p?.invited_by_press_id ?? null;
-        artistDefault = p?.default_press_id ?? null;
-      }
-      if (album?.labelId) {
-        const r = await db.execute<{ invited_by_press_id: string | null; default_press_id: string | null }>(sql`
-          SELECT invited_by_press_id, default_press_id FROM labels WHERE id = ${album.labelId}
-        `);
-        const l = ((r as any).rows ?? [])[0];
-        labelInvited = l?.invited_by_press_id ?? null;
-        labelDefault = l?.default_press_id ?? null;
-      }
-      const pressId = resolvePressIdFromCandidates({
-        artistInvitedPressId: artistInvited,
-        labelInvitedPressId: labelInvited,
-        artistDefaultPressId: artistDefault,
-        labelDefaultPressId: labelDefault,
-        distinctSkuPressIds: skuPressIds,
-      });
-      if (pressId) {
-        const press = await storage.getManufacturerById(pressId);
+      resolvedPressId = await resolveAlbumPressId(albumId, { album, skuPressIds });
+      if (resolvedPressId) {
+        const press = await storage.getManufacturerById(resolvedPressId);
         if (press) vendorId = resolveVendorIdForPress(press.name);
       }
     } catch (e) {
       console.warn("[completed-art] press→vendor resolution failed", e);
     }
     if (!vendorId) vendorId = (row?.vendorId as VendorId | null) ?? resolveVendorIdForPress(null);
+
+    // Task #2725 — derive the Inner Sleeve slot from the press catalog:
+    // when the resolved press's template-spec catalog carries an
+    // inner_sleeve row for this album's format, the press prints inner
+    // sleeves for it, so the card is required without any operator
+    // hand-pick. A stored "printed" still wins (legacy picker rows); a
+    // stored "none" does NOT block, because the derived flow itself is
+    // the only writer of that value now.
+    if (config.innerSleeves !== "printed" && resolvedPressId) {
+      try {
+        const fmt = completedTemplateConfigToAlbumFormat(config);
+        if (fmt) {
+          const specRows = await storage.listPressTemplateSpecs(resolvedPressId, fmt);
+          if (specRows.some((s) => s.componentKey === "inner_sleeve")) {
+            config.innerSleeves = "printed";
+          }
+        }
+      } catch (e) {
+        console.warn("[completed-art] inner-sleeve catalog derivation failed", e);
+      }
+    }
 
     return { vendorId, config, row };
   }
@@ -32688,7 +32757,7 @@ export async function registerRoutes(
   // GET the persisted confirmation + the required-component specs for the
   // album's current vendor/config.
   app.get("/api/admin/albums/:id/completed-template", requireAdminBearer, async (req, res) => {
-    if (!(await requireOperator(req, res))) return;
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
     const album = await storage.getAlbumById(req.params.id, { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
     res.json(await completedTemplatePayload(req.params.id));
@@ -32701,7 +32770,7 @@ export async function registerRoutes(
   // stream-scan it, run the finished-template checks, and persist the
   // result. Re-checking a slot clears any prior override (new file).
   app.post("/api/admin/albums/:id/completed-template/check", requireAdminBearer, async (req, res) => {
-    if (!(await requireOperator(req, res))) return;
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
     const album = await storage.getAlbumById(req.params.id, { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
     const body = z
