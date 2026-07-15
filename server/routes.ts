@@ -9246,10 +9246,10 @@ export async function registerRoutes(
         try {
           parsed = new URL(trimmed);
         } catch {
-          return res.status(400).json({ message: "Sale URL must be a valid https URL." });
+          return res.status(400).json({ message: "Shopify Sale URL must be a valid https URL." });
         }
         if (parsed.protocol !== "https:") {
-          return res.status(400).json({ message: "Sale URL must be a valid https URL." });
+          return res.status(400).json({ message: "Shopify Sale URL must be a valid https URL." });
         }
         updates.externalSaleUrl = trimmed;
       }

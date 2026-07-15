@@ -12,7 +12,7 @@ The whole flow is: **album page → Buy sheet → (cert step, when offered) → 
 > every fan sees.
 
 > **Shopify+ Sale-URL reroute (Task #2714):** when a `shopify_plus` release has an
-> operator-entered **Sale URL** (album's admin Shopify tab → "Sale URL" card,
+> operator-entered **Sale URL** (album's admin Shopify tab → "Shopify Sale URL" card,
 > https-only, empty clears), the whole flow below is bypassed on that release's
 > public Preview & Purchase page. Every Buy affordance — the locked-offer modal's
 > Buy button, the desktop Buy pill, the mobile buy trigger, and the `?buy=1`

@@ -28,6 +28,16 @@ import {
   Video,
 } from "lucide-react";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ShopifyProductBrowser, type ShopifyBrowseProduct } from "@/components/admin/ShopifyProductBrowser";
 
 // Same shape as AlbumFull.songs in AdminAlbum.tsx — narrowed here to
@@ -191,10 +201,35 @@ export function ShopifyPanel({
       );
       setSaleUrlDirty(false);
       queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId] });
-      toast({ title: "Sale URL saved" });
+      toast({ title: "Shopify Sale URL saved" });
     },
     onError: (e: any) =>
-      toast({ title: "Couldn't save Sale URL", description: e?.message, variant: "destructive" }),
+      toast({ title: "Couldn't save Shopify Sale URL", description: e?.message, variant: "destructive" }),
+  });
+  // Task #2724 — deliberate clear via the trash affordance (confirm-gated,
+  // since clearing flips live fan Buy behavior back to GoodTunes checkout).
+  const [confirmClearSaleUrl, setConfirmClearSaleUrl] = useState(false);
+  const clearSaleUrl = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PUT", `/api/admin/albums/${albumId}`, {
+        externalSaleUrl: null,
+      });
+    },
+    onSuccess: () => {
+      // Same write-through-before-undirty pattern as the save path so the
+      // re-seed effect sees the cleared value instead of the stale album.
+      queryClient.setQueryData<ShopifyPanelAlbum | undefined>(
+        ["/api/albums", albumId],
+        (prev) => (prev ? { ...prev, externalSaleUrl: null } : prev),
+      );
+      setSaleUrl("");
+      setSaleUrlDirty(false);
+      setConfirmClearSaleUrl(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+      toast({ title: "Shopify Sale URL removed", description: "Fans check out through GoodTunes again." });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't remove Shopify Sale URL", description: e?.message, variant: "destructive" }),
   });
 
   // Push-to-Shopify (Task #242) — locally-edited fields. Initialized
@@ -365,7 +400,7 @@ export function ShopifyPanel({
             className="rounded-lg border border-slate-200 bg-white p-4 mb-6"
             data-testid="section-external-sale-url"
           >
-            <h2 className="text-sm font-semibold text-slate-900 mb-1">Sale URL</h2>
+            <h2 className="text-sm font-semibold text-slate-900 mb-1">Shopify Sale URL</h2>
             <p className="text-sm text-slate-500 mb-3 leading-snug">
               Where fans buy this release. When set, every Buy button on the public
               preview page opens this link in a new tab instead of GoodTunes checkout.
@@ -392,7 +427,47 @@ export function ShopifyPanel({
               >
                 {saveSaleUrl.isPending ? "Saving…" : "Save"}
               </button>
+              {/* Task #2724 — deliberate clear. Only shown when a URL is
+                  actually saved; hairline + gap keep it clear of Save
+                  (destructive breathing-room rule). */}
+              {!!album?.externalSaleUrl && (
+                <>
+                  <span className="mx-1 h-4 w-px bg-slate-200" aria-hidden="true" />
+                  <button
+                    type="button"
+                    onClick={() => setConfirmClearSaleUrl(true)}
+                    disabled={clearSaleUrl.isPending}
+                    className="w-9 h-9 shrink-0 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50"
+                    aria-label="Remove the Shopify Sale URL"
+                    data-testid="button-clear-external-sale-url"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </>
+              )}
             </div>
+            <AlertDialog open={confirmClearSaleUrl} onOpenChange={setConfirmClearSaleUrl}>
+              <AlertDialogContent data-testid="dialog-confirm-clear-sale-url">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remove the Shopify Sale URL?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Fans will check out through GoodTunes again — every Buy button
+                    on the public preview page goes back to the GoodTunes Buy sheet.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="button-cancel-clear-sale-url">Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => clearSaleUrl.mutate()}
+                    disabled={clearSaleUrl.isPending}
+                    className="bg-rose-600 text-white hover:bg-rose-700"
+                    data-testid="button-confirm-clear-sale-url"
+                  >
+                    {clearSaleUrl.isPending ? "Removing…" : "Remove URL"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <p className="text-xs text-slate-400 mt-2">
               Must start with https://. Fans see “You'll complete your purchase on the
               artist's store.”
