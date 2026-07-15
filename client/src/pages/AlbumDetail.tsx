@@ -52,7 +52,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { AlbumCover } from "@/components/ui/AlbumCover";
 import { GearDetailBody, type GearArtist, type GearArtistNote } from "@/components/gear/GearDetailBody";
-import { ChevronLeft, Share, MoreHorizontal, Lock, ShieldCheck, Music2, ArrowRight } from "lucide-react";
+import { ChevronLeft, Share, MoreHorizontal, Lock, ShieldCheck, Music2, ArrowRight, X } from "lucide-react";
 import { buyEnabled, nativeDownloadsEnabled, streamingHandoffEnabled } from "@/lib/platform";
 import { isPurchaseFunnelHost, isPlayerHost } from "@/hooks/useAuthKind";
 import { LockedOfferModal } from "@/components/ui/LockedOfferModal";
@@ -358,6 +358,73 @@ export function AlbumDetail({
 // Make that unmistakable and remind them checkout is disabled — the server
 // also hard-rejects any checkout that carries the pass, so this is purely a UX
 // signal, never the enforcement.
+// "Loving this album? Tell a friend" — one-time bottom sheet that pops on a
+// fan's second listen session for an album they own. Matches the Apple-Music
+// share-prompt chrome: white card, large album art, single CTA.
+function TellAFriendCard({
+  album,
+  onShare,
+  onClose,
+}: {
+  album: { title: string; artist: string; artwork: string };
+  onShare: () => void;
+  onClose: () => void;
+}) {
+  const reduce = useReducedMotion() ?? false;
+  return (
+    <>
+      <motion.div
+        className="fixed inset-0 z-[70] bg-black/50"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={scrimFade(reduce)}
+        onClick={onClose}
+        data-testid="overlay-tell-friend-scrim"
+      />
+      <motion.div
+        className="fixed bottom-0 left-0 right-0 z-[71] bg-white rounded-t-3xl px-6 pt-6 flex flex-col items-center gap-5"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 32px)" }}
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        transition={sheetOpen(reduce)}
+        data-testid="card-tell-friend"
+      >
+        <IconButton
+          size="md"
+          variant="dimmed"
+          className="absolute top-4 right-4"
+          onClick={onClose}
+          data-testid="button-close-tell-friend"
+          aria-label="Dismiss"
+          style={{ color: "rgba(0,0,0,0.5)" }}
+        >
+          <X className="w-5 h-5" />
+        </IconButton>
+        <div className="text-center pt-1">
+          <p className="text-xl font-bold text-black leading-snug">Loving this album?</p>
+          <p className="text-sm mt-0.5" style={{ color: "rgba(0,0,0,0.45)" }}>Share the love. Tell a friend!</p>
+        </div>
+        <div className="w-44 h-44 rounded-2xl overflow-hidden shadow-xl flex-shrink-0">
+          <AlbumCover
+            artworkUrl={album.artwork}
+            artistPhoto={null}
+            title={album.title}
+            artist={album.artist}
+          />
+        </div>
+        <button
+          className="w-full rounded-full py-4 text-base font-semibold text-white"
+          style={{ backgroundColor: "var(--brand-blue)" }}
+          onClick={() => { onShare(); onClose(); }}
+          data-testid="button-tell-a-friend"
+        >
+          Tell a friend
+        </button>
+      </motion.div>
+    </>
+  );
+}
+
 function PreviewModeBanner() {
   if (!hasPreviewPass()) return null;
   // Discrete Apple/ElevenLabs-style "Preview" pill (replaced the loud
@@ -563,6 +630,7 @@ function AlbumDetailMobile({
     });
   };
   const [downloadedSongs, setDownloadedSongs] = useState<Set<string>>(new Set());
+  const [showTellAFriend, setShowTellAFriend] = useState(false);
 
   // Source-of-truth for base album + tracklist is the API (so CMS edits and
   // newly-created albums show up here, including inside the /admin live
@@ -986,6 +1054,29 @@ function AlbumDetailMobile({
     };
   }, []);
 
+  // "Tell a friend" — show once on the 2nd listen session for owned albums.
+  // A "session" = opening the album page and actually pressing play. Tracked
+  // client-only via localStorage so it survives page reloads but costs no API.
+  const tellFriendSessionCounted = useRef(false);
+  useEffect(() => {
+    if (!isOwned || !isPlaying) return;
+    if (currentSong?.album?.id !== id) return;
+    if (tellFriendSessionCounted.current) return;
+    tellFriendSessionCounted.current = true;
+    const seenKey = `gt:tell-friend-seen:${id}`;
+    const sessionKey = `gt:album-sessions:${id}`;
+    try {
+      if (localStorage.getItem(seenKey)) return;
+      const prev = parseInt(localStorage.getItem(sessionKey) ?? "0", 10);
+      const next = prev + 1;
+      localStorage.setItem(sessionKey, String(next));
+      if (next >= 2) {
+        localStorage.setItem(seenKey, "1");
+        setShowTellAFriend(true);
+      }
+    } catch {}
+  }, [isPlaying, isOwned, id, currentSong?.album?.id]);
+
   useEffect(() => {
     if (album?.id) {
       track("album_viewed", { albumId: album.id, albumTitle: album.title, artistId: undefined });
@@ -1387,6 +1478,14 @@ function AlbumDetailMobile({
             }}
             prefilledEmail={user?.email ?? null}
             source="get"
+          />
+        )}
+
+        {showTellAFriend && (
+          <TellAFriendCard
+            album={{ title: album.title, artist: album.artist, artwork: album.artwork }}
+            onShare={handleShare}
+            onClose={() => setShowTellAFriend(false)}
           />
         )}
 
