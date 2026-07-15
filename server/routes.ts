@@ -26754,7 +26754,13 @@ export async function registerRoutes(
   // `invite_subusers` permission can also call this, but the invite
   // is force-pinned to their own role + scope so they can only grow
   // their own team, never escalate or cross-scope.
-  app.post("/api/admin/invites", requireAdmin, async (req, res) => {
+  // Task #2719 — extracted into a named handler so the partner-portal
+  // invite wrappers below can call it directly. Express 5 removed
+  // `app._router`, so the old `_router.handle({...req}, ...)` re-dispatch
+  // threw "Cannot read properties of undefined (reading 'handle')" on
+  // every wrapper. Calling the shared function with the real (mutated)
+  // req/res is also more robust than the old spread-a-plain-object trick.
+  const adminCreateInviteHandler = async (req: any, res: any) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
     let role = String(req.body?.role || "").trim();
     let roleScopeId = req.body?.roleScopeId ? String(req.body.roleScopeId) : null;
@@ -27206,7 +27212,8 @@ export async function registerRoutes(
       reviewStatus,
       claimedReason,
     });
-  });
+  };
+  app.post("/api/admin/invites", requireAdmin, adminCreateInviteHandler);
 
   // Task #351 — Super-admin review queue for held invites. Lists every
   // invite with review_status='pending_review' that hasn't been used
@@ -27380,9 +27387,10 @@ export async function registerRoutes(
       targetPersonId: role.roleScopeId, // an artist inviting their own team always targets themself
       inviteRole,
     };
-    // Re-dispatch through the same handler — keeps the claimed-Person
-    // gate + duplicate-tree checks + email-sending logic in one place.
-    return (app as any)._router.handle({ ...req, url: "/api/admin/invites", method: "POST" }, res, () => {});
+    // Task #2719 — call the shared handler directly (Express 5 removed
+    // app._router); keeps the claimed-Person gate + duplicate-tree
+    // checks + email-sending logic in one place.
+    return adminCreateInviteHandler(req, res);
   });
 
   // ─── Task #546 — Artist→artist invites + earmarked suggestions ────
@@ -27459,7 +27467,8 @@ export async function registerRoutes(
       // caller's artist Person (no claimed-Person review gate fires
       // because targetPerson stays null).
     };
-    return (app as any)._router.handle({ ...req, url: "/api/admin/invites", method: "POST" }, res, () => {});
+    // Task #2719 — Express 5 removed app._router; call the shared handler directly.
+    return adminCreateInviteHandler(req, res);
   });
 
   // Task #952 — Send an artist→label invite. Mints a placeholder Label
@@ -27492,7 +27501,8 @@ export async function registerRoutes(
       roleScopeId: label.id,
       welcomeNote,
     };
-    return (app as any)._router.handle({ ...req, url: "/api/admin/invites", method: "POST" }, res, () => {});
+    // Task #2719 — Express 5 removed app._router; call the shared handler directly.
+    return adminCreateInviteHandler(req, res);
   });
 
   // Resend an artist→artist invite the caller sent. Wrapper around the
@@ -27624,7 +27634,8 @@ export async function registerRoutes(
     }
 
     (req as any).body = { email, role: inviteeRole, roleScopeId, welcomeNote };
-    return (app as any)._router.handle({ ...req, url: "/api/admin/invites", method: "POST" }, res, () => {});
+    // Task #2719 — Express 5 removed app._router; call the shared handler directly.
+    return adminCreateInviteHandler(req, res);
   });
 
   // Resend a label invite the caller sent — gated to this label's chain.
