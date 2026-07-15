@@ -31080,10 +31080,25 @@ export async function registerRoutes(
       if (!album) return res.status(404).json({ message: "Album not found" });
 
       if (!preview) {
-        await db
-          .insert(userAlbums)
-          .values({ userId: customerId, albumId })
-          .onConflictDoNothing();
+        // Task #52 — a real (non-preview) comp mints the next GR (grant)
+        // number for this album so the granted copy renders as "GR 01"
+        // instead of borrowing the paid "#01" look. Pre-check existence so
+        // an idempotent re-grant doesn't burn a counter number; the
+        // onConflictDoNothing keeps the concurrent-double-tap safe (the
+        // burned number is acceptable there — sequence stays monotonic).
+        const [already] = await db
+          .select({ id: userAlbums.id })
+          .from(userAlbums)
+          .where(and(eq(userAlbums.userId, customerId), eq(userAlbums.albumId, albumId)));
+        if (already) return res.json({ ok: true });
+        const { withRetryOnGrantNumberCollision, assignNextGrantNumber } = await import("./commerce");
+        await withRetryOnGrantNumberCollision(albumId, async () => {
+          const grantNumber = await assignNextGrantNumber(albumId);
+          await db
+            .insert(userAlbums)
+            .values({ userId: customerId, albumId, grantNumber })
+            .onConflictDoNothing();
+        });
         return res.json({ ok: true });
       }
 

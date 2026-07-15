@@ -41,6 +41,7 @@ type WelcomeState = {
     artist: string;
     artwork: string;
     certificateNumber: number | null;
+    grantNumber: number | null;
     acquiredAt: string | null;
   }>;
 };
@@ -363,12 +364,14 @@ export function WelcomeBack() {
                           </div>
                         )}
                       </div>
-                      {it.certificateNumber != null && (
+                      {(it.certificateNumber != null || it.grantNumber != null) && (
                         <div
                           className="text-xs font-mono text-[var(--brand-mint)] tabular-nums flex-shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1"
                           data-testid={`welcomeback-record-cert-${it.albumId}`}
                         >
-                          #{it.certificateNumber}
+                          {it.certificateNumber != null
+                            ? `#${it.certificateNumber}`
+                            : `GR ${String(it.grantNumber).padStart(2, "0")}`}
                         </div>
                       )}
                     </li>

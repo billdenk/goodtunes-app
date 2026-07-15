@@ -576,6 +576,60 @@ export async function withRetryOnGoodDeedCollision<T>(
   throw lastErr ?? new Error("withRetryOnGoodDeedCollision: exhausted retries");
 }
 
+// Task #52 — retry wrapper for the GR (grant) sequence's partial unique
+// index (user_albums_album_grant_number_uniq). Mirrors
+// withRetryOnGoodDeedCollision above; assignNextGrantNumber's counter
+// upsert is atomic so collisions should be near-impossible, this is the
+// belt to that suspender.
+export async function withRetryOnGrantNumberCollision<T>(
+  albumId: string,
+  fn: () => Promise<T>,
+  maxRetries = 5,
+): Promise<T> {
+  let lastErr: any = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      const code = e?.code ?? e?.cause?.code;
+      const constraint: string = e?.constraint ?? e?.cause?.constraint ?? "";
+      const detail: string = e?.detail ?? e?.cause?.detail ?? "";
+      const isCollision =
+        code === "23505" &&
+        (/grant_number/i.test(constraint) || /grant_number/i.test(detail));
+      if (!isCollision) throw e;
+      lastErr = e;
+      console.warn(
+        `[grant-number-collision] album=${albumId} attempt=${attempt + 1}/${maxRetries} retrying after 23505`,
+      );
+    }
+  }
+  throw lastErr ?? new Error("withRetryOnGrantNumberCollision: exhausted retries");
+}
+
+// Task #52 — mint the next GR (grant) number for an album. The
+// album_grant_counters row is the monotonic high-water mark (revoking a
+// grant deletes its user_albums row, so MAX(grant_number) alone could
+// reuse a retired number); GREATEST against the live MAX self-heals a
+// counter that lags a backfill. Atomic single-statement upsert, so two
+// concurrent grants can't read the same number.
+export async function assignNextGrantNumber(albumId: string): Promise<number> {
+  const res: any = await db.execute(sql`
+    INSERT INTO album_grant_counters (album_id, last_number)
+    VALUES (
+      ${albumId},
+      (SELECT COALESCE(MAX(${userAlbums.grantNumber}), 0) + 1 FROM ${userAlbums} WHERE ${userAlbums.albumId} = ${albumId})
+    )
+    ON CONFLICT (album_id) DO UPDATE SET last_number = GREATEST(
+      album_grant_counters.last_number,
+      (SELECT COALESCE(MAX(${userAlbums.grantNumber}), 0) FROM ${userAlbums} WHERE ${userAlbums.albumId} = ${albumId})
+    ) + 1
+    RETURNING last_number AS n
+  `);
+  const row = Array.isArray(res) ? res[0] : res?.rows?.[0];
+  return Number(row?.n ?? 1);
+}
+
 export async function assignNextGoodDeedNumber(albumId: string): Promise<number> {
   // Floor = max(goodDeedNumber across paid orders, per-copy
   // goodDeedNumber across order_copies, certificateNumber across owned

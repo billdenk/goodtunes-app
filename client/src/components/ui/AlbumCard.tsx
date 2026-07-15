@@ -165,8 +165,16 @@ export function AlbumCard({
     [certOrders],
   );
   const ownedNums = seedNums.length > 0 ? seedNums : orderNums;
+  // Task #52 — a granted (comped) copy carries a "GR NN" number on the
+  // owner-scoped /api/my-albums row (shared cache, staleTime: Infinity).
+  const { data: myAlbums } = useQuery<Album[]>({
+    queryKey: ["/api/my-albums"],
+    enabled: playable && !!user,
+  });
+  const grantNumber =
+    album.grantNumber ?? myAlbums?.find((a) => a.id === album.id)?.grantNumber ?? null;
   const isMulti = !isPreview && ownedNums.length > 1;
-  const hasCert = ownedNums.length > 0;
+  const hasCert = ownedNums.length > 0 || grantNumber != null;
   const pdfOrder = certOrders[0] ?? null;
 
   const ownedCount = album.ownedCertificates?.length ?? (orderNums.length || 1);
@@ -212,8 +220,13 @@ export function AlbumCard({
   };
 
   const handleViewProvenance = () => {
-    if (isMulti) setShowOwnership(true);
-    else setProvenanceCertNum(ownedNums[0] ?? album.certificateNumber ?? 1);
+    if (isMulti) {
+      setShowOwnership(true);
+      return;
+    }
+    const n = ownedNums[0] ?? album.certificateNumber;
+    if (n != null) setProvenanceCertNum(n);
+    else { setSingleCertNum(null); setShowCert(true); }
   };
 
   const openPdf = () => {
@@ -517,8 +530,9 @@ export function AlbumCard({
             displayName: user?.displayName || "GoodTunes Fan",
             username: user?.username || "you",
           }}
-          certificateNumber={singleCertNum ?? album.certificateNumber ?? ownedNums[0] ?? 1}
+          certificateNumber={singleCertNum ?? album.certificateNumber ?? ownedNums[0]}
           certificateNumbers={singleCertNum !== null ? [singleCertNum] : (album.ownedCertificates ?? ownedNums)}
+          grantNumber={grantNumber}
           isPreview={isPreview}
           onClose={() => setShowCert(false)}
         />

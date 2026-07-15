@@ -784,7 +784,7 @@ export interface IStorage {
   getAdminCustomerProfile(id: string): Promise<{
     customer: Omit<CustomerUser, "password"> & { password?: string };
     orders: Array<{ id: string; albumId: string; albumTitle: string; albumArtist: string; totalCents: number; status: string; goodDeedNumber: number | null; createdAt: Date | null; shippedAt: Date | null; paymentCardBrand: string | null; paymentCardLast4: string | null; paymentWalletType: string | null; receiptUrl: string | null; origin: string | null; shippingAddress: StripeAddressSnapshot | null; billingAddress: StripeAddressSnapshot | null }>;
-    collection: Array<{ id: string; albumId: string; albumTitle: string; albumArtist: string; albumArtwork: string; certificateNumber: number | null; acquiredAt: Date | null }>;
+    collection: Array<{ id: string; albumId: string; albumTitle: string; albumArtist: string; albumArtwork: string; certificateNumber: number | null; grantNumber: number | null; acquiredAt: Date | null }>;
     playlists: Array<{ id: string; name: string; songCount: number; createdAt: Date | null }>;
     fallbackShippingAddress: StripeAddressSnapshot | null;
     fallbackBillingAddress: StripeAddressSnapshot | null;
@@ -4624,6 +4624,7 @@ export class DbStorage implements IStorage {
         albumArtist: albums.artist,
         albumArtwork: albums.artwork,
         certificateNumber: userAlbums.certificateNumber,
+        grantNumber: userAlbums.grantNumber,
         acquiredAt: userAlbums.acquiredAt,
         // Task #909 — surface preview state so the admin UI can render the
         // Demo chip + expiry and Extend/Remove. Admin sees EXPIRED previews

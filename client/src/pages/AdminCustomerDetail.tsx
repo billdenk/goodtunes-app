@@ -81,6 +81,7 @@ type Profile = {
     albumArtist: string;
     albumArtwork: string;
     certificateNumber: number | null;
+    grantNumber: number | null;
     acquiredAt: string | null;
     // Task #909 — admin-granted preview state. A preview is NOT ownership:
     // it counts toward nothing and shows a Demo chip + expiry instead of a
@@ -715,7 +716,11 @@ export function AdminCustomerDetail() {
                       <div className="text-slate-900 text-sm font-medium truncate">{a.albumTitle}</div>
                       <div className="text-slate-500 text-xs truncate">{a.albumArtist}</div>
                       <div className="text-slate-400 text-xs mt-1">
-                        {a.certificateNumber != null ? `Cert #${a.certificateNumber} · ` : ""}
+                        {a.certificateNumber != null
+                          ? `Cert #${a.certificateNumber} · `
+                          : a.grantNumber != null
+                            ? `GR ${String(a.grantNumber).padStart(2, "0")} · `
+                            : ""}
                         {formatDate(a.acquiredAt)}
                       </div>
                     </div>

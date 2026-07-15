@@ -9546,3 +9546,191 @@ SQL
 }
 migrate_task_2703_fulfillment_contacts dev  "${DATABASE_URL:-}"
 migrate_task_2703_fulfillment_contacts prod "${PROD_DATABASE_URL:-}"
+
+# --- Task #52: grant numbering ("GR NN") + duplicate GoodDeed number cleanup.
+# Two parts, both DBs:
+#  1) Idempotent DDL — user_albums.grant_number + the album_grant_counters
+#     high-water-mark table (a revoked grant deletes its row, so
+#     MAX(grant_number) alone could re-mint a retired number).
+#  2) Marker-guarded one-time backfill (task_52_grant_numbers):
+#     a. delete retired seed auto-grant leftovers (certs 3/7/12/21 minted on
+#        every album by the old seed; only rows whose holder has NO paid
+#        order for that album and that sit in a duplicate (album,cert) group),
+#     b. clear certificate_number on remaining duplicate-group rows whose
+#        holder has no paid order (comped rows must never squat a paid serial),
+#     c. tie-break any still-duplicated (album,cert) group: earliest
+#        acquired_at (then id) keeps the number, the rest are cleared,
+#     d. assign GR numbers to granted (comped) rows: not a preview, no paid
+#        order, no legacy gogoods provenance, no cert number — ordered by
+#        acquired_at per album. Counters need no seeding (assignNextGrantNumber
+#        self-heals via GREATEST against live MAX).
+#  3) The two partial unique indexes — created AFTER the cleanup so leftover
+#     dupes can't brick them; WARN-continue if they still can't build.
+migrate_task_52_grant_numbers() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-52 grant numbers on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+ALTER TABLE user_albums ADD COLUMN IF NOT EXISTS grant_number integer;
+CREATE TABLE IF NOT EXISTS album_grant_counters (
+  album_id    varchar PRIMARY KEY,
+  last_number integer NOT NULL DEFAULT 0
+);
+SQL
+  ); then
+    echo "post-merge: task-52 DDL ok on $label"
+  else
+    echo "post-merge: WARNING — task-52 DDL failed on $label (continuing)"
+    echo "$out" | tail -5
+    return 0
+  fi
+
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_deleted integer := 0;
+  v_cleared integer := 0;
+  v_tiebreak integer := 0;
+  v_granted integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_52_grant_numbers'
+  ) THEN
+    -- (a) retired seed auto-grant leftovers: certs 3/7/12/21 stamped on
+    -- comped rows, only when the (album, cert) pair is duplicated.
+    WITH dup_pairs AS (
+      SELECT album_id, certificate_number
+      FROM user_albums
+      WHERE certificate_number IS NOT NULL
+      GROUP BY album_id, certificate_number
+      HAVING count(*) > 1
+    ),
+    doomed AS (
+      SELECT ua.id
+      FROM user_albums ua
+      JOIN dup_pairs d
+        ON d.album_id = ua.album_id
+       AND d.certificate_number = ua.certificate_number
+      WHERE ua.is_preview = false
+        AND ua.certificate_number IN (3, 7, 12, 21)
+        AND ua.legacy_gogoods_collectible_id IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM orders o
+          WHERE o.customer_id = ua.user_id
+            AND o.album_id = ua.album_id
+            AND o.status IN ('paid','shipped','complete','completed')
+        )
+    )
+    DELETE FROM user_albums WHERE id IN (SELECT id FROM doomed);
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+
+    -- (b) remaining duplicate-group rows whose holder has no paid order:
+    -- clear the squatted serial but keep the (comped) copy.
+    WITH dup_pairs AS (
+      SELECT album_id, certificate_number
+      FROM user_albums
+      WHERE certificate_number IS NOT NULL
+      GROUP BY album_id, certificate_number
+      HAVING count(*) > 1
+    ),
+    to_clear AS (
+      SELECT ua.id
+      FROM user_albums ua
+      JOIN dup_pairs d
+        ON d.album_id = ua.album_id
+       AND d.certificate_number = ua.certificate_number
+      WHERE ua.legacy_gogoods_collectible_id IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM orders o
+          WHERE o.customer_id = ua.user_id
+            AND o.album_id = ua.album_id
+            AND o.status IN ('paid','shipped','complete','completed')
+        )
+    )
+    UPDATE user_albums SET certificate_number = NULL
+    WHERE id IN (SELECT id FROM to_clear);
+    GET DIAGNOSTICS v_cleared = ROW_COUNT;
+
+    -- (c) tie-break any group still duplicated (two paid/legacy holders):
+    -- earliest acquired_at (then id) keeps the number.
+    WITH ranked AS (
+      SELECT id,
+             row_number() OVER (
+               PARTITION BY album_id, certificate_number
+               ORDER BY acquired_at ASC NULLS LAST, id ASC
+             ) AS rn
+      FROM user_albums
+      WHERE certificate_number IS NOT NULL
+    )
+    UPDATE user_albums ua SET certificate_number = NULL
+    FROM ranked r
+    WHERE ua.id = r.id AND r.rn > 1;
+    GET DIAGNOSTICS v_tiebreak = ROW_COUNT;
+
+    -- (d) GR backfill for granted (comped) rows.
+    WITH grant_rows AS (
+      SELECT ua.id,
+             row_number() OVER (
+               PARTITION BY ua.album_id
+               ORDER BY ua.acquired_at ASC NULLS LAST, ua.id ASC
+             ) AS gr
+      FROM user_albums ua
+      WHERE ua.is_preview = false
+        AND ua.certificate_number IS NULL
+        AND ua.grant_number IS NULL
+        AND ua.legacy_gogoods_collectible_id IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM orders o
+          WHERE o.customer_id = ua.user_id
+            AND o.album_id = ua.album_id
+            AND o.status IN ('paid','shipped','complete','completed')
+        )
+    )
+    UPDATE user_albums ua SET grant_number = g.gr
+    FROM grant_rows g
+    WHERE ua.id = g.id;
+    GET DIAGNOSTICS v_granted = ROW_COUNT;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_52_grant_numbers');
+    RAISE NOTICE 'task-52 backfill applied: % seed leftovers deleted, % dup certs cleared, % tie-broken, % GR numbers assigned',
+      v_deleted, v_cleared, v_tiebreak, v_granted;
+  ELSE
+    RAISE NOTICE 'task-52 backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-52 grant-numbers backfill ok on $label"
+    echo "$out" | grep -i 'task-52' || true
+  else
+    echo "post-merge: WARNING — task-52 grant-numbers backfill failed on $label (continuing)"
+    echo "$out" | tail -8
+  fi
+
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+CREATE UNIQUE INDEX IF NOT EXISTS user_albums_album_cert_number_uniq
+  ON user_albums (album_id, certificate_number)
+  WHERE certificate_number IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS user_albums_album_grant_number_uniq
+  ON user_albums (album_id, grant_number)
+  WHERE grant_number IS NOT NULL;
+SQL
+  ); then
+    echo "post-merge: task-52 unique indexes ok on $label"
+  else
+    echo "post-merge: WARNING — task-52 unique indexes failed on $label (duplicates may remain — continuing)"
+    echo "$out" | tail -5
+  fi
+}
+migrate_task_52_grant_numbers dev  "${DATABASE_URL:-}"
+migrate_task_52_grant_numbers prod "${PROD_DATABASE_URL:-}"

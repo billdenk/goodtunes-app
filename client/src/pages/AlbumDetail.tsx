@@ -415,12 +415,16 @@ function AlbumDetailMobile({
     Array<{
       albumId: string;
       isPreview?: boolean;
+      grantNumber?: number | null;
       album?: { isPrepping?: boolean; isHidden?: boolean };
     }> | null
   >({
     queryKey: ["/api/my-albums"],
   });
   const isPreviewAlbum = !!id && (myAlbumsForPreview ?? []).some((a) => a.albumId === id && a.isPreview);
+  // Task #52 — "GR NN" number for a granted (comped) copy of this album.
+  const grantNumber =
+    (!!id && (myAlbumsForPreview ?? []).find((a) => a.albumId === id)?.grantNumber) || null;
   // Bill's own accounts (admin sessions + a small email allowlist) are
   // exempted from preview-first "for now" so they hear full-length tracks
   // on every album — including ones shared to an account that doesn't own
@@ -1136,8 +1140,13 @@ function AlbumDetailMobile({
     }
   };
   const handleViewProvenance = () => {
-    if (isMulti) setShowOwnership(true);
-    else setProvenanceCertNum(ownedNums[0] ?? album.certificateNumber ?? 1);
+    if (isMulti) {
+      setShowOwnership(true);
+      return;
+    }
+    const n = ownedNums[0] ?? album.certificateNumber;
+    if (n != null) setProvenanceCertNum(n);
+    else { setSingleCertNum(null); setShowCert(true); }
   };
   const editorialPanel = hasMoreBy ? (
     <div
@@ -1398,8 +1407,9 @@ function AlbumDetailMobile({
               displayName: user?.displayName || "GoodTunes Fan",
               username: user?.username || "you",
             }}
-            certificateNumber={singleCertNum ?? album.certificateNumber ?? 1}
+            certificateNumber={singleCertNum ?? album.certificateNumber}
             certificateNumbers={singleCertNum !== null ? [singleCertNum] : album.ownedCertificates}
+            grantNumber={grantNumber}
             isPreview={isPreviewAlbum}
             onClose={() => { setShowCert(false); setSingleCertNum(null); }}
           />

@@ -998,6 +998,14 @@ export const userAlbums = pgTable(
     userId: varchar("user_id").notNull().references(() => users.id),
     albumId: varchar("album_id").notNull().references(() => albums.id),
     certificateNumber: integer("certificate_number"),
+    // Task #52 — granted (comped, non-paid) copies get their own visibly
+    // distinct per-album sequence rendered as "GR 01", "GR 02", … so paid
+    // GoodDeed numbers stay exclusive to paid copies. NEVER mix the two
+    // sequences: the paid-number floor in assignNextGoodDeedNumber takes
+    // MAX over `certificate_number`, so grant numbers live in their own
+    // column. Minted via assignNextGrantNumber (album_grant_counters keeps
+    // the sequence monotonic even after a revoke deletes the max row).
+    grantNumber: integer("grant_number"),
     acquiredAt: timestamp("acquired_at").defaultNow(),
     // Task #909 — a preview is a time-boxed full-playback grant that is
     // NOT a purchase: it mints no GoodDeed number, creates no order, and
@@ -1023,8 +1031,29 @@ export const userAlbums = pgTable(
     userAlbumLegacyCollectibleUnique: uniqueIndex(
       "user_albums_legacy_gogoods_collectible_uniq",
     ).on(t.legacyGogoodsCollectibleId),
+    // Task #52 — each album has at most one holder per paid GoodDeed
+    // number and at most one holder per GR (grant) number. Partial, so
+    // the common unnumbered row stays free. Same protection model as
+    // orders_album_good_deed_number_uniq; grant mint sites wrap in
+    // withRetryOnGrantNumberCollision.
+    userAlbumCertNumberUnique: uniqueIndex("user_albums_album_cert_number_uniq")
+      .on(t.albumId, t.certificateNumber)
+      .where(sql`${t.certificateNumber} IS NOT NULL`),
+    userAlbumGrantNumberUnique: uniqueIndex("user_albums_album_grant_number_uniq")
+      .on(t.albumId, t.grantNumber)
+      .where(sql`${t.grantNumber} IS NOT NULL`),
   }),
 );
+
+// Task #52 — per-album monotonic counter for the GR (grant) sequence.
+// A revoked grant deletes its user_albums row, so MAX(grant_number)
+// alone could reuse a retired number; the counter row remembers the
+// high-water mark. Written only by assignNextGrantNumber's atomic
+// upsert.
+export const albumGrantCounters = pgTable("album_grant_counters", {
+  albumId: varchar("album_id").primaryKey(),
+  lastNumber: integer("last_number").notNull().default(0),
+});
 
 // Task #395 — `userId` is a loose FK. Fan playlists carry a `customer_users.id`
 // here; admin playlists (legacy / staff demos) carry a `users.id`. Same pattern

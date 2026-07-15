@@ -16,6 +16,10 @@ interface GoodDeedCertificateProps {
   identities?: ShareIdentities;
   certificateNumber?: number;
   certificateNumbers?: number[];
+  /** Task #52 — GR (grant) number for a comped copy. Only used when the fan
+      holds NO paid GoodDeed number for this album; renders as "GR 01" so a
+      granted copy is visibly distinct from a paid "#01". */
+  grantNumber?: number | null;
   /** Task #909 — an admin-granted preview mints NO GoodDeed number, so the
       cert shows "[Demo]" everywhere a serial would otherwise appear. */
   isPreview?: boolean;
@@ -31,13 +35,22 @@ export function GoodDeedCertificate({
   identities,
   certificateNumber,
   certificateNumbers,
+  grantNumber = null,
   isPreview = false,
   onClose,
 }: GoodDeedCertificateProps) {
-  const certs =
+  // Task #52 — paid GoodDeed numbers win; a granted (comped) copy falls back
+  // to its GR number; a copy with NO number of either kind renders a single
+  // card with no serial (never a fabricated "#01").
+  const paidCerts =
     certificateNumbers && certificateNumbers.length > 0
       ? certificateNumbers
-      : [certificateNumber ?? 1];
+      : certificateNumber != null
+        ? [certificateNumber]
+        : [];
+  const isGrant = paidCerts.length === 0 && grantNumber != null;
+  const certs: Array<number | null> =
+    paidCerts.length > 0 ? paidCerts : [isGrant ? grantNumber : null];
   const [shared, setShared] = useState(false);
   const [savingImage, setSavingImage] = useState(false);
   const [imageSaved, setImageSaved] = useState(false);
@@ -169,8 +182,16 @@ export function GoodDeedCertificate({
     return () => cancelAnimationFrame(id);
   }, [shape, previewW]);
 
+  // Task #52 — the /share/cert page + OG image only understand the paid
+  // GoodDeed serial ("No. NN of this series"), so sharing stays scoped to
+  // paid certs (and Demo previews, which share their own copy). A granted
+  // or unnumbered copy can still save the card image locally.
+  const canShare = paidCerts.length > 0 || isPreview;
+
   const handleShare = async () => {
-    const n = padded(certs[safeIdx]);
+    const activeNum = certs[safeIdx];
+    if (activeNum == null && !isPreview) return;
+    const n = padded(activeNum ?? 0);
     const params = new URLSearchParams({
       album: album.title,
       artist: album.artist,
@@ -219,9 +240,14 @@ export function GoodDeedCertificate({
       });
       const blob = await (await fetch(dataUrl)).blob();
       const safeTitle = album.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "") || "album";
+      const activeNum = certs[safeIdx];
       const fileName = isPreview
         ? `GoodDeed-${safeTitle}-Demo-${shape}.png`
-        : `GoodDeed-${safeTitle}-No-${padded(certs[safeIdx])}-${shape}.png`;
+        : isGrant && activeNum != null
+          ? `GoodDeed-${safeTitle}-GR-${padded(activeNum)}-${shape}.png`
+          : activeNum != null
+            ? `GoodDeed-${safeTitle}-No-${padded(activeNum)}-${shape}.png`
+            : `GoodDeed-${safeTitle}-${shape}.png`;
 
       const downloadBlob = () => {
         const url = URL.createObjectURL(blob);
@@ -477,6 +503,7 @@ export function GoodDeedCertificate({
               )}
             </button>
 
+            {canShare && (
             <button
               type="button"
               onClick={handleShare}
@@ -500,6 +527,7 @@ export function GoodDeedCertificate({
                 </svg>
               )}
             </button>
+            )}
           </div>
         </div>
 
@@ -524,12 +552,13 @@ export function GoodDeedCertificate({
               <div className="flex gap-4 px-1" style={{ minWidth: "100%", justifyContent: "safe center" }}>
                 {certs.map((num, i) => (
                   <CertCard
-                    key={num}
+                    key={num ?? `blank-${i}`}
                     ref={(el) => { cardRefs.current[i] = el; }}
                     album={album}
                     ownerName={displayedName}
                     ownerPhotoUrl={user?.photoUrl ?? null}
                     num={num}
+                    isGrant={isGrant}
                     isPreview={isPreview}
                     shape={shape}
                     w={previewW}
@@ -620,6 +649,7 @@ export function GoodDeedCertificate({
               ownerName={displayedName}
               ownerPhotoUrl={user?.photoUrl ?? null}
               num={certs[safeIdx]}
+              isGrant={isGrant}
               isPreview={isPreview}
               shape={shape}
               w={1080}
@@ -671,7 +701,10 @@ function IdentityRow({
 interface CertCardProps {
   album: Album;
   ownerName: string;
-  num: number;
+  /** Paid GoodDeed serial or GR number; null = unnumbered copy (no serial shown). */
+  num: number | null;
+  /** Task #52 — when true `num` is a GR (grant) number, rendered "GR NN". */
+  isGrant?: boolean;
   /** Task #909 — when true the serial pill/caption render "[Demo]". */
   isPreview?: boolean;
   ownerPhotoUrl?: string | null;
@@ -816,7 +849,7 @@ function CertPortraitArt({ album }: { album: Album }) {
 const CERT_NO_ART_SENTINELS = new Set(["/album-placeholder.svg", "", "null", "undefined"]);
 
 const CertCard = forwardRef(function CertCard(
-  { album, ownerName, num, isPreview = false, ownerPhotoUrl, shape, w }: CertCardProps,
+  { album, ownerName, num, isGrant = false, isPreview = false, ownerPhotoUrl, shape, w }: CertCardProps,
   ref: Ref<HTMLDivElement>,
 ) {
   const [artFailed, setArtFailed] = useState(false);
@@ -837,7 +870,13 @@ const CertCard = forwardRef(function CertCard(
   const showRealArt = !!album.artwork && !artFailed && !isArtworkPressPlaceholder;
   const showPressLogo = !showRealArt && !!pressPlaceholderLogoUrl;
 
-  const certNumStr = isPreview ? "[Demo]" : `#${num.toString().padStart(2, "0")}`;
+  const certNumStr = isPreview
+    ? "[Demo]"
+    : num == null
+      ? ""
+      : isGrant
+        ? `GR ${num.toString().padStart(2, "0")}`
+        : `#${num.toString().padStart(2, "0")}`;
   const initial = (ownerName.replace(/^@/, "").trim()[0] || "?").toUpperCase();
   const u = w / 1080;
   const spec = CERT_SHAPE_SPECS[shape];
@@ -1039,10 +1078,14 @@ const CertCard = forwardRef(function CertCard(
           }}
         >
           <img src="/goodtunes-logo-white.png" alt="GoodTunes" crossOrigin="anonymous" style={{ height: spec.logoHU * u, width: "auto", display: "block" }} />
-          <span style={{ width: 1, height: spec.divHU * u, background: "rgba(255,255,255,0.3)" }} />
-          <span className="font-bold text-white" style={{ fontSize: spec.numFsU * u, letterSpacing: 0.2 }} data-testid="text-cert-serial">
-            {certNumStr}
-          </span>
+          {certNumStr && (
+            <>
+              <span style={{ width: 1, height: spec.divHU * u, background: "rgba(255,255,255,0.3)" }} />
+              <span className="font-bold text-white" style={{ fontSize: spec.numFsU * u, letterSpacing: 0.2 }} data-testid="text-cert-serial">
+                {certNumStr}
+              </span>
+            </>
+          )}
         </div>
 
         {/* Secondary album caption — pinned to the bottom (square/story) or set

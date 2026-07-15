@@ -55,6 +55,9 @@ export interface Album {
   isHidden?: boolean;
   certificateNumber?: number;
   ownedCertificates?: number[];
+  // Task #52 — per-album "GR NN" number for a granted (comped) copy. Only on
+  // the owner-scoped `/api/my-albums` row; null/absent means no grant number.
+  grantNumber?: number | null;
   purchases?: CertPurchase[];
   // Album-level streaming handoff links (Task #734). Used for the
   // album-level "open whole album on Spotify" control on stream-only

@@ -281,12 +281,16 @@ export function AlbumDetailDesktop({
     Array<{
       albumId: string;
       isPreview?: boolean;
+      grantNumber?: number | null;
       album?: { isPrepping?: boolean; isHidden?: boolean };
     }> | null
   >({
     queryKey: ["/api/my-albums"],
   });
   const isPreviewAlbum = !!id && (myAlbumsForPreview ?? []).some((a) => a.albumId === id && a.isPreview);
+  // Task #52 — "GR NN" number for a granted (comped) copy of this album.
+  const grantNumber =
+    (!!id && (myAlbumsForPreview ?? []).find((a) => a.albumId === id)?.grantNumber) || null;
   // Task #2530 — owner-only "Not yet released" marker. Matches the Library
   // card gating: the owner (a row in the owner-scoped /api/my-albums) of a
   // release still prepping (staged) or hidden. The public detail payload strips
@@ -425,8 +429,13 @@ export function AlbumDetailDesktop({
     ? ({ ...(album as unknown as PlayerAlbum), ownedCertificates: ownedNums })
     : null;
   const handleViewProvenance = () => {
-    if (isMulti) setShowOwnership(true);
-    else setProvenanceCertNum(ownedNums[0] ?? 1);
+    if (isMulti) {
+      setShowOwnership(true);
+      return;
+    }
+    const n = ownedNums[0];
+    if (n != null) setProvenanceCertNum(n);
+    else { setSingleCertNum(null); setShowCert(true); }
   };
 
   // Is the player currently auditioning a song from this album under
@@ -1149,8 +1158,9 @@ export function AlbumDetailDesktop({
             displayName: user?.displayName || "GoodTunes Fan",
             username: user?.username || "you",
           }}
-          certificateNumber={singleCertNum ?? ownedNums[0] ?? 1}
+          certificateNumber={singleCertNum ?? ownedNums[0]}
           certificateNumbers={singleCertNum !== null ? [singleCertNum] : ownedNums}
+          grantNumber={grantNumber}
           isPreview={isPreviewAlbum}
           onClose={() => { setShowCert(false); setSingleCertNum(null); }}
         />
