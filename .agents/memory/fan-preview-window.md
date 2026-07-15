@@ -41,3 +41,27 @@ sites: mobile `Player.tsx`, and the two desktop bodies `DesktopNowPlaying`
 **How to apply:** any new player surface or seek entry point must route through
 the window clamp when `previewMode` is on; never wire a raw `seekTo` to a
 fan-reachable control in preview mode.
+
+## Cap auto-advance: pause() queues a stale timeupdate
+
+The preview-cap effect (advance at previewEndSec) calls `audio.pause()` before
+`handleNext`. Per the HTML media spec, pause() queues one FINAL `timeupdate`
+task that lands AFTER the advance — and because the next song's signed Mux URL
+resolves async, the element still holds the OLD media, so the handler reads
+~the old cap time (~30s) and re-trips the cap against the next song's default
+0–30s window. Result: deterministic double-advance (fans heard tracks 1, 3, 5).
+
+**Why the fix is where it is:** `timeupdate` handlers read `a.currentTime`
+LIVE at delivery, so the deterministic neutralizer is zeroing the element
+clock right after pause() when actually advancing (skipped at end-of-queue so
+the dock stays paused at the cap). A one-shot armed ref alone is NOT enough —
+handleNext's synchronous setCurrentTime(0) re-arms it before the stale
+macrotask lands. The armed ref rides along as a belt and must re-arm on
+`!isPlaying` too, or resume-at-cap on the last track would play past the 30s
+window (store compliance).
+
+**How to apply:** any state-driven effect keyed off timeupdate-fed state that
+pauses/advances media must neutralize queued stale ticks at the element (live
+reads), not in React state. Regression test:
+client/src/pages/playerPreviewCapAdvance.test.ts (real PlayerProvider,
+instrumented HTMLMediaElement prototype; verified red against pre-fix code).

@@ -669,17 +669,51 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // completed so handleNext doesn't classify the cut as a skip, then
   // delegate to the natural advance path so shuffle/repeat/end-of-queue
   // behave the same as a real song ending.
+  // Double-advance guard (the "plays 1, 3, 5 — skips the evens" bug). The
+  // `a.pause()` below queues one FINAL `timeupdate` task (per the HTML media
+  // spec's pause steps) that is delivered AFTER handleNext has advanced the
+  // queue — and the element still holds the OLD song's media (the next song's
+  // signed Mux URL is fetched async), so the handler reads ~the old cap time
+  // (≈30s) and re-trips this cap against the NEXT song's window (which also
+  // ends at 30s when no window is placed), advancing twice per track. Two
+  // defenses:
+  //  1. When we're advancing to another track, zero the element clock right
+  //     after pausing — `timeupdate` handlers read `a.currentTime` LIVE at
+  //     delivery, so any queued stale tick now reads 0 (inside every window).
+  //     Skipped at end-of-queue so the dock stays paused at the cap (see the
+  //     toggle-off note below).
+  //  2. A one-shot arm ref as a belt: disarm on fire, re-arm on any tick
+  //     observed inside the window or while paused (preserves the resume-at-
+  //     cap → immediate cap behavior on the last track, so a fan can never
+  //     play past the preview window).
+  const previewCapArmedRef = useRef(true);
   useEffect(() => {
     if (!previewMode) return;
-    if (!isPlaying) return;
-    if (currentTime < previewEndSec) return;
+    if (currentTime < previewEndSec) {
+      previewCapArmedRef.current = true;
+      return;
+    }
+    if (!isPlaying) {
+      previewCapArmedRef.current = true;
+      return;
+    }
+    if (!previewCapArmedRef.current) return;
+    previewCapArmedRef.current = false;
     milestonesRef.current.completed = true;
     const a = audioRef.current;
     if (a && hasRealAudio) {
       try { a.pause(); } catch {}
+      const willAdvance =
+        repeat === "one" ||
+        repeat === "all" ||
+        (shuffle && queue.length > 1) ||
+        currentIndex < queue.length - 1;
+      if (willAdvance) {
+        try { a.currentTime = 0; } catch {}
+      }
     }
     handleNext(false);
-  }, [previewMode, isPlaying, currentTime, previewEndSec, hasRealAudio, handleNext]);
+  }, [previewMode, isPlaying, currentTime, previewEndSec, hasRealAudio, handleNext, repeat, shuffle, queue.length, currentIndex]);
 
   // Exiting preview mode while paused at the cap shouldn't trap the
   // dock at 30s — leave currentTime where it is so the song resumes
