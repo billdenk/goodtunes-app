@@ -1884,6 +1884,20 @@ export function AdminAlbum({
                   sendBlockers={completeness?.press.missing ?? []}
                   pressMode={isPress}
                   hideEntityLinks={isArtist}
+                  // Task #2703 — Fulfillment sub-tab. Destination management +
+                  // the custom-company contact card are press/operator-only;
+                  // artists get the display-identity-only card. Fail closed:
+                  // an unknown/unloaded role sees the quiet card, never the
+                  // contact list (server mirrors this by returning []).
+                  canManageFulfillment={
+                    isPress ||
+                    adminRoleInfo?.role === "super_admin" ||
+                    adminRoleInfo?.role === "admin"
+                  }
+                  fulfillmentPartnerId={album.fulfillmentPartnerId ?? null}
+                  fulfillmentManufacturerId={album.fulfillmentManufacturerId ?? null}
+                  fulfillmentDestinationId={(album as any).fulfillmentDestinationId ?? null}
+                  shipperDisplayName={(album as any).shipperDisplayName ?? null}
                 />
               )}
               {safeTab === "shopify" && allowed.has("shopify") && (
@@ -3146,6 +3160,17 @@ function AlbumFulfillmentSingleDestPanel({
                 <optgroup label="Press (self-fulfill)">
                   {filteredDests
                     .filter((d) => d.kind === "manufacturer")
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                </optgroup>
+              )}
+              {filteredDests.filter((d) => d.kind === "custom").length > 0 && (
+                <optgroup label="Other companies">
+                  {filteredDests
+                    .filter((d) => d.kind === "custom")
                     .map((d) => (
                       <option key={d.id} value={d.id}>
                         {d.name}

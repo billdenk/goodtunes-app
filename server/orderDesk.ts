@@ -515,6 +515,10 @@ export async function dispatchShippingEmail(
     trackingUrl: tracking.trackingUrl,
     goodDeedNumbers,
     webPlayUrl: `${fanOrigin()}/album/${order.albumId}`,
+    // Task #2703 — customer-facing shipper identity. Fans see the album's
+    // shipper display name (operator-set), never the real fulfillment
+    // company; blank means the platform default, "GoodTunes".
+    shippedBy: album?.shipperDisplayName?.trim() || "GoodTunes",
   });
 }
 

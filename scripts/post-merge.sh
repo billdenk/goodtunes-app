@@ -9486,3 +9486,35 @@ reingest_task_2711_masters() {
 }
 reingest_task_2711_masters dev  "${DATABASE_URL:-}"
 reingest_task_2711_masters prod "${PROD_DATABASE_URL:-}"
+
+# --- Task #2703: fulfillment-destination contact fields + per-album
+# customer-facing shipper display name. Idempotent DDL on BOTH DBs:
+#  - fulfillment_destinations gains contact_name/phone/email/is_residential
+#    and drops NOT NULL on name (an "Other" entry may be a person, so the
+#    display name can fall back to contact_name).
+#  - albums gains shipper_display_name (NULL = "GoodTunes" default shown
+#    to fans; the real fulfillment company stays press/super-admin only).
+migrate_task_2703_fulfillment_contacts() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2703 fulfillment contacts migration on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+ALTER TABLE fulfillment_destinations ADD COLUMN IF NOT EXISTS contact_name text;
+ALTER TABLE fulfillment_destinations ADD COLUMN IF NOT EXISTS phone text;
+ALTER TABLE fulfillment_destinations ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE fulfillment_destinations ADD COLUMN IF NOT EXISTS is_residential boolean NOT NULL DEFAULT false;
+ALTER TABLE fulfillment_destinations ALTER COLUMN name DROP NOT NULL;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS shipper_display_name text;
+SQL
+  ); then
+    echo "post-merge: task-2703 fulfillment contacts migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-2703 fulfillment contacts migration failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+migrate_task_2703_fulfillment_contacts dev  "${DATABASE_URL:-}"
+migrate_task_2703_fulfillment_contacts prod "${PROD_DATABASE_URL:-}"

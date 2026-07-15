@@ -9007,6 +9007,11 @@ export async function registerRoutes(
       // ships direct when doesFulfillment=true). Same operational tier
       // as fulfillmentPartnerId — editable after first sale.
       "fulfillmentManufacturerId",
+      // Task #2703 — unified custom-destination FK + the customer-facing
+      // shipper display name. Same operational tier as the other
+      // fulfillment routing fields — editable after first sale.
+      "fulfillmentDestinationId",
+      "shipperDisplayName",
       // Task #2428 — GoodTunes Shopify+ album toggles (signed-GoodDeed
       // on/off, GoodTunes-fulfills on/off). Operational manufacturing
       // config, editable after first sale like the routing override above.
@@ -9138,6 +9143,14 @@ export async function registerRoutes(
         updates.fulfillmentPartnerId = null;
         updates.fulfillmentManufacturerId = null;
       }
+    }
+    // Task #2703 — customer-facing shipper display name. NULL/empty means
+    // the default ("GoodTunes"). This is the ONLY shipper identity fans
+    // ever see; the FK rows above stay press/super-admin information.
+    if (req.body?.shipperDisplayName !== undefined) {
+      const raw = req.body.shipperDisplayName;
+      const trimmed = raw == null ? "" : String(raw).trim();
+      updates.shipperDisplayName = trimmed || null;
     }
     if (req.body?.managerId !== undefined) {
       const normalizedManagerId = req.body.managerId ? String(req.body.managerId) : null;
@@ -19370,11 +19383,28 @@ export async function registerRoutes(
   // Manufacturer visibility: only appears for super_admin users OR when
   // the requester's own press ID matches (self-fulfill within own portal).
   // Press-to-press cross-routing is deferred per task spec.
+  // Task #2703 — fulfillment identities are press + super-admin information
+  // only. requireAdmin admits EVERY partner role (artist/label/vendor/...),
+  // so an explicit role check is required here or those partners could read
+  // the full fulfillment company list. Non-privileged roles get an empty
+  // list; their album views show only the customer-facing shipper display
+  // name (albums.shipperDisplayName ?? "GoodTunes").
+  async function fulfillmentViewerRole(req: Request): Promise<{ ok: boolean; isSuperAdmin: boolean; myPressId: string | null }> {
+    const userId = (req.session as any)?.userId as string | undefined;
+    const info = userId ? await getUserRole(userId) : null;
+    const role = info?.role ?? "";
+    const isSuperAdmin = role === "super_admin" || role === "admin";
+    const isPress = role === "manufacturer";
+    return {
+      ok: isSuperAdmin || isPress,
+      isSuperAdmin,
+      myPressId: isPress ? (info?.roleScopeId ?? null) : null,
+    };
+  }
   app.get("/api/fulfillment-destinations", requireAdmin, async (req, res) => {
-    const isSuperAdmin = ["super_admin", "admin"].includes(
-      (req.session as any)?.role ?? "",
-    );
-    const myPressId: string | null = (req.session as any)?.roleScopeId ?? null;
+    const viewer = await fulfillmentViewerRole(req);
+    if (!viewer.ok) return res.json([]);
+    const { isSuperAdmin, myPressId } = viewer;
 
     const [partners, allMfrs, customs] = await Promise.all([
       storage.getFulfillmentPartners(),
@@ -19403,11 +19433,24 @@ export async function registerRoutes(
         city: null,
         country: null,
       })),
+      // Task #2703 — customs carry the full contact card (address, contact
+      // person, phone, email, residential flag) for the press/operator
+      // Fulfillment tab. Only privileged viewers ever reach this branch.
       ...customs.map((d) => ({
         kind: "custom" as const,
         id: d.id,
-        name: d.name,
+        name: d.name || d.contactName || "(unnamed)",
         isDefault: false,
+        companyName: d.name,
+        contactName: d.contactName,
+        phone: d.phone,
+        email: d.email,
+        isResidential: d.isResidential,
+        addressLine1: d.addressLine1,
+        addressLine2: d.addressLine2,
+        state: d.state,
+        postalCode: d.postalCode,
+        notes: d.notes,
         city: d.city,
         country: d.country,
       })),
@@ -19417,11 +19460,23 @@ export async function registerRoutes(
 
   // CRUD for ad-hoc fulfillment_destinations entries.
   app.post("/api/admin/fulfillment-destinations", requireAdmin, async (req, res) => {
+    if (!(await fulfillmentViewerRole(req)).ok) {
+      return res.status(403).json({ message: "Out of scope for this account" });
+    }
     const b = req.body ?? {};
     const name = String(b.name ?? "").trim();
-    if (!name) return res.status(400).json({ message: "Name is required" });
+    const contactName = String(b.contactName ?? "").trim();
+    // Task #2703 — company name OR contact person is enough (an "Other"
+    // entry may be a person, e.g. the artist ships their own copies).
+    if (!name && !contactName) {
+      return res.status(400).json({ message: "Company name or contact name is required" });
+    }
     const d = await storage.createFulfillmentDestination({
-      name,
+      name: name || null,
+      contactName: contactName || null,
+      phone: b.phone ? String(b.phone).trim() : null,
+      email: b.email ? String(b.email).trim() : null,
+      isResidential: !!b.isResidential,
       addressLine1: b.addressLine1 ? String(b.addressLine1).trim() : null,
       addressLine2: b.addressLine2 ? String(b.addressLine2).trim() : null,
       city: b.city ? String(b.city).trim() : null,
@@ -19433,13 +19488,16 @@ export async function registerRoutes(
     return res.status(201).json(d);
   });
   app.put("/api/admin/fulfillment-destinations/:id", requireAdmin, async (req, res) => {
+    if (!(await fulfillmentViewerRole(req)).ok) {
+      return res.status(403).json({ message: "Out of scope for this account" });
+    }
     const b = req.body ?? {};
     const update: Record<string, unknown> = {};
-    if (b.name !== undefined) {
-      const name = String(b.name).trim();
-      if (!name) return res.status(400).json({ message: "Name is required" });
-      update.name = name;
-    }
+    if (b.name !== undefined) update.name = b.name ? String(b.name).trim() || null : null;
+    if (b.contactName !== undefined) update.contactName = b.contactName ? String(b.contactName).trim() || null : null;
+    if (b.phone !== undefined) update.phone = b.phone ? String(b.phone).trim() : null;
+    if (b.email !== undefined) update.email = b.email ? String(b.email).trim() : null;
+    if (b.isResidential !== undefined) update.isResidential = !!b.isResidential;
     if (b.addressLine1 !== undefined) update.addressLine1 = b.addressLine1 ? String(b.addressLine1).trim() : null;
     if (b.addressLine2 !== undefined) update.addressLine2 = b.addressLine2 ? String(b.addressLine2).trim() : null;
     if (b.city !== undefined) update.city = b.city ? String(b.city).trim() : null;
@@ -19452,6 +19510,9 @@ export async function registerRoutes(
     return res.json(d);
   });
   app.delete("/api/admin/fulfillment-destinations/:id", requireAdmin, async (req, res) => {
+    if (!(await fulfillmentViewerRole(req)).ok) {
+      return res.status(403).json({ message: "Out of scope for this account" });
+    }
     await storage.deleteFulfillmentDestination(String(req.params.id));
     return res.json({ message: "Deleted" });
   });
@@ -19520,7 +19581,11 @@ export async function registerRoutes(
     return res.json({ message: "Deleted" });
   });
 
-  app.get("/api/fulfillment-partners", requireAdmin, async (_req, res) => {
+  app.get("/api/fulfillment-partners", requireAdmin, async (req, res) => {
+    // Task #2703 — same posture as /api/fulfillment-destinations: who
+    // fulfills is press + super-admin information. Other partner roles
+    // get an empty list.
+    if (!(await fulfillmentViewerRole(req)).ok) return res.json([]);
     return res.json(await storage.getFulfillmentPartners());
   });
   app.get("/api/fulfillment-partners/:id", requireAdmin, async (req, res) => {

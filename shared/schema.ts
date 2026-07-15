@@ -284,6 +284,12 @@ export const albums = pgTable("albums", {
     (): any => fulfillmentDestinations.id,
     { onDelete: "set null" },
   ),
+  // Task #2703 — customer-facing shipper display identity. Who actually
+  // fulfills a release is press + super-admin information only; fans (and
+  // artist/label partner views) see this display name instead. NULL means
+  // the default, "GoodTunes". Never resolve fan-facing copy from the real
+  // fulfillment FK rows above.
+  shipperDisplayName: text("shipper_display_name"),
   // Demo show/hide flag. When true the album is excluded from public catalog
   // reads (album list + detail) AND from the fan-facing credits surface,
   // effectively hiding the artist + all their songs/credits in one toggle.
@@ -4438,7 +4444,18 @@ export type ShippingRate = typeof shippingRates.$inferSelect;
 // an operator prints/emails the carton label manually.
 export const fulfillmentDestinations = pgTable("fulfillment_destinations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
+  // Task #2703 — company name is now OPTIONAL: an "Other" entry may be a
+  // person (e.g. the artist ships their own copies). Display name falls
+  // back to contactName when name is null. The API rejects rows where
+  // both are blank.
+  name: text("name"),
+  // Task #2703 — full contact capture for "Other" fulfillment companies
+  // so they can be reached (and possibly onboarded as partners later).
+  contactName: text("contact_name"),
+  phone: text("phone"),
+  email: text("email"),
+  // Residential vs business address — carriers price/route differently.
+  isResidential: boolean("is_residential").notNull().default(false),
   addressLine1: text("address_line1"),
   addressLine2: text("address_line2"),
   city: text("city"),

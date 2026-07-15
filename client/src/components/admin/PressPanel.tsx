@@ -31,6 +31,7 @@ import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPane
 import { CompletedTemplatePanel } from "@/components/admin/CompletedTemplatePanel";
 import { PressTemplateDownloads, type PressTemplate } from "@/components/admin/PressTemplateDownloads";
 import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
+import { FulfillmentAssignmentPanel } from "@/components/admin/FulfillmentAssignmentPanel";
 import { VinylOrderPanel } from "@/components/admin/VinylOrderPanel";
 import type { VinylFormat } from "@shared/vinylFormatRules";
 import { PHYSICAL_FORMAT_TO_ALBUM_FORMAT } from "@shared/schema";
@@ -192,6 +193,11 @@ export function PressPanel({
   sendBlockers = [],
   pressMode = false,
   hideEntityLinks = false,
+  canManageFulfillment = false,
+  fulfillmentPartnerId = null,
+  fulfillmentManufacturerId = null,
+  fulfillmentDestinationId = null,
+  shipperDisplayName = null,
 }: {
   albumId: string;
   albumTitle?: string;
@@ -221,6 +227,15 @@ export function PressPanel({
   // deep-links to /admin/people|labels/:id — those pages are operator-only
   // and the artist can't reach them, so the link would just dead-end.
   hideEntityLinks?: boolean;
+  // Task #2703 — Fulfillment sub-tab. Only presses + super admins manage
+  // destinations and see the custom-company contact card (the server
+  // returns [] destinations for everyone else). Artists get a quiet
+  // display-identity-only card instead.
+  canManageFulfillment?: boolean;
+  fulfillmentPartnerId?: string | null;
+  fulfillmentManufacturerId?: string | null;
+  fulfillmentDestinationId?: string | null;
+  shipperDisplayName?: string | null;
 }) {
   const showVinylSides =
     !!physicalFormat && physicalFormat !== "cassette" && physicalFormat !== "cd";
@@ -877,16 +892,30 @@ export function PressPanel({
         </div>
         )}
 
-        {/* ── FULFILLMENT sub-tab — quiet placeholder (Task #2701) ───── */}
-        {subTab === "fulfillment" && (
+        {/* ── FULFILLMENT sub-tab (Task #2703) ───────────────────────── */}
+        {subTab === "fulfillment" && canManageFulfillment && (
+          <div data-testid="press-subtab-fulfillment">
+            <FulfillmentAssignmentPanel
+              albumId={albumId}
+              fulfillmentPartnerId={fulfillmentPartnerId}
+              fulfillmentManufacturerId={fulfillmentManufacturerId}
+              fulfillmentDestinationId={fulfillmentDestinationId}
+              shipperDisplayName={shipperDisplayName}
+            />
+          </div>
+        )}
+        {subTab === "fulfillment" && !canManageFulfillment && (
           <div
-            className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center"
+            className="rounded-xl border border-slate-200 bg-white px-6 py-10 text-center"
             data-testid="press-subtab-fulfillment"
           >
             <Truck className="w-6 h-6 text-slate-300 mx-auto mb-3" />
-            <p className="text-sm font-medium text-slate-500">Fulfillment lives here soon.</p>
+            <p className="text-sm font-medium text-slate-700">
+              Shipping shows to customers as{" "}
+              <span className="font-semibold">{shipperDisplayName?.trim() || "GoodTunes"}</span>.
+            </p>
             <p className="text-xs text-slate-400 mt-1">
-              Shipping and fulfillment handoff for this release will move into this tab.
+              Fulfillment routing for this release is handled by GoodTunes and the press.
             </p>
           </div>
         )}

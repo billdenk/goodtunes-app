@@ -1313,6 +1313,10 @@ export type OrderShippedData = {
   trackingUrl: string | null;
   goodDeedNumbers: number[];
   webPlayUrl: string;
+  // Task #2703 — customer-facing shipper identity. Resolved at the call
+  // site from albums.shipper_display_name, defaulting to "GoodTunes".
+  // Never the real fulfillment company unless the operator chose to show it.
+  shippedBy: string;
 };
 
 export async function sendOrderShippedEmail(
@@ -1328,6 +1332,7 @@ export async function sendOrderShippedEmail(
     trackingUrl,
     goodDeedNumbers,
     webPlayUrl,
+    shippedBy,
   } = data;
 
   const subject = `Your record shipped — ${albumTitle}`;
@@ -1343,7 +1348,9 @@ export async function sendOrderShippedEmail(
     `It's on the way. Your record just shipped.`,
     ``,
     `${albumTitle} — ${albumArtist}`,
-    ...(carrierLine ? [``, carrierLine] : []),
+    ``,
+    `Shipped by: ${shippedBy}`,
+    ...(carrierLine ? [carrierLine] : []),
     ...(trackingUrl ? [`Track it: ${trackingUrl}`] : []),
     ...(goodDeedNumbers.length > 0 ? [``, `${gdLabel}: ${gdText}`] : []),
     ``,
@@ -1368,6 +1375,10 @@ export async function sendOrderShippedEmail(
   // Carrier / tracking block. Renders whenever we have any of carrier,
   // tracking number, or tracking URL.
   const trackingRows = [
+    `<tr>
+          <td style="padding: 6px 0; font-size: 14px; color: rgba(255,255,255,0.6);">Shipped by</td>
+          <td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">${escapeHtml(shippedBy)}</td>
+        </tr>`,
     carrier ? `<tr>
           <td style="padding: 6px 0; font-size: 14px; color: rgba(255,255,255,0.6);">Carrier</td>
           <td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">${escapeHtml(carrier)}</td>

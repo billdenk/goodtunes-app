@@ -746,6 +746,12 @@ interface UnifiedFulfillmentDest {
   name: string;
   city?: string | null;
   country?: string | null;
+  // Task #2703 — custom ("Other") destinations carry a full contact card.
+  companyName?: string | null;
+  contactName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  isResidential?: boolean;
 }
 export function UnifiedFulfillmentDestPicker({
   value,
@@ -770,6 +776,12 @@ export function UnifiedFulfillmentDestPicker({
 
   const [creatingAddr, setCreatingAddr] = useState(false);
   const [addrName, setAddrName] = useState("");
+  // Task #2703 — contact-card parity with the album Fulfillment tab's
+  // "Other…" inline form: contact person, phone, email, residential flag.
+  const [addrContact, setAddrContact] = useState("");
+  const [addrPhone, setAddrPhone] = useState("");
+  const [addrEmail, setAddrEmail] = useState("");
+  const [addrResidential, setAddrResidential] = useState(false);
   const [addrLine1, setAddrLine1] = useState("");
   const [addrLine2, setAddrLine2] = useState("");
   const [addrCity, setAddrCity] = useState("");
@@ -779,14 +791,18 @@ export function UnifiedFulfillmentDestPicker({
   const [savingAddr, setSavingAddr] = useState(false);
 
   const saveAddr = async () => {
-    if (!addrName.trim()) {
-      toast({ title: "Name is required", variant: "destructive" });
+    if (!addrName.trim() && !addrContact.trim()) {
+      toast({ title: "Company or contact name is required", variant: "destructive" });
       return;
     }
     setSavingAddr(true);
     try {
       const res = await apiRequest("POST", "/api/admin/fulfillment-destinations", {
-        name: addrName.trim(),
+        name: addrName.trim() || null,
+        contactName: addrContact.trim() || null,
+        phone: addrPhone.trim() || null,
+        email: addrEmail.trim() || null,
+        isResidential: addrResidential,
         addressLine1: addrLine1.trim() || null,
         addressLine2: addrLine2.trim() || null,
         city: addrCity.trim() || null,
@@ -798,7 +814,9 @@ export function UnifiedFulfillmentDestPicker({
       await qc.invalidateQueries({ queryKey: ["/api/fulfillment-destinations"] });
       onChange(newDest.id ?? "");
       setCreatingAddr(false);
-      setAddrName(""); setAddrLine1(""); setAddrLine2(""); setAddrCity("");
+      setAddrName(""); setAddrContact(""); setAddrPhone(""); setAddrEmail("");
+      setAddrResidential(false);
+      setAddrLine1(""); setAddrLine2(""); setAddrCity("");
       setAddrState(""); setAddrPostal(""); setAddrCountry("");
       toast({ title: "Address saved." });
     } catch {
@@ -870,7 +888,12 @@ export function UnifiedFulfillmentDestPicker({
       {allowAddNew && creatingAddr && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2 mt-1">
           <p className="text-xs font-semibold text-slate-700">New custom address</p>
-          <input placeholder="Name (required)" value={addrName} onChange={(e) => setAddrName(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-name" />
+          <input placeholder="Company name" value={addrName} onChange={(e) => setAddrName(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-name" />
+          <input placeholder="Contact name" value={addrContact} onChange={(e) => setAddrContact(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-contact" />
+          <div className="grid grid-cols-2 gap-2">
+            <input placeholder="Phone" value={addrPhone} onChange={(e) => setAddrPhone(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-phone" />
+            <input placeholder="Email" value={addrEmail} onChange={(e) => setAddrEmail(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-email" />
+          </div>
           <input placeholder="Address line 1" value={addrLine1} onChange={(e) => setAddrLine1(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-line1" />
           <input placeholder="Address line 2 (optional)" value={addrLine2} onChange={(e) => setAddrLine2(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-line2" />
           <div className="grid grid-cols-2 gap-2">
@@ -879,8 +902,17 @@ export function UnifiedFulfillmentDestPicker({
             <input placeholder="Postal code" value={addrPostal} onChange={(e) => setAddrPostal(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-postal" />
             <input placeholder="Country" value={addrCountry} onChange={(e) => setAddrCountry(e.target.value)} className={INPUT_CLS} data-testid="input-picker-addr-country" />
           </div>
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <input
+              type="checkbox"
+              checked={addrResidential}
+              onChange={(e) => setAddrResidential(e.target.checked)}
+              data-testid="checkbox-picker-addr-residential"
+            />
+            Residential address
+          </label>
           <div className="flex gap-2 pt-1">
-            <Button type="button" size="sm" onClick={saveAddr} disabled={savingAddr || !addrName.trim()} data-testid="btn-picker-save-addr">
+            <Button type="button" size="sm" onClick={saveAddr} disabled={savingAddr || (!addrName.trim() && !addrContact.trim())} data-testid="btn-picker-save-addr">
               {savingAddr ? "Saving…" : "Save address"}
             </Button>
             <Button type="button" variant="ghost" size="sm" onClick={() => setCreatingAddr(false)} data-testid="btn-picker-cancel-addr">
