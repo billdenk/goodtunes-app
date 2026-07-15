@@ -23,6 +23,19 @@ of local-vs-server; exclude it from the effect deps (eslint-disable
 exhaustive-deps) so a toggle doesn't retrigger the effect. This preserves edits
 across same-entity background refetches but still adopts a freshly-saved value.
 
+**Save-side corollary — clearing `dirty` on save success:** the moment
+`onSuccess` flips `dirty` to false, the re-seed effect adopts whatever the
+shared cache holds RIGHT NOW. If the mutation invalidated the WRONG query key
+(or one nobody reads), the cache still holds the pre-save value and the input
+visibly reverts/blanks until a full page refresh — even though the save
+persisted (this bit the Shopify-tab Sale URL: it invalidated an admin-prefixed
+key while the panel's album prop reads a different key with staleTime
+Infinity). Fix pattern: in `onSuccess`, `setQueryData` the saved (normalized)
+value into the EXACT key the component reads BEFORE clearing `dirty`, then
+invalidate that same key to reconcile with server truth. Verify the key by
+finding the useQuery that feeds the prop — never trust the invalidation key
+already in the file.
+
 Related honesty seam on the same save path: partner accounts in **approval
 mode** get edits queued as HTTP **202** (not applied). `apiRequest` treats every
 2xx as success, so a bare `await apiRequest(...)` shows a false "Saved". Return

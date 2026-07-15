@@ -173,14 +173,24 @@ export function ShopifyPanel({
   const saveSaleUrl = useMutation({
     mutationFn: async () => {
       const trimmed = saleUrl.trim();
-      const r = await apiRequest("PUT", `/api/admin/albums/${albumId}`, {
-        externalSaleUrl: trimmed === "" ? null : trimmed,
+      const next = trimmed === "" ? null : trimmed;
+      await apiRequest("PUT", `/api/admin/albums/${albumId}`, {
+        externalSaleUrl: next,
       });
-      return r.json();
+      return next;
     },
-    onSuccess: () => {
+    onSuccess: (next) => {
+      // Write the saved value into the album cache BEFORE clearing the dirty
+      // flag — the re-seed effect above fires as soon as dirty flips false,
+      // and it must see the new value, not the stale pre-save album (the
+      // album prop reads ["/api/albums", albumId], so invalidating only the
+      // admin key left the input blank until a full page refresh).
+      queryClient.setQueryData<ShopifyPanelAlbum | undefined>(
+        ["/api/albums", albumId],
+        (prev) => (prev ? { ...prev, externalSaleUrl: next } : prev),
+      );
       setSaleUrlDirty(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId] });
       toast({ title: "Sale URL saved" });
     },
     onError: (e: any) =>
