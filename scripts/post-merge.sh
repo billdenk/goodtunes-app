@@ -369,6 +369,34 @@ SQL
 migrate_shopify_expiring_tokens dev  "${DATABASE_URL:-}"
 migrate_shopify_expiring_tokens prod "${PROD_DATABASE_URL:-}"
 
+# Task #2721 — Pre-save date + Streaming release ("available") date on albums.
+# Two new nullable ISO-date text columns driving the one-time fan pre-save /
+# now-streaming cards. NOTE: the legacy streaming_release_date column is the
+# repurposed Sunset date (shared/albumStage.ts) — these are distinct columns.
+# Hand-apply on BOTH dev and prod so the schema-drift guard stays green and
+# the publish dev→prod diff is empty. Idempotent.
+migrate_album_presave_streaming_dates() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping album presave/streaming dates migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE albums
+  ADD COLUMN IF NOT EXISTS pre_save_date            text,
+  ADD COLUMN IF NOT EXISTS streaming_available_date text;
+COMMIT;
+SQL
+  then
+    echo "post-merge: album presave/streaming dates migration ok on $label"
+  else
+    echo "post-merge: WARNING — album presave/streaming dates migration failed on $label (continuing)"
+  fi
+}
+migrate_album_presave_streaming_dates dev  "${DATABASE_URL:-}"
+migrate_album_presave_streaming_dates prod "${PROD_DATABASE_URL:-}"
+
 # Task #1036 — TRUE ONE-TIME backfill: give every existing account exactly
 # ONE membership reproducing its current users.role / role_scope_id +
 # folded partner_permission_overrides. Marker-guarded in

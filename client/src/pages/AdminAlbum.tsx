@@ -219,6 +219,10 @@ interface AlbumFull {
   streamingReleaseDate?: string | null;
   // Task #1078 — Apple-style album footer fields.
   originalReleaseDate?: string | null;
+  // Task #2721 — pre-save nudge + actual streaming-live dates (distinct from
+  // the legacy streamingReleaseDate, which is the repurposed Sunset date).
+  preSaveDate?: string | null;
+  streamingAvailableDate?: string | null;
   copyrightLine?: string | null;
   // Task #1158 — per-album footer copyright symbol (℗ vs ©).
   copyrightSymbol?: string | null;
@@ -4814,6 +4818,8 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           goodTunesReleaseDate: album.goodTunesReleaseDate,
           streamingReleaseDate: album.streamingReleaseDate,
           originalReleaseDate: album.originalReleaseDate,
+          preSaveDate: album.preSaveDate,
+          streamingAvailableDate: album.streamingAvailableDate,
         }}
         invalidate={invalidate}
         fields={[
@@ -4838,6 +4844,22 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             label: "Original release date",
             type: "date",
             placeholder: "First-ever release of this record",
+          },
+          // Task #2721 — two streaming-lifecycle dates gating the one-time
+          // fan pre-save / now-streaming cards. Stored on their own new
+          // columns (pre_save_date / streaming_available_date) — NOT the
+          // legacy streamingReleaseDate column, which is the Sunset date.
+          {
+            key: "preSaveDate",
+            label: "Pre-save date",
+            type: "date",
+            placeholder: "When fans may be nudged to pre-save",
+          },
+          {
+            key: "streamingAvailableDate",
+            label: "Streaming release date",
+            type: "date",
+            placeholder: "Day the album is live on streaming",
           },
         ]}
       />

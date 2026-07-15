@@ -236,6 +236,16 @@ export const albums = pgTable("albums", {
   // text ℗ phonogram credit (operator enters "2009 Brash Music"; the UI
   // prepends the ℗ glyph). Both nullable; neither is auto-imported.
   originalReleaseDate: text("original_release_date"),
+  // Task #2721 — two operator-set streaming-lifecycle dates that drive the
+  // one-time fan cards (built in follow-up tasks). ISO YYYY-MM-DD, both
+  // nullable. NOTE: the legacy `streaming_release_date` column above is the
+  // repurposed SUNSET date (see shared/albumStage.ts) — these are distinct.
+  // `preSaveDate`: when we may start nudging fans to pre-save the album on
+  // their streaming service (artists may hold this until physical sales run
+  // their course). `streamingAvailableDate`: the day the album is actually
+  // live on streaming services.
+  preSaveDate: text("pre_save_date"),
+  streamingAvailableDate: text("streaming_available_date"),
   copyrightLine: text("copyright_line"),
   // Task #1158 — per-album footer copyright symbol. The footer prepends a
   // symbol in front of `copyrightLine`; this picks which one. "℗" (sound-

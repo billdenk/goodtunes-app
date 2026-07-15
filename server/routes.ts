@@ -9069,6 +9069,13 @@ export async function registerRoutes(
     // free-text ℗ copyright line. Both ride the edit_metadata gate.
     if (req.body?.originalReleaseDate !== undefined)
       updates.originalReleaseDate = normalizeReleaseDate(req.body.originalReleaseDate);
+    // Task #2721 — pre-save + streaming-available dates (fan-card gates).
+    // Same normalization + edit_metadata gate as the other Release dates.
+    // Distinct from the legacy `streamingReleaseDate` (= Sunset date) above.
+    if (req.body?.preSaveDate !== undefined)
+      updates.preSaveDate = normalizeReleaseDate(req.body.preSaveDate);
+    if (req.body?.streamingAvailableDate !== undefined)
+      updates.streamingAvailableDate = normalizeReleaseDate(req.body.streamingAvailableDate);
     if (req.body?.copyrightLine !== undefined)
       updates.copyrightLine = req.body.copyrightLine ? String(req.body.copyrightLine).trim() : null;
     if (req.body?.copyrightSymbol !== undefined)
