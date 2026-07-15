@@ -3000,6 +3000,7 @@ export function registerCommerceRoutes(app: Express) {
     const quantity = Math.max(1, parseInt(String(req.query.quantity ?? "1"), 10) || 1);
     const signedCertCount = Math.max(0, parseInt(String(req.query.certCount ?? "0"), 10) || 0);
     const bookletCount = Math.max(0, parseInt(String(req.query.bookletCount ?? "0"), 10) || 0);
+    const albumId = typeof req.query.albumId === "string" ? req.query.albumId : undefined;
     const { classifySkuKind } = await import("./orderDesk");
     const skuKind = classifySkuKind(format);
     if (skuKind === "digital") {

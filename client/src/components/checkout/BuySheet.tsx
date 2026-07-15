@@ -817,6 +817,7 @@ export function BuySheet({
     (async () => {
       try {
         const params = new URLSearchParams({
+          albumId,
           format: selectedSku.format,
           country,
           quantity: String(quantity),
