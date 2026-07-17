@@ -261,7 +261,24 @@ async function resolveScope(kind: ScopeKind, req: Request): Promise<ResolvedScop
     let id: string | null = null;
     if (info.role === "super_admin") id = impersonate || null;
     else if (info.role === "artist") id = info.roleScopeId;
-    else if (info.role === "manager") {
+    else if (info.role === "label") {
+      // A label may drill into any artist on their roster. They MUST pass
+      // ?scopeId=<personId> and the person must either be tagged with this
+      // label (people.label_id) or be the primary artist on an album released
+      // by this label. Mirrors the gate in artistReports.ts resolveArtistScope.
+      if (!info.roleScopeId) return { error: "Label account has no label scope", status: 403 };
+      if (!impersonate) return { error: "Label must pass ?scopeId= to drill into a roster artist", status: 400 };
+      const okRow = await db.execute<{ ok: boolean }>(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM people WHERE id = ${impersonate} AND label_id = ${info.roleScopeId}
+          UNION
+          SELECT 1 FROM albums WHERE primary_artist_id = ${impersonate} AND label_id = ${info.roleScopeId}
+        ) AS ok
+      `);
+      const ok = ((okRow as any).rows?.[0]?.ok) === true;
+      if (!ok) return { error: "Artist is not on this label's roster", status: 403 };
+      id = impersonate;
+    } else if (info.role === "manager") {
       // A manager may drill into any artist on their roster. They MUST pass
       // ?scopeId=<personId> and the person must be tagged with this manager
       // (people.manager_id = manager's roleScopeId). Same gate as artistReports.ts.
