@@ -287,3 +287,9 @@ id = "HnY97U4ayzcwX25ctsq1O"
 uri = "file://exports/carplay-android-auto-mockups.jpg"
 type = "image"
 title = "CarPlay + Android Auto — All Screens (JPEG)"
+
+[[outputs]]
+id = "opU_YqG5qsqkUaBV4qpoB"
+uri = "file://docs/sales/investor-overview.md"
+type = "text"
+title = "Investor Overview — docs/sales/investor-overview.md"
