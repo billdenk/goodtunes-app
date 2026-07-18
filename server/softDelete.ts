@@ -13,7 +13,7 @@
 // is only freed when the row is purged or sweeper-collected (handled
 // by the existing on-row-delete cleanups in routes.ts; out of scope
 // here).
-import { pool } from "./db";
+import { pool, safeConnect } from "./db";
 
 export type TrashEntityType =
   | "album"
@@ -160,7 +160,7 @@ export async function softDeleteEntity(
 ): Promise<boolean> {
   const table = TABLE_NAMES[kind];
   const nowIso = new Date().toISOString();
-  const client = await pool.connect();
+  const client = await safeConnect();
   try {
     await client.query("BEGIN");
     const upd = await client.query(
@@ -289,7 +289,7 @@ export async function restoreEntity(
   id: string,
 ): Promise<void> {
   const table = TABLE_NAMES[kind];
-  const client = await pool.connect();
+  const client = await safeConnect();
   try {
     await client.query("BEGIN");
     // Root-row un-flip first, then walk every other soft-deletable

@@ -11,7 +11,7 @@ import { prewarmSpotifyToken } from "./lib/spotify";
 import { authKindMiddleware, canonicalHostRedirect } from "./auth/host";
 import { forwardToPostHog, geoFromRequest } from "./analytics";
 import { alertOps } from "./opsAlert";
-import { describeDbError, type DbErrorInfo } from "./db";
+import { describeDbError, safeConnect, type DbErrorInfo } from "./db";
 import { isStripeConfigured } from "./stripe";
 import { log } from "./log";
 
@@ -40,7 +40,7 @@ app.get("/api/health", async (_req, res) => {
   });
 
   const probe = (async () => {
-    const client = await pool.connect();
+    const client = await safeConnect();
     try {
       await client.query("SET statement_timeout = 3000");
       await client.query("SELECT 1");

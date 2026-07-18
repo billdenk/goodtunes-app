@@ -33,6 +33,24 @@ pool.on("error", (err) => {
   console.error(`[db] idle client error: ${err?.message ?? err}`);
 });
 
+// safeConnect wraps pool.connect() and attaches a no-op 'error' listener to
+// the checked-out client before returning it. When a client is actively held
+// (checked out from the pool) and the database server drops the underlying
+// TCP connection, pg emits the 'error' event on the CLIENT object, not the
+// pool. Without a listener on the client, Node escalates it to
+// process.uncaughtException → fatal crash. The pool.on("error") handler above
+// only covers IDLE clients sitting in the pool, not checked-out ones.
+// Using safeConnect() everywhere pool.connect() is called centrally prevents
+// that crash path: the error is logged, the client is released, and the
+// in-flight query rejects normally so the caller can handle it.
+export async function safeConnect(): Promise<PoolClient> {
+  const client = await pool.connect();
+  client.on("error", (err) => {
+    console.error(`[db] active client error: ${err?.message ?? err}`);
+  });
+  return client;
+}
+
 // ─── DB error introspection ──────────────────────────────────────────
 //
 // Drizzle wraps every failure in a `DrizzleQueryError` whose `.message` is
@@ -135,7 +153,7 @@ const originalPoolQuery = pool.query.bind(pool);
     return (originalPoolQuery as any)(...args);
   }
   return (async () => {
-    const client = await pool.connect();
+    const client = await safeConnect();
     let discarded = false;
     try {
       return await (client.query as any)(...args);
@@ -148,7 +166,7 @@ const originalPoolQuery = pool.query.bind(pool);
         console.warn(
           "[db] cached-plan mismatch (0A000) — recycled connection and retrying query once",
         );
-        const fresh = await pool.connect();
+        const fresh = await safeConnect();
         try {
           return await (fresh.query as any)(...args);
         } finally {
@@ -203,7 +221,7 @@ type TransactionDeps = {
 };
 
 const defaultTransactionDeps: TransactionDeps = {
-  connect: () => pool.connect(),
+  connect: () => safeConnect(),
   runOnClient: (client, fn, config) =>
     drizzle(client, { schema }).transaction(fn, config),
 };
