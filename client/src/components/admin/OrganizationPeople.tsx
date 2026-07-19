@@ -115,6 +115,13 @@ export interface OrganizationPeopleProps {
    * invite artists (menu visible) but can't add admins. Defaults true.
    */
   canAddAdmins?: boolean;
+  /**
+   * Optional click handler for a contact name in voice="partner" mode.
+   * When provided, the name renders as a button that calls this with the
+   * person's id — lets portals navigate to a scoped person detail view.
+   * When omitted, the name renders as a plain span (non-navigable).
+   */
+  onPersonClick?: (personId: string) => void;
 }
 
 export function OrganizationPeople({
@@ -129,6 +136,7 @@ export function OrganizationPeople({
   canInviteSubusers = true,
   entityWebsiteUrl,
   canAddAdmins = true,
+  onPersonClick,
 }: OrganizationPeopleProps) {
   const resolvedBlurb =
     blurb ??
@@ -222,9 +230,20 @@ export function OrganizationPeople({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
                   {voice === "partner" ? (
-                    <span className="text-sm font-semibold text-inherit truncate block" data-testid={`text-${testIdPrefix}-contact-${c.personId}`}>
-                      {c.name}
-                    </span>
+                    onPersonClick ? (
+                      <button
+                        type="button"
+                        onClick={() => onPersonClick(c.personId)}
+                        className="text-sm font-semibold text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate block text-left"
+                        data-testid={`link-${testIdPrefix}-contact-${c.personId}`}
+                      >
+                        {c.name}
+                      </button>
+                    ) : (
+                      <span className="text-sm font-semibold text-inherit truncate block" data-testid={`text-${testIdPrefix}-contact-${c.personId}`}>
+                        {c.name}
+                      </span>
+                    )
                   ) : (
                     <Link href={`/admin/people/${c.personId}?from=partner&backHref=${encodeURIComponent(`${PARTNER_ROUTE_BASE[entityKind]}/${entityId}?tab=people`)}&backName=${encodeURIComponent(entityName)}`} className="text-sm font-semibold text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate block" data-testid={`link-${testIdPrefix}-contact-${c.personId}`}>
                       {c.name}

@@ -2073,6 +2073,13 @@ function PressContactsPanel({ pressId, pressName }: { pressId: string; pressName
   // Task #699 — surface the press website to the Add Admin domain-mismatch
   // warning, same as the super-admin Manufacturer page does.
   const { data: me } = useQuery<PressMe>({ queryKey: [`/api/press/${pressId}/me`] });
+  const [, navigate] = useLocation();
+  const handlePersonClick = (personId: string) => {
+    const sp = new URLSearchParams(window.location.search);
+    sp.set("tab", "people");
+    sp.set("person", personId);
+    navigate(`${window.location.pathname}?${sp.toString()}`);
+  };
   return (
     <OrganizationPeople
       apiPath={`/api/manufacturers/${pressId}/people`}
@@ -2086,6 +2093,7 @@ function PressContactsPanel({ pressId, pressName }: { pressId: string; pressName
       canInviteSubusers={probe.data?.ok === true}
       canAddAdmins={probe.data?.canAddAdmins === true}
       entityWebsiteUrl={me?.websiteUrl ?? null}
+      onPersonClick={handlePersonClick}
     />
   );
 }
