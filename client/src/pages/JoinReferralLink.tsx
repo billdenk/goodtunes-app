@@ -88,7 +88,7 @@ function LogoHeader({ photoUrl, orgName }: { photoUrl: string | null; orgName: s
             alt={orgName ?? ""}
             className="h-12 w-12 rounded-full object-cover ring-1 ring-slate-200"
           />
-          <span className="text-fan-faint text-2xl font-extralight">+</span>
+          <span className="text-slate-400 text-2xl font-extralight">+</span>
         </>
       )}
       <img src="/goodtunes-logo-color.png" alt="GoodTunes" className="h-8 w-auto" />
@@ -106,7 +106,7 @@ function Card({ children }: { children: React.ReactNode }) {
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <label className="block text-xs font-bold uppercase tracking-widest text-fan-faint mb-1.5">
+    <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-1.5">
       {children}
     </label>
   );
@@ -132,8 +132,8 @@ function TextInput({
       autoFocus={autoFocus}
       disabled={disabled}
       className="w-full rounded-xl border border-slate-200 px-3.5 py-3 bg-white text-slate-900 text-sm
-                 placeholder:text-fan-faint focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]
-                 focus:border-[var(--brand-blue)] disabled:bg-slate-50 disabled:text-fan-faint transition-colors"
+                 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]
+                 focus:border-[var(--brand-blue)] disabled:bg-slate-50 disabled:text-slate-400 transition-colors"
       data-testid={testId}
     />
   );
@@ -187,13 +187,13 @@ function ArtistCard({
         />
       ) : (
         <div className="w-11 h-11 rounded-full bg-slate-200 flex-shrink-0 flex items-center justify-center">
-          <Music className="w-4 h-4 text-fan-faint" />
+          <Music className="w-4 h-4 text-slate-400" />
         </div>
       )}
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold text-slate-900 truncate">{artist.name}</div>
         {artist.followers != null && (
-          <div className="text-xs text-fan-faint">
+          <div className="text-xs text-slate-400">
             {artist.followers > 0
               ? `${artist.followers.toLocaleString()} followers`
               : "Spotify artist"}
@@ -440,7 +440,7 @@ export default function JoinReferralLink() {
     return (
       <PageShell>
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-6 h-6 animate-spin text-fan-faint" />
+          <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
         </div>
       </PageShell>
     );
@@ -452,7 +452,7 @@ export default function JoinReferralLink() {
         <div className="text-center py-16">
           <div className="text-3xl mb-3">🔗</div>
           <h2 className="text-lg font-semibold text-slate-800 mb-2">Link not found</h2>
-          <p className="text-sm text-fan-secondary">
+          <p className="text-sm text-slate-500">
             This referral link may be invalid or expired. Ask your referrer for a new link.
           </p>
         </div>
@@ -469,7 +469,7 @@ export default function JoinReferralLink() {
     return (
       <Card>
         <h2 className="text-xl font-bold text-slate-900 mb-1">Tell us about you</h2>
-        <p className="text-sm text-fan-secondary mb-6 leading-relaxed">
+        <p className="text-sm text-slate-500 mb-6 leading-relaxed">
           GoodTunes® helps artists get their vinyl with&nbsp;$0 out of pocket. Help&nbsp;us learn a bit about you.
         </p>
 
@@ -524,7 +524,7 @@ export default function JoinReferralLink() {
         <button
           type="button"
           onClick={() => setStep("info")}
-          className="flex items-center gap-1 text-xs text-fan-faint hover:text-fan-secondary mb-5 transition-colors"
+          className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-500 mb-5 transition-colors"
           data-testid="button-back-to-info"
         >
           <ChevronLeft className="w-3.5 h-3.5" />
@@ -532,7 +532,7 @@ export default function JoinReferralLink() {
         </button>
 
         <h2 className="text-xl font-bold text-slate-900 mb-1">Check your email</h2>
-        <p className="text-sm text-fan-secondary mb-6 leading-relaxed">
+        <p className="text-sm text-slate-500 mb-6 leading-relaxed">
           We sent a 6-digit code to <span className="font-medium text-slate-700">{applicantEmail}</span>.
           Enter it below to continue.
         </p>
@@ -560,7 +560,7 @@ export default function JoinReferralLink() {
               placeholder="123456"
               className="w-full rounded-xl border border-slate-200 px-3.5 py-3 bg-white text-slate-900
                          text-2xl font-bold tracking-[0.4em] text-center
-                         placeholder:text-fan-faint placeholder:font-normal placeholder:tracking-normal
+                         placeholder:text-slate-400 placeholder:font-normal placeholder:tracking-normal
                          focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]
                          focus:border-[var(--brand-blue)] transition-colors"
               data-testid="input-otp"
@@ -580,7 +580,7 @@ export default function JoinReferralLink() {
             {verifyOtpMutation.isPending ? "Verifying…" : "Verify"}
           </PrimaryButton>
 
-          <p className="text-center text-xs text-fan-faint">
+          <p className="text-center text-xs text-slate-400">
             Didn't get it?{" "}
             {otpResent ? (
               <span className="text-emerald-600 font-medium">Sent!</span>
@@ -589,7 +589,7 @@ export default function JoinReferralLink() {
                 type="button"
                 onClick={handleResendOtp}
                 disabled={requestOtpMutation.isPending}
-                className="underline hover:text-fan-secondary transition-colors disabled:opacity-40"
+                className="underline hover:text-slate-500 transition-colors disabled:opacity-40"
                 data-testid="button-resend-otp"
               >
                 Resend code
@@ -607,7 +607,7 @@ export default function JoinReferralLink() {
     return (
       <Card>
         <h2 className="text-xl font-bold text-slate-900 mb-1">Confirm your account</h2>
-        <p className="text-sm text-fan-secondary mb-6 leading-relaxed">
+        <p className="text-sm text-slate-500 mb-6 leading-relaxed">
           Search for your artist profile on Spotify to confirm your identity.
         </p>
 
@@ -622,7 +622,7 @@ export default function JoinReferralLink() {
                 onKeyDown={(e) => { if (e.key === "Enter") handleSpotifySearch(); }}
                 placeholder="Search by artist name…"
                 className="flex-1 rounded-xl border border-slate-200 px-3.5 py-3 bg-white text-slate-900
-                           text-sm placeholder:text-fan-faint focus:outline-none focus:ring-2
+                           text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2
                            focus:ring-[var(--brand-blue)] focus:border-[var(--brand-blue)] transition-colors"
                 data-testid="input-spotify-search"
               />
@@ -630,7 +630,7 @@ export default function JoinReferralLink() {
                 type="button"
                 onClick={handleSpotifySearch}
                 disabled={!spotifyQuery.trim() || spotifyLoading}
-                className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-fan-secondary
+                className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-slate-500
                            hover:bg-slate-50 disabled:opacity-40 transition-colors"
                 data-testid="button-spotify-search"
               >
@@ -662,7 +662,7 @@ export default function JoinReferralLink() {
                         <img src={a.imageUrl} alt="" className="w-11 h-11 rounded-full object-cover flex-shrink-0 ring-1 ring-slate-100" />
                       ) : (
                         <div className="w-11 h-11 rounded-full bg-slate-100 flex-shrink-0 flex items-center justify-center">
-                          <Music className="w-4 h-4 text-fan-faint" />
+                          <Music className="w-4 h-4 text-slate-400" />
                         </div>
                       )}
                       <div className="min-w-0 flex-1">
@@ -675,7 +675,7 @@ export default function JoinReferralLink() {
                           )}
                         </div>
                         {a.followers != null && (
-                          <div className="text-xs text-fan-faint">
+                          <div className="text-xs text-slate-400">
                             {a.followers > 0 ? `${a.followers.toLocaleString()} followers` : "Spotify artist"}
                           </div>
                         )}
@@ -688,12 +688,12 @@ export default function JoinReferralLink() {
           )}
 
           {spotifySearched && !spotifyLoading && spotifyError && (
-            <p className="text-xs text-fan-faint text-center" data-testid="text-spotify-error">
+            <p className="text-xs text-slate-400 text-center" data-testid="text-spotify-error">
               Search unavailable right now. You can skip this step below.
             </p>
           )}
           {spotifySearched && !spotifyLoading && !spotifyError && spotifyResults.length === 0 && (
-            <p className="text-xs text-fan-faint text-center" data-testid="text-spotify-no-results">
+            <p className="text-xs text-slate-400 text-center" data-testid="text-spotify-no-results">
               No results found. Try a different spelling, or skip this step below.
             </p>
           )}
@@ -703,7 +703,7 @@ export default function JoinReferralLink() {
               type="button"
               onClick={() => submitMutation.mutate()}
               disabled={submitMutation.isPending}
-              className="w-full text-center text-xs text-fan-faint hover:text-fan-secondary py-2 transition-colors"
+              className="w-full text-center text-xs text-slate-400 hover:text-slate-500 py-2 transition-colors"
               data-testid="button-no-spotify"
             >
               {submitMutation.isPending ? (
@@ -732,7 +732,7 @@ export default function JoinReferralLink() {
     return (
       <Card>
         <h2 className="text-xl font-bold text-slate-900 mb-1">Confirm your account</h2>
-        <p className="text-sm text-fan-secondary mb-6 leading-relaxed">
+        <p className="text-sm text-slate-500 mb-6 leading-relaxed">
           Search for your artist profile on Spotify to confirm your identity.
         </p>
 
@@ -742,7 +742,7 @@ export default function JoinReferralLink() {
             <ArtistCard artist={selectedArtist} onClear={handleClearArtist} />
           </div>
 
-          <p className="text-sm text-fan-secondary leading-relaxed">
+          <p className="text-sm text-slate-500 leading-relaxed">
             GoodTunes® will generate a short code. Add it to your <strong className="text-slate-700">Spotify bio</strong> to verify account ownership.
           </p>
 
@@ -768,7 +768,7 @@ export default function JoinReferralLink() {
     return (
       <Card>
         <h2 className="text-xl font-bold text-slate-900 mb-1">Confirm your account</h2>
-        <p className="text-sm text-fan-secondary mb-6 leading-relaxed">
+        <p className="text-sm text-slate-500 mb-6 leading-relaxed">
           Search for your artist profile on Spotify to confirm your identity.
         </p>
 
@@ -779,7 +779,7 @@ export default function JoinReferralLink() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
-            <div className="text-xs text-fan-faint text-center mb-2">Your verification code</div>
+            <div className="text-xs text-slate-400 text-center mb-2">Your verification code</div>
             <div className="flex items-center justify-center gap-2">
               <span
                 className="font-mono text-2xl font-bold text-slate-900 tracking-wider"
@@ -803,7 +803,7 @@ export default function JoinReferralLink() {
             </div>
           </div>
 
-          <p className="text-sm text-fan-secondary leading-relaxed text-center">
+          <p className="text-sm text-slate-500 leading-relaxed text-center">
             Add the code <span className="font-mono font-bold text-slate-700">{proofCode}</span> to your Spotify bio. Then come back here and click <strong className="text-slate-700">"Verify"</strong>.
           </p>
 
@@ -833,14 +833,14 @@ export default function JoinReferralLink() {
             <Check className="w-7 h-7 text-emerald-500" />
           </div>
           <h2 className="text-xl font-bold text-slate-900 mb-2">You're on the list!</h2>
-          <p className="text-sm text-fan-secondary leading-relaxed">
+          <p className="text-sm text-slate-500 leading-relaxed">
             Thanks{applicantName ? `, ${applicantName.split(" ")[0]}` : ""}! Your application is under review. We'll be in touch at{" "}
             <span className="font-medium text-slate-700">{applicantEmail}</span>{" "}
             once you've been approved.
           </p>
           {selectedArtist && (
-            <p className="text-xs text-fan-faint mt-4">
-              Spotify profile: <span className="text-fan-secondary">{selectedArtist.name}</span>
+            <p className="text-xs text-slate-400 mt-4">
+              Spotify profile: <span className="text-slate-500">{selectedArtist.name}</span>
             </p>
           )}
         </div>
@@ -861,7 +861,7 @@ export default function JoinReferralLink() {
       {step === "spotify_verify" && renderSpotifyVerify()}
       {step === "submitted" && renderSubmitted()}
 
-      <p className="text-center text-xs text-fan-faint mt-6 leading-relaxed px-2">
+      <p className="text-center text-xs text-slate-400 mt-6 leading-relaxed px-2">
         By applying you agree to GoodTunes' terms of service and privacy policy.
         Your application will be reviewed — you won't have access until you receive your invite email.
       </p>
