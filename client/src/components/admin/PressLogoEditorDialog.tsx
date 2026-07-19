@@ -31,10 +31,26 @@ export interface PressLogoEditorDialogProps {
   name: string;
   /** Current image URL on the entity (null if unset). */
   logoUrl: string | null;
-  /** PUT endpoint that accepts `{ [fieldName] }`, e.g. `/api/admin/manufacturers/123`. */
+  /** API endpoint that accepts `{ [fieldName] }`, e.g. `/api/admin/manufacturers/123`. */
   apiPath: string;
   /**
-   * The entity field the PUT writes the uploaded URL to. Defaults to
+   * HTTP method for the save request. Defaults to `"PUT"` (used by all
+   * admin entity endpoints). Pass `"PATCH"` for press-portal profile
+   * endpoints that use PATCH semantics.
+   */
+  method?: "PUT" | "PATCH";
+  /**
+   * Override the file-upload step. When provided, this function receives
+   * the chosen `File` and must return the hosted public URL string. The
+   * dialog then saves that URL to `apiPath` via the usual save mutation.
+   * Defaults to `uploadImageFile` (the shared admin signed-upload helper).
+   *
+   * Use this for partner-portal callers whose upload endpoint differs from
+   * the standard `/api/admin/upload` route.
+   */
+  uploadFn?: (file: File) => Promise<string>;
+  /**
+   * The entity field the PUT/PATCH writes the uploaded URL to. Defaults to
    * `logoUrl` (the profile logo). Pass e.g. `vinylPlaceholderUrl` to reuse
    * this dialog for a different image slot on the same entity.
    */
@@ -57,6 +73,8 @@ export function PressLogoEditorDialog({
   name,
   logoUrl,
   apiPath,
+  method = "PUT",
+  uploadFn,
   fieldName = "logoUrl",
   title = "Logo",
   onInvalidate,
@@ -68,13 +86,13 @@ export function PressLogoEditorDialog({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  // Task #2117 — paste-a-URL alongside the existing upload, so a logo
-  // can be set from an already-hosted image without downloading it first.
   const [urlInput, setUrlInput] = useState("");
+
+  const resolvedUploadFn = uploadFn ?? uploadImageFile;
 
   const setFromUrl = useMutation({
     mutationFn: async (url: string) => {
-      await apiRequest("PUT", apiPath, { [fieldName]: url });
+      await apiRequest(method, apiPath, { [fieldName]: url });
       return url;
     },
     onSuccess: () => {
@@ -107,8 +125,8 @@ export function PressLogoEditorDialog({
   const upload = useMutation({
     mutationFn: async (file: File) => {
       setPreviewUrl(URL.createObjectURL(file));
-      const url = await uploadImageFile(file);
-      await apiRequest("PUT", apiPath, { [fieldName]: url });
+      const url = await resolvedUploadFn(file);
+      await apiRequest(method, apiPath, { [fieldName]: url });
       return url;
     },
     onSuccess: () => {
@@ -128,7 +146,7 @@ export function PressLogoEditorDialog({
 
   const removeLogo = useMutation({
     mutationFn: async () => {
-      await apiRequest("PUT", apiPath, { [fieldName]: null });
+      await apiRequest(method, apiPath, { [fieldName]: null });
     },
     onSuccess: () => {
       onInvalidate();
@@ -273,8 +291,6 @@ export function PressLogoEditorDialog({
               }}
               data-testid={`input-${testIdPrefix}-logo-file`}
             />
-            {/* Task #2117 — paste-a-URL row, mirroring the paste-or-upload
-                pattern used elsewhere in admin. */}
             <div className="mt-4 flex items-center gap-2">
               <input
                 type="url"

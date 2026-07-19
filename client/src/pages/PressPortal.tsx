@@ -21,10 +21,10 @@
 //                 Catalog deep-links into the existing manufacturer
 //                 catalog editor under /admin/manufacturers/:id.
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch, useLocation, useRoute } from "wouter";
-import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Mail, FileCheck } from "lucide-react";
+import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Mail, FileCheck, Pencil } from "lucide-react";
 import { albumStage, type AlbumStage } from "@shared/albumStage";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
@@ -55,6 +55,7 @@ import { PressCatalogPanel } from "@/pages/AdminManufacturer";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
+import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { PartnerCapabilitiesCard, PRESS_CAPABILITIES } from "@/components/admin/PartnerCapabilitiesCard";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import {
@@ -2109,20 +2110,16 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
   const [location, setLocation] = useState("");
   const [bio, setBio] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-  // Task #2117 — paste-a-URL alongside the upload so a press can set its
-  // logo from an already-hosted image.
-  const [logoUrlInput, setLogoUrlInput] = useState("");
   // Task #2191 — full-size primary nav logo for the press portal whitelabel.
   const [navLogoUrl, setNavLogoUrl] = useState<string | null>(null);
-  const [uploadingNavLogo, setUploadingNavLogo] = useState(false);
-  const [navLogoUrlInput, setNavLogoUrlInput] = useState("");
-  const navLogoFileRef = useRef<HTMLInputElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  // Dialog open states for the polished logo editor (Task #2744).
+  const [logoEditorOpen, setLogoEditorOpen] = useState(false);
+  const [navLogoEditorOpen, setNavLogoEditorOpen] = useState(false);
   const { toast } = useToast();
-  // Hydrate once when /me lands. Subsequent saves invalidate /me which
-  // refires this effect — guarded by undefined check so user keystrokes
-  // mid-edit aren't clobbered.
+
+  // Hydrate text fields once when /me lands (guarded by id so keystrokes
+  // mid-edit aren't clobbered). Logo URLs sync on every me change because
+  // they're only set through the dialog, never typed inline.
   useEffect(() => {
     if (!me) return;
     setName(me.name ?? "");
@@ -2131,9 +2128,17 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
     setContactPhone(me.contactPhone ?? "");
     setLocation(me.location ?? "");
     setBio(me.bio ?? "");
-    setLogoUrl(me.logoUrl ?? null);
-    setNavLogoUrl(me.navLogoUrl ?? null);
   }, [me?.id]);
+
+  useEffect(() => {
+    if (!me) return;
+    setLogoUrl(me.logoUrl ?? null);
+  }, [me?.logoUrl]);
+
+  useEffect(() => {
+    if (!me) return;
+    setNavLogoUrl(me.navLogoUrl ?? null);
+  }, [me?.navLogoUrl]);
 
   const save = useMutation({
     mutationFn: (patch: Record<string, any>) => apiRequest("PATCH", `/api/press/${pressId}/profile`, patch),
@@ -2144,65 +2149,16 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
     onError: (e: any) => toast({ title: "Save failed", description: e?.message ?? "", variant: "destructive" }),
   });
 
-  async function pickLogo(file: File) {
-    setUploadingLogo(true);
-    try {
-      const ext = (file.name.split(".").pop() || "png").toLowerCase();
-      const r = await apiRequest("POST", `/api/press/${pressId}/profile/logo-url`, { ext });
-      const { uploadUrl, publicUrl } = await r.json();
-      await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "image/png" }, body: file });
-      setLogoUrl(publicUrl);
-      save.mutate({ logoUrl: publicUrl });
-    } catch (e: any) {
-      toast({ title: "Logo upload failed", description: e?.message ?? "", variant: "destructive" });
-    } finally {
-      setUploadingLogo(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  }
-
-  function applyLogoUrl() {
-    const url = logoUrlInput.trim();
-    if (!url) return;
-    if (!/^https?:\/\//i.test(url)) {
-      toast({ title: "That doesn't look like a URL", description: "Paste a full image URL starting with http:// or https://", variant: "destructive" });
-      return;
-    }
-    setLogoUrl(url);
-    save.mutate({ logoUrl: url });
-    setLogoUrlInput("");
-  }
-
-  // Task #2191 — primary nav logo (full-size/wide) upload + paste-URL.
-  // Reuses the same signed-upload endpoint as the icon slot; the two slots
-  // simply write to different DB fields.
-  async function pickNavLogo(file: File) {
-    setUploadingNavLogo(true);
-    try {
-      const ext = (file.name.split(".").pop() || "png").toLowerCase();
-      const r = await apiRequest("POST", `/api/press/${pressId}/profile/logo-url`, { ext });
-      const { uploadUrl, publicUrl } = await r.json();
-      await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "image/png" }, body: file });
-      setNavLogoUrl(publicUrl);
-      save.mutate({ navLogoUrl: publicUrl });
-    } catch (e: any) {
-      toast({ title: "Primary logo upload failed", description: e?.message ?? "", variant: "destructive" });
-    } finally {
-      setUploadingNavLogo(false);
-      if (navLogoFileRef.current) navLogoFileRef.current.value = "";
-    }
-  }
-
-  function applyNavLogoUrl() {
-    const url = navLogoUrlInput.trim();
-    if (!url) return;
-    if (!/^https?:\/\//i.test(url)) {
-      toast({ title: "That doesn't look like a URL", description: "Paste a full image URL starting with http:// or https://", variant: "destructive" });
-      return;
-    }
-    setNavLogoUrl(url);
-    save.mutate({ navLogoUrl: url });
-    setNavLogoUrlInput("");
+  // Task #2744 — press-portal signed-upload helper. Calls the press profile
+  // logo-url endpoint to get a signed PUT URL, uploads the file, and returns
+  // the hosted public URL. Passed as `uploadFn` to both PressLogoEditorDialog
+  // instances so they use portal-auth instead of the standard admin upload.
+  async function uploadLogoFile(file: File): Promise<string> {
+    const ext = (file.name.split(".").pop() || "png").toLowerCase();
+    const r = await apiRequest("POST", `/api/press/${pressId}/profile/logo-url`, { ext });
+    const { uploadUrl, publicUrl } = await r.json();
+    await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "image/png" }, body: file });
+    return publicUrl;
   }
 
   if (isLoading) return <PanelLoading />;
@@ -2232,140 +2188,105 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
         </p>
       )}
       <div className="space-y-4 max-w-xl">
-        {/* Task #2191 — Primary logo (full-size/wide for the portal nav header).
-            Renders first so a press sets its whitelabel wordmark before the
-            square icon. Falls back to a wide preview area so it's clear this
-            is a wide-format slot, not a square one. */}
+        {/* Task #2191 / Task #2744 — Primary logo (full-size/wide for the portal
+            nav header). Clicking the thumbnail opens PressLogoEditorDialog with
+            the full drag-and-drop / paste-URL / remove UI, matching the Jacket
+            placeholder pattern in AdminManufacturer. */}
         <div>
           <label className="text-xs text-slate-500 uppercase tracking-wide">Primary logo</label>
           <p className="text-xs text-slate-400 mt-0.5 mb-2">Full-size wordmark shown in the portal nav header. Wide images work best.</p>
-          <div className="flex items-start gap-4">
-            <div className="w-40 h-12 rounded-lg overflow-hidden bg-slate-50 ring-1 ring-slate-200 grid place-items-center flex-shrink-0">
-              {navLogoUrl
-                ? <img src={navLogoUrl} alt="" className="max-h-10 w-auto object-contain" data-testid="img-profile-nav-logo" />
-                : <span className="text-xs text-slate-400">Primary logo</span>}
-            </div>
-            <div className="flex flex-col gap-1">
-              {canEdit && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navLogoFileRef.current?.click()}
-                  disabled={uploadingNavLogo}
-                  className="h-9 bg-transparent text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 border-0 text-sm font-semibold"
-                  data-testid="button-upload-nav-logo"
-                >{uploadingNavLogo ? "Uploading…" : navLogoUrl ? "Replace primary logo" : "Upload primary logo"}</Button>
-              )}
-              {canEdit && navLogoUrl && (
-                <button
-                  type="button"
-                  onClick={() => { setNavLogoUrl(null); save.mutate({ navLogoUrl: null }); }}
-                  className="text-xs text-slate-500 hover:text-rose-600 text-left"
-                  data-testid="button-remove-nav-logo"
-                >Remove primary logo</button>
-              )}
-              <input
-                ref={navLogoFileRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) pickNavLogo(f); }}
-                data-testid="input-nav-logo-file"
-              />
-            </div>
-          </div>
-          {canEdit && (
-            <div className="flex items-center gap-2 max-w-md mt-2">
-              <Input
-                type="url"
-                inputMode="url"
-                value={navLogoUrlInput}
-                onChange={(e) => setNavLogoUrlInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyNavLogoUrl(); } }}
-                disabled={uploadingNavLogo || save.isPending}
-                placeholder="…or paste an image URL"
-                className="min-w-0 bg-white border-slate-200 text-slate-900"
-                data-testid="input-nav-logo-url"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={applyNavLogoUrl}
-                disabled={uploadingNavLogo || save.isPending || !navLogoUrlInput.trim()}
-                className="h-9 shrink-0 bg-transparent text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 border-0 text-sm font-semibold"
-                data-testid="button-nav-logo-url-apply"
-              >Use URL</Button>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => canEdit && setNavLogoEditorOpen(true)}
+            disabled={!canEdit}
+            className={[
+              "relative w-full max-w-xs h-16 rounded-xl overflow-hidden flex items-center justify-center group",
+              navLogoUrl ? "bg-white ring-1 ring-slate-200" : "bg-slate-50 ring-1 ring-dashed ring-slate-300",
+              !canEdit && "cursor-default",
+            ].filter(Boolean).join(" ")}
+            data-testid="button-edit-nav-logo"
+            aria-label="Edit primary logo"
+          >
+            {navLogoUrl ? (
+              <img src={navLogoUrl} alt="" className="max-h-12 w-auto object-contain px-3" data-testid="img-profile-nav-logo" />
+            ) : (
+              <span className="text-xs text-slate-400">Primary logo</span>
+            )}
+            {canEdit && (
+              <>
+                <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
+                <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                  <span className="w-11 h-11 rounded-full bg-white/90 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
+                    <Pencil className="w-4 h-4" />
+                  </span>
+                </span>
+              </>
+            )}
+          </button>
+          <PressLogoEditorDialog
+            open={navLogoEditorOpen}
+            onOpenChange={setNavLogoEditorOpen}
+            name={me?.name ?? "this press"}
+            logoUrl={navLogoUrl}
+            apiPath={`/api/press/${pressId}/profile`}
+            fieldName="navLogoUrl"
+            method="PATCH"
+            uploadFn={uploadLogoFile}
+            title="Primary logo"
+            hint="Full-size wordmark shown in the portal nav header. Wide images work best."
+            FallbackIcon={Factory}
+            testIdPrefix="press-nav-logo"
+            onInvalidate={() => queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/me`] })}
+          />
         </div>
 
         {/* Icon — square logo used in lists, credits, and the fallback rail header. */}
         <div>
           <label className="text-xs text-slate-500 uppercase tracking-wide">Icon</label>
           <p className="text-xs text-slate-400 mt-0.5 mb-2">Square logo used in press lists, credits, and as the rail fallback when no primary logo is set.</p>
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-50 ring-1 ring-slate-200 grid place-items-center">
-              {logoUrl
-                ? <img src={logoUrl} alt="" className="w-full h-full object-cover" data-testid="img-profile-logo" />
-                : <span className="text-xs text-slate-400">Icon</span>}
-            </div>
-            <div className="flex flex-col gap-1">
-              {canEdit && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={uploadingLogo}
-                  className="h-9 bg-transparent text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 border-0 text-sm font-semibold"
-                  data-testid="button-upload-logo"
-                >{uploadingLogo ? "Uploading…" : logoUrl ? "Replace icon" : "Upload an icon"}</Button>
-              )}
-              {canEdit && logoUrl && (
-                <button
-                  type="button"
-                  onClick={() => { setLogoUrl(null); save.mutate({ logoUrl: null }); }}
-                  className="text-xs text-slate-500 hover:text-rose-600 text-left"
-                  data-testid="button-remove-logo"
-                >Remove icon</button>
-              )}
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) pickLogo(f); }}
-                data-testid="input-logo-file"
-              />
-            </div>
-          </div>
-          {/* Task #2117 — paste-a-URL fallback for the icon. */}
-          {canEdit && (
-            <div className="flex items-center gap-2 max-w-md mt-2">
-              <Input
-                type="url"
-                inputMode="url"
-                value={logoUrlInput}
-                onChange={(e) => setLogoUrlInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyLogoUrl(); } }}
-                disabled={uploadingLogo || save.isPending}
-                placeholder="…or paste an image URL"
-                className="min-w-0 bg-white border-slate-200 text-slate-900"
-                data-testid="input-logo-url"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={applyLogoUrl}
-                disabled={uploadingLogo || save.isPending || !logoUrlInput.trim()}
-                className="h-9 shrink-0 bg-transparent text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 border-0 text-sm font-semibold"
-                data-testid="button-logo-url-apply"
-              >Use URL</Button>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => canEdit && setLogoEditorOpen(true)}
+            disabled={!canEdit}
+            className={[
+              "relative w-16 h-16 rounded-xl overflow-hidden flex items-center justify-center group",
+              logoUrl ? "bg-white ring-1 ring-slate-200" : "bg-slate-50 ring-1 ring-dashed ring-slate-300",
+              !canEdit && "cursor-default",
+            ].filter(Boolean).join(" ")}
+            data-testid="button-edit-logo"
+            aria-label="Edit icon"
+          >
+            {logoUrl ? (
+              <img src={logoUrl} alt="" className="w-full h-full object-cover" data-testid="img-profile-logo" />
+            ) : (
+              <Factory className="w-6 h-6 text-slate-300" strokeWidth={1.5} />
+            )}
+            {canEdit && (
+              <>
+                <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
+                <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                  <span className="w-11 h-11 rounded-full bg-white/90 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
+                    <Pencil className="w-4 h-4" />
+                  </span>
+                </span>
+              </>
+            )}
+          </button>
+          <PressLogoEditorDialog
+            open={logoEditorOpen}
+            onOpenChange={setLogoEditorOpen}
+            name={me?.name ?? "this press"}
+            logoUrl={logoUrl}
+            apiPath={`/api/press/${pressId}/profile`}
+            fieldName="logoUrl"
+            method="PATCH"
+            uploadFn={uploadLogoFile}
+            title="Icon"
+            hint="Square works best — used in the Presses list and anywhere this press is credited."
+            FallbackIcon={Factory}
+            testIdPrefix="press-logo"
+            onInvalidate={() => queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/me`] })}
+          />
         </div>
 
         <div>
