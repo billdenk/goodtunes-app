@@ -359,13 +359,15 @@ async function resolveReferrerBranding(
       };
     }
     case "manufacturer": {
-      const r = await db.execute<{ name: string; logo_url: string | null }>(
-        sql`SELECT name, logo_url FROM manufacturers WHERE id = ${scopeId} LIMIT 1`,
+      const r = await db.execute<{ name: string; logo_url: string | null; light_logo_url: string | null }>(
+        sql`SELECT name, logo_url, light_logo_url FROM manufacturers WHERE id = ${scopeId} LIMIT 1`,
       );
       const row = (r as any).rows?.[0];
+      // Task #2750 — referral page has a white background; prefer the
+      // light-variant logo so a dark-only icon (e.g. Memphis) is visible.
       return {
         name: row?.name ?? "A pressing plant",
-        photoUrl: row?.logo_url ?? null,
+        photoUrl: row?.light_logo_url ?? row?.logo_url ?? null,
         orgName: row?.name ?? null,
       };
     }

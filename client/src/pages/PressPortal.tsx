@@ -85,6 +85,11 @@ interface PressMe {
   logoUrl: string | null;
   // Task #2191 — full-size primary nav logo for the press portal whitelabel.
   navLogoUrl?: string | null;
+  // Task #2750 — light-background variants + Square/Tall format.
+  lightLogoUrl?: string | null;
+  lightNavLogoUrl?: string | null;
+  squareLogoUrl?: string | null;
+  lightSquareLogoUrl?: string | null;
   isMaker: boolean;
   domain?: string | null;
   // Task #699 — false for Staff teammates. The portal hides/disables
@@ -2113,9 +2118,18 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   // Task #2191 — full-size primary nav logo for the press portal whitelabel.
   const [navLogoUrl, setNavLogoUrl] = useState<string | null>(null);
+  // Task #2750 — light-background variants + Square/Tall format.
+  const [lightLogoUrl, setLightLogoUrl] = useState<string | null>(null);
+  const [lightNavLogoUrl, setLightNavLogoUrl] = useState<string | null>(null);
+  const [squareLogoUrl, setSquareLogoUrl] = useState<string | null>(null);
+  const [lightSquareLogoUrl, setLightSquareLogoUrl] = useState<string | null>(null);
   // Dialog open states for the polished logo editor (Task #2744).
   const [logoEditorOpen, setLogoEditorOpen] = useState(false);
   const [navLogoEditorOpen, setNavLogoEditorOpen] = useState(false);
+  const [lightLogoEditorOpen, setLightLogoEditorOpen] = useState(false);
+  const [lightNavLogoEditorOpen, setLightNavLogoEditorOpen] = useState(false);
+  const [squareLogoEditorOpen, setSquareLogoEditorOpen] = useState(false);
+  const [lightSquareLogoEditorOpen, setLightSquareLogoEditorOpen] = useState(false);
   const { toast } = useToast();
 
   // Hydrate text fields once when /me lands (guarded by id so keystrokes
@@ -2140,6 +2154,26 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
     if (!me) return;
     setNavLogoUrl(me.navLogoUrl ?? null);
   }, [me?.navLogoUrl]);
+
+  useEffect(() => {
+    if (!me) return;
+    setLightLogoUrl(me.lightLogoUrl ?? null);
+  }, [me?.lightLogoUrl]);
+
+  useEffect(() => {
+    if (!me) return;
+    setLightNavLogoUrl(me.lightNavLogoUrl ?? null);
+  }, [me?.lightNavLogoUrl]);
+
+  useEffect(() => {
+    if (!me) return;
+    setSquareLogoUrl(me.squareLogoUrl ?? null);
+  }, [me?.squareLogoUrl]);
+
+  useEffect(() => {
+    if (!me) return;
+    setLightSquareLogoUrl(me.lightSquareLogoUrl ?? null);
+  }, [me?.lightSquareLogoUrl]);
 
   const save = useMutation({
     mutationFn: (patch: Record<string, any>) => apiRequest("PATCH", `/api/press/${pressId}/profile`, patch),
@@ -2189,90 +2223,80 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
         </p>
       )}
       <div className="space-y-4 max-w-xl">
-        {/* Task #2191 / Task #2744 — Primary logo (full-size/wide for the portal
-            nav header). Clicking the thumbnail opens PressLogoEditorDialog with
-            the full drag-and-drop / paste-URL / remove UI, matching the Jacket
-            placeholder pattern in AdminManufacturer. */}
-        <div>
-          <label className="text-xs text-slate-500 uppercase tracking-wide">Primary logo</label>
-          <p className="text-xs text-slate-400 mt-0.5 mb-2">Full-size wordmark shown in the portal nav header. Wide images work best.</p>
-          <button
-            type="button"
-            onClick={() => canEdit && setNavLogoEditorOpen(true)}
-            disabled={!canEdit}
-            className={[
-              "relative w-full max-w-xs h-16 rounded-xl overflow-hidden flex items-center justify-center group",
-              navLogoUrl ? "bg-white ring-1 ring-slate-200" : "bg-slate-50 ring-1 ring-dashed ring-slate-300",
-              !canEdit && "cursor-default",
-            ].filter(Boolean).join(" ")}
-            data-testid="button-edit-nav-logo"
-            aria-label="Edit primary logo"
-          >
-            {navLogoUrl ? (
-              <img src={navLogoUrl} alt="" className="max-h-12 w-auto object-contain px-3" data-testid="img-profile-nav-logo" />
-            ) : (
-              <span className="text-xs text-slate-400">Primary logo</span>
-            )}
-            {canEdit && (
-              <>
-                <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
-                <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                  <span className="w-11 h-11 rounded-full bg-white/90 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
-                    <Pencil className="w-4 h-4" />
-                  </span>
-                </span>
-              </>
-            )}
-          </button>
-          <PressLogoEditorDialog
-            open={navLogoEditorOpen}
-            onOpenChange={setNavLogoEditorOpen}
-            name={me?.name ?? "this press"}
-            logoUrl={navLogoUrl}
-            apiPath={`/api/press/${pressId}/profile`}
-            fieldName="navLogoUrl"
-            method="PATCH"
-            uploadFn={uploadLogoFile}
-            title="Primary logo"
-            hint="Full-size wordmark shown in the portal nav header. Wide images work best."
-            FallbackIcon={Factory}
-            testIdPrefix="press-nav-logo"
-            onInvalidate={() => queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/me`] })}
-          />
-        </div>
+        {/* Task #2750 — Three logo formats, each with a dark-bg and light-bg slot.
+            Pencil circle on dark-bg thumbnails uses bg-slate-200 (solid) for
+            visibility; light-bg thumbnails keep bg-white/90. */}
 
-        {/* Icon — square logo used in lists, credits, and the fallback rail header. */}
+        {/* ── Icon ── */}
         <div>
           <label className="text-xs text-slate-500 uppercase tracking-wide">Icon</label>
-          <p className="text-xs text-slate-400 mt-0.5 mb-2">Square logo used in press lists, credits, and as the rail fallback when no primary logo is set.</p>
-          <button
-            type="button"
-            onClick={() => canEdit && setLogoEditorOpen(true)}
-            disabled={!canEdit}
-            className={[
-              "relative w-16 h-16 rounded-xl overflow-hidden flex items-center justify-center group",
-              logoUrl ? "bg-white ring-1 ring-slate-200" : "bg-slate-50 ring-1 ring-dashed ring-slate-300",
-              !canEdit && "cursor-default",
-            ].filter(Boolean).join(" ")}
-            data-testid="button-edit-logo"
-            aria-label="Edit icon"
-          >
-            {logoUrl ? (
-              <img src={logoUrl} alt="" className="w-full h-full object-cover" data-testid="img-profile-logo" />
-            ) : (
-              <Factory className="w-6 h-6 text-slate-300" strokeWidth={1.5} />
-            )}
-            {canEdit && (
-              <>
-                <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
-                <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                  <span className="w-11 h-11 rounded-full bg-white/90 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
-                    <Pencil className="w-4 h-4" />
-                  </span>
-                </span>
-              </>
-            )}
-          </button>
+          <p className="text-xs text-slate-400 mt-0.5 mb-2">Square logo used in press lists, credits, and as the rail fallback. Upload both a version for dark and light backgrounds.</p>
+          <div className="flex gap-3 flex-wrap">
+            {/* Dark-bg icon */}
+            <div className="flex flex-col items-start gap-1">
+              <span className="text-xs text-slate-400">Dark backgrounds</span>
+              <button
+                type="button"
+                onClick={() => canEdit && setLogoEditorOpen(true)}
+                disabled={!canEdit}
+                className={[
+                  "relative w-16 h-16 rounded-xl overflow-hidden flex items-center justify-center group",
+                  logoUrl ? "bg-slate-800 ring-1 ring-slate-700" : "bg-slate-800 ring-1 ring-dashed ring-slate-600",
+                  !canEdit && "cursor-default",
+                ].filter(Boolean).join(" ")}
+                data-testid="button-edit-logo"
+                aria-label="Edit icon (dark)"
+              >
+                {logoUrl ? (
+                  <img src={logoUrl} alt="" className="w-full h-full object-contain p-1" data-testid="img-profile-logo" />
+                ) : (
+                  <Factory className="w-6 h-6 text-slate-500" strokeWidth={1.5} />
+                )}
+                {canEdit && (
+                  <>
+                    <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
+                    <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                      <span className="w-11 h-11 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
+                        <Pencil className="w-4 h-4" />
+                      </span>
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+            {/* Light-bg icon */}
+            <div className="flex flex-col items-start gap-1">
+              <span className="text-xs text-slate-400">Light backgrounds</span>
+              <button
+                type="button"
+                onClick={() => canEdit && setLightLogoEditorOpen(true)}
+                disabled={!canEdit}
+                className={[
+                  "relative w-16 h-16 rounded-xl overflow-hidden flex items-center justify-center group",
+                  lightLogoUrl ? "bg-white ring-1 ring-slate-200" : "bg-slate-50 ring-1 ring-dashed ring-slate-300",
+                  !canEdit && "cursor-default",
+                ].filter(Boolean).join(" ")}
+                data-testid="button-edit-light-logo"
+                aria-label="Edit icon (light)"
+              >
+                {lightLogoUrl ? (
+                  <img src={lightLogoUrl} alt="" className="w-full h-full object-contain p-1" data-testid="img-profile-light-logo" />
+                ) : (
+                  <Factory className="w-6 h-6 text-slate-300" strokeWidth={1.5} />
+                )}
+                {canEdit && (
+                  <>
+                    <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
+                    <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                      <span className="w-11 h-11 rounded-full bg-white/90 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
+                        <Pencil className="w-4 h-4" />
+                      </span>
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
           <PressLogoEditorDialog
             open={logoEditorOpen}
             onOpenChange={setLogoEditorOpen}
@@ -2282,10 +2306,229 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
             fieldName="logoUrl"
             method="PATCH"
             uploadFn={uploadLogoFile}
-            title="Icon"
-            hint="Square works best — used in the Presses list and anywhere this press is credited."
+            title="Icon — Dark backgrounds"
+            hint="Square works best — used in the Presses list and anywhere this press is credited on a dark background."
             FallbackIcon={Factory}
             testIdPrefix="press-logo"
+            onInvalidate={() => queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/me`] })}
+          />
+          <PressLogoEditorDialog
+            open={lightLogoEditorOpen}
+            onOpenChange={setLightLogoEditorOpen}
+            name={me?.name ?? "this press"}
+            logoUrl={lightLogoUrl}
+            apiPath={`/api/press/${pressId}/profile`}
+            fieldName="lightLogoUrl"
+            method="PATCH"
+            uploadFn={uploadLogoFile}
+            title="Icon — Light backgrounds"
+            hint="Square works best — shown on light/white pages such as the artist invite signup form."
+            FallbackIcon={Factory}
+            testIdPrefix="press-light-logo"
+            onInvalidate={() => queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/me`] })}
+          />
+        </div>
+
+        {/* ── Wide Logo ── */}
+        <div>
+          <label className="text-xs text-slate-500 uppercase tracking-wide">Wide Logo</label>
+          <p className="text-xs text-slate-400 mt-0.5 mb-2">Full-size wordmark shown in the portal nav header. Wide images work best.</p>
+          <div className="flex gap-3 flex-col sm:flex-row flex-wrap">
+            {/* Dark-bg wide */}
+            <div className="flex flex-col items-start gap-1">
+              <span className="text-xs text-slate-400">Dark backgrounds</span>
+              <button
+                type="button"
+                onClick={() => canEdit && setNavLogoEditorOpen(true)}
+                disabled={!canEdit}
+                className={[
+                  "relative w-full max-w-[220px] h-14 rounded-xl overflow-hidden flex items-center justify-center group",
+                  navLogoUrl ? "bg-slate-800 ring-1 ring-slate-700" : "bg-slate-800 ring-1 ring-dashed ring-slate-600",
+                  !canEdit && "cursor-default",
+                ].filter(Boolean).join(" ")}
+                data-testid="button-edit-nav-logo"
+                aria-label="Edit wide logo (dark)"
+              >
+                {navLogoUrl ? (
+                  <img src={navLogoUrl} alt="" className="max-h-10 w-auto object-contain px-3" data-testid="img-profile-nav-logo" />
+                ) : (
+                  <span className="text-xs text-slate-500">Wide Logo</span>
+                )}
+                {canEdit && (
+                  <>
+                    <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
+                    <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                      <span className="w-11 h-11 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
+                        <Pencil className="w-4 h-4" />
+                      </span>
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+            {/* Light-bg wide */}
+            <div className="flex flex-col items-start gap-1">
+              <span className="text-xs text-slate-400">Light backgrounds</span>
+              <button
+                type="button"
+                onClick={() => canEdit && setLightNavLogoEditorOpen(true)}
+                disabled={!canEdit}
+                className={[
+                  "relative w-full max-w-[220px] h-14 rounded-xl overflow-hidden flex items-center justify-center group",
+                  lightNavLogoUrl ? "bg-white ring-1 ring-slate-200" : "bg-slate-50 ring-1 ring-dashed ring-slate-300",
+                  !canEdit && "cursor-default",
+                ].filter(Boolean).join(" ")}
+                data-testid="button-edit-light-nav-logo"
+                aria-label="Edit wide logo (light)"
+              >
+                {lightNavLogoUrl ? (
+                  <img src={lightNavLogoUrl} alt="" className="max-h-10 w-auto object-contain px-3" data-testid="img-profile-light-nav-logo" />
+                ) : (
+                  <span className="text-xs text-slate-400">Wide Logo</span>
+                )}
+                {canEdit && (
+                  <>
+                    <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
+                    <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                      <span className="w-11 h-11 rounded-full bg-white/90 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
+                        <Pencil className="w-4 h-4" />
+                      </span>
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+          <PressLogoEditorDialog
+            open={navLogoEditorOpen}
+            onOpenChange={setNavLogoEditorOpen}
+            name={me?.name ?? "this press"}
+            logoUrl={navLogoUrl}
+            apiPath={`/api/press/${pressId}/profile`}
+            fieldName="navLogoUrl"
+            method="PATCH"
+            uploadFn={uploadLogoFile}
+            title="Wide Logo — Dark backgrounds"
+            hint="Full-size wordmark for the portal nav header on dark backgrounds. Wide images work best."
+            FallbackIcon={Factory}
+            testIdPrefix="press-nav-logo"
+            onInvalidate={() => queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/me`] })}
+          />
+          <PressLogoEditorDialog
+            open={lightNavLogoEditorOpen}
+            onOpenChange={setLightNavLogoEditorOpen}
+            name={me?.name ?? "this press"}
+            logoUrl={lightNavLogoUrl}
+            apiPath={`/api/press/${pressId}/profile`}
+            fieldName="lightNavLogoUrl"
+            method="PATCH"
+            uploadFn={uploadLogoFile}
+            title="Wide Logo — Light backgrounds"
+            hint="Full-size wordmark for light-background contexts. Wide images work best."
+            FallbackIcon={Factory}
+            testIdPrefix="press-light-nav-logo"
+            onInvalidate={() => queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/me`] })}
+          />
+        </div>
+
+        {/* ── Square/Tall Logo ── */}
+        <div>
+          <label className="text-xs text-slate-500 uppercase tracking-wide">Square / Tall Logo</label>
+          <p className="text-xs text-slate-400 mt-0.5 mb-2">Portrait-format or square stacked logo — used on share cards and printed certificates.</p>
+          <div className="flex gap-3 flex-wrap">
+            {/* Dark-bg square */}
+            <div className="flex flex-col items-start gap-1">
+              <span className="text-xs text-slate-400">Dark backgrounds</span>
+              <button
+                type="button"
+                onClick={() => canEdit && setSquareLogoEditorOpen(true)}
+                disabled={!canEdit}
+                className={[
+                  "relative w-16 h-24 rounded-xl overflow-hidden flex items-center justify-center group",
+                  squareLogoUrl ? "bg-slate-800 ring-1 ring-slate-700" : "bg-slate-800 ring-1 ring-dashed ring-slate-600",
+                  !canEdit && "cursor-default",
+                ].filter(Boolean).join(" ")}
+                data-testid="button-edit-square-logo"
+                aria-label="Edit square/tall logo (dark)"
+              >
+                {squareLogoUrl ? (
+                  <img src={squareLogoUrl} alt="" className="w-full h-full object-contain p-1" data-testid="img-profile-square-logo" />
+                ) : (
+                  <Factory className="w-6 h-6 text-slate-500" strokeWidth={1.5} />
+                )}
+                {canEdit && (
+                  <>
+                    <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
+                    <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                      <span className="w-11 h-11 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
+                        <Pencil className="w-4 h-4" />
+                      </span>
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+            {/* Light-bg square */}
+            <div className="flex flex-col items-start gap-1">
+              <span className="text-xs text-slate-400">Light backgrounds</span>
+              <button
+                type="button"
+                onClick={() => canEdit && setLightSquareLogoEditorOpen(true)}
+                disabled={!canEdit}
+                className={[
+                  "relative w-16 h-24 rounded-xl overflow-hidden flex items-center justify-center group",
+                  lightSquareLogoUrl ? "bg-white ring-1 ring-slate-200" : "bg-slate-50 ring-1 ring-dashed ring-slate-300",
+                  !canEdit && "cursor-default",
+                ].filter(Boolean).join(" ")}
+                data-testid="button-edit-light-square-logo"
+                aria-label="Edit square/tall logo (light)"
+              >
+                {lightSquareLogoUrl ? (
+                  <img src={lightSquareLogoUrl} alt="" className="w-full h-full object-contain p-1" data-testid="img-profile-light-square-logo" />
+                ) : (
+                  <Factory className="w-6 h-6 text-slate-300" strokeWidth={1.5} />
+                )}
+                {canEdit && (
+                  <>
+                    <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
+                    <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                      <span className="w-11 h-11 rounded-full bg-white/90 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
+                        <Pencil className="w-4 h-4" />
+                      </span>
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+          <PressLogoEditorDialog
+            open={squareLogoEditorOpen}
+            onOpenChange={setSquareLogoEditorOpen}
+            name={me?.name ?? "this press"}
+            logoUrl={squareLogoUrl}
+            apiPath={`/api/press/${pressId}/profile`}
+            fieldName="squareLogoUrl"
+            method="PATCH"
+            uploadFn={uploadLogoFile}
+            title="Square/Tall Logo — Dark backgrounds"
+            hint="Portrait or square stacked logo for share cards and certificates on dark backgrounds."
+            FallbackIcon={Factory}
+            testIdPrefix="press-square-logo"
+            onInvalidate={() => queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/me`] })}
+          />
+          <PressLogoEditorDialog
+            open={lightSquareLogoEditorOpen}
+            onOpenChange={setLightSquareLogoEditorOpen}
+            name={me?.name ?? "this press"}
+            logoUrl={lightSquareLogoUrl}
+            apiPath={`/api/press/${pressId}/profile`}
+            fieldName="lightSquareLogoUrl"
+            method="PATCH"
+            uploadFn={uploadLogoFile}
+            title="Square/Tall Logo — Light backgrounds"
+            hint="Portrait or square stacked logo for share cards and certificates on light backgrounds."
+            FallbackIcon={Factory}
+            testIdPrefix="press-light-square-logo"
             onInvalidate={() => queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/me`] })}
           />
         </div>

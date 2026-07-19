@@ -9734,3 +9734,29 @@ SQL
 }
 migrate_task_52_grant_numbers dev  "${DATABASE_URL:-}"
 migrate_task_52_grant_numbers prod "${PROD_DATABASE_URL:-}"
+
+# Task #2750 — press logo: three formats (Icon / Wide / Square-Tall) +
+# light/dark variants. Four new nullable text columns on manufacturers.
+migrate_manufacturer_logo_variants() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping manufacturer logo variants migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE manufacturers
+  ADD COLUMN IF NOT EXISTS light_logo_url        text,
+  ADD COLUMN IF NOT EXISTS light_nav_logo_url    text,
+  ADD COLUMN IF NOT EXISTS square_logo_url       text,
+  ADD COLUMN IF NOT EXISTS light_square_logo_url text;
+COMMIT;
+SQL
+  then
+    echo "post-merge: manufacturer logo variants migration ok on $label"
+  else
+    echo "post-merge: WARNING — manufacturer logo variants migration failed on $label (continuing)"
+  fi
+}
+migrate_manufacturer_logo_variants dev  "${DATABASE_URL:-}"
+migrate_manufacturer_logo_variants prod "${PROD_DATABASE_URL:-}"

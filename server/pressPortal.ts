@@ -501,6 +501,11 @@ export function registerPressPortalRoutes(
       // Task #2191 — full-size primary nav logo for the press portal
       // whitelabel header. Distinct from the square logoUrl (lists/credits).
       navLogoUrl: (press as any).navLogoUrl ?? null,
+      // Task #2750 — light-background variants + Square/Tall format.
+      lightLogoUrl: (press as any).lightLogoUrl ?? null,
+      lightNavLogoUrl: (press as any).lightNavLogoUrl ?? null,
+      squareLogoUrl: (press as any).squareLogoUrl ?? null,
+      lightSquareLogoUrl: (press as any).lightSquareLogoUrl ?? null,
       isMaker: (press as any).isMaker ?? true,
       // Task #2091 — the embedded Settings → Catalog editor surfaces the
       // press-specific import buttons (Hellbender / MRP) keyed off domain.
@@ -2141,6 +2146,11 @@ export function registerPressPortalRoutes(
     logoUrl: z.string().nullable().optional(),
     // Task #2191 — full-size primary nav logo for the press portal whitelabel.
     navLogoUrl: z.string().nullable().optional(),
+    // Task #2750 — light-background variants + Square/Tall format.
+    lightLogoUrl: z.string().nullable().optional(),
+    lightNavLogoUrl: z.string().nullable().optional(),
+    squareLogoUrl: z.string().nullable().optional(),
+    lightSquareLogoUrl: z.string().nullable().optional(),
     websiteUrl: z.string().url().nullable().optional().or(z.literal("")),
     contactEmail: z.string().email().nullable().optional().or(z.literal("")),
     contactPhone: z.string().max(40).nullable().optional(),
@@ -2160,6 +2170,11 @@ export function registerPressPortalRoutes(
     if (parsed.data.name !== undefined) set.name = parsed.data.name;
     if (parsed.data.logoUrl !== undefined) set.logoUrl = norm(parsed.data.logoUrl);
     if (parsed.data.navLogoUrl !== undefined) set.navLogoUrl = norm(parsed.data.navLogoUrl);
+    // Task #2750 — light-background variants + Square/Tall format.
+    if (parsed.data.lightLogoUrl !== undefined) set.lightLogoUrl = norm(parsed.data.lightLogoUrl);
+    if (parsed.data.lightNavLogoUrl !== undefined) set.lightNavLogoUrl = norm(parsed.data.lightNavLogoUrl);
+    if (parsed.data.squareLogoUrl !== undefined) set.squareLogoUrl = norm(parsed.data.squareLogoUrl);
+    if (parsed.data.lightSquareLogoUrl !== undefined) set.lightSquareLogoUrl = norm(parsed.data.lightSquareLogoUrl);
     if (parsed.data.websiteUrl !== undefined) set.websiteUrl = norm(parsed.data.websiteUrl);
     if (parsed.data.contactEmail !== undefined) set.contactEmail = norm(parsed.data.contactEmail);
     if (parsed.data.contactPhone !== undefined) set.contactPhone = norm(parsed.data.contactPhone);
@@ -2193,7 +2208,11 @@ export function registerPressPortalRoutes(
     // file directly to GCS without setting an ACL. The /objects/uploads/:id
     // serving route requires visibility="public" so we set it here, after
     // persisting the URL, using best-effort (never fail the save on ACL error).
-    const logoUrlsToPublish = [set.logoUrl, set.navLogoUrl].filter(
+    const logoUrlsToPublish = [
+      set.logoUrl, set.navLogoUrl,
+      set.lightLogoUrl, set.lightNavLogoUrl,
+      set.squareLogoUrl, set.lightSquareLogoUrl,
+    ].filter(
       (u): u is string => typeof u === "string" && u.startsWith("/objects/uploads/"),
     );
     if (logoUrlsToPublish.length > 0) {

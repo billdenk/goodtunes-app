@@ -4261,6 +4261,13 @@ export const manufacturers = pgTable("manufacturers", {
   // When set, the press portal's top-left rail shows this instead of the
   // small square icon + name text. Null = fall back to today's layout.
   navLogoUrl: text("nav_logo_url"),
+  // Task #2750 — light-background variants + Square/Tall format.
+  // Each of the three logo formats has a dark-bg and light-bg slot so
+  // press portals can serve the right logo wherever the page is light.
+  lightLogoUrl: text("light_logo_url"),
+  lightNavLogoUrl: text("light_nav_logo_url"),
+  squareLogoUrl: text("square_logo_url"),
+  lightSquareLogoUrl: text("light_square_logo_url"),
   coverUrl: text("cover_url"),
   // Operator/press-editable override for the branded "vinyl" jacket art
   // shown in the catalog color-management VinylPreview. When null the
