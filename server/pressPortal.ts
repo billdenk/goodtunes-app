@@ -2189,6 +2189,33 @@ export function registerPressPortalRoutes(
     }
     if (Object.keys(set).length === 0) return res.json({ ok: true });
     await db.update(manufacturers).set(set).where(eq(manufacturers.id, pressId));
+    // When a logo was uploaded via the signed-PUT flow the browser wrote the
+    // file directly to GCS without setting an ACL. The /objects/uploads/:id
+    // serving route requires visibility="public" so we set it here, after
+    // persisting the URL, using best-effort (never fail the save on ACL error).
+    const logoUrlsToPublish = [set.logoUrl, set.navLogoUrl].filter(
+      (u): u is string => typeof u === "string" && u.startsWith("/objects/uploads/"),
+    );
+    if (logoUrlsToPublish.length > 0) {
+      try {
+        const { ObjectStorageService, setObjectAclPolicy } = await import(
+          "./replit_integrations/object_storage/objectStorage"
+        );
+        const oss = new ObjectStorageService();
+        await Promise.all(
+          logoUrlsToPublish.map(async (url) => {
+            try {
+              const file = await oss.getObjectEntityFile(url);
+              await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
+            } catch (e) {
+              console.error("[press-logo-acl] failed to set ACL on", url, e);
+            }
+          }),
+        );
+      } catch (e) {
+        console.error("[press-logo-acl] import failed", e);
+      }
+    }
     res.json({ ok: true });
   });
 
