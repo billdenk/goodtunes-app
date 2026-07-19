@@ -221,9 +221,15 @@ export function OrganizationPeople({
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Link href={`/admin/people/${c.personId}?from=partner&backHref=${encodeURIComponent(`${PARTNER_ROUTE_BASE[entityKind]}/${entityId}?tab=people`)}&backName=${encodeURIComponent(entityName)}`} className="text-sm font-semibold text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate block" data-testid={`link-${testIdPrefix}-contact-${c.personId}`}>
-                    {c.name}
-                  </Link>
+                  {voice === "partner" ? (
+                    <span className="text-sm font-semibold text-inherit truncate block" data-testid={`text-${testIdPrefix}-contact-${c.personId}`}>
+                      {c.name}
+                    </span>
+                  ) : (
+                    <Link href={`/admin/people/${c.personId}?from=partner&backHref=${encodeURIComponent(`${PARTNER_ROUTE_BASE[entityKind]}/${entityId}?tab=people`)}&backName=${encodeURIComponent(entityName)}`} className="text-sm font-semibold text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate block" data-testid={`link-${testIdPrefix}-contact-${c.personId}`}>
+                      {c.name}
+                    </Link>
+                  )}
                   {c.invitePending && c.acceptUrl && (
                     <button
                       type="button"
