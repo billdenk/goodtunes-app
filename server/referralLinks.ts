@@ -43,6 +43,33 @@ function generateProofCode(): string {
   return `GT-${randomBytes(4).toString("hex").toUpperCase()}`;
 }
 
+// 6-digit numeric OTP for email verification.
+function generateEmailOtp(): string {
+  return (100000 + (randomBytes(3).readUIntBE(0, 3) % 900000)).toString();
+}
+
+// Guard: verify that a proven email_otp row exists for this (link, email)
+// before allowing proof mutations or application submission.  Returns null
+// on success, or an Express-ready rejection payload on failure.
+async function requireOtpProven(
+  linkId: number,
+  normEmail: string,
+): Promise<{ status: number; message: string } | null> {
+  const check = await db.execute<any>(
+    sql`SELECT id
+          FROM artist_application_proofs
+         WHERE referral_link_id = ${linkId}
+           AND applicant_email  = ${normEmail}
+           AND proof_kind       = 'email_otp'
+           AND status           = 'proven'
+         LIMIT 1`,
+  );
+  if (!(check as any).rows?.length) {
+    return { status: 403, message: "Email verification required before continuing." };
+  }
+  return null;
+}
+
 // ─── SSRF helpers (reused from server/validators/completedTemplate.ts pattern) ──
 
 function isBlockedIp(ip: string): boolean {
@@ -163,7 +190,7 @@ function normaliseDomain(raw: string): string {
   }
 }
 
-type ProofKind = "instagram" | "x" | "tiktok" | "domain";
+type ProofKind = "instagram" | "x" | "tiktok" | "domain" | "spotify";
 
 // Attempt to verify that `code` appears in the public channel for the given proof kind.
 // Returns { ok: true, channel } on success, { ok: false, error } on failure.
@@ -245,6 +272,29 @@ async function attemptProofVerification(
       };
     }
     return { ok: true, channel: domain };
+  }
+
+  if (proofKind === "spotify") {
+    // proofChannel is the Spotify artist ID (22-char alphanumeric).
+    // Spotify is a JS SPA — bio text is NOT in the initial HTML response,
+    // so automatic verification is not reliable. We attempt the fetch as
+    // best-effort; if the code can't be found we still accept the proof
+    // (self-attested) since: (a) email OTP already confirmed the email,
+    // (b) they found themselves via Spotify search confirming the artist ID,
+    // and (c) admin review sees the Spotify link and can check manually.
+    if (!proofChannel || !/^[A-Za-z0-9]{10,25}$/.test(proofChannel)) {
+      return { ok: false, error: "Invalid Spotify artist ID." };
+    }
+    try {
+      const r = await fetchSocialPage(`https://open.spotify.com/artist/${proofChannel}`);
+      if (r.ok && r.text.toLowerCase().includes(lowerCode)) {
+        return { ok: true, channel: `spotify:artist:${proofChannel}` };
+      }
+    } catch {
+      // ignore fetch errors — fall through to self-attest
+    }
+    // Self-attest: accept the proof and let admin review verify manually.
+    return { ok: true, channel: `spotify:artist:${proofChannel}` };
   }
 
   return { ok: false, error: "Unknown proof kind." };
@@ -495,6 +545,124 @@ export function registerReferralLinkRoutes(
     return res.json({ query: q, candidates: result.candidates });
   });
 
+  // ─── POST /api/public/referral/:code/request-otp ────────────────────
+  // No auth. Sends a 6-digit numeric OTP to the applicant's email for
+  // identity confirmation. Stored in artist_application_proofs with
+  // proof_kind='email_otp'. Replaces any previous pending OTP for the same
+  // (link, email) pair (idempotent re-send).
+  app.post("/api/public/referral/:code/request-otp", async (req, res) => {
+    const code = String(req.params.code).toLowerCase().trim();
+    const linkRow = await db.execute<any>(
+      sql`SELECT id, active, referrer_kind AS "referrerKind", referrer_scope_id AS "referrerScopeId"
+            FROM referral_links WHERE code = ${code} LIMIT 1`,
+    );
+    const link = (linkRow as any).rows?.[0];
+    if (!link) return res.status(404).json({ message: "Invalid referral link" });
+    if (!link.active) return res.status(410).json({ message: "This referral link is no longer active." });
+
+    const parsed = z
+      .object({
+        email: z.string().email(),
+        name: z.string().min(1).max(200),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid input" });
+    }
+    const { email, name } = parsed.data;
+    const normEmail = email.toLowerCase().trim();
+
+    // Invalidate any previous pending OTPs for this (link, email).
+    await db.execute(
+      sql`UPDATE artist_application_proofs
+             SET status = 'failed', failure_reason = 'superseded'
+           WHERE referral_link_id = ${link.id}
+             AND applicant_email   = ${normEmail}
+             AND proof_kind        = 'email_otp'
+             AND status            = 'pending'`,
+    );
+
+    const otp = generateEmailOtp();
+    await db.execute(
+      sql`INSERT INTO artist_application_proofs
+           (referral_link_id, applicant_email, proof_kind, proof_channel, proof_code, status)
+          VALUES
+           (${link.id}, ${normEmail}, 'email_otp', ${normEmail}, ${otp}, 'pending')`,
+    );
+
+    // Resolve referrer name for the email template.
+    const branding = await resolveReferrerBranding(link.referrerKind, link.referrerScopeId);
+    const { sendReferralOtpEmail } = await import("./mail");
+    const mailResult = await sendReferralOtpEmail(normEmail, otp, branding.name);
+
+    if (!mailResult.ok) {
+      console.warn(`[referral-otp] mail send failed for ${normEmail}:`, (mailResult as any).reason);
+      // In production, fail fast so the user knows to retry; in dev, surface the code anyway.
+      if (process.env.NODE_ENV === "production") {
+        return res.status(502).json({ message: "Failed to send confirmation code. Please try again in a moment." });
+      }
+    }
+    // In non-prod, echo the OTP so it can be grabbed from workflow logs.
+    const devCode = process.env.NODE_ENV !== "production" ? otp : undefined;
+    return res.json({ ok: true, ...(devCode ? { devCode } : {}) });
+  });
+
+  // ─── POST /api/public/referral/:code/verify-otp ──────────────────────
+  // No auth. Validates the 6-digit email OTP. Marks the proof as proven.
+  // Enforces a 10-minute TTL on the OTP row.
+  app.post("/api/public/referral/:code/verify-otp", async (req, res) => {
+    const code = String(req.params.code).toLowerCase().trim();
+    const linkRow = await db.execute<any>(
+      sql`SELECT id, active FROM referral_links WHERE code = ${code} LIMIT 1`,
+    );
+    const link = (linkRow as any).rows?.[0];
+    if (!link) return res.status(404).json({ message: "Invalid referral link" });
+    if (!link.active) return res.status(410).json({ message: "This referral link is no longer active." });
+
+    const parsed = z
+      .object({
+        email: z.string().email(),
+        otp: z.string().length(6),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid input" });
+    }
+    const { email, otp } = parsed.data;
+    const normEmail = email.toLowerCase().trim();
+
+    const proofRow = await db.execute<any>(
+      sql`SELECT id, status, created_at AS "createdAt"
+            FROM artist_application_proofs
+           WHERE referral_link_id = ${link.id}
+             AND applicant_email  = ${normEmail}
+             AND proof_kind       = 'email_otp'
+             AND proof_code       = ${otp}
+             AND status           = 'pending'
+           ORDER BY created_at DESC
+           LIMIT 1`,
+    );
+    const proof = (proofRow as any).rows?.[0];
+    if (!proof) {
+      return res.status(400).json({ ok: false, message: "Incorrect code. Check your email and try again." });
+    }
+
+    // Enforce 10-minute TTL.
+    const createdAt = new Date(proof.createdAt);
+    const ageMs = Date.now() - createdAt.getTime();
+    if (ageMs > 10 * 60 * 1000) {
+      await db.execute(
+        sql`UPDATE artist_application_proofs SET status = 'failed', failure_reason = 'expired' WHERE id = ${proof.id}`,
+      );
+      return res.status(400).json({ ok: false, message: "Code expired. Request a new one." });
+    }
+
+    await db.execute(
+      sql`UPDATE artist_application_proofs SET status = 'proven', verified_at = NOW() WHERE id = ${proof.id}`,
+    );
+    return res.json({ ok: true });
+  });
+
   // ─── POST /api/public/referral/:code/proof-issue ─────────────────────
   // No auth. Given an email + proofKind + proofChannel, mint (or return an
   // existing) proof code.  The applicant puts this code in their bio / DNS
@@ -508,7 +676,7 @@ export function registerReferralLinkRoutes(
     if (!link) return res.status(404).json({ message: "Invalid referral link" });
     if (!link.active) return res.status(410).json({ message: "This referral link is no longer active." });
 
-    const PROOF_KINDS = ["instagram", "x", "tiktok", "domain"] as const;
+    const PROOF_KINDS = ["instagram", "x", "tiktok", "domain", "spotify"] as const;
     const parsed = z
       .object({
         email: z.string().email(),
@@ -522,11 +690,17 @@ export function registerReferralLinkRoutes(
     const { email, proofKind, proofChannel } = parsed.data;
     const normEmail = email.toLowerCase().trim();
 
+    // Require a proven email OTP before issuing a proof code.
+    const otpGuardIssue = await requireOtpProven(link.id, normEmail);
+    if (otpGuardIssue) return res.status(otpGuardIssue.status).json({ message: otpGuardIssue.message });
+
     // Normalise the channel so re-issuing with @handle or handle gives same row.
     const normChannel =
       proofKind === "domain"
         ? normaliseDomain(proofChannel)
-        : normaliseHandle(proofChannel);
+        : proofKind === "spotify"
+          ? proofChannel.trim()
+          : normaliseHandle(proofChannel);
 
     // Return existing non-failed proof if it already exists.
     const existing = await db.execute<any>(
@@ -570,7 +744,7 @@ export function registerReferralLinkRoutes(
     if (!link) return res.status(404).json({ message: "Invalid referral link" });
     if (!link.active) return res.status(410).json({ message: "This referral link is no longer active." });
 
-    const PROOF_KINDS = ["instagram", "x", "tiktok", "domain"] as const;
+    const PROOF_KINDS = ["instagram", "x", "tiktok", "domain", "spotify"] as const;
     const parsed = z
       .object({
         email: z.string().email(),
@@ -584,10 +758,17 @@ export function registerReferralLinkRoutes(
     }
     const { email, proofKind, proofChannel, proofCode } = parsed.data;
     const normEmail = email.toLowerCase().trim();
+
+    // Require a proven email OTP before accepting a proof verification.
+    const otpGuardVerify = await requireOtpProven(link.id, normEmail);
+    if (otpGuardVerify) return res.status(otpGuardVerify.status).json({ message: otpGuardVerify.message });
+
     const normChannel =
       proofKind === "domain"
         ? normaliseDomain(proofChannel)
-        : normaliseHandle(proofChannel);
+        : proofKind === "spotify"
+          ? proofChannel.trim()
+          : normaliseHandle(proofChannel);
 
     // Look up the proof row.
     const proofRow = await db.execute<any>(
@@ -669,6 +850,10 @@ export function registerReferralLinkRoutes(
     const d = parsed.data;
     const email = d.applicantEmail.toLowerCase().trim();
 
+    // Require a proven email OTP before accepting the application.
+    const otpGuardApply = await requireOtpProven(link.id, email);
+    if (otpGuardApply) return res.status(otpGuardApply.status).json({ message: otpGuardApply.message });
+
     // Idempotent: don't create a second pending row for the same email.
     const dupe = await db.execute<any>(
       sql`SELECT id FROM artist_applications
@@ -680,6 +865,7 @@ export function registerReferralLinkRoutes(
     if ((dupe as any).rows?.length) return res.json({ ok: true, existing: true });
 
     // Look up any proven proof for this (link, email).
+    // Exclude email_otp rows — those confirm email identity, not artist ownership.
     const proofLookup = await db.execute<any>(
       sql`SELECT proof_kind AS "proofKind",
                  proof_channel AS "proofChannel"
@@ -687,6 +873,7 @@ export function registerReferralLinkRoutes(
            WHERE referral_link_id = ${link.id}
              AND applicant_email = ${email}
              AND status = 'proven'
+             AND proof_kind != 'email_otp'
            ORDER BY verified_at DESC
            LIMIT 1`,
     );

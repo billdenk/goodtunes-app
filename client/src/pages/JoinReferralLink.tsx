@@ -1,23 +1,21 @@
-// Task #2399 — Public branded landing page for reusable referral links.
-// Task #2422 — Ownership proof + evidence links.
-// Route: /join/:code (public, no auth required on admin host).
+// Task #2739 — Multi-step wizard redesign of the /join/:code referral page.
 //
-// Flow:
-//   1. Loads branding via GET /api/public/referral/:code
-//   2. Fan fills in name + email + optional Spotify self-identification
-//   3. Optional: adds evidence links (website, streaming, distributor)
-//   4. Optional: proves channel ownership (social bio / domain DNS)
-//   5. POST /api/public/referral/:code/apply → pending artist_applications row
-//   6. "Thanks — we'll be in touch" confirmation state
+// Steps:
+//   1. info            — name + email → request email OTP
+//   2. otp             — enter 6-digit code from email
+//   3. spotify_search  — find yourself on Spotify (or skip)
+//   4. spotify_selected— confirm artist card → get GT- proof code
+//   5. spotify_verify  — add code to bio → verify
+//   6. submitted       — success
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import {
-  Loader2, Music2, Search, X, Check, ChevronDown, ChevronUp,
-  Globe, Link2, ShieldCheck, AlertTriangle,
+  Loader2, Search, X, Copy, Check, ChevronLeft, Music,
 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 import { IconButton } from "@/components/ui/IconButton";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -41,22 +39,19 @@ interface SpotifyCandidate {
   genres: string[];
 }
 
-type ProofKind = "instagram" | "x" | "tiktok" | "domain";
-type ProofFlowState =
-  | "idle"
-  | "choosing"
-  | "issuing"
-  | "pending"
-  | "verifying"
-  | "proven"
-  | "failed";
+type Step =
+  | "info"
+  | "otp"
+  | "spotify_search"
+  | "spotify_selected"
+  | "spotify_verify"
+  | "submitted";
 
 // ─── Spotify artist search ────────────────────────────────────────────────────
-type SpotifySearchResult =
-  | { ok: true; candidates: SpotifyCandidate[] }
-  | { ok: false };
 
-async function searchSpotifyArtists(query: string): Promise<SpotifySearchResult> {
+async function searchSpotifyArtists(
+  query: string,
+): Promise<{ ok: true; candidates: SpotifyCandidate[] } | { ok: false }> {
   if (!query.trim()) return { ok: true, candidates: [] };
   try {
     const r = await fetch(
@@ -64,7 +59,7 @@ async function searchSpotifyArtists(query: string): Promise<SpotifySearchResult>
     );
     if (!r.ok) return { ok: false };
     const data = await r.json();
-    const candidates = Array.isArray(data) ? data : data.candidates ?? [];
+    const candidates = Array.isArray(data) ? data : (data.candidates ?? []);
     return {
       ok: true,
       candidates: candidates.slice(0, 6).map((a: any) => ({
@@ -81,850 +76,795 @@ async function searchSpotifyArtists(query: string): Promise<SpotifySearchResult>
   }
 }
 
-// ─── Form validation ──────────────────────────────────────────────────────────
-const formSchema = z.object({
-  applicantName: z.string().min(1, "Enter your name").max(200),
-  applicantEmail: z.string().email("Enter a valid email"),
-});
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
-const urlSchema = z.string().url("Enter a valid URL (include https://)").or(z.literal(""));
-
-// ─── Shared page shell ────────────────────────────────────────────────────────
-function PageShell({ children }: { children: React.ReactNode }) {
+function LogoHeader({ photoUrl, orgName }: { photoUrl: string | null; orgName: string | null }) {
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-start px-4 py-12">
+    <div className="flex items-center justify-center gap-3 mb-8">
+      {photoUrl && (
+        <>
+          <img
+            src={photoUrl}
+            alt={orgName ?? ""}
+            className="h-12 w-12 rounded-full object-cover ring-1 ring-slate-200"
+          />
+          <span className="text-fan-faint text-2xl font-extralight">+</span>
+        </>
+      )}
+      <img src="/goodtunes-logo-color.png" alt="GoodTunes" className="h-8 w-auto" />
+    </div>
+  );
+}
+
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
       {children}
     </div>
   );
 }
 
-// ─── Submitted state ──────────────────────────────────────────────────────────
-function SubmittedState({
-  referrerName,
-  existing,
-}: {
-  referrerName: string;
-  existing: boolean;
-}) {
+function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <PageShell>
-      <div className="w-full max-w-sm text-center space-y-5">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 ring-1 ring-emerald-200">
-          <Check className="w-8 h-8 text-emerald-600" />
-        </div>
-        <h1 className="text-2xl font-bold text-slate-900 leading-snug">
-          {existing ? "Already received!" : "We got it!"}
-        </h1>
-        <p className="text-slate-500 text-base leading-relaxed">
-          {existing
-            ? "It looks like we already have your application — we'll be in touch soon."
-            : `Thanks for applying. ${referrerName} referred you, and the GoodTunes team will review your application and send you a confirmation email shortly.`}
-        </p>
-        <img src="/goodtunes-logo-color.png" alt="GoodTunes" className="w-28 mx-auto mt-4 opacity-70" />
-      </div>
-    </PageShell>
+    <label className="block text-xs font-bold uppercase tracking-widest text-fan-faint mb-1.5">
+      {children}
+    </label>
   );
 }
 
-// ─── Proof channel labels ─────────────────────────────────────────────────────
-const PROOF_KIND_LABELS: Record<ProofKind, string> = {
-  instagram: "Instagram",
-  x: "X (Twitter)",
-  tiktok: "TikTok",
-  domain: "Your website / domain",
-};
-
-const PROOF_KIND_PLACEHOLDER: Record<ProofKind, string> = {
-  instagram: "@yourhandle",
-  x: "@yourhandle",
-  tiktok: "@yourhandle",
-  domain: "yourdomain.com",
-};
-
-// ─── Proof instructions helper ────────────────────────────────────────────────
-function proofInstructions(kind: ProofKind, channel: string, code: string): string {
-  if (kind === "domain") {
-    return `Add a DNS TXT record with the value  goodtunes-verify=${code}  on ${channel}, OR publish a file at https://${channel}/.well-known/goodtunes-verification.txt containing the code. Then click "Verify".`;
-  }
-  return `Add the code  ${code}  to your ${PROOF_KIND_LABELS[kind]} bio for @${channel.replace(/^@/, "")}. Your profile must be public. Then click "Verify".`;
+function TextInput({
+  value, onChange, placeholder, type = "text", autoFocus, disabled, testId,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  autoFocus?: boolean;
+  disabled?: boolean;
+  testId?: string;
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      autoFocus={autoFocus}
+      disabled={disabled}
+      className="w-full rounded-xl border border-slate-200 px-3.5 py-3 bg-white text-slate-900 text-sm
+                 placeholder:text-fan-faint focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]
+                 focus:border-[var(--brand-blue)] disabled:bg-slate-50 disabled:text-fan-faint transition-colors"
+      data-testid={testId}
+    />
+  );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+function PrimaryButton({
+  onClick, disabled, loading, children, testId,
+}: {
+  onClick?: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  children: React.ReactNode;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled || loading}
+      className="w-full rounded-xl bg-[var(--brand-blue)] hover:bg-[var(--brand-blue-hover)]
+                 disabled:opacity-40 disabled:cursor-not-allowed transition-colors
+                 px-4 py-3.5 text-sm font-semibold text-white"
+      data-testid={testId}
+    >
+      {loading ? (
+        <span className="inline-flex items-center gap-2 justify-center">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          {children}
+        </span>
+      ) : (
+        children
+      )}
+    </button>
+  );
+}
+
+function ArtistCard({
+  artist,
+  onClear,
+}: {
+  artist: SpotifyCandidate;
+  onClear?: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3">
+      {artist.imageUrl ? (
+        <img
+          src={artist.imageUrl}
+          alt=""
+          className="w-11 h-11 rounded-full object-cover flex-shrink-0 ring-1 ring-white/80"
+        />
+      ) : (
+        <div className="w-11 h-11 rounded-full bg-slate-200 flex-shrink-0 flex items-center justify-center">
+          <Music className="w-4 h-4 text-fan-faint" />
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-semibold text-slate-900 truncate">{artist.name}</div>
+        {artist.followers != null && (
+          <div className="text-xs text-fan-faint">
+            {artist.followers > 0
+              ? `${artist.followers.toLocaleString()} followers`
+              : "Spotify artist"}
+          </div>
+        )}
+      </div>
+      {onClear && (
+        <IconButton
+          variant="ghost"
+          size="md"
+          onClick={onClear}
+          aria-label="Clear artist selection"
+          data-testid="button-clear-artist"
+        >
+          <X className="w-4 h-4" />
+        </IconButton>
+      )}
+    </div>
+  );
+}
+
+// ─── Page shell ───────────────────────────────────────────────────────────────
+
+function PageShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-start py-12 px-4">
+      <div className="w-full max-w-sm">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function JoinReferralLink() {
   const { code } = useParams<{ code: string }>();
 
-  // Form state
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
+  // ── Step state ──────────────────────────────────────────────────────────────
+  const [step, setStep] = useState<Step>("info");
 
-  // Spotify state
+  // Step 1
+  const [applicantName, setApplicantName] = useState("");
+  const [applicantEmail, setApplicantEmail] = useState("");
+  const [infoError, setInfoError] = useState<string | null>(null);
+
+  // Step 2 (OTP)
+  const [otpValue, setOtpValue] = useState("");
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpResent, setOtpResent] = useState(false);
+  const otpInputRef = useRef<HTMLInputElement>(null);
+
+  // Step 3 (search)
   const [spotifyQuery, setSpotifyQuery] = useState("");
   const [spotifyResults, setSpotifyResults] = useState<SpotifyCandidate[]>([]);
   const [spotifyLoading, setSpotifyLoading] = useState(false);
-  const [selectedArtist, setSelectedArtist] = useState<SpotifyCandidate | null>(null);
   const [spotifySearched, setSpotifySearched] = useState(false);
-  const [spotifyFetchError, setSpotifyFetchError] = useState(false);
+  const [spotifyError, setSpotifyError] = useState(false);
 
-  // Evidence links state
-  const [showEvidence, setShowEvidence] = useState(false);
-  const [evidenceWebsite, setEvidenceWebsite] = useState("");
-  const [evidenceStreaming, setEvidenceStreaming] = useState("");
-  const [evidenceDistributor, setEvidenceDistributor] = useState("");
-  const [evidenceErrors, setEvidenceErrors] = useState<{
-    website?: string;
-    streaming?: string;
-    distributor?: string;
-  }>({});
-
-  // Proof of ownership state
-  const [showProof, setShowProof] = useState(false);
-  const [proofKind, setProofKind] = useState<ProofKind>("instagram");
-  const [proofChannel, setProofChannel] = useState("");
+  // Steps 4–5 (artist selected + proof)
+  const [selectedArtist, setSelectedArtist] = useState<SpotifyCandidate | null>(null);
   const [proofCode, setProofCode] = useState<string | null>(null);
-  const [proofFlow, setProofFlow] = useState<ProofFlowState>("idle");
   const [proofError, setProofError] = useState<string | null>(null);
-  const [proofVerifiedChannel, setProofVerifiedChannel] = useState<string | null>(null);
-  const proofEmailRef = useRef<string>("");
+  const [codeCopied, setCodeCopied] = useState(false);
 
-  // Submitted
-  const [submitted, setSubmitted] = useState(false);
-  const [existing, setExisting] = useState(false);
-
-  // Fetch referral link branding
-  const { data, isLoading, error } = useQuery<ReferralInfo>({
+  // ── Query: referral branding ────────────────────────────────────────────────
+  const brandingQuery = useQuery<ReferralInfo>({
     queryKey: ["/api/public/referral", code],
     queryFn: async () => {
       const r = await fetch(`/api/public/referral/${code}`);
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.message ?? "Invalid referral link");
-      return j;
+      if (!r.ok) throw new Error("Invalid referral link");
+      return r.json();
     },
     retry: false,
-    staleTime: Infinity,
   });
 
-  // ─── Proof issue mutation ──────────────────────────────────────────────────
+  const branding = brandingQuery.data?.branding;
+
+  // ── OTP auto-focus when step becomes otp ───────────────────────────────────
+  useEffect(() => {
+    if (step === "otp") {
+      setTimeout(() => otpInputRef.current?.focus(), 80);
+    }
+  }, [step]);
+
+  // ── Mutations ───────────────────────────────────────────────────────────────
+
+  const requestOtpMutation = useMutation({
+    mutationFn: async (payload: { email: string; name: string }) => {
+      const r = await apiRequest("POST", `/api/public/referral/${code}/request-otp`, payload);
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.message ?? "Failed to send code. Try again.");
+      }
+      const data = await r.json();
+      if (data.devCode) {
+        console.info("[referral-otp] dev OTP:", data.devCode);
+      }
+    },
+    onSuccess: () => {
+      setOtpValue("");
+      setOtpError(null);
+      setOtpResent(false);
+      setStep("otp");
+    },
+    onError: (err: Error) => {
+      setInfoError(err.message);
+    },
+  });
+
+  const verifyOtpMutation = useMutation({
+    mutationFn: async (otp: string) => {
+      const r = await apiRequest("POST", `/api/public/referral/${code}/verify-otp`, {
+        email: applicantEmail.toLowerCase().trim(),
+        otp,
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.message ?? "Incorrect or expired code.");
+      }
+    },
+    onSuccess: () => {
+      setOtpError(null);
+      setStep("spotify_search");
+    },
+    onError: (err: Error) => {
+      setOtpError(err.message);
+    },
+  });
+
   const proofIssueMutation = useMutation({
-    mutationFn: async ({
-      email: em,
-      proofKind: pk,
-      proofChannel: pc,
-    }: { email: string; proofKind: ProofKind; proofChannel: string }) => {
-      const r = await fetch(`/api/public/referral/${code}/proof-issue`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: em, proofKind: pk, proofChannel: pc }),
+    mutationFn: async (artist: SpotifyCandidate) => {
+      const r = await apiRequest("POST", `/api/public/referral/${code}/proof-issue`, {
+        email: applicantEmail.toLowerCase().trim(),
+        proofKind: "spotify",
+        proofChannel: artist.id,
       });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.message ?? "Could not generate a code");
-      return j as { proofCode: string; alreadyProven: boolean };
-    },
-    onSuccess: (data) => {
-      setProofCode(data.proofCode);
-      if (data.alreadyProven) {
-        setProofFlow("proven");
-        setProofVerifiedChannel(proofChannel);
-      } else {
-        setProofFlow("pending");
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.message ?? "Failed to generate code.");
       }
+      const data = await r.json();
+      return data.proofCode as string;
     },
-    onError: (e: Error) => {
-      setProofError(e.message);
-      setProofFlow("failed");
+    onSuccess: (pCode) => {
+      setProofCode(pCode);
+      setProofError(null);
+      setCodeCopied(false);
+      setStep("spotify_verify");
+    },
+    onError: (err: Error) => {
+      setProofError(err.message);
     },
   });
 
-  // ─── Proof verify mutation ─────────────────────────────────────────────────
   const proofVerifyMutation = useMutation({
-    mutationFn: async ({
-      email: em,
-      proofKind: pk,
-      proofChannel: pc,
-      proofCode: pcode,
-    }: { email: string; proofKind: ProofKind; proofChannel: string; proofCode: string }) => {
-      const r = await fetch(`/api/public/referral/${code}/proof-verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: em, proofKind: pk, proofChannel: pc, proofCode: pcode }),
+    mutationFn: async () => {
+      if (!selectedArtist || !proofCode) throw new Error("Missing artist or code.");
+      const r = await apiRequest("POST", `/api/public/referral/${code}/proof-verify`, {
+        email: applicantEmail.toLowerCase().trim(),
+        proofKind: "spotify",
+        proofChannel: selectedArtist.id,
+        proofCode,
       });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.message ?? "Verification failed");
-      return j as { ok: boolean; channel?: string; error?: string };
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.message ?? "Verification failed.");
+      return body;
     },
-    onSuccess: (data) => {
-      if (data.ok) {
-        setProofFlow("proven");
-        setProofVerifiedChannel(data.channel ?? proofChannel);
-        setProofError(null);
-      } else {
-        setProofFlow("failed");
-        setProofError(data.error ?? "Verification failed. Check the code is in your bio and try again.");
-      }
+    onSuccess: () => {
+      submitMutation.mutate();
     },
-    onError: (e: Error) => {
-      setProofFlow("failed");
-      setProofError(e.message);
+    onError: (err: Error) => {
+      setProofError(err.message);
     },
   });
 
-  // ─── Submit mutation ───────────────────────────────────────────────────────
   const submitMutation = useMutation({
-    mutationFn: async (body: {
-      applicantEmail: string;
-      applicantName: string;
-      spotifyArtistId?: string | null;
-      spotifyArtistName?: string | null;
-      spotifyArtistUrl?: string | null;
-      spotifyPhotoUrl?: string | null;
-      evidenceLinks?: Array<{ kind: string; url: string }>;
-    }) => {
-      const r = await fetch(`/api/public/referral/${code}/apply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/public/referral/${code}/apply`, {
+        applicantEmail: applicantEmail.toLowerCase().trim(),
+        applicantName: applicantName.trim(),
+        spotifyArtistId: selectedArtist?.id ?? null,
+        spotifyArtistName: selectedArtist?.name ?? null,
+        spotifyArtistUrl: selectedArtist?.spotifyUrl ?? null,
+        spotifyPhotoUrl: selectedArtist?.imageUrl ?? null,
       });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.message ?? "Something went wrong");
-      return j as { ok: boolean; existing: boolean };
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.message ?? "Submission failed.");
+      }
     },
-    onSuccess: (data) => {
-      setSubmitted(true);
-      setExisting(data.existing);
+    onSuccess: () => {
+      setStep("submitted");
     },
   });
 
-  // ─── Event handlers ────────────────────────────────────────────────────────
-
+  // ── Spotify search ──────────────────────────────────────────────────────────
   async function handleSpotifySearch() {
-    if (!spotifyQuery.trim()) return;
+    if (!spotifyQuery.trim() || spotifyLoading) return;
     setSpotifyLoading(true);
-    setSpotifyResults([]);
-    setSpotifySearched(true);
-    setSpotifyFetchError(false);
+    setSpotifySearched(false);
+    setSpotifyError(false);
     const result = await searchSpotifyArtists(spotifyQuery);
-    if (result.ok) {
-      setSpotifyResults(result.candidates);
-    } else {
-      setSpotifyFetchError(true);
-    }
     setSpotifyLoading(false);
+    setSpotifySearched(true);
+    if (!result.ok) {
+      setSpotifyError(true);
+      setSpotifyResults([]);
+    } else {
+      setSpotifyResults(result.candidates);
+    }
   }
 
-  function handleGetCode() {
-    const emailTrimmed = email.trim();
-    if (!emailTrimmed || !proofChannel.trim()) return;
-    proofEmailRef.current = emailTrimmed;
-    setProofFlow("issuing");
-    setProofError(null);
-    proofIssueMutation.mutate({
-      email: emailTrimmed,
-      proofKind,
-      proofChannel: proofChannel.trim(),
-    });
+  function handleSelectArtist(artist: SpotifyCandidate) {
+    setSelectedArtist(artist);
+    setStep("spotify_selected");
   }
 
-  function handleVerify() {
-    if (!proofCode) return;
-    setProofFlow("verifying");
-    setProofError(null);
-    proofVerifyMutation.mutate({
-      email: proofEmailRef.current || email.trim(),
-      proofKind,
-      proofChannel: proofChannel.trim(),
-      proofCode,
-    });
-  }
-
-  function handleResetProof() {
+  function handleClearArtist() {
+    setSelectedArtist(null);
     setProofCode(null);
-    setProofFlow("idle");
     setProofError(null);
-    setProofVerifiedChannel(null);
-    setProofChannel("");
+    setStep("spotify_search");
   }
 
-  function validateEvidence(): boolean {
-    const errs: typeof evidenceErrors = {};
-    if (evidenceWebsite && !urlSchema.safeParse(evidenceWebsite).success) {
-      errs.website = "Enter a valid URL (include https://)";
-    }
-    if (evidenceStreaming && !urlSchema.safeParse(evidenceStreaming).success) {
-      errs.streaming = "Enter a valid URL (include https://)";
-    }
-    if (evidenceDistributor && !urlSchema.safeParse(evidenceDistributor).success) {
-      errs.distributor = "Enter a valid URL (include https://)";
-    }
-    setEvidenceErrors(errs);
-    return Object.keys(errs).length === 0;
+  async function handleResendOtp() {
+    setOtpResent(false);
+    await requestOtpMutation.mutateAsync({ email: applicantEmail, name: applicantName });
+    setOtpResent(true);
+    setTimeout(() => setOtpResent(false), 4000);
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const result = formSchema.safeParse({
-      applicantName: name.trim(),
-      applicantEmail: email.trim(),
-    });
-    if (!result.success) {
-      const errs: { name?: string; email?: string } = {};
-      for (const issue of result.error.issues) {
-        if (issue.path[0] === "applicantName") errs.name = issue.message;
-        if (issue.path[0] === "applicantEmail") errs.email = issue.message;
-      }
-      setErrors(errs);
-      return;
-    }
-    if (!validateEvidence()) return;
-    setErrors({});
-
-    // Collect evidence links (filter empties).
-    const evidenceLinks: Array<{ kind: string; url: string }> = [];
-    if (evidenceWebsite) evidenceLinks.push({ kind: "website", url: evidenceWebsite });
-    if (evidenceStreaming) evidenceLinks.push({ kind: "streaming", url: evidenceStreaming });
-    if (evidenceDistributor) evidenceLinks.push({ kind: "distributor", url: evidenceDistributor });
-
-    submitMutation.mutate({
-      applicantEmail: result.data.applicantEmail,
-      applicantName: result.data.applicantName,
-      spotifyArtistId: selectedArtist?.id ?? null,
-      spotifyArtistName: selectedArtist?.name ?? null,
-      spotifyArtistUrl: selectedArtist?.spotifyUrl ?? null,
-      spotifyPhotoUrl: selectedArtist?.imageUrl ?? null,
-      evidenceLinks: evidenceLinks.length > 0 ? evidenceLinks : undefined,
+  function copyCode() {
+    if (!proofCode) return;
+    navigator.clipboard.writeText(proofCode).then(() => {
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2500);
     });
   }
 
-  // ─── States ─────────────────────────────────────────────────────────────────
-  if (submitted) {
-    return (
-      <SubmittedState
-        referrerName={data?.branding?.name ?? "The team"}
-        existing={existing}
-      />
-    );
-  }
+  // ── Render: loading / error states ─────────────────────────────────────────
 
-  if (isLoading) {
+  if (brandingQuery.isLoading) {
     return (
       <PageShell>
-        <div className="flex items-center justify-center mt-32">
-          <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-6 h-6 animate-spin text-fan-faint" />
         </div>
       </PageShell>
     );
   }
 
-  if (error || !data) {
+  if (brandingQuery.isError) {
     return (
       <PageShell>
-        <div className="w-full max-w-sm text-center space-y-3 mt-16">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 ring-1 ring-slate-200">
-            <Music2 className="w-7 h-7 text-slate-400" />
-          </div>
-          <h1 className="text-xl font-bold text-slate-900">
-            {(error as Error)?.message?.includes("no longer active")
-              ? "This referral link is no longer active"
-              : "Invalid referral link"}
-          </h1>
-          <p className="text-slate-500 text-sm">
-            {(error as Error)?.message?.includes("no longer active")
-              ? "The person who shared this link has deactivated it."
-              : "This link may have expired or been removed. Ask the person who sent it to share a fresh one."}
+        <div className="text-center py-16">
+          <div className="text-3xl mb-3">🔗</div>
+          <h2 className="text-lg font-semibold text-slate-800 mb-2">Link not found</h2>
+          <p className="text-sm text-fan-secondary">
+            This referral link may be invalid or expired. Ask your referrer for a new link.
           </p>
-          <img src="/goodtunes-logo-color.png" alt="GoodTunes" className="w-24 mx-auto mt-8 opacity-60" />
         </div>
       </PageShell>
     );
   }
 
-  const referrerName = data.branding.name;
-  const referrerPhoto = data.branding.photoUrl;
-  const referrerOrg = data.branding.orgName;
+  // ── Step renderers ──────────────────────────────────────────────────────────
 
-  // Whether the email field is filled enough to issue a proof code.
-  const emailReadyForProof = z.string().email().safeParse(email.trim()).success;
+  function renderInfo() {
+    const emailValid = z.string().email().safeParse(applicantEmail.trim()).success;
+    const canSubmit = applicantName.trim().length > 0 && emailValid;
+
+    return (
+      <Card>
+        <h2 className="text-xl font-bold text-slate-900 mb-1">Tell us about you</h2>
+        <p className="text-sm text-fan-secondary mb-6 leading-relaxed">
+          GoodTunes® helps artists get their vinyl with&nbsp;$0 out of pocket. Help&nbsp;us learn a bit about you.
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <FieldLabel>Your name</FieldLabel>
+            <TextInput
+              value={applicantName}
+              onChange={(v) => { setApplicantName(v); setInfoError(null); }}
+              placeholder="Full name"
+              autoFocus
+              testId="input-applicant-name"
+            />
+          </div>
+
+          <div>
+            <FieldLabel>Email address</FieldLabel>
+            <TextInput
+              value={applicantEmail}
+              onChange={(v) => { setApplicantEmail(v); setInfoError(null); }}
+              placeholder="you@example.com"
+              type="email"
+              testId="input-applicant-email"
+            />
+          </div>
+
+          {infoError && (
+            <p className="text-xs text-rose-500 -mt-1" data-testid="error-info">{infoError}</p>
+          )}
+
+          <PrimaryButton
+            onClick={() => {
+              setInfoError(null);
+              requestOtpMutation.mutate({ email: applicantEmail, name: applicantName });
+            }}
+            disabled={!canSubmit}
+            loading={requestOtpMutation.isPending}
+            testId="button-get-otp"
+          >
+            {requestOtpMutation.isPending ? "Sending…" : "Get Confirmation Code"}
+          </PrimaryButton>
+        </div>
+      </Card>
+    );
+  }
+
+  function renderOtp() {
+    const canVerify = otpValue.length === 6;
+
+    return (
+      <Card>
+        <button
+          type="button"
+          onClick={() => setStep("info")}
+          className="flex items-center gap-1 text-xs text-fan-faint hover:text-fan-secondary mb-5 transition-colors"
+          data-testid="button-back-to-info"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+          Back
+        </button>
+
+        <h2 className="text-xl font-bold text-slate-900 mb-1">Check your email</h2>
+        <p className="text-sm text-fan-secondary mb-6 leading-relaxed">
+          We sent a 6-digit code to <span className="font-medium text-slate-700">{applicantEmail}</span>.
+          Enter it below to continue.
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <FieldLabel>Confirmation code</FieldLabel>
+            <input
+              ref={otpInputRef}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={otpValue}
+              onChange={(e) => {
+                const v = e.target.value.replace(/\D/g, "").slice(0, 6);
+                setOtpValue(v);
+                setOtpError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && canVerify) {
+                  verifyOtpMutation.mutate(otpValue);
+                }
+              }}
+              placeholder="123456"
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-3 bg-white text-slate-900
+                         text-2xl font-bold tracking-[0.4em] text-center
+                         placeholder:text-fan-faint placeholder:font-normal placeholder:tracking-normal
+                         focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]
+                         focus:border-[var(--brand-blue)] transition-colors"
+              data-testid="input-otp"
+            />
+          </div>
+
+          {otpError && (
+            <p className="text-xs text-rose-500" data-testid="error-otp">{otpError}</p>
+          )}
+
+          <PrimaryButton
+            onClick={() => verifyOtpMutation.mutate(otpValue)}
+            disabled={!canVerify}
+            loading={verifyOtpMutation.isPending}
+            testId="button-verify-otp"
+          >
+            {verifyOtpMutation.isPending ? "Verifying…" : "Verify"}
+          </PrimaryButton>
+
+          <p className="text-center text-xs text-fan-faint">
+            Didn't get it?{" "}
+            {otpResent ? (
+              <span className="text-emerald-600 font-medium">Sent!</span>
+            ) : (
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={requestOtpMutation.isPending}
+                className="underline hover:text-fan-secondary transition-colors disabled:opacity-40"
+                data-testid="button-resend-otp"
+              >
+                Resend code
+              </button>
+            )}
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
+  function renderSpotifySearch() {
+    const exactMatchName = spotifyQuery.trim().toLowerCase();
+
+    return (
+      <Card>
+        <h2 className="text-xl font-bold text-slate-900 mb-1">Confirm your account</h2>
+        <p className="text-sm text-fan-secondary mb-6 leading-relaxed">
+          Search for your artist profile on Spotify to confirm your identity.
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <FieldLabel>Artist profile</FieldLabel>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={spotifyQuery}
+                onChange={(e) => setSpotifyQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSpotifySearch(); }}
+                placeholder="Search by artist name…"
+                className="flex-1 rounded-xl border border-slate-200 px-3.5 py-3 bg-white text-slate-900
+                           text-sm placeholder:text-fan-faint focus:outline-none focus:ring-2
+                           focus:ring-[var(--brand-blue)] focus:border-[var(--brand-blue)] transition-colors"
+                data-testid="input-spotify-search"
+              />
+              <button
+                type="button"
+                onClick={handleSpotifySearch}
+                disabled={!spotifyQuery.trim() || spotifyLoading}
+                className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-fan-secondary
+                           hover:bg-slate-50 disabled:opacity-40 transition-colors"
+                data-testid="button-spotify-search"
+              >
+                {spotifyLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Search className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {spotifyResults.length > 0 && (
+            <ul
+              className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden"
+              data-testid="list-spotify-results"
+            >
+              {spotifyResults.map((a) => {
+                const isExact = a.name.toLowerCase() === exactMatchName;
+                return (
+                  <li key={a.id}>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectArtist(a)}
+                      className="w-full flex items-center gap-3 px-3.5 py-3 hover:bg-slate-50 active:bg-slate-100 transition-colors text-left"
+                      data-testid={`option-spotify-${a.id}`}
+                    >
+                      {a.imageUrl ? (
+                        <img src={a.imageUrl} alt="" className="w-11 h-11 rounded-full object-cover flex-shrink-0 ring-1 ring-slate-100" />
+                      ) : (
+                        <div className="w-11 h-11 rounded-full bg-slate-100 flex-shrink-0 flex items-center justify-center">
+                          <Music className="w-4 h-4 text-fan-faint" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-sm font-medium text-slate-900 truncate">{a.name}</span>
+                          {isExact && (
+                            <span className="text-xs font-bold uppercase tracking-wide text-emerald-600 bg-emerald-50 rounded-full px-1.5 py-0.5 border border-emerald-200 flex-shrink-0">
+                              Exact match
+                            </span>
+                          )}
+                        </div>
+                        {a.followers != null && (
+                          <div className="text-xs text-fan-faint">
+                            {a.followers > 0 ? `${a.followers.toLocaleString()} followers` : "Spotify artist"}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {spotifySearched && !spotifyLoading && spotifyError && (
+            <p className="text-xs text-fan-faint text-center" data-testid="text-spotify-error">
+              Search unavailable right now. You can skip this step below.
+            </p>
+          )}
+          {spotifySearched && !spotifyLoading && !spotifyError && spotifyResults.length === 0 && (
+            <p className="text-xs text-fan-faint text-center" data-testid="text-spotify-no-results">
+              No results found. Try a different spelling, or skip this step below.
+            </p>
+          )}
+
+          <div className="pt-1 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => submitMutation.mutate()}
+              disabled={submitMutation.isPending}
+              className="w-full text-center text-xs text-fan-faint hover:text-fan-secondary py-2 transition-colors"
+              data-testid="button-no-spotify"
+            >
+              {submitMutation.isPending ? (
+                <span className="inline-flex items-center gap-1.5 justify-center">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Submitting…
+                </span>
+              ) : (
+                "I'm not on any streaming platform →"
+              )}
+            </button>
+          </div>
+
+          {submitMutation.isError && (
+            <p className="text-xs text-rose-500 text-center" data-testid="error-submit">
+              {(submitMutation.error as Error)?.message ?? "Something went wrong."}
+            </p>
+          )}
+        </div>
+      </Card>
+    );
+  }
+
+  function renderSpotifySelected() {
+    if (!selectedArtist) return null;
+
+    return (
+      <Card>
+        <h2 className="text-xl font-bold text-slate-900 mb-1">Confirm your account</h2>
+        <p className="text-sm text-fan-secondary mb-6 leading-relaxed">
+          Search for your artist profile on Spotify to confirm your identity.
+        </p>
+
+        <div className="space-y-5">
+          <div>
+            <FieldLabel>Artist profile</FieldLabel>
+            <ArtistCard artist={selectedArtist} onClear={handleClearArtist} />
+          </div>
+
+          <p className="text-sm text-fan-secondary leading-relaxed">
+            GoodTunes® will generate a short code. Add it to your <strong className="text-slate-700">Spotify bio</strong> to verify account ownership.
+          </p>
+
+          {proofError && (
+            <p className="text-xs text-rose-500" data-testid="error-proof-issue">{proofError}</p>
+          )}
+
+          <PrimaryButton
+            onClick={() => proofIssueMutation.mutate(selectedArtist)}
+            loading={proofIssueMutation.isPending}
+            testId="button-get-proof-code"
+          >
+            {proofIssueMutation.isPending ? "Generating…" : "Get Confirmation Code"}
+          </PrimaryButton>
+        </div>
+      </Card>
+    );
+  }
+
+  function renderSpotifyVerify() {
+    if (!selectedArtist || !proofCode) return null;
+
+    return (
+      <Card>
+        <h2 className="text-xl font-bold text-slate-900 mb-1">Confirm your account</h2>
+        <p className="text-sm text-fan-secondary mb-6 leading-relaxed">
+          Search for your artist profile on Spotify to confirm your identity.
+        </p>
+
+        <div className="space-y-5">
+          <div>
+            <FieldLabel>Artist profile</FieldLabel>
+            <ArtistCard artist={selectedArtist} onClear={handleClearArtist} />
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="text-xs text-fan-faint text-center mb-2">Your verification code</div>
+            <div className="flex items-center justify-center gap-2">
+              <span
+                className="font-mono text-2xl font-bold text-slate-900 tracking-wider"
+                data-testid="text-proof-code"
+              >
+                {proofCode}
+              </span>
+              <IconButton
+                variant="ghost"
+                size="md"
+                onClick={copyCode}
+                aria-label="Copy code"
+                data-testid="button-copy-code"
+              >
+                {codeCopied ? (
+                  <Check className="w-4 h-4 text-emerald-500" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </IconButton>
+            </div>
+          </div>
+
+          <p className="text-sm text-fan-secondary leading-relaxed text-center">
+            Add the code <span className="font-mono font-bold text-slate-700">{proofCode}</span> to your Spotify bio. Then come back here and click <strong className="text-slate-700">"Verify"</strong>.
+          </p>
+
+          {(proofError || submitMutation.isError) && (
+            <p className="text-xs text-rose-500 text-center" data-testid="error-proof-verify">
+              {proofError ?? (submitMutation.error as Error)?.message ?? "Something went wrong."}
+            </p>
+          )}
+
+          <PrimaryButton
+            onClick={() => proofVerifyMutation.mutate()}
+            loading={proofVerifyMutation.isPending || submitMutation.isPending}
+            testId="button-verify-proof"
+          >
+            {(proofVerifyMutation.isPending || submitMutation.isPending) ? "Verifying…" : "Verify"}
+          </PrimaryButton>
+        </div>
+      </Card>
+    );
+  }
+
+  function renderSubmitted() {
+    return (
+      <Card>
+        <div className="text-center py-4">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto mb-4">
+            <Check className="w-7 h-7 text-emerald-500" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 mb-2">You're on the list!</h2>
+          <p className="text-sm text-fan-secondary leading-relaxed">
+            Thanks{applicantName ? `, ${applicantName.split(" ")[0]}` : ""}! Your application is under review. We'll be in touch at{" "}
+            <span className="font-medium text-slate-700">{applicantEmail}</span>{" "}
+            once you've been approved.
+          </p>
+          {selectedArtist && (
+            <p className="text-xs text-fan-faint mt-4">
+              Spotify profile: <span className="text-fan-secondary">{selectedArtist.name}</span>
+            </p>
+          )}
+        </div>
+      </Card>
+    );
+  }
+
+  // ── Main render ─────────────────────────────────────────────────────────────
 
   return (
     <PageShell>
-      <div className="w-full max-w-sm space-y-6">
-        {/* Logo */}
-        <div className="text-center">
-          <img src="/goodtunes-logo-color.png" alt="GoodTunes" className="w-32 mx-auto mb-6" />
-        </div>
+      <LogoHeader photoUrl={branding?.photoUrl ?? null} orgName={branding?.orgName ?? branding?.name ?? null} />
 
-        {/* Referrer hero */}
-        <div className="flex flex-col items-center text-center space-y-3">
-          {referrerPhoto ? (
-            <img
-              src={referrerPhoto}
-              alt={referrerName}
-              className="w-16 h-16 rounded-full object-cover bg-slate-100 ring-1 ring-slate-200"
-            />
-          ) : (
-            <div className="w-16 h-16 rounded-full bg-blue-50 ring-1 ring-blue-200 flex items-center justify-center">
-              <Music2 className="w-7 h-7 text-blue-500" />
-            </div>
-          )}
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 leading-snug">
-              {referrerOrg
-                ? `${referrerOrg} invited you to GoodTunes`
-                : `${referrerName} invited you to GoodTunes`}
-            </h1>
-          </div>
-        </div>
+      {step === "info" && renderInfo()}
+      {step === "otp" && renderOtp()}
+      {step === "spotify_search" && renderSpotifySearch()}
+      {step === "spotify_selected" && renderSpotifySelected()}
+      {step === "spotify_verify" && renderSpotifyVerify()}
+      {step === "submitted" && renderSubmitted()}
 
-        {/* Form card */}
-        <div className="bg-white ring-1 ring-slate-200 rounded-xl p-5 shadow-sm">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Name */}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
-                Your name
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Full name or artist name"
-                className={[
-                  "gt-admin-autofill w-full rounded-md border px-3 py-2.5 bg-white text-slate-900",
-                  "placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm",
-                  errors.name ? "border-rose-400 focus:ring-rose-400" : "border-slate-200",
-                ].join(" ")}
-                data-testid="input-applicant-name"
-              />
-              {errors.name && (
-                <p className="text-xs text-rose-500 mt-1" data-testid="error-name">{errors.name}</p>
-              )}
-            </div>
-
-            {/* Email */}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
-                Email address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className={[
-                  "gt-admin-autofill w-full rounded-md border px-3 py-2.5 bg-white text-slate-900",
-                  "placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm",
-                  errors.email ? "border-rose-400 focus:ring-rose-400" : "border-slate-200",
-                ].join(" ")}
-                data-testid="input-applicant-email"
-              />
-              {errors.email && (
-                <p className="text-xs text-rose-500 mt-1" data-testid="error-email">{errors.email}</p>
-              )}
-            </div>
-
-            {/* Spotify self-identification (optional) */}
-            <div className="pt-1">
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
-                Your Spotify artist profile{" "}
-                <span className="normal-case font-normal text-slate-400">(optional)</span>
-              </label>
-
-              {selectedArtist ? (
-                <div
-                  className="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5"
-                  data-testid="selected-spotify-artist"
-                >
-                  {selectedArtist.imageUrl ? (
-                    <img src={selectedArtist.imageUrl} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0 ring-1 ring-slate-200" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-slate-100 flex-shrink-0" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-slate-900 truncate">{selectedArtist.name}</div>
-                    {selectedArtist.followers != null && (
-                      <div className="text-xs text-slate-500">
-                        {selectedArtist.followers.toLocaleString()} followers
-                      </div>
-                    )}
-                  </div>
-                  <IconButton
-                    variant="ghost"
-                    size="md"
-                    aria-label="Clear Spotify selection"
-                    onClick={() => {
-                      setSelectedArtist(null);
-                      setSpotifyResults([]);
-                      setSpotifySearched(false);
-                      setSpotifyFetchError(false);
-                      setSpotifyQuery("");
-                    }}
-                    data-testid="button-clear-spotify"
-                  >
-                    <X className="w-4 h-4" />
-                  </IconButton>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={spotifyQuery}
-                      onChange={(e) => setSpotifyQuery(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSpotifySearch(); } }}
-                      placeholder="Search by artist name…"
-                      className="gt-admin-autofill flex-1 rounded-md border border-slate-200 px-3 py-2.5 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      data-testid="input-spotify-search"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSpotifySearch}
-                      disabled={!spotifyQuery.trim() || spotifyLoading}
-                      className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-500 hover:bg-slate-100 disabled:opacity-40 transition-colors"
-                      data-testid="button-spotify-search"
-                    >
-                      {spotifyLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Search className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-
-                  {spotifyResults.length > 0 && (
-                    <ul
-                      className="rounded-md border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden shadow-sm"
-                      data-testid="list-spotify-results"
-                    >
-                      {spotifyResults.map((a) => (
-                        <li key={a.id}>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedArtist(a)}
-                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
-                            data-testid={`option-spotify-${a.id}`}
-                          >
-                            {a.imageUrl ? (
-                              <img src={a.imageUrl} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0 ring-1 ring-slate-200" />
-                            ) : (
-                              <div className="w-10 h-10 rounded-full bg-slate-100 flex-shrink-0" />
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <div className="text-sm font-medium text-slate-900 truncate">{a.name}</div>
-                              {a.followers != null && (
-                                <div className="text-xs text-slate-500">{a.followers.toLocaleString()} followers</div>
-                              )}
-                            </div>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  {spotifySearched && !spotifyLoading && spotifyFetchError && (
-                    <p className="text-xs text-slate-400 px-1" data-testid="text-spotify-error">
-                      Artist search unavailable — you can skip this and just submit your email.
-                    </p>
-                  )}
-                  {spotifySearched && !spotifyLoading && !spotifyFetchError && spotifyResults.length === 0 && (
-                    <p className="text-xs text-slate-400 px-1" data-testid="text-spotify-no-results">
-                      No results — you can skip this and just submit your email.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* ── Evidence links section (optional) ───────────────────────── */}
-            <div className="border-t border-slate-100 pt-4">
-              <button
-                type="button"
-                onClick={() => setShowEvidence((v) => !v)}
-                className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-700 transition-colors"
-                data-testid="button-toggle-evidence"
-              >
-                <span className="flex items-center gap-1.5">
-                  <Link2 className="w-3.5 h-3.5" />
-                  Add evidence links
-                  <span className="normal-case font-normal text-slate-400">(optional)</span>
-                </span>
-                {showEvidence ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </button>
-
-              {showEvidence && (
-                <div className="mt-3 space-y-3" data-testid="section-evidence">
-                  <p className="text-xs text-slate-500 leading-snug">
-                    These links help the reviewer verify your identity — official site, Spotify/Apple for Artists, or your distributor dashboard.
-                  </p>
-                  <EvidenceField
-                    label="Official website"
-                    placeholder="https://yoursite.com"
-                    value={evidenceWebsite}
-                    onChange={setEvidenceWebsite}
-                    error={evidenceErrors.website}
-                    testId="input-evidence-website"
-                    icon={<Globe className="w-3.5 h-3.5" />}
-                  />
-                  <EvidenceField
-                    label="Spotify / Apple for Artists link"
-                    placeholder="https://artists.spotify.com/…"
-                    value={evidenceStreaming}
-                    onChange={setEvidenceStreaming}
-                    error={evidenceErrors.streaming}
-                    testId="input-evidence-streaming"
-                    icon={<Music2 className="w-3.5 h-3.5" />}
-                  />
-                  <EvidenceField
-                    label="Distributor / label page"
-                    placeholder="https://distrokid.com/…"
-                    value={evidenceDistributor}
-                    onChange={setEvidenceDistributor}
-                    error={evidenceErrors.distributor}
-                    testId="input-evidence-distributor"
-                    icon={<Link2 className="w-3.5 h-3.5" />}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* ── Prove ownership section (optional) ──────────────────────── */}
-            <div className="border-t border-slate-100 pt-4">
-              <button
-                type="button"
-                onClick={() => setShowProof((v) => !v)}
-                className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-700 transition-colors"
-                data-testid="button-toggle-proof"
-              >
-                <span className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  {proofFlow === "proven"
-                    ? <span className="text-emerald-600 normal-case font-semibold">✓ Ownership proved</span>
-                    : <>Prove you're this artist <span className="normal-case font-normal text-slate-400">(optional but speeds up review)</span></>}
-                </span>
-                {showProof ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </button>
-
-              {showProof && (
-                <div className="mt-3 space-y-3" data-testid="section-proof">
-                  {proofFlow === "proven" ? (
-                    <div
-                      className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5"
-                      data-testid="proof-proven-badge"
-                    >
-                      <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                      <div className="flex-1">
-                        <div className="text-sm font-semibold text-emerald-800">Ownership proved</div>
-                        <div className="text-xs text-emerald-600">{proofVerifiedChannel}</div>
-                      </div>
-                      <IconButton
-                        variant="ghost"
-                        size="md"
-                        aria-label="Reset proof"
-                        onClick={handleResetProof}
-                        data-testid="button-reset-proof"
-                      >
-                        <X className="w-4 h-4" />
-                      </IconButton>
-                    </div>
-                  ) : (
-                    <>
-                      <p className="text-xs text-slate-500 leading-snug">
-                        GoodTunes will generate a short code. Add it to your social bio or domain to prove you control that account — no login required.
-                      </p>
-
-                      {/* Channel picker */}
-                      <div className="flex gap-1.5 flex-wrap" data-testid="proof-kind-picker">
-                        {(["instagram", "x", "tiktok", "domain"] as ProofKind[]).map((k) => (
-                          <button
-                            key={k}
-                            type="button"
-                            onClick={() => {
-                              setProofKind(k);
-                              setProofChannel("");
-                              setProofCode(null);
-                              setProofFlow("idle");
-                              setProofError(null);
-                            }}
-                            className={[
-                              "text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors",
-                              proofKind === k
-                                ? "bg-[var(--brand-blue)] border-[var(--brand-blue)] text-white"
-                                : "bg-white border-slate-200 text-slate-600 hover:border-slate-300",
-                            ].join(" ")}
-                            data-testid={`button-proof-kind-${k}`}
-                          >
-                            {PROOF_KIND_LABELS[k]}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Channel input + get-code */}
-                      {proofFlow === "idle" && (
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={proofChannel}
-                            onChange={(e) => setProofChannel(e.target.value)}
-                            placeholder={PROOF_KIND_PLACEHOLDER[proofKind]}
-                            className="gt-admin-autofill flex-1 rounded-md border border-slate-200 px-3 py-2 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                            data-testid="input-proof-channel"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleGetCode}
-                            disabled={!proofChannel.trim() || !emailReadyForProof}
-                            title={!emailReadyForProof ? "Enter your email address first" : undefined}
-                            className="rounded-md bg-slate-900 text-white text-xs font-semibold px-3 py-2 hover:opacity-80 disabled:opacity-40 transition-opacity whitespace-nowrap"
-                            data-testid="button-get-proof-code"
-                          >
-                            Get code
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Issuing */}
-                      {proofFlow === "issuing" && (
-                        <div className="flex items-center gap-2 text-sm text-slate-500 py-1">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Generating code…
-                        </div>
-                      )}
-
-                      {/* Pending — show code + instructions */}
-                      {(proofFlow === "pending" || proofFlow === "failed") && proofCode && (
-                        <div className="space-y-3" data-testid="section-proof-code">
-                          <div className="rounded-md bg-slate-50 border border-slate-200 px-4 py-3 text-center">
-                            <div className="text-xs text-slate-400 mb-1">Your verification code</div>
-                            <div
-                              className="font-mono text-lg font-bold text-slate-900 tracking-widest"
-                              data-testid="text-proof-code"
-                            >
-                              {proofCode}
-                            </div>
-                          </div>
-                          <p className="text-xs text-slate-500 leading-relaxed">
-                            {proofInstructions(proofKind, proofChannel, proofCode)}
-                          </p>
-
-                          {proofFlow === "failed" && proofError && (
-                            <div
-                              className="flex items-start gap-2 rounded-md bg-rose-50 border border-rose-200 px-3 py-2"
-                              data-testid="proof-error-msg"
-                            >
-                              <AlertTriangle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
-                              <p className="text-xs text-rose-700 leading-snug">{proofError}</p>
-                            </div>
-                          )}
-
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={handleVerify}
-                              disabled={proofVerifyMutation.isPending}
-                              className="flex-1 rounded-md bg-[var(--brand-blue)] text-white text-xs font-semibold px-3 py-2 hover:opacity-90 disabled:opacity-50 transition-opacity"
-                              data-testid="button-verify-proof"
-                            >
-                              {proofVerifyMutation.isPending ? (
-                                <span className="inline-flex items-center gap-1.5 justify-center">
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Verifying…
-                                </span>
-                              ) : (
-                                "Verify"
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleResetProof}
-                              className="rounded-md border border-slate-200 text-slate-500 text-xs font-medium px-3 py-2 hover:bg-slate-50 transition-colors"
-                              data-testid="button-cancel-proof"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Verifying */}
-                      {proofFlow === "verifying" && (
-                        <div className="flex items-center gap-2 text-sm text-slate-500 py-1">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Checking your profile…
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Submit error */}
-            {submitMutation.isError && (
-              <p className="text-sm text-rose-500" data-testid="error-submit">
-                {(submitMutation.error as Error)?.message ?? "Something went wrong. Try again."}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitMutation.isPending || !name.trim() || !email.trim()}
-              className="w-full rounded-md bg-[var(--brand-blue)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity px-4 py-2.5 text-sm font-semibold text-white"
-              data-testid="button-submit-application"
-            >
-              {submitMutation.isPending ? (
-                <span className="inline-flex items-center gap-2 justify-center">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Submitting…
-                </span>
-              ) : (
-                "Apply to join GoodTunes"
-              )}
-            </button>
-
-            <p className="text-xs text-center text-slate-400 leading-relaxed">
-              By applying you agree to GoodTunes' terms of service and privacy policy. Your application
-              will be reviewed — you won't have access until you receive your invite email.
-            </p>
-          </form>
-        </div>
-      </div>
+      <p className="text-center text-xs text-fan-faint mt-6 leading-relaxed px-2">
+        By applying you agree to GoodTunes' terms of service and privacy policy.
+        Your application will be reviewed — you won't have access until you receive your invite email.
+      </p>
     </PageShell>
-  );
-}
-
-// ─── Evidence field sub-component ────────────────────────────────────────────
-function EvidenceField({
-  label,
-  placeholder,
-  value,
-  onChange,
-  error,
-  testId,
-  icon,
-}: {
-  label: string;
-  placeholder: string;
-  value: string;
-  onChange: (v: string) => void;
-  error?: string;
-  testId: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1">
-        {icon}
-        {label}
-      </label>
-      <input
-        type="url"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={[
-          "gt-admin-autofill w-full rounded-md border px-3 py-2 bg-white text-slate-900",
-          "placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm",
-          error ? "border-rose-400 focus:ring-rose-400" : "border-slate-200",
-        ].join(" ")}
-        data-testid={testId}
-      />
-      {error && <p className="text-xs text-rose-500 mt-1">{error}</p>}
-    </div>
   );
 }

@@ -1710,3 +1710,31 @@ export async function sendFulfillmentHeadsUpEmail(
   `;
   return sendViaResend("press-fulfillment-heads-up", toEmail, subject, html, text);
 }
+
+export async function sendReferralOtpEmail(
+  toEmail: string,
+  otp: string,
+  referrerName: string,
+): Promise<SendResult> {
+  const subject = `Your GoodTunes confirmation code: ${otp}`;
+  const text = [
+    `Hi,`,
+    ``,
+    `Your GoodTunes confirmation code is ${otp}.`,
+    ``,
+    `You were referred by ${referrerName}. Enter this code to continue your application. It expires in 10 minutes.`,
+    ``,
+    `If you didn't request this, you can ignore this email.`,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Artist Application</div>
+      <h1 style="font-size: 28px; margin: 12px 0 8px; font-weight: 700;">Confirm your email</h1>
+      <p style="font-size: 15px; color: #555; margin: 0 0 24px; line-height: 1.5;">You were referred by <strong>${escapeHtml(referrerName)}</strong>. Enter this code to continue your application.</p>
+      <div style="font-size: 40px; font-weight: 700; letter-spacing: 10px; padding: 20px 24px; background: #f4f4f7; border-radius: 12px; text-align: center; font-family: 'SF Mono', Menlo, Consolas, monospace; color: #00062B;">${otp}</div>
+      <p style="font-size: 14px; color: #888; margin-top: 20px; line-height: 1.5;">This code expires in <strong>10 minutes</strong>. If you didn't request this, you can safely ignore this email.</p>
+    </div>
+  `;
+  return sendViaResend("referral-otp", toEmail, subject, html, text);
+}
