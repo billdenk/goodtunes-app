@@ -410,7 +410,8 @@ export function registerPayoutRoutes(app: Express) {
     // Task #79 — payouts gated by `manage_payouts` against the owner's
     // scope (person → artist scope; label → label scope).
     {
-      const err = await gatePayoutOwner(req.session!.userId!, ownerKind, ownerId);
+      const userId = (req as any).adminUserId ?? req.session?.userId;
+      const err = await gatePayoutOwner(userId, ownerKind, ownerId);
       if (err) return res.status(err.status).json(err.body);
     }
     // Validate owner exists.
@@ -474,7 +475,8 @@ export function registerPayoutRoutes(app: Express) {
     const [row] = await db.select().from(payoutAccounts).where(eq(payoutAccounts.id, String(req.params.id)));
     if (!row) return res.status(404).json({ message: "Account not found" });
     {
-      const err = await gatePayoutOwner(req.session!.userId!, row.ownerKind as PayoutOwnerKind, row.ownerId);
+      const userId = (req as any).adminUserId ?? req.session?.userId;
+      const err = await gatePayoutOwner(userId, row.ownerKind as PayoutOwnerKind, row.ownerId);
       if (err) return res.status(err.status).json(err.body);
     }
     try {
@@ -497,7 +499,8 @@ export function registerPayoutRoutes(app: Express) {
     const [row] = await db.select().from(payoutAccounts).where(eq(payoutAccounts.id, String(req.params.id)));
     if (!row) return res.status(404).json({ message: "Account not found" });
     {
-      const err = await gatePayoutOwner(req.session!.userId!, row.ownerKind as PayoutOwnerKind, row.ownerId);
+      const userId = (req as any).adminUserId ?? req.session?.userId;
+      const err = await gatePayoutOwner(userId, row.ownerKind as PayoutOwnerKind, row.ownerId);
       if (err) return res.status(err.status).json(err.body);
     }
     try {
@@ -515,7 +518,8 @@ export function registerPayoutRoutes(app: Express) {
     const [row] = await db.select().from(payoutAccounts).where(eq(payoutAccounts.id, String(req.params.id)));
     if (!row) return res.json({ ok: true });
     {
-      const err = await gatePayoutOwner(req.session!.userId!, row.ownerKind as PayoutOwnerKind, row.ownerId);
+      const userId = (req as any).adminUserId ?? req.session?.userId;
+      const err = await gatePayoutOwner(userId, row.ownerKind as PayoutOwnerKind, row.ownerId);
       if (err) return res.status(err.status).json(err.body);
     }
     try {

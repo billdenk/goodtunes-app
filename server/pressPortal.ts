@@ -1951,8 +1951,8 @@ export function registerPressPortalRoutes(
   // GET /api/press/:id/payouts — Settings → Payouts data: the press's
   // Stripe Connect account state plus a roll-up of every captured
   // invoice with its variance vs the locked quote and the transfer
-  // status. Read-only — actual Connect onboarding still lives on
-  // /admin/manufacturers/:id?tab=payouts via the shared payouts panel.
+  // status. Connect onboarding is managed inline in the press portal
+  // via PayoutAccountPanel calling the shared /api/admin/payouts/* routes.
   app.get("/api/press/:id/payouts", requireAdmin, requirePressScope, async (req, res) => {
     const pressId = String(req.params.id);
     const acctRows = await db.execute<any>(sql`

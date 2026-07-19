@@ -28,6 +28,7 @@ import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLi
 import { albumStage, type AlbumStage } from "@shared/albumStage";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
+import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
@@ -2056,7 +2057,7 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
           )}
         </div>
       )}
-      {sub === "payouts" && <PayoutsSubTab pressId={pressId} />}
+      {sub === "payouts" && <PayoutsSubTab pressId={pressId} pressName={pressName} />}
       {sub === "notifications" && <NotificationsSubTab pressId={pressId} />}
     </div>
   );
@@ -2362,34 +2363,13 @@ type PayoutsResponse = {
   }>;
 };
 
-function PayoutsSubTab({ pressId }: { pressId: string }) {
+function PayoutsSubTab({ pressId, pressName }: { pressId: string; pressName: string }) {
   const { data, isLoading } = useQuery<PayoutsResponse>({ queryKey: [`/api/press/${pressId}/payouts`] });
   if (isLoading) return <PanelLoading />;
-  const acct = data?.account ?? null;
   const invoices = data?.invoices ?? [];
   return (
     <div className="space-y-4">
-      <DashboardPanel padding="md">
-        <h3 className="text-base font-semibold mb-2">Stripe payouts</h3>
-        {acct?.stripeAccountId && acct.payoutsEnabled ? (
-          <div className="text-sm text-emerald-700" data-testid="text-payouts-enabled">
-            ✓ Connected — invoice captures earmark to your Stripe account automatically.
-          </div>
-        ) : acct?.stripeAccountId ? (
-          <div className="text-sm text-amber-700" data-testid="text-payouts-pending">
-            Stripe account connected but not yet payouts-enabled. Finish onboarding to receive earmarks.
-          </div>
-        ) : (
-          <div className="text-sm text-slate-700" data-testid="text-payouts-missing">
-            No Stripe Connect account yet. Captured invoices won't be earmarked until you connect one.
-          </div>
-        )}
-        <Link
-          href={`/admin/manufacturers/${pressId}?tab=payouts`}
-          className="mt-3 inline-flex items-center gap-1 h-9 px-4 rounded-full bg-slate-100 text-slate-900 text-sm font-semibold hover:bg-slate-200"
-          data-testid="link-payouts-editor"
-        >Open payouts <ExternalLink className="w-3 h-3" /></Link>
-      </DashboardPanel>
+      <PayoutAccountPanel ownerKind="manufacturer" ownerId={pressId} ownerName={pressName} />
 
       <DashboardPanel padding="md">
         <h3 className="text-base font-semibold mb-3">Recent invoice captures</h3>
