@@ -2966,7 +2966,12 @@ function SkuRow({
   // uses the published quantity tiers; non-vinyl has no rung concept
   // so the picker falls back to a number input.
   const quantityRungs = useMemo<number[]>(() => {
-    if (usingCatalog && pickedTier) {
+    // Only use the catalog ladder when it actually has entries — if the press
+    // has created a tier but hasn't entered pricing rungs yet, priceLadder is
+    // empty and returning [] here would suppress the dropdown entirely.  Fall
+    // through to VINYL_QUANTITY_TIERS so artists can still pick a quantity
+    // even while the press is filling in their pricing.
+    if (usingCatalog && pickedTier && pickedTier.priceLadder.length > 0) {
       return [...pickedTier.priceLadder].sort((a, b) => a.qty - b.qty).map((r) => r.qty);
     }
     if (isVinyl) return [...VINYL_QUANTITY_TIERS];
