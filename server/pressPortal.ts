@@ -16,6 +16,7 @@
 import type { Express, Request, Response } from "express";
 import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
+import * as dnsLookup from "dns/promises";
 import { db } from "./db";
 import { storage } from "./storage";
 import {
@@ -29,6 +30,58 @@ import {
 import { evaluateEarlyCut, syncEarlyCutQueue, resolveAlbumPressTier } from "./earlyCut";
 import { hasArtistShape } from "./lib/personArtistShape";
 import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
+
+// SSRF-safe fetch helpers (mirrors the same logic in routes.ts registerRoutes).
+function ppIsPrivateIp(ip: string): boolean {
+  const net = require("net") as typeof import("net");
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split(".").map(Number);
+    return (
+      a === 0 || a === 10 || a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      a >= 224
+    );
+  }
+  if (net.isIPv6(ip)) {
+    const lower = ip.toLowerCase().replace(/^\[|\]$/g, "");
+    if (lower === "::1" || lower === "::") return true;
+    if (lower.startsWith("fc") || lower.startsWith("fd")) return true;
+    if (lower.startsWith("fe80:")) return true;
+    const dot = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (dot) return ppIsPrivateIp(dot[1]);
+    const hex = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (hex) {
+      const hi = parseInt(hex[1], 16);
+      const lo = parseInt(hex[2], 16);
+      return ppIsPrivateIp(`${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`);
+    }
+  }
+  return false;
+}
+async function ppAssertPublic(u: URL) {
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`Disallowed protocol: ${u.protocol}`);
+  const all = await dnsLookup.lookup(u.hostname, { all: true });
+  for (const { address } of all) {
+    if (ppIsPrivateIp(address)) throw new Error(`Refusing to fetch private/loopback host (${address})`);
+  }
+}
+async function ppSafeFetch(url: string, init?: RequestInit, maxHops = 5): Promise<globalThis.Response> {
+  let current = url;
+  for (let i = 0; i <= maxHops; i++) {
+    await ppAssertPublic(new URL(current));
+    const res = await fetch(current, { ...(init || {}), redirect: "manual" });
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get("location");
+      if (!loc) throw new Error("Redirect with no Location header");
+      current = new URL(loc, current).toString();
+      continue;
+    }
+    return res;
+  }
+  throw new Error("Too many redirects");
+}
 
 // Pipeline stage IDs the Pipeline tab renders columns for. Derived in
 // `deriveStage` below — never persisted on the album row.
@@ -1412,6 +1465,75 @@ export function registerPressPortalRoutes(
     role: z.enum(["artist", "label"]),
     name: z.string().min(1).max(200),
     welcomeNote: z.string().max(1000).optional().nullable(),
+    // Task #2756 — pre-seeded label metadata scraped from the label's website
+    websiteUrl: z.string().url().max(2000).optional().nullable(),
+    domain: z.string().max(255).optional().nullable(),
+    logoUrl: z.string().max(2000).optional().nullable(),
+  });
+
+  // POST /api/press/:id/scrape-label — session-compatible label scrape so the
+  // press invite dialog can pre-fill name + logo from a website URL without
+  // needing a bearer token (the main /api/admin/labels/scrape is bearer-only).
+  // Delegates into the same OG/apple-touch-icon logic, SSRF-gated via
+  // safeFetch (imported lazily from the main routes build).
+  app.post("/api/press/:id/scrape-label", requireAdmin, requirePressScope, async (req, res) => {
+    const url = String(req.body?.url ?? "").trim();
+    if (!url || !/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ message: "A full https:// URL is required" });
+    }
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { return res.status(400).json({ message: "Malformed URL" }); }
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (/(^|\.)instagram\.com$/.test(host) || /(^|\.)facebook\.com$/.test(host)) {
+      return res.status(400).json({ message: "Instagram/Facebook pages can't be scraped — paste the label's own website." });
+    }
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 10_000);
+      const html = await ppSafeFetch(url, {
+        signal: ctrl.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; GoodTunesBot/1.0; +https://goodtunes.app)",
+          "Accept": "text/html,application/xhtml+xml",
+        },
+      }).then((r: globalThis.Response) => {
+        if (!r.ok) throw new Error(`Page returned ${r.status}`);
+        return r.text();
+      }).finally(() => clearTimeout(t));
+
+      const meta: Record<string, string> = {};
+      const re1 = /<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi;
+      const re2 = /<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']([^"']+)["'][^>]*>/gi;
+      let m: RegExpExecArray | null;
+      while ((m = re1.exec(html))) { const k = m[1].toLowerCase(); if (!(k in meta)) meta[k] = m[2]; }
+      while ((m = re2.exec(html))) { const k = m[2].toLowerCase(); if (!(k in meta)) meta[k] = m[1]; }
+
+      let logoUrl: string | null = null;
+      const touchA = /<link[^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+      const touchB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]*>/i.exec(html);
+      if (touchA) logoUrl = touchA[1];
+      else if (touchB) logoUrl = touchB[1];
+      if (!logoUrl) logoUrl = meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
+      if (!logoUrl) {
+        const iconA = /<link[^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+        const iconB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]*>/i.exec(html);
+        if (iconA) logoUrl = iconA[1];
+        else if (iconB) logoUrl = iconB[1];
+      }
+      if (logoUrl?.startsWith("//")) logoUrl = `https:${logoUrl}`;
+      if (logoUrl?.startsWith("/")) logoUrl = `${parsed.origin}${logoUrl}`;
+
+      let name = meta["og:title"] || meta["twitter:title"] || null;
+      if (name) {
+        name = name
+          .replace(/\s*[|·–—-]\s*(?:home|official\s+site|official|records|music|label|the\s+official\s+site).*$/i, "")
+          .trim();
+      }
+
+      return res.json({ name, domain: host, logoUrl, websiteUrl: meta["og:url"] || url });
+    } catch (e: any) {
+      return res.status(502).json({ message: e?.message || "Failed to read page" });
+    }
   });
   // POST /api/press/:id/people/:personId/invite — invite an EXISTING person
   // (already in this press's People roster) to claim their profile / join
@@ -1529,7 +1651,7 @@ export function registerPressPortalRoutes(
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid invite" });
     }
-    const { email, role, name, welcomeNote } = parsed.data;
+    const { email, role, name, welcomeNote, websiteUrl, domain, logoUrl } = parsed.data;
     const lower = email.toLowerCase();
 
     // Create the scoped entity first so the invite role_scope_id is real.
@@ -1555,8 +1677,8 @@ export function registerPressPortalRoutes(
       }
     } else {
       const created = await db.execute<{ id: string }>(sql`
-        INSERT INTO labels (name, invited_by_press_id, default_press_id)
-        VALUES (${name}, ${pressId}, ${pressId})
+        INSERT INTO labels (name, website_url, domain, logo_url, invited_by_press_id, default_press_id)
+        VALUES (${name}, ${websiteUrl ?? null}, ${domain ?? null}, ${logoUrl ?? null}, ${pressId}, ${pressId})
         RETURNING id
       `);
       roleScopeId = (created as any).rows[0].id;

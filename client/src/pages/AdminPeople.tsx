@@ -779,7 +779,15 @@ export function CreditFilterRail({
   );
 }
 
-export function EmptyState({ searching }: { searching: boolean }) {
+export function EmptyState({
+  searching,
+  emptyTitle,
+  emptyDescription,
+}: {
+  searching: boolean;
+  emptyTitle?: string;
+  emptyDescription?: string;
+}) {
   return (
     <div
       className="py-16 flex flex-col items-center justify-center text-center"
@@ -789,12 +797,12 @@ export function EmptyState({ searching }: { searching: boolean }) {
         <UserIcon className="w-6 h-6" />
       </div>
       <p className="text-slate-700 text-[14px] font-semibold">
-        {searching ? "No people match that search" : "No people yet"}
+        {searching ? "No people match that search" : (emptyTitle ?? "No people yet")}
       </p>
       <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs">
         {searching
           ? "Try a different name."
-          : "Add an artist, performer, writer, or producer to start building the SuperCredits™ catalog."}
+          : (emptyDescription ?? "Add an artist, performer, writer, or producer to start building the SuperCredits™ catalog.")}
       </p>
     </div>
   );

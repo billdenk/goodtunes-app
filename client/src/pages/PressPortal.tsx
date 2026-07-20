@@ -693,7 +693,11 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
       {isLoading ? (
         <PanelLoading />
       ) : filtered.length === 0 ? (
-        <EmptyState searching={search.trim().length > 0 || selected.size > 0} />
+        <EmptyState
+          searching={search.trim().length > 0 || selected.size > 0}
+          emptyTitle="No artists yet"
+          emptyDescription="Add an artist to your press roster — anyone you're actively working with or pressing records for."
+        />
       ) : view === "grid" ? (
         <div
           className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-6"
@@ -1289,9 +1293,42 @@ function LabelInviteDialog({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [welcomeNote, setWelcomeNote] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [scrapedDomain, setScrapedDomain] = useState<string | null>(null);
+  const [scrapedLogoUrl, setScrapedLogoUrl] = useState<string | null>(null);
+  const [isScraping, setIsScraping] = useState(false);
+  const [scrapeNote, setScrapeNote] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const reset = () => { setName(""); setEmail(""); setWelcomeNote(""); };
+  const reset = () => {
+    setName(""); setEmail(""); setWelcomeNote("");
+    setWebsiteUrl(""); setScrapedDomain(null); setScrapedLogoUrl(null);
+    setScrapeNote(null);
+  };
+
+  async function handleWebsiteBlur() {
+    const url = websiteUrl.trim();
+    if (!url || !/^https?:\/\//i.test(url)) {
+      setScrapedDomain(null); setScrapedLogoUrl(null); setScrapeNote(null);
+      return;
+    }
+    setIsScraping(true);
+    setScrapeNote(null);
+    setScrapedDomain(null);
+    setScrapedLogoUrl(null);
+    try {
+      const res = await apiRequest("POST", `/api/press/${pressId}/scrape-label`, { url });
+      const data = await res.json();
+      if (data.domain) setScrapedDomain(data.domain);
+      if (data.logoUrl) setScrapedLogoUrl(data.logoUrl);
+      if (data.name) setName((prev) => prev || data.name);
+      if (!data.logoUrl && !data.name) setScrapeNote("Couldn't find a logo — fill in the name below.");
+    } catch {
+      setScrapeNote("Couldn't find a logo — fill in the name below.");
+    } finally {
+      setIsScraping(false);
+    }
+  }
 
   const invite = useMutation({
     mutationFn: async () =>
@@ -1300,9 +1337,12 @@ function LabelInviteDialog({
         name,
         role: "label",
         welcomeNote: welcomeNote || null,
+        websiteUrl: websiteUrl.trim() || null,
+        domain: scrapedDomain || null,
+        logoUrl: scrapedLogoUrl || null,
       }),
     onSuccess: () => {
-      toast({ title: "Invite sent", description: `${email} will join your People directory when they accept.` });
+      toast({ title: "Invite sent", description: `${name || email} will be added to your labels when they accept.` });
       queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/people`] });
       queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/pipeline`] });
       queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/summary`] });
@@ -1318,10 +1358,38 @@ function LabelInviteDialog({
         <DialogHeader>
           <DialogTitle>Invite a label</DialogTitle>
           <DialogDescription className="text-slate-500">
-            Send a label an invite to join your press. They'll appear in your People directory once they accept.
+            Send a label an invite to join your press. They'll appear in your labels directory once they accept.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
+          <div className="relative">
+            <Input
+              placeholder="Label website (optional, e.g. https://mergerecords.com)"
+              value={websiteUrl}
+              onChange={(e) => setWebsiteUrl(e.target.value)}
+              onBlur={handleWebsiteBlur}
+              data-testid="input-invite-label-website"
+              className={scrapedDomain ? "pr-8" : ""}
+            />
+            {isScraping && (
+              <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />
+            )}
+          </div>
+          {scrapedLogoUrl && (
+            <div className="flex items-center gap-2.5 px-1">
+              <img
+                src={scrapedLogoUrl}
+                alt=""
+                className="w-8 h-8 rounded object-cover border border-slate-200 bg-slate-50"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                data-testid="img-scraped-label-logo"
+              />
+              <span className="text-xs text-slate-500">Logo found from {scrapedDomain}</span>
+            </div>
+          )}
+          {scrapeNote && !scrapedLogoUrl && (
+            <p className="text-xs text-slate-400 px-1" data-testid="text-scrape-note">{scrapeNote}</p>
+          )}
           <Input placeholder="Label name" value={name} onChange={(e) => setName(e.target.value)} data-testid="input-invite-label-name" />
           <Input placeholder="email@example.com" type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="input-invite-label-email" />
           <Textarea placeholder="Optional welcome note" value={welcomeNote} onChange={(e) => setWelcomeNote(e.target.value)} rows={3} data-testid="input-invite-label-note" />
