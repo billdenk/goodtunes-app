@@ -3309,6 +3309,14 @@ export function registerCommerceRoutes(app: Express) {
         case "checkout.session.completed":
         case "checkout.session.async_payment_succeeded": {
           const session = event.data.object as Stripe.Checkout.Session;
+          // Payment-link sessions for one-off invoices carry a
+          // payment_request_id in metadata and must NOT go through
+          // materializeOrderFromSession (they have no album/SKU).
+          if (session.metadata?.payment_request_id) {
+            const { handlePaymentRequestCheckout } = await import("./paymentRequests");
+            await handlePaymentRequestCheckout(session.id, session.metadata.payment_request_id);
+            break;
+          }
           await materializeOrderFromSession(session);
           break;
         }

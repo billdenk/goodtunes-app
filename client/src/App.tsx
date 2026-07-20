@@ -124,6 +124,7 @@ import { AdminPlatformPricing } from "@/pages/AdminPlatformPricing";
 import { AdminPublishing } from "@/pages/AdminPublishing";
 import { AdminGoodDeedPricing } from "@/pages/AdminGoodDeedPricing";
 import AdminPayoutsRelease from "@/pages/AdminPayoutsRelease";
+import AdminPaymentRequests from "@/pages/AdminPaymentRequests";
 import { AdminDashboard } from "@/pages/AdminDashboard";
 import { VendorPortal } from "@/pages/VendorPortal";
 import ErrorPage from "@/pages/ErrorPage";
@@ -1124,6 +1125,9 @@ function Router() {
           <ProtectedRoute component={AdminGoodDeedPricing} />
         </Route>
         {/* Task #543 — Bill-only payout-release queue. */}
+        <Route path="/admin/payment-requests">
+          <ProtectedRoute component={AdminPaymentRequests} />
+        </Route>
         <Route path="/admin/payouts-release">
           <ProtectedRoute component={AdminPayoutsRelease} />
         </Route>

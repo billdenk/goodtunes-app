@@ -9805,3 +9805,42 @@ SQL
 }
 backfill_task_2757_feedback_wont_do dev  "${DATABASE_URL:-}"
 backfill_task_2757_feedback_wont_do prod "${PROD_DATABASE_URL:-}"
+
+# payment_requests table — one row per one-off invoice an operator sends
+# to an artist via a Stripe Payment Link. Status auto-updates via webhook.
+migrate_payment_requests() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping payment_requests migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS payment_requests (
+  id                      varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_by_user_id      varchar NOT NULL,
+  recipient_person_id     varchar NOT NULL,
+  recipient_email         text    NOT NULL,
+  amount_cents            integer NOT NULL,
+  currency                text    NOT NULL DEFAULT 'usd',
+  description             text    NOT NULL,
+  album_id                varchar,
+  stripe_payment_link_id  text,
+  stripe_payment_link_url text,
+  status                  text    NOT NULL DEFAULT 'pending',
+  paid_at                 timestamp,
+  stripe_checkout_session_id text,
+  created_at              timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS payment_requests_status_idx    ON payment_requests (status);
+CREATE INDEX IF NOT EXISTS payment_requests_recipient_idx ON payment_requests (recipient_person_id);
+COMMIT;
+SQL
+  then
+    echo "post-merge: payment_requests migration ok on $label"
+  else
+    echo "post-merge: WARNING — payment_requests migration failed on $label (continuing)"
+  fi
+}
+migrate_payment_requests dev  "${DATABASE_URL:-}"
+migrate_payment_requests prod "${PROD_DATABASE_URL:-}"

@@ -24567,6 +24567,8 @@ export async function registerRoutes(
   registerReferralPayoutRoutes(app);
   const { registerPayoutEarmarkRoutes } = await import("./payoutEarmarks");
   registerPayoutEarmarkRoutes(app);
+  const { registerPaymentRequestRoutes } = await import("./paymentRequests");
+  registerPaymentRequestRoutes(app, requireAdmin);
 
   // Task #2428 — GoodTunes Shopify+ prepaid-manufacturing payment ledger.
   const { registerShopifyPlusRoutes } = await import("./shopifyPlus");

@@ -90,6 +90,7 @@ const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   customers: "audience",
   "platform-pricing": "system",
   "payouts-release": "system",
+  "payment-requests": "system",
   invites: "system",
   "invite-directory": "system",
   trash: "system",
@@ -150,6 +151,7 @@ export type EntityKey =
   | "invites"
   | "invite-tree"
   | "invite-directory"
+  | "payment-requests"
   | "trash"
   | "none";
 
@@ -1109,6 +1111,16 @@ export function AdminFrame({
                   active={active === "payouts-release"}
                   onClick={() => navigate("/admin/payouts-release")}
                   testId="nav-payouts-release"
+                />
+                {/* One-off invoices billed to artists / people via Stripe
+                    Payment Links. Status auto-updates via webhook. */}
+                <SidebarLink
+                  icon={Receipt}
+                  label="Payment requests"
+                  count={-1}
+                  active={active === "payment-requests"}
+                  onClick={() => navigate("/admin/payment-requests")}
+                  testId="nav-payment-requests"
                 />
                 {/* Admin team invites — send admin / super-admin (and
                     partner) invite links. Super-admin-only surface, so it

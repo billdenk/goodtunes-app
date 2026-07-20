@@ -1711,6 +1711,47 @@ export async function sendFulfillmentHeadsUpEmail(
   return sendViaResend("press-fulfillment-heads-up", toEmail, subject, html, text);
 }
 
+export async function sendPaymentRequestEmail(
+  toEmail: string,
+  recipientName: string,
+  amountCents: number,
+  description: string,
+  paymentLinkUrl: string,
+): Promise<SendResult> {
+  const dollars = formatUsdCents(amountCents);
+  const subject = `Payment request from GoodTunes: ${dollars}`;
+  const text = [
+    `Hi ${recipientName},`,
+    ``,
+    `GoodTunes has sent you a payment request for ${dollars}.`,
+    ``,
+    `Description: ${description}`,
+    ``,
+    `Pay securely here: ${paymentLinkUrl}`,
+    ``,
+    `If you have questions, reply to this email.`,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Payment Request</div>
+      <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700;">You have a payment due</h1>
+      <p style="font-size: 16px; line-height: 1.5; color: #333;">Hi <strong>${escapeHtml(recipientName)}</strong>,</p>
+      <p style="font-size: 16px; line-height: 1.5; color: #333;">GoodTunes has sent you a payment request for <strong>${escapeHtml(dollars)}</strong>.</p>
+      <div style="margin: 20px 0; padding: 16px 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #319ED8;">
+        <div style="font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Description</div>
+        <div style="font-size: 15px; color: #1a1a1a;">${escapeHtml(description)}</div>
+      </div>
+      <div style="margin: 28px 0;">
+        ${bulletproofButton(paymentLinkUrl, `Pay ${escapeHtml(dollars)}`, { bgColor: "#319ED8", paddingV: 12, paddingH: 24, borderRadius: 8 })}
+      </div>
+      <p style="font-size: 13px; color: #888; line-height: 1.5;">Or paste this URL into your browser:<br /><span style="color: #319ED8; word-break: break-all;">${escapeHtml(paymentLinkUrl)}</span></p>
+      <p style="font-size: 13px; color: #888; margin-top: 24px;">Questions? Reply to this email and we'll get back to you.</p>
+    </div>
+  `;
+  return sendViaResend("payment-request", toEmail, subject, html, text);
+}
+
 export async function sendReferralOtpEmail(
   toEmail: string,
   otp: string,

@@ -5903,3 +5903,42 @@ export const insertAlbumPreviewGrantSchema = createInsertSchema(albumPreviewGran
 });
 export type AlbumPreviewGrant = typeof albumPreviewGrants.$inferSelect;
 export type InsertAlbumPreviewGrant = z.infer<typeof insertAlbumPreviewGrantSchema>;
+
+// payment_requests: one row per one-off invoice an operator sends to
+// an artist (or any person). A Stripe Payment Link is minted per row
+// so the recipient can pay without a GoodTunes checkout session. The
+// webhook marks the row paid when the session completes.
+//
+// status: pending → paid (webhook) | cancelled (operator)
+// recipientEmail is a snapshot taken at creation time so the history
+// stays readable even if the person's contactEmail changes later.
+export const paymentRequests = pgTable("payment_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdByUserId: varchar("created_by_user_id").notNull(),
+  recipientPersonId: varchar("recipient_person_id").notNull(),
+  recipientEmail: text("recipient_email").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  currency: text("currency").notNull().default("usd"),
+  description: text("description").notNull(),
+  albumId: varchar("album_id"),
+  stripePaymentLinkId: text("stripe_payment_link_id"),
+  stripePaymentLinkUrl: text("stripe_payment_link_url"),
+  status: text("status").notNull().default("pending"), // "pending"|"paid"|"cancelled"
+  paidAt: timestamp("paid_at"),
+  stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  byStatus: index("payment_requests_status_idx").on(t.status),
+  byRecipient: index("payment_requests_recipient_idx").on(t.recipientPersonId),
+}));
+export const insertPaymentRequestSchema = createInsertSchema(paymentRequests).omit({
+  id: true,
+  stripePaymentLinkId: true,
+  stripePaymentLinkUrl: true,
+  status: true,
+  paidAt: true,
+  stripeCheckoutSessionId: true,
+  createdAt: true,
+});
+export type PaymentRequest = typeof paymentRequests.$inferSelect;
+export type InsertPaymentRequest = z.infer<typeof insertPaymentRequestSchema>;
