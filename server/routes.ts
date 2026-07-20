@@ -3813,7 +3813,6 @@ export async function registerRoutes(
     "in_progress",
     "shipped",
     "closed",
-    "wont_do",
   ] as const;
 
   // Submit a bug/feature report. Identity (role/scope/name/email) is

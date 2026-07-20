@@ -9760,3 +9760,48 @@ SQL
 }
 migrate_manufacturer_logo_variants dev  "${DATABASE_URL:-}"
 migrate_manufacturer_logo_variants prod "${PROD_DATABASE_URL:-}"
+
+# Task #2757 — Remove "Won't do" feedback status: migrate any existing
+# partner_feedback rows with status='wont_do' to status='closed'. One-time,
+# marker-guarded. Idempotent on re-run once the marker is stamped.
+backfill_task_2757_feedback_wont_do() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2757 wont_do migration on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2757_feedback_wont_do'
+  ) THEN
+    UPDATE partner_feedback SET status = 'closed' WHERE status = 'wont_do';
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_2757_feedback_wont_do');
+    RAISE NOTICE 'task-2757 backfill applied: % rows migrated wont_do → closed', v_count;
+  ELSE
+    RAISE NOTICE 'task-2757 backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2757 feedback wont_do migration ok on $label"
+    echo "$out" | grep -i 'task-2757' || true
+  else
+    echo "post-merge: WARNING — task-2757 feedback wont_do migration failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_2757_feedback_wont_do dev  "${DATABASE_URL:-}"
+backfill_task_2757_feedback_wont_do prod "${PROD_DATABASE_URL:-}"

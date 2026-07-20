@@ -52,7 +52,6 @@ const STATUS_LABELS: Record<string, string> = {
   in_progress: "In progress",
   shipped: "Shipped",
   closed: "Closed",
-  wont_do: "Won't do",
 };
 
 // Light-admin status pills (no mint/pink on white — see design-system.md).
@@ -62,7 +61,6 @@ const STATUS_PILL: Record<string, string> = {
   in_progress: "bg-violet-50 text-violet-700 ring-violet-200",
   shipped: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   closed: "bg-slate-100 text-slate-600 ring-slate-200",
-  wont_do: "bg-rose-50 text-rose-700 ring-rose-200",
 };
 
 export function FeedbackStatusPill({ status }: { status: string }) {

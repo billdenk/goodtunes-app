@@ -5204,8 +5204,7 @@ export type InsertPartnerPermissions = typeof partnerPermissions.$inferInsert;
 // rest of the schema) and keep the display fields denormalized.
 //
 // status lifecycle: new → reviewing → in_progress → shipped → closed
-// (with wont_do as the alternate terminal state). `escalated` is the
-// "Escalated to dev" flag. `internalNotes` is operator-only; `publicReply`
+// `escalated` is the "Escalated to dev" flag. `internalNotes` is operator-only; `publicReply`
 // is surfaced back to the submitter in their "My requests" history.
 export const partnerFeedback = pgTable("partner_feedback", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -5220,7 +5219,7 @@ export const partnerFeedback = pgTable("partner_feedback", {
   body: text("body").notNull(),
   pageUrl: text("page_url"),
   screenshotUrl: text("screenshot_url"),
-  status: text("status").notNull().default("new"), // new|reviewing|in_progress|shipped|closed|wont_do
+  status: text("status").notNull().default("new"), // new|reviewing|in_progress|shipped|closed
   escalated: boolean("escalated").notNull().default(false),
   internalNotes: text("internal_notes"),
   publicReply: text("public_reply"),

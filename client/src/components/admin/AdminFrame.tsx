@@ -380,8 +380,8 @@ export function AdminFrame({
       o.fulfillmentStatus !== "returned",
   ).length;
   // Feedback badge counts all unresolved reports (everything except terminal
-  // statuses). Terminal = operator explicitly closed or won't-do'd the item.
-  const FEEDBACK_TERMINAL_STATUSES = new Set(["closed", "wont_do"]);
+  // statuses). Terminal = operator explicitly closed the item.
+  const FEEDBACK_TERMINAL_STATUSES = new Set(["closed"]);
   const { data: feedbackRows = [] } = useQuery<Array<{ status: string }>>({
     queryKey: ["/api/admin/feedback"],
     enabled: !!user?.isAdmin,
