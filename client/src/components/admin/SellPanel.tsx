@@ -525,12 +525,8 @@ export function SellPanel({
     enabled: !!primaryArtistId,
   });
   const artistPhotoUrl = primaryArtist?.photoUrl ?? null;
-  const costByFormat = useMemo(() => {
-    const m = new Map<string, PayoutFormatCost>();
-    const source = invitedPress?.press ? invitedPress.formatCosts : formatCosts;
-    (source ?? []).forEach((c) => m.set(c.format, c));
-    return m;
-  }, [formatCosts, invitedPress]);
+  // costByFormat is defined after isInvitedPressSelected (below) so it can
+  // correctly switch cost sources when the operator picks a non-invited press.
 
   const upsertSku = useMutation({
     mutationFn: async (body: {
@@ -908,14 +904,16 @@ export function SellPanel({
   // The selected press's catalog. When the invited press is selected
   // (the only option in dedicated mode) we already have its catalog
   // inline; for any other press we lazily load it through the same
-  // /catalog endpoint the cross-press comparison cards use, so the query
-  // cache is shared. While a foreign catalog loads we fall back to the
-  // invited catalog to avoid flashing the legacy (non-catalog) picker.
+  // /catalog endpoint the cross-press comparison cards use, so the
+  // query cache is shared.
   const invitedPressId = invitedPress?.press?.id ?? null;
   const selectedRealPressId = selectedPress?.id ?? null;
   const isInvitedPressSelected =
     !selectedRealPressId || selectedRealPressId === invitedPressId;
-  const { data: selectedPressCatalog } = useQuery<Catalog>({
+  const {
+    data: selectedPressCatalog,
+    isLoading: selectedPressCatalogLoading,
+  } = useQuery<Catalog>({
     queryKey: ["/api/admin/manufacturers", selectedRealPressId, "catalog"],
     queryFn: async () => {
       const r = await apiRequest(
@@ -926,9 +924,15 @@ export function SellPanel({
     },
     enabled: !!selectedRealPressId && !isInvitedPressSelected,
   });
+  // Bug fix: do NOT fall back to the invited catalog while a non-invited
+  // press's catalog is loading. Silently showing the invited press's
+  // swatches / jacket options during the loading window misleads operators
+  // into thinking two presses share the same colors. Keep activeCatalog
+  // null until the selected press's data arrives so the color picker and
+  // jacket picker render an honest empty / loading state instead.
   const activeCatalog: Catalog | null = isInvitedPressSelected
     ? invitedPress?.catalog ?? null
-    : selectedPressCatalog ?? invitedPress?.catalog ?? null;
+    : selectedPressCatalog ?? null;
   // The per-row color picker reads from this map (the SELECTED press).
   // The invited-press `catalogByFormat` above still drives format
   // scoping + cost-default plumbing, so those stay stable across chip
@@ -938,6 +942,24 @@ export function SellPanel({
     (activeCatalog?.formats ?? []).forEach((f) => m.set(f.format, f));
     return m;
   }, [activeCatalog]);
+
+  // Bug fix: costByFormat must reflect the SELECTED press's costs, not
+  // always the invited press's. When a non-invited press is selected we
+  // don't have that press's PayoutFormatCost overrides (those are scoped
+  // to invited presses); fall back to the platform defaults so the
+  // Profit / Artist Net / Total breakdown stops showing the invited
+  // press's numbers for a different plant.
+  // The catalog tier ladder drives the real per-quantity manufacturing
+  // cost once a tier is picked — these platform defaults only fill the
+  // fallback display before any tier is selected.
+  const costByFormat = useMemo(() => {
+    const m = new Map<string, PayoutFormatCost>();
+    const source = isInvitedPressSelected
+      ? (invitedPress?.press ? invitedPress.formatCosts : formatCosts)
+      : formatCosts;
+    (source ?? []).forEach((c) => m.set(c.format, c));
+    return m;
+  }, [formatCosts, invitedPress, isInvitedPressSelected]);
 
   // Task #1830 — The saved SKU may reference a press that differs from the
   // artist's (or label's) invited press. This happens when an operator
@@ -1416,7 +1438,7 @@ export function SellPanel({
                           allPresses={allPresses ?? null}
                           invitedPressItself={invitedPress?.press ?? null}
                           effectivePressItself={invitedPress?.press ? null : (invitedPress?.effectivePress ?? null)}
-                          pressLoading={invitedPressLoading}
+                          pressLoading={invitedPressLoading || (!isInvitedPressSelected && selectedPressCatalogLoading)}
                           pressFormatsByPress={pressFormatsByPress}
                           allPlannedQuantities={data.skus
                             .map((s) => s.plannedQuantity ?? 0)
@@ -1488,7 +1510,7 @@ export function SellPanel({
                         allPresses={allPresses ?? null}
                         invitedPressItself={invitedPress?.press ?? null}
                         effectivePressItself={invitedPress?.press ? null : (invitedPress?.effectivePress ?? null)}
-                        pressLoading={invitedPressLoading}
+                        pressLoading={invitedPressLoading || (!isInvitedPressSelected && selectedPressCatalogLoading)}
                         pressFormatsByPress={pressFormatsByPress}
                         allPlannedQuantities={data.skus
                           .map((s) => s.plannedQuantity ?? 0)
