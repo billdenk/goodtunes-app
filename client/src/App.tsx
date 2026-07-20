@@ -116,9 +116,7 @@ import { AdminShopify } from "@/pages/AdminShopify";
 import { AdminAlbumEngagement } from "@/pages/AdminAlbumEngagement";
 import { AnalyticsDebugOverlay } from "@/components/admin/AnalyticsDebugOverlay";
 import { isAnalyticsDebugOverlayEnabled } from "@/lib/analytics";
-import { NowPlayingDebugOverlay } from "@/components/admin/NowPlayingDebugOverlay";
 import { isNativeIOS } from "@/lib/platform";
-import { isFullAccessEmail } from "@shared/fullAccess";
 import { NewFanWelcomeSheet } from "@/components/NewFanWelcomeSheet";
 import { AdminReports } from "@/pages/AdminReports";
 import { AdminJobs } from "@/pages/AdminJobs";
@@ -1201,16 +1199,6 @@ function Router() {
           admin/auth/checkout paths. iOS-safe: zero Buy/price copy. */}
       <NewFanWelcomeSheet />
       {user?.kind === "admin" && isAnalyticsDebugOverlayEnabled() && <AnalyticsDebugOverlay />}
-      {/* Task #2658 — operator-only Now Playing bridge diagnostics on the
-          native iOS app (self-serve: no localStorage flag, no rebuild — the
-          shell loads the remote origin so this ships via a web publish). Lets
-          Bill read the lock-screen/CarPlay metadata fork on-device. */}
-      {isNativeIOS &&
-        (user?.kind === "admin" ||
-          user?.isAdmin ||
-          user?.role === "super_admin" ||
-          user?.role === "admin" ||
-          isFullAccessEmail(user?.email ?? "")) && <NowPlayingDebugOverlay />}
     </>
   );
 }

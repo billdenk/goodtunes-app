@@ -206,6 +206,14 @@ final class NowPlayingStore {
     /// the main thread whenever the playlists list changes so the Collection
     /// Playlists sub-list can refresh.
     var onPlaylistsChanged: (() -> Void)?
+    /// Set by `CarPlaySceneDelegate` while a head unit is connected — invoked on
+    /// the main thread immediately after the new track's metadata has been written
+    /// to MPNowPlayingInfoCenter, so the scene can explicitly refresh
+    /// CPNowPlayingTemplate via `updateNowPlayingButtons`. Without this call,
+    /// CarPlay's framework can cache the previous track's title + artwork and
+    /// visually freeze the Now Playing screen even though the info center is
+    /// correct.
+    var onTrackChanged: (() -> Void)?
     /// Set by `NowPlayingPlugin` on load — forwards a CarPlay playlist tap back
     /// to JS as a `playPlaylist` remote command with the playlist id. JS fetches
     /// the tracks and starts playing. nil when the plugin isn't loaded.

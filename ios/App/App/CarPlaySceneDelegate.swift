@@ -155,6 +155,13 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
         NowPlayingStore.shared.onPlaylistsChanged = { [weak self] in
             self?.rebuildCollectionTemplate()
         }
+        // Track changed → force CPNowPlayingTemplate to re-render. CarPlay's
+        // framework caches the template's visual state and does NOT auto-refresh
+        // title + artwork when MPNowPlayingInfoCenter changes; an explicit
+        // updateNowPlayingButtons call is required to trigger a re-render.
+        NowPlayingStore.shared.onTrackChanged = { [weak self] in
+            self?.rebuildNowPlayingButtons()
+        }
 
         // Root is the browsable tab bar; the system Now Playing surface rides on
         // top of it, matching how Apple Music / Spotify open in CarPlay (library
@@ -178,6 +185,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPN
         NowPlayingStore.shared.onRecentsChanged = nil
         NowPlayingStore.shared.onFavoriteChanged = nil
         NowPlayingStore.shared.onPlaylistsChanged = nil
+        NowPlayingStore.shared.onTrackChanged = nil
         self.tabBarTemplate = nil
         self.interfaceController = nil
     }

@@ -357,6 +357,15 @@ public class NowPlayingPlugin: CAPPlugin, CAPBridgedPlugin {
                     info[MPMediaItemPropertyArtwork] = freshArt
                 }
                 MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+                // Explicit CPNowPlayingTemplate refresh on track change: calling
+                // updateNowPlayingButtons forces CarPlay to re-render the template
+                // and pick up the new title + artwork from MPNowPlayingInfoCenter.
+                // Without this, the template can visually freeze on the previous
+                // track (its internal render cache doesn't observe info-center
+                // changes alone — an explicit template mutation is needed).
+                if trackChanged {
+                    NowPlayingStore.shared.onTrackChanged?()
+                }
             }
 
             if trackChanged {
