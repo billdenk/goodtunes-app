@@ -58,6 +58,11 @@ type ScrapeResult = {
   logoUrl: string | null;
 };
 
+function getNpoPageTab(): "dashboard" | "list" {
+  const p = new URLSearchParams(window.location.search).get("tab");
+  return p === "list" ? "list" : "dashboard";
+}
+
 export function AdminNonProfits() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -66,6 +71,13 @@ export function AdminNonProfits() {
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const [pageTab, setPageTabRaw] = useState<"dashboard" | "list">(getNpoPageTab);
+  const setPageTab = (t: "dashboard" | "list") => {
+    setPageTabRaw(t);
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", t);
+    history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+  };
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -172,7 +184,44 @@ export function AdminNonProfits() {
   return (
     <AdminFrame active="nonprofits">
       <div className="space-y-5" data-testid="page-admin-nonprofits">
-        <AdminSectionDashboard section="npos" />
+        <div
+          className="inline-flex items-center bg-slate-100 rounded-md p-0.5"
+          role="tablist"
+          data-testid="tabs-section-nonprofits"
+        >
+          <button
+            type="button"
+            onClick={() => setPageTab("dashboard")}
+            aria-pressed={pageTab === "dashboard"}
+            className={[
+              "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+              pageTab === "dashboard"
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-900",
+            ].join(" ")}
+            data-testid="tab-section-dashboard"
+          >
+            Dashboard
+          </button>
+          <button
+            type="button"
+            onClick={() => setPageTab("list")}
+            aria-pressed={pageTab === "list"}
+            className={[
+              "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+              pageTab === "list"
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-900",
+            ].join(" ")}
+            data-testid="tab-section-list"
+          >
+            NPOs
+          </button>
+        </div>
+
+        {pageTab === "dashboard" && <AdminSectionDashboard section="npos" />}
+
+        {pageTab === "list" && (<>
         <AdminPageHeader
           title="NPOs"
           subtitle="Non-profit partners. Each referrer earns $1 per paid unit attributed to them."
@@ -279,6 +328,7 @@ export function AdminNonProfits() {
             ))}
           </div>
         )}
+        </>)}
       </div>
 
       <Dialog

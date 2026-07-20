@@ -77,6 +77,11 @@ function extractDuplicateManufacturer(err: unknown): Manufacturer | null {
  * Styleguide alignment (Task #283): search-toggle + ViewModeToggle +
  * grid/list renderer mirroring Labels/Makers/NPOs.
  */
+function getMfrPageTab(): "dashboard" | "list" {
+  const p = new URLSearchParams(window.location.search).get("tab");
+  return p === "list" ? "list" : "dashboard";
+}
+
 export function AdminManufacturers() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -84,6 +89,13 @@ export function AdminManufacturers() {
   }, []);
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
+  const [pageTab, setPageTabRaw] = useState<"dashboard" | "list">(getMfrPageTab);
+  const setPageTab = (t: "dashboard" | "list") => {
+    setPageTabRaw(t);
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", t);
+    history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+  };
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -214,7 +226,44 @@ export function AdminManufacturers() {
   return (
     <AdminFrame active="manufacturers">
       <div className="space-y-5">
-        <AdminSectionDashboard section="presses" />
+        <div
+          className="inline-flex items-center bg-slate-100 rounded-md p-0.5"
+          role="tablist"
+          data-testid="tabs-section-manufacturers"
+        >
+          <button
+            type="button"
+            onClick={() => setPageTab("dashboard")}
+            aria-pressed={pageTab === "dashboard"}
+            className={[
+              "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+              pageTab === "dashboard"
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-900",
+            ].join(" ")}
+            data-testid="tab-section-dashboard"
+          >
+            Dashboard
+          </button>
+          <button
+            type="button"
+            onClick={() => setPageTab("list")}
+            aria-pressed={pageTab === "list"}
+            className={[
+              "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+              pageTab === "list"
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-900",
+            ].join(" ")}
+            data-testid="tab-section-list"
+          >
+            Presses
+          </button>
+        </div>
+
+        {pageTab === "dashboard" && <AdminSectionDashboard section="presses" />}
+
+        {pageTab === "list" && (<>
         <AdminPageHeader
           title="Presses"
           subtitle="Vinyl pressing plants and duplication houses. Invite them to bid on print runs."
@@ -345,6 +394,7 @@ export function AdminManufacturers() {
             ))}
           </div>
         )}
+        </>)}
       </div>
 
       <Dialog

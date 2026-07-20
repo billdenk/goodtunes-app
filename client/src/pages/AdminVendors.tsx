@@ -123,9 +123,21 @@ interface TrashedVendor extends VendorLite {
   deletedAt: string | null;
 }
 
+function getVendorPageTab(): "dashboard" | "list" {
+  const p = new URLSearchParams(window.location.search).get("tab");
+  return p === "list" ? "list" : "dashboard";
+}
+
 export function AdminVendors() {
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
+  const [pageTab, setPageTabRaw] = useState<"dashboard" | "list">(getVendorPageTab);
+  const setPageTab = (t: "dashboard" | "list") => {
+    setPageTabRaw(t);
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", t);
+    history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+  };
   // Task #174 — same component serves both /admin/vendors (resellers,
   // the default) and /admin/makers (gear builders). The DB row is the
   // same vendor entity; mode just narrows which flag we filter on,
@@ -615,7 +627,44 @@ export function AdminVendors() {
   return (
     <AdminFrame active={copy.active}>
       <div className="space-y-5">
-      <AdminSectionDashboard section={mode === "maker" ? "makers" : "resellers"} />
+      <div
+        className="inline-flex items-center bg-slate-100 rounded-md p-0.5"
+        role="tablist"
+        data-testid="tabs-section-vendors"
+      >
+        <button
+          type="button"
+          onClick={() => setPageTab("dashboard")}
+          aria-pressed={pageTab === "dashboard"}
+          className={[
+            "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+            pageTab === "dashboard"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-900",
+          ].join(" ")}
+          data-testid="tab-section-dashboard"
+        >
+          Dashboard
+        </button>
+        <button
+          type="button"
+          onClick={() => setPageTab("list")}
+          aria-pressed={pageTab === "list"}
+          className={[
+            "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+            pageTab === "list"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-900",
+          ].join(" ")}
+          data-testid="tab-section-list"
+        >
+          {copy.title}
+        </button>
+      </div>
+
+      {pageTab === "dashboard" && <AdminSectionDashboard section={mode === "maker" ? "makers" : "resellers"} />}
+
+      {pageTab === "list" && (<>
       <AdminPageHeader
         title={copy.title}
         subtitle={copy.subtitle}
@@ -803,6 +852,7 @@ export function AdminVendors() {
           ))}
         </div>
       )}
+      </>)}
       </div>
       <Dialog
         open={addOpen}

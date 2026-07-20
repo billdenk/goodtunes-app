@@ -90,27 +90,27 @@ function lsKey(section: SectionKind) {
 
 const SECTION_TITLES: Record<SectionKind, { title: string; subtitle: string }> = {
   labels: {
-    title: "Labels — rollup",
+    title: "Labels Dashboard",
     subtitle: "All non-deleted labels combined.",
   },
   npos: {
-    title: "NPOs — rollup",
+    title: "NPO Dashboard",
     subtitle: "All non-profit partners combined.",
   },
   presses: {
-    title: "Presses — rollup",
+    title: "Press Dashboard",
     subtitle: "All pressing plants combined.",
   },
   makers: {
-    title: "Makers — rollup",
+    title: "Makers Dashboard",
     subtitle: "All gear builders combined.",
   },
   resellers: {
-    title: "Resellers — rollup",
+    title: "Resellers Dashboard",
     subtitle: "All gear shops combined.",
   },
   fulfillment: {
-    title: "Fulfillment — rollup",
+    title: "Fulfillment Dashboard",
     subtitle: "All fulfillment partners combined.",
   },
 };
@@ -150,9 +150,6 @@ export function AdminSectionDashboard({ section }: { section: SectionKind }) {
     <div className="space-y-5" data-testid={`section-dashboard-${section}`}>
       <section className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-slate-500 text-xs uppercase tracking-wider font-semibold">
-            God-view dashboard
-          </p>
           <h2
             className="text-lg sm:text-xl font-semibold text-slate-900 truncate"
             data-testid={`heading-section-dashboard-${section}`}

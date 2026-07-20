@@ -83,9 +83,21 @@ interface LabelLite {
   location: string | null;
 }
 
+function getPageTab(): "dashboard" | "list" {
+  const p = new URLSearchParams(window.location.search).get("tab");
+  return p === "list" ? "list" : "dashboard";
+}
+
 export function AdminLabels() {
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
+  const [pageTab, setPageTabRaw] = useState<"dashboard" | "list">(getPageTab);
+  const setPageTab = (t: "dashboard" | "list") => {
+    setPageTabRaw(t);
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", t);
+    history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+  };
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -293,7 +305,44 @@ export function AdminLabels() {
   return (
     <AdminFrame active="labels">
       <div className="space-y-5">
-      <AdminSectionDashboard section="labels" />
+      <div
+        className="inline-flex items-center bg-slate-100 rounded-md p-0.5"
+        role="tablist"
+        data-testid="tabs-section-labels"
+      >
+        <button
+          type="button"
+          onClick={() => setPageTab("dashboard")}
+          aria-pressed={pageTab === "dashboard"}
+          className={[
+            "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+            pageTab === "dashboard"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-900",
+          ].join(" ")}
+          data-testid="tab-section-dashboard"
+        >
+          Dashboard
+        </button>
+        <button
+          type="button"
+          onClick={() => setPageTab("list")}
+          aria-pressed={pageTab === "list"}
+          className={[
+            "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+            pageTab === "list"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-900",
+          ].join(" ")}
+          data-testid="tab-section-list"
+        >
+          Labels
+        </button>
+      </div>
+
+      {pageTab === "dashboard" && <AdminSectionDashboard section="labels" />}
+
+      {pageTab === "list" && (<>
       <AdminPageHeader
         title="Labels"
         subtitle="Record labels + imprints. Albums link here, so edit once and it reads through everywhere."
@@ -382,6 +431,7 @@ export function AdminLabels() {
           ))}
         </div>
       )}
+      </>)}
       </div>
 
       <Dialog

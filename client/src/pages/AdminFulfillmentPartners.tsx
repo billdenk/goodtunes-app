@@ -72,6 +72,11 @@ function extractDuplicatePartner(err: unknown): FulfillmentPartner | null {
  * search-toggle + ViewModeToggle next to the existing AddEntityButton,
  * and a grid renderer mirroring Makers/Resellers.
  */
+function getFulfillmentPageTab(): "dashboard" | "list" {
+  const p = new URLSearchParams(window.location.search).get("tab");
+  return p === "list" ? "list" : "dashboard";
+}
+
 export function AdminFulfillmentPartners() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -79,6 +84,13 @@ export function AdminFulfillmentPartners() {
   }, []);
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
+  const [pageTab, setPageTabRaw] = useState<"dashboard" | "list">(getFulfillmentPageTab);
+  const setPageTab = (t: "dashboard" | "list") => {
+    setPageTabRaw(t);
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", t);
+    history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+  };
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -241,7 +253,44 @@ export function AdminFulfillmentPartners() {
   return (
     <AdminFrame active="fulfillment">
       <div className="space-y-5">
-        <AdminSectionDashboard section="fulfillment" />
+        <div
+          className="inline-flex items-center bg-slate-100 rounded-md p-0.5"
+          role="tablist"
+          data-testid="tabs-section-fulfillment"
+        >
+          <button
+            type="button"
+            onClick={() => setPageTab("dashboard")}
+            aria-pressed={pageTab === "dashboard"}
+            className={[
+              "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+              pageTab === "dashboard"
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-900",
+            ].join(" ")}
+            data-testid="tab-section-dashboard"
+          >
+            Dashboard
+          </button>
+          <button
+            type="button"
+            onClick={() => setPageTab("list")}
+            aria-pressed={pageTab === "list"}
+            className={[
+              "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+              pageTab === "list"
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-900",
+            ].join(" ")}
+            data-testid="tab-section-list"
+          >
+            Fulfillment
+          </button>
+        </div>
+
+        {pageTab === "dashboard" && <AdminSectionDashboard section="fulfillment" />}
+
+        {pageTab === "list" && (<>
         <AdminPageHeader
           title="Fulfillment partners"
           subtitle="Warehouses that ship finished records to fans."
@@ -349,6 +398,7 @@ export function AdminFulfillmentPartners() {
             )}
           </div>
         )}
+        </>)}
       </div>
 
       <Dialog
