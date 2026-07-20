@@ -453,6 +453,10 @@ workflows:
         # Selects the scripted publish behavior (scripts/publish-ios.sh):
         # "testflight" = upload + submit to TestFlight + add to the beta group.
         PUBLISH_MODE: testflight
+        # Skip downloading LFS-tracked binary blobs (attached_assets ZIP/video
+        # files) during clone. Those assets are never imported by the build;
+        # skipping them avoids exhausting the GitHub LFS bandwidth quota.
+        GIT_LFS_SKIP_SMUDGE: "1"
     # NOTE: no declarative `ios_signing:` block on purpose — signing is done
     # manually in the "Set up iOS code signing" script above so we can pass
     # `--create` (the declarative block only fetches and fails when no profile
@@ -491,6 +495,9 @@ workflows:
         # "appstore" = upload + submit to TestFlight + submit to App Store review
         # (AFTER_APPROVAL, phased release, cancel previous submissions).
         PUBLISH_MODE: appstore
+        # Skip downloading LFS-tracked binary blobs during clone (same reason as
+        # ios-testflight above — avoids exhausting GitHub LFS bandwidth quota).
+        GIT_LFS_SKIP_SMUDGE: "1"
     # NOTE: no declarative `ios_signing:` block on purpose — see the matching
     # note in the ios-testflight workflow. Signing runs in the shared script
     # with `--create`; the `app_store_connect` integration authorizes it.
@@ -522,6 +529,11 @@ workflows:
       android_signing:
         - goodtunes_keystore # keystore reference uploaded in Codemagic
       node: 20
+      vars:
+        # Skip downloading LFS-tracked binary blobs during clone (attached_assets
+        # ZIP/video files — never used by the Android build). Avoids exhausting
+        # the GitHub LFS bandwidth quota that was killing the clone step.
+        GIT_LFS_SKIP_SMUDGE: "1"
     # AUTO-TRIGGER (CONDITIONAL — native shell only): every push to `main` (the
     # GitHub build mirror that post-merge.sh force-pushes to) reaches Codemagic,
     # but the build now RUNS only when the merge changed the native shell (see the
