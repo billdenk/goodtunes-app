@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, AlertTriangle, ExternalLink, RefreshCw, Trash2, Loader2 } from "lucide-react";
 import { SiStripe } from "react-icons/si";
 import type { PayoutAccount, PayoutOwnerKind } from "@shared/schema";
+import { PhoneVerifySheet } from "@/components/PhoneVerifySheet";
 
 interface Props {
   ownerKind: PayoutOwnerKind;
@@ -23,6 +24,7 @@ export function PayoutAccountPanel({ ownerKind, ownerId, ownerName, ownerEmail, 
   const qc = useQueryClient();
   const { toast } = useToast();
   const [unlinking, setUnlinking] = useState(false);
+  const [showPhoneVerify, setShowPhoneVerify] = useState(false);
 
   const accountQ = useQuery<PayoutAccount | null>({
     queryKey: ["/api/admin/payouts/accounts", ownerKind, ownerId],
@@ -40,6 +42,44 @@ export function PayoutAccountPanel({ ownerKind, ownerId, ownerName, ownerEmail, 
     },
   });
 
+  // Best-effort: fetch the owner's phone to pre-fill the PhoneVerifySheet.
+  // Only fetches for ownerKind values that have a known phone field.
+  const ownerPhoneQ = useQuery<string | null>({
+    queryKey: ["/api/owner-phone", ownerKind, ownerId],
+    queryFn: async () => {
+      const token = getAuthToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        if (ownerKind === "manufacturer") {
+          const res = await fetch(`/api/manufacturers/${encodeURIComponent(ownerId)}`, {
+            credentials: "include",
+            headers,
+          });
+          if (!res.ok) return null;
+          const d = await res.json();
+          return d?.contactPhone ?? d?.phone ?? null;
+        }
+        if (ownerKind === "person") {
+          const res = await fetch(`/api/admin/people/${encodeURIComponent(ownerId)}`, {
+            credentials: "include",
+            headers,
+          });
+          if (!res.ok) return null;
+          const d = await res.json();
+          return d?.contactPhone ?? d?.phone ?? null;
+        }
+      } catch {
+        // best-effort
+      }
+      return null;
+    },
+    enabled: ownerKind === "manufacturer" || ownerKind === "person",
+    staleTime: Infinity,
+  });
+
+  const ownerPhone = ownerPhoneQ.data ?? undefined;
+
   const create = useMutation({
     mutationFn: async () => {
       return apiRequest("POST", "/api/admin/payouts/accounts", {
@@ -52,7 +92,16 @@ export function PayoutAccountPanel({ ownerKind, ownerId, ownerName, ownerEmail, 
       qc.invalidateQueries({ queryKey: ["/api/admin/payouts/accounts", ownerKind, ownerId] });
       toast({ title: "Stripe account created", description: "Click 'Continue onboarding' to finish KYC." });
     },
-    onError: (e: any) => toast({ title: "Couldn't create account", description: e?.message, variant: "destructive" }),
+    onError: (e: any) => {
+      // Task #2753 — If the server returns requiresPhoneVerification, open
+      // PhoneVerifySheet instead of showing a destructive toast. The sheet's
+      // onVerified callback retries the create call automatically.
+      if ((e as any)?.body?.requiresPhoneVerification) {
+        setShowPhoneVerify(true);
+        return;
+      }
+      toast({ title: "Couldn't create account", description: e?.message, variant: "destructive" });
+    },
   });
 
   const onboard = useMutation({
@@ -98,74 +147,89 @@ export function PayoutAccountPanel({ ownerKind, ownerId, ownerName, ownerEmail, 
   }
 
   return (
-    <section className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-4" data-testid="panel-payouts">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-slate-900 text-[14px] font-bold flex items-center gap-2">
-            <SiStripe className="w-3.5 h-3.5 text-[#635BFF]" />
-            {isDonation ? "Donation disbursements — bank account" : "Stripe Connect payouts"}
-          </h2>
-          <p className="text-slate-500 text-[12px] mt-0.5">
-            {isDonation
-              ? `GoodTunes wires donations earned by ${ownerName} to the bank account connected here.`
-              : `When an order on a release tied to ${ownerName} ships, the artist share is auto-transferred here.`}
-          </p>
-        </div>
-      </div>
-
-      {!account && (
-        <div className="rounded-lg border border-dashed border-slate-300 p-5 text-center" data-testid="payouts-no-account">
-          <p className="text-slate-700 text-[13.5px] font-medium">{isDonation ? "No bank account connected yet" : "No connected Stripe account yet"}</p>
-          <p className="text-slate-500 text-[12px] mt-1">
-            {isDonation
-              ? "Connect a bank account so GoodTunes can wire earned donations to your organization."
-              : "Create an Express account, then run the onboarding link to collect KYC + a bank account."}
-          </p>
-          <button
-            type="button"
-            onClick={() => create.mutate()}
-            disabled={create.isPending}
-            className="mt-3 h-9 px-4 rounded-md bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-60 inline-flex items-center gap-2"
-            data-testid="button-create-payout-account"
-          >
-            {create.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <SiStripe className="w-3.5 h-3.5" />}
-            Create Stripe Express account
-          </button>
-        </div>
-      )}
-
-      {account && <AccountDetails account={account} onboard={onboard} refresh={refresh} onUnlink={() => setUnlinking(true)} isDonation={isDonation} />}
-
-      {unlinking && account && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 space-y-2" data-testid="payouts-unlink-confirm">
-          <p className="text-rose-700 text-[13px] font-medium">Remove this connected account?</p>
-          <p className="text-rose-600 text-[12px]">
-            {isDonation
-              ? `Existing transfers stay in Stripe. Future donations for ${ownerName} won't be disbursed until you link a new bank account.`
-              : `Existing transfers stay in Stripe. Future orders for ${ownerName} will land in stuck-cases until you link a new account.`}
-          </p>
-          <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setUnlinking(false)}
-              className="h-8 px-3 rounded-md bg-white border border-slate-200 text-slate-700 text-[12px] font-semibold hover:bg-slate-50"
-              data-testid="button-unlink-cancel"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => unlink.mutate(account.id)}
-              disabled={unlink.isPending}
-              className="h-8 px-3 rounded-md bg-rose-600 text-white text-[12px] font-semibold hover:bg-rose-700 disabled:opacity-60"
-              data-testid="button-unlink-confirm"
-            >
-              {unlink.isPending ? "Removing…" : "Remove"}
-            </button>
+    <>
+      <section className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-4" data-testid="panel-payouts">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-slate-900 text-[14px] font-bold flex items-center gap-2">
+              <SiStripe className="w-3.5 h-3.5 text-[#635BFF]" />
+              {isDonation ? "Donation disbursements — bank account" : "Stripe Connect payouts"}
+            </h2>
+            <p className="text-slate-500 text-[12px] mt-0.5">
+              {isDonation
+                ? `GoodTunes wires donations earned by ${ownerName} to the bank account connected here.`
+                : `When an order on a release tied to ${ownerName} ships, the artist share is auto-transferred here.`}
+            </p>
           </div>
         </div>
+
+        {!account && (
+          <div className="rounded-lg border border-dashed border-slate-300 p-5 text-center" data-testid="payouts-no-account">
+            <p className="text-slate-700 text-[13.5px] font-medium">{isDonation ? "No bank account connected yet" : "No connected Stripe account yet"}</p>
+            <p className="text-slate-500 text-[12px] mt-1">
+              {isDonation
+                ? "Connect a bank account so GoodTunes can wire earned donations to your organization."
+                : "Create an Express account, then run the onboarding link to collect KYC + a bank account."}
+            </p>
+            <button
+              type="button"
+              onClick={() => create.mutate()}
+              disabled={create.isPending}
+              className="mt-3 h-9 px-4 rounded-md bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-60 inline-flex items-center gap-2"
+              data-testid="button-create-payout-account"
+            >
+              {create.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <SiStripe className="w-3.5 h-3.5" />}
+              Create Stripe Express account
+            </button>
+          </div>
+        )}
+
+        {account && <AccountDetails account={account} onboard={onboard} refresh={refresh} onUnlink={() => setUnlinking(true)} isDonation={isDonation} />}
+
+        {unlinking && account && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 space-y-2" data-testid="payouts-unlink-confirm">
+            <p className="text-rose-700 text-[13px] font-medium">Remove this connected account?</p>
+            <p className="text-rose-600 text-[12px]">
+              {isDonation
+                ? `Existing transfers stay in Stripe. Future donations for ${ownerName} won't be disbursed until you link a new bank account.`
+                : `Existing transfers stay in Stripe. Future orders for ${ownerName} will land in stuck-cases until you link a new account.`}
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setUnlinking(false)}
+                className="h-8 px-3 rounded-md bg-white border border-slate-200 text-slate-700 text-[12px] font-semibold hover:bg-slate-50"
+                data-testid="button-unlink-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => unlink.mutate(account.id)}
+                disabled={unlink.isPending}
+                className="h-8 px-3 rounded-md bg-rose-600 text-white text-[12px] font-semibold hover:bg-rose-700 disabled:opacity-60"
+                data-testid="button-unlink-confirm"
+              >
+                {unlink.isPending ? "Removing…" : "Remove"}
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {showPhoneVerify && (
+        <PhoneVerifySheet
+          open={true}
+          reason="payouts"
+          initialPhone={ownerPhone}
+          onClose={() => setShowPhoneVerify(false)}
+          onVerified={() => {
+            setShowPhoneVerify(false);
+            create.mutate();
+          }}
+        />
       )}
-    </section>
+    </>
   );
 }
 
