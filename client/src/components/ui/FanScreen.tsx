@@ -180,13 +180,13 @@ export function FanScreen({
             {/* Spacer that pushes the first content row below the absolutely
                 positioned header. Derive it from the SAME chrome inset the
                 header uses (FAN_TOP_CHROME_INSET + 44px control + 36px title
-                row + 12px pb = header bottom edge) plus a comfortable ~40px
+                row + 12px pb = header bottom edge) plus a comfortable ~20px
                 Apple-Music large-title margin, so the title always clears the
                 content with breathing room on flat AND notched/safe-area
                 devices — a fixed height under-clears on notched screens. */}
             <div
               aria-hidden
-              style={{ height: `calc(${FAN_TOP_CHROME_INSET} + 132px)`, flexShrink: 0 }}
+              style={{ height: `calc(${FAN_TOP_CHROME_INSET} + 112px)`, flexShrink: 0 }}
             />
             {children}
           </div>
