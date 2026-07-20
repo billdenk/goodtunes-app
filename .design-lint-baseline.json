@@ -11985,6 +11985,16 @@
     "snippet": "<button onClick={onDelete} disabled={busy} aria-label=\"Delete split\" className=\"h-7 w-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:"
   },
   {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/TabBtn.tsx",
+    "snippet": "\"relative py-2.5 text-[13.5px] font-semibold transition-colors inline-flex items-center gap-1.5 flex-shrink-0\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/TabBtn.tsx",
+    "snippet": "\"tabular-nums text-[11.5px] font-bold px-1.5 py-px rounded\","
+  },
+  {
     "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/components/admin/TrackCreditsPanel.tsx",
     "snippet": "<Link"
@@ -15638,16 +15648,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbums.tsx",
     "snippet": "<span className=\"text-slate-400 text-[11px] uppercase tracking-wide font-semibold tabular-nums\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbums.tsx",
-    "snippet": "\"relative py-2.5 text-[13.5px] font-semibold transition-colors inline-flex items-center gap-1.5 flex-shrink-0\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbums.tsx",
-    "snippet": "\"tabular-nums text-[11.5px] font-bold px-1.5 py-px rounded\","
   },
   {
     "rule": "hardcoded-font-size",
@@ -21457,6 +21457,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "className=\"w-48 bg-transparent text-[12.5px] text-slate-700 placeholder-slate-400 focus:outline-none\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
     "snippet": "<div className=\"flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium\">"
   },
   {
@@ -21498,6 +21503,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
     "snippet": "<p className=\"text-[11px] text-slate-400\">Daily activity over the selected window</p>"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<button type=\"button\" onClick={closeSearch} className=\"text-slate-400 hover:text-slate-700\" data-testid=\"button-close-search-press-albums\" aria-label=\"Close search\" > <XIcon className=\"w-3.5 h-3.5\" />"
   },
   {
     "rule": "hardcoded-font-size",

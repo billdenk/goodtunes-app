@@ -21,7 +21,7 @@
 //                 Catalog deep-links into the existing manufacturer
 //                 catalog editor under /admin/manufacturers/:id.
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch, useLocation, useRoute } from "wouter";
 import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Mail, FileCheck, Pencil } from "lucide-react";
@@ -70,6 +70,7 @@ import {
   type PersonLite,
 } from "@/pages/AdminPeople";
 import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
+import { TabBtn } from "@/components/admin/TabBtn";
 import { PRIMARY_CREATIVE_CREDITS } from "@/components/admin/RolePicker";
 
 // pipeline + reports stay in the union so direct ?tab= URLs still render
@@ -395,7 +396,10 @@ interface PressAlbumLite {
   awaitingPressingOrder?: boolean;
 }
 
-const PRESS_ALBUM_STAGE_TABS: { key: AlbumStage; label: string }[] = [
+type PressAlbumTabKey = AlbumStage | "all";
+
+const PRESS_ALBUM_STAGE_TABS: { key: PressAlbumTabKey; label: string }[] = [
+  { key: "all",       label: "All"       },
   { key: "prepping",  label: "Prepping"  },
   { key: "at_press",  label: "At press"  },
   { key: "staged",    label: "Staged"    },
@@ -404,8 +408,11 @@ const PRESS_ALBUM_STAGE_TABS: { key: AlbumStage; label: string }[] = [
 ];
 
 function PressAlbumsTab({ pressId }: { pressId: string }) {
-  const [stageTab, setStageTab] = useState<AlbumStage>("at_press");
+  const [stageTab, setStageTab] = useState<PressAlbumTabKey>("all");
   const [view, setView] = useViewMode("press-albums");
+  const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { data: albums = [], isLoading } = useQuery<PressAlbumLite[]>({
     queryKey: [`/api/press/${pressId}/albums`],
@@ -419,9 +426,37 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
     return map;
   }, [albums]);
 
-  const visible = byStage[stageTab];
+  const visible = useMemo(() => {
+    const pool = stageTab === "all" ? albums : byStage[stageTab];
+    if (!search.trim()) return pool;
+    const q = search.toLowerCase();
+    return albums.filter(
+      (a) =>
+        a.title.toLowerCase().includes(q) ||
+        (a.artist ?? "").toLowerCase().includes(q),
+    );
+  }, [albums, byStage, stageTab, search]);
+
+  const closeSearch = () => {
+    setSearch("");
+    setSearchOpen(false);
+  };
+
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
 
   if (isLoading) return <PanelLoading />;
+
+  const tabCount = (key: PressAlbumTabKey) =>
+    key === "all" ? albums.length : byStage[key as AlbumStage].length;
+
+  const emptyLabel =
+    search.trim()
+      ? "No releases match that search."
+      : stageTab === "all"
+      ? "No albums yet."
+      : `No ${stageTab.replace("_", " ")} albums.`;
 
   return (
     <div className="space-y-4" data-testid="press-albums-tab">
@@ -429,41 +464,66 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
         title="Albums"
         subtitle="GoodTunes releases pressed by your plant, grouped by lifecycle stage."
         testId="heading-press-albums"
+        actions={
+          <>
+            {searchOpen ? (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-white border border-slate-200 shadow-sm">
+                <SearchIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                <input
+                  ref={searchInputRef}
+                  className="w-48 bg-transparent text-[12.5px] text-slate-700 placeholder-slate-400 focus:outline-none"
+                  placeholder="Find an album or artist…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") closeSearch();
+                  }}
+                  data-testid="input-search-press-albums"
+                />
+                <button
+                  type="button"
+                  onClick={closeSearch}
+                  className="text-slate-400 hover:text-slate-700"
+                  data-testid="button-close-search-press-albums"
+                  aria-label="Close search"
+                >
+                  <XIcon className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+                data-testid="button-open-search-press-albums"
+                aria-label="Search albums"
+              >
+                <SearchIcon className="w-4 h-4" />
+              </button>
+            )}
+            <ViewModeToggle view={view} onToggle={setView} />
+          </>
+        }
+        belowHeader={
+          <div className="border-b border-slate-200 flex items-center gap-6 overflow-x-auto">
+            {PRESS_ALBUM_STAGE_TABS.map((t) => (
+              <TabBtn
+                key={t.key}
+                active={stageTab === t.key}
+                onClick={() => setStageTab(t.key)}
+                count={tabCount(t.key)}
+                testId={`tab-press-albums-${t.key}`}
+              >
+                {t.label}
+              </TabBtn>
+            ))}
+          </div>
+        }
       />
-
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-0 rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
-          {PRESS_ALBUM_STAGE_TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setStageTab(t.key)}
-              className={[
-                "inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap",
-                stageTab === t.key
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-50",
-              ].join(" ")}
-              data-testid={`tab-press-albums-${t.key}`}
-            >
-              {t.label}
-              {byStage[t.key].length > 0 && (
-                <span className={[
-                  "text-xs font-semibold tabular-nums",
-                  stageTab === t.key ? "opacity-70" : "opacity-50",
-                ].join(" ")}>
-                  {byStage[t.key].length}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-        <ViewModeToggle view={view} onToggle={setView} />
-      </div>
 
       {visible.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-400 text-sm" data-testid="empty-press-albums">
-          No {stageTab} albums.
+          {emptyLabel}
         </div>
       ) : view === "grid" ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3" data-testid="grid-press-albums">
