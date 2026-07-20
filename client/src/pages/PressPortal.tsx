@@ -74,9 +74,9 @@ import { PRIMARY_CREATIVE_CREDITS } from "@/components/admin/RolePicker";
 
 // pipeline + reports stay in the union so direct ?tab= URLs still render
 // their content (they're just hidden from the nav per Task #2188).
-type TabId = "dashboard" | "people" | "catalog" | "albums" | "pipeline" | "reports" | "pricing" | "settings";
+type TabId = "dashboard" | "people" | "catalog" | "albums" | "pipeline" | "reports" | "pricing" | "referrals" | "settings";
 
-const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "catalog", "albums", "pipeline", "reports", "pricing", "settings"];
+const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "catalog", "albums", "pipeline", "reports", "pricing", "referrals", "settings"];
 
 interface MeRole { role: string; roleScopeId: string | null; }
 interface PressMe {
@@ -346,6 +346,16 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       {tab === "pipeline" && <PipelineTab pressId={pressId} />}
       {tab === "reports" && <AdminReports embedded />}
       {tab === "pricing" && <AdminGoodDeedPricing embedded />}
+      {tab === "referrals" && (
+        <div className="space-y-4" data-testid="press-referrals-tab">
+          <AdminPageHeader
+            title="Referrals"
+            subtitle="Share your link to recruit artists — anyone who applies lands in the GoodTunes review queue."
+            testId="heading-press-referrals"
+          />
+          <ReferralLinkWidget kind="manufacturer" scopeId={pressId} canEdit={me?.canEdit !== false} />
+        </div>
+      )}
       {tab === "settings" && <SettingsTab pressId={pressId} pressName={me?.name ?? ""} />}
       </>
       )}
@@ -609,11 +619,6 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
 
   return (
     <div className="space-y-5">
-      {/* Reusable referral link — press owners/admins can share this URL
-          on socials or via email to recruit artists without sending individual
-          invites. Staff teammates (canEdit=false) see the widget read-only. */}
-      <ReferralLinkWidget kind="manufacturer" scopeId={pressId} canEdit={canEdit} />
-
       <AdminPageHeader
         title="People"
         subtitle="Artists homed to your press, plus anyone leading an album you're pressing."

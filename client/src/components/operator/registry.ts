@@ -169,6 +169,7 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "catalog",   label: "Vinyl catalog",    icon: BookOpen,         roles: ["press"] },
   { id: "pricing",   label: "GoodDeed pricing", icon: CircleDollarSign, roles: ["press"] },
   { id: "settings",  label: "Settings",         icon: Cog,              roles: ["press"] },
+  { id: "referrals", label: "Referrals",        icon: UserPlus,         roles: ["press"] },
 
   // GoodDeed Quickprinter shell — `/vendor` routed via VendorScopeRouter
   // for is_quickprinter vendors (PrinterPortal.tsx). Print Queue stays the

@@ -11,7 +11,19 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, Check, RefreshCw, Link2, ToggleLeft, ToggleRight, Loader2, ExternalLink } from "lucide-react";
+import { Copy, Check, RefreshCw, Link2, Loader2, ExternalLink } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface ReferralLinkData {
   id: string;
@@ -44,7 +56,6 @@ interface Props {
 export function ReferralLinkWidget({ kind, scopeId, canEdit = false }: Props) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
-  const [confirmRegen, setConfirmRegen] = useState(false);
 
   const q = useQuery<ReferralLinkData>({
     queryKey: ["/api/referral-links", kind, scopeId],
@@ -69,7 +80,6 @@ export function ReferralLinkWidget({ kind, scopeId, canEdit = false }: Props) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/referral-links", kind, scopeId] });
-      setConfirmRegen(false);
       toast({ title: "New referral link generated", description: "The old URL no longer works." });
     },
     onError: (e: Error) => {
@@ -145,21 +155,17 @@ export function ReferralLinkWidget({ kind, scopeId, canEdit = false }: Props) {
         </div>
 
         {canEdit && (
-          <button
-            type="button"
-            onClick={() => toggleMutation.mutate(!link.active)}
-            disabled={toggleMutation.isPending}
-            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 transition-colors disabled:opacity-50"
-            data-testid={`button-toggle-referral-${link.active ? "disable" : "enable"}`}
-            title={link.active ? "Disable link" : "Enable link"}
-          >
-            {link.active ? (
-              <ToggleRight className="w-5 h-5 text-[var(--brand-blue)]" />
-            ) : (
-              <ToggleLeft className="w-5 h-5 text-slate-400" />
-            )}
-            {link.active ? "Active" : "Off"}
-          </button>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={link.active}
+              onCheckedChange={(checked) => toggleMutation.mutate(checked)}
+              disabled={toggleMutation.isPending}
+              data-testid={`switch-referral-active`}
+            />
+            <span className="text-xs text-slate-500">
+              {link.active ? "Active" : "Off"}
+            </span>
+          </div>
         )}
       </div>
 
@@ -199,40 +205,38 @@ export function ReferralLinkWidget({ kind, scopeId, canEdit = false }: Props) {
 
       {/* Regenerate */}
       {canEdit && (
-        confirmRegen ? (
-          <div className="flex items-center gap-2 pt-1" data-testid="confirm-regen">
-            <span className="text-xs text-slate-600 flex-1">
-              The old link breaks immediately. Continue?
-            </span>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
             <button
               type="button"
-              onClick={() => regenMutation.mutate()}
-              disabled={regenMutation.isPending}
-              className="text-xs font-semibold text-rose-600 hover:underline disabled:opacity-50"
-              data-testid="button-confirm-regen"
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+              data-testid="button-regen-referral"
             >
-              {regenMutation.isPending ? "Regenerating…" : "Yes, regenerate"}
+              <RefreshCw className="w-3.5 h-3.5" />
+              Generate new link (old link will break)
             </button>
-            <button
-              type="button"
-              onClick={() => setConfirmRegen(false)}
-              className="text-xs text-slate-400 hover:text-slate-600"
-              data-testid="button-cancel-regen"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setConfirmRegen(true)}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors"
-            data-testid="button-regen-referral"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Generate new link (old link will break)
-          </button>
-        )
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Generate a new referral link?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Anyone using the current link won't be able to reach your referral page anymore.
+                This can't be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-regen">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => regenMutation.mutate()}
+                disabled={regenMutation.isPending}
+                className="bg-rose-600 text-white hover:bg-rose-700"
+                data-testid="button-confirm-regen"
+              >
+                {regenMutation.isPending ? "Generating…" : "Generate new link"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </div>
   );
