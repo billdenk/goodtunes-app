@@ -160,10 +160,20 @@ export function PressLogoEditorDialog({
       }),
   });
 
+  const ALLOWED_LOGO_TYPES = new Set([
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "image/avif",
+  ]);
+
   const acceptFile = (file: File | undefined | null) => {
     if (!file) return;
-    if (!/^image\//.test(file.type)) {
-      toast({ title: "That's not an image", description: "Use a JPG, PNG, or WebP file.", variant: "destructive" });
+    // SVG is intentionally excluded — it can carry executable script.
+    // Check the explicit allow-list rather than the broad image/* prefix.
+    if (!ALLOWED_LOGO_TYPES.has(file.type)) {
+      toast({ title: "That format isn't supported", description: "Use a JPG, PNG, WebP, GIF, or AVIF file.", variant: "destructive" });
       return;
     }
     if (file.size > 8 * 1024 * 1024) {

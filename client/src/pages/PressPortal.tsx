@@ -2260,7 +2260,14 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
     const ext = (file.name.split(".").pop() || "png").toLowerCase();
     const r = await apiRequest("POST", `/api/press/${pressId}/profile/logo-url`, { ext });
     const { uploadUrl, publicUrl } = await r.json();
-    await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "image/png" }, body: file });
+    // The Replit-signed PUT URL is signed WITHOUT binding a Content-Type,
+    // so GCS will reject any PUT that includes a Content-Type header (signature
+    // mismatch). Omit the header entirely — the serving route derives the correct
+    // content type from the file extension as a fallback.
+    const putRes = await fetch(uploadUrl, { method: "PUT", body: file });
+    if (!putRes.ok) {
+      throw new Error(`Upload failed (${putRes.status}) — try again or use the paste-a-URL option.`);
+    }
     return publicUrl;
   }
 
