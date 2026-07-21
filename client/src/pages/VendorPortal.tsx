@@ -198,6 +198,7 @@ function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string;
       {tab === "dashboard" && (
         <PartnerDashboard
           scope="vendor"
+          sectionTitle="Dashboard"
           title={vendor?.name ?? "Your dashboard"}
           subtitle="Jobs, units, and turn-time across your GoodTunes pipeline"
           scopeIdQs={superAdminScopeKind ? vendorId : null}
