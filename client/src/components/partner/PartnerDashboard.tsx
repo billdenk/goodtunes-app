@@ -92,6 +92,7 @@ export function PartnerDashboard({
   scopeIdQs,
   scopeKindQs,
   extraHeader,
+  hideTitle,
 }: {
   scope: PartnerScopeKind;
   title: string;
