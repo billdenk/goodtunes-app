@@ -170,3 +170,12 @@ export const SERVICE_LOGO: Record<StreamingServiceId, string> = {
   deezer: deezerLogo,
   pandora: pandoraLogo,
 };
+
+export const SERVICE_COLOR: Record<StreamingServiceId, string> = {
+  spotify: "#1DB954",
+  apple_music: "#FC3C44",
+  tidal: "#000000",
+  qobuz: "#005BB8",
+  deezer: "#00C7F2",
+  pandora: "#224099",
+};

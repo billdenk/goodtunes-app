@@ -42,7 +42,10 @@ import {
   setFavoriteStreamingService,
   handoffUrlForService,
   openStreamLink,
+  linkForService,
   STREAMING_SERVICES,
+  SERVICE_LOGO,
+  SERVICE_COLOR,
   type StreamingServiceId,
   type StreamLinks,
 } from "@/lib/streamingService";
@@ -358,17 +361,27 @@ export function AlbumDetail({
 // Make that unmistakable and remind them checkout is disabled — the server
 // also hard-rejects any checkout that carries the pass, so this is purely a UX
 // signal, never the enforcement.
-// "Loving this album? Tell a friend" — one-time bottom sheet that pops on a
-// fan's second listen session for an album they own. Matches the Apple-Music
-// share-prompt chrome: white card, large album art, single CTA.
-function TellAFriendCard({
+// Shared white bottom-sheet layout used by Tell-A-Friend, Pre-save, and
+// Now-Available prompts. All three share the same chrome: rounded-top card,
+// plain X in the top-right corner (no circle), large bold heading, muted
+// subtitle, square album art (real art when available), full-width pill CTA.
+type PromptAlbum = { title: string; artist: string; artwork: string };
+function PromptSheet({
+  heading,
+  subtitle,
   album,
-  onShare,
   onClose,
+  testId,
+  scrimTestId,
+  children,
 }: {
-  album: { title: string; artist: string; artwork: string };
-  onShare: () => void;
+  heading: string;
+  subtitle: string;
+  album: PromptAlbum;
   onClose: () => void;
+  testId?: string;
+  scrimTestId?: string;
+  children: React.ReactNode;
 }) {
   const reduce = useReducedMotion() ?? false;
   return (
@@ -379,49 +392,143 @@ function TellAFriendCard({
         animate={{ opacity: 1 }}
         transition={scrimFade(reduce)}
         onClick={onClose}
-        data-testid="overlay-tell-friend-scrim"
+        data-testid={scrimTestId ?? "overlay-prompt-sheet-scrim"}
       />
       <motion.div
-        className="fixed bottom-0 left-0 right-0 z-[71] bg-white rounded-t-3xl px-6 pt-6 flex flex-col items-center gap-5"
+        className="fixed bottom-0 left-0 right-0 z-[71] bg-white rounded-t-3xl px-6 pt-8 flex flex-col items-center gap-5"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 32px)" }}
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
         transition={sheetOpen(reduce)}
-        data-testid="card-tell-friend"
+        data-testid={testId ?? "card-prompt-sheet"}
       >
+        {/* X — IconButton with background stripped so no circle shows */}
         <IconButton
           size="md"
           variant="dimmed"
-          className="absolute top-4 right-4"
+          className="absolute top-4 right-5 !bg-transparent !shadow-none text-black/30 hover:text-black/50"
           onClick={onClose}
-          data-testid="button-close-tell-friend"
           aria-label="Dismiss"
-          style={{ color: "rgba(0,0,0,0.5)" }}
+          data-testid="button-close-prompt-sheet"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4 stroke-2" />
         </IconButton>
-        <div className="text-center pt-1">
-          <p className="text-xl font-bold text-black leading-snug">Loving this album?</p>
-          <p className="text-sm mt-0.5" style={{ color: "rgba(0,0,0,0.45)" }}>Share the love. Tell a friend!</p>
+        <div className="text-center">
+          <p className="text-2xl font-black text-black leading-tight">{heading}</p>
+          <p className="text-sm mt-1.5 leading-snug" style={{ color: "rgba(0,0,0,0.45)" }}>{subtitle}</p>
         </div>
-        <div className="w-44 h-44 rounded-2xl overflow-hidden shadow-xl flex-shrink-0">
-          <AlbumCover
-            artworkUrl={album.artwork}
-            artistPhoto={null}
-            title={album.title}
-            artist={album.artist}
-          />
+        {/* Album art — direct <img> so the URL always renders; AlbumCover fallback when missing */}
+        <div className="w-44 h-44 rounded-2xl overflow-hidden shadow-lg flex-shrink-0">
+          {album.artwork ? (
+            <img src={album.artwork} alt={album.title} className="w-full h-full object-cover" />
+          ) : (
+            <AlbumCover artwork={null} artistPhoto={null} title={album.title} />
+          )}
         </div>
-        <button
-          className="w-full rounded-full py-4 text-base font-semibold text-white"
-          style={{ backgroundColor: "var(--brand-blue)" }}
-          onClick={() => { onShare(); onClose(); }}
-          data-testid="button-tell-a-friend"
-        >
-          Tell a friend
-        </button>
+        {children}
       </motion.div>
     </>
+  );
+}
+
+function TellAFriendCard({
+  album,
+  onShare,
+  onClose,
+}: {
+  album: PromptAlbum;
+  onShare: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <PromptSheet
+      heading="Loving this album?"
+      subtitle="Share the love. Tell a friend!"
+      album={album}
+      onClose={onClose}
+      testId="card-tell-friend"
+      scrimTestId="overlay-tell-friend-scrim"
+    >
+      <button
+        type="button"
+        className="w-full rounded-full py-4 text-base font-semibold text-white"
+        style={{ backgroundColor: "var(--brand-blue)" }}
+        onClick={() => { onShare(); onClose(); }}
+        data-testid="button-tell-a-friend"
+      >
+        Tell a friend
+      </button>
+    </PromptSheet>
+  );
+}
+
+function PresaveCard({
+  album,
+  onSelectService,
+  onClose,
+}: {
+  album: PromptAlbum;
+  onSelectService: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <PromptSheet
+      heading="Pre-save Now"
+      subtitle={`Get notified when ${album.title} is available on your favorite streaming service`}
+      album={album}
+      onClose={onClose}
+      testId="card-presave"
+      scrimTestId="overlay-presave-scrim"
+    >
+      <button
+        type="button"
+        className="w-full rounded-full py-4 text-base font-semibold text-white"
+        style={{ backgroundColor: "var(--brand-blue)" }}
+        onClick={onSelectService}
+        data-testid="button-presave-select-service"
+      >
+        Select Streaming Service
+      </button>
+    </PromptSheet>
+  );
+}
+
+function NowAvailableCard({
+  album,
+  serviceId,
+  onListen,
+  onClose,
+}: {
+  album: PromptAlbum;
+  serviceId: StreamingServiceId;
+  onListen: () => void;
+  onClose: () => void;
+}) {
+  const svc = STREAMING_SERVICES.find((s) => s.id === serviceId);
+  const label = svc?.label ?? serviceId;
+  const color = SERVICE_COLOR[serviceId] ?? "var(--brand-blue)";
+  const logo = SERVICE_LOGO[serviceId];
+  return (
+    <PromptSheet
+      heading={`Now Available\non ${label}`}
+      subtitle="The album you love on your favorite streaming service"
+      album={album}
+      onClose={onClose}
+      testId="card-now-available"
+      scrimTestId="overlay-now-available-scrim"
+    >
+      <button
+        type="button"
+        className="w-full rounded-full py-4 text-base font-semibold text-white flex items-center justify-center gap-2"
+        style={{ backgroundColor: color }}
+        onClick={onListen}
+        data-testid="button-now-available-listen"
+      >
+        <span>Listen on</span>
+        {logo && <img src={logo} alt="" className="w-5 h-5 object-contain" aria-hidden />}
+        <span>{label}</span>
+      </button>
+    </PromptSheet>
   );
 }
 
@@ -631,6 +738,8 @@ function AlbumDetailMobile({
   };
   const [downloadedSongs, setDownloadedSongs] = useState<Set<string>>(new Set());
   const [showTellAFriend, setShowTellAFriend] = useState(false);
+  const [showPresave, setShowPresave] = useState(false);
+  const [nowAvailable, setNowAvailable] = useState<{ serviceId: StreamingServiceId; url: string } | null>(null);
 
   // Source-of-truth for base album + tracklist is the API (so CMS edits and
   // newly-created albums show up here, including inside the /admin live
@@ -913,7 +1022,22 @@ function AlbumDetailMobile({
     const fav =
       (user?.favoriteStreamingService as StreamingServiceId | undefined) ??
       getFavoriteStreamingService();
+
+    // If the album has no direct streaming links on any service → pre-save prompt.
+    const anyDirectLink = STREAMING_SERVICES.some((s) => !!linkForService(s.id, links));
+    if (!anyDirectLink) {
+      setShowPresave(true);
+      return;
+    }
+
     if (fav) {
+      const directLink = linkForService(fav, links);
+      if (directLink) {
+        // Fan has a favorite AND there's a real link → show "Now Available" card.
+        setNowAvailable({ serviceId: fav, url: directLink });
+        return;
+      }
+      // Fav service has no direct link — fall back to search handoff immediately.
       openStreamLink(handoffUrlForService(fav, links, searchQuery));
       return;
     }
@@ -1487,6 +1611,26 @@ function AlbumDetailMobile({
             album={{ title: album.title, artist: album.artist, artwork: album.artwork }}
             onShare={handleShare}
             onClose={() => setShowTellAFriend(false)}
+          />
+        )}
+
+        {showPresave && (
+          <PresaveCard
+            album={{ title: album.title, artist: album.artist, artwork: album.artwork }}
+            onSelectService={() => {
+              setShowPresave(false);
+              setStreamPicker({ links: {}, searchQuery: `${album.artist} ${album.title}`.trim(), subtitle: album.title });
+            }}
+            onClose={() => setShowPresave(false)}
+          />
+        )}
+
+        {nowAvailable && (
+          <NowAvailableCard
+            album={{ title: album.title, artist: album.artist, artwork: album.artwork }}
+            serviceId={nowAvailable.serviceId}
+            onListen={() => { openStreamLink(nowAvailable.url); setNowAvailable(null); }}
+            onClose={() => setNowAvailable(null)}
           />
         )}
 
