@@ -109,6 +109,9 @@ export function PartnerDashboard({
   scopeKindQs?: "vendor" | "manufacturer" | "fulfillment" | null;
   /** Slot rendered above the range picker (e.g. brand row). */
   extraHeader?: React.ReactNode;
+  /** When true, suppresses every title/eyebrow — use when the portal shell
+   * header already shows the org name and a heading would be redundant. */
+  hideTitle?: boolean;
 }) {
   const [preset, setPreset] = useState<PartnerRangePreset>("30d");
   const qs = useMemo(() => {
@@ -133,7 +136,18 @@ export function PartnerDashboard({
   return (
     <div className="space-y-6" data-testid={`partner-dashboard-${scope}`}>
       <section className="space-y-4">
-        {sectionTitle ? (
+        {hideTitle ? (
+          /* Shell already shows org name — just range picker + optional subtitle */
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {subtitle && <p className="text-slate-500 text-sm">{subtitle}</p>}
+            <RangePicker
+              presets={RANGE_PRESETS}
+              value={preset}
+              onChange={setPreset}
+              testId={`range-picker-${scope}`}
+            />
+          </div>
+        ) : sectionTitle ? (
           /* Section-title header (artist Dashboard tab): the canonical
              super-admin AdminPageHeader treatment so this tab matches the
              clean section headers the shell draws on every other artist tab. */
