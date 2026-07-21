@@ -92,7 +92,6 @@ export function PartnerDashboard({
   scopeIdQs,
   scopeKindQs,
   extraHeader,
-  hideTitle,
 }: {
   scope: PartnerScopeKind;
   title: string;
@@ -100,9 +99,8 @@ export function PartnerDashboard({
   /** When set, the header renders in the super-admin section-title treatment
    * — a single bold H1 (`sectionTitle`) with the range picker inline on the
    * right and a bottom hairline — instead of the "Dashboard" eyebrow + entity
-   * name. The artist shell passes "Dashboard" here so this tab matches the
-   * clean section headers on its other tabs; `title` (the entity name) stays
-   * available for the rail. Label/NPO/Vendor omit it → unchanged. */
+   * name. All partner portals pass "Dashboard" here so the tab matches the
+   * clean section headers the shell draws on every other tab. */
   sectionTitle?: ReactNode;
   /** Optional `?scopeId=…` for super-admin impersonation. */
   scopeIdQs?: string | null;
@@ -110,9 +108,6 @@ export function PartnerDashboard({
   scopeKindQs?: "vendor" | "manufacturer" | "fulfillment" | null;
   /** Slot rendered above the range picker (e.g. brand row). */
   extraHeader?: React.ReactNode;
-  /** When true, suppresses every title/eyebrow — use when the portal shell
-   * header already shows the org name and a heading would be redundant. */
-  hideTitle?: boolean;
 }) {
   const [preset, setPreset] = useState<PartnerRangePreset>("30d");
   const qs = useMemo(() => {
@@ -137,18 +132,7 @@ export function PartnerDashboard({
   return (
     <div className="space-y-6" data-testid={`partner-dashboard-${scope}`}>
       <section className="space-y-4">
-        {hideTitle ? (
-          /* Shell already shows org name — just range picker + optional subtitle */
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            {subtitle && <p className="text-slate-500 text-sm">{subtitle}</p>}
-            <RangePicker
-              presets={RANGE_PRESETS}
-              value={preset}
-              onChange={setPreset}
-              testId={`range-picker-${scope}`}
-            />
-          </div>
-        ) : sectionTitle ? (
+        {sectionTitle ? (
           /* Section-title header (artist Dashboard tab): the canonical
              super-admin AdminPageHeader treatment so this tab matches the
              clean section headers the shell draws on every other artist tab. */
