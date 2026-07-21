@@ -171,7 +171,7 @@ export function NonProfitDashboard() {
       {tab === "dashboard" && (
         <PartnerDashboard
           scope="npo"
-          hideTitle
+          sectionTitle="Dashboard"
           title={me.data?.name ?? "Your dashboard"}
           subtitle="Donation activity from referred artists"
         />
