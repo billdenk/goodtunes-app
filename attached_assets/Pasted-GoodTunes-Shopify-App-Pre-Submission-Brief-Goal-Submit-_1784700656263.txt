@@ -1,0 +1,27 @@
+GoodTunes Shopify App — Pre-Submission Brief
+Goal: Submit the GoodTunes app through Shopify's official app review so it installs without the "unverified" banner. We're submitting as a public app with unlisted visibility (approved and installable via App Store link, but not searchable). The review process is the same as a fully listed app, so everything below needs to pass.
+How you implement these is your call — this covers what Shopify's review requires, not how to build it.
+Distribution setting
+In the Partner Dashboard, the app's distribution needs to be set to Public. Note this is one-time and irreversible — before flipping it, confirm nothing in the current setup depends on it remaining a custom app (existing installs, install links in use, etc.). Flag anything that would break before you switch it.
+Mandatory compliance webhooks
+All three GDPR webhooks must be implemented and returning correct responses:
+customers/data_request
+customers/redact
+shop/redact
+These need to actually process (or log and acknowledge) the requests, not just return 200 blindly. Shopify's automated checks test these.
+OAuth
+The install flow must complete cleanly through standard OAuth. Request only the scopes we actually use — reviewers reject apps requesting scopes with no visible purpose. Please list the scopes we're currently requesting and what each is used for, so we can trim anything unnecessary.
+Billing
+The app is free to install (our fees are per-unit outside Shopify), so mark it as free. We do not need the Billing API unless we ever charge merchants inside Shopify — we don't.
+Install / uninstall hygiene
+Fresh install on a clean development store works first try, no errors
+Uninstall removes or deactivates everything cleanly — no orphaned webhooks, no broken states
+Reinstall after uninstall works without residue issues
+Protected customer data access
+Since orders flow to GoodTunes for fulfillment (names, emails, shipping addresses), we need to apply for protected customer data access under API Access in the Partner Dashboard. Please prepare the answers on data use: what fields we access, why, where they're stored, retention. Skipping this is a common rejection reason.
+Automated pre-checks
+The Partner Dashboard runs automated tests plus an AI self-review before human review. Run these and clear everything they flag before we submit.
+Listing content (light version for unlisted)
+Even unlisted apps need the listing fields filled: app name, icon, short description, at least basic screenshots, support email, and a privacy policy URL. Also prepare test credentials and a development store the reviewer can use to walk the full install-to-use flow. Send me anything you need from my side (copy, logo assets, privacy policy URL).
+Timeline: initial review typically runs 5–10 business days once submitted, and first submissions usually get at least one round of reviewer feedback, so let's build that into expectations.
+First step: send me the list from item 3 (scopes and purposes) and any blockers you see on item 1 before we flip distribution to public.
