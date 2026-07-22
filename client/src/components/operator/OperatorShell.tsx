@@ -270,18 +270,19 @@ export function OperatorShell<TabId extends string>({
         <div
           className="flex-1 min-h-0 overflow-hidden flex bg-slate-50 text-slate-900"
         >
-        {/* Left rail — 256px white column. Partner logo + name in the top
+        {/* Left rail — 220px white column (AdminFrame parity). Partner logo
+            + name in the top
             header band (replacing the GoodTunes logo). Vertical nav in the
             middle. "Powered by GoodTunes" pinned to the foot.
             Hidden on phones, which fall back to the horizontal tab bar. */}
-        <aside className="w-64 flex-shrink-0 bg-white hidden md:flex md:flex-col">
+        <aside className="w-[220px] flex-shrink-0 bg-white hidden md:flex md:flex-col">
           {/* Partner logo + name — top-left rail header (h-14 band). When a
               full-size navLogoUrl is set (press whitelabel), render it
               height-constrained so the band never grows; otherwise fall back to
               the small square avatar + the partner name on a single line. The
-              partner rail is widened (w-64, vs AdminFrame's 220px) so a long
-              press name like "Memphis Record Pressing" fits on one line;
-              truncate is only a safety net for unusually long names. */}
+              rail is w-[220px] — byte-identical to AdminFrame's sidebar — so
+              partner portals and the super admin read as the same product;
+              long press names like "Memphis Record Pressing" truncate. */}
           <div className="h-14 flex-shrink-0 flex items-center gap-2.5 px-3 border-b border-slate-200 overflow-hidden">
             {navLogoUrl ? (
               <img

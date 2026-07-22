@@ -243,6 +243,9 @@ export function PublisherPortal() {
       name={me?.displayName ?? (meLoading ? "Loading…" : "Your dashboard")}
       fallbackIcon={Music2}
       logoShape="square"
+      // Super-admin-style section heading — the single Statement tab leads
+      // with "Statement" as H1; publisher identity lives in the rail only.
+      pageTitle="Statement"
       subtitle={
         me ? <PayoutStatusPill has={me.hasPayoutAccount} enabled={me.payoutsEnabled} /> : undefined
       }

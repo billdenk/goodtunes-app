@@ -302,6 +302,21 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       // Super-admin mode is signalled by the "Super-admin view" badge in the
       // top nav (superAdminView), not by a duplicated content-header eyebrow.
       hideHeaderIdentity
+      // Super-admin-style section heading: tabs whose body doesn't already
+      // render its own AdminPageHeader lead with the section name as H1.
+      // dashboard, catalog, pricing, referrals, reports, people, and albums
+      // all render their own (people/albums carry the search input in the
+      // header's actions slot, so they must keep theirs). Only settings and
+      // the direct-URL pipeline view need the shell heading. Suppressed
+      // while the embedded album view is open (it brings its own chrome).
+      pageTitle={
+        albumViewId ||
+        ["dashboard", "catalog", "pricing", "referrals", "reports", "people", "albums"].includes(tab)
+          ? undefined
+          : tab === "pipeline"
+            ? "Pipeline"
+            : tabs.find((t) => t.id === tab)?.label
+      }
       fallbackIcon={Factory}
       tabs={tabs}
       activeTab={albumViewId ? "albums" : tab}

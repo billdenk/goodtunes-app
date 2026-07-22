@@ -138,6 +138,12 @@ export function NonProfitDashboard() {
     caps?.subRole === "npo_ambassador" ? "Ambassador" :
     caps?.subRole === "npo_staff" ? "Staff" : null;
 
+  // Super-admin-style section heading: every tab's content leads with the
+  // section name as H1 (same AdminPageHeader treatment the label/artist
+  // portals use). Dashboard is exempt — PartnerDashboard renders its own
+  // "Dashboard" header band.
+  const currentTabLabel = tabs.find((t) => t.id === tab)?.label;
+
   return (
     <OperatorShell
       testId="npo-shell"
@@ -146,19 +152,12 @@ export function NonProfitDashboard() {
       logoUrl={me.data?.logoUrl ?? null}
       fallbackIcon={Heart}
       hideHeaderIdentity
+      pageTitle={tab === "dashboard" ? undefined : currentTabLabel}
       maxWidth="5xl"
-      subtitle={
-        me.data?.websiteUrl ? (
-          <a
-            href={me.data.websiteUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
-          >
-            {me.data.websiteUrl.replace(/^https?:\/\//, "")}
-          </a>
-        ) : null
-      }
+      // No subtitle: org identity (name, website) lives in the rail only.
+      // Passing the website link here would render it under every section
+      // H1 now that pageTitle is set (it was inert while hideHeaderIdentity
+      // suppressed the identity band).
       tabs={tabs}
       activeTab={tab}
       onTabChange={(newTab) => {

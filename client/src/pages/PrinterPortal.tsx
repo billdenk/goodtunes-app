@@ -85,6 +85,9 @@ export function PrinterPortal({ vendorId, isSuperAdminView }: { vendorId: string
       name={me?.name ?? "Your print shop"}
       logoUrl={me?.logoUrl ?? null}
       fallbackIcon={Printer}
+      // Super-admin-style section heading: every tab's content leads with
+      // the section name as H1 (no printer tab renders its own header band).
+      pageTitle={tabs.find((t) => t.id === tab)?.label}
       tabs={tabs}
       activeTab={tab}
       onTabChange={handleTabChange}
@@ -353,7 +356,8 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
 
   return (
     <div className="bg-white text-slate-900 rounded-2xl p-4 sm:p-6 ring-1 ring-slate-200" data-testid="printer-print-queue">
-      <h2 className="text-[20px] font-semibold text-slate-900 mb-1">Print queue</h2>
+      {/* Section H1 ("Print Queue") comes from the shell's pageTitle band —
+          no duplicate heading inside the card. */}
       <p className="text-slate-500 text-[13px] mb-5">
         GoodDeed certificates routed to your shop. Confirmed rows are ready to print — batch them into a ZIP of single-page PDFs,
         one merged PDF, or split into single-stock <span className="text-slate-900">US Letter</span> / <span className="text-slate-900">A4</span> files,

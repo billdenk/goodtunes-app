@@ -191,6 +191,9 @@ function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string;
       logoUrl={vendor?.logoUrl ?? null}
       fallbackIcon={Store}
       hideHeaderIdentity
+      // Super-admin-style section heading for every non-dashboard tab
+      // ("GoodDeed Services"); Dashboard renders its own header band.
+      pageTitle={tab === "dashboard" ? undefined : tabs.find((t) => t.id === tab)?.label}
       tabs={tabs}
       activeTab={tab}
       onTabChange={handleTabChange}

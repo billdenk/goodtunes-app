@@ -40,13 +40,10 @@ import {
   Megaphone,
   UserCheck,
   UserPlus,
-  Mail,
   ScrollText,
-  Network,
   Wrench,
   BookOpen,
-  CircleDollarSign,
-  BadgeDollarSign,
+  Receipt,
   Cog,
   Printer,
   type LucideIcon,
@@ -146,9 +143,11 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "artists",     label: "Your artists",  icon: Users,      roles: ["non_profit"] },
   { id: "acquisition", label: "Acquisition",   icon: Megaphone,  roles: ["non_profit"] },
   { id: "buyers",      label: "Buyers",        icon: UserCheck,  roles: ["non_profit"] },
-  { id: "invites",     label: "Invites",       icon: Mail,       roles: ["non_profit"] },
+  // Invites + Team tree mirror the super-admin System section's
+  // "Invites" (UserPlus) and "Invite tree" (Users) glyphs exactly.
+  { id: "invites",     label: "Invites",       icon: UserPlus,   roles: ["non_profit"] },
   { id: "ledger",      label: "Album ledger",  icon: ScrollText, roles: ["non_profit"] },
-  { id: "tree",        label: "Team tree",     icon: Network,    roles: ["non_profit"] },
+  { id: "tree",        label: "Team tree",     icon: Users,      roles: ["non_profit"] },
 
   // Vendor + reseller + fulfillment shell — `/vendor` (VendorPortal.tsx)
   // GoodDeed Services is vendor-only server-side (gateVendorAccess in
@@ -167,7 +166,7 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "people",    label: "People",           icon: User,   section: "catalog", roles: ["press"] },
   { id: "albums",    label: "Albums",           icon: Disc3,  section: "catalog", roles: ["press"] },
   { id: "catalog",   label: "Vinyl catalog",    icon: BookOpen,         roles: ["press"] },
-  { id: "pricing",   label: "GoodDeed pricing", icon: CircleDollarSign, roles: ["press"] },
+  { id: "pricing",   label: "GoodDeed pricing", icon: Receipt,          roles: ["press"] },
   { id: "settings",  label: "Settings",         icon: Cog,              roles: ["press"] },
   { id: "referrals", label: "Referrals",        icon: UserPlus,         roles: ["press"] },
 
@@ -180,7 +179,7 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "print-queue", label: "Print Queue",     icon: Printer,          roles: ["printer"] },
   { id: "people",      label: "People & Labels", icon: User,   section: "catalog", roles: ["printer"] },
   { id: "albums",      label: "Albums",          icon: Disc3,  section: "catalog", roles: ["printer"] },
-  { id: "catalog",     label: "GoodDeed pricing", icon: BadgeDollarSign, roles: ["printer"] },
+  { id: "catalog",     label: "GoodDeed pricing", icon: Receipt,         roles: ["printer"] },
   { id: "settings",    label: "Settings",        icon: Cog,              roles: ["printer"] },
 ];
 
