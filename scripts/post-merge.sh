@@ -397,6 +397,31 @@ SQL
 migrate_album_presave_streaming_dates dev  "${DATABASE_URL:-}"
 migrate_album_presave_streaming_dates prod "${PROD_DATABASE_URL:-}"
 
+# Task #2785 — Manufacturing ledger funding source. Adds `funding_source` to
+# manufacturer_payment_steps so each step tracks whether Bill pays from platform
+# sales ('goodtunes_sales') or the artist pays GoodTunes first ('artist_direct').
+# Default 'artist_direct' matches the original Shopify+ prepay model.
+migrate_manufacturer_payment_steps_funding_source() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping manufacturer_payment_steps funding_source migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE manufacturer_payment_steps
+  ADD COLUMN IF NOT EXISTS funding_source text NOT NULL DEFAULT 'artist_direct';
+COMMIT;
+SQL
+  then
+    echo "post-merge: manufacturer_payment_steps funding_source migration ok on $label"
+  else
+    echo "post-merge: WARNING — manufacturer_payment_steps funding_source migration failed on $label (continuing)"
+  fi
+}
+migrate_manufacturer_payment_steps_funding_source dev  "${DATABASE_URL:-}"
+migrate_manufacturer_payment_steps_funding_source prod "${PROD_DATABASE_URL:-}"
+
 # Task #1036 — TRUE ONE-TIME backfill: give every existing account exactly
 # ONE membership reproducing its current users.role / role_scope_id +
 # folded partner_permission_overrides. Marker-guarded in

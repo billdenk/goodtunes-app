@@ -4220,6 +4220,11 @@ export const manufacturerPaymentSteps = pgTable(
     // in the platform balance (never earmarked to the plant).
     marginCents: integer("margin_cents").notNull().default(0),
     sortOrder: integer("sort_order").notNull().default(0),
+    // Who funds this step. 'goodtunes_sales' = Bill clicks Pay (funded from
+    // platform sales balance); 'artist_direct' = artist sends funds via ACH,
+    // then Bill releases to MRP. Default 'artist_direct' matches the original
+    // Shopify+ pre-pay model (artist pays GoodTunes before any GoodTunes sales).
+    fundingSource: text("funding_source").notNull().default("artist_direct"),
     status: text("status").notNull().default("unpaid"),
     stripeCheckoutSessionId: text("stripe_checkout_session_id"),
     stripePaymentIntentId: text("stripe_payment_intent_id"),

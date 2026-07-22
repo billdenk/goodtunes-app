@@ -1925,6 +1925,7 @@ export function AdminAlbum({
                   fulfillmentPartnerId={album.fulfillmentPartnerId ?? null}
                   canEdit={!modeChangeBlocked}
                   canPay={albumEditAccess?.canManagePayouts ?? false}
+                  isOperatorView={!embedded}
                 />
               )}
               {safeTab === "customers" && allowed.has("customers") && (

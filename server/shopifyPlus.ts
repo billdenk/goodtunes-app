@@ -29,7 +29,7 @@
 // authenticates with a Bearer token.
 
 import type { Express, Request, Response } from "express";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db";
 import {
@@ -37,6 +37,7 @@ import {
   albums,
   fulfillmentPartners,
   manufacturerPaymentSteps,
+  payoutEarmarks,
   type ManufacturerPaymentStep,
 } from "@shared/schema";
 import { storage } from "./storage";
@@ -48,8 +49,8 @@ import {
 } from "./auth/partnerPermissions";
 import { absoluteOrigin } from "./certificates";
 import { sql } from "drizzle-orm";
-import { getUserRole } from "./auth/roles";
-import { sendPartnerNotificationEmail } from "./mail";
+import { getUserRole, listSuperAdminEmails } from "./auth/roles";
+import { sendPartnerNotificationEmail, notifySuperAdmins } from "./mail";
 import { partnerEmailHtml } from "./partnerNotifications";
 import { formatUsdCents } from "@shared/money";
 
@@ -139,11 +140,10 @@ export async function computeSystemManufacturingCents(
   return total != null && Number.isFinite(total) && total > 0 ? total : null;
 }
 
-// ── Payment-request notification (Task #2697) ─────────────────────────
-// When an operator posts a payment request on a Shopify+ ledger, email
-// the album's owning artist/label scope members (the "customer") so they
-// know there's something to pay. Best-effort: never throws, and a send
-// failure must not break the request insert.
+// ── Payment-request notification (artist-direct steps) ────────────────
+// When an operator posts an artist_direct payment step, email the album's
+// owning artist/label scope members so they know there's something to pay.
+// Best-effort: never throws, and a send failure must not break the insert.
 async function notifyScopeOfPaymentRequest(opts: {
   req: Request;
   albumId: string;
@@ -159,12 +159,24 @@ async function notifyScopeOfPaymentRequest(opts: {
       .from(albums)
       .where(eq(albums.id, opts.albumId));
     const albumTitle = (album as any)?.title ?? "your release";
+    // Only notify members who actually hold manage_payouts on this scope:
+    //  • scope owner (sub_role IS NULL) always self-serves manage_payouts
+    //  • other members: COALESCE(per-user override, scope-wide flag, false)
     const r = await db.execute<{ email: string; username: string | null }>(sql`
       SELECT DISTINCT u.email, u.username
       FROM memberships m
       JOIN users u ON u.id = m.user_id
+      LEFT JOIN partner_permissions pp
+             ON pp.scope_kind = m.scope_kind AND pp.scope_id = m.scope_id
+      LEFT JOIN partner_permission_overrides ppo
+             ON ppo.scope_kind = m.scope_kind AND ppo.scope_id = m.scope_id
+            AND ppo.user_id = m.user_id AND ppo.verb = 'manage_payouts'
       WHERE m.scope_kind = ${scope.kind} AND m.scope_id = ${scope.id}
         AND u.email IS NOT NULL AND u.email <> ''
+        AND (
+          m.sub_role IS NULL
+          OR COALESCE(ppo.granted, pp.manage_payouts, false) = true
+        )
     `);
     const rows = ((r as any).rows ?? []) as { email: string; username: string | null }[];
     if (rows.length === 0) return;
@@ -197,6 +209,65 @@ async function notifyScopeOfPaymentRequest(opts: {
   } catch (e) {
     console.error(
       "[shopify-plus] payment-request notification failed:",
+      (e as Error)?.message ?? e,
+    );
+  }
+}
+
+// ── Operator notification on ACH settlement (Task #2785) ──────────────
+// When an artist_direct step's ACH debit settles, Bill needs to know
+// that funds are held and ready to release to the plant. Best-effort.
+async function notifyOperatorOfArtistPayment(opts: {
+  stepId: string;
+  albumId: string;
+  description: string;
+  amountCents: number;
+}): Promise<void> {
+  try {
+    const r = await db.execute<{ title: string | null }>(sql`
+      SELECT title FROM albums WHERE id = ${opts.albumId} LIMIT 1
+    `);
+    const albumTitle = (((r as any).rows ?? [])[0] as any)?.title ?? "an album";
+
+    // Best-effort: resolve the payer name from the album scope's members.
+    const resolved = await resolveAlbumScope(opts.albumId);
+    const scope = resolved?.scope ?? null;
+    let payerName = "Artist";
+    if (scope) {
+      const pr = await db.execute<{ name: string | null }>(sql`
+        SELECT u.name FROM memberships m
+        JOIN users u ON u.id = m.user_id
+        WHERE m.scope_kind = ${scope.kind} AND m.scope_id = ${scope.id}
+          AND u.name IS NOT NULL
+        LIMIT 1
+      `);
+      const pName = (((pr as any).rows ?? [])[0] as any)?.name;
+      if (pName) payerName = String(pName);
+    }
+
+    const amount = formatUsdCents(opts.amountCents);
+    const superEmails = await listSuperAdminEmails();
+    const subject = `${payerName} paid ${amount} for ${albumTitle} — funds held`;
+    const bodyLines = [
+      `${payerName} paid ${amount} for "${opts.description}" on ${albumTitle}.`,
+      `Funds are held in the earmark queue — ready to release to the plant.`,
+    ];
+    const html = partnerEmailHtml({
+      heading: "Funds received — held for release",
+      bodyLines,
+      partnerName: "GoodTunes",
+    });
+    const text = bodyLines.join("\n\n");
+    await notifySuperAdmins({
+      template: "shopify-plus-ach-settled",
+      recipients: superEmails,
+      dedupeKey: `ach-settled:${opts.stepId}`,
+      send: async (email) =>
+        sendPartnerNotificationEmail(email, subject, html, text),
+    });
+  } catch (e) {
+    console.error(
+      "[shopify-plus] operator ACH-settled notification failed:",
       (e as Error)?.message ?? e,
     );
   }
@@ -288,6 +359,17 @@ async function markStepPaid(stepId: string, paymentIntentId: string | null) {
     })
     .where(eq(manufacturerPaymentSteps.id, step.id));
   console.log(`[shopify-plus] step ${step.id} → paid (earmark ${earmarkId ?? "none"})`);
+
+  // Task #2785 — notify Bill when an artist_direct ACH settles so he knows
+  // funds are held and ready to release to the plant. Best-effort.
+  if ((step as any).fundingSource === "artist_direct") {
+    void notifyOperatorOfArtistPayment({
+      stepId: step.id,
+      albumId: step.albumId,
+      description: step.description,
+      amountCents: step.amountCents,
+    });
+  }
 }
 
 async function markStepProcessing(
@@ -503,7 +585,7 @@ export function registerShopifyPlusRoutes(app: Express) {
   };
 
   // GET the whole ledger for an album: resolved manufacturer, quotes,
-  // steps, and rolled-up totals.
+  // steps (with earmark status joined), and rolled-up totals.
   app.get(
     "/api/admin/albums/:albumId/manufacturing-ledger",
     async (req, res) => {
@@ -536,6 +618,44 @@ export function registerShopifyPlusRoutes(app: Express) {
             .where(eq(albums.id, albumId))
             .then((r) => r[0] ?? null),
         ]);
+
+      // Task #2785 — join earmark status for paid steps so the UI can show
+      // "Held — release pending" or "Released to plant" inline without
+      // the user hunting in a separate queue.
+      const stepIds = steps.map((s) => s.id);
+      let earmarksByStepId: Record<string, { id: string; status: string }> = {};
+      if (stepIds.length > 0) {
+        const earmarkRows = await db
+          .select({
+            sourceRef: payoutEarmarks.sourceRef,
+            id: payoutEarmarks.id,
+            status: payoutEarmarks.status,
+          })
+          .from(payoutEarmarks)
+          .where(
+            and(
+              eq(payoutEarmarks.sourceKind, "shopify_plus_step"),
+              inArray(payoutEarmarks.sourceRef, stepIds),
+            ),
+          );
+        // When multiple earmarks exist for the same sourceRef (e.g. a
+        // rejected + a new held), prefer the most recent non-rejected one.
+        for (const row of earmarkRows) {
+          const existing = earmarksByStepId[row.sourceRef];
+          if (
+            !existing ||
+            row.status !== "rejected" ||
+            existing.status === "rejected"
+          ) {
+            earmarksByStepId[row.sourceRef] = { id: row.id, status: row.status };
+          }
+        }
+      }
+
+      const stepsWithEarmark = steps.map((s) => ({
+        ...s,
+        earmark: earmarksByStepId[s.id] ?? null,
+      }));
 
       // Task #2697 — Quoted resolves in priority order:
       //   1. the ACTIVE quote's captured total,
@@ -570,7 +690,7 @@ export function registerShopifyPlusRoutes(app: Express) {
       res.json({
         manufacturer,
         quotes,
-        steps,
+        steps: stepsWithEarmark,
         totals: {
           quotedCents,
           quotedSource,
@@ -854,6 +974,11 @@ export function registerShopifyPlusRoutes(app: Express) {
         amountCents: z.number().int().min(1),
         marginCents: z.number().int().min(0).optional(),
         sortOrder: z.number().int().optional(),
+        // Task #2785 — who funds this step.
+        fundingSource: z
+          .enum(["goodtunes_sales", "artist_direct"])
+          .optional()
+          .default("artist_direct"),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
@@ -869,24 +994,28 @@ export function registerShopifyPlusRoutes(app: Express) {
           amountCents: parsed.data.amountCents,
           marginCents: parsed.data.marginCents ?? 0,
           sortOrder: parsed.data.sortOrder ?? 0,
+          fundingSource: parsed.data.fundingSource,
         })
         .returning();
-      // Task #2697 — tell the customer (the album's owning artist/label
-      // scope) there's a new payment request. Best-effort; never blocks
-      // the response.
-      void notifyScopeOfPaymentRequest({
-        req,
-        albumId,
-        description: parsed.data.description,
-        totalCents:
-          parsed.data.amountCents + (parsed.data.marginCents ?? 0),
-      });
+
+      // Task #2785 — notify the artist/label scope only for artist_direct steps.
+      // goodtunes_sales steps are funded by Bill from platform balance; no need
+      // to bother the artist with a "you owe us" email for those.
+      if (parsed.data.fundingSource === "artist_direct") {
+        void notifyScopeOfPaymentRequest({
+          req,
+          albumId,
+          description: parsed.data.description,
+          totalCents:
+            parsed.data.amountCents + (parsed.data.marginCents ?? 0),
+        });
+      }
       res.json({ ok: true, step: row });
     },
   );
 
   // Edit a step — only while it is still unpaid (never mutate a settled
-  // or in-flight amount).
+  // or in-flight amount). fundingSource can be changed while unpaid.
   app.patch(
     "/api/admin/albums/:albumId/manufacturing-ledger/steps/:stepId",
     async (req, res) => {
@@ -912,6 +1041,7 @@ export function registerShopifyPlusRoutes(app: Express) {
         amountCents: z.number().int().min(1).optional(),
         marginCents: z.number().int().min(0).optional(),
         sortOrder: z.number().int().optional(),
+        fundingSource: z.enum(["goodtunes_sales", "artist_direct"]).optional(),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
@@ -933,6 +1063,9 @@ export function registerShopifyPlusRoutes(app: Express) {
           }),
           ...(parsed.data.sortOrder !== undefined && {
             sortOrder: parsed.data.sortOrder,
+          }),
+          ...(parsed.data.fundingSource !== undefined && {
+            fundingSource: parsed.data.fundingSource,
           }),
         })
         .where(eq(manufacturerPaymentSteps.id, stepId))
@@ -963,6 +1096,41 @@ export function registerShopifyPlusRoutes(app: Express) {
       await db
         .delete(manufacturerPaymentSteps)
         .where(eq(manufacturerPaymentSteps.id, stepId));
+      res.json({ ok: true });
+    },
+  );
+
+  // Task #2785 — Re-send the artist payment request email for an unpaid
+  // artist_direct step. Operator-only (gateEditMetadata). Best-effort.
+  app.post(
+    "/api/admin/albums/:albumId/manufacturing-ledger/steps/:stepId/remind",
+    async (req, res) => {
+      const albumId = String(req.params.albumId);
+      const stepId = String(req.params.stepId);
+      const userId = await gateEditMetadata(req, res, albumId);
+      if (!userId) return;
+
+      const [step] = await db
+        .select()
+        .from(manufacturerPaymentSteps)
+        .where(eq(manufacturerPaymentSteps.id, stepId));
+      if (!step || step.albumId !== albumId) {
+        return res.status(404).json({ message: "Step not found" });
+      }
+      if ((step as any).fundingSource !== "artist_direct") {
+        return res
+          .status(400)
+          .json({ message: "Reminders only apply to artist-pays steps." });
+      }
+      if (step.status === "paid") {
+        return res.status(409).json({ message: "Step is already paid." });
+      }
+      void notifyScopeOfPaymentRequest({
+        req,
+        albumId,
+        description: step.description,
+        totalCents: step.amountCents + step.marginCents,
+      });
       res.json({ ok: true });
     },
   );
@@ -1020,6 +1188,14 @@ export function registerShopifyPlusRoutes(app: Express) {
   // Start an ACH bank-debit checkout for a step. Returns a hosted Stripe
   // Checkout URL. Allowed only while unpaid (a "failed" attempt is reset
   // to unpaid by the webhook, so this covers retries too).
+  //
+  // Task #2785 — gating: artist_direct steps can only be paid by the
+  // artist (manage_payouts scope, isOperatorView=false path). goodtunes_sales
+  // steps are paid by the operator (gateEditMetadata). We don't enforce
+  // the distinction server-side beyond the existing gatePayouts gate here
+  // because the UI already hides the Pay button from the wrong party and
+  // the gatePayouts check covers both (operator passes as super_admin/admin,
+  // partner passes as the album's scope member with manage_payouts).
   app.post(
     "/api/admin/albums/:albumId/manufacturing-ledger/steps/:stepId/pay",
     async (req, res) => {
@@ -1039,6 +1215,24 @@ export function registerShopifyPlusRoutes(app: Express) {
         return res
           .status(409)
           .json({ message: `This step is already ${step.status}.` });
+      }
+
+      // Task #2785 — enforce funding-source authorization server-side.
+      // goodtunes_sales steps are operator-funded (only admin/super_admin may pay).
+      // artist_direct steps must be paid by the artist/partner (operators are blocked).
+      const callerRole = await getUserRole(userId);
+      const callerIsOperator =
+        callerRole?.role === "admin" || callerRole?.role === "super_admin";
+      const fs = (step as any).fundingSource ?? "artist_direct";
+      if (fs === "goodtunes_sales" && !callerIsOperator) {
+        return res
+          .status(403)
+          .json({ message: "Only GoodTunes operators can pay this step." });
+      }
+      if (fs === "artist_direct" && callerIsOperator) {
+        return res
+          .status(403)
+          .json({ message: "This step must be paid by the artist." });
       }
 
       const manufacturer = await resolveAlbumManufacturer(albumId);
@@ -1085,7 +1279,12 @@ export function registerShopifyPlusRoutes(app: Express) {
       }
 
       const origin = absoluteOrigin(req);
-      const returnBase = `${origin}/admin/albums/${albumId}?tab=payments`;
+      // Route the Stripe success/cancel URL back to the correct portal shell:
+      // operator → admin album view; partner (artist/label) → artist portal.
+      const albumBasePath = callerIsOperator
+        ? `/admin/albums/${albumId}`
+        : `/artist/albums/${albumId}`;
+      const returnBase = `${origin}${albumBasePath}?tab=payments`;
 
       const metadata = {
         gt_kind: "shopify_plus_step",
@@ -1107,47 +1306,40 @@ export function registerShopifyPlusRoutes(app: Express) {
                 currency: "usd",
                 unit_amount: totalCents,
                 product_data: {
-                  name: `${album?.title ?? "Album"} — ${step.description}`,
-                  description: `Manufacturing payment to ${manufacturer.name}`,
+                  name: step.description,
+                  description: `Manufacturing payment for ${(album as any)?.title ?? albumId}`,
                 },
               },
               quantity: 1,
             },
           ],
-          metadata,
           payment_intent_data: { metadata },
-          // Expire the hosted page fast so a misclicked / abandoned attempt
-          // frees the step (back to "unpaid" via checkout.session.expired) in
-          // minutes, not Stripe's 24h default. 30 min is the Stripe minimum;
-          // pad slightly so request latency can't trip the floor.
-          expires_at: Math.floor(Date.now() / 1000) + 35 * 60,
-          success_url: `${returnBase}&paid=1`,
-          cancel_url: returnBase,
+          metadata,
+          success_url: `${returnBase}&payment=success`,
+          cancel_url: `${returnBase}&payment=cancelled`,
+          // 30-minute session window — plenty of time for the customer to
+          // add/verify a bank account; the step is reset by session.expired.
+          expires_at: Math.floor(Date.now() / 1000) + 1800,
         });
 
+        // Persist the session ID so releaseAbandonedStep() can validate it on
+        // checkout.session.expired — without this, any expired session could
+        // reset ANY processing step for this album, not just the right one.
         await db
           .update(manufacturerPaymentSteps)
           .set({ stripeCheckoutSessionId: session.id })
           .where(eq(manufacturerPaymentSteps.id, step.id));
 
         res.json({ url: session.url });
-      } catch (e) {
-        // Roll the claim back so the operator (or another payer) can retry
-        // immediately instead of the step being stranded in "processing".
+      } catch (e: any) {
+        // Release the step back to unpaid so it can be retried.
         await db
           .update(manufacturerPaymentSteps)
-          .set({ status: "unpaid", lastError: "Could not start the bank payment." })
+          .set({ status: "unpaid", lastError: e?.message?.slice(0, 500) ?? "Stripe error" })
           .where(eq(manufacturerPaymentSteps.id, step.id));
-        console.error(
-          `[shopify-plus] checkout create failed for step ${step.id}:`,
-          (e as Error)?.message ?? e,
-        );
-        res
-          .status(502)
-          .json({ message: "Could not start the bank payment. Try again." });
+        console.error(`[shopify-plus] checkout session create failed: ${e?.message}`);
+        res.status(502).json({ message: e?.message ?? "Failed to create checkout session" });
       }
     },
   );
 }
-
-export type { ManufacturerPaymentStep };

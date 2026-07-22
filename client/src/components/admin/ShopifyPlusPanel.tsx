@@ -14,6 +14,9 @@ import {
   Lock,
   Undo2,
   Check,
+  Bell,
+  Clock,
+  ArrowRight,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -53,6 +56,16 @@ interface Props {
    * on `canEdit`.
    */
   canPay?: boolean;
+  /**
+   * Task #2785 — true when the panel is rendering in the admin/operator shell
+   * (AdminAlbum), false in an artist/label partner portal.
+   *
+   * For goodtunes_sales steps: only the operator sees Pay (Bill funds from
+   * platform balance). For artist_direct steps: only the partner sees Pay
+   * (artist sends the funds via ACH); the operator sees "Waiting for artist"
+   * + a Send reminder link.
+   */
+  isOperatorView?: boolean;
 }
 
 interface FulfillmentPartner {
@@ -68,6 +81,7 @@ export function ShopifyPlusPanel({
   fulfillmentPartnerId,
   canEdit = true,
   canPay = true,
+  isOperatorView = true,
 }: Props) {
   const { toast } = useToast();
   const [saving, setSaving] = useState<string | null>(null);
@@ -262,7 +276,12 @@ export function ShopifyPlusPanel({
         )}
       </div>
 
-      <ManufacturingLedger albumId={albumId} canEdit={canEdit} canPay={canPay} />
+      <ManufacturingLedger
+        albumId={albumId}
+        canEdit={canEdit}
+        canPay={canPay}
+        isOperatorView={isOperatorView}
+      />
     </div>
   );
 }
@@ -286,10 +305,13 @@ interface LedgerStep {
   description: string;
   amountCents: number;
   marginCents: number;
+  fundingSource: "goodtunes_sales" | "artist_direct";
   status: "unpaid" | "processing" | "paid" | "failed";
   sortOrder: number;
   paidAt: string | null;
   lastError: string | null;
+  // Task #2785 — earmark status joined server-side.
+  earmark?: { id: string; status: string } | null;
 }
 
 interface LedgerData {
@@ -330,14 +352,64 @@ const QUOTED_SOURCE_CAPTION: Record<LedgerData["totals"]["quotedSource"], string
   steps: "Sum of payment requests (no quote or system cost yet)",
 };
 
+// Task #2785 — earmark status chip for paid steps.
+function EarmarkChip({
+  earmark,
+  stepId,
+}: {
+  earmark: { id: string; status: string } | null | undefined;
+  stepId: string;
+}) {
+  if (!earmark) return null;
+  if (earmark.status === "released") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+        data-testid="chip-earmark-released"
+      >
+        <Check className="w-3 h-3" />
+        Released to plant
+      </span>
+    );
+  }
+  if (earmark.status === "held") {
+    return (
+      <a
+        href={`/admin/payouts-release?sourceRef=${encodeURIComponent(stepId)}`}
+        className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200 hover:bg-amber-100 transition-colors"
+        data-testid="chip-earmark-held"
+        title="Go to release queue"
+      >
+        <Clock className="w-3 h-3" />
+        Held — release pending
+        <ArrowRight className="w-3 h-3" />
+      </a>
+    );
+  }
+  if (earmark.status === "failed") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+        data-testid="chip-earmark-failed"
+      >
+        <AlertCircle className="w-3 h-3" />
+        Transfer failed
+      </span>
+    );
+  }
+  return null;
+}
+
 function ManufacturingLedger({
   albumId,
   canEdit,
   canPay,
+  isOperatorView,
 }: {
   albumId: string;
   canEdit: boolean;
   canPay: boolean;
+  isOperatorView: boolean;
 }) {
   const { toast } = useToast();
   const ledgerKey = ["/api/admin/albums", albumId, "manufacturing-ledger"];
@@ -357,6 +429,10 @@ function ManufacturingLedger({
   const [desc, setDesc] = useState("");
   const [amount, setAmount] = useState("");
   const [margin, setMargin] = useState("");
+  // Task #2785 — funding source for the new step form.
+  const [fundingSource, setFundingSource] = useState<"goodtunes_sales" | "artist_direct">(
+    "artist_direct",
+  );
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ledgerKey });
@@ -393,6 +469,7 @@ function ManufacturingLedger({
           description: desc.trim(),
           amountCents: cents,
           marginCents: marginCents > 0 ? marginCents : 0,
+          fundingSource,
         },
       );
       setDesc("");
@@ -426,6 +503,49 @@ function ManufacturingLedger({
         description: String(e?.message ?? e),
         variant: "destructive",
       });
+      setBusy(null);
+    }
+  }
+
+  async function sendReminder(step: LedgerStep) {
+    setBusy(`remind-${step.id}`);
+    try {
+      await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/manufacturing-ledger/steps/${step.id}/remind`,
+      );
+      toast({ title: "Reminder sent" });
+    } catch (e: any) {
+      toast({
+        title: "Couldn't send reminder",
+        description: String(e?.message ?? e),
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function patchStep(
+    step: LedgerStep,
+    body: { fundingSource?: "goodtunes_sales" | "artist_direct" },
+    busyKey: string,
+  ) {
+    setBusy(busyKey);
+    try {
+      await apiRequest(
+        "PATCH",
+        `/api/admin/albums/${albumId}/manufacturing-ledger/steps/${step.id}`,
+        body,
+      );
+      await refresh();
+    } catch (e: any) {
+      toast({
+        title: "Couldn't update step",
+        description: String(e?.message ?? e),
+        variant: "destructive",
+      });
+    } finally {
       setBusy(null);
     }
   }
@@ -740,9 +860,9 @@ function ManufacturingLedger({
             )}
           </div>
 
-          {/* Task #2697 — Payment requests block (formerly "payment steps"):
-              each request emails the album's artist/label scope when created
-              and is settled by an ACH debit. */}
+          {/* Task #2785 — Payment requests block. The Pay button and "Waiting
+              for artist" indicator depend on both the step's fundingSource and
+              whether this is the operator or artist view. */}
           <div className="mt-5 pt-4 border-t border-slate-100">
             <div className="text-xs font-semibold text-slate-700 mb-2">
               Payment requests
@@ -754,136 +874,286 @@ function ManufacturingLedger({
               </p>
             ) : (
               <div className="divide-y divide-slate-100 border border-slate-100 rounded-lg">
-                {steps.map((step) => (
-                  <div
-                    key={step.id}
-                    className="flex items-center justify-between gap-3 px-3 py-2.5"
-                    data-testid={`row-step-${step.id}`}
-                  >
-                    <div className="min-w-0">
-                      <div className="text-sm text-slate-900 truncate">
-                        {step.description}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {formatUsdCents(step.amountCents + step.marginCents)}
-                        {step.marginCents > 0 && (
-                          <span className="text-slate-400">
-                            {" "}
-                            ({formatUsdCents(step.amountCents)} to plant +{" "}
-                            {formatUsdCents(step.marginCents)} margin)
-                          </span>
-                        )}
-                      </div>
-                      {step.lastError && (
-                        <div className="text-xs text-rose-600 mt-0.5 flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3 shrink-0" />
-                          {step.lastError}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLES[step.status]}`}
-                        data-testid={`status-step-${step.id}`}
-                      >
-                        {STATUS_LABELS[step.status]}
-                      </span>
-                      {canPay &&
-                        (step.status === "unpaid" || step.status === "failed") && (
-                          <button
-                            onClick={() => pay(step)}
-                            disabled={busy === `pay-${step.id}` || !manufacturer}
-                            className="h-9 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                            data-testid={`button-pay-step-${step.id}`}
-                          >
-                            {busy === `pay-${step.id}` ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <CreditCard className="w-3.5 h-3.5" />
+                {steps.map((step) => {
+                  const isArtistDirect = step.fundingSource === "artist_direct";
+                  const isGoodTunesPays = step.fundingSource === "goodtunes_sales";
+                  // Who can pay this step:
+                  //   artist_direct → artist (isOperatorView=false) can pay
+                  //   goodtunes_sales → operator (isOperatorView=true) can pay
+                  const canPayThisStep =
+                    canPay &&
+                    ((isArtistDirect && !isOperatorView) ||
+                      (isGoodTunesPays && isOperatorView));
+                  // Operator sees "Waiting for artist" on artist_direct steps.
+                  const showWaiting =
+                    isOperatorView &&
+                    isArtistDirect &&
+                    (step.status === "unpaid" || step.status === "failed");
+
+                  return (
+                    <div
+                      key={step.id}
+                      className="px-3 py-2.5"
+                      data-testid={`row-step-${step.id}`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm text-slate-900 truncate">
+                            {step.description}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {formatUsdCents(step.amountCents + step.marginCents)}
+                            {step.marginCents > 0 && (
+                              <span className="text-slate-400">
+                                {" "}
+                                ({formatUsdCents(step.amountCents)} to plant +{" "}
+                                {formatUsdCents(step.marginCents)} margin)
+                              </span>
                             )}
-                            Pay
-                          </button>
-                        )}
-                      {canEdit &&
-                        (step.status === "unpaid" || step.status === "failed") && (
-                          <button
-                            onClick={() => removeStep(step)}
-                            disabled={busy === `del-${step.id}`}
-                            aria-label="Remove payment request"
-                            className="h-9 inline-flex items-center justify-center rounded-lg px-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                            data-testid={`button-remove-step-${step.id}`}
+                            {/* Task #2785 — show funding source badge inline. */}
+                            <span
+                              className={`ml-2 text-xs font-medium ${
+                                isArtistDirect
+                                  ? "text-blue-600"
+                                  : "text-purple-600"
+                              }`}
+                              data-testid={`badge-funding-${step.id}`}
+                            >
+                              {isArtistDirect ? "Artist pays" : "GoodTunes pays"}
+                            </span>
+                          </div>
+                          {step.lastError && (
+                            <div className="text-xs text-rose-600 mt-0.5 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3 shrink-0" />
+                              {step.lastError}
+                            </div>
+                          )}
+                          {/* Task #2785 — earmark status chip for paid steps. */}
+                          {step.status === "paid" && step.earmark && (
+                            <div className="mt-1">
+                              <EarmarkChip earmark={step.earmark} stepId={step.id} />
+                            </div>
+                          )}
+                          {/* Task #2785 — operator can change funding source while
+                              the step is still unpaid. */}
+                          {isOperatorView &&
+                            canEdit &&
+                            (step.status === "unpaid" || step.status === "failed") && (
+                              <div className="mt-1.5 flex items-center gap-1">
+                                <button
+                                  onClick={() =>
+                                    patchStep(
+                                      step,
+                                      { fundingSource: "artist_direct" },
+                                      `fs-${step.id}`,
+                                    )
+                                  }
+                                  disabled={
+                                    busy === `fs-${step.id}` || isArtistDirect
+                                  }
+                                  className={`text-xs px-2 py-0.5 rounded border font-medium transition-colors ${
+                                    isArtistDirect
+                                      ? "border-blue-400 bg-blue-50 text-blue-700"
+                                      : "border-slate-200 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-600"
+                                  }`}
+                                  data-testid={`button-fs-artist-${step.id}`}
+                                >
+                                  Artist pays
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    patchStep(
+                                      step,
+                                      { fundingSource: "goodtunes_sales" },
+                                      `fs-${step.id}`,
+                                    )
+                                  }
+                                  disabled={
+                                    busy === `fs-${step.id}` || isGoodTunesPays
+                                  }
+                                  className={`text-xs px-2 py-0.5 rounded border font-medium transition-colors ${
+                                    isGoodTunesPays
+                                      ? "border-purple-400 bg-purple-50 text-purple-700"
+                                      : "border-slate-200 bg-white text-slate-500 hover:border-purple-300 hover:text-purple-600"
+                                  }`}
+                                  data-testid={`button-fs-goodtunes-${step.id}`}
+                                >
+                                  GoodTunes pays
+                                </button>
+                              </div>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLES[step.status]}`}
+                            data-testid={`status-step-${step.id}`}
                           >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                            {STATUS_LABELS[step.status]}
+                          </span>
+
+                          {/* Pay button — shown only to the right party. */}
+                          {canPayThisStep &&
+                            (step.status === "unpaid" || step.status === "failed") && (
+                              <button
+                                onClick={() => pay(step)}
+                                disabled={busy === `pay-${step.id}` || !manufacturer}
+                                className="h-9 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                                data-testid={`button-pay-step-${step.id}`}
+                              >
+                                {busy === `pay-${step.id}` ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                )}
+                                Pay
+                              </button>
+                            )}
+
+                          {/* Task #2785 — operator sees "Waiting for artist" +
+                              Send reminder for unpaid artist_direct steps. */}
+                          {showWaiting && (
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className="text-xs text-slate-500 italic"
+                                data-testid={`text-waiting-artist-${step.id}`}
+                              >
+                                Waiting for artist
+                              </span>
+                              <button
+                                onClick={() => sendReminder(step)}
+                                disabled={busy === `remind-${step.id}`}
+                                className="h-9 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                data-testid={`button-remind-step-${step.id}`}
+                                title="Re-send payment request email to artist"
+                              >
+                                {busy === `remind-${step.id}` ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Bell className="w-3.5 h-3.5" />
+                                )}
+                                Send reminder
+                              </button>
+                            </div>
+                          )}
+
+                          {canEdit &&
+                            (step.status === "unpaid" || step.status === "failed") && (
+                              <button
+                                onClick={() => removeStep(step)}
+                                disabled={busy === `del-${step.id}`}
+                                aria-label="Remove payment request"
+                                className="h-9 inline-flex items-center justify-center rounded-lg px-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                                data-testid={`button-remove-step-${step.id}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
-            {/* Request payment — hidden once the run is closed out. */}
+            {/* Request payment — hidden once the run is closed out.
+                Operator-only (canEdit gates on edit_metadata). */}
             {canEdit && !runClosed && (
-              <div className="mt-3 flex flex-wrap items-end gap-2" data-testid="form-add-step">
-                <div className="flex-1 min-w-[160px]">
+              <div className="mt-3 space-y-2" data-testid="form-add-step">
+                {/* Task #2785 — funding source selector. */}
+                <div>
                   <label className="block text-xs text-slate-500 mb-1">
-                    Reason
+                    Funded by
                   </label>
-                  <input
-                    value={desc}
-                    onChange={(e) => setDesc(e.target.value)}
-                    placeholder="e.g. Vinyl run — 500 units"
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)]"
-                    data-testid="input-step-description"
-                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFundingSource("artist_direct")}
+                      className={`h-8 inline-flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold border transition-colors ${
+                        fundingSource === "artist_direct"
+                          ? "border-blue-400 bg-blue-50 text-blue-700"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                      data-testid="button-funding-artist-direct"
+                    >
+                      Artist pays GoodTunes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFundingSource("goodtunes_sales")}
+                      className={`h-8 inline-flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold border transition-colors ${
+                        fundingSource === "goodtunes_sales"
+                          ? "border-purple-400 bg-purple-50 text-purple-700"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                      data-testid="button-funding-goodtunes-sales"
+                    >
+                      GoodTunes pays from sales
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {fundingSource === "artist_direct"
+                      ? "Artist gets an email with a payment link. You'll be notified when funds arrive."
+                      : "Bill pays the plant from GoodTunes' sales balance. No artist notification."}
+                  </p>
                 </div>
-                <div className="w-28">
-                  <label className="block text-xs text-slate-500 mb-1">
-                    To plant $
-                  </label>
-                  <input
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)]"
-                    data-testid="input-step-amount"
-                  />
+
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="flex-1 min-w-[160px]">
+                    <label className="block text-xs text-slate-500 mb-1">
+                      Reason
+                    </label>
+                    <input
+                      value={desc}
+                      onChange={(e) => setDesc(e.target.value)}
+                      placeholder="e.g. Vinyl run — 500 units"
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)]"
+                      data-testid="input-step-description"
+                    />
+                  </div>
+                  <div className="w-28">
+                    <label className="block text-xs text-slate-500 mb-1">
+                      To plant $
+                    </label>
+                    <input
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)]"
+                      data-testid="input-step-amount"
+                    />
+                  </div>
+                  <div className="w-28">
+                    <label className="block text-xs text-slate-500 mb-1">
+                      Margin $
+                    </label>
+                    <input
+                      value={margin}
+                      onChange={(e) => setMargin(e.target.value)}
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)]"
+                      data-testid="input-step-margin"
+                    />
+                  </div>
+                  <button
+                    onClick={addStep}
+                    disabled={busy === "add"}
+                    className="h-9 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    data-testid="button-add-step"
+                  >
+                    {busy === "add" ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Plus className="w-3.5 h-3.5" />
+                    )}
+                    Request payment
+                  </button>
                 </div>
-                <div className="w-28">
-                  <label className="block text-xs text-slate-500 mb-1">
-                    Margin $
-                  </label>
-                  <input
-                    value={margin}
-                    onChange={(e) => setMargin(e.target.value)}
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)]"
-                    data-testid="input-step-margin"
-                  />
-                </div>
-                <button
-                  onClick={addStep}
-                  disabled={busy === "add"}
-                  className="h-9 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                  data-testid="button-add-step"
-                >
-                  {busy === "add" ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Plus className="w-3.5 h-3.5" />
-                  )}
-                  Request payment
-                </button>
               </div>
-            )}
-            {canEdit && !runClosed && (
-              <p className="text-xs text-slate-400 mt-1.5">
-                Requesting a payment emails the release's artist/label team.
-              </p>
             )}
           </div>
         </>
