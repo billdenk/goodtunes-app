@@ -35,7 +35,7 @@ GoodTunes is a fan-first music platform that treats every song as a structured o
 
 ## The Infrastructure
 
-- **12 production integrations:** Mux (encrypted streaming), Stripe + Connect (checkout + payouts), Shopify (bundle redemption), OrderDesk (fulfillment), OpenAI (catalog AI — GPT-5 mini), ElevenLabs (lyric sync), Spotify (metadata enrichment), Google Sign-In, Apple Sign-In, Resend (transactional email), Replit Object Storage, GitHub (CI + source control)
+- **16 production integrations:** Mux (encrypted streaming), Stripe + Connect (checkout + payouts), Shopify (bundle redemption), OrderDesk (fulfillment), OpenAI (catalog AI — GPT-5 mini), ElevenLabs (lyric sync), Spotify (metadata enrichment), Google Sign-In, Apple Sign-In, Resend (transactional email), Replit Object Storage, GitHub (CI + source control), PostHog (product analytics), Sentry (error monitoring), Odesli/song.link (cross-service streaming links — Tidal, Deezer, Pandora), Odoo (printer/fulfillment bridge, env-gated)
 - **Deep links wired** — Universal Links (iOS) and App Links (Android) verified; native app links resolve correctly when the Capacitor shell ships
 - **Encrypted adaptive streaming** — every master delivered through Mux with per-session signed tokens; same model used by HBO Max and Robinhood
 
@@ -43,9 +43,9 @@ GoodTunes is a fan-first music platform that treats every song as a structured o
 
 | | |
 |---|---|
-| **Automated tests** | 613 across 72 test files — re-run on every change so nothing that works can silently break |
-| **Quality gates** | 6 run on every change: test suite, design linter, schema-drift check, DB-query smoke, and two app-build guards — all green |
-| **Production integrations** | 12 |
+| **Automated tests** | 1,062 across 138 test files — re-run on every change so nothing that works can silently break |
+| **Quality gates** | 7 run on every change: test suite, design linter, schema-drift check, DB-query smoke, and three app-build guards — all green |
+| **Production integrations** | 16 |
 | **Shipped improvements** | 1,200+ discrete, reviewed, tested changes merged into the platform |
 
 *The automated tests are not manual QA — they are code checks that run automatically on every single change. The strength is that a thousand-plus improvements have each been validated against the same 600+ critical-path checks, for free, every time.*
