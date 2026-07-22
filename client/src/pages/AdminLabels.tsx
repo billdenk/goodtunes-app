@@ -14,6 +14,7 @@ import {
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { AdminFilterPanel } from "@/components/admin/AdminFilterPanel";
 import {
   Dialog,
   DialogContent,
@@ -196,9 +197,14 @@ export function AdminLabels() {
     enabled: !!user?.isAdmin,
   });
 
+  // Task #24 — toolbar filter panel state. One completeness sweep:
+  // which labels still need a logo pulled in.
+  const [logoFilter, setLogoFilter] = useState<"has" | "missing" | null>(null);
+  const filtersActive = logoFilter !== null;
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const rows = q
+    let rows = q
       ? labels.filter(
           (l) =>
             l.name.toLowerCase().includes(q) ||
@@ -206,9 +212,14 @@ export function AdminLabels() {
             (l.domain ?? "").toLowerCase().includes(q),
         )
       : labels.slice();
+    if (logoFilter) {
+      rows = rows.filter((l) =>
+        logoFilter === "has" ? !!l.logoUrl : !l.logoUrl,
+      );
+    }
     rows.sort((a, b) => a.name.localeCompare(b.name));
     return rows;
-  }, [labels, search]);
+  }, [labels, search, logoFilter]);
 
   const openLabel = (id: string) => navigate(`/admin/labels/${id}`);
 
@@ -382,6 +393,27 @@ export function AdminLabels() {
               <Search className="w-4 h-4" />
             </button>
           )}
+          {/* Task #24 — shared filter panel. */}
+          <AdminFilterPanel
+            groups={[
+              {
+                id: "logo",
+                label: "Logo",
+                mode: "single",
+                options: [
+                  { value: "has", label: "Has logo" },
+                  { value: "missing", label: "Missing logo" },
+                ],
+              },
+            ]}
+            selected={{ logo: logoFilter ? [logoFilter] : [] }}
+            onToggle={(_g, value) => {
+              const v = value as "has" | "missing";
+              setLogoFilter((prev) => (prev === v ? null : v));
+            }}
+            onReset={() => setLogoFilter(null)}
+            isActive={filtersActive}
+          />
           <ViewModeToggle
             value={view}
             onChange={setView}
@@ -410,6 +442,7 @@ export function AdminLabels() {
       ) : filtered.length === 0 ? (
         <EmptyState
           searching={search.trim().length > 0}
+          filtering={filtersActive}
           onAdd={openNewLabel}
         />
       ) : view === "grid" ? (
@@ -677,9 +710,12 @@ function LabelRow({
 
 function EmptyState({
   searching,
+  filtering,
   onAdd,
 }: {
   searching: boolean;
+  /** Task #24 — filters (not search) emptied the list. */
+  filtering?: boolean;
   onAdd: () => void;
 }) {
   return (
@@ -691,14 +727,20 @@ function EmptyState({
         <Tag className="w-6 h-6" />
       </div>
       <p className="text-slate-700 text-[14px] font-semibold">
-        {searching ? "No labels match that search" : "No labels yet"}
+        {searching
+          ? "No labels match that search"
+          : filtering
+            ? "No labels match these filters"
+            : "No labels yet"}
       </p>
       <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs">
         {searching
           ? "Try a different name or domain."
-          : "Paste a label's website and we'll do the rest — name, logo, and bio in one click."}
+          : filtering
+            ? "Adjust or reset the filters to see more labels."
+            : "Paste a label's website and we'll do the rest — name, logo, and bio in one click."}
       </p>
-      {!searching && (
+      {!searching && !filtering && (
         <button
           type="button"
           onClick={onAdd}

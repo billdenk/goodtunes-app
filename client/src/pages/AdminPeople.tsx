@@ -15,6 +15,7 @@ import {
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { AdminFilterPanel } from "@/components/admin/AdminFilterPanel";
 
 /**
  * Admin home · People (Phase 6a).
@@ -277,6 +278,24 @@ export function AdminPeople() {
               <Search className="w-4 h-4" />
             </button>
           )}
+          {/* Task #24 — credit filter moved off the old chip rail into
+              the shared filter panel so the People toolbar matches
+              Albums. Selection still lives in the URL (`?role=`). */}
+          <AdminFilterPanel
+            groups={[
+              {
+                id: "role",
+                label: "Credit",
+                options: allCredits.map((c) => ({ value: c, label: c })),
+              },
+            ]}
+            selected={{
+              role: allCredits.filter((c) => selectedSet.has(c.toLowerCase())),
+            }}
+            onToggle={(_g, value) => toggleRole(value)}
+            onReset={() => setRoleParam([])}
+            isActive={selectedSet.size > 0}
+          />
           <ViewModeToggle
             value={view}
             onChange={setView}
@@ -293,18 +312,6 @@ export function AdminPeople() {
         </>)}
       />
 
-      {/* Task #827 — credit filter rail. Toggle chips narrow the list by
-          one or more creative credits (stored tags ∪ derived credits).
-          State lives in the URL (`?role=`) so it survives refresh. */}
-      {allCredits.length > 0 && (
-        <CreditFilterRail
-          credits={allCredits}
-          selected={selectedSet}
-          onToggle={toggleRole}
-          onClear={() => setRoleParam([])}
-        />
-      )}
-
       {/* Grid */}
       {isLoading ? (
         <div className="py-20 flex items-center justify-center">
@@ -319,7 +326,8 @@ export function AdminPeople() {
         />
       ) : filtered.length === 0 ? (
         <EmptyState
-          searching={search.trim().length > 0 || selectedSet.size > 0}
+          searching={search.trim().length > 0}
+          filtering={selectedSet.size > 0}
         />
       ) : view === "grid" ? (
         <div
@@ -781,10 +789,14 @@ export function CreditFilterRail({
 
 export function EmptyState({
   searching,
+  filtering,
   emptyTitle,
   emptyDescription,
 }: {
   searching: boolean;
+  /** Task #24 — filters (not search) emptied the list; distinct copy so
+      the operator knows to open the filter panel, not clear a query. */
+  filtering?: boolean;
   emptyTitle?: string;
   emptyDescription?: string;
 }) {
@@ -797,12 +809,18 @@ export function EmptyState({
         <UserIcon className="w-6 h-6" />
       </div>
       <p className="text-slate-700 text-[14px] font-semibold">
-        {searching ? "No people match that search" : (emptyTitle ?? "No people yet")}
+        {searching
+          ? "No people match that search"
+          : filtering
+            ? "No people match these filters"
+            : (emptyTitle ?? "No people yet")}
       </p>
       <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs">
         {searching
           ? "Try a different name."
-          : (emptyDescription ?? "Add an artist, performer, writer, or producer to start building the SuperCredits™ catalog.")}
+          : filtering
+            ? "Adjust or reset the filters to see more people."
+            : (emptyDescription ?? "Add an artist, performer, writer, or producer to start building the SuperCredits™ catalog.")}
       </p>
     </div>
   );

@@ -13,6 +13,7 @@ import {
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { AdminFilterPanel } from "@/components/admin/AdminFilterPanel";
 import {
   Dialog,
   DialogContent,
@@ -112,12 +113,21 @@ export function AdminInstruments() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  // Task #174 — operator cleanup filter for the post-backfill state.
-  // The maker-name → instrument-name match catches "Gibson Les Paul"
-  // but not "Custom Shop '59 Reissue", so a handful of rows always
-  // need a hand-pick. This toggle narrows the grid to only those
-  // unassigned rows so the operator can sweep them in one sitting.
-  const [onlyUnassignedMaker, setOnlyUnassignedMaker] = useState(false);
+  // Task #24 — toolbar filter panel state. Category chips narrow by the
+  // card's display category; the Maker link group keeps Task #174's
+  // "unassigned maker" cleanup sweep (plus its inverse) — that filter
+  // used to be a standalone amber toolbar pill, now folded in here.
+  const [categoryFilter, setCategoryFilter] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [makerFilter, setMakerFilter] = useState<"has" | "unassigned" | null>(
+    null,
+  );
+  const filtersActive = categoryFilter.size > 0 || makerFilter !== null;
+  const resetFilters = () => {
+    setCategoryFilter(new Set());
+    setMakerFilter(null);
+  };
   const searchInputRef = useRef<HTMLInputElement>(null);
   // Entity token stays "instruments" to match the rest of the file's
   // testids (`grid-instruments`, `card-instrument-…`, `row-instrument-…`)
@@ -146,10 +156,22 @@ export function AdminInstruments() {
     enabled: !!user?.isAdmin,
   });
 
-  const unassignedMakerCount = useMemo(
-    () => instruments.filter((i) => !i.makerVendorId).length,
-    [instruments],
-  );
+  // Display category = the same string the cards show (short label when
+  // set, else the full category). Distinct values feed the filter panel.
+  const displayCategory = (i: InstrumentLite) =>
+    (i.shortCategory?.trim() || i.category.trim() || "Uncategorized");
+
+  const categoryOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const i of instruments) {
+      const label = displayCategory(i);
+      const key = label.toLowerCase();
+      if (!seen.has(key)) seen.set(key, label);
+    }
+    return Array.from(seen.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [instruments]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -160,12 +182,19 @@ export function AdminInstruments() {
             i.category.toLowerCase().includes(q),
         )
       : instruments.slice();
-    if (onlyUnassignedMaker) {
+    if (categoryFilter.size > 0) {
+      rows = rows.filter((i) =>
+        categoryFilter.has(displayCategory(i).toLowerCase()),
+      );
+    }
+    if (makerFilter === "unassigned") {
       rows = rows.filter((i) => !i.makerVendorId);
+    } else if (makerFilter === "has") {
+      rows = rows.filter((i) => !!i.makerVendorId);
     }
     rows.sort((a, b) => a.name.localeCompare(b.name));
     return rows;
-  }, [instruments, search, onlyUnassignedMaker]);
+  }, [instruments, search, categoryFilter, makerFilter]);
 
   const openInstrument = (id: string) => {
     navigate(`/admin/instruments/${id}`);
@@ -537,38 +566,47 @@ export function AdminInstruments() {
               <Search className="w-4 h-4" />
             </button>
           )}
-          {/* Task #174 — unassigned-maker filter. Hidden when the
-              catalog is fully classified so the header doesn't carry
-              dead UI; surfaces as a small pill while any rows still
-              need a Maker pick. */}
-          {unassignedMakerCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setOnlyUnassignedMaker((v) => !v)}
-              aria-pressed={onlyUnassignedMaker}
-              className={[
-                "h-9 inline-flex items-center gap-1.5 rounded-md border px-2.5 text-[12.5px] font-medium transition-colors",
-                onlyUnassignedMaker
-                  ? "bg-amber-50 border-amber-300 text-amber-800"
-                  : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50",
-              ].join(" ")}
-              data-testid="button-filter-unassigned-maker"
-              title="Show only gear without a Maker assigned"
-            >
-              <Guitar className="w-3.5 h-3.5" />
-              {onlyUnassignedMaker ? "Unassigned only" : "Unassigned maker"}
-              <span
-                className={[
-                  "rounded-full px-1.5 py-0.5 text-[10.5px] leading-none font-semibold tabular-nums",
-                  onlyUnassignedMaker
-                    ? "bg-amber-200 text-amber-900"
-                    : "bg-slate-100 text-slate-600",
-                ].join(" ")}
-              >
-                {unassignedMakerCount}
-              </span>
-            </button>
-          )}
+          {/* Task #24 — shared filter panel (replaces the Task #174
+              standalone "Unassigned maker" pill; that sweep now lives
+              in the Maker link group inside the panel). */}
+          <AdminFilterPanel
+            groups={[
+              {
+                id: "category",
+                label: "Category",
+                options: categoryOptions,
+              },
+              {
+                id: "maker",
+                label: "Maker link",
+                mode: "single",
+                options: [
+                  { value: "has", label: "Has maker" },
+                  { value: "unassigned", label: "Unassigned maker" },
+                ],
+              },
+            ]}
+            selected={{
+              category: Array.from(categoryFilter),
+              maker: makerFilter ? [makerFilter] : [],
+            }}
+            onToggle={(groupId, value) => {
+              if (groupId === "category") {
+                setCategoryFilter((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(value)) next.delete(value);
+                  else next.add(value);
+                  return next;
+                });
+              } else {
+                setMakerFilter((prev) =>
+                  prev === value ? null : (value as "has" | "unassigned"),
+                );
+              }
+            }}
+            onReset={resetFilters}
+            isActive={filtersActive}
+          />
           <ViewModeToggle
             value={view}
             onChange={setView}
@@ -599,7 +637,10 @@ export function AdminInstruments() {
           testId="admin-instruments-error"
         />
       ) : filtered.length === 0 ? (
-        <EmptyState searching={search.trim().length > 0} />
+        <EmptyState
+          searching={search.trim().length > 0}
+          filtering={filtersActive}
+        />
       ) : view === "grid" ? (
         <div
           className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-6"
@@ -1026,7 +1067,13 @@ function InstrumentRow({
   );
 }
 
-function EmptyState({ searching }: { searching: boolean }) {
+function EmptyState({
+  searching,
+  filtering,
+}: {
+  searching: boolean;
+  filtering?: boolean;
+}) {
   return (
     <div
       className="py-16 flex flex-col items-center justify-center text-center"
@@ -1036,12 +1083,18 @@ function EmptyState({ searching }: { searching: boolean }) {
         <Guitar className="w-6 h-6" />
       </div>
       <p className="text-slate-700 text-[14px] font-semibold">
-        {searching ? "No gear matches that search" : "No gear yet"}
+        {searching
+          ? "No gear matches that search"
+          : filtering
+            ? "No gear matches these filters"
+            : "No gear yet"}
       </p>
       <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs">
         {searching
           ? "Try a different name or category."
-          : "Add a guitar, amp, mic, or anything else artists play on — each can carry its own maker / reseller links."}
+          : filtering
+            ? "Adjust or reset the filters to see more gear."
+            : "Add a guitar, amp, mic, or anything else artists play on — each can carry its own maker / reseller links."}
       </p>
     </div>
   );

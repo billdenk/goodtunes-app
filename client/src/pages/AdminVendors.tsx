@@ -14,6 +14,7 @@ import {
   useViewMode,
 } from "@/components/admin/ViewModeToggle";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { AdminFilterPanel } from "@/components/admin/AdminFilterPanel";
 import {
   Dialog,
   DialogContent,
@@ -539,9 +540,22 @@ export function AdminVendors() {
     },
   });
 
+  // Task #24 — toolbar filter panel state (Active tab only; the Trash
+  // tab keeps its plain search). Completeness sweeps: which rows still
+  // need a logo or a website filled in.
+  const [logoFilter, setLogoFilter] = useState<"has" | "missing" | null>(null);
+  const [domainFilter, setDomainFilter] = useState<"has" | "missing" | null>(
+    null,
+  );
+  const filtersActive = logoFilter !== null || domainFilter !== null;
+  const resetFilters = () => {
+    setLogoFilter(null);
+    setDomainFilter(null);
+  };
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const rows = q
+    let rows = q
       ? vendors.filter(
           (v) =>
             v.name.toLowerCase().includes(q) ||
@@ -549,9 +563,19 @@ export function AdminVendors() {
             (v.tagline ?? "").toLowerCase().includes(q),
         )
       : vendors.slice();
+    if (logoFilter) {
+      rows = rows.filter((v) =>
+        logoFilter === "has" ? !!v.logoUrl : !v.logoUrl,
+      );
+    }
+    if (domainFilter) {
+      rows = rows.filter((v) =>
+        domainFilter === "has" ? !!v.domain.trim() : !v.domain.trim(),
+      );
+    }
     rows.sort((a, b) => a.name.localeCompare(b.name));
     return rows;
-  }, [vendors, search]);
+  }, [vendors, search, logoFilter, domainFilter]);
 
   // Task #1253 — Trash tab list. Same search box filters both tabs;
   // trashed rows sort most-recently-deleted first so the thing you just
@@ -704,6 +728,46 @@ export function AdminVendors() {
               <Search className="w-4 h-4" />
             </button>
           )}
+          {/* Task #24 — shared filter panel; only meaningful on the
+              Active tab (Trash keeps plain search). */}
+          {tab === "active" && (
+            <AdminFilterPanel
+              groups={[
+                {
+                  id: "logo",
+                  label: "Logo",
+                  mode: "single",
+                  options: [
+                    { value: "has", label: "Has logo" },
+                    { value: "missing", label: "Missing logo" },
+                  ],
+                },
+                {
+                  id: "domain",
+                  label: "Website",
+                  mode: "single",
+                  options: [
+                    { value: "has", label: "Has website" },
+                    { value: "missing", label: "Missing website" },
+                  ],
+                },
+              ]}
+              selected={{
+                logo: logoFilter ? [logoFilter] : [],
+                domain: domainFilter ? [domainFilter] : [],
+              }}
+              onToggle={(groupId, value) => {
+                const v = value as "has" | "missing";
+                if (groupId === "logo") {
+                  setLogoFilter((prev) => (prev === v ? null : v));
+                } else {
+                  setDomainFilter((prev) => (prev === v ? null : v));
+                }
+              }}
+              onReset={resetFilters}
+              isActive={filtersActive}
+            />
+          )}
           <ViewModeToggle
             value={view}
             onChange={setView}
@@ -774,6 +838,7 @@ export function AdminVendors() {
         ) : filtered.length === 0 ? (
           <EmptyState
             searching={search.trim().length > 0}
+            filtering={filtersActive}
             title={copy.emptyTitle}
             hint={copy.emptyHint}
             searchHint={copy.emptySearchHint}
@@ -1383,12 +1448,15 @@ function EmptyState({
   hint,
   searchHint,
   Icon,
+  filtering,
 }: {
   searching: boolean;
   title: string;
   hint: string;
   searchHint: string;
   Icon: ComponentType<{ className?: string }>;
+  /** Task #24 — filters (not search) emptied the list. */
+  filtering?: boolean;
 }) {
   return (
     <div
@@ -1399,10 +1467,18 @@ function EmptyState({
         <Icon className="w-6 h-6" />
       </div>
       <p className="text-slate-700 text-[14px] font-semibold">
-        {searching ? "No matches" : title}
+        {searching
+          ? "No matches"
+          : filtering
+            ? "No matches for these filters"
+            : title}
       </p>
       <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs">
-        {searching ? searchHint : hint}
+        {searching
+          ? searchHint
+          : filtering
+            ? "Adjust or reset the filters to see more."
+            : hint}
       </p>
     </div>
   );

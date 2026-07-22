@@ -9720,6 +9720,36 @@
     "snippet": "className=\"px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:o"
   },
   {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminFilterPanel.tsx",
+    "snippet": "className=\"w-full text-[13px] bg-transparent outline-none placeholder:text-slate-400\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminFilterPanel.tsx",
+    "snippet": "<div className=\"text-[10.5px] font-semibold uppercase tracking-[0.06em] text-slate-500 mb-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminFilterPanel.tsx",
+    "snippet": "\"h-7 px-2.5 text-[12px] font-semibold rounded-md transition-colors inline-flex items-center\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminFilterPanel.tsx",
+    "snippet": "className=\"text-[12.5px] text-slate-400 text-center py-2\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminFilterPanel.tsx",
+    "snippet": "className=\"text-[12.5px] font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminFilterPanel.tsx",
+    "snippet": "<SheetTitle className=\"text-[15px] font-semibold text-slate-900\">"
+  },
+  {
     "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/components/admin/AdminFrame.tsx",
     "snippet": "<Link"
@@ -16473,16 +16503,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstruments.tsx",
     "snippet": "className=\"w-44 text-[13px] bg-transparent outline-none placeholder:text-slate-400\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "\"h-9 inline-flex items-center gap-1.5 rounded-md border px-2.5 text-[12.5px] font-medium transition-colors\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "\"rounded-full px-1.5 py-0.5 text-[10.5px] leading-none font-semibold tabular-nums\","
   },
   {
     "rule": "hardcoded-font-size",
