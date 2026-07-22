@@ -190,6 +190,7 @@ function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string;
       name={vendor?.name ?? "Your dashboard"}
       logoUrl={vendor?.logoUrl ?? null}
       fallbackIcon={Store}
+      hideHeaderIdentity
       tabs={tabs}
       activeTab={tab}
       onTabChange={handleTabChange}

@@ -145,6 +145,7 @@ export function NonProfitDashboard() {
       name={me.data?.name ?? "Loading…"}
       logoUrl={me.data?.logoUrl ?? null}
       fallbackIcon={Heart}
+      hideHeaderIdentity
       maxWidth="5xl"
       subtitle={
         me.data?.websiteUrl ? (
