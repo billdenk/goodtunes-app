@@ -75,6 +75,7 @@ type Mapping = {
   signedCertPriceCents: number | null;
   storeName: string | null;
   shopDomain: string | null;
+  isSignedGooddeedAddon: boolean;
 };
 type Resolved = {
   storeId: string;
@@ -164,6 +165,11 @@ export function ShopifyPanel({
   const [pickerStoreId, setPickerStoreId] = useState<string>("");
   const [offerCert, setOfferCert] = useState(false);
   const [certPrice, setCertPrice] = useState("9.99");
+  // Addon-line detection flag: this mapping is the "Signed GoodDeed add-on"
+  // product for the album (not the primary album product). When an order
+  // contains this line item alongside the primary mapping, a signed cert is
+  // minted at the retail price the fan paid on Shopify.
+  const [isAddon, setIsAddon] = useState(false);
   // Task #2428 — for a shopify_plus album the operator opts a mapping in to
   // ALSO mint the GoodTunes digital unlock + GoodDeed (default OFF =
   // fulfillment-only). Not shown for plain "shopify" (a mapping always mints).
@@ -339,12 +345,13 @@ export function ShopifyPanel({
         shopifyVariantId: variantId,
         shopifyProductTitle: resolved.shopifyProductTitle,
         albumId,
-        offerSignedCert: offerCert,
+        offerSignedCert: isAddon ? false : offerCert,
+        isSignedGooddeedAddon: isAddon,
       };
       // Task #2428 — only meaningful for shopify_plus; the server ignores it
       // for plain shopify (a mapping always mints the unlock there).
       if (isShopifyPlus) body.offersDigitalUnlock = offerUnlock;
-      if (offerCert) {
+      if (!isAddon && offerCert) {
         const cents = parseDollars(certPrice);
         if (cents == null) throw new Error("Enter a valid cert price");
         body.signedCertPriceCents = cents;
@@ -359,6 +366,7 @@ export function ShopifyPanel({
       setVariantId(null);
       setOfferCert(false);
       setOfferUnlock(false);
+      setIsAddon(false);
       toast({ title: "Mapping saved" });
     },
     onError: (e: any) => toast({ title: "Couldn't save mapping", description: e?.message, variant: "destructive" }),
@@ -773,7 +781,7 @@ export function ShopifyPanel({
                   <div className="text-[11.5px] text-slate-500 min-w-0 flex-1">
                     {m.storeName ?? m.shopDomain ?? "—"}
                     {m.shopifyVariantId ? ` · variant ${m.shopifyVariantId}` : " · all variants"}
-                    {m.offerSignedCert ? ` · cert ${dollars(m.signedCertPriceCents)}` : ""}
+                    {m.isSignedGooddeedAddon ? " · signed-cert add-on" : m.offerSignedCert ? ` · cert ${dollars(m.signedCertPriceCents)}` : ""}
                   </div>
                   <button
                     type="button"
@@ -905,28 +913,48 @@ export function ShopifyPanel({
                 <label className="inline-flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={offerCert}
-                    onChange={(e) => setOfferCert(e.target.checked)}
+                    checked={isAddon}
+                    onChange={(e) => {
+                      setIsAddon(e.target.checked);
+                      if (e.target.checked) setOfferCert(false);
+                    }}
                     className="h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
-                    data-testid="toggle-shopify-cert"
+                    data-testid="toggle-shopify-addon"
                   />
-                  <span className="text-[13px] text-slate-800">Bundle a printed & signed GoodDeed certificate</span>
+                  <span className="text-[13px] text-slate-800">This product is the signed-GoodDeed add-on for the album</span>
                 </label>
-                {offerCert && (
-                  <div className="flex items-center gap-1.5 mt-2 ml-6">
-                    <span className="text-slate-500 text-[12px]">Price $</span>
-                    <input
-                      type="text"
-                      value={certPrice}
-                      onChange={(e) => setCertPrice(e.target.value)}
-                      inputMode="decimal"
-                      className="w-24 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
-                      data-testid="input-shopify-cert-price"
-                    />
-                    <span className="text-[11.5px] text-slate-400">Must be ≥ the album's per-album minimum floor.</span>
-                  </div>
-                )}
+                <p className="text-[11.5px] text-slate-400 mt-0.5 ml-6">
+                  Fan adds it to their cart separately. Mints a signed cert at the retail price they paid.
+                </p>
               </div>
+              {!isAddon && (
+                <div>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={offerCert}
+                      onChange={(e) => setOfferCert(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
+                      data-testid="toggle-shopify-cert"
+                    />
+                    <span className="text-[13px] text-slate-800">Bundle a printed & signed GoodDeed certificate</span>
+                  </label>
+                  {offerCert && (
+                    <div className="flex items-center gap-1.5 mt-2 ml-6">
+                      <span className="text-slate-500 text-[12px]">Price $</span>
+                      <input
+                        type="text"
+                        value={certPrice}
+                        onChange={(e) => setCertPrice(e.target.value)}
+                        inputMode="decimal"
+                        className="w-24 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
+                        data-testid="input-shopify-cert-price"
+                      />
+                      <span className="text-[11.5px] text-slate-400">Must be ≥ the album's per-album minimum floor.</span>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex justify-end">
                 <button
                   type="button"

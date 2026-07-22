@@ -3110,6 +3110,12 @@ export const shopifyStores = pgTable("shopify_stores", {
   // so admin UI can render "Disconnected" without losing the linkage.
   installedAt: timestamp("installed_at").defaultNow(),
   uninstalledAt: timestamp("uninstalled_at"),
+  // Per-store digital per-unit fee GoodTunes bills the artist outside Shopify
+  // for each order that mints a digital unlock. Platform default is $3.50
+  // (350 cents); per-deal overrides go up or down from there. Nullable for
+  // backwards compatibility — a null row reads as the $3.50 platform default
+  // at accrual time (coalesce in the webhook handler).
+  digitalUnitFeeCents: integer("digital_unit_fee_cents").default(350),
 });
 
 // Mapping a Shopify product (or specific variant) on a connected store
@@ -3150,6 +3156,16 @@ export const shopifyProductMappings = pgTable(
     // Price the label is selling the cert for inside the Shopify cart.
     // Subject to the album's min floor — webhook discards values below.
     signedCertPriceCents: integer("signed_cert_price_cents"),
+    // When true this mapping row represents the signed-GoodDeed add-on
+    // product/variant on the artist's Shopify store. It is NOT the primary
+    // album product — it's the standalone "Signed Certificate" SKU the fan
+    // can add to their cart. On a paid-order webhook we scan ALL matched
+    // line items: if any line matches an isSignedGooddeedAddon=true mapping
+    // for the same album, we mint a signed cert. Orders that contain only
+    // the primary album mapping stay digital-only. This replaces the old
+    // album-level all-or-nothing offerSignedCert approach for Shopify stores
+    // where the cert is a separate purchasable SKU rather than always bundled.
+    isSignedGooddeedAddon: boolean("is_signed_gooddeed_addon").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow(),
   },
   // No table-level uniqueness here — Postgres treats NULL variantId as
@@ -3166,6 +3182,36 @@ export const shopifyProductMappings = pgTable(
   // because Postgres requires the conflict target to match exactly one
   // of the two partial indexes).
 );
+
+// Per-order digital fee accrual for Shopify merchant billing.
+// Every Shopify order that mints a digital unlock accrues a fee into
+// this ledger at the store's digitalUnitFeeCents rate (default $3.50).
+// The fee is billed to the artist OUTSIDE Shopify — this table is the
+// source of truth for what has been earned and what has been reversed.
+// Reversed rows (refunded orders) flip reversedAt; net still-owed
+// amounts are computed as SUM(totalCents) WHERE reversedAt IS NULL.
+export const shopifyDigitalFeeLedger = pgTable("shopify_digital_fee_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id")
+    .notNull()
+    .references(() => orders.id, { onDelete: "cascade" })
+    .unique(),
+  storeId: varchar("store_id")
+    .notNull()
+    .references(() => shopifyStores.id, { onDelete: "cascade" }),
+  albumId: varchar("album_id")
+    .notNull()
+    .references(() => albums.id, { onDelete: "cascade" }),
+  // Snapshot of the rate at accrual time so later rate changes don't
+  // retroactively change historical ledger entries.
+  unitFeeCents: integer("unit_fee_cents").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  // totalCents = unitFeeCents × quantity, stored for fast aggregation.
+  totalCents: integer("total_cents").notNull(),
+  // Stamped when the Shopify order is refunded; used to compute net amounts.
+  reversedAt: timestamp("reversed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 // One-time redemption code minted at orders/paid webhook time. The code
 // is the path component on /redeem/<code> — both the order-status-page
@@ -4230,6 +4276,7 @@ export type InsertShopifyProductMapping = z.infer<typeof insertShopifyProductMap
 export type ShopifyProductMapping = typeof shopifyProductMappings.$inferSelect;
 
 export type ShopifyRedemptionCode = typeof shopifyRedemptionCodes.$inferSelect;
+export type ShopifyDigitalFeeLedgerEntry = typeof shopifyDigitalFeeLedger.$inferSelect;
 
 // ─── Task #69 — Manufacturer & fulfillment partner roles + RFQ ──────────
 // Two new partner entities, both first-class in the single admin shell:

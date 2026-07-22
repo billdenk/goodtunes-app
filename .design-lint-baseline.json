@@ -11612,6 +11612,16 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<span className=\"text-[13px] text-slate-800\">This product is the signed-GoodDeed add-on for the album</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<p className=\"text-[11.5px] text-slate-400 mt-0.5 ml-6\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "<span className=\"text-[13px] text-slate-800\">Bundle a printed & signed GoodDeed certificate</span>"
   },
   {
@@ -21508,11 +21518,6 @@
     "rule": "naked-icon-button",
     "file": "client/src/pages/PressPortal.tsx",
     "snippet": "<button type=\"button\" onClick={closeSearch} className=\"text-slate-400 hover:text-slate-700\" data-testid=\"button-close-search-press-albums\" aria-label=\"Close search\" > <XIcon className=\"w-3.5 h-3.5\" />"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<h2 className=\"text-[20px] font-semibold text-slate-900 mb-1\">Print queue</h2>"
   },
   {
     "rule": "hardcoded-font-size",

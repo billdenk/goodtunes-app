@@ -9844,3 +9844,50 @@ SQL
 }
 migrate_payment_requests dev  "${DATABASE_URL:-}"
 migrate_payment_requests prod "${PROD_DATABASE_URL:-}"
+
+# Task #2780 — Shopify per-deal digital unit fee + signed-GoodDeed add-on.
+#   shopify_stores.digital_unit_fee_cents — per-unit fee override (default 350 = $3.50)
+#   shopify_product_mappings.is_signed_gooddeed_addon — marks a Shopify product as
+#     the per-order signed-cert add-on for an album mapping
+#   shopify_digital_fee_ledger — accrual ledger, one row per order, reversedAt on refund
+migrate_task_2780_shopify_fees() {
+  local label="$1" db_url="$2"
+  [ -z "$db_url" ] && { echo "post-merge: skipping task-2780 shopify fees migration on $label (no URL set)"; return; }
+  if psql "$db_url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE shopify_stores
+  ADD COLUMN IF NOT EXISTS digital_unit_fee_cents integer NOT NULL DEFAULT 350;
+
+ALTER TABLE shopify_product_mappings
+  ADD COLUMN IF NOT EXISTS is_signed_gooddeed_addon boolean NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS shopify_digital_fee_ledger (
+  id              varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id        varchar NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
+  store_id        varchar NOT NULL REFERENCES shopify_stores(id) ON DELETE CASCADE,
+  album_id        varchar NOT NULL,
+  unit_fee_cents  integer NOT NULL DEFAULT 350,
+  quantity        integer NOT NULL DEFAULT 1,
+  total_cents     integer NOT NULL,
+  reversed_at     timestamp,
+  created_at      timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS shopify_digital_fee_ledger_store_idx  ON shopify_digital_fee_ledger (store_id);
+CREATE INDEX IF NOT EXISTS shopify_digital_fee_ledger_album_idx  ON shopify_digital_fee_ledger (album_id);
+CREATE INDEX IF NOT EXISTS shopify_digital_fee_ledger_created_idx ON shopify_digital_fee_ledger (created_at);
+
+-- Per-deal rate overrides (Soul Chef = $4.00, Niina Soleil = $2.50)
+UPDATE shopify_stores SET digital_unit_fee_cents = 400
+  WHERE store_name ILIKE '%soul chef%' OR shop_domain ILIKE '%soulchef%' OR shop_domain ILIKE '%soul-chef%';
+UPDATE shopify_stores SET digital_unit_fee_cents = 250
+  WHERE store_name ILIKE '%niina%' OR shop_domain ILIKE '%niina%';
+COMMIT;
+SQL
+  then
+    echo "post-merge: task-2780 shopify fees migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-2780 shopify fees migration failed on $label (continuing)"
+  fi
+}
+migrate_task_2780_shopify_fees dev  "${DATABASE_URL:-}"
+migrate_task_2780_shopify_fees prod "${PROD_DATABASE_URL:-}"

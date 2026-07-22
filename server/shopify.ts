@@ -28,6 +28,7 @@ import {
   userAlbums,
   shopifyStores,
   shopifyProductMappings,
+  shopifyDigitalFeeLedger,
   shopifyRedemptionCodes,
   shopifyPushLog,
   insertShopifyProductMappingSchema,
@@ -663,8 +664,10 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
     const vid = li.variant_id != null ? String(li.variant_id) : null;
     // Prefer an exact (product, variant) mapping; fall back to a
     // product-wide mapping (variantId=null) if no exact match.
-    const exact = mappings.find((m) => m.shopifyProductId === pid && m.shopifyVariantId === vid);
-    const productWide = mappings.find((m) => m.shopifyProductId === pid && m.shopifyVariantId === null);
+    // Skip addon mappings (isSignedGooddeedAddon=true) — those are
+    // separate "Signed GoodDeed add-on" SKUs, not the primary album.
+    const exact = mappings.find((m) => m.shopifyProductId === pid && m.shopifyVariantId === vid && !m.isSignedGooddeedAddon);
+    const productWide = mappings.find((m) => m.shopifyProductId === pid && m.shopifyVariantId === null && !m.isSignedGooddeedAddon);
     const hit = exact ?? productWide;
     if (hit) {
       albumId = hit.albumId;
@@ -674,6 +677,28 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
     }
   }
   if (!albumId || !matchedMapping || !matchedLine) return null;
+
+  // Scan the rest of the cart for a signed-GoodDeed add-on product mapped
+  // to the same album. When found, an order that contains the primary album
+  // product AND this add-on line mints a signed certificate (instead of the
+  // old album-level all-or-nothing offerSignedCert flag).
+  let signedAddonLine: ShopifyLineItem | null = null;
+  for (const li of payload.line_items) {
+    if (li === matchedLine) continue;
+    const pid = String(li.product_id ?? "");
+    const vid = li.variant_id != null ? String(li.variant_id) : null;
+    const addonExact = mappings.find(
+      (m) => m.isSignedGooddeedAddon && m.albumId === albumId && m.shopifyProductId === pid && m.shopifyVariantId === vid,
+    );
+    const addonWide = mappings.find(
+      (m) => m.isSignedGooddeedAddon && m.albumId === albumId && m.shopifyProductId === pid && m.shopifyVariantId === null,
+    );
+    const addonHit = addonExact ?? addonWide;
+    if (addonHit) {
+      signedAddonLine = li;
+      break;
+    }
+  }
 
   // Task #2428 — GoodTunes Shopify+ albums sell on the customer's OWN
   // Shopify; GoodTunes is NOT the seller. We never mint a GoodTunes sale,
@@ -717,9 +742,11 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // Build the order_items snapshot. Two kinds:
   //   "format" → the physical SKU label (we use the line item title)
   //   "addon"  → printed & signed cert, if this mapping offered it AND
-  //              the price is at or above the album's min floor.
+  //              the price is at or above the album's min floor, OR
+  //              if the cart contained an isSignedGooddeedAddon line item.
   const totalCents = dollarsToCents(payload.total_price);
   let signedCertCents = 0;
+  // Method A: legacy mapping-level offerSignedCert (album-wide toggle).
   if (
     matchedMapping.offerSignedCert &&
     matchedMapping.signedCertPriceCents != null &&
@@ -733,6 +760,23 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
       .where(and(eq(albumAddons.albumId, albumId), eq(albumAddons.kind, "signed_cert")));
     if (!floor || matchedMapping.signedCertPriceCents >= floor.minPriceCents) {
       signedCertCents = matchedMapping.signedCertPriceCents;
+    }
+  }
+  // Method B: per-order add-on line item detection. A separate Shopify
+  // product/variant mapped as isSignedGooddeedAddon=true for this album
+  // lets the fan add the cert to their cart independently. The retail price
+  // (what the fan paid) goes into the order_items row; GoodTunes bills the
+  // artist the manufacturing ladder cost separately outside Shopify.
+  if (signedAddonLine && signedCertCents === 0) {
+    const addonLineCents = dollarsToCents(signedAddonLine.price) * (signedAddonLine.quantity ?? 1);
+    const [floor] = await db
+      .select()
+      .from(albumAddons)
+      .where(and(eq(albumAddons.albumId, albumId), eq(albumAddons.kind, "signed_cert")));
+    // Floor check: if the artist set a floor on this album's cert, enforce
+    // it. (Per-unit price vs floor; multiply quantity after the check.)
+    if (!floor || dollarsToCents(signedAddonLine.price) >= floor.minPriceCents) {
+      signedCertCents = addonLineCents;
     }
   }
 
@@ -841,6 +885,30 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
     await accruePressPool(albumId, order.id, matchedLine.quantity).catch((e) =>
       console.error(`[shopify] press-pool accrual failed for ${order.id}`, (e as Error)?.message),
     );
+  }
+
+  // Digital per-unit fee accrual. Every order that mints a digital unlock
+  // accrues the store's digitalUnitFeeCents rate (default $3.50) per unit
+  // into the fee ledger. Billed to the artist outside Shopify. Idempotent
+  // (the orderId UNIQUE constraint on the ledger table silences replays).
+  // shopify_plus external_paid orders DO accrue — GoodTunes still provides
+  // the digital unlock and GoodDeed, so the platform fee applies.
+  try {
+    const unitFeeCents = store.digitalUnitFeeCents ?? 350;
+    const qty = matchedLine.quantity ?? 1;
+    await db
+      .insert(shopifyDigitalFeeLedger)
+      .values({
+        orderId: order.id,
+        storeId: store.id,
+        albumId,
+        unitFeeCents,
+        quantity: qty,
+        totalCents: unitFeeCents * qty,
+      })
+      .onConflictDoNothing({ target: shopifyDigitalFeeLedger.orderId });
+  } catch (e: any) {
+    console.error(`[shopify] digital fee accrual failed for ${order.id}: ${e?.message ?? e}`);
   }
 
   // Task #246 — Mint a cert_reservations row if the order carries the
@@ -1030,6 +1098,13 @@ async function handleShopifyRefund(payload: { order_id?: number; id?: number }):
       console.error(`[shopify] press-pool reversal failed for ${order.id}`, e?.message),
     );
   }
+  // Reverse the digital fee accrual for this order. Stamps reversedAt so the
+  // operator's fee-ledger view correctly shows the net still-owed amount.
+  await db
+    .update(shopifyDigitalFeeLedger)
+    .set({ reversedAt: new Date() })
+    .where(and(eq(shopifyDigitalFeeLedger.orderId, order.id), isNull(shopifyDigitalFeeLedger.reversedAt)))
+    .catch((e: any) => console.error(`[shopify] fee reversal failed for ${order.id}: ${e?.message ?? e}`));
   // Same lock-return logic as the Stripe refund path: only revoke the
   // album unlock if this is the *only* live order for the customer +
   // album. Other live orders — a direct/Shopify "paid" order or a
@@ -1757,6 +1832,97 @@ export function registerShopifyRoutes(app: Express) {
     res.json({ ok: true });
   });
 
+  // Update per-store settings — currently only digitalUnitFeeCents (the
+  // per-unit fee GoodTunes bills the artist for each order that mints a
+  // digital unlock). Returns the updated store row minus the access token.
+  app.patch("/api/admin/shopify/stores/:id", requireAdmin, async (req, res) => {
+    const storeId = String(req.params.id);
+    const parsed = z.object({
+      digitalUnitFeeCents: z.number().int().min(0).max(100_000).nullable().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid body" });
+    const updates: Record<string, unknown> = {};
+    if (parsed.data.digitalUnitFeeCents !== undefined) {
+      updates.digitalUnitFeeCents = parsed.data.digitalUnitFeeCents;
+    }
+    if (Object.keys(updates).length === 0) return res.status(400).json({ message: "Nothing to update" });
+    const [updated] = await db
+      .update(shopifyStores)
+      .set(updates)
+      .where(eq(shopifyStores.id, storeId))
+      .returning();
+    if (!updated) return res.status(404).json({ message: "Store not found" });
+    res.json({ ...updated, accessToken: undefined });
+  });
+
+  // Fee ledger — accrued digital per-unit fees per store, grouped or
+  // per-row. Returns rows with totals so the operator can review what
+  // has been earned and what has been reversed (refunded). Query params:
+  //   storeId — filter to a specific store
+  //   since / until — ISO date strings for a time window
+  //   grouped — if "true", collapse to one summary row per store
+  app.get("/api/admin/shopify/fee-ledger", requireAdmin, async (req, res) => {
+    const storeId = req.query.storeId ? String(req.query.storeId) : null;
+    const since = req.query.since ? new Date(String(req.query.since)) : null;
+    const until = req.query.until ? new Date(String(req.query.until)) : null;
+    const grouped = req.query.grouped === "true";
+
+    const conditions = [
+      storeId ? eq(shopifyDigitalFeeLedger.storeId, storeId) : null,
+      since ? sql`${shopifyDigitalFeeLedger.createdAt} >= ${since}` : null,
+      until ? sql`${shopifyDigitalFeeLedger.createdAt} <= ${until}` : null,
+    ].filter(Boolean) as any[];
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    if (grouped) {
+      // Aggregate: per-store total accrued and total reversed
+      const rows = await db
+        .select({
+          storeId: shopifyDigitalFeeLedger.storeId,
+          storeName: shopifyStores.storeName,
+          shopDomain: shopifyStores.shopDomain,
+          totalAccruedCents: sql<number>`COALESCE(SUM(${shopifyDigitalFeeLedger.totalCents}),0)`,
+          totalReversedCents: sql<number>`COALESCE(SUM(CASE WHEN ${shopifyDigitalFeeLedger.reversedAt} IS NOT NULL THEN ${shopifyDigitalFeeLedger.totalCents} ELSE 0 END),0)`,
+          orderCount: sql<number>`COUNT(*)`,
+          reversedCount: sql<number>`COUNT(${shopifyDigitalFeeLedger.reversedAt})`,
+        })
+        .from(shopifyDigitalFeeLedger)
+        .leftJoin(shopifyStores, eq(shopifyDigitalFeeLedger.storeId, shopifyStores.id))
+        .where(where)
+        .groupBy(shopifyDigitalFeeLedger.storeId, shopifyStores.storeName, shopifyStores.shopDomain)
+        .orderBy(desc(sql`SUM(${shopifyDigitalFeeLedger.totalCents})`));
+      const result = rows.map((r) => ({
+        ...r,
+        netCents: Number(r.totalAccruedCents) - Number(r.totalReversedCents),
+      }));
+      return res.json(result);
+    }
+
+    // Per-row ledger entries
+    const rows = await db
+      .select({
+        id: shopifyDigitalFeeLedger.id,
+        orderId: shopifyDigitalFeeLedger.orderId,
+        storeId: shopifyDigitalFeeLedger.storeId,
+        storeName: shopifyStores.storeName,
+        shopDomain: shopifyStores.shopDomain,
+        albumId: shopifyDigitalFeeLedger.albumId,
+        albumTitle: albums.title,
+        unitFeeCents: shopifyDigitalFeeLedger.unitFeeCents,
+        quantity: shopifyDigitalFeeLedger.quantity,
+        totalCents: shopifyDigitalFeeLedger.totalCents,
+        reversedAt: shopifyDigitalFeeLedger.reversedAt,
+        createdAt: shopifyDigitalFeeLedger.createdAt,
+      })
+      .from(shopifyDigitalFeeLedger)
+      .leftJoin(shopifyStores, eq(shopifyDigitalFeeLedger.storeId, shopifyStores.id))
+      .leftJoin(albums, eq(shopifyDigitalFeeLedger.albumId, albums.id))
+      .where(where)
+      .orderBy(desc(shopifyDigitalFeeLedger.createdAt))
+      .limit(500);
+    res.json(rows);
+  });
+
   // ─── Admin: label ↔ Shopify store (Task #2030) ────────────────────
   // The label page's Shopify tab reads this for connection status + a
   // per-album mapped/not-mapped summary. `store` is the store stamped with
@@ -2071,13 +2237,16 @@ export function registerShopifyRoutes(app: Express) {
       );
     let row;
     if (existing) {
+      const isAddon = d.isSignedGooddeedAddon ?? false;
       [row] = await db
         .update(shopifyProductMappings)
         .set({
           albumId: d.albumId,
-          offerSignedCert: d.offerSignedCert ?? false,
+          isSignedGooddeedAddon: isAddon,
+          // addon mappings never bundle a cert — clear cert fields when converting
+          offerSignedCert: isAddon ? false : (d.offerSignedCert ?? false),
+          signedCertPriceCents: isAddon ? null : (d.signedCertPriceCents ?? null),
           offersDigitalUnlock: d.offersDigitalUnlock,
-          signedCertPriceCents: d.signedCertPriceCents ?? null,
           shopifyProductTitle: d.shopifyProductTitle ?? null,
         })
         .where(eq(shopifyProductMappings.id, existing.id))

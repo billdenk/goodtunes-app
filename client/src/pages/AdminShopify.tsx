@@ -2,11 +2,11 @@
 // (Task #49, step 10). Surfaces the one-step install link the operator
 // pastes in front of a label during a pitch, plus a list of stores that
 // have already installed.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ExternalLink, Trash2, CheckCircle2, FlaskConical, Copy, Check } from "lucide-react";
+import { ExternalLink, Trash2, CheckCircle2, FlaskConical, Copy, Check, DollarSign, Pencil } from "lucide-react";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 
@@ -17,6 +17,7 @@ type Store = {
   scopes: string | null;
   installedAt: string | null;
   uninstalledAt: string | null;
+  digitalUnitFeeCents: number | null;
 };
 
 type AlbumLite = { id: string; title: string; artist: string };
@@ -55,6 +56,21 @@ function AdminShopifyInner() {
   const remove = useMutation({
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/admin/shopify/stores/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/shopify/stores"] }),
+  });
+
+  // Per-store digital unit fee inline edit state
+  const [editingFeeStoreId, setEditingFeeStoreId] = useState<string | null>(null);
+  const [feeInputValue, setFeeInputValue] = useState("");
+  const feeInputRef = useRef<HTMLInputElement>(null);
+  const saveFee = useMutation({
+    mutationFn: async ({ storeId, cents }: { storeId: string; cents: number }) =>
+      apiRequest("PATCH", `/api/admin/shopify/stores/${storeId}`, { digitalUnitFeeCents: cents }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/shopify/stores"] });
+      setEditingFeeStoreId(null);
+      toast({ title: "Digital unit fee saved" });
+    },
+    onError: (e: any) => toast({ title: "Couldn't save fee", description: e?.message, variant: "destructive" }),
   });
 
   // Dev-only mint affordance. The /api/admin/shopify/dev-mint endpoint
@@ -341,6 +357,51 @@ Get your music now
                       {s.shopDomain} · {live ? "Live" : "Uninstalled"}
                       {s.installedAt ? ` · ${new Date(s.installedAt).toLocaleDateString()}` : ""}
                     </div>
+                  </div>
+                  {/* Digital unit fee inline edit */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <DollarSign className="w-3.5 h-3.5 text-slate-400" />
+                    {editingFeeStoreId === s.id ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const val = Number.parseFloat(feeInputValue.replace(/[^0-9.]/g, ""));
+                          if (!Number.isFinite(val) || val < 0) return;
+                          saveFee.mutate({ storeId: s.id, cents: Math.round(val * 100) });
+                        }}
+                        className="flex items-center gap-1"
+                      >
+                        <input
+                          ref={feeInputRef}
+                          type="text"
+                          value={feeInputValue}
+                          onChange={(e) => setFeeInputValue(e.target.value)}
+                          onBlur={() => setEditingFeeStoreId(null)}
+                          className="w-16 h-6 border border-slate-300 rounded px-1.5 text-xs focus:outline-none focus:border-[var(--brand-blue)]"
+                          data-testid={`input-digital-fee-${s.id}`}
+                          autoFocus
+                        />
+                        <button type="submit" className="text-emerald-600 hover:text-emerald-700 text-xs font-medium" data-testid={`button-save-fee-${s.id}`}>
+                          Save
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = s.digitalUnitFeeCents ?? 350;
+                          setFeeInputValue((current / 100).toFixed(2));
+                          setEditingFeeStoreId(s.id);
+                          setTimeout(() => feeInputRef.current?.focus(), 50);
+                        }}
+                        className="text-xs text-slate-500 hover:text-slate-900 flex items-center gap-1 group"
+                        title="Edit digital unit fee"
+                        data-testid={`button-edit-fee-${s.id}`}
+                      >
+                        ${((s.digitalUnitFeeCents ?? 350) / 100).toFixed(2)}/unit
+                        <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60" />
+                      </button>
+                    )}
                   </div>
                   <button
                     type="button"
