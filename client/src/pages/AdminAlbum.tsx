@@ -901,16 +901,16 @@ export function AdminAlbum({
     },
   });
 
-  // Bulk-delete N songs. No dedicated bulk endpoint exists yet, so we
-  // fan out parallel DELETEs against /api/admin/songs/:id. If any one
-  // fails the whole mutation rejects — the cache invalidation in
-  // onSettled still runs so the operator sees whatever made it through.
+  // Bulk-delete N songs via a single server-side transaction. The old
+  // Promise.all-over-N-individual-deletes approach caused deadlocks: each
+  // transaction's recompactTracklist UPDATE tried to lock every song row in
+  // the album simultaneously, so concurrent transactions deadlocked each
+  // other. The new endpoint deletes all songs + cascades + recompacts in one
+  // atomic transaction.
   const bulkDeleteSongs = useMutation({
     mutationFn: async (ids: string[]) => {
-      await Promise.all(
-        ids.map((id) => apiRequest("DELETE", `/api/admin/songs/${id}`)),
-      );
-      return ids.length;
+      const res = await apiRequest("DELETE", `/api/admin/albums/${albumId}/songs`, { ids });
+      return (res as any).deleted as number;
     },
     onSuccess: (count) => {
       toast({

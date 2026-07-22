@@ -277,6 +277,67 @@ export async function softDeleteEntity(
   }
 }
 
+// Bulk soft-delete for multiple songs in a single transaction with a
+// single tracklist recompaction at the end. This avoids the deadlock
+// that `Promise.all` over N individual deletions causes: each
+// individual deletion opens its own transaction, soft-deletes its row,
+// then runs `recompactTracklist` which issues an UPDATE touching EVERY
+// song in the album — so N concurrent transactions each hold one song
+// lock and all race to acquire the others' locks simultaneously.
+//
+// By serialising all N deletes + one recompact in one transaction we
+// eliminate the concurrent-lock race entirely.
+export async function softDeleteSongs(
+  ids: string[],
+  userId: string | null,
+  albumId: string,
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  const nowIso = new Date().toISOString();
+  const client = await safeConnect();
+  try {
+    await client.query("BEGIN");
+    let deleted = 0;
+    for (const id of ids) {
+      const upd = await client.query(
+        `UPDATE songs
+            SET deleted_at = $1,
+                deleted_by_user_id = $2,
+                deleted_via_parent_id = NULL
+          WHERE id = $3 AND deleted_at IS NULL
+          RETURNING id`,
+        [nowIso, userId, id],
+      );
+      if ((upd.rowCount ?? 0) === 0) continue;
+      deleted++;
+      for (const child of [
+        { table: "track_writers", fk: "song_id" },
+        { table: "track_performers", fk: "song_id" },
+      ]) {
+        await client.query(
+          `UPDATE ${child.table}
+              SET deleted_at = $1,
+                  deleted_by_user_id = $2,
+                  deleted_via_parent_id = $3
+            WHERE ${child.fk} = $4 AND deleted_at IS NULL`,
+          [nowIso, userId, id, id],
+        );
+      }
+      await client.query(`DELETE FROM playlist_songs WHERE song_id = $1`, [id]);
+    }
+    if (deleted > 0) {
+      await recompactTracklist(client, albumId);
+    }
+    await client.query("COMMIT");
+    return deleted;
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 export class RestoreConflictError extends Error {
   constructor(message: string) {
     super(message);

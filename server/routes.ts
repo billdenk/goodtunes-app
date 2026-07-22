@@ -9937,6 +9937,28 @@ export async function registerRoutes(
     return res.json(updated);
   });
 
+  // Bulk-delete N songs in a single transaction (avoids the deadlock that
+  // parallel individual deletes cause — each transaction's recompactTracklist
+  // UPDATE races to acquire the other transactions' row-locks on the same
+  // album). All songs must belong to the supplied album; the partner
+  // permission check runs once against that album.
+  app.delete("/api/admin/albums/:albumId/songs", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.albumId);
+    const parsed = z.object({ ids: z.array(z.string()).min(1) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "ids required" });
+    const { ids } = parsed.data;
+    const { partnerEditGate, resolveAlbumScope } = await import("./auth/partnerPermissions");
+    const albumScope = await resolveAlbumScope(albumId);
+    if (albumScope?.scope) {
+      const outcome = await partnerEditGate(req, res, "edit_credits_and_gear", albumScope.scope, { albumIdForLock: albumId });
+      if (outcome === "deny") return;
+      if (outcome === "divert") return res.status(403).json({ message: "Bulk delete requires operator approval." });
+    }
+    const { softDeleteSongs } = await import("./softDelete");
+    const deleted = await softDeleteSongs(ids, req.session.userId ?? null, albumId);
+    return res.json({ deleted });
+  });
+
   app.delete("/api/admin/songs/:id", requireAdmin, async (req, res) => {
     // Task #79 — deleting a track is a track-listing change. Resolve
     // the song's album for scope + lock; divert under approval-mode.
