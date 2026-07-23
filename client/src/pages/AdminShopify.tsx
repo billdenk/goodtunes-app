@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ExternalLink, Trash2, CheckCircle2, FlaskConical, Copy, Check, DollarSign, Pencil } from "lucide-react";
+import { ExternalLink, Trash2, CheckCircle2, FlaskConical, Copy, Check, DollarSign, Pencil, ShieldAlert, ChevronDown, ChevronUp, TriangleAlert } from "lucide-react";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 
@@ -21,6 +21,16 @@ type Store = {
 };
 
 type AlbumLite = { id: string; title: string; artist: string };
+
+type GdprRequest = {
+  id: string;
+  shopDomain: string;
+  customerEmail: string;
+  shopifyCustomerId: string | null;
+  compiledData: unknown;
+  requestedAt: string;
+  fulfilledAt: string | null;
+};
 
 export function AdminShopify() {
   return (
@@ -37,6 +47,29 @@ function AdminShopifyInner() {
 
   const { data: cfg } = useQuery<{ configured: boolean; apiKey: string | null; scopes: string }>({
     queryKey: ["/api/admin/shopify/config"],
+  });
+
+  const { data: gdprRequests } = useQuery<GdprRequest[]>({
+    queryKey: ["/api/admin/shopify/gdpr-requests"],
+  });
+
+  const [expandedGdprId, setExpandedGdprId] = useState<string | null>(null);
+
+  const fulfill = useMutation({
+    mutationFn: async (id: string) =>
+      apiRequest("POST", `/api/admin/shopify/gdpr-requests/${id}/fulfill`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/shopify/gdpr-requests"] });
+      toast({ title: "Request marked fulfilled" });
+    },
+    onError: (e: any) => toast({ title: "Couldn't mark fulfilled", description: e?.message, variant: "destructive" }),
+  });
+
+  const OVERDUE_DAYS = 25;
+  const overdueRequests = (gdprRequests ?? []).filter((r) => {
+    if (r.fulfilledAt) return false;
+    const age = (Date.now() - new Date(r.requestedAt).getTime()) / (1000 * 60 * 60 * 24);
+    return age >= OVERDUE_DAYS;
   });
   const {
     data: stores,
@@ -316,6 +349,110 @@ Get your music now
             )}
           </section>
         )}
+
+        {/* GDPR data requests */}
+        {overdueRequests.length > 0 && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 flex items-start gap-3 mb-6" data-testid="gdpr-overdue-banner">
+            <TriangleAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-[13px] text-amber-800">
+              <strong>{overdueRequests.length} GDPR data {overdueRequests.length === 1 ? "request is" : "requests are"} overdue</strong> — Shopify requires you to return customer data within 30 days of receiving the request. Reply to the customer and click <strong>Mark fulfilled</strong> below.
+            </div>
+          </div>
+        )}
+
+        <section className="mb-8" data-testid="gdpr-requests-section">
+          <h2 className="text-[15px] font-semibold text-slate-900 mb-1 flex items-center gap-1.5">
+            <ShieldAlert className="w-4 h-4 text-slate-500" />
+            GDPR data requests
+          </h2>
+          <p className="text-[12.5px] text-slate-500 mb-4">
+            When a customer exercises their right of data access, Shopify sends a <code>customers/data_request</code> webhook and GoodTunes compiles all personal data we hold for them. Return the data to the customer within 30 days, then click <strong>Mark fulfilled</strong>.
+          </p>
+
+          {(gdprRequests === undefined) && (
+            <div className="text-slate-400 text-sm">Loading…</div>
+          )}
+
+          {gdprRequests !== undefined && gdprRequests.length === 0 && (
+            <div className="rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-slate-400 text-[13.5px]">
+              No data requests received yet.
+            </div>
+          )}
+
+          {gdprRequests !== undefined && gdprRequests.length > 0 && (
+            <div className="space-y-2">
+              {gdprRequests.map((r) => {
+                const ageMs = Date.now() - new Date(r.requestedAt).getTime();
+                const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+                const isOverdue = !r.fulfilledAt && ageDays >= OVERDUE_DAYS;
+                const isExpanded = expandedGdprId === r.id;
+                return (
+                  <div
+                    key={r.id}
+                    className={`rounded-lg border bg-white ${isOverdue ? "border-amber-300" : r.fulfilledAt ? "border-slate-200 opacity-60" : "border-slate-200"}`}
+                    data-testid={`row-gdpr-request-${r.id}`}
+                  >
+                    <div className="px-4 py-3 flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13.5px] font-medium text-slate-900 flex items-center gap-2">
+                          {r.customerEmail}
+                          {isOverdue && (
+                            <span className="text-[11px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                              Overdue
+                            </span>
+                          )}
+                          {r.fulfilledAt && (
+                            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> Fulfilled
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[12px] text-slate-500">
+                          {r.shopDomain} · Received {new Date(r.requestedAt).toLocaleDateString()}
+                          {!r.fulfilledAt && ` · ${ageDays}d old`}
+                          {r.fulfilledAt && ` · Fulfilled ${new Date(r.fulfilledAt).toLocaleDateString()}`}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedGdprId(isExpanded ? null : r.id)}
+                        className="text-[12px] text-slate-500 hover:text-slate-900 flex items-center gap-1 shrink-0"
+                        data-testid={`button-gdpr-expand-${r.id}`}
+                        aria-label={isExpanded ? "Collapse compiled data" : "View compiled data"}
+                      >
+                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        Data
+                      </button>
+                      {!r.fulfilledAt && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`Mark data request for ${r.customerEmail} as fulfilled? This confirms you've returned their data.`)) {
+                              fulfill.mutate(r.id);
+                            }
+                          }}
+                          disabled={fulfill.isPending}
+                          className="shrink-0 h-8 px-3 rounded-md bg-emerald-600 text-white text-[12.5px] font-medium hover:bg-emerald-700 disabled:opacity-50"
+                          data-testid={`button-gdpr-fulfill-${r.id}`}
+                        >
+                          Mark fulfilled
+                        </button>
+                      )}
+                    </div>
+                    {isExpanded && (
+                      <div className="border-t border-slate-100 px-4 py-3" data-testid={`gdpr-data-${r.id}`}>
+                        <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Compiled personal data</div>
+                        <pre className="text-[11.5px] bg-slate-50 border border-slate-200 rounded-md p-3 overflow-x-auto whitespace-pre-wrap break-words max-h-80 overflow-y-auto text-slate-700">
+                          {JSON.stringify(r.compiledData, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
         {/* Connected stores */}
         <section data-testid="shopify-stores-list">

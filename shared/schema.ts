@@ -5975,6 +5975,26 @@ export const insertAlbumPreviewGrantSchema = createInsertSchema(albumPreviewGran
 export type AlbumPreviewGrant = typeof albumPreviewGrants.$inferSelect;
 export type InsertAlbumPreviewGrant = z.infer<typeof insertAlbumPreviewGrantSchema>;
 
+// shopify_gdpr_requests: one row per customers/data_request webhook Shopify
+// delivers when a fan exercises their GDPR right-of-access. We compile all
+// personal data we hold for that customer (orders, unlocks, profile) and store
+// it here so the operator can retrieve and return it within Shopify's required
+// 30-day window. fulfilledAt is stamped when the operator clicks "Mark fulfilled".
+export const shopifyGdprRequests = pgTable("shopify_gdpr_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  shopDomain: text("shop_domain").notNull(),
+  customerEmail: text("customer_email").notNull(),
+  shopifyCustomerId: text("shopify_customer_id"),
+  compiledData: jsonb("compiled_data").notNull(),
+  requestedAt: timestamp("requested_at").defaultNow().notNull(),
+  fulfilledAt: timestamp("fulfilled_at"),
+}, (t) => ({
+  byShop: index("shopify_gdpr_requests_shop_idx").on(t.shopDomain),
+  byEmail: index("shopify_gdpr_requests_email_idx").on(t.customerEmail),
+  byFulfilled: index("shopify_gdpr_requests_fulfilled_idx").on(t.fulfilledAt),
+}));
+export type ShopifyGdprRequest = typeof shopifyGdprRequests.$inferSelect;
+
 // payment_requests: one row per one-off invoice an operator sends to
 // an artist (or any person). A Stripe Payment Link is minted per row
 // so the recipient can pay without a GoodTunes checkout session. The

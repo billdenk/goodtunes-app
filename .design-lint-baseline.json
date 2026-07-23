@@ -18492,12 +18492,57 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-3\">Connected stores</h2>"
+    "snippet": "<div className=\"text-[13px] text-amber-800\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminShopify.tsx",
     "snippet": "<div className=\"rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-slate-400 text-[13.5px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminShopify.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-medium text-slate-900 flex items-center gap-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminShopify.tsx",
+    "snippet": "<span className=\"text-[11px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminShopify.tsx",
+    "snippet": "<span className=\"text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center gap-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminShopify.tsx",
+    "snippet": "<div className=\"text-[12px] text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminShopify.tsx",
+    "snippet": "className=\"text-[12px] text-slate-500 hover:text-slate-900 flex items-center gap-1 shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminShopify.tsx",
+    "snippet": "className=\"shrink-0 h-8 px-3 rounded-md bg-emerald-600 text-white text-[12.5px] font-medium hover:bg-emerald-700 disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminShopify.tsx",
+    "snippet": "<div className=\"text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-2\">Compiled personal data</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminShopify.tsx",
+    "snippet": "<pre className=\"text-[11.5px] bg-slate-50 border border-slate-200 rounded-md p-3 overflow-x-auto whitespace-pre-wrap break-words max-h-80 overflow-y-auto text-slate-700\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminShopify.tsx",
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-3\">Connected stores</h2>"
   },
   {
     "rule": "hardcoded-font-size",

@@ -31,6 +31,7 @@ import {
   shopifyDigitalFeeLedger,
   shopifyRedemptionCodes,
   shopifyPushLog,
+  shopifyGdprRequests,
   insertShopifyProductMappingSchema,
   type ShopifyStore,
   type ShopifyProductMapping,
@@ -1578,14 +1579,51 @@ export function registerShopifyRoutes(app: Express) {
         })),
       };
 
-      console.log(
-        `[shopify-gdpr] data_request compiled for shop=${shopDomain} customer=${customerEmail}:`,
-        JSON.stringify(compiled),
-      );
+      // Persist to the DB so the operator can retrieve it via the admin UI
+      // within Shopify's required 30-day window. Still log for operational
+      // tracing, but the DB row is the retrievable record.
+      await db.insert(shopifyGdprRequests).values({
+        shopDomain,
+        customerEmail,
+        shopifyCustomerId: customer.id ? String(customer.id) : null,
+        compiledData: compiled,
+      });
+      console.log(`[shopify-gdpr] data_request stored for shop=${shopDomain} customer=${customerEmail}`);
       res.json({ received: true });
     } catch (e: any) {
       console.error(`[shopify-gdpr] data_request error shop=${shopDomain}:`, e?.message);
       res.status(500).json({ message: "Handler failed" });
+    }
+  });
+
+  // ─── Admin: list GDPR data requests ────────────────────────────────────
+  app.get("/api/admin/shopify/gdpr-requests", requireAdmin, async (_req, res) => {
+    try {
+      const rows = await db
+        .select()
+        .from(shopifyGdprRequests)
+        .orderBy(desc(shopifyGdprRequests.requestedAt));
+      res.json(rows);
+    } catch (e: any) {
+      console.error("[shopify-gdpr] list error:", e?.message);
+      res.status(500).json({ message: "Failed to load GDPR requests" });
+    }
+  });
+
+  // ─── Admin: mark a GDPR request fulfilled ──────────────────────────────
+  app.post("/api/admin/shopify/gdpr-requests/:id/fulfill", requireAdmin, async (req, res) => {
+    const { id } = req.params;
+    try {
+      const [updated] = await db
+        .update(shopifyGdprRequests)
+        .set({ fulfilledAt: new Date() })
+        .where(and(eq(shopifyGdprRequests.id, id), isNull(shopifyGdprRequests.fulfilledAt)))
+        .returning();
+      if (!updated) return res.status(404).json({ message: "Request not found or already fulfilled" });
+      res.json(updated);
+    } catch (e: any) {
+      console.error("[shopify-gdpr] fulfill error:", e?.message);
+      res.status(500).json({ message: "Failed to mark request fulfilled" });
     }
   });
 
