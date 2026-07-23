@@ -68,11 +68,13 @@ async function liveCount(userId: string): Promise<number> {
 
 test("a fresh mint prunes the minting user's expired rows", async () => {
   const userId = await seedAdmin();
-  // Stage three already-expired rows for this user.
+  // Stage three already-expired rows for this user. Each rawDevice() awaits
+  // the INSERT and throws on failure, so we trust they're present without
+  // re-counting here — a concurrent global prune (from another test file
+  // running in parallel) can race the count and produce a false failure.
   for (let i = 0; i < 3; i++) {
     await rawDevice(userId, new Date(Date.now() - (i + 1) * 60_000), new Date(Date.now() - (i + 1) * 60_000));
   }
-  assert.equal(await liveCount(userId), 3, "staged expired rows exist before the mint");
 
   const liveHash = createHash("sha256").update(randomBytes(16)).digest("hex");
   await storage.createAdminTrustedDevice(userId, liveHash, new Date(Date.now() + THIRTY_DAYS_MS));

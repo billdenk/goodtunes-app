@@ -947,6 +947,52 @@ export function registerShopifyPlusRoutes(app: Express) {
     },
   );
 
+  // Stream an uploaded manufacturer quote PDF back to the client.
+  // The file lives in private object storage under manufacturer-quotes/,
+  // so there is no public /objects/ route for it — callers must hit this
+  // authenticated endpoint instead.
+  app.get(
+    "/api/admin/albums/:albumId/manufacturing-ledger/quotes/:quoteId/download",
+    async (req, res) => {
+      const albumId = String(req.params.albumId);
+      const quoteId = String(req.params.quoteId);
+      const userId = await gateEditMetadata(req, res, albumId);
+      if (!userId) return;
+
+      const [row] = await db
+        .select()
+        .from(albumManufacturerQuotes)
+        .where(eq(albumManufacturerQuotes.id, quoteId));
+      if (!row || row.albumId !== albumId) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+      const { fileUrl, fileName } = row;
+      if (!fileUrl.startsWith("/objects/")) {
+        // External link — redirect; the browser will follow it directly.
+        return res.redirect(302, fileUrl);
+      }
+      try {
+        const mod = await import(
+          "./replit_integrations/object_storage/objectStorage"
+        );
+        const oss = new (mod as any).ObjectStorageService();
+        const file = await oss.getObjectEntityFile(fileUrl);
+        const [buf] = await file.download();
+        const safeName = (fileName || "Quote.pdf").replace(/[^\w.\- ]/g, "_");
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${safeName}"`,
+        );
+        res.setHeader("Content-Length", String(buf.length));
+        res.end(buf);
+      } catch (e) {
+        console.error("[quote-download] failed to stream quote PDF:", e);
+        res.status(500).json({ message: "Failed to retrieve quote file" });
+      }
+    },
+  );
+
   // Add a payment step.
   app.post(
     "/api/admin/albums/:albumId/manufacturing-ledger/steps",

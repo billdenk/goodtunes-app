@@ -9916,3 +9916,35 @@ SQL
 }
 migrate_task_2780_shopify_fees dev  "${DATABASE_URL:-}"
 migrate_task_2780_shopify_fees prod "${PROD_DATABASE_URL:-}"
+
+# Task #2792/#2795 — Two schema objects that exist in prod but were never
+# reflected in shared/schema.ts, causing publish to generate DROP migrations:
+#   1. users.skip_second_factor — trusted-device bypass flag (boolean NOT NULL DEFAULT false)
+#   2. shopify_gdpr_requests — GDPR data_request compilation log table
+migrate_task_2792_2795_schema() {
+  local label="$1" db_url="$2"
+  [ -z "$db_url" ] && { echo "post-merge: skipping task-2792/2795 schema migration on $label (no URL set)"; return; }
+  if psql "$db_url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS skip_second_factor boolean NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS shopify_gdpr_requests (
+  id                  varchar      PRIMARY KEY DEFAULT gen_random_uuid(),
+  shop_domain         text         NOT NULL,
+  customer_email      text         NOT NULL,
+  shopify_customer_id text,
+  compiled_data       jsonb        NOT NULL,
+  requested_at        timestamp    NOT NULL DEFAULT now(),
+  fulfilled_at        timestamp
+);
+COMMIT;
+SQL
+  then
+    echo "post-merge: task-2792/2795 schema migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-2792/2795 schema migration failed on $label (continuing)"
+  fi
+}
+migrate_task_2792_2795_schema dev  "${DATABASE_URL:-}"
+migrate_task_2792_2795_schema prod "${PROD_DATABASE_URL:-}"

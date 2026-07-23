@@ -19,6 +19,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { IconButton } from "@/components/ui/IconButton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient, apiErrorStatus } from "@/lib/queryClient";
 import { formatUsdCents } from "@shared/money";
@@ -820,6 +821,7 @@ function ManufacturingLedger({
                   <QuoteRow
                     key={q.id}
                     quote={q}
+                    albumId={albumId}
                     canEdit={canEdit}
                     busy={busy}
                     onSaveTotal={(cents) =>
@@ -1166,6 +1168,7 @@ function ManufacturingLedger({
 // (saved on blur/Enter), Active pill or Make-active button, delete.
 function QuoteRow({
   quote,
+  albumId,
   canEdit,
   busy,
   onSaveTotal,
@@ -1173,6 +1176,7 @@ function QuoteRow({
   onRemove,
 }: {
   quote: LedgerQuote;
+  albumId: string;
   canEdit: boolean;
   busy: string | null;
   onSaveTotal: (cents: number | null) => void;
@@ -1182,6 +1186,31 @@ function QuoteRow({
   const [total, setTotal] = useState(
     quote.totalCents != null ? (quote.totalCents / 100).toFixed(2) : "",
   );
+  const [downloading, setDownloading] = useState(false);
+  const { toast } = useToast();
+
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      const res = await apiRequest(
+        "GET",
+        `/api/admin/albums/${albumId}/manufacturing-ledger/quotes/${quote.id}/download`,
+      );
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = quote.fileName || "Quote.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({ title: "Download failed", description: "Could not retrieve the quote file.", variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   function commitTotal() {
     const trimmed = total.trim();
@@ -1205,15 +1234,17 @@ function QuoteRow({
       data-testid={`row-quote-${quote.id}`}
     >
       <div className="inline-flex items-center gap-2 min-w-0 flex-1">
-        <a
-          href={quote.fileUrl}
-          download={quote.fileName || "Quote.pdf"}
-          className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-200 shrink-0 transition-colors"
+        <IconButton
+          onClick={handleDownload}
+          disabled={downloading}
+          label={`Download ${quote.fileName || "Quote.pdf"}`}
+          variant="ghost"
+          size="md"
+          className="shrink-0 text-slate-400"
           data-testid={`link-quote-${quote.id}`}
-          aria-label={`Download ${quote.fileName || "Quote.pdf"}`}
         >
           <Download className="w-4 h-4" />
-        </a>
+        </IconButton>
         <span className="text-sm text-slate-700 truncate">
           {quote.fileName || "Quote.pdf"}
         </span>
