@@ -241,35 +241,71 @@ function internalDeviceIds(): string[] {
 // internal detection and extends it with the comp/preview signal, so every
 // fan metric that ANDs `NOT (this)` stays in lock-step.
 export function nonFanListen() {
-  const devices = internalDeviceIds();
-  const emails = FULL_ACCESS_EMAILS.map((x) => x.toLowerCase().trim()).filter(Boolean);
   // COALESCE(..., FALSE): an absent `_internal` key or a NULL user_id makes
   // individual branches evaluate to NULL, and a single NULL would poison the
   // whole OR to NULL (dropping a genuine-fan row from BOTH the fan count and
   // the excluded count). An event we can't positively flag as non-fan must
   // count as a genuine listen, so fold NULL → FALSE.
   return sql`COALESCE((
+    ${staffInternalBranches()}
+    OR ${grantBranch()}
+  ), FALSE)`;
+}
+
+// Task #2815 — the nonFanListen predicate decomposed into its two halves so
+// grant/comp listening can be reported as its OWN bucket rather than lumped
+// with operator/staff/internal noise. `nonFanListen()` above stays the exact
+// OR of these two branches, so every fan metric that ANDs `NOT nonFanListen()`
+// is bit-for-bit unchanged.
+//
+// staffInternalListen — branches (a)+(b): internal-stamped events / denylisted
+// devices, operator `users` rows, and full-access customer emails. These stay
+// fully excluded from every partner-facing bucket (footnote only).
+function staffInternalBranches() {
+  const devices = internalDeviceIds();
+  const emails = FULL_ACCESS_EMAILS.map((x) => x.toLowerCase().trim()).filter(Boolean);
+  return sql`(
     (e.payload->>'_internal') = 'true'
     OR ${devices.length ? sql`(e.payload->>'_device_id') = ANY(${pgArray(devices)})` : sql`FALSE`}
     OR e.user_id IN (SELECT u.id FROM users u)
     OR ${emails.length ? sql`e.user_id IN (SELECT cu.id FROM customer_users cu WHERE lower(cu.email) = ANY(${pgArray(emails)}))` : sql`FALSE`}
-    OR EXISTS (
-      SELECT 1
-      FROM songs sg
-      JOIN user_albums ua ON ua.album_id = sg.album_id AND ua.user_id = e.user_id
-      WHERE sg.id = e.payload->>'songId'
-        AND (
-          ua.is_preview = FALSE
-          OR (ua.preview_expires_at IS NOT NULL AND ua.preview_expires_at > now())
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM orders o2
-          WHERE o2.customer_id = e.user_id
-            AND o2.album_id = sg.album_id
-            AND o2.status IN ('paid','shipped','complete','completed')
-        )
-    )
-  ), FALSE)`;
+  )`;
+}
+export function staffInternalListen() {
+  return sql`COALESCE(${staffInternalBranches()}, FALSE)`;
+}
+
+// grantBranch — branch (c): the listener holds a `user_albums` grant for THIS
+// event's own album (a comp, or an unexpired preview) with NO paid order.
+function grantBranch() {
+  return sql`EXISTS (
+    SELECT 1
+    FROM songs sg
+    JOIN user_albums ua ON ua.album_id = sg.album_id AND ua.user_id = e.user_id
+    WHERE sg.id = e.payload->>'songId'
+      AND (
+        ua.is_preview = FALSE
+        OR (ua.preview_expires_at IS NOT NULL AND ua.preview_expires_at > now())
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM orders o2
+        WHERE o2.customer_id = e.user_id
+          AND o2.album_id = sg.album_id
+          AND o2.status IN ('paid','shipped','complete','completed')
+      )
+  )`;
+}
+
+// grantListen — TRUE only for the grant/comp bucket: grant holder AND NOT
+// staff/internal, so an operator who also holds a comp never leaks into the
+// partner-visible grant numbers. Each half must be COALESCEd SEPARATELY:
+// staffInternalBranches() is NULL for any event without an `_internal`
+// payload key (most fan events), and `TRUE AND NOT NULL` = NULL, which a
+// single outer COALESCE would fold to FALSE — silently dropping genuine
+// grant plays out of the grant bucket while nonFanListen() still excluded
+// them from fan numbers.
+export function grantListen() {
+  return sql`(COALESCE(${grantBranch()}, FALSE) AND NOT COALESCE(${staffInternalBranches()}, FALSE))`;
 }
 
 // ─── KPIs ─────────────────────────────────────────────────────────────
@@ -300,23 +336,35 @@ export async function computeKpis(scope: ArtistScope, r: Range) {
   // `nonfan` is computed ONCE per event in the inner subquery, then the
   // outer FILTERs partition genuine-fan vs. excluded without re-evaluating
   // the correlated comp/preview lookup.
+  // Task #2815 — `grant` (comp/preview holder, minus staff) is split out as
+  // its own bucket; `excluded` narrows to staff/internal only so the footnote
+  // no longer swallows grant listening. Fan columns unchanged (NOT nonfan).
+  const emptyPlayRow = {
+    starts: "0", completes: "0", listeners: "0", excluded: "0",
+    grant_plays: "0", grant_completes: "0", grant_listeners: "0",
+  };
   const playRow = scope.songIds.length ? await db.execute<{
     starts: string; completes: string; listeners: string; excluded: string;
+    grant_plays: string; grant_completes: string; grant_listeners: string;
   }>(sql`
     SELECT
       COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS starts,
       COUNT(*) FILTER (WHERE t.name = 'play_complete' AND NOT t.nonfan)::text AS completes,
       COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
         FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS listeners,
-      COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.nonfan)::text AS excluded
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.nonfan AND NOT t.grant)::text AS excluded,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.grant)::text AS grant_plays,
+      COUNT(*) FILTER (WHERE t.name = 'play_complete' AND t.grant)::text AS grant_completes,
+      COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
+        FILTER (WHERE t.name = 'play_start' AND t.grant)::text AS grant_listeners
     FROM (
-      SELECT e.name, e.user_id, e.session_id, ${nonFanListen()} AS nonfan
+      SELECT e.name, e.user_id, e.session_id, ${nonFanListen()} AS nonfan, ${grantListen()} AS grant
       FROM analytics_events e
       WHERE ${playsFilter(scope)}
         AND e.ts >= ${r.from} AND e.ts < ${r.to}
     ) t
-  `) : ({ rows: [{ starts: "0", completes: "0", listeners: "0", excluded: "0" }] } as any);
-  const p = (playRow as any).rows?.[0] ?? { starts: "0", completes: "0", listeners: "0", excluded: "0" };
+  `) : ({ rows: [emptyPlayRow] } as any);
+  const p = (playRow as any).rows?.[0] ?? emptyPlayRow;
 
   const topTrack = scope.songIds.length ? await db.execute<{
     song_id: string; title: string; plays: string;
@@ -365,6 +413,10 @@ export async function computeKpis(scope: ArtistScope, r: Range) {
     completionRate: starts > 0 ? completes / starts : 0,
     listeners: Number(p.listeners),
     excludedPlays: Number(p.excluded),
+    // Task #2815 — grant/comp bucket (comp copies + unexpired previews, staff excluded)
+    grantPlays: Number(p.grant_plays),
+    grantCompletes: Number(p.grant_completes),
+    grantListeners: Number(p.grant_listeners),
     topTrack: ((topTrack as any).rows?.[0]) ?? null,
     topAlbum: ((topAlbum as any).rows?.[0]) ?? null,
   };
@@ -374,7 +426,9 @@ function emptyKpis() {
   return {
     grossCents: 0, artistShareCents: 0, refundedCents: 0,
     units: 0, orders: 0, buyers: 0, plays: 0, completions: 0, completionRate: 0,
-    listeners: 0, excludedPlays: 0, topTrack: null, topAlbum: null,
+    listeners: 0, excludedPlays: 0,
+    grantPlays: 0, grantCompletes: 0, grantListeners: 0,
+    topTrack: null, topAlbum: null,
   };
 }
 
@@ -410,6 +464,9 @@ export type LifetimeTotals = {
   ownerCompletes: number;
   previewPlays: number;
   uniquePreviewSessions: number;
+  // Task #2815 — grant/comp bucket (staff/internal excluded)
+  grantPlays: number;
+  grantListeners: number;
 };
 
 export async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotals> {
@@ -418,6 +475,7 @@ export async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotal
     refundedCents: 0, plays: 0, listeners: 0, excludedPlays: 0,
     ownerPlays: 0, uniqueOwners: 0, ownerCompletes: 0,
     previewPlays: 0, uniquePreviewSessions: 0,
+    grantPlays: 0, grantListeners: 0,
   };
   if (scope.albumIds.length === 0 && scope.songIds.length === 0) return empty;
 
@@ -445,17 +503,22 @@ export async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotal
   // surfaced separately as excludedPlays and shown on the Previews card.
   const emptyPlays = { starts: "0", listeners: "0", excluded: "0",
     owner_plays: "0", unique_owners: "0", owner_completes: "0",
-    preview_plays: "0", unique_preview_sessions: "0" };
+    preview_plays: "0", unique_preview_sessions: "0",
+    grant_plays: "0", grant_listeners: "0" };
   const playRow = scope.songIds.length ? await db.execute<{
     starts: string; listeners: string; excluded: string;
     owner_plays: string; unique_owners: string; owner_completes: string;
     preview_plays: string; unique_preview_sessions: string;
+    grant_plays: string; grant_listeners: string;
   }>(sql`
     SELECT
       COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS starts,
       COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
         FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS listeners,
-      COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.nonfan)::text AS excluded,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.nonfan AND NOT t.grant)::text AS excluded,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.grant)::text AS grant_plays,
+      COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
+        FILTER (WHERE t.name = 'play_start' AND t.grant)::text AS grant_listeners,
       COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND t.is_owner)::text AS owner_plays,
       COUNT(DISTINCT t.user_id)
         FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND t.is_owner AND t.user_id IS NOT NULL)::text AS unique_owners,
@@ -464,7 +527,7 @@ export async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotal
       COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
         FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND NOT t.is_owner)::text AS unique_preview_sessions
     FROM (
-      SELECT e.name, e.user_id, e.session_id, ${nonFanListen()} AS nonfan,
+      SELECT e.name, e.user_id, e.session_id, ${nonFanListen()} AS nonfan, ${grantListen()} AS grant,
         (
           e.user_id IS NOT NULL
           AND EXISTS (
@@ -500,6 +563,8 @@ export async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotal
     ownerCompletes: Number(p.owner_completes),
     previewPlays: Number(p.preview_plays),
     uniquePreviewSessions: Number(p.unique_preview_sessions),
+    grantPlays: Number(p.grant_plays),
+    grantListeners: Number(p.grant_listeners),
   };
 }
 
@@ -722,20 +787,27 @@ async function topTracksHandler(req: Request, res: Response) {
   }>(sql`
     SELECT
       s.id AS song_id, s.title, s.album_id, a.title AS album_title,
-      COUNT(*) FILTER (WHERE e.name = 'play_start')::text AS plays,
-      COUNT(*) FILTER (WHERE e.name = 'play_complete')::text AS completes,
-      COUNT(*) FILTER (WHERE e.name = 'favorite_song')::text AS favorites,
-      COUNT(*) FILTER (WHERE e.name = 'song_added_to_playlist')::text AS playlist_adds,
-      COUNT(*) FILTER (WHERE e.name = 'share_completed')::text AS shares
-    FROM analytics_events e
-    JOIN songs s ON s.id = e.payload->>'songId'
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.grant)::text AS plays,
+      COUNT(*) FILTER (WHERE t.name = 'play_complete' AND NOT t.grant)::text AS completes,
+      COUNT(*) FILTER (WHERE t.name = 'favorite_song' AND NOT t.grant)::text AS favorites,
+      COUNT(*) FILTER (WHERE t.name = 'song_added_to_playlist' AND NOT t.grant)::text AS playlist_adds,
+      COUNT(*) FILTER (WHERE t.name = 'share_completed' AND NOT t.grant)::text AS shares,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.grant)::text AS grant_plays
+    FROM (
+      -- Task #2815 — drop staff/internal at the WHERE, then split fan vs
+      -- grant per-row. Fan columns are identical to the old NOT nonFanListen
+      -- filter (given NOT staff, nonfan == grant); grant plays are additive.
+      SELECT e.name, e.payload->>'songId' AS song_id, ${grantListen()} AS grant
+      FROM analytics_events e
+      WHERE e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
+        AND e.name IN ('play_start','play_complete','favorite_song','song_added_to_playlist','share_completed')
+        AND e.ts >= ${range.from} AND e.ts < ${range.to}
+        AND NOT ${staffInternalListen()}
+    ) t
+    JOIN songs s ON s.id = t.song_id
     LEFT JOIN albums a ON a.id = s.album_id
-    WHERE e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
-      AND e.name IN ('play_start','play_complete','favorite_song','song_added_to_playlist','share_completed')
-      AND e.ts >= ${range.from} AND e.ts < ${range.to}
-      AND NOT ${nonFanListen()}
     GROUP BY s.id, s.title, s.album_id, a.title
-    ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC
+    ORDER BY COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.grant) DESC
     LIMIT ${limit}
   `);
 
@@ -744,6 +816,7 @@ async function topTracksHandler(req: Request, res: Response) {
     plays: Number(r.plays), completes: Number(r.completes),
     favorites: Number(r.favorites), playlistAdds: Number(r.playlist_adds),
     shares: Number(r.shares),
+    grantPlays: Number(r.grant_plays),
   }));
 
   if (req.query.format === "csv") return sendCsv(res, "top-tracks.csv", tracks);
@@ -777,22 +850,32 @@ async function topAlbumsHandler(req: Request, res: Response) {
   `);
 
   const plays = scope.songIds.length ? await db.execute<{
-    album_id: string; plays: string; listeners: string;
+    album_id: string; plays: string; listeners: string; grant_plays: string; grant_listeners: string;
   }>(sql`
-    SELECT s.album_id, COUNT(*)::text AS plays,
-      COUNT(DISTINCT COALESCE(e.user_id, e.session_id))::text AS listeners
-    FROM analytics_events e
-    JOIN songs s ON s.id = e.payload->>'songId'
-    WHERE e.name = 'play_start'
-      AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
-      AND s.album_id = ANY(${pgArray(scope.albumIds)})
-      AND e.ts >= ${range.from} AND e.ts < ${range.to}
-      AND NOT ${nonFanListen()}
+    SELECT t.album_id,
+      COUNT(*) FILTER (WHERE NOT t.grant)::text AS plays,
+      COUNT(DISTINCT COALESCE(t.user_id, t.session_id)) FILTER (WHERE NOT t.grant)::text AS listeners,
+      COUNT(*) FILTER (WHERE t.grant)::text AS grant_plays,
+      COUNT(DISTINCT COALESCE(t.user_id, t.session_id)) FILTER (WHERE t.grant)::text AS grant_listeners
+    FROM (
+      -- Task #2815 — same staff-out / fan-vs-grant split as topTracksHandler.
+      SELECT s.album_id, e.user_id, e.session_id, ${grantListen()} AS grant
+      FROM analytics_events e
+      JOIN songs s ON s.id = e.payload->>'songId'
+      WHERE e.name = 'play_start'
+        AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
+        AND s.album_id = ANY(${pgArray(scope.albumIds)})
+        AND e.ts >= ${range.from} AND e.ts < ${range.to}
+        AND NOT ${staffInternalListen()}
+    ) t
     GROUP BY 1
   `) : ({ rows: [] } as any);
-  const playMap = new Map<string, { plays: number; listeners: number }>();
+  const playMap = new Map<string, { plays: number; listeners: number; grantPlays: number; grantListeners: number }>();
   for (const r of ((plays as any).rows || [])) {
-    playMap.set(r.album_id, { plays: Number(r.plays), listeners: Number(r.listeners) });
+    playMap.set(r.album_id, {
+      plays: Number(r.plays), listeners: Number(r.listeners),
+      grantPlays: Number(r.grant_plays), grantListeners: Number(r.grant_listeners),
+    });
   }
 
   const albums = ((rev as any).rows || []).map((r: any) => {
@@ -808,6 +891,8 @@ async function topAlbumsHandler(req: Request, res: Response) {
       buyers: Number(r.buyers || 0),
       plays: playMap.get(r.album_id)?.plays ?? 0,
       listeners: playMap.get(r.album_id)?.listeners ?? 0,
+      grantPlays: playMap.get(r.album_id)?.grantPlays ?? 0,
+      grantListeners: playMap.get(r.album_id)?.grantListeners ?? 0,
     };
   }).sort((a: any, b: any) => b.revenueCents - a.revenueCents).slice(0, limit);
 

@@ -156,28 +156,40 @@ const scope = (): ArtistScope => ({
 });
 const range = () => ({ from: new Date(Date.now() - 60_000), to: new Date(Date.now() + 60_000) });
 
-// Genuine-fan plays = 2 (buyer) + 1 (anon fan) = 3.
-// Excluded plays     = 3 (comp) + 1 (preview) + 1 (admin) + 1 (full-access) + 1 (internal) = 7.
+// Task #2815 split the old lumped exclusion into two buckets:
+//   Genuine-fan plays  = 2 (buyer) + 1 (anon fan) = 3.
+//   Grant plays        = 3 (comp) + 1 (preview) = 4 (grant holders, NOT staff).
+//   Staff/internal     = 1 (admin) + 1 (full-access) + 1 (internal) = 3
+//                        (surfaced as `excludedPlays`, footnote-only).
 // Genuine-fan listeners = distinct(buyer, anon session) = 2.
-test("computeKpis: fan plays exclude comp/preview/operator/internal; excluded stays visible", async () => {
+// Grant listeners       = distinct(comp holder, preview holder) = 2.
+test("computeKpis: fan plays exclude comp/preview/operator/internal; buckets stay visible", async () => {
   const k = await computeKpis(scope(), range());
   assert.equal(k.plays, 3, "only genuine-fan plays counted");
   assert.equal(k.listeners, 2, "only genuine-fan listeners counted");
-  assert.equal(k.excludedPlays, 7, "all non-fan plays surfaced as excluded, not dropped");
+  assert.equal(k.grantPlays, 4, "comp + unexpired-preview plays land in the grant bucket");
+  assert.equal(k.grantListeners, 2, "distinct grant holders counted");
+  assert.equal(k.excludedPlays, 3, "staff/internal plays surfaced as excluded, not dropped");
 });
 
-test("computeLifetime: same exclusion + excluded count on the all-time totals", async () => {
+test("computeLifetime: same buckets on the all-time totals", async () => {
   const l = await computeLifetime(scope());
   assert.equal(l.plays, 3, "only genuine-fan plays counted");
   assert.equal(l.listeners, 2, "only genuine-fan listeners counted");
-  assert.equal(l.excludedPlays, 7, "all non-fan plays surfaced as excluded");
+  assert.equal(l.grantPlays, 4, "grant bucket on lifetime totals");
+  assert.equal(l.grantListeners, 2, "distinct grant holders on lifetime totals");
+  assert.equal(l.excludedPlays, 3, "staff/internal surfaced as excluded");
 });
 
-test("sanity: total seeded plays = fan plays + excluded plays (nothing lost)", async () => {
+test("sanity: total seeded plays = fan + grant + staff/internal (nothing lost)", async () => {
   const k = await computeKpis(scope(), range());
   const total = await exec(sql`
     SELECT COUNT(*)::int AS n FROM analytics_events
      WHERE name = 'play_start' AND payload->>'songId' = ${songId}
   `);
-  assert.equal((total.rows as any[])[0].n, k.plays + k.excludedPlays, "no play is silently dropped");
+  assert.equal(
+    (total.rows as any[])[0].n,
+    k.plays + k.grantPlays + k.excludedPlays,
+    "no play is silently dropped",
+  );
 });

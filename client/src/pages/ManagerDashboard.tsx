@@ -46,6 +46,7 @@ type Kpis = {
   plays: number; completions: number; completionRate: number;
   listeners: number; newFans: number;
   rosterSize: number; albumCount: number;
+  grantPlays?: number; grantListeners?: number;
 };
 type Summary = { range: Range; compare: Range | null; current: Kpis; previous: Kpis | null };
 type Timeseries = {
@@ -78,6 +79,7 @@ type AlbumsPayload = {
     primaryArtistId: string | null;
     revenueCents: number; managerShareCents: number; units: number; buyers: number;
     plays: number; listeners: number;
+    grantPlays?: number; grantListeners?: number;
   }[];
 };
 type Tracks = {
@@ -85,6 +87,7 @@ type Tracks = {
   tracks: {
     songId: string; title: string; albumTitle: string; albumArtist: string;
     plays: number; completes: number; favorites: number; playlistAdds: number; shares: number;
+    grantPlays?: number;
   }[];
 };
 
@@ -260,14 +263,15 @@ function OverviewTab({ qs }: { qs: string }) {
     <>
       <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3" data-testid="kpi-grid">
         {summary.isLoading ? (
-          Array.from({ length: 8 }).map((_, i) => (
+          Array.from({ length: 9 }).map((_, i) => (
             <KpiCardSkeleton key={i} testId={`kpi-skeleton-${i}`} />
           ))
         ) : (
           <>
             <Kpi label="Gross revenue" value={cur ? dollars(cur.grossCents) : "—"} sub={cur && cur.refundedCents ? `${dollars(cur.refundedCents)} refunded` : undefined} prev={cur ? { cur: cur.grossCents, prev: prev?.grossCents ?? null } : null} spark={dailyGross(series.data)} testId="kpi-gross" />
             <Kpi label="Units sold" value={cur ? compact(cur.units) : "—"} sub={cur ? `${cur.buyers} unique buyer${cur.buyers === 1 ? "" : "s"}` : undefined} prev={cur ? { cur: cur.units, prev: prev?.units ?? null } : null} testId="kpi-units" />
-            <Kpi label="Total plays" value={cur ? compact(cur.plays) : "—"} sub={cur ? `${pct(cur.completionRate)} complete` : undefined} prev={cur ? { cur: cur.plays, prev: prev?.plays ?? null } : null} spark={dailyPlays(series.data)} testId="kpi-plays" />
+            <Kpi label="Fan plays" value={cur ? compact(cur.plays) : "—"} sub={cur ? `${pct(cur.completionRate)} complete` : undefined} prev={cur ? { cur: cur.plays, prev: prev?.plays ?? null } : null} spark={dailyPlays(series.data)} testId="kpi-plays" />
+            <Kpi label="Grant plays" value={cur ? compact(cur.grantPlays ?? 0) : "—"} sub={cur ? `${compact(cur.grantListeners ?? 0)} grant listener${(cur.grantListeners ?? 0) === 1 ? "" : "s"} · comped copies & previews` : undefined} prev={cur ? { cur: cur.grantPlays ?? 0, prev: prev ? (prev.grantPlays ?? 0) : null } : null} testId="kpi-grant-plays" />
             <Kpi label="Unique listeners" value={cur ? compact(cur.listeners) : "—"} prev={cur ? { cur: cur.listeners, prev: prev?.listeners ?? null } : null} spark={dailyListeners(series.data)} testId="kpi-listeners" />
             <Kpi label="New fans" value={cur ? compact(cur.newFans) : "—"} sub="First-ever play in window" prev={cur ? { cur: cur.newFans, prev: prev?.newFans ?? null } : null} testId="kpi-new-fans" />
             <Kpi label="Roster" labelIcon={<Star className="w-3 h-3 -mt-0.5 text-emerald-600 fill-emerald-600" />} value={cur ? compact(cur.rosterSize) : "—"} sub={cur ? `${cur.albumCount} album${cur.albumCount === 1 ? "" : "s"}` : undefined} testId="kpi-roster" />
@@ -352,7 +356,7 @@ function RosterTab({ qs, managerIdParam }: { qs: string; managerIdParam: string 
               <SortableTh label="Revenue" k="revenue" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="text-right px-2" />
               <SortableTh label="Units" k="units" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="text-right px-2" />
               <SortableTh label="Buyers" k="buyers" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="text-right px-2" />
-              <SortableTh label="Plays" k="plays" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="text-right px-2" />
+              <SortableTh label="Fan plays" k="plays" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="text-right px-2" />
               <SortableTh label="Listeners" k="listeners" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="text-right pl-2" />
             </tr>
           </thead>
@@ -430,13 +434,14 @@ function CatalogTab({ qs }: { qs: string }) {
                 <th className="text-right font-medium px-2">Revenue</th>
                 <th className="text-right font-medium px-2">Units</th>
                 <th className="text-right font-medium px-2">Buyers</th>
-                <th className="text-right font-medium px-2">Plays</th>
+                <th className="text-right font-medium px-2">Fan plays</th>
+                <th className="text-right font-medium px-2">Grant plays</th>
                 <th className="text-right font-medium pl-2">Listeners</th>
               </tr>
             </thead>
             <tbody>
-              {albums.isLoading && <tr><td colSpan={6} className="py-6 text-center text-slate-400">Loading…</td></tr>}
-              {!albums.isLoading && (albums.data?.albums.length ?? 0) === 0 && <tr><td colSpan={6} className="py-6 text-center text-slate-400">No albums in scope.</td></tr>}
+              {albums.isLoading && <tr><td colSpan={7} className="py-6 text-center text-slate-400">Loading…</td></tr>}
+              {!albums.isLoading && (albums.data?.albums.length ?? 0) === 0 && <tr><td colSpan={7} className="py-6 text-center text-slate-400">No albums in scope.</td></tr>}
               {albums.data?.albums.map((a) => (
                 <tr key={a.albumId} className="border-t border-slate-100" data-testid={`row-album-${a.albumId}`}>
                   <td className="py-2 pr-3">
@@ -454,6 +459,7 @@ function CatalogTab({ qs }: { qs: string }) {
                   <td className="px-2 text-right tabular-nums">{a.units}</td>
                   <td className="px-2 text-right tabular-nums">{a.buyers}</td>
                   <td className="px-2 text-right tabular-nums">{compact(a.plays)}</td>
+                  <td className="px-2 text-right tabular-nums text-slate-500" data-testid={`text-grant-plays-${a.albumId}`}>{compact(a.grantPlays ?? 0)}</td>
                   <td className="pl-2 text-right tabular-nums">{compact(a.listeners)}</td>
                 </tr>
               ))}
@@ -473,7 +479,8 @@ function CatalogTab({ qs }: { qs: string }) {
             <thead className="text-slate-400 text-[11px] uppercase tracking-wider">
               <tr>
                 <th className="text-left font-medium py-2 pr-3">Track</th>
-                <th className="text-right font-medium px-2">Plays</th>
+                <th className="text-right font-medium px-2">Fan plays</th>
+                <th className="text-right font-medium px-2">Grant plays</th>
                 <th className="text-right font-medium px-2">Completes</th>
                 <th className="text-right font-medium px-2">
                   <span className="inline-flex items-center gap-1 justify-end">
@@ -485,8 +492,8 @@ function CatalogTab({ qs }: { qs: string }) {
               </tr>
             </thead>
             <tbody>
-              {tracks.isLoading && <tr><td colSpan={6} className="py-6 text-center text-slate-400">Loading…</td></tr>}
-              {!tracks.isLoading && (tracks.data?.tracks.length ?? 0) === 0 && <tr><td colSpan={6} className="py-6 text-center text-slate-400">No plays yet in this window.</td></tr>}
+              {tracks.isLoading && <tr><td colSpan={7} className="py-6 text-center text-slate-400">Loading…</td></tr>}
+              {!tracks.isLoading && (tracks.data?.tracks.length ?? 0) === 0 && <tr><td colSpan={7} className="py-6 text-center text-slate-400">No plays yet in this window.</td></tr>}
               {tracks.data?.tracks.map((t) => (
                 <tr key={t.songId} className="border-t border-slate-100" data-testid={`row-track-${t.songId}`}>
                   <td className="py-2 pr-3">
@@ -494,6 +501,7 @@ function CatalogTab({ qs }: { qs: string }) {
                     <p className="text-slate-400 text-[11px] truncate">{t.albumTitle} · {t.albumArtist}</p>
                   </td>
                   <td className="px-2 text-right tabular-nums">{compact(t.plays)}</td>
+                  <td className="px-2 text-right tabular-nums text-slate-500" data-testid={`text-grant-plays-track-${t.songId}`}>{compact(t.grantPlays ?? 0)}</td>
                   <td className="px-2 text-right tabular-nums">{compact(t.completes)}</td>
                   <td className="px-2 text-right tabular-nums text-rose-600">{compact(t.favorites)}</td>
                   <td className="px-2 text-right tabular-nums">{compact(t.playlistAdds)}</td>

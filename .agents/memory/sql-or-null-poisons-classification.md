@@ -35,3 +35,12 @@ caught it; a test that only checked "excluded > 0" would have passed.
 `WHERE NOT pred` split) — always `COALESCE(..., FALSE)` the whole thing, and add
 a conservation assertion (`kept + excluded == total`) to the test, not just a
 one-sided "excluded is non-zero" check.
+
+**AND-NOT variant:** when splitting a predicate into
+sub-buckets like `grant AND NOT staff`, COALESCE each half SEPARATELY —
+`COALESCE(grant, FALSE) AND NOT COALESCE(staff, FALSE)`. A single outer
+`COALESCE((grant AND NOT staff), FALSE)` still poisons: if `staff` is NULL
+(e.g. absent `_internal` JSON key), `TRUE AND NOT NULL = NULL` folds to FALSE
+and the row silently drops out of the sub-bucket while the parent OR-predicate
+still excludes it elsewhere. Verify with a full partition check
+(bucketA + bucketB + kept == total), not just per-bucket non-zero.

@@ -21,6 +21,7 @@ import { sql } from "drizzle-orm";
 import { pgArray } from "./lib/pgArray";
 import { getUserRole } from "./auth/roles";
 import { LOC_COUNTRY } from "./reports/buyers";
+import { grantListen, nonFanListen, staffInternalListen } from "./artistReports";
 
 // ─── Date range helpers ─────────────────────────────────────────────────
 type Range = { from: Date; to: Date };
@@ -109,7 +110,7 @@ function playsFilter(scope: ManagerScope) {
 }
 
 // ─── KPIs ─────────────────────────────────────────────────────────────
-async function computeKpis(scope: ManagerScope, r: Range) {
+export async function computeKpis(scope: ManagerScope, r: Range) {
   if (scope.albumIds.length === 0 && scope.songIds.length === 0) return emptyKpis();
   const revRow = scope.albumIds.length ? await db.execute<{
     gross: string; units: string; buyers: string; refunded: string;
@@ -125,19 +126,26 @@ async function computeKpis(scope: ManagerScope, r: Range) {
   `) : ({ rows: [{ gross: "0", units: "0", buyers: "0", refunded: "0" }] } as any);
   const rev = (revRow as any).rows?.[0] ?? { gross: "0", units: "0", buyers: "0", refunded: "0" };
 
+  // Task #2815 — fan/grant split: primary plays/listeners are FAN-ONLY
+  // (grant AND staff/internal excluded via NOT nonFanListen()); grant is a
+  // separate bucket (grantListen() excludes staff/internal).
+  const emptyPlays = { starts: "0", completes: "0", listeners: "0", grant_plays: "0", grant_listeners: "0" };
   const playRow = scope.songIds.length ? await db.execute<{
-    starts: string; completes: string; listeners: string;
+    starts: string; completes: string; listeners: string; grant_plays: string; grant_listeners: string;
   }>(sql`
     SELECT
-      COUNT(*) FILTER (WHERE e.name = 'play_start')::text AS starts,
-      COUNT(*) FILTER (WHERE e.name = 'play_complete')::text AS completes,
+      COUNT(*) FILTER (WHERE e.name = 'play_start' AND NOT ${nonFanListen()})::text AS starts,
+      COUNT(*) FILTER (WHERE e.name = 'play_complete' AND NOT ${nonFanListen()})::text AS completes,
       COUNT(DISTINCT COALESCE(e.user_id, e.session_id))
-        FILTER (WHERE e.name = 'play_start')::text AS listeners
+        FILTER (WHERE e.name = 'play_start' AND NOT ${nonFanListen()})::text AS listeners,
+      COUNT(*) FILTER (WHERE e.name = 'play_start' AND ${grantListen()})::text AS grant_plays,
+      COUNT(DISTINCT COALESCE(e.user_id, e.session_id))
+        FILTER (WHERE e.name = 'play_start' AND ${grantListen()})::text AS grant_listeners
     FROM analytics_events e
     WHERE ${playsFilter(scope)}
       AND e.ts >= ${r.from} AND e.ts < ${r.to}
-  `) : ({ rows: [{ starts: "0", completes: "0", listeners: "0" }] } as any);
-  const p = (playRow as any).rows?.[0] ?? { starts: "0", completes: "0", listeners: "0" };
+  `) : ({ rows: [emptyPlays] } as any);
+  const p = (playRow as any).rows?.[0] ?? emptyPlays;
 
   const newFansRow = scope.songIds.length ? await db.execute<{ new_fans: string }>(sql`
     WITH first_play AS (
@@ -166,6 +174,9 @@ async function computeKpis(scope: ManagerScope, r: Range) {
     completions: completes,
     completionRate: starts > 0 ? completes / starts : 0,
     listeners: Number(p.listeners),
+    // Task #2815 — grant/comp bucket (staff/internal excluded)
+    grantPlays: Number(p.grant_plays),
+    grantListeners: Number(p.grant_listeners),
     newFans,
     rosterSize: scope.rosterPersonIds.length,
     albumCount: scope.albumIds.length,
@@ -176,7 +187,8 @@ function emptyKpis() {
   return {
     grossCents: 0, managerShareCents: 0, refundedCents: 0,
     units: 0, buyers: 0, plays: 0, completions: 0, completionRate: 0,
-    listeners: 0, newFans: 0, rosterSize: 0, albumCount: 0,
+    listeners: 0, grantPlays: 0, grantListeners: 0,
+    newFans: 0, rosterSize: 0, albumCount: 0,
   };
 }
 
@@ -326,8 +338,8 @@ async function rosterHandler(req: Request, res: Response) {
     person_id: string; plays: string; listeners: string;
   }>(sql`
     SELECT a.primary_artist_id AS person_id,
-      COUNT(*)::text AS plays,
-      COUNT(DISTINCT COALESCE(e.user_id, e.session_id))::text AS listeners
+      COUNT(*) FILTER (WHERE NOT ${nonFanListen()})::text AS plays,
+      COUNT(DISTINCT COALESCE(e.user_id, e.session_id)) FILTER (WHERE NOT ${nonFanListen()})::text AS listeners
     FROM analytics_events e
     JOIN songs s ON s.id = e.payload->>'songId'
     JOIN albums a ON a.id = s.album_id
@@ -447,9 +459,13 @@ async function topAlbumsHandler(req: Request, res: Response) {
     GROUP BY a.id, a.title, a.artist, a.artwork, a.primary_artist_id
   `);
 
-  const plays = scope.songIds.length ? await db.execute<{ album_id: string; plays: string; listeners: string }>(sql`
-    SELECT s.album_id, COUNT(*)::text AS plays,
-      COUNT(DISTINCT COALESCE(e.user_id, e.session_id))::text AS listeners
+  // Task #2815 — fan/grant split: plays/listeners are FAN-ONLY; grant separate.
+  const plays = scope.songIds.length ? await db.execute<{ album_id: string; plays: string; listeners: string; grant_plays: string; grant_listeners: string }>(sql`
+    SELECT s.album_id,
+      COUNT(*) FILTER (WHERE NOT ${nonFanListen()})::text AS plays,
+      COUNT(DISTINCT COALESCE(e.user_id, e.session_id)) FILTER (WHERE NOT ${nonFanListen()})::text AS listeners,
+      COUNT(*) FILTER (WHERE ${grantListen()})::text AS grant_plays,
+      COUNT(DISTINCT COALESCE(e.user_id, e.session_id)) FILTER (WHERE ${grantListen()})::text AS grant_listeners
     FROM analytics_events e
     JOIN songs s ON s.id = e.payload->>'songId'
     WHERE e.name = 'play_start'
@@ -458,9 +474,12 @@ async function topAlbumsHandler(req: Request, res: Response) {
       AND e.ts >= ${range.from} AND e.ts < ${range.to}
     GROUP BY 1
   `) : ({ rows: [] } as any);
-  const playMap = new Map<string, { plays: number; listeners: number }>();
+  const playMap = new Map<string, { plays: number; listeners: number; grantPlays: number; grantListeners: number }>();
   for (const r of (((plays as any).rows || []) as any[])) {
-    playMap.set(r.album_id, { plays: Number(r.plays), listeners: Number(r.listeners) });
+    playMap.set(r.album_id, {
+      plays: Number(r.plays), listeners: Number(r.listeners),
+      grantPlays: Number(r.grant_plays), grantListeners: Number(r.grant_listeners),
+    });
   }
 
   const albums = (((rev as any).rows || []) as any[]).map((r: any) => {
@@ -477,11 +496,50 @@ async function topAlbumsHandler(req: Request, res: Response) {
       buyers: Number(r.buyers || 0),
       plays: playMap.get(r.album_id)?.plays ?? 0,
       listeners: playMap.get(r.album_id)?.listeners ?? 0,
+      grantPlays: playMap.get(r.album_id)?.grantPlays ?? 0,
+      grantListeners: playMap.get(r.album_id)?.grantListeners ?? 0,
     };
   }).sort((a: any, b: any) => b.revenueCents - a.revenueCents).slice(0, limit);
 
   if (req.query.format === "csv") return sendCsv(res, "top-albums.csv", albums);
   return res.json({ range, albums });
+}
+
+export async function computeTopTracks(scope: ManagerScope, range: Range, limit: number) {
+  const rows = await db.execute<{
+    song_id: string; title: string; album_id: string; album_title: string; album_artist: string;
+    plays: string; completes: string; favorites: string; playlist_adds: string; shares: string;
+  }>(sql`
+    SELECT s.id AS song_id, s.title, s.album_id, a.title AS album_title, a.artist AS album_artist,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.grant)::text AS plays,
+      COUNT(*) FILTER (WHERE t.name = 'play_complete' AND NOT t.grant)::text AS completes,
+      COUNT(*) FILTER (WHERE t.name = 'favorite_song' AND NOT t.grant)::text AS favorites,
+      COUNT(*) FILTER (WHERE t.name = 'song_added_to_playlist' AND NOT t.grant)::text AS playlist_adds,
+      COUNT(*) FILTER (WHERE t.name = 'share_completed' AND NOT t.grant)::text AS shares,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.grant)::text AS grant_plays
+    FROM (
+      -- Same staff-out / fan-vs-grant split as the artist topTracksHandler:
+      -- staff/internal dropped at the WHERE, every metric split per-row.
+      SELECT e.name, e.payload->>'songId' AS song_id, ${grantListen()} AS grant
+      FROM analytics_events e
+      WHERE e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
+        AND e.name IN ('play_start','play_complete','favorite_song','song_added_to_playlist','share_completed')
+        AND e.ts >= ${range.from} AND e.ts < ${range.to}
+        AND NOT ${staffInternalListen()}
+    ) t
+    JOIN songs s ON s.id = t.song_id
+    LEFT JOIN albums a ON a.id = s.album_id
+    GROUP BY s.id, s.title, s.album_id, a.title, a.artist
+    ORDER BY COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.grant) DESC
+    LIMIT ${limit}
+  `);
+
+  return (((rows as any).rows || []) as any[]).map((r: any) => ({
+    songId: r.song_id, title: r.title, albumId: r.album_id, albumTitle: r.album_title, albumArtist: r.album_artist,
+    plays: Number(r.plays), completes: Number(r.completes),
+    favorites: Number(r.favorites), playlistAdds: Number(r.playlist_adds), shares: Number(r.shares),
+    grantPlays: Number(r.grant_plays),
+  }));
 }
 
 async function topTracksHandler(req: Request, res: Response) {
@@ -493,34 +551,7 @@ async function topTracksHandler(req: Request, res: Response) {
     if (req.query.format === "csv") return sendCsv(res, "top-tracks.csv", []);
     return res.json({ range, tracks: [] });
   }
-
-  const rows = await db.execute<{
-    song_id: string; title: string; album_id: string; album_title: string; album_artist: string;
-    plays: string; completes: string; favorites: string; playlist_adds: string; shares: string;
-  }>(sql`
-    SELECT s.id AS song_id, s.title, s.album_id, a.title AS album_title, a.artist AS album_artist,
-      COUNT(*) FILTER (WHERE e.name = 'play_start')::text AS plays,
-      COUNT(*) FILTER (WHERE e.name = 'play_complete')::text AS completes,
-      COUNT(*) FILTER (WHERE e.name = 'favorite_song')::text AS favorites,
-      COUNT(*) FILTER (WHERE e.name = 'song_added_to_playlist')::text AS playlist_adds,
-      COUNT(*) FILTER (WHERE e.name = 'share_completed')::text AS shares
-    FROM analytics_events e
-    JOIN songs s ON s.id = e.payload->>'songId'
-    LEFT JOIN albums a ON a.id = s.album_id
-    WHERE e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
-      AND e.name IN ('play_start','play_complete','favorite_song','song_added_to_playlist','share_completed')
-      AND e.ts >= ${range.from} AND e.ts < ${range.to}
-    GROUP BY s.id, s.title, s.album_id, a.title, a.artist
-    ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC
-    LIMIT ${limit}
-  `);
-
-  const tracks = (((rows as any).rows || []) as any[]).map((r: any) => ({
-    songId: r.song_id, title: r.title, albumId: r.album_id, albumTitle: r.album_title, albumArtist: r.album_artist,
-    plays: Number(r.plays), completes: Number(r.completes),
-    favorites: Number(r.favorites), playlistAdds: Number(r.playlist_adds), shares: Number(r.shares),
-  }));
-
+  const tracks = await computeTopTracks(scope, range, limit);
   if (req.query.format === "csv") return sendCsv(res, "top-tracks.csv", tracks);
   return res.json({ range, tracks });
 }
