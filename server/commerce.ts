@@ -3517,7 +3517,9 @@ export function registerCommerceRoutes(app: Express) {
     const status = (req.query.status as string | undefined)?.trim();
 
     // Artist scoping: artists only see orders for their own albums.
-    const userId = (req as any).session?.userId as string | undefined;
+    // commerce.ts requireAdmin stamps adminUserId from the Bearer token;
+    // fall back to session for routes that accept both auth modes.
+    const userId = ((req as any).adminUserId ?? (req as any).session?.userId) as string | undefined;
     let artistAlbumIds: string[] | null = null;
     // Task #2061 — who may see Gift-of-Hope recipient PII. super_admin /
     // admin see every box; a non_profit partner sees it only for boxes their
@@ -3529,6 +3531,7 @@ export function registerCommerceRoutes(app: Express) {
       const roleInfo = await getUserRole(userId);
       viewerRole = roleInfo?.role ?? null;
       viewerScopeId = roleInfo?.roleScopeId ?? null;
+      if (roleInfo?.role === "artist" && !roleInfo.roleScopeId) return res.json([]);
       if (roleInfo?.role === "artist" && roleInfo.roleScopeId) {
         const albumRows = await db.execute<{ id: string }>(sql`
           SELECT id FROM albums

@@ -16347,6 +16347,7 @@ export async function registerRoutes(
     const callerRolePeople = req.session?.userId
       ? await getUserRole(req.session.userId)
       : null;
+    if (callerRolePeople?.role === "artist" && !callerRolePeople.roleScopeId) return res.json([]);
     if (callerRolePeople?.role === "artist" && callerRolePeople.roleScopeId) {
       const artistPid = callerRolePeople.roleScopeId;
       const albumRows = await db.execute<{ id: string }>(sql`
@@ -16563,6 +16564,7 @@ export async function registerRoutes(
     const id = String(req.params.id);
     // Artist scope: only allow access to people credited on their albums.
     const callerPeople = await getUserRole(req.session.userId!);
+    if (callerPeople?.role === "artist" && !callerPeople.roleScopeId) return res.status(403).json({ message: "Artist account has no person scope" });
     if (callerPeople?.role === "artist" && callerPeople.roleScopeId) {
       const artistPid = callerPeople.roleScopeId;
       if (id !== artistPid) {
@@ -18347,6 +18349,7 @@ export async function registerRoutes(
     const callerRoleInstr = req.session?.userId
       ? await getUserRole(req.session.userId)
       : null;
+    if (callerRoleInstr?.role === "artist" && !callerRoleInstr.roleScopeId) return res.json([]);
     if (callerRoleInstr?.role === "artist" && callerRoleInstr.roleScopeId) {
       const artistPid = callerRoleInstr.roleScopeId;
       const albumRows = await db.execute<{ id: string }>(sql`
@@ -24875,6 +24878,7 @@ export async function registerRoutes(
   // picker on the invite sheet and the referrer picker.
   app.get("/api/non-profits", requireAdmin, async (req, res) => {
     const callerNpo = await getUserRole(req.session.userId!);
+    if (callerNpo?.role === "artist" && !callerNpo.roleScopeId) return res.json([]);
     if (callerNpo?.role === "artist" && callerNpo.roleScopeId) {
       // Artist: only NPOs that are beneficiaries on their albums.
       const pid = callerNpo.roleScopeId;
@@ -24975,6 +24979,7 @@ export async function registerRoutes(
   // doesn't have to fetch the whole list and filter client-side.
   app.get("/api/non-profits/:id", requireAdmin, async (req, res) => {
     const callerNpoDetail = await getUserRole(req.session.userId!);
+    if (callerNpoDetail?.role === "artist" && !callerNpoDetail.roleScopeId) return res.status(403).json({ message: "Artist account has no person scope" });
     if (callerNpoDetail?.role === "artist" && callerNpoDetail.roleScopeId) {
       const pid = callerNpoDetail.roleScopeId;
       const chk = await db.execute<{ exists: boolean }>(sql`
@@ -25004,6 +25009,7 @@ export async function registerRoutes(
   // through this NPO-scoped endpoint.
   app.get("/api/non-profits/:id/people", requireAdmin, async (req, res) => {
     const callerNpoPeople = await getUserRole(req.session.userId!);
+    if (callerNpoPeople?.role === "artist" && !callerNpoPeople.roleScopeId) return res.status(403).json({ message: "Artist account has no person scope" });
     if (callerNpoPeople?.role === "artist" && callerNpoPeople.roleScopeId) {
       const pid = callerNpoPeople.roleScopeId;
       const chk = await db.execute<{ exists: boolean }>(sql`
