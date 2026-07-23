@@ -210,7 +210,30 @@ export function isPhysicalSkuKind(kind: string | null | undefined): boolean {
 // hit POST /orders today — refunds and re-submits land in a later task.
 const OD_BASE = "https://app.orderdesk.me/api/v2";
 
+// Task #2814 — test-run guard. On June 3–4 2026 the paid-checkout tests
+// pushed hundreds of fake "Test Fan" orders into the REAL Order Desk store
+// (auto-push was on and the workspace carries live credentials). Auto-push
+// is now off by default, but this guard makes the failure structurally
+// impossible: any test run — the `test` workflow sets GT_TEST=1, and we
+// also detect Node's test runner directly — is refused at the single HTTP
+// choke point below, covering auto-push, manual push, and every future
+// call site. Operator scripts run outside the test runner (plain `tsx
+// script.ts`, no GT_TEST) and are unaffected. Do NOT rely on NODE_ENV:
+// it is never set to "test" here.
+export function isTestRun(): boolean {
+  if (process.env.GT_TEST?.trim()) return true;
+  // Node's built-in test runner marks spawned test processes.
+  if (process.env.NODE_TEST_CONTEXT) return true;
+  if (process.execArgv.some((a) => a === "--test" || a.startsWith("--test-"))) return true;
+  return false;
+}
+
 async function odFetch(path: string, init: RequestInit = {}): Promise<any> {
+  if (isTestRun()) {
+    throw new Error(
+      "[orderdesk] blocked: refusing to call the live Order Desk API from a test run (GT_TEST / node --test detected)",
+    );
+  }
   const creds = odCreds();
   if (!creds) throw new Error("Order Desk credentials not configured");
   const res = await fetch(`${OD_BASE}${path}`, {

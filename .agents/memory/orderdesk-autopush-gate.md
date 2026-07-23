@@ -23,6 +23,16 @@ exactly what Bill (the operator) does NOT want. He asked to "just prep the
 integration" now; the richer release-level "on its way / here's where it is"
 status view + extras-to-artist-vs-Spinney workflow is future work.
 
+**Test-run guard (June 2026 incident):** checkout-verification tests once
+auto-pushed ~700 "Test Fan"/`@example.test` orders into the LIVE store. Now
+`odFetch` in `server/orderDesk.ts` (single choke point for ALL OD HTTP) throws
+when `isTestRun()` is true (`GT_TEST=1` set by the `test` workflow, or Node
+test-runner detection) — even with live creds + auto-push on. Guard test:
+`server/orderDesk.testGuard.db.test.ts`. Manual push, webhook, and operator
+scripts (which use their own fetch) are unaffected. Note: OD API rate-limits
+bursts (~50 rapid calls) — pace bulk scripts ~1 req/s with backoff; GET /orders
+paging appears to list only the open/New folder.
+
 **How to apply:** Leave `ORDERDESK_AUTO_PUSH` unset until the release-level
 fulfillment workflow exists. The manual retry button and the inbound status
 webhook are always live regardless of the flag. If you ever re-enable auto-push,

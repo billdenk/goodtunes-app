@@ -51,10 +51,6 @@ args = "db-query-smoke"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "test"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
 args = "schema-drift-smoke"
 
 [[workflows.workflow.tasks]]
@@ -72,6 +68,10 @@ args = "codemagic-android-changeset-smoke"
 [[workflows.workflow.tasks]]
 task = "workflow.run"
 args = "mirror-freshness"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "test"
 
 [[workflows.workflow]]
 name = "Start application"
@@ -103,17 +103,6 @@ args = "tsx scripts/db-query-smoke.ts"
 
 [workflows.workflow.metadata]
 isValidation = true
-
-[[workflows.workflow]]
-name = "test"
-author = "agent"
-
-[workflows.workflow.metadata]
-isValidation = true
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "TSX_TSCONFIG_PATH=tsconfig.test.json npx tsx --test --test-force-exit $(find client shared server -name '*.test.ts' -not -path '*/node_modules/*')"
 
 [[workflows.workflow]]
 name = "schema-drift-smoke"
@@ -166,6 +155,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/check-github-mirror-freshness.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "test"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "GT_TEST=1 TSX_TSCONFIG_PATH=tsconfig.test.json npx tsx --test --test-force-exit $(find client shared server -name '*.test.ts' -not -path '*/node_modules/*')"
 
 [workflows.workflow.metadata]
 isValidation = true

@@ -93,6 +93,8 @@ Alternatively, use the order detail sheet (click any order row) — the Fulfillm
 
 **Auto-push flag (off by default).** Setting the `ORDERDESK_AUTO_PUSH` secret to `true` makes every paid physical order hand off the instant payment clears. Leave it unset until the release-level fulfillment workflow exists — otherwise the fulfillment partner is told to fulfill each individual fan order before anything is pressed.
 
+**Test runs can never touch the live store.** All Order Desk API traffic flows through a single guarded client that refuses to make any HTTP call during a test run (the automated `test` workflow sets `GT_TEST=1`, and the Node test runner is also detected directly). This was added after the June 2026 incident where checkout-verification tests auto-pushed hundreds of "Test Fan" orders into the real store; even if `ORDERDESK_AUTO_PUSH` is turned on someday, the test suite is structurally locked out. A guard-verification test (`server/orderDesk.testGuard.db.test.ts`) proves the block on every run.
+
 ### Changing the default fulfillment partner
 
 The routing rule is deterministic (in priority order):
