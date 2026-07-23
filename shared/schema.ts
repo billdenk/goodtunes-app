@@ -93,9 +93,6 @@ export const users = pgTable("users", {
   // link integrity is enforced in app code + the post-merge migration. The
   // partial unique index guarantees at most one admin per fan.
   customerUserId: varchar("customer_user_id"),
-  // Task #2795 — Trusted-device skip: when true the admin can bypass the
-  // second-factor prompt on recognised devices (browser-cookie gated).
-  skipSecondFactor: boolean("skip_second_factor").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => ({
   customerUserIdUniq: uniqueIndex("users_customer_user_id_uniq")
@@ -3222,22 +3219,6 @@ export const shopifyDigitalFeeLedger = pgTable("shopify_digital_fee_ledger", {
   // Stamped when the Shopify order is refunded; used to compute net amounts.
   reversedAt: timestamp("reversed_at"),
   createdAt: timestamp("created_at").defaultNow(),
-});
-
-// Task #2792 — GDPR data_request compilation log. One row per Shopify
-// GDPR data_request webhook received, storing the compiled personal-data
-// snapshot so operators can retrieve it from the admin surface rather
-// than hunting through server stdout. `compiledData` is the full JSON
-// payload sent to the customer. `fulfilledAt` is stamped when the
-// compiled snapshot is stored.
-export const shopifyGdprRequests = pgTable("shopify_gdpr_requests", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  shopDomain: text("shop_domain").notNull(),
-  customerEmail: text("customer_email").notNull(),
-  shopifyCustomerId: text("shopify_customer_id"),
-  compiledData: jsonb("compiled_data").notNull(),
-  requestedAt: timestamp("requested_at").defaultNow().notNull(),
-  fulfilledAt: timestamp("fulfilled_at"),
 });
 
 // One-time redemption code minted at orders/paid webhook time. The code
