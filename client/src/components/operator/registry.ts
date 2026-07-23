@@ -46,6 +46,7 @@ import {
   Receipt,
   Cog,
   Printer,
+  Truck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -155,6 +156,11 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // fulfillment scopes get the dashboard tab only. No catalog — flat list.
   { id: "dashboard", label: "Dashboard",         icon: LayoutDashboard, roles: ["vendor", "manufacturer", "fulfillment"] },
   { id: "services",  label: "GoodDeed Services", icon: Wrench,          roles: ["vendor"] },
+  // Task #2818 — fulfillment partners (Spinney Media et al) get real
+  // work surfaces: fan orders routed to their warehouse + approved
+  // press runs inbound to their dock.
+  { id: "orders",    label: "Orders",            icon: ShoppingBag,     roles: ["fulfillment"] },
+  { id: "inbound",   label: "Inbound",           icon: Truck,           roles: ["fulfillment"] },
 
   // Press shell — `/vendor` routed via ManufacturerScopeRouter for
   // is_maker manufacturers (PressPortal.tsx). Catalog section (People,

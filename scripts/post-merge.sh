@@ -10063,3 +10063,23 @@ SQL
 }
 seed_task_2795_shopify_reviewer_admin dev  "${DATABASE_URL:-}"
 seed_task_2795_shopify_reviewer_admin prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #2818 — expected-arrival on pressing-run → fulfillment leg ─────
+# Idempotent schema alignment for the new pressing_order_requests column
+# (dev + prod; drizzle-kit not used for incremental changes).
+add_task_2818_expected_arrival() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: task-2818 skipped on $label (no DATABASE_URL)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 -q -c \
+    "ALTER TABLE pressing_order_requests ADD COLUMN IF NOT EXISTS expected_arrival_at timestamp;"; then
+    echo "post-merge: task-2818 expected_arrival_at ok on $label"
+  else
+    echo "post-merge: ERROR — task-2818 expected_arrival_at FAILED on $label"
+    return 1
+  fi
+}
+add_task_2818_expected_arrival dev  "${DATABASE_URL:-}"
+add_task_2818_expected_arrival prod "${PROD_DATABASE_URL:-}"

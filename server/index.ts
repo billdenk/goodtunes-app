@@ -505,6 +505,11 @@ async function bootstrapAccessGuard() {
   try {
     const { armOdooPollScheduler } = await import("./odoo");
     armOdooPollScheduler();
+
+    // Task #2818 — Order Desk on-demand pull complement to the webhook.
+    // No-ops every tick while ORDERDESK_* credentials are unset.
+    const { armOrderDeskPollScheduler } = await import("./orderDesk");
+    armOrderDeskPollScheduler();
   } catch (e: any) {
     log(`odoo poll scheduler init failed: ${e?.message ?? e}`, "odoo-poll");
   }

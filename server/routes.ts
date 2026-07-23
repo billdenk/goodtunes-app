@@ -5,7 +5,7 @@ import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
 import { registerPublishingSettlementRoutes, registerPublisherPortalRoutes } from "./publishingSettlementRoutes";
 import { sql, and, eq, ne, or, ilike, isNull, isNotNull, desc, inArray, gt } from "drizzle-orm";
-import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, fulfillmentPartners, fulfillmentDestinations, albumPreviewGrants, TERMS_VERSION } from "@shared/schema";
+import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, fulfillmentPartners, fulfillmentDestinations, albumPreviewGrants, pressingOrderRequests, TERMS_VERSION } from "@shared/schema";
 import {
   MRP_DOMAIN,
   HELLBENDER_DOMAIN,
@@ -33413,6 +33413,32 @@ export async function registerRoutes(
         userId,
         body.data.note,
       );
+      res.json(row);
+    },
+  );
+
+  // PATCH expected-arrival — Task #2818. Operator override for when an
+  // approved run's finished goods should LAND at the fulfillment
+  // destination. Null clears the override (feed falls back to the
+  // press-turn-time estimate). super_admin only, mirroring approve/reject.
+  app.patch(
+    "/api/admin/pressing-orders/:id/expected-arrival",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const body = z
+        .object({ expectedArrivalAt: z.string().datetime().nullable() })
+        .safeParse(req.body);
+      if (!body.success) {
+        return res.status(400).json({ message: "expectedArrivalAt must be an ISO datetime or null" });
+      }
+      const existing = await storage.getPressingOrderRequest(String(req.params.id));
+      if (!existing) return res.status(404).json({ message: "Not found" });
+      const [row] = await db
+        .update(pressingOrderRequests)
+        .set({ expectedArrivalAt: body.data.expectedArrivalAt ? new Date(body.data.expectedArrivalAt) : null })
+        .where(eq(pressingOrderRequests.id, String(req.params.id)))
+        .returning();
       res.json(row);
     },
   );

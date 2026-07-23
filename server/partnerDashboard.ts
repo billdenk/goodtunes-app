@@ -848,6 +848,102 @@ async function buildVendorPayload(
     return { kpis, chartMetrics, series, activity };
   }
 
+  // Task #2818 — fulfillment-partner scope gets real warehouse KPIs off
+  // orders.fulfillment_partner_id: routed orders, shipped, open pipeline
+  // (submitted / in_fulfillment), plus approved press runs inbound.
+  if (subKind === "fulfillment") {
+    async function fWindow(window: RangeWindow | null) {
+      if (!window) return null;
+      const row = await db.execute<any>(sql`
+        SELECT
+          COUNT(*)::bigint AS routed,
+          COUNT(*) FILTER (WHERE fulfillment_status IN ('shipped','delivered'))::bigint AS shipped
+        FROM orders
+        WHERE fulfillment_partner_id = ${scope.id}
+          AND origin <> 'qa:test'
+          AND created_at >= ${window.from} AND created_at < ${window.to}
+      `).catch(() => ({ rows: [] }) as any);
+      const x = (((row as any).rows ?? [])[0]) ?? {};
+      return { routed: Number(x.routed ?? 0), shipped: Number(x.shipped ?? 0) };
+    }
+    // Open pipeline + inbound are point-in-time (not windowed).
+    const openRow = await db.execute<any>(sql`
+      SELECT COUNT(*)::bigint AS n FROM orders
+      WHERE fulfillment_partner_id = ${scope.id}
+        AND origin <> 'qa:test'
+        AND fulfillment_status IN ('submitted','in_fulfillment')
+    `).catch(() => ({ rows: [] }) as any);
+    const openPipeline = Number((((openRow as any).rows ?? [])[0])?.n ?? 0);
+    // Inbound press runs: approved runs whose album routes here (splits /
+    // album override / platform default). Mirrors the portal Inbound feed.
+    let inbound: number | null = null;
+    try {
+      const { albumRoutesToPartner } = await import("./fulfillmentPortal");
+      const partnerRow = await db.execute<any>(sql`
+        SELECT is_default FROM fulfillment_partners WHERE id = ${scope.id} AND deleted_at IS NULL
+      `);
+      const isDefault = !!(((partnerRow as any).rows ?? [])[0]?.is_default);
+      const runRows = await db.execute<any>(sql`
+        SELECT por.album_id FROM pressing_order_requests por
+        JOIN albums a ON a.id = por.album_id AND a.deleted_at IS NULL
+        WHERE por.status = 'approved'
+        LIMIT 200
+      `);
+      let n = 0;
+      for (const rr of ((runRows as any).rows ?? []) as any[]) {
+        if (await albumRoutesToPartner(String(rr.album_id), scope.id, isDefault)) n++;
+      }
+      inbound = n;
+    } catch {
+      inbound = null;
+    }
+    const [cur, prv] = await Promise.all([fWindow(r), fWindow(prior)]);
+    const kpis: Kpi[] = [
+      { id: "routed", label: "Orders routed", value: cur?.routed ?? 0, prior: prv?.routed ?? null, format: "number", note: "Fan orders routed to your warehouse" },
+      { id: "open", label: "Open pipeline", value: openPipeline, format: "number", note: "Submitted or in fulfillment right now" },
+      { id: "shipped", label: "Shipped", value: cur?.shipped ?? 0, prior: prv?.shipped ?? null, format: "number" },
+      inbound === null
+        ? { id: "inbound", label: "Inbound press runs", value: null, format: "number", comingSoon: true }
+        : { id: "inbound", label: "Inbound press runs", value: inbound, format: "number", note: "Approved runs headed to your dock" },
+      { id: "turn", label: "Avg turn-time", value: null, format: "duration", comingSoon: true, note: "Turn-time lands with per-order pick/pack events" },
+    ];
+    const daily = await db.execute<any>(sql`
+      SELECT date_trunc('day', created_at)::date::text AS day,
+        COUNT(*)::bigint AS routed,
+        COUNT(*) FILTER (WHERE fulfillment_status IN ('shipped','delivered'))::bigint AS shipped
+      FROM orders
+      WHERE fulfillment_partner_id = ${scope.id}
+        AND origin <> 'qa:test'
+        AND created_at >= ${r.from} AND created_at < ${r.to}
+      GROUP BY 1 ORDER BY 1 ASC
+    `).catch(() => ({ rows: [] }) as any);
+    const series = mergeDaily(r, [
+      { rows: ((daily as any).rows ?? []) as any[], routed: (x: any) => Number(x.routed ?? 0), shipped: (x: any) => Number(x.shipped ?? 0) },
+    ]);
+    const chartMetrics: ChartMetric[] = [
+      { id: "routed", label: "Routed", format: "number" },
+      { id: "shipped", label: "Shipped", format: "number" },
+    ];
+    const activity: ActivityItem[] = [];
+    const recent = await db.execute<any>(sql`
+      SELECT o.id, o.created_at, o.fulfillment_status, a.title AS album_title
+      FROM orders o JOIN albums a ON a.id = o.album_id
+      WHERE o.fulfillment_partner_id = ${scope.id}
+        AND o.origin <> 'qa:test'
+        AND o.created_at >= ${r.from} AND o.created_at < ${r.to}
+      ORDER BY o.created_at DESC LIMIT 10
+    `).catch(() => ({ rows: [] }) as any);
+    for (const o of ((recent as any).rows ?? []) as any[]) {
+      activity.push({
+        kind: "order",
+        ts: new Date(o.created_at).toISOString(),
+        title: `Order routed — ${o.album_title}`,
+        detail: o.fulfillment_status ? String(o.fulfillment_status).replace(/_/g, " ") : "pending",
+      });
+    }
+    return { kpis, chartMetrics, series, activity };
+  }
+
   // Most vendor-pipeline metrics aren't tracked end-to-end yet — render
   // as coming-soon tiles so the shell still feels populated and the
   // operator can see *where* the numbers will land once the pipeline

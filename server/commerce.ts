@@ -75,6 +75,7 @@ import {
 } from "./pressCatalog";
 import { registerPressPortalRoutes } from "./pressPortal";
 import { registerPrinterPortalRoutes } from "./printerPortal";
+import { registerFulfillmentPortalRoutes } from "./fulfillmentPortal";
 import { grantLltBonusIfEligible } from "./lltBonus";
 import { hasReachedSunset } from "@shared/albumStage";
 import { isReferralWindowActive } from "@shared/referralWindow";
@@ -1490,6 +1491,10 @@ export function registerCommerceRoutes(app: Express) {
   // Task #2047 — GoodDeed Quickprinter portal. Its own scope gate (vendor
   // membership + isQuickprinter assertion) lives inside the module.
   registerPrinterPortalRoutes(app, requireAdmin);
+
+  // Task #2818 — Fulfillment-partner portal (Spinney Media et al). Scoped
+  // read-mostly feeds; the scope gate lives inside the module.
+  registerFulfillmentPortalRoutes(app, requireAdmin);
 
   app.get("/api/admin/manufacturers/:id/format-costs", requireAdmin, requirePressScope, async (req, res) => {
     const pressId = String(req.params.id);

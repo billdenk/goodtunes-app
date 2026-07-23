@@ -2,7 +2,7 @@
 
 **Receive clean, fully-stamped physical orders — album, artist, label, SKU, and GoodDeed number baked onto every carton — and report status back with one signed webhook.**
 
-*Dated June 10, 2026*
+*Dated July 23, 2026*
 
 ---
 
@@ -21,10 +21,12 @@ When a fan buys a physical record on GoodTunes — vinyl, cassette, CD, or bundl
 Everything below is live in production, not a slide:
 
 - **Order Desk handoff is wired and credentialed.** Direct GoodTunes checkout and label Shopify bundles can both push an order to Order Desk with the album, artist, label, SKU, GoodDeed number, and shipping address stamped on the payload — nothing to re-key in the warehouse.
-- **The handoff is operator-triggered, not per-order automatic.** This is deliberate. The GoodTunes flow aggregates fan orders, confirms the press-run quantity with the artist (a 344-order release might press 500 for a better price), and places **one** order with the chosen press — so the fulfillment partner is *not* told to fulfill each individual fan order before anything is even printed. The operator pushes to Order Desk from the admin order row when the run is real. (A release-level "this pressing is on its way / here's where it is" view for the fulfillment partner is the next build; auto-push is gated behind `ORDERDESK_AUTO_PUSH` for that day.)
+- **The handoff is operator-triggered, not per-order automatic.** This is deliberate. The GoodTunes flow aggregates fan orders, confirms the press-run quantity with the artist (a 344-order release might press 500 for a better price), and places **one** order with the chosen press — so the fulfillment partner is *not* told to fulfill each individual fan order before anything is even printed. The operator pushes to Order Desk from the admin order row when the run is real. (The release-level "this pressing is on its way / here's where it is" view now lives in your portal's **Inbound** tab; auto-push stays gated behind `ORDERDESK_AUTO_PUSH`.)
 - **Deterministic routing to your warehouse.** When an order is pushed, it routes to the platform-default fulfillment partner (currently Spinney Media), with a per-order override available on any individual order when needed. No more "first row in the table wins" ambiguity. Some presses fulfill their own runs (e.g. MRP); others hand off to Spinney — routing is per-order so both paths coexist.
 - **Signed status webhooks back to GoodTunes.** Report submitted → in fulfillment → shipped → delivered, plus carrier and tracking number/URL; the operator sees the full lifecycle on the admin order row with a one-click retry if a handoff ever fails. Fans see the same lifecycle as a pill on their Orders page with a tap-to-track link once the package moves.
 - **Visible push failures.** If an Order Desk push fails (credentials not configured, API error, etc.), the error message is shown directly on the admin order row — no logs to dig through — with a one-click "Push to OD" retry button.
+- **Your own portal.** Sign in and see your work in one place: a dashboard with real numbers (orders routed to you, open pipeline, shipped, inbound press runs), an **Orders** tab listing every fan order routed to your warehouse — quantity, destination, live status pill, carrier + tracking — and an **Inbound** tab showing the approved pressing runs headed to your dock, each with an expected-arrival date derived from the producing press's standard turn time (the operator can pin an exact date, which always wins and drops the "est." tag). You see the shipping destination, never the buyer's name or email.
+- **Status flows both ways with Order Desk.** Beyond the signed webhook, GoodTunes also *pulls* status from Order Desk on a timer and the operator has a one-click per-order "Refresh from Order Desk" — so a missed webhook can't strand an order's status.
 - **You're a first-class entity in the catalog.** Fulfillment warehouses carry contact info, location, specialties, standard turnaround, and a receiving-dock shipping address (with Google Places autocomplete), and can be set as the default fulfillment partner for a given pressing plant.
 - **Notification recipients on your side.** Name the people (Ops / Accounting / Owner) who get emailed when GoodTunes fires the production heads-up and the inbound-units notice; every send is logged with a "Last notified" date.
 - **Shared contacts.** Record the account rep or production lead on your org (paste a LinkedIn URL to add a contact).
@@ -114,9 +116,8 @@ To change the platform default: update `fulfillment_partners.is_default` directl
 
 ## Coming next
 
-- **Full album → partner routing map.** Today orders route to the platform default unless overridden per-order. A per-album → partner map (e.g. "all Nightbirde orders go to Spinney, all PMP orders go to PacPack") is the next routing layer.
-- **Fan ship/deliver notification emails.** Tracked in the task queue — webhook status updates already land in our DB; the email send is next.
-- **Fulfillment SLA dashboards** in the god-view (today's "Coming soon" tiles).
+- **Inventory sync + label generation.** The portal is read-mostly today; on-hand counts and shipping-label generation from inside the portal are the next build.
+- **Fulfillment SLA dashboards** in the god-view.
 
 ## CTA
 

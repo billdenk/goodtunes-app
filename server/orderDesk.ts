@@ -545,6 +545,157 @@ export async function dispatchShippingEmail(
   });
 }
 
+// ─── On-demand status pull (Task #2818) ─────────────────────────────
+// The webhook stays the primary channel; this GET-based pull is the
+// on-demand complement (admin "Refresh from Order Desk" button + a
+// best-effort scheduled poll for orders sitting in submitted /
+// in_fulfillment). Idempotent with the webhook: both funnel through the
+// same status mapping and the same first-ship guards (timestamps only
+// stamp when previously null; the shipping email only fires on the
+// first transition to shipped).
+
+// Read one order out of Order Desk. Returns the OD order object or null
+// when it can't be found / creds unset.
+export async function getOrderDeskOrder(odOrderId: string): Promise<any | null> {
+  if (!odCreds()) return null;
+  try {
+    const body = await odFetch(`/orders/${encodeURIComponent(odOrderId)}`, { method: "GET" });
+    return body?.order ?? null;
+  } catch (e: any) {
+    console.warn(`[orderdesk-pull] GET order ${odOrderId} failed: ${e?.message ?? e}`);
+    return null;
+  }
+}
+
+// Reconcile a fresh OD snapshot onto our order row. Mirrors the webhook
+// patch logic exactly (status mapping, tracking, legacy status flip,
+// payout attempt, first-ship email) so pull and push channels can never
+// disagree. Returns true when a status transition was applied.
+export async function refreshOrderFromOrderDesk(orderId: string): Promise<{
+  ok: boolean;
+  changed: boolean;
+  error?: string;
+  odOrder?: any;
+}> {
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+  if (!order) return { ok: false, changed: false, error: "Order not found" };
+  if (!order.orderDeskOrderId) return { ok: false, changed: false, error: "Order was never pushed to Order Desk" };
+  if (!odCreds()) return { ok: false, changed: false, error: "Order Desk credentials not configured" };
+
+  const odOrder = await getOrderDeskOrder(order.orderDeskOrderId);
+  if (!odOrder) return { ok: false, changed: false, error: "Order Desk order not found" };
+
+  const folderName: string | null = odOrder?.folder_name ?? odOrder?.folder ?? null;
+  // Pull has no event type — the folder is the source of truth for state.
+  const mapped = mapOdStatus("", folderName);
+  // OD v2 orders carry shipments as an array; accept the webhook's
+  // singular `shipment` shape too for safety.
+  const shipment =
+    (Array.isArray(odOrder?.shipments) && odOrder.shipments.length > 0
+      ? odOrder.shipments[odOrder.shipments.length - 1]
+      : null) ?? odOrder?.shipment ?? null;
+  const carrier: string | null = shipment?.carrier_code ?? odOrder?.carrier ?? null;
+  const trackingNumber: string | null = shipment?.tracking_number ?? odOrder?.tracking_number ?? null;
+  const trackingUrl: string | null = shipment?.tracking_url ?? odOrder?.tracking_url ?? null;
+
+  const patch: Record<string, any> = {
+    fulfillmentRaw: { source: "od-pull", odOrderId: order.orderDeskOrderId, folderName, carrier, trackingNumber, trackingUrl, pulledAt: new Date().toISOString() },
+  };
+  if (mapped) {
+    patch.fulfillmentStatus = mapped.status;
+    if (mapped.tsColumn && !(order as any)[mapped.tsColumn]) {
+      patch[mapped.tsColumn as string] = new Date();
+    }
+  }
+  if (carrier) patch.carrier = carrier;
+  if (trackingNumber) patch.trackingNumber = trackingNumber;
+  if (trackingUrl) patch.trackingUrl = trackingUrl;
+  if (mapped?.status === "shipped" && order.status === "paid") {
+    patch.status = "shipped";
+  }
+  const isFirstShipTransition = mapped?.status === "shipped" && !order.shippedAt;
+
+  await db.update(orders).set(patch).where(eq(orders.id, order.id));
+
+  if (mapped?.status === "shipped" && order.status === "paid") {
+    try {
+      const [refreshed] = await db.select().from(orders).where(eq(orders.id, order.id));
+      const { attemptTransferForOrder } = await import("./payouts");
+      await attemptTransferForOrder(refreshed);
+    } catch (e: any) {
+      console.error(`[orderdesk-pull] payout attempt failed for ${order.id}`, e?.message);
+    }
+  }
+
+  if (isFirstShipTransition) {
+    try {
+      await dispatchShippingEmail(order, {
+        carrier: (patch.carrier as string | null) ?? order.carrier ?? null,
+        trackingNumber: (patch.trackingNumber as string | null) ?? order.trackingNumber ?? null,
+        trackingUrl: (patch.trackingUrl as string | null) ?? order.trackingUrl ?? null,
+      });
+    } catch (e: any) {
+      console.error(`[orderdesk-pull] shipping email failed for ${order.id}`, e?.message);
+    }
+  }
+
+  const changed = mapped != null && mapped.status !== order.fulfillmentStatus;
+  return { ok: true, changed, odOrder };
+}
+
+// One poll pass: pull current OD state for every pushed-but-in-flight
+// order (submitted / in_fulfillment). Terminal statuses are skipped —
+// no further OD movement matters. No-ops cleanly when creds are unset.
+export async function runOrderDeskStatusPoll(): Promise<number> {
+  if (!odCreds()) return 0;
+  const open = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(
+      sql`${orders.orderDeskOrderId} IS NOT NULL
+        AND (${orders.fulfillmentStatus} IS NULL OR ${orders.fulfillmentStatus} IN ('submitted','in_fulfillment'))`,
+    )
+    .limit(200);
+  if (open.length === 0) return 0;
+  let transitions = 0;
+  for (const row of open) {
+    try {
+      const r = await refreshOrderFromOrderDesk(row.id);
+      if (r.ok && r.changed) transitions++;
+    } catch (e: any) {
+      console.error(`[orderdesk-pull] poll sync failed for order ${row.id}`, e?.message);
+    }
+  }
+  return transitions;
+}
+
+// In-process poll scheduler mirroring armOdooPollScheduler: delayed first
+// tick, fixed interval, overlap guard. Arms unconditionally — every tick
+// is a clean no-op while ORDERDESK_* creds are unset.
+export function armOrderDeskPollScheduler() {
+  let ticking = false;
+  const tick = async () => {
+    if (ticking) return;
+    ticking = true;
+    try {
+      const n = await runOrderDeskStatusPoll();
+      if (n > 0) console.log(`[orderdesk-pull] reconciled ${n} order(s) from Order Desk`);
+    } catch (e: any) {
+      console.error(`[orderdesk-pull] poll tick failed: ${e?.message ?? e}`);
+    } finally {
+      ticking = false;
+    }
+  };
+  // First tick ~3min after boot (offset from the Odoo poll), then every 15min.
+  setTimeout(tick, 180 * 1000);
+  setInterval(tick, 15 * 60 * 1000);
+  console.log(
+    odCreds()
+      ? "[orderdesk-pull] poll scheduler armed (15min tick)"
+      : "[orderdesk-pull] poll scheduler armed (15min tick, idle — credentials unset)",
+  );
+}
+
 // ─── Webhook handler ─────────────────────────────────────────────────
 // Mounted in server/routes.ts on POST /api/webhooks/orderdesk. Body is
 // raw bytes (express.raw in server/index.ts) so we can HMAC-verify the
@@ -806,5 +957,32 @@ export function registerOrderDeskRoutes(app: Express) {
     const result = await pushOrderToOrderDesk(String(req.params.id));
     if (!result.ok) return res.status(502).json(result);
     res.json(result);
+  });
+
+  // POST /api/admin/orders/:id/orderdesk-refresh — Task #2818 on-demand
+  // status pull. Idempotent with the webhook (same mapping + first-ship
+  // guards); useful when a webhook was missed or the operator wants the
+  // freshest OD state right now.
+  app.post("/api/admin/orders/:id/orderdesk-refresh", async (req, res) => {
+    const storage = await storagePromise;
+    const auth = req.headers.authorization;
+    if (!auth?.startsWith("Bearer ")) return res.status(401).json({ message: "Sign in required" });
+    const a = await storage.getAuthBy(auth.slice(7));
+    if (!a || a.kind !== "admin") return res.status(401).json({ message: "Admin only" });
+    // Operator-only: partner accounts (fulfillment, press, label, …) also
+    // authenticate as kind "admin", so gate on the resolved role. Fail
+    // closed on a role-lookup error.
+    try {
+      const { getUserRole } = await import("./auth/roles");
+      const info = await getUserRole(a.userId);
+      if (!info || (info.role !== "super_admin" && info.role !== "admin")) {
+        return res.status(403).json({ message: "Operator only" });
+      }
+    } catch {
+      return res.status(403).json({ message: "Operator only" });
+    }
+    const result = await refreshOrderFromOrderDesk(String(req.params.id));
+    if (!result.ok) return res.status(422).json({ message: result.error ?? "Refresh failed" });
+    res.json({ ok: true, changed: result.changed });
   });
 }

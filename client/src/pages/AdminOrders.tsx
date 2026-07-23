@@ -905,6 +905,25 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
     onError: (e: any) => toast({ title: "Push failed", description: e?.message, variant: "destructive" }),
   });
 
+  // Task #2818 — on-demand Order Desk status refresh for orders that have
+  // reached OD; pulls the freshest status when a webhook was missed.
+  const canRefreshOd = isPhysical && !!o.orderDeskOrderId;
+  const odRefresh = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/orders/${o.id}/orderdesk-refresh`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message ?? `Refresh failed (${res.status})`);
+      }
+      return res.json();
+    },
+    onSuccess: (data: { changed?: boolean }) => {
+      toast({ title: data.changed ? "Status updated from Order Desk" : "Already up to date" });
+      if (data.changed) queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+    },
+    onError: (e: any) => toast({ title: "Refresh failed", description: e?.message, variant: "destructive" }),
+  });
+
   // Task #1976 — deliberate "Push to Odoo" action, parallel to "Push to OD".
   // No auto-push: an order only reaches Odoo when the operator clicks this.
   const needsOdooPush = isPhysical && !o.odooOrderId;
@@ -932,6 +951,19 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
         </span>
         {o.orderDeskOrderId && (
           <span className="text-slate-400" data-testid={`text-od-id-${o.id}`}>OD #{o.orderDeskOrderId}</span>
+        )}
+        {canRefreshOd && (
+          <button
+            type="button"
+            onClick={() => odRefresh.mutate()}
+            disabled={odRefresh.isPending}
+            title="Refresh status from Order Desk"
+            className="px-1.5 py-0.5 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold"
+            data-testid={`button-od-refresh-${o.id}`}
+          >
+            {odRefresh.isPending ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
+            Refresh
+          </button>
         )}
         {o.odooOrderId && (
           <span className="text-slate-400" data-testid={`text-odoo-id-${o.id}`}>Odoo #{o.odooOrderId}</span>

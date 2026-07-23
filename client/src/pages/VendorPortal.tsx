@@ -20,6 +20,9 @@ import { PressPortal } from "./PressPortal";
 // Task #2047 — GoodDeed quickprinter (is_quickprinter) vendors get a
 // print-centric portal instead of the legacy GoodDeed-Services shell.
 import { PrinterPortal } from "./PrinterPortal";
+// Task #2818 — fulfillment partners get Orders + Inbound work surfaces,
+// shared with the super-admin mirror on AdminFulfillmentPartner.
+import { FulfillmentOrdersPanel, FulfillmentInboundPanel } from "@/components/admin/FulfillmentPartnerPanels";
 
 // Routes a vendor-role scope to either the new PrinterPortal (when the
 // vendor is flagged `is_quickprinter`) or the legacy VendorBody shell
@@ -68,7 +71,7 @@ interface MeRole {
   roleScopeId: string | null;
 }
 
-type VendorTabId = "dashboard" | "services";
+type VendorTabId = "dashboard" | "services" | "orders" | "inbound";
 
 export function VendorPortal() {
   const { user, isLoading: authLoading } = useAuth();
@@ -152,7 +155,7 @@ function RoleRouter({ meRole }: { meRole: MeRole | null | undefined }) {
 function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string; role: string; superAdminScopeKind?: "vendor" | "manufacturer" | "fulfillment" }) {
   const [tab, setTab] = useState<VendorTabId>(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
-    if (t === "dashboard" || t === "services") return t;
+    if (t === "dashboard" || t === "services" || t === "orders" || t === "inbound") return t;
     return "dashboard";
   });
   // GoodDeed Services is vendor-only server-side (gateVendorAccess in
@@ -162,15 +165,28 @@ function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string;
   const operatorRole = (role as OperatorRole) || "vendor";
   const tabs = modulesForRole(operatorRole) as ReadonlyArray<{ id: VendorTabId; label: string }>;
   const canSeeServices = tabs.some((t) => t.id === "services");
-  // Header lookup currently goes through the gooddeed-services endpoint
-  // (vendor-only). For manufacturer/fulfillment we fall back to a
-  // header without the logo + name lookup — the dashboard payload
-  // itself carries the partner's name in its scope block.
+  // Header identity lookup, per scope kind (Task #2818 fix — the old
+  // vendor-only gooddeed-services query left manufacturer/fulfillment
+  // headers reading "Your dashboard"):
+  //   vendor       → /api/admin/vendors/:id/gooddeed-services (vendor block)
+  //   fulfillment  → /api/fulfillment/:id/me
+  //   manufacturer → /api/press/:id/me (reseller/non-maker rows land here)
   const { data } = useQuery<{ vendor: { id: string; name: string; logoUrl: string | null } }>({
     queryKey: ["/api/admin/vendors", vendorId, "gooddeed-services"],
     enabled: canSeeServices,
   });
-  const vendor = data?.vendor;
+  const { data: fulfillMe } = useQuery<{ id: string; name: string; logoUrl: string | null }>({
+    queryKey: [`/api/fulfillment/${vendorId}/me`],
+    enabled: role === "fulfillment",
+  });
+  const { data: pressMe } = useQuery<{ id: string; name: string; logoUrl?: string | null }>({
+    queryKey: [`/api/press/${vendorId}/me`],
+    enabled: role === "manufacturer",
+  });
+  const vendor =
+    data?.vendor ??
+    (role === "fulfillment" && fulfillMe ? { id: fulfillMe.id, name: fulfillMe.name, logoUrl: fulfillMe.logoUrl ?? null } : undefined) ??
+    (role === "manufacturer" && pressMe ? { id: pressMe.id, name: pressMe.name, logoUrl: pressMe.logoUrl ?? null } : undefined);
   const portalLabel =
     role === "manufacturer" ? "Manufacturer portal" :
     role === "fulfillment" ? "Fulfillment portal" :
@@ -213,6 +229,12 @@ function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string;
         <div className="bg-white text-slate-900 rounded-2xl p-4 sm:p-6 ring-1 ring-slate-200" data-testid="vendor-services-panel">
           <GoodDeedServicesTab vendorId={vendorId} />
         </div>
+      )}
+      {tab === "orders" && role === "fulfillment" && (
+        <FulfillmentOrdersPanel partnerId={vendorId} />
+      )}
+      {tab === "inbound" && role === "fulfillment" && (
+        <FulfillmentInboundPanel partnerId={vendorId} />
       )}
     </OperatorShell>
   );

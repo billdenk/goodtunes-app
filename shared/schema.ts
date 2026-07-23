@@ -5546,6 +5546,12 @@ export const pressingOrderRequests = pgTable("pressing_order_requests", {
   submittedByUserId: varchar("submitted_by_user_id"),
   decidedAt: timestamp("decided_at"),
   decidedByUserId: varchar("decided_by_user_id"),
+  // Task #2818 — when the finished run is expected to LAND at the
+  // fulfillment destination. Operator-editable override; when null the
+  // fulfillment feed derives a default from the producing press's turn
+  // time (manufacturers.turnaround_weeks_* / turnaround_days) anchored
+  // on decidedAt. Stored value always wins over the derived estimate.
+  expectedArrivalAt: timestamp("expected_arrival_at"),
 });
 
 export type PressingOrderRequest = typeof pressingOrderRequests.$inferSelect;

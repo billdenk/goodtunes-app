@@ -11,6 +11,7 @@ import { AddressAutocompleteField } from "@/components/admin/AddressAutocomplete
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
+import { FulfillmentOrdersPanel, FulfillmentInboundPanel } from "@/components/admin/FulfillmentPartnerPanels";
 import { Button } from "@/components/ui/button";
 import { ViewAsPartnerButton } from "@/components/admin/ViewAsPartnerButton";
 import {
@@ -40,8 +41,11 @@ export function AdminFulfillmentPartner() {
   // Task #590 — Fulfillment partner page didn't have tabs before;
   // introduce Dashboard (lead) / Overview (the FpForm) / People with
   // `?tab=` round-trip so cross-section deep links stay honest.
-  type FpTab = "dashboard" | "overview" | "people";
-  const FP_TAB_KEYS: readonly FpTab[] = ["dashboard", "overview", "people"];
+  // Task #2818 — Orders + Inbound mirror the invited partner's portal
+  // tabs (same shared panels), so the operator sees exactly what the
+  // partner sees, plus the Order Desk refresh action.
+  type FpTab = "dashboard" | "orders" | "inbound" | "overview" | "people";
+  const FP_TAB_KEYS: readonly FpTab[] = ["dashboard", "orders", "inbound", "overview", "people"];
   const [tab, setTabState] = useState<FpTab>(() => {
     if (typeof window === "undefined") return "dashboard";
     const q = new URLSearchParams(window.location.search).get("tab");
@@ -260,6 +264,8 @@ export function AdminFulfillmentPartner() {
           <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
             {([
               { key: "dashboard", label: "Dashboard" },
+              { key: "orders", label: "Orders" },
+              { key: "inbound", label: "Inbound" },
               { key: "overview", label: "Overview" },
               { key: "people", label: "People" },
             ] as const).map((t) => (
@@ -293,6 +299,10 @@ export function AdminFulfillmentPartner() {
             subtitle="Fulfillment dashboard"
           />
         )}
+
+        {tab === "orders" && <FulfillmentOrdersPanel partnerId={f.id} canRefreshOd />}
+
+        {tab === "inbound" && <FulfillmentInboundPanel partnerId={f.id} canEditArrival />}
 
         {tab === "overview" && (
           <>

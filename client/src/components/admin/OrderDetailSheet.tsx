@@ -512,6 +512,48 @@ function FulfillmentRetryButton({ order }: { order: AdminOrderRow }) {
     },
   });
 
+  // Task #2818 — on-demand OD status refresh once the order has an OD id.
+  const canRefreshOd = isPhysical && !!order.orderDeskOrderId;
+  const refresh = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/orders/${order.id}/orderdesk-refresh`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message ?? `Refresh failed (${res.status})`);
+      }
+      return res.json();
+    },
+    onSuccess: (data: { changed?: boolean }) => {
+      toast({ title: data.changed ? "Status updated from Order Desk" : "Already up to date" });
+      if (data.changed) {
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/orders", order.id] });
+      }
+    },
+    onError: (e: any) => toast({ title: "Refresh failed", description: e?.message ?? "Unknown error", variant: "destructive" }),
+  });
+
+  if (canRefreshOd) {
+    return (
+      <div className="mb-3" data-testid="fulfillment-od-refresh">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => refresh.mutate()}
+          disabled={refresh.isPending}
+          data-testid="button-orderdesk-refresh"
+        >
+          {refresh.isPending ? (
+            <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Refreshing…</>
+          ) : (
+            <><RefreshCw className="w-3 h-3 mr-1.5" /> Refresh from Order Desk</>
+          )}
+        </Button>
+      </div>
+    );
+  }
+
   if (!needsRetry) return null;
 
   return (
