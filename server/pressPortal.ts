@@ -28,6 +28,7 @@ import {
   pressColorTiers,
 } from "@shared/schema";
 import { evaluateEarlyCut, syncEarlyCutQueue, resolveAlbumPressTier } from "./earlyCut";
+import { sqlPersonIdByContactEmail } from "./partnerInvites";
 import { hasArtistShape } from "./lib/personArtistShape";
 import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
 
@@ -462,6 +463,108 @@ export function sqlEarlyCutPoolsForPress(pressId: string): SQL {
               AND por.package_snapshot ->> 'pressId' = ${pressId}
          )
        ORDER BY (a.press_pool_accrued_cents - a.press_pool_released_cents) DESC
+  `;
+}
+
+// ── Press invite / start-album raw SQL ──────────────────────────────
+// Exported so scripts/db-query-smoke.ts can EXPLAIN-validate them. These
+// flows previously referenced phantom `people.email` / `people.created_at`
+// columns (people only has `contact_email`, and no created_at) and 500'd
+// the press invite flow in production.
+
+// "Accepted" column — customers (artists + labels) who signed up against
+// this press but haven't created an album yet. People carry no creation
+// timestamp, so artist rows sort after labels (NULLS LAST) by name.
+export function sqlPressAcceptedCustomers(pressId: string): SQL {
+  return sql`
+      SELECT 'artist' AS kind, p.id, p.name, p.contact_email AS email,
+             NULL::timestamptz AS "createdAt"
+      FROM people p
+      WHERE p.default_press_id = ${pressId}
+        AND p.deleted_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM albums a
+          WHERE a.primary_artist_id = p.id AND a.deleted_at IS NULL
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM admin_invites ai
+          WHERE ai.default_press_id = ${pressId}
+            AND lower(ai.email) = lower(p.contact_email)
+            AND ai.used_at IS NULL
+            AND ai.revoked_at IS NULL
+            AND ai.expires_at > NOW()
+        )
+      UNION ALL
+      SELECT 'label' AS kind, l.id, l.name, NULL::text AS email,
+             l.created_at AS "createdAt"
+      FROM labels l
+      WHERE l.default_press_id = ${pressId}
+        AND l.deleted_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM albums a
+          WHERE a.label_id = l.id AND a.deleted_at IS NULL
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM admin_invites ai
+          WHERE ai.default_press_id = ${pressId}
+            AND ai.role_scope_id = l.id
+            AND ai.used_at IS NULL
+            AND ai.revoked_at IS NULL
+            AND ai.expires_at > NOW()
+        )
+      ORDER BY "createdAt" DESC NULLS LAST, name ASC
+  `;
+}
+
+// Backfill contact_email on a person only when it's still empty, so the
+// invite record and future email-keyed lookups agree without clobbering
+// a curated address.
+export function sqlBackfillPersonContactEmail(personId: string, emailLower: string): SQL {
+  return sql`
+    UPDATE people SET contact_email = ${emailLower}
+     WHERE id = ${personId} AND (contact_email IS NULL OR contact_email = '')
+  `;
+}
+
+export function sqlInsertPressInvitedPerson(name: string, emailLower: string, pressId: string): SQL {
+  return sql`
+    INSERT INTO people (name, contact_email, invited_by_press_id, default_press_id)
+    VALUES (${name}, ${emailLower}, ${pressId}, ${pressId})
+    RETURNING id
+  `;
+}
+
+export function sqlInsertStartAlbumPerson(args: {
+  name: string;
+  emailLower: string;
+  pressId: string;
+  photoUrl: string | null;
+  bio: string | null;
+  spotifyUrl: string | null;
+  appleMusicUrl: string | null;
+  itunesArtistId: string | null;
+}): SQL {
+  return sql`
+    INSERT INTO people (name, contact_email, invited_by_press_id, photo_url, bio, spotify_url, apple_music_url, itunes_artist_id)
+    VALUES (
+      ${args.name}, ${args.emailLower}, ${args.pressId},
+      ${args.photoUrl}, ${args.bio},
+      ${args.spotifyUrl}, ${args.appleMusicUrl}, ${args.itunesArtistId}
+    )
+    RETURNING id
+  `;
+}
+
+export function sqlMastersReadyNotifyRow(artistId: string, albumId: string, pressId: string): SQL {
+  return sql`
+    SELECT p.name AS artist_name, p.contact_email AS artist_email,
+           a.title AS album_title,
+           m.name AS press_name
+    FROM albums a
+    LEFT JOIN people p ON p.id = ${artistId}
+    LEFT JOIN manufacturers m ON m.id = ${pressId}
+    WHERE a.id = ${albumId}
+    LIMIT 1
   `;
 }
 
@@ -926,42 +1029,7 @@ export function registerPressPortalRoutes(
     // anyone with at least one non-deleted album (those land in the
     // album-driven columns below) and anyone still on a pending invite
     // (those are already in the Invited column).
-    const accepted = await db.execute<any>(sql`
-      SELECT 'artist' AS kind, p.id, p.name, p.email,
-             p.created_at AS "createdAt"
-      FROM people p
-      WHERE p.default_press_id = ${pressId}
-        AND NOT EXISTS (
-          SELECT 1 FROM albums a
-          WHERE a.primary_artist_id = p.id AND a.deleted_at IS NULL
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM admin_invites ai
-          WHERE ai.default_press_id = ${pressId}
-            AND lower(ai.email) = lower(p.email)
-            AND ai.used_at IS NULL
-            AND ai.revoked_at IS NULL
-            AND ai.expires_at > NOW()
-        )
-      UNION ALL
-      SELECT 'label' AS kind, l.id, l.name, NULL::text AS email,
-             l.created_at AS "createdAt"
-      FROM labels l
-      WHERE l.default_press_id = ${pressId}
-        AND NOT EXISTS (
-          SELECT 1 FROM albums a
-          WHERE a.label_id = l.id AND a.deleted_at IS NULL
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM admin_invites ai
-          WHERE ai.default_press_id = ${pressId}
-            AND ai.role_scope_id = l.id
-            AND ai.used_at IS NULL
-            AND ai.revoked_at IS NULL
-            AND ai.expires_at > NOW()
-        )
-      ORDER BY "createdAt" DESC
-    `);
+    const accepted = await db.execute<any>(sqlPressAcceptedCustomers(pressId));
     // Pre-pressing albums: assigned to this press via SKU stamp but no
     // pressing order yet. These get a synthetic stage "awaiting_pressing_order"
     // so the Pipeline board can surface them in a leading column.
@@ -1601,10 +1669,7 @@ export function registerPressPortalRoutes(
                invited_by_press_id = COALESCE(invited_by_press_id, ${pressId})
          WHERE id = ${personId}
       `);
-      await db.execute(sql`
-        UPDATE people SET email = ${lower}
-         WHERE id = ${personId} AND (email IS NULL OR email = '')
-      `);
+      await db.execute(sqlBackfillPersonContactEmail(personId, lower));
 
       const { sendAdminInviteEmail } = await import("./mail");
       const crypto = await import("crypto");
@@ -1657,9 +1722,7 @@ export function registerPressPortalRoutes(
     // Create the scoped entity first so the invite role_scope_id is real.
     let roleScopeId: string;
     if (role === "artist") {
-      const existing = await db.execute<{ id: string }>(sql`
-        SELECT id FROM people WHERE LOWER(email) = ${lower} LIMIT 1
-      `);
+      const existing = await db.execute<{ id: string }>(sqlPersonIdByContactEmail(lower));
       const row = ((existing as any).rows ?? [])[0];
       if (row?.id) {
         roleScopeId = row.id;
@@ -1668,11 +1731,9 @@ export function registerPressPortalRoutes(
           WHERE id = ${roleScopeId} AND default_press_id IS NULL
         `);
       } else {
-        const created = await db.execute<{ id: string }>(sql`
-          INSERT INTO people (name, email, invited_by_press_id, default_press_id)
-          VALUES (${name}, ${lower}, ${pressId}, ${pressId})
-          RETURNING id
-        `);
+        const created = await db.execute<{ id: string }>(
+          sqlInsertPressInvitedPerson(name, lower, pressId),
+        );
         roleScopeId = (created as any).rows[0].id;
       }
     } else {
@@ -1757,20 +1818,21 @@ export function registerPressPortalRoutes(
     // row from the streaming prefill. We stamp `invited_by_press_id`
     // provenance now, but DON'T pin `default_press_id` on the person —
     // that relationship only goes live when an operator approves.
-    const existing = await db.execute<{ id: string }>(sql`
-      SELECT id FROM people WHERE LOWER(email) = ${lower} LIMIT 1
-    `);
+    const existing = await db.execute<{ id: string }>(sqlPersonIdByContactEmail(lower));
     let personId: string = ((existing as any).rows ?? [])[0]?.id;
     if (!personId) {
-      const created = await db.execute<{ id: string }>(sql`
-        INSERT INTO people (name, email, invited_by_press_id, photo_url, bio, spotify_url, apple_music_url, itunes_artist_id)
-        VALUES (
-          ${name}, ${lower}, ${pressId},
-          ${photoUrl ?? null}, ${stripAppleMusicBoilerplate(bio) || null},
-          ${spotifyUrl ?? null}, ${appleMusicUrl ?? null}, ${itunesArtistId ?? null}
-        )
-        RETURNING id
-      `);
+      const created = await db.execute<{ id: string }>(
+        sqlInsertStartAlbumPerson({
+          name,
+          emailLower: lower,
+          pressId,
+          photoUrl: photoUrl ?? null,
+          bio: stripAppleMusicBoilerplate(bio) || null,
+          spotifyUrl: spotifyUrl ?? null,
+          appleMusicUrl: appleMusicUrl ?? null,
+          itunesArtistId: itunesArtistId ?? null,
+        }),
+      );
       personId = (created as any).rows[0].id;
     }
 
@@ -2679,16 +2741,7 @@ export function registerPressPortalRoutes(
 async function notifyArtistMastersReady(artistId: string | null, albumId: string, pressId: string) {
   if (!artistId) return;
   try {
-    const r = await db.execute<any>(sql`
-      SELECT p.name AS artist_name, p.email AS artist_email,
-             a.title AS album_title,
-             m.name AS press_name
-      FROM albums a
-      LEFT JOIN people p ON p.id = ${artistId}
-      LEFT JOIN manufacturers m ON m.id = ${pressId}
-      WHERE a.id = ${albumId}
-      LIMIT 1
-    `);
+    const r = await db.execute<any>(sqlMastersReadyNotifyRow(artistId, albumId, pressId));
     const row = ((r as any).rows ?? [])[0];
     if (!row?.artist_email) {
       console.log(`[notify] masters-ready skip — no email on artist=${artistId} album=${albumId}`);

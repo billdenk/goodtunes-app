@@ -24,13 +24,25 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import crypto from "crypto";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "./db";
 import { storage } from "./storage";
 import { getUserRole, findMembershipForScope, addMembership } from "./auth/roles";
 import { sqlNpoAlbumLedger } from "./adminAlbumQueries";
+import { sqlPersonIdByContactEmail } from "./partnerInvites";
 
 const INVITE_TTL_DAYS = 14;
+
+// Placeholder Person minted by an NPO invite. People are keyed on
+// `people.contact_email` (there is no `people.email` column). Exported so
+// scripts/db-query-smoke.ts can EXPLAIN-validate the column references.
+export function sqlNpoInsertReferredPerson(name: string, emailLower: string, npoId: string): SQL {
+  return sql`
+    INSERT INTO people (name, contact_email, referred_by_org_id)
+    VALUES (${name}, ${emailLower}, ${npoId})
+    RETURNING id
+  `;
+}
 
 // ─── Sub-role helper ─────────────────────────────────────────────────
 // A user's NPO sub-role is the `invite_role` of the most-recent
@@ -244,9 +256,7 @@ export function registerNpoPortalRoutes(
       // via the referrerKind='non_profit' path, but we set it here too
       // so the artist surfaces in the NPO's roll-up even pre-accept.
       const personName = (name || email.split("@")[0]).trim();
-      const existing = await db.execute<{ id: string }>(sql`
-        SELECT id FROM people WHERE LOWER(email) = ${email} LIMIT 1
-      `);
+      const existing = await db.execute<{ id: string }>(sqlPersonIdByContactEmail(email));
       const row = ((existing as any).rows ?? [])[0];
       if (row?.id) {
         roleScopeId = row.id;
@@ -255,11 +265,9 @@ export function registerNpoPortalRoutes(
           WHERE id = ${roleScopeId} AND referred_by_org_id IS NULL
         `);
       } else {
-        const created = await db.execute<{ id: string }>(sql`
-          INSERT INTO people (name, email, referred_by_org_id)
-          VALUES (${personName}, ${email}, ${npoId})
-          RETURNING id
-        `);
+        const created = await db.execute<{ id: string }>(
+          sqlNpoInsertReferredPerson(personName, email, npoId),
+        );
         roleScopeId = (created as any).rows[0].id;
       }
       referrerKind = "non_profit";

@@ -249,3 +249,16 @@ export async function revokePlaceholderIfUnused(
   );
   return true;
 }
+
+// Person lookup keyed on contact email, shared by the press + NPO invite
+// flows. People are keyed on `people.contact_email` — there is NO
+// `people.email` column (raw SQL referencing one 500'd the press invite
+// flow in production). Soft-deleted people never match, so a trashed
+// profile can't be silently resurrected by a new invite.
+export function sqlPersonIdByContactEmail(emailLower: string): SQL {
+  return sql`
+    SELECT id FROM people
+    WHERE LOWER(contact_email) = ${emailLower} AND deleted_at IS NULL
+    LIMIT 1
+  `;
+}

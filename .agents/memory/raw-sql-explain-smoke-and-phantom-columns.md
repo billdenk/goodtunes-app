@@ -66,7 +66,9 @@ throws and hides the rest. Fixing one unmasks the next — re-verify every query
 the block against the live catalog, don't stop at the one that was reported.
 
 **Why:** these reads predate a schema rename/cleanup and were never updated;
-they 500 only when the endpoint is actually hit. Known remaining offenders
-outside the early-cut/press-portal flows: `server/routes.ts` loadConnectedAlbums
-(`a.cover_url`) + the active-artist albums query, and `server/npoPortal.ts`
-(`a.created_at`). Extend the smoke registry when touching those flows.
+they 500 only when the endpoint is actually hit. The press + NPO INVITE flows
+(`people.email` / `people.created_at` class) are now fixed and their queries
+extracted + registered in the smoke. Known remaining offenders outside those
+flows: `server/routes.ts` loadConnectedAlbums (`a.cover_url`) + the
+active-artist albums query, and `server/npoPortal.ts` (`a.created_at`).
+Extend the smoke registry when touching those flows.

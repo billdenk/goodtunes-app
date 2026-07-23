@@ -38,7 +38,13 @@ import {
   sqlPressPipeline,
   sqlPaidPaymentIntentsForAlbum,
   sqlEarlyCutPoolsForPress,
+  sqlPressAcceptedCustomers,
+  sqlBackfillPersonContactEmail,
+  sqlInsertPressInvitedPerson,
+  sqlInsertStartAlbumPerson,
+  sqlMastersReadyNotifyRow,
 } from "../server/pressPortal";
+import { sqlNpoInsertReferredPerson } from "../server/npoPortal";
 import {
   sqlConnectedAlbums,
   sqlNpoArtistAlbums,
@@ -52,6 +58,7 @@ import {
   sqlOpenArtistReferral,
   sqlAmbassadorOrg,
   sqlPlaceholderScopeInUseCount,
+  sqlPersonIdByContactEmail,
 } from "../server/partnerInvites";
 
 // Stable dummy bind values — content is irrelevant because EXPLAIN never
@@ -80,6 +87,28 @@ const SMOKE_QUERIES: { name: string; sql: SQL }[] = [
   { name: "pressPortal.pipeline", sql: sqlPressPipeline(PRESS) },
   { name: "pressPortal.paidPaymentIntentsForAlbum", sql: sqlPaidPaymentIntentsForAlbum(ALBUM) },
   { name: "pressPortal.earlyCutPoolsForPress", sql: sqlEarlyCutPoolsForPress(PRESS) },
+  // Press + NPO invite flows — these previously referenced phantom
+  // people.email / people.created_at columns and 500'd invites in prod
+  // (people only has contact_email, and no created_at).
+  { name: "pressPortal.acceptedCustomers", sql: sqlPressAcceptedCustomers(PRESS) },
+  { name: "pressPortal.backfillPersonContactEmail", sql: sqlBackfillPersonContactEmail(PRESS, "nobody@example.com") },
+  { name: "pressPortal.insertInvitedPerson", sql: sqlInsertPressInvitedPerson("Smoke Test", "nobody@example.com", PRESS) },
+  {
+    name: "pressPortal.insertStartAlbumPerson",
+    sql: sqlInsertStartAlbumPerson({
+      name: "Smoke Test",
+      emailLower: "nobody@example.com",
+      pressId: PRESS,
+      photoUrl: null,
+      bio: null,
+      spotifyUrl: null,
+      appleMusicUrl: null,
+      itunesArtistId: null,
+    }),
+  },
+  { name: "pressPortal.mastersReadyNotifyRow", sql: sqlMastersReadyNotifyRow(PRESS, ALBUM, PRESS) },
+  { name: "partnerInvites.personIdByContactEmail", sql: sqlPersonIdByContactEmail("nobody@example.com") },
+  { name: "npoPortal.insertReferredPerson", sql: sqlNpoInsertReferredPerson("Smoke Test", "nobody@example.com", ORG) },
   // server/adminAlbumQueries.ts
   { name: "adminAlbumQueries.connectedAlbums", sql: sqlConnectedAlbums([ALBUM]) },
   { name: "adminAlbumQueries.npoArtistAlbums", sql: sqlNpoArtistAlbums([ALBUM]) },
