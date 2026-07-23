@@ -15,7 +15,7 @@
 import type { Express, Request, Response } from "express";
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, scrypt as _scrypt, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, not, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   albums,
@@ -1436,6 +1436,371 @@ export function registerShopifyRoutes(app: Express) {
       res.json({ received: true });
     } catch (e: any) {
       console.error(`[shopify-webhook] handler failed topic=${topic}`, e?.message);
+      res.status(500).json({ message: "Handler failed" });
+    }
+  });
+
+  // ─── GDPR mandatory compliance webhooks ───────────────────────────
+  // Required for Shopify public app review. Shopify signs these with the
+  // same X-Shopify-Hmac-Sha256 / SHOPIFY_API_SECRET as merchant webhooks.
+  // URLs are configured in Partner Dashboard → App setup (not via the
+  // Admin API). All three fall under the express.raw() mount already
+  // applied to /api/webhooks/shopify in server/index.ts.
+  //
+  // Verification helper shared by all three endpoints. Returns the raw
+  // Buffer on success or sends a 401/500 and returns null on failure.
+  function verifyGdprWebhook(req: Request, res: Response): Buffer | null {
+    const raw = req.body as Buffer;
+    const headerHmac = req.headers["x-shopify-hmac-sha256"] as string | undefined;
+    if (SHOPIFY_API_SECRET) {
+      if (!verifyWebhookHmac(raw, headerHmac)) {
+        console.error(
+          `[shopify-gdpr] HMAC failed from shop=${req.headers["x-shopify-shop-domain"] ?? "unknown"}`,
+        );
+        res.status(401).json({ message: "Invalid signature" });
+        return null;
+      }
+    } else if (process.env.NODE_ENV === "production") {
+      res.status(500).json({ message: "Shopify webhook secret not configured" });
+      return null;
+    } else {
+      console.warn("[shopify-gdpr] DEV: accepting unsigned GDPR payload (no SHOPIFY_API_SECRET)");
+    }
+    return raw;
+  }
+
+  // customers/data_request — Shopify asks us to compile all personal data
+  // we hold for a customer of the requesting shop so the merchant can return
+  // it to the data subject. We compile the relevant rows, log them (so the
+  // operator can retrieve from server logs within Shopify's 30-day window),
+  // and return 200. No data leaves via the webhook response body.
+  app.post("/api/webhooks/shopify/customers/data_request", async (req, res) => {
+    const raw = verifyGdprWebhook(req, res);
+    if (!raw) return;
+
+    let payload: any;
+    try {
+      payload = JSON.parse(raw.toString("utf8"));
+    } catch {
+      return res.status(400).json({ message: "Bad JSON" });
+    }
+
+    const shopDomain = String(payload.shop_domain ?? "").toLowerCase();
+    const customer = payload.customer ?? {};
+    const customerEmail = String(customer.email ?? "").toLowerCase();
+    const shopifyOrderIds: string[] = (payload.orders_requested ?? []).map(String);
+
+    // Shopify populates orders_requested only for the specific customer's orders.
+    // An empty list means this customer has no orders in the store — nothing to compile.
+    if (shopifyOrderIds.length === 0) {
+      console.log(`[shopify-gdpr] data_request: no orders_requested for shop=${shopDomain} customer=${customerEmail} — no data held`);
+      return res.json({ received: true });
+    }
+
+    try {
+      const store = await getStoreByDomain(shopDomain);
+      if (!store) {
+        console.log(`[shopify-gdpr] data_request: unknown shop ${shopDomain} — no data held`);
+        return res.json({ received: true });
+      }
+
+      const storeOrders = await db
+        .select({
+          id: orders.id,
+          shopifyOrderId: orders.shopifyOrderId,
+          status: orders.status,
+          albumId: orders.albumId,
+          totalCents: orders.totalCents,
+          createdAt: orders.createdAt,
+          customerId: orders.customerId,
+          buyerEmail: orders.buyerEmail,
+          buyerName: orders.buyerName,
+          buyerPhone: orders.buyerPhone,
+          shippingAddress: orders.shippingAddress,
+          billingAddress: orders.billingAddress,
+        })
+        .from(orders)
+        .where(
+          and(eq(orders.shopifyStoreId, store.id), inArray(orders.shopifyOrderId, shopifyOrderIds)),
+        );
+
+      const storeOrderIds = storeOrders.map((o) => o.id);
+
+      // Redemption codes tied to the specified orders.
+      const codes = storeOrderIds.length > 0
+        ? await db
+            .select({ orderId: shopifyRedemptionCodes.orderId, code: shopifyRedemptionCodes.code })
+            .from(shopifyRedemptionCodes)
+            .where(inArray(shopifyRedemptionCodes.orderId, storeOrderIds))
+        : [];
+
+      let fan: (typeof customerUsers.$inferSelect) | null = null;
+      if (customerEmail) {
+        const [row] = await db.select().from(customerUsers).where(eq(customerUsers.email, customerEmail));
+        fan = row ?? null;
+      }
+
+      // Album unlock grants scoped to the albums on the requesting store's orders.
+      // We do NOT return all of the fan's unlocks — only those provably tied to
+      // this merchant's transactions (same album IDs as the validated store orders).
+      const storeAlbumIds = [...new Set(storeOrders.map((o) => o.albumId).filter(Boolean))];
+      const unlocks = fan && storeAlbumIds.length > 0
+        ? await db
+            .select({ albumId: userAlbums.albumId, grantedAt: userAlbums.grantedAt })
+            .from(userAlbums)
+            .where(and(eq(userAlbums.userId, fan.id), inArray(userAlbums.albumId, storeAlbumIds)))
+        : [];
+
+      const compiled = {
+        shopDomain,
+        shopifyCustomerId: customer.id,
+        email: customerEmail,
+        goodtunesCustomerId: fan?.id ?? null,
+        displayName: fan?.displayName ?? null,
+        contactEmail: fan?.contactEmail ?? null,
+        phone: fan?.phone ?? null,
+        shippingAddress: fan?.shippingAddress ?? null,
+        billingAddress: fan?.billingAddress ?? null,
+        albumUnlocks: unlocks.map((u) => ({ albumId: u.albumId, grantedAt: u.grantedAt })),
+        orders: storeOrders.map((o) => ({
+          goodtunesOrderId: o.id,
+          shopifyOrderId: o.shopifyOrderId,
+          status: o.status,
+          albumId: o.albumId,
+          totalCents: o.totalCents,
+          createdAt: o.createdAt,
+          buyerEmail: o.buyerEmail,
+          buyerName: o.buyerName,
+          buyerPhone: o.buyerPhone,
+          shippingAddress: o.shippingAddress,
+          billingAddress: o.billingAddress,
+          redemptionCode: codes.find((c) => c.orderId === o.id)?.code ?? null,
+        })),
+      };
+
+      console.log(
+        `[shopify-gdpr] data_request compiled for shop=${shopDomain} customer=${customerEmail}:`,
+        JSON.stringify(compiled),
+      );
+      res.json({ received: true });
+    } catch (e: any) {
+      console.error(`[shopify-gdpr] data_request error shop=${shopDomain}:`, e?.message);
+      res.status(500).json({ message: "Handler failed" });
+    }
+  });
+
+  // customers/redact — Shopify instructs us to delete or anonymize all
+  // personal data we hold for a specific customer that originated from the
+  // requesting shop. We:
+  //   1. Clear shopify_order_token on the specified orders (removes the
+  //      credential that gates the public redemption-by-order endpoint).
+  //   2. Delete one-time redemption codes for those orders.
+  //   3. If the fan's account was created solely through this shop (no
+  //      other orders anywhere in GoodTunes), anonymize the customer_users
+  //      row in place.
+  app.post("/api/webhooks/shopify/customers/redact", async (req, res) => {
+    const raw = verifyGdprWebhook(req, res);
+    if (!raw) return;
+
+    let payload: any;
+    try {
+      payload = JSON.parse(raw.toString("utf8"));
+    } catch {
+      return res.status(400).json({ message: "Bad JSON" });
+    }
+
+    const shopDomain = String(payload.shop_domain ?? "").toLowerCase();
+    const customer = payload.customer ?? {};
+    const customerEmail = String(customer.email ?? "").toLowerCase();
+    const shopifyOrderIds: string[] = (payload.orders_to_redact ?? []).map(String);
+
+    // Shopify populates orders_to_redact only for the specific customer's orders.
+    // An empty list means this customer has no orders in the store — nothing to redact.
+    if (shopifyOrderIds.length === 0) {
+      console.log(`[shopify-gdpr] customers/redact: no orders_to_redact for shop=${shopDomain} customer=${customerEmail} — nothing to redact`);
+      return res.json({ received: true });
+    }
+
+    try {
+      const store = await getStoreByDomain(shopDomain);
+      if (!store) {
+        console.log(`[shopify-gdpr] customers/redact: unknown shop ${shopDomain} — nothing to redact`);
+        return res.json({ received: true });
+      }
+
+      const affectedOrders = await db
+        .select({ id: orders.id, customerId: orders.customerId })
+        .from(orders)
+        .where(
+          and(eq(orders.shopifyStoreId, store.id), inArray(orders.shopifyOrderId, shopifyOrderIds)),
+        );
+
+      const orderIds = affectedOrders.map((o) => o.id);
+
+      if (orderIds.length > 0) {
+        // Clear the Shopify order token (the public redemption endpoint credential)
+        // and scrub all PII fields captured on the order rows at checkout.
+        await db
+          .update(orders)
+          .set({
+            shopifyOrderToken: null,
+            buyerEmail: null,
+            buyerName: null,
+            buyerPhone: null,
+            shippingAddress: null,
+            billingAddress: null,
+          })
+          .where(inArray(orders.id, orderIds));
+        // Delete one-time redemption codes — these are PII-adjacent credentials
+        // tying a Shopify transaction to a fan.
+        await db.delete(shopifyRedemptionCodes).where(inArray(shopifyRedemptionCodes.orderId, orderIds));
+      }
+
+      // For each affected customer, check if they have any orders outside this
+      // shop. If not, they're shop-only and we anonymize the account row.
+      const customerIds = [...new Set(affectedOrders.map((o) => o.customerId).filter(Boolean))] as string[];
+      let anonymized = 0;
+      // orderIds is always non-empty here because we early-exited on empty
+      // shopifyOrderIds above and customerIds derives from affectedOrders.
+      for (const customerId of customerIds) {
+        const [extraOrder] = await db
+          .select({ id: orders.id })
+          .from(orders)
+          .where(and(eq(orders.customerId, customerId), not(inArray(orders.id, orderIds))))
+          .limit(1);
+
+        if (!extraOrder) {
+          await db
+            .update(customerUsers)
+            .set({
+              email: `redacted-${customerId}@shopify-gdpr.invalid`,
+              username: `redacted-${customerId}`,
+              displayName: "Redacted",
+              realName: null,
+              contactEmail: null,
+              contactPhone: null,
+              phone: null,
+              phoneE164: null,
+              billingAddress: null,
+              shippingAddress: null,
+              stripeCustomerId: null,
+            })
+            .where(eq(customerUsers.id, customerId));
+          anonymized++;
+        }
+      }
+
+      console.log(
+        `[shopify-gdpr] customers/redact: shop=${shopDomain} customer=${customerEmail}` +
+        ` orders=${orderIds.length} anonymized_accounts=${anonymized}`,
+      );
+      res.json({ received: true });
+    } catch (e: any) {
+      console.error(`[shopify-gdpr] customers/redact error shop=${shopDomain}:`, e?.message);
+      res.status(500).json({ message: "Handler failed" });
+    }
+  });
+
+  // shop/redact — Fires ~48 h after the merchant uninstalls the app.
+  // Shopify instructs us to purge all data we hold for the store. We:
+  //   1. Disassociate orders from the store (null shopify_store_id) and
+  //      clear their order tokens.
+  //   2. Delete redemption codes for all store orders.
+  //   3. Anonymize any fan account whose only orders came from this store.
+  //   4. Delete the shopify_stores row, cascading to shopify_product_mappings
+  //      and shopify_digital_fee_ledger.
+  app.post("/api/webhooks/shopify/shop/redact", async (req, res) => {
+    const raw = verifyGdprWebhook(req, res);
+    if (!raw) return;
+
+    let payload: any;
+    try {
+      payload = JSON.parse(raw.toString("utf8"));
+    } catch {
+      return res.status(400).json({ message: "Bad JSON" });
+    }
+
+    const shopDomain = String(payload.shop_domain ?? "").toLowerCase();
+
+    try {
+      const store = await getStoreByDomain(shopDomain);
+      if (!store) {
+        console.log(`[shopify-gdpr] shop/redact: unknown shop ${shopDomain} — nothing to redact`);
+        return res.json({ received: true });
+      }
+
+      const storeOrders = await db
+        .select({ id: orders.id, customerId: orders.customerId })
+        .from(orders)
+        .where(eq(orders.shopifyStoreId, store.id));
+
+      const orderIds = storeOrders.map((o) => o.id);
+
+      // Identify shop-only customers BEFORE we disassociate orders (otherwise
+      // we can't distinguish them from direct orders by storeId afterward).
+      const customerIds = [...new Set(storeOrders.map((o) => o.customerId).filter(Boolean))] as string[];
+      const shopOnlyCustomers = new Set<string>();
+      for (const customerId of customerIds) {
+        const [extraOrder] = orderIds.length > 0
+          ? await db
+              .select({ id: orders.id })
+              .from(orders)
+              .where(and(eq(orders.customerId, customerId), not(inArray(orders.id, orderIds))))
+              .limit(1)
+          : [];
+        if (!extraOrder) shopOnlyCustomers.add(customerId);
+      }
+
+      if (orderIds.length > 0) {
+        // Disassociate orders from the store, clear tokens, and scrub all
+        // PII fields captured on the order rows at Shopify checkout.
+        await db
+          .update(orders)
+          .set({
+            shopifyStoreId: null,
+            shopifyOrderToken: null,
+            buyerEmail: null,
+            buyerName: null,
+            buyerPhone: null,
+            shippingAddress: null,
+            billingAddress: null,
+          })
+          .where(inArray(orders.id, orderIds));
+        // Delete redemption codes (FK on orders.id, not on store).
+        await db.delete(shopifyRedemptionCodes).where(inArray(shopifyRedemptionCodes.orderId, orderIds));
+      }
+
+      // Anonymize shop-only fan accounts.
+      for (const customerId of shopOnlyCustomers) {
+        await db
+          .update(customerUsers)
+          .set({
+            email: `redacted-${customerId}@shopify-gdpr.invalid`,
+            username: `redacted-${customerId}`,
+            displayName: "Redacted",
+            realName: null,
+            contactEmail: null,
+            contactPhone: null,
+            phone: null,
+            phoneE164: null,
+            billingAddress: null,
+            shippingAddress: null,
+            stripeCustomerId: null,
+          })
+          .where(eq(customerUsers.id, customerId));
+      }
+
+      // Delete the store row — cascades to shopify_product_mappings and
+      // shopify_digital_fee_ledger (both have ON DELETE CASCADE to this row).
+      await db.delete(shopifyStores).where(eq(shopifyStores.id, store.id));
+
+      console.log(
+        `[shopify-gdpr] shop/redact: shop=${shopDomain} orders=${orderIds.length}` +
+        ` anonymized_accounts=${shopOnlyCustomers.size} store_deleted=true`,
+      );
+      res.json({ received: true });
+    } catch (e: any) {
+      console.error(`[shopify-gdpr] shop/redact error shop=${shopDomain}:`, e?.message);
       res.status(500).json({ message: "Handler failed" });
     }
   });
