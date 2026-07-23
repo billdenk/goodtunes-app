@@ -126,10 +126,108 @@ The install→use→uninstall→reinstall flow is handled in `server/shopify.ts`
 - **Reinstall:** `upsertStore` finds the existing row by `shop_domain` and overwrites the token fields + clears `uninstalled_at`. Re-runs webhook and script tag registration.
 - **Shop redact (48h after uninstall):** The GDPR `shop/redact` webhook deletes the store row and cascades cleanup (see §1).
 
-**No orphaned webhooks** — Shopify automatically deregisters app-level webhooks when the store uninstalls; reinstalling re-registers them via our callback. Verify this on a dev store:
-1. Install → confirm 4 webhooks appear in Shopify admin.
-2. Uninstall → confirm our row has `uninstalled_at` set, `access_token` cleared.
-3. Reinstall → confirm webhooks re-registered, `uninstalled_at` cleared, orders still present.
+**No orphaned webhooks** — Shopify automatically deregisters app-level webhooks when the store uninstalls; reinstalling re-registers them via our callback.
+
+### Step-by-step operator verification (run on a Shopify development store)
+
+These steps use two admin API endpoints added specifically for this verification:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/admin/shopify/stores/:id/inspect` | Live-checks Shopify API for expected webhooks + script tag; shows DB row state |
+| `POST /api/admin/shopify/stores/:id/reinstall-hooks` | Re-registers webhooks + script tag; idempotent (safe to call on an already-healthy install) |
+
+#### Prerequisites
+
+- A **Shopify development store** (Partner Dashboard → Stores → Create development store). Do **not** use a production store.
+- `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` set in Replit Secrets (already done for prod).
+- The app must be running at its public URL (`my.goodtunes.music` in prod, or your dev tunnel).
+- An admin session (or Bearer token) for the `curl` calls below.
+
+---
+
+#### Step 1 — Fresh install
+
+1. In the GoodTunes admin → Shopify page, click **Connect a Shopify store**, enter `<dev-store>.myshopify.com`, and complete the OAuth flow.
+2. Shopify redirects back to `/admin/shopify?installed=<storeId>`. Note the `<storeId>` UUID.
+3. **Verify via API:**
+   ```sh
+   curl -s -b 'YOUR_SESSION_COOKIE' \
+     https://my.goodtunes.music/api/admin/shopify/stores/<storeId>/inspect | jq .
+   ```
+   Expected response shape (all must be true before continuing):
+   ```json
+   {
+     "dbRow": { "hasAccessToken": true, "uninstalledAt": null, ... },
+     "live": {
+       "allWebhooksPresent": true,
+       "webhookCount": 4,
+       "foundTopics": ["app/uninstalled","orders/paid","orders/refunded","refunds/create"],
+       "missingTopics": [],
+       "scriptTagInstalled": true,
+       "healthy": true
+     }
+   }
+   ```
+4. Capture a screenshot of the GoodTunes admin Shopify page showing the connected store (**§5 screenshot #1**).
+5. Capture a screenshot of the Shopify OAuth consent screen from step 1 if you can re-run it in an incognito window (**§5 screenshot #2**).
+
+---
+
+#### Step 2 — Place a test order
+
+1. In the Shopify dev store, create a free or $1 product and map it to a GoodTunes album via **Admin → Shopify → product mapping** (**§5 screenshot #3**).
+2. Place an order for that product as a test customer (use Shopify's Bogus Gateway or a real test card with Stripe Test mode).
+3. **Verify** the `orders/paid` webhook fired: check server logs for `[shopify-webhook] order <id> → GoodTunes order <id> code=<code>`.
+4. Open the Shopify order confirmation page (order status URL in Shopify admin → Orders). The GoodTunes "Get your music" CTA injected by the script tag must appear (**§5 screenshot #4**).
+5. Click the CTA → lands on `/redeem/<code>` (**§5 screenshot #5**).
+
+---
+
+#### Step 3 — Uninstall
+
+1. In the Shopify dev store admin → Apps → Uninstall GoodTunes.
+2. Wait ~10 seconds for the `app/uninstalled` webhook to arrive.
+3. **Verify via API:**
+   ```sh
+   curl -s -b 'YOUR_SESSION_COOKIE' \
+     https://my.goodtunes.music/api/admin/shopify/stores/<storeId>/inspect | jq .dbRow
+   ```
+   Expected: `"uninstalledAt": "<timestamp>"`, `"hasAccessToken": false`, `"hasRefreshToken": false`.
+4. The `live` key will be `null` with `"note": "Store is uninstalled — Shopify API not queried"` — this is correct.
+5. Verify **no orphaned webhooks** by checking Shopify admin → Settings → Notifications (Webhooks section) — it should be empty.
+
+---
+
+#### Step 4 — Reinstall
+
+1. Re-run the install flow: GoodTunes admin → Shopify → Connect a store → same `<dev-store>.myshopify.com`.
+2. **Verify via API** (same `<storeId>` as before — upsert should have found the existing row):
+   ```sh
+   curl -s -b 'YOUR_SESSION_COOKIE' \
+     https://my.goodtunes.music/api/admin/shopify/stores/<storeId>/inspect | jq .
+   ```
+   Expected: `"uninstalledAt": null`, `"hasAccessToken": true`, `allWebhooksPresent: true`, `scriptTagInstalled: true`.
+3. Verify **historical orders are still present**: the test order from Step 2 should still show in admin → Orders for that store.
+4. If the inspect call shows `missingTopics` (e.g. a network blip during the callback), run:
+   ```sh
+   curl -s -X POST -b 'YOUR_SESSION_COOKIE' \
+     https://my.goodtunes.music/api/admin/shopify/stores/<storeId>/reinstall-hooks | jq .
+   ```
+   Expected: `{ "ok": true, "webhooks": { ... "already_registered" ... }, "scriptTag": "already_installed" }`.
+
+---
+
+#### Checklist — all must be ✅ before submission
+
+- [ ] Fresh install: `inspect` returns `healthy: true` (4 webhooks + script tag)
+- [ ] Uninstall: `dbRow.uninstalledAt` is set, `hasAccessToken: false`
+- [ ] No orphaned webhooks remain in Shopify after uninstall
+- [ ] Reinstall: `dbRow.uninstalledAt` is null, `inspect` returns `healthy: true`
+- [ ] Historical test order still present after reinstall
+- [ ] Test order status page shows GoodTunes "Get your music" block
+- [ ] `/redeem/<code>` landing page works end-to-end
+- [ ] All 5 screenshots captured (see §5)
 
 ---
 

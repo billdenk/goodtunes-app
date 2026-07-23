@@ -2197,6 +2197,133 @@ export function registerShopifyRoutes(app: Express) {
     res.json({ ok: true });
   });
 
+  // Re-register webhooks + script tag for an already-installed store.
+  // Useful after a reinstall that failed mid-way (e.g. network blip during
+  // the OAuth callback), or when the operator wants to verify the hooks are
+  // live without re-running the full OAuth flow. Idempotent on Shopify's
+  // side — a 422 "Address has already been taken" from a duplicate webhook
+  // registration means it was already there, which is success.
+  app.post("/api/admin/shopify/stores/:id/reinstall-hooks", requireAdmin, async (req, res) => {
+    const storeId = String(req.params.id);
+    const store = await getStoreById(storeId);
+    if (!store) return res.status(404).json({ message: "Store not found" });
+    if (store.uninstalledAt || !store.accessToken) {
+      return res.status(409).json({ message: "Store is uninstalled — re-run OAuth to reconnect it first" });
+    }
+    const appUrl = appOrigin(req);
+    const webhookErrors: string[] = [];
+    const topics = ["orders/paid", "orders/refunded", "refunds/create", "app/uninstalled"];
+    const webhookResults: Record<string, string> = {};
+    for (const topic of topics) {
+      try {
+        const r = await shopifyFetch(store, "webhooks.json", {
+          method: "POST",
+          body: JSON.stringify({ webhook: { topic, address: `${appUrl}/api/webhooks/shopify/orders`, format: "json" } }),
+        });
+        const j = await r.json() as any;
+        if (r.ok) {
+          webhookResults[topic] = "registered";
+        } else if (r.status === 422 && JSON.stringify(j).includes("already been taken")) {
+          webhookResults[topic] = "already_registered";
+        } else {
+          webhookResults[topic] = `error_${r.status}`;
+          webhookErrors.push(`${topic}: ${r.status}`);
+        }
+      } catch (e: any) {
+        webhookResults[topic] = "exception";
+        webhookErrors.push(`${topic}: ${e?.message}`);
+      }
+    }
+    let scriptTagResult = "unknown";
+    try {
+      const r = await shopifyFetch(store, "script_tags.json", {
+        method: "POST",
+        body: JSON.stringify({ script_tag: { event: "onload", src: `${appUrl}/shopify/redeem-button.js`, display_scope: "order_status" } }),
+      });
+      const j = await r.json() as any;
+      if (r.ok) {
+        scriptTagResult = "installed";
+      } else if (r.status === 422 && JSON.stringify(j).includes("already been taken")) {
+        scriptTagResult = "already_installed";
+      } else {
+        scriptTagResult = `error_${r.status}`;
+        webhookErrors.push(`script_tag: ${r.status}`);
+      }
+    } catch (e: any) {
+      scriptTagResult = "exception";
+      webhookErrors.push(`script_tag: ${e?.message}`);
+    }
+    res.json({ ok: webhookErrors.length === 0, webhooks: webhookResults, scriptTag: scriptTagResult, errors: webhookErrors });
+  });
+
+  // Live install-state inspection — fetches webhook and script-tag lists
+  // from the Shopify Admin API so the operator can verify the install is
+  // healthy without opening the Shopify admin UI. Returns a summary of
+  // expected vs. found resources. Useful for the §4 hygiene checklist in
+  // docs/shopify-app-review.md.
+  app.get("/api/admin/shopify/stores/:id/inspect", requireAdmin, async (req, res) => {
+    const storeId = String(req.params.id);
+    const store = await getStoreById(storeId);
+    if (!store) return res.status(404).json({ message: "Store not found" });
+
+    const dbRow = {
+      id: store.id,
+      shopDomain: store.shopDomain,
+      storeName: store.storeName,
+      installedAt: store.installedAt,
+      uninstalledAt: store.uninstalledAt,
+      hasAccessToken: !!store.accessToken,
+      hasRefreshToken: !!store.refreshToken,
+      accessTokenExpiresAt: store.accessTokenExpiresAt,
+      scopes: store.scopes,
+      labelId: store.labelId,
+      personId: store.personId,
+    };
+
+    if (store.uninstalledAt || !store.accessToken) {
+      return res.json({ dbRow, live: null, note: "Store is uninstalled — Shopify API not queried" });
+    }
+
+    const EXPECTED_TOPICS = ["orders/paid", "orders/refunded", "refunds/create", "app/uninstalled"];
+    let webhooks: any[] = [];
+    let scriptTags: any[] = [];
+    let liveError: string | null = null;
+
+    try {
+      const [whRes, stRes] = await Promise.all([
+        shopifyFetch(store, "webhooks.json?limit=50"),
+        shopifyFetch(store, "script_tags.json?limit=50"),
+      ]);
+      if (whRes.ok) webhooks = ((await whRes.json() as any).webhooks ?? []);
+      else liveError = `webhooks API ${whRes.status}`;
+      if (stRes.ok) scriptTags = ((await stRes.json() as any).script_tags ?? []);
+      else liveError = (liveError ? liveError + "; " : "") + `script_tags API ${stRes.status}`;
+    } catch (e: any) {
+      liveError = e?.message ?? "fetch failed";
+    }
+
+    const foundTopics = webhooks.map((w: any) => w.topic as string);
+    const missingTopics = EXPECTED_TOPICS.filter((t) => !foundTopics.includes(t));
+    const appUrl = appOrigin(req);
+    const expectedScriptSrc = `${appUrl}/shopify/redeem-button.js`;
+    const scriptInstalled = scriptTags.some((s: any) => s.src === expectedScriptSrc);
+
+    res.json({
+      dbRow,
+      live: liveError
+        ? { error: liveError }
+        : {
+            webhookCount: webhooks.length,
+            foundTopics,
+            missingTopics,
+            allWebhooksPresent: missingTopics.length === 0,
+            scriptTagInstalled: scriptInstalled,
+            scriptTagCount: scriptTags.length,
+            healthy: missingTopics.length === 0 && scriptInstalled,
+          },
+    });
+  });
+
   // Update per-store settings — currently only digitalUnitFeeCents (the
   // per-unit fee GoodTunes bills the artist for each order that mints a
   // digital unlock). Returns the updated store row minus the access token.
