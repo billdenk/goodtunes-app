@@ -9938,6 +9938,10 @@ CREATE TABLE IF NOT EXISTS shopify_gdpr_requests (
   requested_at        timestamp    NOT NULL DEFAULT now(),
   fulfilled_at        timestamp
 );
+
+CREATE INDEX IF NOT EXISTS shopify_gdpr_requests_shop_idx      ON shopify_gdpr_requests (shop_domain);
+CREATE INDEX IF NOT EXISTS shopify_gdpr_requests_email_idx     ON shopify_gdpr_requests (customer_email);
+CREATE INDEX IF NOT EXISTS shopify_gdpr_requests_fulfilled_idx ON shopify_gdpr_requests (fulfilled_at);
 COMMIT;
 SQL
   then
