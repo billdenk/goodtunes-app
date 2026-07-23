@@ -1489,6 +1489,21 @@ export async function registerRoutes(
           : "user-id-mismatch";
         console.warn(`[auth] gt_trusted_device cookie present but bypass rejected (${bypassReason}) for user ${user.id}`);
       }
+      // Task #2795 — reviewer/demo account bypass. Accounts provisioned
+      // by post-merge (appreview@goodtunes.music) set skip_second_factor=true
+      // so a Shopify or App Store reviewer can authenticate with just the
+      // shared password — they have no access to the OTP email inbox.
+      // This flag is NEVER exposed in admin UI and is only settable via SQL.
+      if (user.skipSecondFactor) {
+        req.session.userId = user.id;
+        req.session.kind = "admin";
+        const token = generateToken();
+        await storage.createAuthToken(token, user.id, "admin");
+        const u = await storage.getUser(user.id);
+        const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
+        const landingPath = await landingPathForUser(user.id);
+        return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath, kind: "admin" });
+      }
       req.session.pendingTotpUserId = user.id;
       const totp = await storage.getAdminTotp(user.id);
       // Task #57 — second-factor router. `factorPref` is the admin's

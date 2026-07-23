@@ -76,6 +76,14 @@ export const users = pgTable("users", {
   // moment a fresh row is provisioned via invite accept.
   termsAcceptedAt: timestamp("terms_accepted_at"),
   termsVersion: text("terms_version"),
+  // Task #2795 — Shopify reviewer demo account OTP bypass. When true, the
+  // admin login route skips the second factor (email OTP / TOTP) and issues
+  // a session immediately after the correct password. ONLY ever stamped true
+  // on machine-provisioned reviewer / demo accounts (appreview@goodtunes.music)
+  // so a Shopify or App Store reviewer can log in with just the shared
+  // password without needing access to the OTP email inbox. Never expose in
+  // admin UI — this flag is set in post-merge.sh and stays there.
+  skipSecondFactor: boolean("skip_second_factor").notNull().default(false),
   // Task #1037 — Unified identity P2: link this admin row to the same
   // human's canonical fan (customer_users) row. When set, the fan row is
   // the source of truth for credentials + OAuth identities; users.password

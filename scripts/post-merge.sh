@@ -9948,3 +9948,114 @@ SQL
 }
 migrate_task_2792_2795_schema dev  "${DATABASE_URL:-}"
 migrate_task_2792_2795_schema prod "${PROD_DATABASE_URL:-}"
+
+# Task #2795 — Seed the admin-side account for the Shopify reviewer demo.
+# Creates (or idempotently updates) a users row for appreview@goodtunes.music
+# with artist role scoped to person-sampler-artist, linked to the fan-side
+# cust-appreview-demo via customer_user_id, with skip_second_factor=true so
+# the reviewer can authenticate with just the shared password (no OTP inbox).
+#
+# Upserts by EMAIL (not id) so it handles pre-existing rows gracefully:
+# - Row doesn't exist: INSERT with stable id 'admin-appreview-demo'.
+# - Row exists with appreview@goodtunes.music email (any id): UPDATE required
+#   fields (role, role_scope_id, is_admin, skip_second_factor, customer_user_id).
+# Hard-fails (non-zero exit, NOT a warning) if prerequisite records are absent.
+#
+# Password plaintext: GoodTunes-Review-2026
+# Stored as scrypt hash (buf.hex().salt.hex() — same format as /api/register).
+# The DO UPDATE clause deliberately omits password so an operator-reset hash is
+# never clobbered on subsequent merges.
+#
+# The sampler album has primary_artist_id='person-sampler-artist' so it shows
+# up in the artist dashboard automatically once role+membership resolve.
+seed_task_2795_shopify_reviewer_admin() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2795 shopify-reviewer-admin seed on $label (no URL set)"
+    return 0
+  fi
+  local out rc
+  out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+DO $$
+DECLARE
+  v_uid text;
+BEGIN
+  -- Hard-fail if task-939 prerequisites are absent.
+  -- This seed must run AFTER seed_task_939_appreview_demo.
+  IF NOT EXISTS (SELECT 1 FROM customer_users WHERE id = 'cust-appreview-demo') THEN
+    RAISE EXCEPTION
+      'task-2795 prereq missing: customer_users.cust-appreview-demo — run task-939 seed first';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM people WHERE id = 'person-sampler-artist') THEN
+    RAISE EXCEPTION
+      'task-2795 prereq missing: people.person-sampler-artist — run task-939 seed first';
+  END IF;
+
+  -- Upsert the admin-side user row by EMAIL so we handle three cases:
+  --   (a) row absent              → INSERT with the canonical id
+  --   (b) row exists, same email  → UPDATE role/scope/flags (never clobber password)
+  --   (c) another unique conflict → ON CONFLICT (email) catches it and updates
+  --
+  -- Note: we conflict on (email) not (id) so a pre-existing row under a
+  -- different id is still corrected rather than silently skipped.
+  INSERT INTO users
+    (id, username, email, display_name, real_name, password,
+     is_admin, role, role_scope_id, factor_pref, skip_second_factor,
+     customer_user_id, terms_accepted_at, terms_version, created_at)
+  VALUES
+    ('admin-appreview-demo', 'appreview-admin', 'appreview@goodtunes.music',
+     'App Review', 'App Review',
+     '52cd42711c43ae528aa9554029334b70507117c84bdeb76bd95165fab09eb57622410ae1c79042931cc3904ff4dff373c539e6f9fb8fbb250d53eeddbaab252f.d94e15f2254f581ddb6e0ab8bc8afe9a',
+     true, 'artist', 'person-sampler-artist', 'email', true,
+     'cust-appreview-demo', now(), '2026-05-31', now())
+  ON CONFLICT (email) DO UPDATE SET
+    role               = EXCLUDED.role,
+    role_scope_id      = EXCLUDED.role_scope_id,
+    is_admin           = EXCLUDED.is_admin,
+    skip_second_factor = EXCLUDED.skip_second_factor,
+    customer_user_id   = EXCLUDED.customer_user_id,
+    factor_pref        = EXCLUDED.factor_pref;
+  -- password deliberately excluded from DO UPDATE — preserves operator resets.
+
+  -- Resolve the actual user id (may differ from 'admin-appreview-demo' when
+  -- the email row pre-existed under a different id).
+  SELECT id INTO STRICT v_uid
+    FROM users WHERE email = 'appreview@goodtunes.music';
+
+  -- Upsert membership so getUserMemberships / findMembershipForScope resolve.
+  INSERT INTO memberships (user_id, role, scope_kind, scope_id, sub_role)
+  VALUES (v_uid, 'artist', 'artist', 'person-sampler-artist', NULL)
+  ON CONFLICT (user_id, scope_kind, scope_id) WHERE scope_id IS NOT NULL
+  DO UPDATE SET role = EXCLUDED.role;
+
+  -- Verify the required state is actually present before declaring success.
+  IF NOT EXISTS (
+    SELECT 1 FROM users u
+      JOIN memberships m ON m.user_id = u.id
+    WHERE u.email = 'appreview@goodtunes.music'
+      AND u.is_admin = true
+      AND u.skip_second_factor = true
+      AND u.role = 'artist'
+      AND u.role_scope_id = 'person-sampler-artist'
+      AND u.customer_user_id = 'cust-appreview-demo'
+      AND m.scope_kind = 'artist'
+      AND m.scope_id = 'person-sampler-artist'
+  ) THEN
+    RAISE EXCEPTION 'task-2795 post-seed verification failed — required state not present';
+  END IF;
+
+  RAISE NOTICE 'task-2795 ok: reviewer admin seeded (user_id=%, skip_second_factor=true)', v_uid;
+END$$;
+SQL
+  )
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    echo "post-merge: task-2795 shopify-reviewer-admin seed ok on $label"
+  else
+    echo "post-merge: ERROR — task-2795 shopify-reviewer-admin seed FAILED on $label"
+    echo "$out" | tail -10
+    return 1
+  fi
+}
+seed_task_2795_shopify_reviewer_admin dev  "${DATABASE_URL:-}"
+seed_task_2795_shopify_reviewer_admin prod "${PROD_DATABASE_URL:-}"
