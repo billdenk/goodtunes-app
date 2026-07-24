@@ -29,7 +29,7 @@ import {
   userAlbums,
   shopifyStores,
   shopifyProductMappings,
-  shopifyDigitalFeeLedger,
+  platformWholesaleLedger,
   shopifyRedemptionCodes,
   shopifyPushLog,
   shopifyGdprRequests,
@@ -966,8 +966,9 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // Method B: per-order add-on line item detection. A separate Shopify
   // product/variant mapped as isSignedGooddeedAddon=true for this album
   // lets the fan add the cert to their cart independently. The retail price
-  // (what the fan paid) goes into the order_items row; GoodTunes bills the
-  // artist the manufacturing ladder cost separately outside Shopify.
+  // (what the fan paid) goes into the order_items row; the manufacturing
+  // ladder cost is a wholesale charge billed through our standing vendor
+  // relationship with the artist.
   if (signedAddonLine && signedCertCents === 0) {
     const addonLineCents = dollarsToCents(signedAddonLine.price) * (signedAddonLine.quantity ?? 1);
     const [floor] = await db
@@ -1089,9 +1090,11 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
     );
   }
 
-  // Digital per-unit fee accrual. Every order that mints a digital unlock
-  // accrues the store's digitalUnitFeeCents rate (default $3.50) per unit
-  // into the fee ledger. Billed to the artist outside Shopify. Idempotent
+  // Wholesale platform charge accrual. Every order that mints a digital
+  // unlock accrues the store's digitalUnitFeeCents rate (default $3.50) per
+  // unit into the wholesale ledger — the per-unit wholesale charge for
+  // GoodTunes platform access, billed through our standing vendor
+  // relationship with the artist. Idempotent
   // (the orderId UNIQUE constraint on the ledger table silences replays).
   // shopify_plus external_paid orders DO accrue — GoodTunes still provides
   // the digital unlock and GoodDeed, so the platform fee applies.
@@ -1099,7 +1102,7 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
     const unitFeeCents = store.digitalUnitFeeCents ?? 350;
     const qty = matchedLine.quantity ?? 1;
     await db
-      .insert(shopifyDigitalFeeLedger)
+      .insert(platformWholesaleLedger)
       .values({
         orderId: order.id,
         storeId: store.id,
@@ -1108,7 +1111,7 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
         quantity: qty,
         totalCents: unitFeeCents * qty,
       })
-      .onConflictDoNothing({ target: shopifyDigitalFeeLedger.orderId });
+      .onConflictDoNothing({ target: platformWholesaleLedger.orderId });
   } catch (e: any) {
     console.error(`[shopify] digital fee accrual failed for ${order.id}: ${e?.message ?? e}`);
   }
@@ -1330,9 +1333,9 @@ async function handleShopifyRefund(payload: { order_id?: number; id?: number }):
   // Reverse the digital fee accrual for this order. Stamps reversedAt so the
   // operator's fee-ledger view correctly shows the net still-owed amount.
   await db
-    .update(shopifyDigitalFeeLedger)
+    .update(platformWholesaleLedger)
     .set({ reversedAt: new Date() })
-    .where(and(eq(shopifyDigitalFeeLedger.orderId, order.id), isNull(shopifyDigitalFeeLedger.reversedAt)))
+    .where(and(eq(platformWholesaleLedger.orderId, order.id), isNull(platformWholesaleLedger.reversedAt)))
     .catch((e: any) => console.error(`[shopify] fee reversal failed for ${order.id}: ${e?.message ?? e}`));
   // Same lock-return logic as the Stripe refund path: only revoke the
   // album unlock if this is the *only* live order for the customer +
@@ -1975,7 +1978,7 @@ export function registerShopifyRoutes(app: Express) {
   //   2. Delete redemption codes for all store orders.
   //   3. Anonymize any fan account whose only orders came from this store.
   //   4. Delete the shopify_stores row, cascading to shopify_product_mappings
-  //      and shopify_digital_fee_ledger.
+  //      and platform_wholesale_ledger.
   app.post("/api/webhooks/shopify/shop/redact", async (req, res) => {
     const raw = verifyGdprWebhook(req, res);
     if (!raw) return;
@@ -2058,7 +2061,7 @@ export function registerShopifyRoutes(app: Express) {
       }
 
       // Delete the store row — cascades to shopify_product_mappings and
-      // shopify_digital_fee_ledger (both have ON DELETE CASCADE to this row).
+      // platform_wholesale_ledger (both have ON DELETE CASCADE to this row).
       await db.delete(shopifyStores).where(eq(shopifyStores.id, store.id));
 
       console.log(
@@ -2669,9 +2672,9 @@ export function registerShopifyRoutes(app: Express) {
     const grouped = req.query.grouped === "true";
 
     const conditions = [
-      storeId ? eq(shopifyDigitalFeeLedger.storeId, storeId) : null,
-      since ? sql`${shopifyDigitalFeeLedger.createdAt} >= ${since}` : null,
-      until ? sql`${shopifyDigitalFeeLedger.createdAt} <= ${until}` : null,
+      storeId ? eq(platformWholesaleLedger.storeId, storeId) : null,
+      since ? sql`${platformWholesaleLedger.createdAt} >= ${since}` : null,
+      until ? sql`${platformWholesaleLedger.createdAt} <= ${until}` : null,
     ].filter(Boolean) as any[];
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -2679,19 +2682,19 @@ export function registerShopifyRoutes(app: Express) {
       // Aggregate: per-store total accrued and total reversed
       const rows = await db
         .select({
-          storeId: shopifyDigitalFeeLedger.storeId,
+          storeId: platformWholesaleLedger.storeId,
           storeName: shopifyStores.storeName,
           shopDomain: shopifyStores.shopDomain,
-          totalAccruedCents: sql<number>`COALESCE(SUM(${shopifyDigitalFeeLedger.totalCents}),0)`,
-          totalReversedCents: sql<number>`COALESCE(SUM(CASE WHEN ${shopifyDigitalFeeLedger.reversedAt} IS NOT NULL THEN ${shopifyDigitalFeeLedger.totalCents} ELSE 0 END),0)`,
+          totalAccruedCents: sql<number>`COALESCE(SUM(${platformWholesaleLedger.totalCents}),0)`,
+          totalReversedCents: sql<number>`COALESCE(SUM(CASE WHEN ${platformWholesaleLedger.reversedAt} IS NOT NULL THEN ${platformWholesaleLedger.totalCents} ELSE 0 END),0)`,
           orderCount: sql<number>`COUNT(*)`,
-          reversedCount: sql<number>`COUNT(${shopifyDigitalFeeLedger.reversedAt})`,
+          reversedCount: sql<number>`COUNT(${platformWholesaleLedger.reversedAt})`,
         })
-        .from(shopifyDigitalFeeLedger)
-        .leftJoin(shopifyStores, eq(shopifyDigitalFeeLedger.storeId, shopifyStores.id))
+        .from(platformWholesaleLedger)
+        .leftJoin(shopifyStores, eq(platformWholesaleLedger.storeId, shopifyStores.id))
         .where(where)
-        .groupBy(shopifyDigitalFeeLedger.storeId, shopifyStores.storeName, shopifyStores.shopDomain)
-        .orderBy(desc(sql`SUM(${shopifyDigitalFeeLedger.totalCents})`));
+        .groupBy(platformWholesaleLedger.storeId, shopifyStores.storeName, shopifyStores.shopDomain)
+        .orderBy(desc(sql`SUM(${platformWholesaleLedger.totalCents})`));
       const result = rows.map((r) => ({
         ...r,
         netCents: Number(r.totalAccruedCents) - Number(r.totalReversedCents),
@@ -2702,24 +2705,24 @@ export function registerShopifyRoutes(app: Express) {
     // Per-row ledger entries
     const rows = await db
       .select({
-        id: shopifyDigitalFeeLedger.id,
-        orderId: shopifyDigitalFeeLedger.orderId,
-        storeId: shopifyDigitalFeeLedger.storeId,
+        id: platformWholesaleLedger.id,
+        orderId: platformWholesaleLedger.orderId,
+        storeId: platformWholesaleLedger.storeId,
         storeName: shopifyStores.storeName,
         shopDomain: shopifyStores.shopDomain,
-        albumId: shopifyDigitalFeeLedger.albumId,
+        albumId: platformWholesaleLedger.albumId,
         albumTitle: albums.title,
-        unitFeeCents: shopifyDigitalFeeLedger.unitFeeCents,
-        quantity: shopifyDigitalFeeLedger.quantity,
-        totalCents: shopifyDigitalFeeLedger.totalCents,
-        reversedAt: shopifyDigitalFeeLedger.reversedAt,
-        createdAt: shopifyDigitalFeeLedger.createdAt,
+        unitFeeCents: platformWholesaleLedger.unitFeeCents,
+        quantity: platformWholesaleLedger.quantity,
+        totalCents: platformWholesaleLedger.totalCents,
+        reversedAt: platformWholesaleLedger.reversedAt,
+        createdAt: platformWholesaleLedger.createdAt,
       })
-      .from(shopifyDigitalFeeLedger)
-      .leftJoin(shopifyStores, eq(shopifyDigitalFeeLedger.storeId, shopifyStores.id))
-      .leftJoin(albums, eq(shopifyDigitalFeeLedger.albumId, albums.id))
+      .from(platformWholesaleLedger)
+      .leftJoin(shopifyStores, eq(platformWholesaleLedger.storeId, shopifyStores.id))
+      .leftJoin(albums, eq(platformWholesaleLedger.albumId, albums.id))
       .where(where)
-      .orderBy(desc(shopifyDigitalFeeLedger.createdAt))
+      .orderBy(desc(platformWholesaleLedger.createdAt))
       .limit(500);
     res.json(rows);
   });

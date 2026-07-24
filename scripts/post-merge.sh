@@ -9870,11 +9870,48 @@ SQL
 migrate_payment_requests dev  "${DATABASE_URL:-}"
 migrate_payment_requests prod "${PROD_DATABASE_URL:-}"
 
+# Task #2844 — Rename shopify_digital_fee_ledger → platform_wholesale_ledger.
+# The ledger records the per-unit wholesale charge for GoodTunes platform
+# access, billed through our standing vendor relationship with the artist;
+# the old name misrepresented that model. Renames the table + its indexes
+# only when the old table still exists (idempotent), and runs BEFORE the
+# task-2780 block below so a legacy DB is renamed rather than getting a
+# duplicate empty table.
+migrate_task_2844_wholesale_ledger_rename() {
+  local label="$1" db_url="$2"
+  [ -z "$db_url" ] && { echo "post-merge: skipping task-2844 wholesale ledger rename on $label (no URL set)"; return; }
+  if psql "$db_url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'shopify_digital_fee_ledger')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'platform_wholesale_ledger') THEN
+    ALTER TABLE shopify_digital_fee_ledger RENAME TO platform_wholesale_ledger;
+  END IF;
+END
+$$;
+ALTER INDEX IF EXISTS shopify_digital_fee_ledger_store_idx   RENAME TO platform_wholesale_ledger_store_idx;
+ALTER INDEX IF EXISTS shopify_digital_fee_ledger_album_idx   RENAME TO platform_wholesale_ledger_album_idx;
+ALTER INDEX IF EXISTS shopify_digital_fee_ledger_created_idx RENAME TO platform_wholesale_ledger_created_idx;
+COMMIT;
+SQL
+  then
+    echo "post-merge: task-2844 wholesale ledger rename ok on $label"
+  else
+    echo "post-merge: WARNING — task-2844 wholesale ledger rename failed on $label (continuing)"
+  fi
+}
+migrate_task_2844_wholesale_ledger_rename dev  "${DATABASE_URL:-}"
+migrate_task_2844_wholesale_ledger_rename prod "${PROD_DATABASE_URL:-}"
+
 # Task #2780 — Shopify per-deal digital unit fee + signed-GoodDeed add-on.
 #   shopify_stores.digital_unit_fee_cents — per-unit fee override (default 350 = $3.50)
 #   shopify_product_mappings.is_signed_gooddeed_addon — marks a Shopify product as
 #     the per-order signed-cert add-on for an album mapping
-#   shopify_digital_fee_ledger — accrual ledger, one row per order, reversedAt on refund
+#   platform_wholesale_ledger — per-unit wholesale platform-access charge ledger
+#     (billed through our standing vendor relationship with the artist), one row
+#     per order, reversedAt on refund. Renamed from shopify_digital_fee_ledger
+#     by the task-2844 block above; this CREATE uses the new name for fresh DBs.
 migrate_task_2780_shopify_fees() {
   local label="$1" db_url="$2"
   [ -z "$db_url" ] && { echo "post-merge: skipping task-2780 shopify fees migration on $label (no URL set)"; return; }
@@ -9886,7 +9923,7 @@ ALTER TABLE shopify_stores
 ALTER TABLE shopify_product_mappings
   ADD COLUMN IF NOT EXISTS is_signed_gooddeed_addon boolean NOT NULL DEFAULT false;
 
-CREATE TABLE IF NOT EXISTS shopify_digital_fee_ledger (
+CREATE TABLE IF NOT EXISTS platform_wholesale_ledger (
   id              varchar PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id        varchar NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
   store_id        varchar NOT NULL REFERENCES shopify_stores(id) ON DELETE CASCADE,
@@ -9897,9 +9934,9 @@ CREATE TABLE IF NOT EXISTS shopify_digital_fee_ledger (
   reversed_at     timestamp,
   created_at      timestamp NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS shopify_digital_fee_ledger_store_idx  ON shopify_digital_fee_ledger (store_id);
-CREATE INDEX IF NOT EXISTS shopify_digital_fee_ledger_album_idx  ON shopify_digital_fee_ledger (album_id);
-CREATE INDEX IF NOT EXISTS shopify_digital_fee_ledger_created_idx ON shopify_digital_fee_ledger (created_at);
+CREATE INDEX IF NOT EXISTS platform_wholesale_ledger_store_idx  ON platform_wholesale_ledger (store_id);
+CREATE INDEX IF NOT EXISTS platform_wholesale_ledger_album_idx  ON platform_wholesale_ledger (album_id);
+CREATE INDEX IF NOT EXISTS platform_wholesale_ledger_created_idx ON platform_wholesale_ledger (created_at);
 
 -- Per-deal rate overrides (Soul Chef = $4.00, Niina Soleil = $2.50)
 UPDATE shopify_stores SET digital_unit_fee_cents = 400

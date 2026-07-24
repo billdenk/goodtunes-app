@@ -55,7 +55,7 @@ cleared).
 disassociates orders from the store (sets `shopify_store_id = NULL`), deletes
 redemption codes for every store order, anonymizes accounts that have no non-store
 orders, then **deletes the `shopify_stores` row** (which cascades to
-`shopify_product_mappings` and `shopify_digital_fee_ledger`).
+`shopify_product_mappings` and `platform_wholesale_ledger`).
 
 ---
 

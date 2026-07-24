@@ -3123,8 +3123,9 @@ export const shopifyStores = pgTable("shopify_stores", {
   // so admin UI can render "Disconnected" without losing the linkage.
   installedAt: timestamp("installed_at").defaultNow(),
   uninstalledAt: timestamp("uninstalled_at"),
-  // Per-store digital per-unit fee GoodTunes bills the artist outside Shopify
-  // for each order that mints a digital unlock. Platform default is $3.50
+  // Per-store per-unit wholesale charge for GoodTunes platform access,
+  // billed through our standing vendor relationship with the artist, for
+  // each order that mints a digital unlock. Platform default is $3.50
   // (350 cents); per-deal overrides go up or down from there. Nullable for
   // backwards compatibility — a null row reads as the $3.50 platform default
   // at accrual time (coalesce in the webhook handler).
@@ -3196,14 +3197,15 @@ export const shopifyProductMappings = pgTable(
   // of the two partial indexes).
 );
 
-// Per-order digital fee accrual for Shopify merchant billing.
-// Every Shopify order that mints a digital unlock accrues a fee into
-// this ledger at the store's digitalUnitFeeCents rate (default $3.50).
-// The fee is billed to the artist OUTSIDE Shopify — this table is the
-// source of truth for what has been earned and what has been reversed.
+// Per-order wholesale platform charge accrual. Every Shopify order that
+// mints a digital unlock accrues the store's digitalUnitFeeCents rate
+// (default $3.50) per unit into this ledger — the per-unit wholesale
+// charge for GoodTunes platform access, billed through our standing
+// vendor relationship with the artist. This table is the source of
+// truth for what has been earned and what has been reversed.
 // Reversed rows (refunded orders) flip reversedAt; net still-owed
 // amounts are computed as SUM(totalCents) WHERE reversedAt IS NULL.
-export const shopifyDigitalFeeLedger = pgTable("shopify_digital_fee_ledger", {
+export const platformWholesaleLedger = pgTable("platform_wholesale_ledger", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orderId: varchar("order_id")
     .notNull()
@@ -4298,7 +4300,7 @@ export type InsertShopifyProductMapping = z.infer<typeof insertShopifyProductMap
 export type ShopifyProductMapping = typeof shopifyProductMappings.$inferSelect;
 
 export type ShopifyRedemptionCode = typeof shopifyRedemptionCodes.$inferSelect;
-export type ShopifyDigitalFeeLedgerEntry = typeof shopifyDigitalFeeLedger.$inferSelect;
+export type PlatformWholesaleLedgerEntry = typeof platformWholesaleLedger.$inferSelect;
 
 // ─── Task #69 — Manufacturer & fulfillment partner roles + RFQ ──────────
 // Two new partner entities, both first-class in the single admin shell:
