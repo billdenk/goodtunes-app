@@ -381,8 +381,8 @@ async function shopifyGraphql<T = Record<string, unknown>>(
 // rewrite every caller, gqlProductToRest() maps the GraphQL node back to
 // that legacy shape so diffPushSnapshot(), the resolve endpoint, and the
 // catalog browser stay byte-compatible. Numeric ids ride legacyResourceId
-// — Shopify keeps these stable and the DB columns / order webhooks
-// (still REST until Phase 4) all speak numeric ids.
+// — Shopify keeps these stable and the DB columns / order webhook
+// payloads all speak numeric ids.
 const productGid = (id: string | number) => `gid://shopify/Product/${id}`;
 const variantGid = (id: string | number) => `gid://shopify/ProductVariant/${id}`;
 
@@ -470,6 +470,185 @@ async function fetchProductByLegacyId(store: ShopifyStore, legacyId: string) {
     id: productGid(legacyId),
   });
   return data.product ? gqlProductToRest(data.product) : null;
+}
+
+// ─── Webhook/order/transaction GraphQL plumbing (Phase 4 migration) ────
+// Shopify deprecated the REST webhook + order endpoints alongside
+// products. Same bridging approach as Phase 3: callers keep speaking the
+// REST vocabulary (topic strings like "orders/paid", numeric transaction
+// ids, snake_case fields) and these helpers translate at the boundary.
+const orderGid = (id: string | number) => `gid://shopify/Order/${id}`;
+const gidTail = (gid: string) => gid.split("/").pop() ?? gid;
+
+// REST topic strings ↔ GraphQL WebhookSubscriptionTopic enums. The DB,
+// the webhook handler's X-Shopify-Topic header, and every caller in this
+// file all speak the REST form, so the enum never leaks past here.
+const WEBHOOK_TOPIC_TO_ENUM: Record<string, string> = {
+  "orders/paid": "ORDERS_PAID",
+  "orders/refunded": "ORDERS_REFUNDED",
+  "refunds/create": "REFUNDS_CREATE",
+  "app/uninstalled": "APP_UNINSTALLED",
+};
+const WEBHOOK_ENUM_TO_TOPIC: Record<string, string> = Object.fromEntries(
+  Object.entries(WEBHOOK_TOPIC_TO_ENUM).map(([topic, enumName]) => [enumName, topic]),
+);
+// Generic fallback for topics outside our map: ORDERS_FULFILLED →
+// orders/fulfilled, CUSTOMERS_DATA_REQUEST → customers/data_request
+// (only the FIRST underscore becomes a slash).
+const webhookEnumToTopic = (enumName: string) =>
+  WEBHOOK_ENUM_TO_TOPIC[enumName] ?? enumName.toLowerCase().replace("_", "/");
+
+const WEBHOOK_CREATE_MUTATION = /* GraphQL */ `
+  mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
+    webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
+      webhookSubscription { id }
+      userErrors { field message }
+    }
+  }
+`;
+
+// Registers one webhook subscription. Returns "registered" or
+// "already_registered" (Shopify reports a duplicate callback address for
+// a topic as an "address … has already been taken" userError — the
+// GraphQL equivalent of REST's 422, and success for our idempotent
+// install flow). Throws on transport/auth errors (err.status set by
+// shopifyGraphql) and on any other userError.
+async function createWebhookSubscription(
+  store: ShopifyStore,
+  topic: string,
+  address: string,
+): Promise<"registered" | "already_registered"> {
+  const enumTopic = WEBHOOK_TOPIC_TO_ENUM[topic];
+  if (!enumTopic) throw new Error(`Unknown webhook topic: ${topic}`);
+  const data = await shopifyGraphql<{
+    webhookSubscriptionCreate: {
+      webhookSubscription: { id: string } | null;
+      userErrors: Array<{ field: string[] | null; message: string }>;
+    } | null;
+  }>(store, WEBHOOK_CREATE_MUTATION, {
+    topic: enumTopic,
+    webhookSubscription: { callbackUrl: address, format: "JSON" },
+  });
+  const errs = data.webhookSubscriptionCreate?.userErrors ?? [];
+  if (errs.length === 0) return "registered";
+  if (errs.some((e) => /already been taken/i.test(e.message))) return "already_registered";
+  throw new Error(`webhookSubscriptionCreate ${topic}: ${errs.map((e) => e.message).join("; ")}`);
+}
+
+const WEBHOOK_LIST_QUERY = /* GraphQL */ `
+  query webhookSubscriptions {
+    webhookSubscriptions(first: 50) {
+      nodes {
+        id
+        topic
+        endpoint {
+          __typename
+          ... on WebhookHttpEndpoint { callbackUrl }
+        }
+      }
+    }
+  }
+`;
+
+// REST-shaped webhook list ({ topic: "orders/paid", address }) so the
+// inspect route's expected-vs-found comparison stays unchanged.
+async function listWebhookSubscriptions(
+  store: ShopifyStore,
+): Promise<Array<{ id: string; topic: string; address: string | null }>> {
+  const data = await shopifyGraphql<{
+    webhookSubscriptions: {
+      nodes: Array<{
+        id: string;
+        topic: string;
+        endpoint: { __typename: string; callbackUrl?: string } | null;
+      }>;
+    } | null;
+  }>(store, WEBHOOK_LIST_QUERY);
+  return (data.webhookSubscriptions?.nodes ?? []).map((n) => ({
+    id: n.id,
+    topic: webhookEnumToTopic(n.topic),
+    address: n.endpoint?.__typename === "WebhookHttpEndpoint" ? (n.endpoint.callbackUrl ?? null) : null,
+  }));
+}
+
+const ORDER_UPDATE_MUTATION = /* GraphQL */ `
+  mutation orderUpdate($input: OrderInput!) {
+    orderUpdate(input: $input) {
+      order { id }
+      userErrors { field message }
+    }
+  }
+`;
+
+// Replaces the REST `PUT orders/:id.json` note_attributes write. GraphQL
+// calls the same order-level key/value bag `customAttributes`; Shopify's
+// Liquid templates still render it as `note_attributes`, so the
+// merchant's confirmation-email snippet keeps working unchanged.
+async function updateOrderCustomAttributes(
+  store: ShopifyStore,
+  shopifyOrderId: string,
+  attributes: Array<{ key: string; value: string }>,
+): Promise<void> {
+  const data = await shopifyGraphql<{
+    orderUpdate: {
+      order: { id: string } | null;
+      userErrors: Array<{ field: string[] | null; message: string }>;
+    } | null;
+  }>(store, ORDER_UPDATE_MUTATION, {
+    input: { id: orderGid(shopifyOrderId), customAttributes: attributes },
+  });
+  const errs = data.orderUpdate?.userErrors ?? [];
+  if (errs.length > 0) {
+    throw new Error(`orderUpdate ${shopifyOrderId}: ${errs.map((e) => e.message).join("; ")}`);
+  }
+}
+
+const ORDER_TRANSACTIONS_QUERY = /* GraphQL */ `
+  query orderTransactions($id: ID!) {
+    order(id: $id) {
+      transactions(first: 100) {
+        id
+        kind
+        status
+        gateway
+        amountSet { shopMoney { amount } }
+        parentTransaction { id }
+      }
+    }
+  }
+`;
+
+type GqlOrderTransaction = {
+  id: string;
+  kind: string; // enum: SALE, CAPTURE, REFUND, …
+  status: string; // enum: SUCCESS, FAILURE, PENDING, ERROR
+  gateway: string | null;
+  amountSet: { shopMoney: { amount: string } | null } | null;
+  parentTransaction: { id: string } | null;
+};
+
+// REST-shaped transaction (numeric id, lowercase kind/status, snake_case
+// parent_id) — refundShopifyOrder still builds its REST refund payload
+// (Phase 6) against this shape.
+function gqlTransactionToRest(t: GqlOrderTransaction) {
+  return {
+    id: Number(gidTail(t.id)),
+    kind: (t.kind ?? "").toLowerCase(),
+    status: (t.status ?? "").toLowerCase(),
+    gateway: t.gateway ?? "",
+    amount: t.amountSet?.shopMoney?.amount ?? "0",
+    parent_id: t.parentTransaction ? Number(gidTail(t.parentTransaction.id)) : null,
+  };
+}
+
+// Replaces `GET orders/:id/transactions.json`. Throws when the order
+// doesn't exist (GraphQL returns `order: null` where REST 404'd).
+async function fetchOrderTransactions(store: ShopifyStore, shopifyOrderId: string) {
+  const data = await shopifyGraphql<{
+    order: { transactions: GqlOrderTransaction[] } | null;
+  }>(store, ORDER_TRANSACTIONS_QUERY, { id: orderGid(shopifyOrderId) });
+  if (!data.order) throw new Error(`Shopify order ${shopifyOrderId} not found`);
+  return (data.order.transactions ?? []).map(gqlTransactionToRest);
 }
 
 // ─── Write redemption metafield to Shopify order ──────────────────────
@@ -651,16 +830,7 @@ async function registerWebhooks(store: ShopifyStore, appUrl: string): Promise<vo
   const topics = ["orders/paid", "orders/refunded", "refunds/create", "app/uninstalled"];
   for (const topic of topics) {
     try {
-      await shopifyFetch(store, "webhooks.json", {
-        method: "POST",
-        body: JSON.stringify({
-          webhook: {
-            topic,
-            address: `${appUrl}/api/webhooks/shopify/orders`,
-            format: "json",
-          },
-        }),
-      });
+      await createWebhookSubscription(store, topic, `${appUrl}/api/webhooks/shopify/orders`);
     } catch (e: any) {
       console.error(`[shopify] failed to register webhook ${topic} for ${store.shopDomain}`, e?.message);
     }
@@ -1324,18 +1494,10 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
     const appUrl = process.env.APP_URL ?? `https://${process.env.GOODTUNES_HOST ?? "my.goodtunes.music"}`;
     const redeemUrl = `${appUrl.replace(/\/$/, "")}/redeem/${code}`;
     const [albumRow] = await db.select({ title: albums.title }).from(albums).where(eq(albums.id, albumId));
-    await shopifyFetch(store, `orders/${shopifyOrderId}.json`, {
-      method: "PUT",
-      body: JSON.stringify({
-        order: {
-          id: Number(shopifyOrderId),
-          note_attributes: [
-            { name: "GoodTunes redemption URL", value: redeemUrl },
-            { name: "GoodTunes album", value: albumRow?.title ?? "" },
-          ],
-        },
-      }),
-    });
+    await updateOrderCustomAttributes(store, shopifyOrderId, [
+      { key: "GoodTunes redemption URL", value: redeemUrl },
+      { key: "GoodTunes album", value: albumRow?.title ?? "" },
+    ]);
   } catch (e: any) {
     console.warn(`[shopify] couldn't stamp note_attributes on order ${shopifyOrderId}: ${e?.message ?? e}`);
   }
@@ -1378,14 +1540,11 @@ export async function refundShopifyOrder(opts: {
       },
     }),
   });
-  // Fetch transactions so we can build a refund payload covering `amount`.
-  const txRes = await shopifyFetch(store, `orders/${opts.shopifyOrderId}/transactions.json`, { method: "GET" });
-  if (!txRes.ok) {
-    const body = await txRes.text();
-    throw new Error(`Shopify transactions fetch failed: ${txRes.status} ${body.slice(0, 200)}`);
-  }
-  const txJson = (await txRes.json()) as { transactions: Array<{ id: number; kind: string; status: string; gateway: string; amount: string; parent_id: number | null }> };
-  const sale = (txJson.transactions ?? []).find((t) => (t.kind === "sale" || t.kind === "capture") && t.status === "success");
+  // Fetch transactions (Admin GraphQL, Phase 4) so we can build a refund
+  // payload covering `amount`. fetchOrderTransactions returns the legacy
+  // REST shape (numeric ids, lowercase kind/status) the refund POST needs.
+  const transactions = await fetchOrderTransactions(store, opts.shopifyOrderId);
+  const sale = transactions.find((t) => (t.kind === "sale" || t.kind === "capture") && t.status === "success");
   if (!sale) throw new Error("No successful sale transaction found on Shopify order");
   // Silence unused-var lint on calcRes — we may want to surface its
   // estimate to operators later; right now we just need it to have run.
@@ -2666,21 +2825,16 @@ export function registerShopifyRoutes(app: Express) {
     const webhookResults: Record<string, string> = {};
     for (const topic of topics) {
       try {
-        const r = await shopifyFetch(store, "webhooks.json", {
-          method: "POST",
-          body: JSON.stringify({ webhook: { topic, address: `${appUrl}/api/webhooks/shopify/orders`, format: "json" } }),
-        });
-        const j = await r.json() as any;
-        if (r.ok) {
-          webhookResults[topic] = "registered";
-        } else if (r.status === 422 && JSON.stringify(j).includes("already been taken")) {
-          webhookResults[topic] = "already_registered";
-        } else {
-          webhookResults[topic] = `error_${r.status}`;
-          webhookErrors.push(`${topic}: ${r.status}`);
-        }
+        // "already_registered" (duplicate-address userError, GraphQL's
+        // equivalent of the old REST 422) counts as success — the hook
+        // was already live.
+        webhookResults[topic] = await createWebhookSubscription(
+          store,
+          topic,
+          `${appUrl}/api/webhooks/shopify/orders`,
+        );
       } catch (e: any) {
-        webhookResults[topic] = "exception";
+        webhookResults[topic] = e?.status ? `error_${e.status}` : "exception";
         webhookErrors.push(`${topic}: ${e?.message}`);
       }
     }
@@ -2717,18 +2871,18 @@ export function registerShopifyRoutes(app: Express) {
     }
 
     const EXPECTED_TOPICS = ["orders/paid", "orders/refunded", "refunds/create", "app/uninstalled"];
-    let webhooks: any[] = [];
+    let webhooks: Array<{ id: string; topic: string; address: string | null }> = [];
     let liveError: string | null = null;
 
     try {
-      const whRes = await shopifyFetch(store, "webhooks.json?limit=50");
-      if (whRes.ok) webhooks = ((await whRes.json() as any).webhooks ?? []);
-      else liveError = `webhooks API ${whRes.status}`;
+      // Admin GraphQL webhookSubscriptions (Phase 4) — helper returns the
+      // REST-style topic strings this comparison was written against.
+      webhooks = await listWebhookSubscriptions(store);
     } catch (e: any) {
-      liveError = e?.message ?? "fetch failed";
+      liveError = e?.status ? `webhooks API ${e.status}` : (e?.message ?? "fetch failed");
     }
 
-    const foundTopics = webhooks.map((w: any) => w.topic as string);
+    const foundTopics = webhooks.map((w) => w.topic);
     const missingTopics = EXPECTED_TOPICS.filter((t) => !foundTopics.includes(t));
 
     res.json({
@@ -3806,4 +3960,12 @@ export const __internal = {
   productGid,
   variantGid,
   diffPushSnapshot,
+  // Phase 4 GraphQL plumbing (webhooks, orderUpdate, transactions).
+  orderGid,
+  webhookEnumToTopic,
+  createWebhookSubscription,
+  listWebhookSubscriptions,
+  updateOrderCustomAttributes,
+  gqlTransactionToRest,
+  fetchOrderTransactions,
 };
