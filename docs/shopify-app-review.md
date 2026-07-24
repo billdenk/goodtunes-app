@@ -8,13 +8,47 @@ section below must be addressed before flipping distribution to Public.
 
 ## Status board (source of truth — the task tracker auto-advances and is NOT authoritative)
 
-**Phase gate rule (Bill, 2026-07-24):** each phase stops for Bill's review before the
-next starts. The tracker chain may auto-advance; ignore it — this table governs.
+**Phase gate rule — REVISED (Bill, 2026-07-24, end-of-chain gate is now the governing rule):**
+Phases 5 and 6 run to completion without per-phase stops. Then, **before ANY other work**:
+1. Deliver a **consolidated Phases 3–6 report** — per phase: what migrated, tests, architect-review flags, deviations — **plus** the two leftover "digital fee" wording fixes in `server/shopify.ts` (~lines 1116/1333, deferred to avoid conflicting with in-flight phase agents).
+2. Run a **full `/shopify-app-store-review` re-run** with the delta versus the original audit.
+3. **HARD STOP** until Bill has reviewed. Drafts #2851–2853 are outside approved scope — do not start them; Bill reviews after the Phase 6 report.
+
+The tracker chain may auto-advance; ignore it — this table governs. (Historical note: the
+original per-phase gate was overrun when Phase 4 auto-ran and merged without review.)
 
 | Phase | Real status |
 |-------|-------------|
-| **1b — Checkout UI Extension** | **PARTIALLY DONE / BLOCKED.** `shopify app deploy` ran and created version `goodtunes-5` in the Partner Dashboard, but it is **deployed, not released** — release is blocked on Bill approving the extension's **network-access capability** in Partner Dashboard → App → API access. No on-store verification has happened: the prod store `goodtunes-test.myshopify.com` has a legacy (pre-rotation) token that 403s and needs an operator reconnect, and no dev-store install/checkout run has exercised the banner. Update 2026-07-24: network access approved by Bill and **`goodtunes-5` RELEASED to users via CLI** (`shopify app release --version goodtunes-5`). Remaining to call 1b done: (1) reconnect `goodtunes-test` (operator reconnect — legacy token 403s); (2) add the block in the checkout editor (thank-you + order-status) and run the §4 Step 2 test order to see the banner + `/redeem/<code>`. |
-| **2 — Fee-ledger rename** | Started (renames only, no logic — content pre-approved by Bill). Stops for review at completion before any Phase 3 work. |
+| **1b — Checkout UI Extension** | **DONE — accepted by Bill 2026-07-24.** `goodtunes-5` released; `goodtunes-test` reconnected on the new expiring-token pair (it was the only installed legacy-token row). Full E2E green on test order #1002 (`NUDG9Z8WY`): `orders/paid` webhook → prod order row → redemption code → order metafield in the app-reserved namespace → redemption email → banner data path verified with a genuinely-signed session token (200 with code/URL; wrong confirmation 403; `/redeem/<code>` 200). Bill eyeballs the on-store banner himself. **Pending final cleanup:** order #1002's prod rows (order, order_items, redemption code, `delivered@resend.dev` stub customer) are retained ONLY so the banner poll works; delete them after Bill's eyeball. The Hope ownership grant + product mapping were already deleted. |
+| **2 — Fee-ledger rename** | Merged (renames only, content pre-approved by Bill). |
+| **3 — GraphQL migration (products/mappings)** | Merged (#2845, pre-gate-revision). |
+| **4 — GraphQL migration (webhooks/orders/transactions)** | Merged (#2846). Auto-ran without per-phase review (gate overrun — acknowledged to Bill). 1094/1094 tests, hermetic-only at merge; the 2026-07-24 live E2E exercised its webhook + order paths against the real store successfully. |
+| **5 — GraphQL migration (inventory/locations)** | #2847 running/merging under the end-of-chain gate. |
+| **6 — Refunds GraphQL + remaining** | Runs after Phase 5, then triggers the end-of-chain gate above. **Scope note:** `orders/refunded` webhook registration 422s on the 2026-01 API — investigate/drop; `refunds/create` is registered and the handler treats both identically, so refund coverage exists, but Phase 6 must confirm and clean up the dead registration attempt. |
+
+### Test hygiene rule (Bill, 2026-07-24)
+**Never map a test to a real artist's album.** Real releases (especially Nightbirde's
+*Hope* — estate reporting must stay pristine) are off-limits for test mappings, orders, or
+grants. A dedicated hidden QA album exists on prod for all future Shopify test runs:
+`albums.id = a0000000-0000-4000-8000-00000000e2e0` ("GoodTunes QA Test Album (do not sell)",
+`is_hidden=true`, artist "GoodTunes QA"). Map test products to that album only.
+Also learned: an order created *already-paid* via `orderCreate` fires no `orders/paid`
+webhook — create PENDING then `orderMarkAsPaid` to exercise the real transition.
+
+### Historical-order backfill — DESIGN ONLY (do not build until Niina's decision lands)
+Niina Soleil's existing Shopify pre-orders are exactly the "already-paid, no webhook" case
+above: they predate install/mapping, so they never minted codes. Spec (Bill, 2026-07-24):
+- **Trigger:** on install (or on demand from the admin store page), for each mapped
+  product with digital unlock, fetch historical PAID orders via the Admin GraphQL API
+  (paginate `orders(query: "financial_status:paid")`, filter line items to mapped variants).
+- **Mint:** for each matched order with no existing prod order row, materialize the order
+  row + redemption code exactly as the webhook path does (idempotent on `shopify_order_id`).
+- **Metafield:** write the redemption metafield on each historical order
+  (app-reserved `$app:goodtunes` namespace, same JSON shape).
+- **Email:** send access emails **per the artist's retroactive decision** — an explicit
+  per-store/per-mapping flag (send-to-all vs. silent mint, codes surfaced only on the
+  order-status page). Default OFF; no email without the artist's opt-in.
+- **Blocked on:** Niina's decision. Scope only — no implementation yet.
 
 ---
 

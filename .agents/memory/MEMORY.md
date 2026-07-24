@@ -156,3 +156,4 @@
 - [npm override vs direct dep](npm-override-direct-dep-conflict.md) — a pkg in BOTH dependencies and overrides needs `"$name"` in overrides, or bumping it EOVERRIDE-breaks npm install.
 - [Main-hotfix vs task-merge duplicates](main-hotfix-vs-task-merge-duplicates.md) — a main-agent hotfix a queued task also implemented merges as a DUPLICATE (schema export = app-down build break); dedupe keeping the merged version, Cancel duplicate task cards.
 - [Shopify extension redemption polling](shopify-extension-redemption-polling.md) — checkout UI extensions cannot read ORDER metafields on any surface; redemption data must be polled from our authed endpoint (session token + confirmationNumber).
+- [Shopify E2E test hygiene](shopify-test-hygiene.md) — never map tests to a real artist's album (use prod QA album a0000000-…e2e0); already-paid orderCreate fires no orders/paid — create PENDING then orderMarkAsPaid.
