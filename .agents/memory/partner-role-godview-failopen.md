@@ -80,6 +80,18 @@ and are the real exposure.
    assumption is FALSE — verify actual client calls before denying any shared admin
    prefix.
 
+5. **Per-route allow-lists behind requireAdmin** — even routes with an artist
+   scoping branch (`/api/admin/orders` in commerce.ts, the `/api/admin/customers`
+   list/geo/detail family) failed OPEN: any role NOT matched by the artist branch
+   (manufacturer/vendor/fulfillment, or an unknown future role) fell through to
+   the global fan-PII feed. Fixed to explicit allow-lists (operators global,
+   artist scoped, everything else empty/403). Same class of bug on the
+   `/api/admin/people` typeahead (no artist scoping at all) and on `/api/people`,
+   which resolved the caller SESSION-ONLY so a Bearer-authed artist looked
+   anonymous and got the full catalog — any public route that scopes by admin
+   role must resolve session-OR-bearer (admin-kind only). Pinned by
+   `server/partnerOrderPeopleScope.db.test.ts`.
+
 **How to apply:** when adding ANY new admin-side role (publisher was the example —
 it has only the self-scoped GET /api/publisher/statement), fail it closed in
 `NO_ALBUM_LIST_ROLES`, `requireReportScope`, AND (if it should not see hidden album

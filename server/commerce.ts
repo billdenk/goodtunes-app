@@ -3531,20 +3531,33 @@ export function registerCommerceRoutes(app: Express) {
     // own org owns; everyone else (fulfillment, artist, vendor) sees status only.
     let viewerRole: string | null = null;
     let viewerScopeId: string | null = null;
-    if (userId) {
+    // Fail CLOSED (#2793): this is the global fan-order list (names + prices —
+    // PII). requireAdmin admits EVERY partner role, so the god-view must be an
+    // explicit allow-list: only super_admin / admin see the global list; a
+    // scoped artist sees orders for their own albums; every other role — and
+    // any caller whose user id or role can't be resolved — gets an empty list.
+    // (label/manager/non_profit are additionally 403'd upstream by the
+    // denyAllReportingPartners prefix middleware in routes.ts.)
+    if (!userId) return res.json([]);
+    {
       const { getUserRole } = await import("./auth/roles");
       const roleInfo = await getUserRole(userId);
       viewerRole = roleInfo?.role ?? null;
       viewerScopeId = roleInfo?.roleScopeId ?? null;
-      if (roleInfo?.role === "artist" && !roleInfo.roleScopeId) return res.json([]);
-      if (roleInfo?.role === "artist" && roleInfo.roleScopeId) {
+      if (viewerRole === "artist") {
+        if (!roleInfo!.roleScopeId) return res.json([]);
         const albumRows = await db.execute<{ id: string }>(sql`
           SELECT id FROM albums
-          WHERE primary_artist_id = ${roleInfo.roleScopeId}
-             OR (payout_owner_kind = 'person' AND payout_owner_id = ${roleInfo.roleScopeId})
+          WHERE primary_artist_id = ${roleInfo!.roleScopeId}
+             OR (payout_owner_kind = 'person' AND payout_owner_id = ${roleInfo!.roleScopeId})
         `);
         artistAlbumIds = ((albumRows as any).rows ?? []).map((r: any) => r.id as string);
         if (artistAlbumIds.length === 0) return res.json([]);
+      } else if (viewerRole !== "super_admin" && viewerRole !== "admin") {
+        // manufacturer / vendor / fulfillment / label / manager / non_profit /
+        // unknown → no shared fan-order feed. Their portals have dedicated
+        // scoped endpoints (pressing orders, printer queues, etc.).
+        return res.json([]);
       }
     }
 

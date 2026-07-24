@@ -16339,48 +16339,60 @@ export async function registerRoutes(
     // canonical saved slug back to the operator after a save.
     artistShareSlug: p.artistShareSlug ?? null,
   });
+  // Shared credited-people scope for artist-role callers (#2821): the set of
+  // person ids credited on the artist's own albums/songs, plus the artist
+  // themselves. Used by /api/people AND the /api/admin/people typeahead so an
+  // artist can never browse/search the whole People catalog.
+  const artistCreditedPeopleSet = async (artistPid: string): Promise<Set<string>> => {
+    const albumRows = await db.execute<{ id: string }>(sql`
+      SELECT id FROM albums
+      WHERE (primary_artist_id = ${artistPid}
+             OR (payout_owner_kind = 'person' AND payout_owner_id = ${artistPid}))
+        AND deleted_at IS NULL
+    `);
+    const artistAlbumIds: string[] = (albumRows as any).rows?.map((r: any) => r.id) ?? [];
+    // Artist has no albums yet — show only themselves.
+    if (!artistAlbumIds.length) return new Set([artistPid]);
+    const credited = await db.execute<{ person_id: string }>(sql`
+      SELECT DISTINCT person_id FROM (
+        SELECT tp.person_id FROM track_performers tp
+        JOIN songs s ON s.id = tp.song_id
+        WHERE s.album_id = ANY(${pgArray(artistAlbumIds)}::text[]) AND tp.person_id IS NOT NULL
+        UNION ALL
+        SELECT tw.person_id FROM track_writers tw
+        JOIN songs s ON s.id = tw.song_id
+        WHERE s.album_id = ANY(${pgArray(artistAlbumIds)}::text[]) AND tw.person_id IS NOT NULL
+        UNION ALL
+        SELECT ac.person_id FROM album_credits ac
+        WHERE ac.album_id = ANY(${pgArray(artistAlbumIds)}::text[]) AND ac.person_id IS NOT NULL
+      ) q
+    `);
+    const set = new Set<string>(
+      (credited as any).rows?.map((r: any) => String(r.person_id)) ?? [],
+    );
+    // Always include the artist's own person record.
+    set.add(artistPid);
+    return set;
+  };
+  // Resolve the caller for admin-aware public routes session-OR-Bearer
+  // (#2821): the partner SPA authenticates with a Bearer token (no session
+  // cookie on that host), so a session-only read makes an artist-scoped
+  // caller look anonymous and skips the scoping branch entirely. Only
+  // admin-kind auth counts — fan (customer) auth stays "public caller".
+  const resolveAdminCallerId = async (req: Request): Promise<string | null> => {
+    const a = await getAuthFromRequest(req);
+    return a && a.kind === "admin" ? a.userId : null;
+  };
   app.get("/api/people", async (req, res) => {
     // Artist admins see only people credited on their own albums/songs.
     // Fans and unauthenticated callers see the full public list (no auth
     // required — fan pages like ArtistDetail/FavoriteArtists depend on this).
     let artistPersonIdFilter: Set<string> | null = null;
-    const callerRolePeople = req.session?.userId
-      ? await getUserRole(req.session.userId)
-      : null;
+    const callerIdPeople = await resolveAdminCallerId(req);
+    const callerRolePeople = callerIdPeople ? await getUserRole(callerIdPeople) : null;
     if (callerRolePeople?.role === "artist" && !callerRolePeople.roleScopeId) return res.json([]);
     if (callerRolePeople?.role === "artist" && callerRolePeople.roleScopeId) {
-      const artistPid = callerRolePeople.roleScopeId;
-      const albumRows = await db.execute<{ id: string }>(sql`
-        SELECT id FROM albums
-        WHERE (primary_artist_id = ${artistPid}
-               OR (payout_owner_kind = 'person' AND payout_owner_id = ${artistPid}))
-          AND deleted_at IS NULL
-      `);
-      const artistAlbumIds: string[] = (albumRows as any).rows?.map((r: any) => r.id) ?? [];
-      if (artistAlbumIds.length) {
-        const credited = await db.execute<{ person_id: string }>(sql`
-          SELECT DISTINCT person_id FROM (
-            SELECT tp.person_id FROM track_performers tp
-            JOIN songs s ON s.id = tp.song_id
-            WHERE s.album_id = ANY(${pgArray(artistAlbumIds)}::text[]) AND tp.person_id IS NOT NULL
-            UNION ALL
-            SELECT tw.person_id FROM track_writers tw
-            JOIN songs s ON s.id = tw.song_id
-            WHERE s.album_id = ANY(${pgArray(artistAlbumIds)}::text[]) AND tw.person_id IS NOT NULL
-            UNION ALL
-            SELECT ac.person_id FROM album_credits ac
-            WHERE ac.album_id = ANY(${pgArray(artistAlbumIds)}::text[]) AND ac.person_id IS NOT NULL
-          ) q
-        `);
-        artistPersonIdFilter = new Set(
-          (credited as any).rows?.map((r: any) => String(r.person_id)) ?? [],
-        );
-        // Always include the artist's own person record.
-        artistPersonIdFilter.add(artistPid);
-      } else {
-        // Artist has no albums yet — show only themselves.
-        artistPersonIdFilter = new Set([artistPid]);
-      }
+      artistPersonIdFilter = await artistCreditedPeopleSet(callerRolePeople.roleScopeId);
     }
     const [rows, allLabels] = await Promise.all([
       storage.getPeople(),
@@ -16544,9 +16556,19 @@ export async function registerRoutes(
     const q = String(req.query.q ?? "").trim();
     const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 25);
     if (q.length < 2) return res.json([]);
+    // Artist scoping (#2821): the PersonPicker typeahead must not let an
+    // artist search the entire People catalog by name. Scope-less artist
+    // fails closed; a scoped artist searches only their credited people.
+    const callerTypeahead = await getUserRole(req.session.userId!);
+    let typeaheadScope: Set<string> | null = null;
+    if (callerTypeahead?.role === "artist") {
+      if (!callerTypeahead.roleScopeId) return res.json([]);
+      typeaheadScope = await artistCreditedPeopleSet(callerTypeahead.roleScopeId);
+    }
     // Over-fetch a little so re-ranking the alphabetical slice still has
     // the prefix/exact hits to surface, then cap at the requested limit.
-    const rows = await storage.searchPeople(q, Math.max(limit * 3, limit));
+    let rows = await storage.searchPeople(q, Math.max(limit * 3, limit));
+    if (typeaheadScope) rows = rows.filter((p: any) => typeaheadScope!.has(p.id));
     const ql = q.toLowerCase();
     const score = (name: string) => {
       const n = name.toLowerCase();
@@ -30508,6 +30530,13 @@ export async function registerRoutes(
     // Artist partners see only fans who purchased their albums.
     let artistAlbumIds: string[] | undefined;
     const callerRole = await getUserRole(req.session.userId!);
+    // Fail CLOSED (#2793): only operators see the global fan registry. A
+    // scoped artist sees their own buyers; every other partner role admitted
+    // by requireAdmin (manufacturer / vendor / fulfillment — label / manager /
+    // non_profit are already 403'd by denyAllReportingPartners) gets nothing.
+    if (callerRole?.role !== "super_admin" && callerRole?.role !== "admin" && callerRole?.role !== "artist") {
+      return res.json({ rows: [], total: 0 });
+    }
     if (callerRole?.role === "artist") {
       const personId = callerRole.roleScopeId;
       if (!personId) return res.json({ rows: [], total: 0 });
@@ -30549,6 +30578,10 @@ export async function registerRoutes(
     };
     let scopeFilter = sql`TRUE`;
     const callerRole = await getUserRole(req.session.userId!);
+    // Fail CLOSED (#2793): operators global, artists scoped, everyone else empty.
+    if (callerRole?.role !== "super_admin" && callerRole?.role !== "admin" && callerRole?.role !== "artist") {
+      return res.json(emptyGeo);
+    }
     if (callerRole?.role === "artist") {
       const personId = callerRole.roleScopeId;
       if (!personId) return res.json(emptyGeo);
@@ -30571,6 +30604,12 @@ export async function registerRoutes(
     // Artist partners can only view profiles of customers who bought their albums.
     // Variables declared in outer scope so they're accessible after the guard block.
     const callerRole = await getUserRole(req.session.userId!);
+    // Fail CLOSED (#2793): fan profile detail is PII. Operators see any
+    // profile; a scoped artist sees only their own buyers; every other
+    // partner role is rejected outright.
+    if (callerRole?.role !== "super_admin" && callerRole?.role !== "admin" && callerRole?.role !== "artist") {
+      return res.status(403).json({ message: "Out of scope for this account" });
+    }
     let artistScopedAlbumIds: string[] = [];
     if (callerRole?.role === "artist") {
       const personId = callerRole.roleScopeId;
