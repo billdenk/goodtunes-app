@@ -1,0 +1,17 @@
+Otis — three items: one investigation, one decision, one doc addition. None of this blocks the consolidated report — that's still the priority deliverable.
+
+1. SELL-MODE INVENTORY (investigate now, rename post-launch — reading only, no writes):
+The internal 'shopify_plus' sell mode collides with Shopify's Plus plan name, as the cert fix just proved. Product-wise we have exactly two offerings now: GoodTunes Direct and GoodTunes for Shopify. So:
+(a) List every sell mode in the schema/enum today, and for each: every code branch that switches on it, and which albums/rows in prod use it. I specifically need what shopify_plus mode CONTAINS — unlock behavior, fulfillment routing, cert flow, billing/ledger treatment — so nothing is lost in a rename.
+(b) Propose the mapping: presumably shopify_plus → goodtunes_for_shopify (or external_checkout), and the direct mode aligned to goodtunes_direct. If modes exist beyond these two, list them and what uses them — we decide keep/merge/kill per mode.
+(c) Migration plan (enum + data migration for existing rows including CALIFORNIALAND + all code references, atomic, tested) — but execution is POST-LAUNCH queue, not before 8/14. Her row works today; no live-enum renames under a launch.
+Deliver the inventory with or after the consolidated report.
+
+2. OAUTH ON /REDEEM — DECISION: not for 8/14. Password-only stays on the redeem page. Put OAuth-on-redeem on the post-launch queue as a candidate; we'll decide with real launch data on whether fans actually stumble. The auto-link path you described covers OAuth-preferring fans adequately for launch.
+
+3. SUPPORT PLAYBOOK — add two entries alongside the re-attach procedure in the doc:
+(a) Apple 'Hide My Email': private-relay address won't match the buyer email → fan hits the mismatch path → support verifies purchase and runs the re-attach.
+(b) Claimed stub + OAuth: fan set a password on /redeem, later tries Google/Apple with the same email, sees the 'sign in to link' guard → script is: sign in with your password first, then link the provider in settings.
+Both will occur in week one; two lines each.
+
+Priority order stands: consolidated Phases 3–6 report + self-review re-run first, then these.

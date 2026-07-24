@@ -71,6 +71,14 @@ above: they predate install/mapping, so they never minted codes. Spec (Bill, 202
       `shopify_redemption_codes.redeemed_at/redeemed_by_user_id` if unredeemed.
       (The webhook-created stub account under the buyer email can be left; it holds no
       password unless the fan set one.)
+   **Two more week-one support scripts (Bill, 2026-07-24):**
+   - **Apple "Hide My Email":** the fan's private-relay address won't match the Shopify
+     buyer email → they hit the redeem mismatch path. Script: verify the purchase
+     (order/confirmation number + buyer email), then run the re-attach above.
+   - **Claimed stub + OAuth:** fan set a password on `/redeem`, later tries Google/Apple
+     with the same email and sees the "sign in to link" guard. Script: sign in with your
+     password first, then link the provider from Account settings. (Working as designed —
+     the guard protects a credentialed account.)
 3. **`external_paid` cert-PDF gap (Shopify+ / Niina).** ✅ **FIXED 2026-07-24** (approved
    as a gate exception by Bill). `external_paid` added to `FINALIZED_CERT_ORDER_STATUSES`
    in `server/certificates.ts`. All three uses of the set audited — cert PDF download,
@@ -82,6 +90,16 @@ above: they predate install/mapping, so they never minted codes. Spec (Bill, 202
    must place the block once: Settings → Checkout → **Customize** (thank-you page) and
    the customer-accounts editor (order status page) → Add app block → GoodTunes
    Redemption → Save. This is a required step in Niina's store setup runbook.
+
+### Post-launch queue (after 8/14 — decided by Bill 2026-07-24)
+- **Sell-mode rename.** Internal `shopify_plus` sell mode collides with Shopify's "Plus"
+  plan name. Proposed mapping: `direct` → `goodtunes_direct`, `shopify_plus` →
+  `goodtunes_for_shopify`; legacy `shopify` mode to be decided (merge or kill — see the
+  sell-mode inventory delivered with the consolidated Phases 3–6 report). No live-enum
+  renames before launch; CALIFORNIALAND's row works today.
+- **OAuth on /redeem (candidate).** Redeem page stays password-only for 8/14. Revisit
+  with real launch data on whether fans stumble; the OAuth auto-link path (unclaimed stub
+  → identity attach on provider-verified email) covers OAuth-preferring fans for launch.
 
 ---
 
