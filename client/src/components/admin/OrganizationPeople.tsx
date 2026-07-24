@@ -10,6 +10,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient, apiErrorBody } from "@/lib/queryClient";
@@ -145,7 +155,18 @@ export function OrganizationPeople({
       : "People who represent this partner. Add as many as you need.");
   const { toast } = useToast();
   const contactsKey = [apiPath] as const;
-  const contactsQ = useQuery<Contact[]>({ queryKey: contactsKey });
+  // staleTime: 0 + refetchOnMount — a contact's photo/role is edited over on
+  // AdminPerson, which can't know this per-entity contacts key to invalidate
+  // it; refetching on return keeps avatars fresh without a manual reload.
+  const contactsQ = useQuery<Contact[]>({
+    queryKey: contactsKey,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
+  // Confirm-before-remove (design system: destructive actions always
+  // confirm, naming the thing being removed).
+  const [removeTarget, setRemoveTarget] = useState<{ personId: string; name: string } | null>(null);
 
   const attachedIds = useMemo(
     () => new Set((contactsQ.data ?? []).map((c) => c.personId)),
@@ -168,7 +189,10 @@ export function OrganizationPeople({
     mutationFn: async (personId: string) => {
       await apiRequest("DELETE", `${apiPath}/${personId}`);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: contactsKey }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: contactsKey });
+      setRemoveTarget(null);
+    },
     onError: (err) =>
       toast({
         title: "Couldn't remove contact",
@@ -284,7 +308,7 @@ export function OrganizationPeople({
                 type="button"
                 size="sm"
                 variant="ghost"
-                onClick={() => detach.mutate(c.personId)}
+                onClick={() => setRemoveTarget({ personId: c.personId, name: c.name })}
                 disabled={detach.isPending}
                 className="opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto"
                 data-testid={`button-${testIdPrefix}-remove-contact-${c.personId}`}
@@ -295,6 +319,39 @@ export function OrganizationPeople({
           ))
         )}
       </ul>
+      <AlertDialog
+        open={!!removeTarget}
+        onOpenChange={(v) => { if (!v && !detach.isPending) setRemoveTarget(null); }}
+      >
+        <AlertDialogContent data-testid={`dialog-${testIdPrefix}-remove-contact`}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {removeTarget?.name ?? "this contact"}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes them from {entityName}'s contacts. Their profile and any
+              account access they have aren't deleted — you can add them back later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={detach.isPending}
+              data-testid={`button-${testIdPrefix}-remove-contact-cancel`}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (removeTarget && !detach.isPending) detach.mutate(removeTarget.personId);
+              }}
+              disabled={detach.isPending}
+              className="bg-rose-600 hover:bg-rose-700"
+              data-testid={`button-${testIdPrefix}-remove-contact-confirm`}
+            >
+              {detach.isPending ? "Removing…" : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <InvitePendingDialog
         open={!!openInvite}
         onOpenChange={(v) => !v && setOpenInvite(null)}
