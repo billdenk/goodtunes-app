@@ -9,7 +9,7 @@ import {
 } from "@shopify/ui-extensions-react/checkout";
 import { useRedemptionPoll } from "./useRedemptionPoll";
 
-export default reactExtension("purchase.thank-you", () => <GoodTunesRedemption />);
+export default reactExtension("purchase.thank-you.block.render", () => <GoodTunesRedemption />);
 
 function GoodTunesRedemption() {
   const order = useOrder();

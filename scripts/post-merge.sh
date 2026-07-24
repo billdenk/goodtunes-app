@@ -10137,3 +10137,26 @@ mint_appreview_grant_numbers() {
 }
 mint_appreview_grant_numbers dev  "${DATABASE_URL:-}"
 mint_appreview_grant_numbers prod "${PROD_DATABASE_URL:-}"
+
+# Task #2842 — Phase 1b: one-time removal of leftover GoodTunes ScriptTags
+# from currently-installed Shopify stores (the Checkout UI Extension replaced
+# the order-status ScriptTag; ScriptTag API shuts off 2026-08-26). Best-effort
+# per store: 404 = no ScriptTag surface (skip), 401/403 = NEEDS-MANUAL from
+# the store admin (logged, exits non-zero so the marker stays unset and the
+# sweep re-checks next merge). Idempotent + marker-guarded
+# (post_merge_data_backfills / script_tag_cleanup_v1) so it runs at most once
+# per DB after a clean sweep.
+cleanup_script_tags() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping script-tag cleanup on $label (no URL set)"
+    return 0
+  fi
+  if DATABASE_URL="$url" npx tsx scripts/cleanup-script-tags.ts; then
+    echo "post-merge: script-tag cleanup ok on $label"
+  else
+    echo "post-merge: WARNING — script-tag cleanup incomplete on $label (will re-check next merge)"
+  fi
+}
+cleanup_script_tags dev  "${DATABASE_URL:-}"
+cleanup_script_tags prod "${PROD_DATABASE_URL:-}"

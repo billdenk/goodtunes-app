@@ -465,6 +465,78 @@ export async function sweepRedemptionMetafields(): Promise<{ retried: number; fa
   return { retried, failed };
 }
 
+// ─── One-time ScriptTag cleanup (Task #2842 / Phase 1b) ────────────────
+// The order-status ScriptTag was replaced by the Checkout UI Extension
+// (extensions/goodtunes-redemption); install-time registration is already
+// gone. This removes the tags legacy installs left behind. Called from
+// scripts/cleanup-script-tags.ts (post-merge, marker-guarded). Uses
+// shopifyFetch so encrypted-at-rest + expiring-offline-token refresh both
+// work — a raw DB access_token is ciphertext and would always 401.
+export async function cleanupGoodTunesScriptTags(): Promise<{ deleted: number; failures: string[] }> {
+  const isGoodTunesSrc = (src: string): boolean => {
+    try {
+      const host = new URL(src).hostname.toLowerCase();
+      return host === "goodtunes.music" || host.endsWith(".goodtunes.music");
+    } catch {
+      return false;
+    }
+  };
+
+  const stores = await db.select().from(shopifyStores).where(isNull(shopifyStores.uninstalledAt));
+  let deleted = 0;
+  const failures: string[] = [];
+  for (const store of stores) {
+    if (!store.accessToken) continue;
+    try {
+      // Page through the full list via since_id so stores with >250 tags
+      // can't hide a GoodTunes tag past the first page.
+      const all: Array<{ id: number; src: string }> = [];
+      let sinceId = 0;
+      let listFailed = false;
+      for (;;) {
+        const listRes = await shopifyFetch(store, `script_tags.json?limit=250&since_id=${sinceId}`);
+        if (listRes.status === 404) {
+          // Dead/dev-clone store or a token without the script-tag surface —
+          // it cannot be carrying our tags via this token.
+          console.log(`[script-tag-cleanup] SKIP ${store.shopDomain}: script_tags 404`);
+          listFailed = true;
+          break;
+        }
+        if (listRes.status === 401 || listRes.status === 403) {
+          failures.push(`${store.shopDomain}: ${listRes.status} — reconnect required; remove GoodTunes ScriptTags from the store admin`);
+          listFailed = true;
+          break;
+        }
+        if (!listRes.ok) {
+          failures.push(`${store.shopDomain}: list returned ${listRes.status}`);
+          listFailed = true;
+          break;
+        }
+        const body = (await listRes.json()) as { script_tags?: Array<{ id: number; src: string }> };
+        const page = body.script_tags ?? [];
+        all.push(...page);
+        if (page.length < 250) break;
+        sinceId = Math.max(...page.map((t) => t.id));
+      }
+      if (listFailed) continue;
+      const ours = all.filter((t) => isGoodTunesSrc(t.src));
+      console.log(`[script-tag-cleanup] ${store.shopDomain}: ${all.length} tag(s), ${ours.length} GoodTunes`);
+      for (const tag of ours) {
+        const delRes = await shopifyFetch(store, `script_tags/${tag.id}.json`, { method: "DELETE" });
+        if (delRes.ok) {
+          deleted++;
+          console.log(`[script-tag-cleanup]   deleted #${tag.id} (${tag.src})`);
+        } else {
+          failures.push(`${store.shopDomain}: delete #${tag.id} returned ${delRes.status}`);
+        }
+      }
+    } catch (e: any) {
+      failures.push(`${store.shopDomain}: ${e?.message ?? e}`);
+    }
+  }
+  return { deleted, failures };
+}
+
 // ─── Post-install setup: register webhooks + script tag ───────────────
 // All three pieces are idempotent on Shopify's side via `address` / `src`
 // uniqueness — calling them twice on a re-install is fine.

@@ -52,3 +52,9 @@ legacy → still 403s (loud failure, reconnect visibly still broken, not silent)
 Post-merge you MUST reconnect a real store in prod (e.g. goodtunes-test),
 confirm `shopify_stores.access_token_expires_at` + `refresh_token` populate,
 then confirm a product browse succeeds past the 1-hour access-token lifetime.
+
+## Tokens are encrypted at rest — never call Shopify with a raw DB read
+`shopify_stores.access_token` is AES-encrypted; a script that reads the column and fetches Shopify directly always 401s. Any offline maintenance script must go through the server's `shopifyFetch` (handles decrypt + expiring-token refresh) — export a helper from server/shopify.ts and call it from the script (cleanup-script-tags.ts is the template). Legacy non-expiring tokens with no refresh_token can still 403 on scopes → operator reconnect.
+
+## Shopify CLI `doc fetch` needs Node 22
+`shopify app doc fetch` (used by the app-store-review skill) fails on the workspace default Node 20; prepend a Node 22 runtime to PATH (a nodejs-22 build exists in the nix store — `ls /nix/store | grep nodejs-22`) then `npx -y @shopify/cli@latest ...`.

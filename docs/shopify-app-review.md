@@ -133,8 +133,8 @@ These steps use two admin API endpoints added specifically for this verification
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /api/admin/shopify/stores/:id/inspect` | Live-checks Shopify API for expected webhooks + script tag; shows DB row state |
-| `POST /api/admin/shopify/stores/:id/reinstall-hooks` | Re-registers webhooks + script tag; idempotent (safe to call on an already-healthy install) |
+| `GET /api/admin/shopify/stores/:id/inspect` | Live-checks Shopify API for expected webhooks; shows DB row state |
+| `POST /api/admin/shopify/stores/:id/reinstall-hooks` | Re-registers webhooks; idempotent (safe to call on an already-healthy install) |
 
 #### Prerequisites
 
@@ -163,7 +163,6 @@ These steps use two admin API endpoints added specifically for this verification
        "webhookCount": 4,
        "foundTopics": ["app/uninstalled","orders/paid","orders/refunded","refunds/create"],
        "missingTopics": [],
-       "scriptTagInstalled": true,
        "healthy": true
      }
    }
@@ -178,7 +177,7 @@ These steps use two admin API endpoints added specifically for this verification
 1. In the Shopify dev store, create a free or $1 product and map it to a GoodTunes album via **Admin → Shopify → product mapping** (**§5 screenshot #3**).
 2. Place an order for that product as a test customer (use Shopify's Bogus Gateway or a real test card with Stripe Test mode).
 3. **Verify** the `orders/paid` webhook fired: check server logs for `[shopify-webhook] order <id> → GoodTunes order <id> code=<code>`.
-4. Open the Shopify order confirmation page (order status URL in Shopify admin → Orders). The GoodTunes "Get your music" CTA injected by the script tag must appear (**§5 screenshot #4**).
+4. Open the Shopify **Thank-you page** (immediately after checkout) and/or the **order status page** (order status URL in Shopify admin → Orders). The GoodTunes Checkout UI Extension block ("Your digital album is ready" banner with the "Get your music now" link) must appear. Note: the extension block only renders after the app version carrying it is **released** in the Partner Dashboard AND the merchant has added the block in the checkout editor (thank-you + order-status surfaces) (**§5 screenshot #4**).
 5. Click the CTA → lands on `/redeem/<code>` (**§5 screenshot #5**).
 
 ---
@@ -206,25 +205,26 @@ These steps use two admin API endpoints added specifically for this verification
    curl -s -b 'YOUR_SESSION_COOKIE' \
      https://my.goodtunes.music/api/admin/shopify/stores/<storeId>/inspect | jq .
    ```
-   Expected: `"uninstalledAt": null`, `"hasAccessToken": true`, `allWebhooksPresent: true`, `scriptTagInstalled: true`.
+   Expected: `"uninstalledAt": null`, `"hasAccessToken": true`, `allWebhooksPresent: true`.
 3. Verify **historical orders are still present**: the test order from Step 2 should still show in admin → Orders for that store.
 4. If the inspect call shows `missingTopics` (e.g. a network blip during the callback), run:
    ```sh
    curl -s -X POST -b 'YOUR_SESSION_COOKIE' \
      https://my.goodtunes.music/api/admin/shopify/stores/<storeId>/reinstall-hooks | jq .
    ```
-   Expected: `{ "ok": true, "webhooks": { ... "already_registered" ... }, "scriptTag": "already_installed" }`.
+   Expected: `{ "ok": true, "webhooks": { ... "already_registered" ... } }`.
 
 ---
 
 #### Checklist — all must be ✅ before submission
 
-- [ ] Fresh install: `inspect` returns `healthy: true` (4 webhooks + script tag)
+- [ ] Fresh install: `inspect` returns `healthy: true` (4 webhooks)
+- [ ] Checkout UI Extension version released in Partner Dashboard (network-access capability approved first) and the block added in the checkout editor
 - [ ] Uninstall: `dbRow.uninstalledAt` is set, `hasAccessToken: false`
 - [ ] No orphaned webhooks remain in Shopify after uninstall
 - [ ] Reinstall: `dbRow.uninstalledAt` is null, `inspect` returns `healthy: true`
 - [ ] Historical test order still present after reinstall
-- [ ] Test order status page shows GoodTunes "Get your music" block
+- [ ] Test order thank-you and order-status pages show the GoodTunes extension banner
 - [ ] `/redeem/<code>` landing page works end-to-end
 - [ ] All 5 screenshots captured (see §5)
 
@@ -251,7 +251,7 @@ Capture these from a real dev-store install:
 1. The GoodTunes admin "Connect a Shopify store" dialog.
 2. Shopify's OAuth consent screen showing the four scopes.
 3. The admin product-mapping UI (link a Shopify product to an album).
-4. The Shopify order confirmation page with the GoodTunes "Get your music" CTA block injected by the script tag.
+4. The Shopify thank-you / order-status page with the GoodTunes Checkout UI Extension banner ("Get your music now").
 5. The GoodTunes `/redeem/:code` landing page (pre-filled email, one-click claim).
 
 ### Demo store + reviewer walkthrough
@@ -267,7 +267,7 @@ Flow:
 1. In the dev store, go to Apps → GoodTunes → already installed.
 2. Open any order that contains the demo vinyl product.
 3. Observe the order note attribute "goodtunes_redeem_url" was stamped.
-4. Open the order status page — the GoodTunes "Get your music" block appears.
+4. Open the order status page — the GoodTunes extension banner appears.
 5. Click "Get your music now" → lands on /redeem/:code → enter name + password → Library shows the album.
 ```
 
