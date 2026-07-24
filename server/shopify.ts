@@ -67,7 +67,11 @@ const SHOPIFY_TOKEN_KEY = createHash("sha256")
   .digest();
 // The Shopify Admin API version pinned here is bumped quarterly. Pinned
 // rather than "unstable" so a Shopify rev doesn't silently break us.
+// REST stays on 2024-10 for the endpoints not yet migrated (orders,
+// refunds, webhooks, inventory — Phases 4-6); GraphQL calls pin to a
+// current stable version since that's where new work lands (Phase 3+).
 const SHOPIFY_API_VERSION = "2024-10";
+const SHOPIFY_GRAPHQL_API_VERSION = "2026-01";
 
 export function shopifyConfigured(): boolean {
   return Boolean(SHOPIFY_API_KEY) && Boolean(SHOPIFY_API_SECRET);
@@ -333,7 +337,7 @@ async function shopifyGraphql<T = Record<string, unknown>>(
   query: string,
   variables?: Record<string, unknown>,
 ): Promise<T> {
-  const url = `https://${store.shopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const url = `https://${store.shopDomain}/admin/api/${SHOPIFY_GRAPHQL_API_VERSION}/graphql.json`;
   const body = JSON.stringify({ query, variables });
   const doFetch = (token: string) =>
     fetch(url, {
@@ -356,13 +360,116 @@ async function shopifyGraphql<T = Record<string, unknown>>(
   }
   if (!r.ok) {
     const text = await r.text();
-    throw new Error(`Shopify GraphQL HTTP ${r.status}: ${text.slice(0, 200)}`);
+    const err = new Error(`Shopify GraphQL HTTP ${r.status}: ${text.slice(0, 200)}`) as Error & { status?: number };
+    // Callers that need to distinguish "reconnect required" (401/403 that
+    // survived the refresh retry) from transient Shopify errors read this.
+    err.status = r.status;
+    throw err;
   }
   const parsed = (await r.json()) as { data: T; errors?: Array<{ message: string }> };
   if (parsed.errors?.length) {
     throw new Error(`Shopify GraphQL errors: ${parsed.errors.map((e) => e.message).join("; ")}`);
   }
   return parsed.data;
+}
+
+// ─── Product/variant GraphQL plumbing (Phase 3 REST→GraphQL migration) ─
+// Shopify deprecated the REST product/variant endpoints. Everything
+// product-shaped now goes through Admin GraphQL, but the callers in this
+// file were written against the REST payload shape (numeric string ids,
+// body_html, comma-joined tags, option1, inventory_item_id). Rather than
+// rewrite every caller, gqlProductToRest() maps the GraphQL node back to
+// that legacy shape so diffPushSnapshot(), the resolve endpoint, and the
+// catalog browser stay byte-compatible. Numeric ids ride legacyResourceId
+// — Shopify keeps these stable and the DB columns / order webhooks
+// (still REST until Phase 4) all speak numeric ids.
+const productGid = (id: string | number) => `gid://shopify/Product/${id}`;
+const variantGid = (id: string | number) => `gid://shopify/ProductVariant/${id}`;
+
+// Shared selection set for anything that reads a product. 100 variants is
+// far above anything we push (2) or the picker needs to display.
+const PRODUCT_FIELDS = /* GraphQL */ `
+  legacyResourceId
+  title
+  descriptionHtml
+  vendor
+  tags
+  productType
+  featuredMedia { preview { image { url } } }
+  variants(first: 100) {
+    nodes {
+      legacyResourceId
+      title
+      price
+      sku
+      inventoryQuantity
+      selectedOptions { name value }
+      inventoryItem { legacyResourceId }
+    }
+  }
+`;
+
+type GqlProductNode = {
+  legacyResourceId: string;
+  title: string;
+  descriptionHtml: string | null;
+  vendor: string | null;
+  tags: string[];
+  productType: string | null;
+  featuredMedia: { preview: { image: { url: string } | null } | null } | null;
+  variants: {
+    nodes: Array<{
+      legacyResourceId: string;
+      title: string;
+      price: string;
+      sku: string | null;
+      inventoryQuantity: number | null;
+      selectedOptions: Array<{ name: string; value: string }>;
+      inventoryItem: { legacyResourceId: string } | null;
+    }>;
+  };
+};
+
+// REST-shaped product (subset the callers in this file actually read).
+function gqlProductToRest(p: GqlProductNode) {
+  const imageUrl = p.featuredMedia?.preview?.image?.url ?? null;
+  return {
+    id: p.legacyResourceId,
+    title: p.title,
+    body_html: p.descriptionHtml ?? "",
+    vendor: p.vendor ?? "",
+    // REST serialized tags as a comma-space-joined string; GraphQL returns
+    // an array. diffPushSnapshot compares against the string form.
+    tags: (p.tags ?? []).join(", "),
+    product_type: p.productType ?? "",
+    image: imageUrl ? { src: imageUrl } : null,
+    images: imageUrl ? [{ src: imageUrl }] : [],
+    variants: p.variants.nodes.map((v) => ({
+      id: v.legacyResourceId,
+      title: v.title,
+      price: v.price,
+      sku: v.sku ?? "",
+      inventory_quantity: v.inventoryQuantity ?? 0,
+      option1: v.selectedOptions[0]?.value ?? v.title,
+      inventory_item_id: v.inventoryItem ? Number(v.inventoryItem.legacyResourceId) : null,
+    })),
+  };
+}
+
+const PRODUCT_BY_ID_QUERY = /* GraphQL */ `
+  query product($id: ID!) {
+    product(id: $id) { ${PRODUCT_FIELDS} }
+  }
+`;
+
+// Single product read by numeric (legacy REST) id. Returns null when the
+// product doesn't exist — GraphQL returns `product: null` rather than a
+// 404 like REST did. Throws on transport/auth errors (err.status set).
+async function fetchProductByLegacyId(store: ShopifyStore, legacyId: string) {
+  const data = await shopifyGraphql<{ product: GqlProductNode | null }>(store, PRODUCT_BY_ID_QUERY, {
+    id: productGid(legacyId),
+  });
+  return data.product ? gqlProductToRest(data.product) : null;
 }
 
 // ─── Write redemption metafield to Shopify order ──────────────────────
@@ -2459,62 +2566,64 @@ export function registerShopifyRoutes(app: Express) {
     const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
     const cursor = typeof req.query.cursor === "string" ? req.query.cursor.trim() : "";
 
-    const params = new URLSearchParams();
-    if (search) {
-      params.set("limit", "250");
-      params.set("status", "active");
-    } else {
-      params.set("limit", "20");
-      if (cursor) {
-        // Shopify's cursor pagination rejects any filter params other than
-        // `limit`/`fields` alongside `page_info` — don't also send `status`.
-        params.set("page_info", cursor);
-      } else {
-        params.set("status", "active");
-      }
-    }
-
-    const r = await shopifyFetch(store, `products.json?${params.toString()}`);
-    if (!r.ok) {
-      // A 401/403 after shopifyFetch's proactive + reactive refresh means the
-      // token can't be revived — a legacy non-expiring install, or the refresh
-      // token lapsed/was revoked. Tell the operator to reconnect (the existing
-      // OAuth install flow IS the reconnect). Other statuses (429/5xx) are
-      // transient Shopify errors — surface the status for diagnosability.
-      if (r.status === 401 || r.status === 403) {
+    // GraphQL `products` query (Phase 3). Search keeps the pre-migration
+    // behavior: pull a big page of active products and title-filter
+    // client-side (Shopify's `title:` search token is prefix-anchored and
+    // missed mid-word matches, which is why the REST version filtered in
+    // JS too). Browse mode pages 20 at a time via cursor.
+    let data: { products: { nodes: GqlProductNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } };
+    try {
+      data = await shopifyGraphql(
+        store,
+        /* GraphQL */ `
+          query products($first: Int!, $after: String, $query: String) {
+            products(first: $first, after: $after, query: $query, sortKey: TITLE) {
+              nodes { ${PRODUCT_FIELDS} }
+              pageInfo { hasNextPage endCursor }
+            }
+          }
+        `,
+        {
+          first: search ? 250 : 20,
+          after: !search && cursor ? cursor : null,
+          query: "status:active",
+        },
+      );
+    } catch (e: any) {
+      // A 401/403 after shopifyGraphql's proactive + reactive refresh means
+      // the token can't be revived — a legacy non-expiring install, or the
+      // refresh token lapsed/was revoked. Tell the operator to reconnect
+      // (the existing OAuth install flow IS the reconnect). Other failures
+      // (429/5xx/GraphQL errors) are transient — surface for diagnosability.
+      if (e?.status === 401 || e?.status === 403) {
         return res.status(409).json({
           code: "shopify_reconnect_required",
           message: "Reconnect this Shopify store to continue.",
         });
       }
-      return res.status(502).json({ message: `Couldn't fetch products from Shopify (${r.status})` });
-    }
-    const j: any = await r.json();
-    let products: any[] = j?.products ?? [];
-    if (search) {
-      const needle = search.toLowerCase();
-      products = products.filter((p) => String(p.title ?? "").toLowerCase().includes(needle));
+      console.error(`[shopify] products query failed store=${store.shopDomain}: ${e?.message ?? e}`);
+      return res.status(502).json({ message: "Couldn't fetch products from Shopify" });
     }
 
-    let nextCursor: string | null = null;
-    if (!search) {
-      const link = r.headers.get("link") ?? r.headers.get("Link");
-      const m = link?.match(/<[^>]*[?&]page_info=([^&>]+)[^>]*>;\s*rel="next"/);
-      if (m) nextCursor = decodeURIComponent(m[1]);
+    let products = data.products.nodes.map(gqlProductToRest);
+    if (search) {
+      const needle = search.toLowerCase();
+      products = products.filter((p) => p.title.toLowerCase().includes(needle));
     }
+    const nextCursor = !search && data.products.pageInfo.hasNextPage ? data.products.pageInfo.endCursor : null;
 
     res.json({
       products: products.map((p) => ({
         id: String(p.id),
-        title: p.title as string,
+        title: p.title,
         // Task #2435 — surfaced so the artist product browser can offer a
         // lightweight client-side product-type filter over loaded items.
-        productType: (p.product_type as string) || null,
-        image: p.image?.src ?? p.images?.[0]?.src ?? null,
-        variants: (p.variants ?? []).map((v: any) => ({
+        productType: p.product_type || null,
+        image: p.image?.src ?? null,
+        variants: p.variants.map((v) => ({
           id: String(v.id),
-          title: v.title as string,
-          price: v.price as string,
+          title: v.title,
+          price: v.price,
         })),
       })),
       nextCursor,
@@ -2965,11 +3074,14 @@ export function registerShopifyRoutes(app: Express) {
     }
     if (!productId) return res.status(404).json({ message: "Couldn't resolve product id" });
 
-    const r = await shopifyFetch(store, `products/${productId}.json`);
-    if (!r.ok) return res.status(404).json({ message: "Product not found on connected store" });
-    const j: any = await r.json();
-    const product = j?.product;
-    if (!product) return res.status(404).json({ message: "Empty product payload" });
+    let product: ReturnType<typeof gqlProductToRest> | null = null;
+    try {
+      product = await fetchProductByLegacyId(store, productId);
+    } catch (e: any) {
+      console.error(`[shopify] product resolve failed store=${store.shopDomain} product=${productId}: ${e?.message ?? e}`);
+      return res.status(502).json({ message: "Couldn't fetch that product from Shopify" });
+    }
+    if (!product) return res.status(404).json({ message: "Product not found on connected store" });
     res.json({
       storeId: store.id,
       shopifyProductId: String(product.id),
@@ -3202,10 +3314,15 @@ export function registerShopifyRoutes(app: Express) {
     // with {force:true}. If the product was deleted on Shopify, fall
     // through and create a new draft.
     if (existingProductId && !force) {
-      const r = await shopifyFetch(store, `products/${existingProductId}.json`);
-      if (r.ok) {
-        const j: any = await r.json();
-        const live = j?.product;
+      let live: ReturnType<typeof gqlProductToRest> | null = null;
+      try {
+        live = await fetchProductByLegacyId(store, existingProductId);
+      } catch (e: any) {
+        // Transient read failure — same behavior as the old REST branch on a
+        // non-ok status: skip the conflict check rather than block the push.
+        console.error(`[shopify-push] conflict-check read failed album=${albumId}: ${e?.message ?? e}`);
+      }
+      {
         if (live && album.shopifyPushSnapshot) {
           const conflicts = diffPushSnapshot(album.shopifyPushSnapshot, live, {
             editionVariantId: album.shopifyPushEditionVariantId,
@@ -3225,96 +3342,155 @@ export function registerShopifyRoutes(app: Express) {
     let productId = existingProductId;
     let editionVariantId: string | null = null;
     let certVariantId: string | null = null;
+    let editionInventoryItemId: string | null = null;
+    let certInventoryItemId: string | null = null;
 
-    if (productId) {
-      const productPayload: any = {
-        product: {
-          id: Number(productId),
-          title,
-          body_html: bodyHtml,
-          vendor,
-          tags,
-          options: [{ name: "Edition" }],
-          variants: [
-            album.shopifyPushEditionVariantId
-              ? { ...editionVariant, id: Number(album.shopifyPushEditionVariantId) }
-              : editionVariant,
-            ...(certVariant
-              ? [album.shopifyPushCertVariantId
-                  ? { ...certVariant, id: Number(album.shopifyPushCertVariantId) }
-                  : certVariant]
-              : []),
-          ],
-          status: "draft" as const,
+    // productSet (Phase 3) replaces the REST PUT/POST-with-variants pair.
+    // Its list-field semantics match the old PUT exactly: the variants we
+    // send become the complete set (entries omitted are deleted). One call
+    // covers both create (no id) and update (id present); the "Edition"
+    // option + optionValues replace REST's options/option1.
+    const gqlVariants = [
+      {
+        ...(productId && album.shopifyPushEditionVariantId
+          ? { id: variantGid(album.shopifyPushEditionVariantId) }
+          : {}),
+        optionValues: [{ optionName: "Edition", name: editionVariant.option1 }],
+        price: editionVariant.price,
+        sku: editionVariant.sku,
+        taxable: true,
+        inventoryPolicy: "DENY",
+        inventoryItem: {
+          tracked: editionInventory != null,
+          requiresShipping: false,
         },
-      };
-      if (album.artwork) productPayload.product.images = [{ src: album.artwork }];
-      const r = await shopifyFetch(store, `products/${productId}.json`, {
-        method: "PUT",
-        body: JSON.stringify(productPayload),
-      });
-      if (!r.ok) {
-        const t = await r.text();
-        console.error(`[shopify-push] update failed album=${albumId} status=${r.status} ${t.slice(0, 200)}`);
-        return res.status(502).json({ message: `Shopify update failed (${r.status})`, detail: t.slice(0, 400) });
-      }
-      const j: any = await r.json();
-      const p = j?.product;
-      editionVariantId = p?.variants?.[0]?.id ? String(p.variants[0].id) : null;
-      certVariantId = certAddon && p?.variants?.[1]?.id ? String(p.variants[1].id) : null;
-    } else {
-      const productPayload: any = {
-        product: {
-          title,
-          body_html: bodyHtml,
-          vendor,
-          tags,
-          options: [{ name: "Edition" }],
-          variants: certVariant ? [editionVariant, certVariant] : [editionVariant],
-          status: "draft" as const,
+      },
+      ...(certVariant
+        ? [
+            {
+              ...(productId && album.shopifyPushCertVariantId
+                ? { id: variantGid(album.shopifyPushCertVariantId) }
+                : {}),
+              optionValues: [{ optionName: "Edition", name: certVariant.option1 }],
+              price: certVariant.price,
+              sku: certVariant.sku,
+              taxable: true,
+              inventoryPolicy: "DENY",
+              inventoryItem: {
+                tracked: certInventory != null,
+                requiresShipping: true,
+              },
+            },
+          ]
+        : []),
+    ];
+    const setInput: Record<string, unknown> = {
+      ...(productId ? { id: productGid(productId) } : {}),
+      title,
+      descriptionHtml: bodyHtml,
+      vendor,
+      tags: [tags],
+      status: "DRAFT",
+      productOptions: [
+        {
+          name: "Edition",
+          position: 1,
+          values: gqlVariants.map((v) => ({ name: v.optionValues[0].name })),
         },
-      };
-      if (album.artwork) productPayload.product.images = [{ src: album.artwork }];
-      const r = await shopifyFetch(store, `products.json`, {
-        method: "POST",
-        body: JSON.stringify(productPayload),
-      });
-      if (!r.ok) {
-        const t = await r.text();
-        console.error(`[shopify-push] create failed album=${albumId} status=${r.status} ${t.slice(0, 200)}`);
-        return res.status(502).json({ message: `Shopify create failed (${r.status})`, detail: t.slice(0, 400) });
+      ],
+      variants: gqlVariants,
+      ...(album.artwork
+        ? { files: [{ originalSource: album.artwork, contentType: "IMAGE", alt: title }] }
+        : {}),
+    };
+
+    try {
+      const result = await shopifyGraphql<{
+        productSet: {
+          product: {
+            legacyResourceId: string;
+            variants: {
+              nodes: Array<{
+                legacyResourceId: string;
+                sku: string | null;
+                inventoryItem: { legacyResourceId: string } | null;
+              }>;
+            };
+          } | null;
+          userErrors: Array<{ field: string[] | null; message: string }>;
+        };
+      }>(
+        store,
+        /* GraphQL */ `
+          mutation productSet($input: ProductSetInput!) {
+            productSet(input: $input, synchronous: true) {
+              product {
+                legacyResourceId
+                variants(first: 10) {
+                  nodes {
+                    legacyResourceId
+                    sku
+                    inventoryItem { legacyResourceId }
+                  }
+                }
+              }
+              userErrors { field message }
+            }
+          }
+        `,
+        { input: setInput },
+      );
+      const errs = result.productSet?.userErrors ?? [];
+      if (errs.length > 0) {
+        const detail = errs.map((e) => `${e.field?.join(".") ?? ""}: ${e.message}`).join("; ");
+        console.error(`[shopify-push] productSet userErrors album=${albumId} ${detail.slice(0, 200)}`);
+        return res.status(502).json({
+          message: `Shopify ${productId ? "update" : "create"} failed`,
+          detail: detail.slice(0, 400),
+        });
       }
-      const j: any = await r.json();
-      const p = j?.product;
-      productId = p?.id ? String(p.id) : null;
-      editionVariantId = p?.variants?.[0]?.id ? String(p.variants[0].id) : null;
-      certVariantId = certAddon && p?.variants?.[1]?.id ? String(p.variants[1].id) : null;
+      const p = result.productSet?.product;
+      productId = p?.legacyResourceId ? String(p.legacyResourceId) : productId;
+      const vs = p?.variants?.nodes ?? [];
+      // Match variants back by SKU (stable, we mint them) with an index
+      // fallback mirroring the old REST canonical-order assumption.
+      const editionNode = vs.find((v) => v.sku === editionVariant.sku) ?? vs[0] ?? null;
+      const certNode = certVariant ? vs.find((v) => v.sku === certVariant.sku) ?? vs[1] ?? null : null;
+      editionVariantId = editionNode ? String(editionNode.legacyResourceId) : null;
+      certVariantId = certNode ? String(certNode.legacyResourceId) : null;
+      editionInventoryItemId = editionNode?.inventoryItem?.legacyResourceId ?? null;
+      certInventoryItemId = certNode?.inventoryItem?.legacyResourceId ?? null;
+    } catch (e: any) {
+      console.error(`[shopify-push] productSet failed album=${albumId}: ${e?.message ?? e}`);
+      return res.status(502).json({
+        message: `Shopify ${existingProductId ? "update" : "create"} failed`,
+        detail: String(e?.message ?? e).slice(0, 400),
+      });
     }
 
-    // Apply inventory levels for tracked variants. Shopify's
-    // products.json create/update sets `inventory_management` but not
-    // the actual `available` count — that's a separate endpoint keyed
-    // on (inventory_item_id, location_id). Best-effort: log and
-    // continue on failure so the label still has a usable draft.
+    // Apply inventory levels for tracked variants. productSet sets
+    // `tracked` but not the actual `available` count — that's a separate
+    // call keyed on (inventory_item_id, location_id). Inventory endpoints
+    // are Phase 6, so this stays REST; the inventory item ids now come
+    // straight off the productSet response (no product re-read needed).
+    // Best-effort: log and continue on failure so the label still has a
+    // usable draft.
     if ((editionInventory != null || certInventory != null) && productId) {
       try {
         const locRes = await shopifyFetch(store, "locations.json");
-        const pRes = await shopifyFetch(store, `products/${productId}.json`);
-        if (locRes.ok && pRes.ok) {
+        if (locRes.ok) {
           const locJson: any = await locRes.json();
           const locId = locJson?.locations?.[0]?.id;
-          const pJson: any = await pRes.json();
-          const vs: any[] = pJson?.product?.variants ?? [];
-          if (locId && editionInventory != null && vs[0]?.inventory_item_id) {
+          if (locId && editionInventory != null && editionInventoryItemId) {
             await shopifyFetch(store, "inventory_levels/set.json", {
               method: "POST",
-              body: JSON.stringify({ location_id: locId, inventory_item_id: vs[0].inventory_item_id, available: editionInventory }),
+              body: JSON.stringify({ location_id: locId, inventory_item_id: Number(editionInventoryItemId), available: editionInventory }),
             });
           }
-          if (locId && certInventory != null && vs[1]?.inventory_item_id) {
+          if (locId && certInventory != null && certInventoryItemId) {
             await shopifyFetch(store, "inventory_levels/set.json", {
               method: "POST",
-              body: JSON.stringify({ location_id: locId, inventory_item_id: vs[1].inventory_item_id, available: certInventory }),
+              body: JSON.stringify({ location_id: locId, inventory_item_id: Number(certInventoryItemId), available: certInventory }),
             });
           }
         }
@@ -3515,19 +3691,26 @@ export function registerShopifyRoutes(app: Express) {
           retail = cached.value;
         } else {
           try {
-            const r = await shopifyFetch(store, `variants/${spec.variantId}.json`);
-            if (r.status === 404) {
+            // GraphQL productVariant (Phase 3). A deleted variant comes back
+            // as `productVariant: null` (GraphQL never 404s) → removed:true.
+            const data = await shopifyGraphql<{ productVariant: { price: string } | null }>(
+              store,
+              /* GraphQL */ `
+                query productVariant($id: ID!) {
+                  productVariant(id: $id) { price }
+                }
+              `,
+              { id: variantGid(spec.variantId) },
+            );
+            if (!data.productVariant) {
               retail = { priceCents: null, currency: null, removed: true };
-            } else if (r.ok) {
-              const j = (await r.json()) as { variant?: { price?: string } };
-              const priceStr = j.variant?.price ?? null;
+            } else {
+              const priceStr = data.productVariant.price ?? null;
               retail = {
                 priceCents: priceStr ? dollarsToCents(priceStr) : null,
-                currency: "USD", // Shopify variant endpoint doesn't include currency; store currency is uniform
+                currency: "USD", // store currency is uniform; price carries no currency
                 removed: false,
               };
-            } else {
-              retail = { priceCents: null, currency: null, removed: false };
             }
             if (retail) variantRetailCache.set(cacheKey, { at: Date.now(), value: retail });
           } catch (e: any) {
@@ -3613,4 +3796,14 @@ export function registerShopifyRoutes(app: Express) {
 
 // Internal helpers we expose for tests / future wiring. None used by
 // callers outside this file today.
-export const __internal = { generateRedemptionCode, materializeOrderFromShopify, handleShopifyRefund };
+export const __internal = {
+  generateRedemptionCode,
+  materializeOrderFromShopify,
+  handleShopifyRefund,
+  // Phase 3 GraphQL plumbing, exported for hermetic tests.
+  gqlProductToRest,
+  fetchProductByLegacyId,
+  productGid,
+  variantGid,
+  diffPushSnapshot,
+};
