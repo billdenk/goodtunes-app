@@ -476,7 +476,7 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
   return (
     <div className="space-y-4" data-testid="press-albums-tab">
       <AdminPageHeader
-        title="Albums"
+        title="Projects"
         subtitle="GoodTunes releases pressed by your plant, grouped by lifecycle stage."
         testId="heading-press-albums"
         actions={
