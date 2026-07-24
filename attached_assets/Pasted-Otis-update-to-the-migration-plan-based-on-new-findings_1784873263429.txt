@@ -1,0 +1,33 @@
+Otis — update to the migration plan based on new findings. The ScriptTag situation is worse than a review flag: Shopify turned off Order Status page ScriptTags for Plus stores in August 2025, began auto-upgrading all stores' Thank you / Order status pages in January 2026, and shuts ScriptTags off everywhere August 26, 2026. Any store on the new pages never sees our redeem button. We have two artist launches (Nina, SoulChef) on brand-new stores with a hard release date of August 14, so this is now the top priority. Phase 0 from the earlier brief is answered: we are not migrating the ScriptTag call to GraphQL — we are replacing the mechanism entirely.
+
+Revised plan, in order:
+
+Phase 1a — Verify store page versions (do this first, report before building):
+Check whether the redeem button currently renders on the order status page of (1) Nina's store, (2) SoulChef's store, and (3) our dev store. For any store on the new Thank you / Order status pages, the ScriptTag will not fire — confirm what a fan actually sees post-purchase today. Report findings before starting 1b.
+
+Phase 1b — Rebuild redeem button as a checkout UI extension:
+Build a UI extension targeting the Order Status page that replaces /shopify/redeem-button.js. Requirements:
+- Works on all merchant plans (Basic through Plus — Order Status page extensions are supported on all plans)
+- Same function as today: fan lands on order status, sees their redemption entry point into the GoodTunes player
+- Deploy the extension alongside the existing ScriptTag first; do not remove the ScriptTag until the extension is confirmed working on a legacy-page store and a new-page store
+- Then remove installScriptTag() from the install flow and clean up existing script tags on installed stores
+- Your call on implementation details, but flag anything about the extension sandbox that limits what the current redeem-button.js does (e.g., network calls, session handling) before working around it
+
+Phase 1c — Interim fallback (only if 1b can't be live before August 10):
+If the extension won't be production-ready with buffer before the August 14 releases, add the redemption link to the order confirmation email flow as a stopgap so fans on new-page stores can still redeem. Tell me by end of 1a whether you think we need this.
+
+Phase 2 — Code language cleanup:
+Rename shopify_digital_fee_ledger and any comments saying "billed to the artist outside Shopify" to wholesale/platform language — e.g., platform_wholesale_ledger, "per-unit wholesale charge for GoodTunes platform access, billed through our standing vendor relationship with the artist." The code should describe the model the way we describe it to Shopify: we are a wholesale vendor; the app is a free connector. No logic changes, naming and comments only.
+
+Phases 3–6 — GraphQL migration as previously briefed, minus script_tags.json (now moot):
+Phase 3: products.json, products/*.json, variants/*.json
+Phase 4: orders/*.json, webhooks.json, transactions.json
+Phase 5: inventory_levels/set.json, locations.json
+Phase 6: refunds/calculate.json, refunds.json
+Same rules as before: after each phase, run tests, confirm affected flows, re-run /shopify-app-store-review, report before continuing.
+
+Heads up: adding the UI extension means the self-review will start evaluating extension requirement groups it previously skipped. Expect new items on the re-run — report them, don't silently fix them.
+
+Ground rules unchanged: use the AI Toolkit's schema access, don't guess mutation shapes, stop and ask on anything ambiguous, no scope creep.
+
+Start with 1a and report.

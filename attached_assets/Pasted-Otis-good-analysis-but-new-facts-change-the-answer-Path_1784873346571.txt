@@ -1,0 +1,13 @@
+Otis — good analysis, but new facts change the answer: Path B, now. Here's what you're missing. ScriptTags on the Order Status page stopped rendering for Plus stores in August 2025, Shopify began auto-upgrading all stores to the new Thank you / Order status pages in January 2026, and the hard shutoff for every store is August 26, 2026. Nina's and SoulChef's stores were just created — assume they're on the new pages, where the ScriptTag never fires regardless of which API registers it. We have hard artist launches August 14. Path A migrates the registration call for a button that won't render where we need it, then dies platform-wide two weeks later. It's not buying time; the time is already gone.
+
+So: skip Path A entirely. Drop script_tags.json from the GraphQL migration (moot once the ScriptTag is gone). Build the extension per my revised brief, with these decisions made so you don't wait on me:
+
+1. Data delivery: use the metafield approach, not an app proxy. Write the redemption code/deeplink to an order metafield from the orders/paid webhook handler, and the extension reads it at render time. Requirement: app-owned protected metafield so it isn't readable outside our app — a redemption code in a merchant-visible metafield is leakable.
+
+2. Target both surfaces: purchase.thank-you AND the customer accounts order status target. Fans redeem from the confirmation email link later, not just immediately post-purchase — the old order_status scope covered that and we can't lose it.
+
+3. Scope addition (write_checkout_extensions_apis or whatever the current requirement is): fine, add it, and document the justification for review.
+
+4. Sequencing per the revised brief: verify page versions on Nina's, SoulChef's, and our dev store first (1a); deploy the extension alongside the existing ScriptTag; remove the ScriptTag only after the extension is confirmed on both page versions. Internal deadline August 10. If at any point you think that date is at risk, say so immediately and we activate the email fallback.
+
+Your 1.5–2 day estimate fits the timeline fine, which removes the schedule argument for Path A anyway. Start with 1a and report.

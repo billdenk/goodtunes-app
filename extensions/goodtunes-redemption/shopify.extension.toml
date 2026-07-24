@@ -1,0 +1,18 @@
+api_version = "2026-07"
+
+[[extensions]]
+type = "ui_extension"
+name = "GoodTunes Redemption"
+handle = "goodtunes-redemption"
+
+[[extensions.targeting]]
+module = "./src/ThankYou.tsx"
+target = "purchase.thank-you"
+
+[[extensions.targeting]]
+module = "./src/OrderStatus.tsx"
+target = "customer-account.order-status.block.render"
+
+[[extensions.metafields]]
+namespace = "goodtunes"
+key = "redemption"

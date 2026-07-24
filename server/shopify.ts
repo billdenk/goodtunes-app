@@ -322,6 +322,89 @@ async function shopifyFetch(store: ShopifyStore, path: string, init: RequestInit
   return r;
 }
 
+// ─── Shopify Admin GraphQL helper ─────────────────────────────────────
+// Mirrors shopifyFetch but posts to the GraphQL endpoint. Uses the same
+// token-refresh + reactive-rotation logic so it's safe to call from any
+// webhook handler. Returns the parsed `data` field; throws on HTTP errors
+// or GraphQL-level `errors` arrays.
+async function shopifyGraphql<T = Record<string, unknown>>(
+  store: ShopifyStore,
+  query: string,
+  variables?: Record<string, unknown>,
+): Promise<T> {
+  const url = `https://${store.shopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const body = JSON.stringify({ query, variables });
+  const doFetch = (token: string) =>
+    fetch(url, {
+      method: "POST",
+      headers: {
+        "X-Shopify-Access-Token": token,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body,
+    });
+
+  let r = await doFetch(await getFreshAccessToken(store.id));
+  if (r.status === 401 || r.status === 403) {
+    const latest = await getStoreById(store.id);
+    if (latest?.refreshToken) {
+      const refreshed = await refreshStoreToken(latest);
+      if (refreshed) r = await doFetch(refreshed);
+    }
+  }
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(`Shopify GraphQL HTTP ${r.status}: ${text.slice(0, 200)}`);
+  }
+  const parsed = (await r.json()) as { data: T; errors?: Array<{ message: string }> };
+  if (parsed.errors?.length) {
+    throw new Error(`Shopify GraphQL errors: ${parsed.errors.map((e) => e.message).join("; ")}`);
+  }
+  return parsed.data;
+}
+
+// ─── Write redemption metafield to Shopify order ──────────────────────
+// Called fire-and-forget after the redemption code is minted so the
+// checkout UI extension (purchase.thank-you + customer-account order
+// status) can display the code and deep-link without the ScriptTag.
+// Namespace "goodtunes" is app-owned so only our extension can read it.
+// Best-effort: a failure is logged but never blocks the webhook response.
+const GOODTUNES_FAN_HOST = process.env.GOODTUNES_HOST ?? "my.goodtunes.music";
+
+const METAFIELDS_SET_MUTATION = /* GraphQL */ `
+  mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
+    metafieldsSet(metafields: $metafields) {
+      metafields { id }
+      userErrors { field message }
+    }
+  }
+`;
+
+async function writeRedemptionMetafield(
+  store: ShopifyStore,
+  shopifyOrderId: string,
+  code: string,
+): Promise<void> {
+  const url = `https://${GOODTUNES_FAN_HOST}/redeem/${code}`;
+  const value = JSON.stringify({ code, url });
+  const ownerId = `gid://shopify/Order/${shopifyOrderId}`;
+
+  const result = await shopifyGraphql<{
+    metafieldsSet: {
+      metafields: Array<{ id: string }>;
+      userErrors: Array<{ field: string; message: string }>;
+    };
+  }>(store, METAFIELDS_SET_MUTATION, {
+    metafields: [{ ownerId, namespace: "goodtunes", key: "redemption", type: "json", value }],
+  });
+
+  const errs = result.metafieldsSet?.userErrors ?? [];
+  if (errs.length > 0) {
+    throw new Error(errs.map((e) => `${e.field}: ${e.message}`).join("; "));
+  }
+}
+
 // ─── Post-install setup: register webhooks + script tag ───────────────
 // All three pieces are idempotent on Shopify's side via `address` / `src`
 // uniqueness — calling them twice on a re-install is fine.
@@ -952,6 +1035,15 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // leak a code that can't be resolved.
   const code = generateRedemptionCode();
   await db.insert(shopifyRedemptionCodes).values({ code, orderId: order.id });
+
+  // Write the code + deep-link to an app-owned order metafield so the
+  // checkout UI extension (purchase.thank-you + customer-account order
+  // status) can display it directly. Fire-and-forget: a failure is logged
+  // but never blocks the webhook response. The extension handles the
+  // not-yet-written state with a "being prepared" placeholder card.
+  writeRedemptionMetafield(store, shopifyOrderId, code).catch((e: any) => {
+    console.error(`[shopify] metafield write failed order=${shopifyOrderId}: ${e?.message ?? e}`);
+  });
 
   // Task #73 — physical bundles also flow through Order Desk so the
   // label's vinyl ships from the same warehouse pool as direct orders.

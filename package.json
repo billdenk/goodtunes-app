@@ -54,6 +54,8 @@
     "@radix-ui/react-tooltip": "^1.2.0",
     "@sentry/node": "^10.55.0",
     "@shopify/cli": "^3.94.3",
+    "@shopify/ui-extensions": "^2025.7.3",
+    "@shopify/ui-extensions-react": "^2025.7.3",
     "@stripe/react-stripe-js": "^6.4.0",
     "@stripe/stripe-js": "^9.6.0",
     "@tanstack/react-query": "^5.60.5",
