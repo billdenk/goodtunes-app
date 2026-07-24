@@ -17090,8 +17090,50 @@ export async function registerRoutes(
         updates.artistShareSlug = result.slug;
       }
     }
+    // Task #2839 — auto-pull the Spotify portrait when a Spotify URL is
+    // FIRST saved to a Person who has no photo yet (e.g. the artist
+    // confirming their Spotify URL through verification). Decide before
+    // the update so "newly non-null" compares against the prior row.
+    // Automated path → respects photoLocked (unlike the admin's explicit
+    // refresh button).
+    let autoSpotifyPhoto = false;
+    if (updates.spotifyUrl && spotifyConfigured()) {
+      const prior = await storage.getPersonById(id);
+      autoSpotifyPhoto =
+        !!prior && !prior.spotifyUrl && !prior.photoUrl && !prior.photoLocked &&
+        updates.photoUrl === undefined;
+    }
     const p = await storage.updatePerson(id, updates);
     if (!p) return res.status(404).json({ message: "Person not found" });
+    if (autoSpotifyPhoto && p.spotifyUrl) {
+      const savedUrl = p.spotifyUrl;
+      // Fire-and-forget: never delay or fail the PUT response.
+      void (async () => {
+        try {
+          const { fetchSpotifyArtistPhotoByUrl } = await import("./lib/spotify");
+          const result = await fetchSpotifyArtistPhotoByUrl(savedUrl);
+          if (!result?.photoUrl) {
+            console.log(`[people] auto-spotify-photo: no portrait returned for person ${id}`);
+            return;
+          }
+          let finalUrl = result.photoUrl;
+          try {
+            const hosted = await rehostRemoteImage(result.photoUrl);
+            if (hosted) finalUrl = hosted;
+          } catch {
+            /* fall through with the Spotify URL if rehost fails */
+          }
+          // Re-check right before writing — an admin may have uploaded a
+          // photo or locked it while we were fetching.
+          const fresh = await storage.getPersonById(id);
+          if (!fresh || fresh.photoUrl || fresh.photoLocked) return;
+          await storage.updatePerson(id, { photoUrl: finalUrl } as any);
+          console.log(`[people] auto-spotify-photo: saved portrait for person ${id}`);
+        } catch (err: any) {
+          console.warn(`[people] auto-spotify-photo: failed for person ${id}:`, err?.message ?? err);
+        }
+      })();
+    }
     return res.json(p);
   });
 
@@ -26665,6 +26707,32 @@ export async function registerRoutes(
     // targetPersonId can name the invitee directly (a real Person row).
     const targetPersonIds = Array.from(new Set(rows.filter((r: any) => r.targetPersonId).map((r: any) => r.targetPersonId as string)));
 
+    // Task #2839 — invites sent WITHOUT a pre-flighted Person carry a null
+    // roleScopeId, and the accept handler passes it through as-is, so once
+    // joined these rows never resolved to a clickable entity. Fall back to
+    // the accepted admin user's own role_scope_id (looked up by email).
+    // users.role_scope_id lives outside the drizzle pgTable (see
+    // server/auth/roles.ts), so this is raw SQL by design.
+    const joinedNullScopeEmails = Array.from(new Set(
+      rows
+        .filter((r: any) => r.usedAt && !r.roleScopeId && r.email)
+        .map((r: any) => String(r.email).toLowerCase()),
+    ));
+    const fallbackScopeByEmail = new Map<string, string>();
+    if (joinedNullScopeEmails.length) {
+      const u = await db.execute<{ email: string; role_scope_id: string }>(sql`
+        SELECT lower(email) AS email, role_scope_id
+        FROM users
+        WHERE lower(email) = ANY(${pgArray(joinedNullScopeEmails, "varchar")})
+          AND is_admin = true
+          AND role_scope_id IS NOT NULL
+      `);
+      for (const row of (((u as any).rows ?? []) as Array<{ email: string; role_scope_id: string }>)) {
+        if (!fallbackScopeByEmail.has(row.email)) fallbackScopeByEmail.set(row.email, row.role_scope_id);
+      }
+    }
+    const fallbackPersonIds = Array.from(new Set(fallbackScopeByEmail.values()));
+
     // --- Referrer identity across every kind. ---
     const refByKind = (kind: string) =>
       Array.from(new Set(rows.filter((r: any) => r.referrerKind === kind && r.referrerScopeId).map((r: any) => r.referrerScopeId as string)));
@@ -26674,7 +26742,7 @@ export async function registerRoutes(
     const refMfgIds = refByKind("manufacturer");
     const refOrgIds = refByKind("non_profit");
 
-    const allPersonIds = Array.from(new Set([...scopeArtistIds, ...targetPersonIds, ...refPersonIds, ...refAmbassadorIds]));
+    const allPersonIds = Array.from(new Set([...scopeArtistIds, ...targetPersonIds, ...fallbackPersonIds, ...refPersonIds, ...refAmbassadorIds]));
     const allLabelIds = Array.from(new Set([...labelsNeeded, ...refLabelIds]));
     const allMfgIds = Array.from(new Set([...mfgNeeded, ...refMfgIds]));
     const allNpoIds = Array.from(new Set([...npoIdsScope, ...refOrgIds]));
@@ -26794,7 +26862,13 @@ export async function registerRoutes(
 
     res.json(rows.map((r: any) => {
       const sm = scopeMeta(r.role, r.roleScopeId);
-      const target = r.targetPersonId ? peopleIdx.get(r.targetPersonId) : null;
+      // Task #2839 — joined-but-null-scope rows resolve via the accepted
+      // user's own role_scope_id; treat that Person like a named target.
+      const fbId = !r.roleScopeId && r.usedAt
+        ? fallbackScopeByEmail.get(String(r.email ?? "").toLowerCase())
+        : undefined;
+      const fbPerson = fbId ? peopleIdx.get(fbId) : null;
+      const target = (r.targetPersonId ? peopleIdx.get(r.targetPersonId) : null) ?? fbPerson ?? null;
       const rm = refMeta(r.referrerKind ?? null, r.referrerScopeId ?? null);
       const status = statusOf(r);
       const acceptUrl =
