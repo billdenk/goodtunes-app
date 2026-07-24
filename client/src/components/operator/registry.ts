@@ -163,14 +163,15 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "inbound",   label: "Inbound",           icon: Truck,           roles: ["fulfillment"] },
 
   // Press shell — `/vendor` routed via ManufacturerScopeRouter for
-  // is_maker manufacturers (PressPortal.tsx). Catalog section (People,
-  // Albums) under Dashboard. The press's own "catalog" tab is the VINYL
-  // PRODUCT catalog (not releases) — relabeled "Vinyl catalog" and left
-  // flat alongside GoodDeed pricing + Settings so it doesn't clash with
-  // the section name. GoodDeed pricing renders INLINE (Task #2075).
+  // is_maker manufacturers (PressPortal.tsx). Clients + Projects render
+  // FLAT directly under Dashboard (no collapsible Catalog section —
+  // flattened per Bill, Task #2838). The press's own "catalog" tab is
+  // the VINYL PRODUCT catalog (not releases) — relabeled "Vinyl catalog"
+  // alongside GoodDeed pricing + Settings. GoodDeed pricing renders
+  // INLINE (Task #2075).
   { id: "dashboard", label: "Dashboard",        icon: LayoutDashboard,  roles: ["press"] },
-  { id: "people",    label: "Clients",          icon: User,   section: "catalog", roles: ["press"] },
-  { id: "albums",    label: "Projects",         icon: Disc3,  section: "catalog", roles: ["press"] },
+  { id: "people",    label: "Clients",          icon: User,             roles: ["press"] },
+  { id: "albums",    label: "Projects",         icon: Disc3,            roles: ["press"] },
   { id: "catalog",   label: "Vinyl catalog",    icon: BookOpen,         roles: ["press"] },
   { id: "pricing",   label: "GoodDeed pricing", icon: Receipt,          roles: ["press"] },
   { id: "settings",  label: "Settings",         icon: Cog,              roles: ["press"] },
