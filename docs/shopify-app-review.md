@@ -6,6 +6,18 @@ section below must be addressed before flipping distribution to Public.
 
 ---
 
+## Status board (source of truth — the task tracker auto-advances and is NOT authoritative)
+
+**Phase gate rule (Bill, 2026-07-24):** each phase stops for Bill's review before the
+next starts. The tracker chain may auto-advance; ignore it — this table governs.
+
+| Phase | Real status |
+|-------|-------------|
+| **1b — Checkout UI Extension** | **PARTIALLY DONE / BLOCKED.** `shopify app deploy` ran and created version `goodtunes-5` in the Partner Dashboard, but it is **deployed, not released** — release is blocked on Bill approving the extension's **network-access capability** in Partner Dashboard → App → API access. No on-store verification has happened: the prod store `goodtunes-test.myshopify.com` has a legacy (pre-rotation) token that 403s and needs an operator reconnect, and no dev-store install/checkout run has exercised the banner. Remaining to call 1b done: (1) Bill approves network access + releases `goodtunes-5`; (2) reconnect `goodtunes-test`; (3) add the block in the checkout editor (thank-you + order-status) and run the §4 Step 2 test order to see the banner + `/redeem/<code>`. |
+| **2 — Fee-ledger rename** | Started (renames only, no logic — content pre-approved by Bill). Stops for review at completion before any Phase 3 work. |
+
+---
+
 ## 1 — GDPR compliance webhooks (shipped)
 
 Three mandatory endpoints are live in `server/shopify.ts`.  Configure these URLs
