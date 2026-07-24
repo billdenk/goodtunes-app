@@ -10105,3 +10105,35 @@ add_shopify_extension_columns() {
 }
 add_shopify_extension_columns dev  "${DATABASE_URL:-}"
 add_shopify_extension_columns prod "${PROD_DATABASE_URL:-}"
+
+# ─── Appreview demo account — mint grant numbers (GR serials) ─────────────
+# Bill wants the App Store reviewer to see a numbered GoodDeed certificate.
+# Stamp a grant_number on the demo account's comped copies where none exists
+# yet (idempotent: only NULL rows, per-album MAX+1 sequence). Dev + prod.
+mint_appreview_grant_numbers() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: appreview-grant-numbers skipped on $label (no DATABASE_URL)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 -q -c \
+    "UPDATE user_albums ua
+     SET grant_number = sub.next_gr
+     FROM (
+       SELECT ua2.id,
+              COALESCE((SELECT MAX(x.grant_number) FROM user_albums x WHERE x.album_id = ua2.album_id), 0)
+                + ROW_NUMBER() OVER (PARTITION BY ua2.album_id ORDER BY ua2.id) AS next_gr
+       FROM user_albums ua2
+       WHERE ua2.user_id = 'cust-appreview-demo'
+         AND ua2.grant_number IS NULL
+         AND ua2.certificate_number IS NULL
+     ) sub
+     WHERE ua.id = sub.id;"; then
+    echo "post-merge: appreview-grant-numbers ok on $label"
+  else
+    echo "post-merge: ERROR — appreview-grant-numbers FAILED on $label"
+    return 1
+  fi
+}
+mint_appreview_grant_numbers dev  "${DATABASE_URL:-}"
+mint_appreview_grant_numbers prod "${PROD_DATABASE_URL:-}"
