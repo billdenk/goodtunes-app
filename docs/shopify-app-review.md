@@ -71,12 +71,12 @@ above: they predate install/mapping, so they never minted codes. Spec (Bill, 202
       `shopify_redemption_codes.redeemed_at/redeemed_by_user_id` if unredeemed.
       (The webhook-created stub account under the buyer email can be left; it holds no
       password unless the fan set one.)
-3. **`external_paid` cert-PDF gap (Shopify+ / Niina).** The fan cert download
-   (`GET /api/orders/:orderId/cert/pdf`) gates on `FINALIZED_CERT_ORDER_STATUSES`
-   (`paid/complete/shipped/n/nd`) — it does **not** include `external_paid`, the status
-   Shopify+ unlock orders get. Niina's fans would 404 on the PDF download while normal
-   Shopify-store fans work. Add `external_paid` to the set (audit the other two uses of
-   the set in `server/certificates.ts` at the same time).
+3. **`external_paid` cert-PDF gap (Shopify+ / Niina).** ✅ **FIXED 2026-07-24** (approved
+   as a gate exception by Bill). `external_paid` added to `FINALIZED_CERT_ORDER_STATUSES`
+   in `server/certificates.ts`. All three uses of the set audited — cert PDF download,
+   QR provenance (`/g/:shortId`) resolution, and the digital name-confirm endpoint — the
+   one shared-set change correctly enables all three for Shopify+ unlock orders. Cert
+   test suites re-run green (33/33).
 4. **Checkout-editor block placement is per-store manual setup.** Both extension targets
    are `block.render` (thank-you + customer-account order status), so each store's admin
    must place the block once: Settings → Checkout → **Customize** (thank-you page) and

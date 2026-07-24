@@ -44,7 +44,17 @@ const LETTER_COUNTRIES = new Set(["US", "USA", "CA", "CAN", "MX", "MEX"]);
 // Order statuses that count as "finalized" for cert download. "complete"
 // is the legacy gogoods import status; "paid"/"shipped"/"n"/"nd" are the
 // live paid-ish states (mirrors the reports/storage paid-ish filter).
-const FINALIZED_CERT_ORDER_STATUSES = new Set(["paid", "complete", "shipped", "n", "nd"]);
+// "external_paid" is the Shopify+ unlock status (Task #2428) — the fan paid
+// on the artist's own Shopify store, so their cert/provenance/name-confirm
+// surfaces must work identically (gate exception approved by Bill 2026-07-24).
+const FINALIZED_CERT_ORDER_STATUSES = new Set([
+  "paid",
+  "complete",
+  "shipped",
+  "n",
+  "nd",
+  "external_paid",
+]);
 const SIGNATURE_ASSET = path.resolve(
   process.cwd(),
   "attached_assets",
