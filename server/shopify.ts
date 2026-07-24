@@ -651,6 +651,85 @@ async function fetchOrderTransactions(store: ShopifyStore, shopifyOrderId: strin
   return (data.order.transactions ?? []).map(gqlTransactionToRest);
 }
 
+// ─── Inventory/location GraphQL plumbing (Phase 5 migration) ───────────
+// Replaces `GET locations.json` and `POST inventory_levels/set.json`.
+// Same bridging approach as Phases 3-4: callers keep numeric REST ids
+// (inventory_item_id off productSet's legacyResourceId) and these
+// helpers translate to gids at the boundary.
+const locationGid = (id: string | number) => `gid://shopify/Location/${id}`;
+const inventoryItemGid = (id: string | number) => `gid://shopify/InventoryItem/${id}`;
+
+const LOCATIONS_QUERY = /* GraphQL */ `
+  query locations {
+    locations(first: 10) {
+      nodes { id name }
+    }
+  }
+`;
+
+// REST-shaped location list ({ id: numeric, name }). The push flow only
+// uses the first location, mirroring the old `locations[0].id` read.
+async function fetchLocations(store: ShopifyStore): Promise<Array<{ id: number; name: string }>> {
+  const data = await shopifyGraphql<{
+    locations: { nodes: Array<{ id: string; name: string }> } | null;
+  }>(store, LOCATIONS_QUERY);
+  return (data.locations?.nodes ?? []).map((n) => ({ id: Number(gidTail(n.id)), name: n.name }));
+}
+
+// `inventorySetQuantities` is the current recommended absolute-set
+// mutation (the REST set.json semantic — "make available exactly N"),
+// per the Shopify Admin API reference for our pinned 2026-01 version.
+// `inventoryAdjustQuantities` is the delta form; wrong fit here because
+// the push flow writes an operator-entered absolute count.
+// ignoreCompareQuantity opts out of the compare-and-set check, matching
+// REST's last-write-wins behavior. (Heads-up for a future version bump:
+// 2026-04 drops ignoreCompareQuantity in favor of a per-item
+// changeFromQuantity and requires an @idempotent directive.)
+const INVENTORY_SET_MUTATION = /* GraphQL */ `
+  mutation inventorySetQuantities($input: InventorySetQuantitiesInput!) {
+    inventorySetQuantities(input: $input) {
+      inventoryAdjustmentGroup { id }
+      userErrors { field message }
+    }
+  }
+`;
+
+// Sets the absolute available quantity for one inventory item at one
+// location. Throws on userErrors so callers can log-and-continue
+// (inventory writes in the push flow are best-effort).
+async function setInventoryAvailable(
+  store: ShopifyStore,
+  inventoryItemId: string | number,
+  locationId: string | number,
+  available: number,
+): Promise<void> {
+  const data = await shopifyGraphql<{
+    inventorySetQuantities: {
+      inventoryAdjustmentGroup: { id: string } | null;
+      userErrors: Array<{ field: string[] | null; message: string }>;
+    } | null;
+  }>(store, INVENTORY_SET_MUTATION, {
+    input: {
+      name: "available",
+      reason: "correction",
+      ignoreCompareQuantity: true,
+      quantities: [
+        {
+          inventoryItemId: inventoryItemGid(inventoryItemId),
+          locationId: locationGid(locationId),
+          quantity: available,
+        },
+      ],
+    },
+  });
+  const errs = data.inventorySetQuantities?.userErrors ?? [];
+  if (errs.length > 0) {
+    throw new Error(
+      `inventorySetQuantities item=${inventoryItemId}: ${errs.map((e) => e.message).join("; ")}`,
+    );
+  }
+}
+
 // ─── Write redemption metafield to Shopify order ──────────────────────
 // Called fire-and-forget after the redemption code is minted so the
 // checkout UI extension (purchase.thank-you + customer-account order
@@ -3624,29 +3703,19 @@ export function registerShopifyRoutes(app: Express) {
 
     // Apply inventory levels for tracked variants. productSet sets
     // `tracked` but not the actual `available` count — that's a separate
-    // call keyed on (inventory_item_id, location_id). Inventory endpoints
-    // are Phase 6, so this stays REST; the inventory item ids now come
-    // straight off the productSet response (no product re-read needed).
-    // Best-effort: log and continue on failure so the label still has a
-    // usable draft.
+    // mutation keyed on (inventoryItemId, locationId). Phase 5: GraphQL
+    // (fetchLocations + inventorySetQuantities); the inventory item ids
+    // come straight off the productSet response (no product re-read
+    // needed). Best-effort: log and continue on failure so the label
+    // still has a usable draft.
     if ((editionInventory != null || certInventory != null) && productId) {
       try {
-        const locRes = await shopifyFetch(store, "locations.json");
-        if (locRes.ok) {
-          const locJson: any = await locRes.json();
-          const locId = locJson?.locations?.[0]?.id;
-          if (locId && editionInventory != null && editionInventoryItemId) {
-            await shopifyFetch(store, "inventory_levels/set.json", {
-              method: "POST",
-              body: JSON.stringify({ location_id: locId, inventory_item_id: Number(editionInventoryItemId), available: editionInventory }),
-            });
-          }
-          if (locId && certInventory != null && certInventoryItemId) {
-            await shopifyFetch(store, "inventory_levels/set.json", {
-              method: "POST",
-              body: JSON.stringify({ location_id: locId, inventory_item_id: Number(certInventoryItemId), available: certInventory }),
-            });
-          }
+        const locId = (await fetchLocations(store))[0]?.id;
+        if (locId && editionInventory != null && editionInventoryItemId) {
+          await setInventoryAvailable(store, editionInventoryItemId, locId, editionInventory);
+        }
+        if (locId && certInventory != null && certInventoryItemId) {
+          await setInventoryAvailable(store, certInventoryItemId, locId, certInventory);
         }
       } catch (e: any) {
         console.error(`[shopify-push] inventory set failed album=${albumId}`, e?.message);
@@ -3968,4 +4037,9 @@ export const __internal = {
   updateOrderCustomAttributes,
   gqlTransactionToRest,
   fetchOrderTransactions,
+  // Phase 5 GraphQL plumbing (locations, inventory).
+  locationGid,
+  inventoryItemGid,
+  fetchLocations,
+  setInventoryAvailable,
 };
