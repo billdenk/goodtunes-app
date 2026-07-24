@@ -176,6 +176,15 @@ async function main() {
       `);
       fixed++;
     } catch (err: any) {
+      // A session/PI that no longer exists in Stripe (e.g. synthetic test
+      // fixtures like cs_test_<uuid> seeded by hermetic tests) has no address
+      // to recover — that's a permanent "nothing to backfill", not a partial
+      // run. Only real connectivity/DB errors should block the marker.
+      if (err?.code === "resource_missing" || /No such (checkout\.session|payment_intent)/i.test(String(err?.message ?? ""))) {
+        console.warn(`order ${order.id}: Stripe reference missing (${err?.message ?? err}) — treating as no-address`);
+        stillMissing++;
+        continue;
+      }
       errored++;
       console.error(`order ${order.id}: ${err?.message ?? err}`);
     }
