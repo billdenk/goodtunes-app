@@ -67,10 +67,10 @@ const SHOPIFY_TOKEN_KEY = createHash("sha256")
   .digest();
 // The Shopify Admin API version pinned here is bumped quarterly. Pinned
 // rather than "unstable" so a Shopify rev doesn't silently break us.
-// REST stays on 2024-10 for the endpoints not yet migrated (orders,
-// refunds, webhooks, inventory — Phases 4-6); GraphQL calls pin to a
-// current stable version since that's where new work lands (Phase 3+).
-const SHOPIFY_API_VERSION = "2024-10";
+// The REST→GraphQL migration is complete (Phases 3-6): every Admin API
+// call in this file goes through shopifyGraphql. Heads-up for a version
+// bump: 2026-04 changes inventorySetQuantities' input shape — re-check
+// every mutation's input against the target version's docs first.
 const SHOPIFY_GRAPHQL_API_VERSION = "2026-01";
 
 export function shopifyConfigured(): boolean {
@@ -191,11 +191,6 @@ async function upsertStore(input: {
   return created;
 }
 
-// ─── Shopify Admin REST helper ─────────────────────────────────────────
-// Note: don't annotate the return as `Promise<Response>` — `Response` in
-// this file resolves to express's response type because of the imports
-// above, which would mask `.ok` / `.json()`. Let TS infer the global
-// fetch `Response` from the body.
 // ─── Expiring offline access tokens (Shopify Dec 2025 cutover) ──────────
 // Shopify stopped accepting the classic non-expiring offline tokens our
 // install used to mint. We now request `expiring=1` on the OAuth code
@@ -297,40 +292,12 @@ async function getFreshAccessToken(storeId: string): Promise<string> {
   return refreshStoreToken(store);
 }
 
-// ─── Shopify Admin REST helper ─────────────────────────────────────────
-async function shopifyFetch(store: ShopifyStore, path: string, init: RequestInit = {}) {
-  const url = `https://${store.shopDomain}/admin/api/${SHOPIFY_API_VERSION}/${path.replace(/^\//, "")}`;
-  const doFetch = (token: string) =>
-    fetch(url, {
-      ...init,
-      headers: {
-        "X-Shopify-Access-Token": token,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        ...(init.headers ?? {}),
-      },
-    });
-
-  let r = await doFetch(await getFreshAccessToken(store.id));
-  // Reactive rotation: a 401/403 (token expired out from under us, rotated by
-  // another instance, or Shopify's non-expiring cutover) → force one refresh
-  // and retry. Never throws for token reasons, so best-effort callers keep
-  // their existing `r.ok` contract; a store with no refresh token just gets
-  // the 401/403 back and the route turns it into "reconnect required".
-  if (r.status === 401 || r.status === 403) {
-    const latest = await getStoreById(store.id);
-    if (latest?.refreshToken) {
-      const token = await refreshStoreToken(latest);
-      if (token) r = await doFetch(token);
-    }
-  }
-  return r;
-}
-
 // ─── Shopify Admin GraphQL helper ─────────────────────────────────────
-// Mirrors shopifyFetch but posts to the GraphQL endpoint. Uses the same
-// token-refresh + reactive-rotation logic so it's safe to call from any
-// webhook handler. Returns the parsed `data` field; throws on HTTP errors
+// The single Admin API entry point (the REST shopifyFetch helper was
+// removed in Phase 6 once the last REST call migrated). Reactive
+// rotation: a 401/403 (token expired out from under us, rotated by
+// another instance) forces one refresh and retries, so it's safe to
+// call from any webhook handler. Returns the parsed `data` field; throws on HTTP errors
 // or GraphQL-level `errors` arrays.
 async function shopifyGraphql<T = Record<string, unknown>>(
   store: ShopifyStore,
@@ -483,9 +450,11 @@ const gidTail = (gid: string) => gid.split("/").pop() ?? gid;
 // REST topic strings ↔ GraphQL WebhookSubscriptionTopic enums. The DB,
 // the webhook handler's X-Shopify-Topic header, and every caller in this
 // file all speak the REST form, so the enum never leaks past here.
+// (`orders/refunded` was dropped: the 2026-01 enum removed
+// ORDERS_REFUNDED, so registering it always failed — refunds are covered
+// by REFUNDS_CREATE alone.)
 const WEBHOOK_TOPIC_TO_ENUM: Record<string, string> = {
   "orders/paid": "ORDERS_PAID",
-  "orders/refunded": "ORDERS_REFUNDED",
   "refunds/create": "REFUNDS_CREATE",
   "app/uninstalled": "APP_UNINSTALLED",
 };
@@ -628,8 +597,8 @@ type GqlOrderTransaction = {
 };
 
 // REST-shaped transaction (numeric id, lowercase kind/status, snake_case
-// parent_id) — refundShopifyOrder still builds its REST refund payload
-// (Phase 6) against this shape.
+// parent_id) — refundShopifyOrder picks its parent sale/capture from this
+// shape and re-wraps the id as a gid at the refundCreate boundary.
 function gqlTransactionToRest(t: GqlOrderTransaction) {
   return {
     id: Number(gidTail(t.id)),
@@ -830,83 +799,16 @@ export async function sweepRedemptionMetafields(): Promise<{ retried: number; fa
   return { retried, failed };
 }
 
-// ─── One-time ScriptTag cleanup (Task #2842 / Phase 1b) ────────────────
-// The order-status ScriptTag was replaced by the Checkout UI Extension
-// (extensions/goodtunes-redemption); install-time registration is already
-// gone. This removes the tags legacy installs left behind. Called from
-// scripts/cleanup-script-tags.ts (post-merge, marker-guarded). Uses
-// shopifyFetch so encrypted-at-rest + expiring-offline-token refresh both
-// work — a raw DB access_token is ciphertext and would always 401.
-export async function cleanupGoodTunesScriptTags(): Promise<{ deleted: number; failures: string[] }> {
-  const isGoodTunesSrc = (src: string): boolean => {
-    try {
-      const host = new URL(src).hostname.toLowerCase();
-      return host === "goodtunes.music" || host.endsWith(".goodtunes.music");
-    } catch {
-      return false;
-    }
-  };
-
-  const stores = await db.select().from(shopifyStores).where(isNull(shopifyStores.uninstalledAt));
-  let deleted = 0;
-  const failures: string[] = [];
-  for (const store of stores) {
-    if (!store.accessToken) continue;
-    try {
-      // Page through the full list via since_id so stores with >250 tags
-      // can't hide a GoodTunes tag past the first page.
-      const all: Array<{ id: number; src: string }> = [];
-      let sinceId = 0;
-      let listFailed = false;
-      for (;;) {
-        const listRes = await shopifyFetch(store, `script_tags.json?limit=250&since_id=${sinceId}`);
-        if (listRes.status === 404) {
-          // Dead/dev-clone store or a token without the script-tag surface —
-          // it cannot be carrying our tags via this token.
-          console.log(`[script-tag-cleanup] SKIP ${store.shopDomain}: script_tags 404`);
-          listFailed = true;
-          break;
-        }
-        if (listRes.status === 401 || listRes.status === 403) {
-          failures.push(`${store.shopDomain}: ${listRes.status} — reconnect required; remove GoodTunes ScriptTags from the store admin`);
-          listFailed = true;
-          break;
-        }
-        if (!listRes.ok) {
-          failures.push(`${store.shopDomain}: list returned ${listRes.status}`);
-          listFailed = true;
-          break;
-        }
-        const body = (await listRes.json()) as { script_tags?: Array<{ id: number; src: string }> };
-        const page = body.script_tags ?? [];
-        all.push(...page);
-        if (page.length < 250) break;
-        sinceId = Math.max(...page.map((t) => t.id));
-      }
-      if (listFailed) continue;
-      const ours = all.filter((t) => isGoodTunesSrc(t.src));
-      console.log(`[script-tag-cleanup] ${store.shopDomain}: ${all.length} tag(s), ${ours.length} GoodTunes`);
-      for (const tag of ours) {
-        const delRes = await shopifyFetch(store, `script_tags/${tag.id}.json`, { method: "DELETE" });
-        if (delRes.ok) {
-          deleted++;
-          console.log(`[script-tag-cleanup]   deleted #${tag.id} (${tag.src})`);
-        } else {
-          failures.push(`${store.shopDomain}: delete #${tag.id} returned ${delRes.status}`);
-        }
-      }
-    } catch (e: any) {
-      failures.push(`${store.shopDomain}: ${e?.message ?? e}`);
-    }
-  }
-  return { deleted, failures };
-}
-
-// ─── Post-install setup: register webhooks + script tag ───────────────
-// All three pieces are idempotent on Shopify's side via `address` / `src`
-// uniqueness — calling them twice on a re-install is fine.
+// ─── Post-install setup: register webhooks ────────────────────────────
+// Idempotent on Shopify's side via `address` uniqueness — calling twice
+// on a re-install is fine. Note `orders/refunded` is deliberately NOT
+// registered: the topic was removed from the GraphQL
+// WebhookSubscriptionTopic enum (2026-01 has only REFUNDS_CREATE), so
+// registering it 422'd as a dead attempt. `refunds/create` carries the
+// same refund payload and handleShopifyRefund treats both identically,
+// so refund coverage is unchanged.
 async function registerWebhooks(store: ShopifyStore, appUrl: string): Promise<void> {
-  const topics = ["orders/paid", "orders/refunded", "refunds/create", "app/uninstalled"];
+  const topics = ["orders/paid", "refunds/create", "app/uninstalled"];
   for (const topic of topics) {
     try {
       await createWebhookSubscription(store, topic, `${appUrl}/api/webhooks/shopify/orders`);
@@ -1469,7 +1371,7 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
       })
       .onConflictDoNothing({ target: platformWholesaleLedger.orderId });
   } catch (e: any) {
-    console.error(`[shopify] digital fee accrual failed for ${order.id}: ${e?.message ?? e}`);
+    console.error(`[shopify] wholesale accrual failed for ${order.id}: ${e?.message ?? e}`);
   }
 
   // Task #246 — Mint a cert_reservations row if the order carries the
@@ -1490,7 +1392,11 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
           orderId: order.id,
           shopifyOrderId,
           shopifyLineItemId: matchedLine.id != null ? String(matchedLine.id) : null,
-          goodDeedNumber: variantKind === "printed" ? goodDeedNumber : null,
+          // `order.goodDeedNumber` (not the bare closure variable — that
+          // was a latent ReferenceError the surrounding catch swallowed,
+          // so printed reservations silently never minted; found by the
+          // Phase 6 tsc audit).
+          goodDeedNumber: variantKind === "printed" ? order.goodDeedNumber : null,
           variantKind,
           status: variantKind === "printed" ? "reserved" : "digital_only",
         })
@@ -1584,14 +1490,73 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   return { orderId: order.id, code };
 }
 
+// ─── Refund GraphQL plumbing (Phase 6 migration) ───────────────────────
+// Replaces `POST orders/:id/refunds/calculate.json` (preview) and
+// `POST orders/:id/refunds.json` (issue). Same bridging approach as
+// Phases 3-5: callers keep numeric REST ids; gids are built at the
+// boundary.
+const orderTransactionGid = (id: string | number) => `gid://shopify/OrderTransaction/${id}`;
+
+// GraphQL's calculate equivalent is the `order.suggestedRefund` field
+// (there is no `refundCalculate` mutation on the 2026-01 Admin API).
+// With no args it suggests a full refund; we only read the refundable
+// ceiling to sanity-check the requested amount before issuing.
+const SUGGESTED_REFUND_QUERY = /* GraphQL */ `
+  query suggestedRefund($id: ID!) {
+    order(id: $id) {
+      suggestedRefund {
+        amountSet { shopMoney { amount } }
+        maximumRefundableSet { shopMoney { amount } }
+      }
+    }
+  }
+`;
+
+// Preview what Shopify considers refundable on the order. Mirrors the old
+// REST calculate step's role in this flow: advisory only. Returns null
+// (never throws) when the preview is unavailable — refundCreate itself is
+// the enforcement point and fails loudly on an over-refund.
+async function fetchSuggestedRefund(
+  store: ShopifyStore,
+  shopifyOrderId: string,
+): Promise<{ amount: string | null; maximumRefundable: string | null } | null> {
+  try {
+    const data = await shopifyGraphql<{
+      order: {
+        suggestedRefund: {
+          amountSet: { shopMoney: { amount: string } | null } | null;
+          maximumRefundableSet: { shopMoney: { amount: string } | null } | null;
+        } | null;
+      } | null;
+    }>(store, SUGGESTED_REFUND_QUERY, { id: orderGid(shopifyOrderId) });
+    if (!data.order?.suggestedRefund) return null;
+    return {
+      amount: data.order.suggestedRefund.amountSet?.shopMoney?.amount ?? null,
+      maximumRefundable: data.order.suggestedRefund.maximumRefundableSet?.shopMoney?.amount ?? null,
+    };
+  } catch (e: any) {
+    console.warn(`[shopify] suggestedRefund preview failed for order ${shopifyOrderId}: ${e?.message ?? e}`);
+    return null;
+  }
+}
+
+const REFUND_CREATE_MUTATION = /* GraphQL */ `
+  mutation refundCreate($input: RefundInput!) {
+    refundCreate(input: $input) {
+      refund { id }
+      userErrors { field message }
+    }
+  }
+`;
+
 // Task #236 — operator-initiated refund against a Shopify-origin order.
-// Calls Shopify Admin REST `refunds/calculate.json` to build a valid
-// refund payload for the requested cents (the calc endpoint figures out
-// which transactions to refund against — gateway, gift card, etc.),
-// then POSTs `refunds.json` to actually issue it. Shopify in turn fires
-// `refunds/create` + `orders/refunded` webhooks back at us, but we don't
-// wait — `handleShopifyRefund` is idempotent so the webhook is a no-op
-// when it lands. Returns the Shopify refund id for logging.
+// Queries `order.suggestedRefund` (the GraphQL successor to REST
+// `refunds/calculate.json`) as an advisory preview, then issues the
+// refund via `mutation refundCreate` against the most recent successful
+// sale/capture transaction. Shopify in turn fires the `refunds/create`
+// webhook back at us, but we don't wait — `handleShopifyRefund` is
+// idempotent so the webhook is a no-op when it lands. Returns the
+// numeric Shopify refund id for logging.
 export async function refundShopifyOrder(opts: {
   shopifyStoreId: string;
   shopifyOrderId: string;
@@ -1603,56 +1568,78 @@ export async function refundShopifyOrder(opts: {
   if (store.uninstalledAt) throw new Error("Shopify store has been disconnected");
   const amount = (opts.amountCents / 100).toFixed(2);
 
-  // Step 1: ask Shopify what transactions to refund against.
-  const calcRes = await shopifyFetch(store, `orders/${opts.shopifyOrderId}/refunds/calculate.json`, {
-    method: "POST",
-    body: JSON.stringify({
-      refund: {
-        currency: undefined, // let Shopify default to the order currency
-        shipping: { full_refund: false },
-        refund_line_items: [],
-        // `transactions: []` here would calc a zero-amount refund; instead
-        // we ask Shopify to suggest transactions covering the dollar amount.
-        // The documented shape uses `transactions` with `kind: "suggested_refund"`
-        // returned from this same endpoint — but the simpler path is to fetch
-        // the parent transactions list and refund against the most recent sale.
-      },
-    }),
-  });
-  // Fetch transactions (Admin GraphQL, Phase 4) so we can build a refund
-  // payload covering `amount`. fetchOrderTransactions returns the legacy
-  // REST shape (numeric ids, lowercase kind/status) the refund POST needs.
+  // Step 1: preview (advisory, best-effort — matches the old flow where
+  // the REST calculate response wasn't consulted for the payload either;
+  // refundCreate's userErrors are the real guard against over-refunds).
+  const preview = await fetchSuggestedRefund(store, opts.shopifyOrderId);
+  if (preview?.maximumRefundable != null) {
+    const maxCents = Math.round(Number.parseFloat(preview.maximumRefundable) * 100);
+    if (Number.isFinite(maxCents) && opts.amountCents > maxCents) {
+      console.warn(
+        `[shopify] refund ${amount} exceeds suggested maximum ${preview.maximumRefundable} on order ${opts.shopifyOrderId} — proceeding; Shopify will reject if truly over`,
+      );
+    }
+  }
+
+  // Step 2: pick the parent transaction. fetchOrderTransactions (Phase 4)
+  // returns the legacy REST shape (numeric ids, lowercase kind/status).
   const transactions = await fetchOrderTransactions(store, opts.shopifyOrderId);
   const sale = transactions.find((t) => (t.kind === "sale" || t.kind === "capture") && t.status === "success");
   if (!sale) throw new Error("No successful sale transaction found on Shopify order");
-  // Silence unused-var lint on calcRes — we may want to surface its
-  // estimate to operators later; right now we just need it to have run.
-  void calcRes;
 
-  const refundBody = {
-    refund: {
+  // Step 3: issue the refund.
+  return issueRefundCreate(store, {
+    shopifyOrderId: opts.shopifyOrderId,
+    amount,
+    note: opts.reason ?? "GoodTunes admin refund",
+    parentTransactionId: sale.id,
+    gateway: sale.gateway,
+  });
+}
+
+// The refundCreate mutation call itself, split out so hermetic tests can
+// exercise the exact input shape + userErrors handling without a DB
+// store row. OrderTransactionInput requires orderId + gateway alongside
+// the parent transaction; kind REFUND writes money back to the fan's
+// original payment method.
+async function issueRefundCreate(
+  store: ShopifyStore,
+  args: {
+    shopifyOrderId: string;
+    amount: string;
+    note: string;
+    parentTransactionId: string | number;
+    gateway: string;
+  },
+): Promise<{ refundId: string }> {
+  const data = await shopifyGraphql<{
+    refundCreate: {
+      refund: { id: string } | null;
+      userErrors: Array<{ field: string[] | null; message: string }>;
+    } | null;
+  }>(store, REFUND_CREATE_MUTATION, {
+    input: {
+      orderId: orderGid(args.shopifyOrderId),
       notify: true,
-      note: opts.reason ?? "GoodTunes admin refund",
+      note: args.note,
       transactions: [
         {
-          parent_id: sale.id,
-          amount,
-          kind: "refund",
-          gateway: sale.gateway,
+          orderId: orderGid(args.shopifyOrderId),
+          parentId: orderTransactionGid(args.parentTransactionId),
+          amount: args.amount,
+          kind: "REFUND",
+          gateway: args.gateway,
         },
       ],
     },
-  };
-  const res = await shopifyFetch(store, `orders/${opts.shopifyOrderId}/refunds.json`, {
-    method: "POST",
-    body: JSON.stringify(refundBody),
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Shopify refund failed: ${res.status} ${body.slice(0, 300)}`);
+  const errs = data.refundCreate?.userErrors ?? [];
+  if (errs.length > 0) {
+    throw new Error(`Shopify refund failed: ${errs.map((e) => e.message).join("; ")}`);
   }
-  const json = (await res.json()) as { refund?: { id: number } };
-  return { refundId: String(json.refund?.id ?? "") };
+  const refundGid = data.refundCreate?.refund?.id;
+  if (!refundGid) throw new Error("Shopify refund failed: no refund id returned");
+  return { refundId: gidTail(refundGid) };
 }
 
 async function handleShopifyRefund(payload: { order_id?: number; id?: number }): Promise<void> {
@@ -1675,8 +1662,8 @@ async function handleShopifyRefund(payload: { order_id?: number; id?: number }):
       console.error(`[shopify] press-pool reversal failed for ${order.id}`, e?.message),
     );
   }
-  // Reverse the digital fee accrual for this order. Stamps reversedAt so the
-  // operator's fee-ledger view correctly shows the net still-owed amount.
+  // Reverse the wholesale accrual for this order. Stamps reversedAt so the
+  // operator's ledger view correctly shows the net still-owed amount.
   await db
     .update(platformWholesaleLedger)
     .set({ reversedAt: new Date() })
@@ -1885,7 +1872,7 @@ export function registerShopifyRoutes(app: Express) {
     // opts into Shopify's expiring offline tokens (required as of the Dec 2025
     // cutover — non-expiring offline tokens are rejected by the Admin API).
     // The response carries a 1-hour access token plus a ~90-day refresh token
-    // we persist and rotate in shopifyFetch.
+    // we persist and rotate in getFreshAccessToken / shopifyGraphql.
     const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -1905,15 +1892,23 @@ export function registerShopifyRoutes(app: Express) {
     const tokenIssuedAtMs = Date.now();
 
     // Fetch the store's display name so admin lists look like the
-    // label's brand, not the myshopify subdomain.
+    // label's brand, not the myshopify subdomain. Raw GraphQL fetch (not
+    // shopifyGraphql) because the store row isn't persisted yet — we hold
+    // the plaintext token from the exchange above.
     let storeName: string | null = null;
     try {
-      const shopRes = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/shop.json`, {
-        headers: { "X-Shopify-Access-Token": tokenJson.access_token, Accept: "application/json" },
+      const shopRes = await fetch(`https://${shop}/admin/api/${SHOPIFY_GRAPHQL_API_VERSION}/graphql.json`, {
+        method: "POST",
+        headers: {
+          "X-Shopify-Access-Token": tokenJson.access_token,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ query: `{ shop { name } }` }),
       });
       if (shopRes.ok) {
         const j: any = await shopRes.json();
-        storeName = j?.shop?.name ?? null;
+        storeName = j?.data?.shop?.name ?? null;
       }
     } catch {
       // Non-fatal — admin can rename the store later.
@@ -2900,7 +2895,7 @@ export function registerShopifyRoutes(app: Express) {
     }
     const appUrl = appOrigin(req);
     const webhookErrors: string[] = [];
-    const topics = ["orders/paid", "orders/refunded", "refunds/create", "app/uninstalled"];
+    const topics = ["orders/paid", "refunds/create", "app/uninstalled"];
     const webhookResults: Record<string, string> = {};
     for (const topic of topics) {
       try {
@@ -2949,7 +2944,8 @@ export function registerShopifyRoutes(app: Express) {
       return res.json({ dbRow, live: null, note: "Store is uninstalled — Shopify API not queried" });
     }
 
-    const EXPECTED_TOPICS = ["orders/paid", "orders/refunded", "refunds/create", "app/uninstalled"];
+    // `orders/refunded` intentionally absent — see registerWebhooks.
+    const EXPECTED_TOPICS = ["orders/paid", "refunds/create", "app/uninstalled"];
     let webhooks: Array<{ id: string; topic: string; address: string | null }> = [];
     let liveError: string | null = null;
 
@@ -4042,4 +4038,9 @@ export const __internal = {
   inventoryItemGid,
   fetchLocations,
   setInventoryAvailable,
+  // Phase 6 GraphQL plumbing (refunds).
+  orderTransactionGid,
+  fetchSuggestedRefund,
+  issueRefundCreate,
+  webhookTopicToEnum: WEBHOOK_TOPIC_TO_ENUM,
 };

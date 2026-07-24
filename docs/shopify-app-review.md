@@ -23,8 +23,8 @@ original per-phase gate was overrun when Phase 4 auto-ran and merged without rev
 | **2 — Fee-ledger rename** | Merged (renames only, content pre-approved by Bill). |
 | **3 — GraphQL migration (products/mappings)** | Merged (#2845, pre-gate-revision). |
 | **4 — GraphQL migration (webhooks/orders/transactions)** | Merged (#2846). Auto-ran without per-phase review (gate overrun — acknowledged to Bill). 1094/1094 tests, hermetic-only at merge; the 2026-07-24 live E2E exercised its webhook + order paths against the real store successfully. |
-| **5 — GraphQL migration (inventory/locations)** | #2847 running/merging under the end-of-chain gate. |
-| **6 — Refunds GraphQL + remaining** | Runs after Phase 5, then triggers the end-of-chain gate above. **Scope note:** `orders/refunded` webhook registration 422s on the 2026-01 API — investigate/drop; `refunds/create` is registered and the handler treats both identically, so refund coverage exists, but Phase 6 must confirm and clean up the dead registration attempt. |
+| **5 — GraphQL migration (inventory/locations)** | Merged (#2847) under the end-of-chain gate. |
+| **6 — Refunds GraphQL + remaining** | **DONE (#2848) — awaiting Bill's end-of-chain review.** Refund calculate/create migrated to `order.suggestedRefund` (advisory preview, never blocks) + `refundCreate`. `shopifyFetch` and the last REST calls removed; script-tag cleanup deleted (script tags never used on 2026-01). `orders/refunded` **confirmed absent from the 2026-01 `WebhookSubscriptionTopic` enum** — the dead registration attempt is dropped everywhere (map, register, reinstall-hooks, inspect); the webhook handler still accepts both `orders/refunded` and `refunds/create` payloads for safety. Expected webhook count is now **3**. Hermetic Phase 6 tests in `server/shopifyGraphqlPhase6.test.ts`. |
 
 ### Test hygiene rule (Bill, 2026-07-24)
 **Never map a test to a real artist's album.** Real releases (especially Nightbirde's
@@ -189,7 +189,7 @@ to Public. Copy-paste the answers below.
 
 | Scope | Justification |
 |-------|---------------|
-| `read_orders` | Required to access the orders/paid and orders/refunded webhook payloads (customer identity, line items, totals, status) so GoodTunes can mint and revoke digital album unlocks. |
+| `read_orders` | Required to access the orders/paid and refunds/create webhook payloads (customer identity, line items, totals, status) so GoodTunes can mint and revoke digital album unlocks. |
 | `write_orders` | Required to stamp a `note_attribute` (the redemption URL) onto the Shopify order record so it appears in the merchant's order confirmation email Liquid template. |
 | `read_products` | Required to enumerate the merchant's catalog in the admin product-mapping UI so the operator can link a Shopify product/variant to a GoodTunes album without typing product IDs by hand. |
 
@@ -239,8 +239,8 @@ These steps use two admin API endpoints added specifically for this verification
      "dbRow": { "hasAccessToken": true, "uninstalledAt": null, ... },
      "live": {
        "allWebhooksPresent": true,
-       "webhookCount": 4,
-       "foundTopics": ["app/uninstalled","orders/paid","orders/refunded","refunds/create"],
+       "webhookCount": 3,
+       "foundTopics": ["app/uninstalled","orders/paid","refunds/create"],
        "missingTopics": [],
        "healthy": true
      }
@@ -376,3 +376,60 @@ Run **Partner Dashboard → Apps → [your app] → App setup → Run automated 
 > ⚠ Do NOT flip to Public before step 6. Shopify redacts customer PII from order
 > payloads for apps without an approved protected-data application, which breaks
 > order fulfillment for all connected stores.
+
+## 7 — App Store requirements review (2026-07-24, post-Phase 6)
+
+Ran the pre-submission compliance skill against the live requirements list
+(fetched via `shopify doc fetch`, 2026-07 edition). 38 requirements evaluated
+(Sections 1–3 in full + Group 5.6 Checkout customization); all other Section 5
+groups skipped — no theme / payment / subscription / post-purchase /
+sales-channel extensions exist in this repo.
+
+**Summary: 34 pass · 2 warnings · 0 fails · 2 N/A.**
+
+### ⚠️ Warnings (Bill to resolve before submission)
+
+- **1.2.1 Billing** — the app is listed free and has no Billing API usage, but
+  GoodTunes charges connected stores the per-unlock wholesale rate
+  (`digitalUnitFeeCents`, default $3.50) off-platform. Shopify's rule:
+  *"Charging merchants externally while listing the Shopify app as free is not
+  allowed."* Options: (a) declare the wholesale fee in the listing's pricing
+  section as an external charge and justify it in reviewer notes (it's a
+  goods/wholesale cost, not an app charge — same model as print-on-demand
+  apps, which Shopify allows), or (b) move billing to the Billing API. Reviewer
+  notes should lead with the print-on-demand analogy.
+- **2.3.1 Install initiation** — our operator admin (AdminShopify / label /
+  person Shopify tabs) asks the operator to enter the store's
+  `*.myshopify.com` domain to build the install link. The rule targets
+  merchant-facing manual entry; ours is an internal operator tool and the
+  merchant themselves lands on standard OAuth. Keep as-is, but when the app
+  goes listed, install must also work from the App Store listing link
+  (it does — `/api/shopify/install?shop=` is the standard entry). Mention in
+  reviewer notes.
+
+### Key passes (evidence)
+
+- **1.1.15 Refunds** — refunds now flow exclusively through GraphQL
+  `refundCreate` (advisory `order.suggestedRefund` first), to the original
+  gateway. No gift-card/wallet refunds anywhere. (Phase 6.)
+- **2.2.4 GraphQL-only** — the only two `/admin/api/` URLs in the codebase are
+  both `graphql.json`. REST client, script_tags, and the legacy
+  `orders/refunded` webhook are gone. (Phases 3–6.)
+- **2.2.1 / 2.2.3** — Admin API used throughout; App Bridge N/A
+  (`embedded = false`, app runs on our own admin host).
+- **2.3.2–2.3.4 OAuth** — install route → `/admin/oauth/authorize` with our
+  client_id; callback HMAC+state verified; reinstall re-registers webhooks and
+  re-encrypts tokens.
+- **3.2 Scopes** — only `read_orders, write_orders, read_products`; no
+  `read_all_orders` or other flagged scopes.
+- **5.6 Checkout UI extension** — thank-you/order-status blocks show the
+  buyer's own redemption code only: no promotion, no countdowns, no order-total
+  changes, no payment-info collection; `network_access` justified inline in
+  the extension TOML.
+
+### N/A
+
+- **1.1.1 session tokens** — embedded-app rule; app is non-embedded. (The
+  extension itself does use Shopify session tokens for our polling endpoint.)
+- **3.1.1 TLS** — platform-managed HTTPS on all hosts (Replit + custom
+  domains); no HTTP fallback exists to configure.
