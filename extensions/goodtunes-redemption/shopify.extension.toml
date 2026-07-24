@@ -5,6 +5,15 @@ type = "ui_extension"
 name = "GoodTunes Redemption"
 handle = "goodtunes-redemption"
 
+# network_access: the extension polls our authenticated endpoint
+# (https://admin.goodtunes.music/api/shopify/redemption-status) because
+# neither the thank-you nor the order-status surface can deliver ORDER
+# metafields to an extension (AppMetafieldEntryTarget has no 'order'
+# owner type). Shopify App Store review asks for a justification for
+# this capability — see the note in the app listing.
+[extensions.capabilities]
+network_access = true
+
 [[extensions.targeting]]
 module = "./src/ThankYou.tsx"
 target = "purchase.thank-you"
@@ -12,7 +21,3 @@ target = "purchase.thank-you"
 [[extensions.targeting]]
 module = "./src/OrderStatus.tsx"
 target = "customer-account.order-status.block.render"
-
-[[extensions.metafields]]
-namespace = "goodtunes"
-key = "redemption"

@@ -2942,6 +2942,11 @@ export const orders = pgTable("orders", {
   // pull the redemption code; the buyer also has to be on their own
   // order status page (where Shopify hands them the token).
   shopifyOrderToken: text("shopify_order_token"),
+  // Shopify's alpha-numeric confirmation number (always present on 2024+
+  // orders). Exposed to checkout UI extensions via useOrder(), so the
+  // extension's redemption-status poll presents it as proof-of-order —
+  // the poll endpoint only releases the code when it matches.
+  shopifyConfirmationNumber: text("shopify_confirmation_number"),
   // ─── Task #73 — Order Desk fulfillment wiring ─────────────────────
   // Snapshot fields and lifecycle timestamps for the physical-goods
   // path. We snapshot artistId/labelId/skuKind here (denormalized) so
@@ -3237,6 +3242,10 @@ export const shopifyRedemptionCodes = pgTable("shopify_redemption_codes", {
   // a second click just signs them in to the already-claimed account.
   redeemedAt: timestamp("redeemed_at"),
   redeemedByUserId: varchar("redeemed_by_user_id"),
+  // Stamped when the $app-namespace order metafield write succeeds.
+  // NULL rows inside the sweep window get retried by
+  // sweepRedemptionMetafields (server/shopify.ts) until it lands.
+  metafieldWrittenAt: timestamp("metafield_written_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

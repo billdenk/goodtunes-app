@@ -10083,3 +10083,25 @@ add_task_2818_expected_arrival() {
 }
 add_task_2818_expected_arrival dev  "${DATABASE_URL:-}"
 add_task_2818_expected_arrival prod "${PROD_DATABASE_URL:-}"
+
+# ─── Shopify checkout-extension redemption columns ───────────────────────
+# orders.shopify_confirmation_number (poll-endpoint proof-of-order) and
+# shopify_redemption_codes.metafield_written_at (reconciliation-sweep
+# stamp). Idempotent, dev + prod.
+add_shopify_extension_columns() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: shopify-extension-columns skipped on $label (no DATABASE_URL)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 -q -c \
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS shopify_confirmation_number text;
+     ALTER TABLE shopify_redemption_codes ADD COLUMN IF NOT EXISTS metafield_written_at timestamp;"; then
+    echo "post-merge: shopify-extension-columns ok on $label"
+  else
+    echo "post-merge: ERROR — shopify-extension-columns FAILED on $label"
+    return 1
+  fi
+}
+add_shopify_extension_columns dev  "${DATABASE_URL:-}"
+add_shopify_extension_columns prod "${PROD_DATABASE_URL:-}"

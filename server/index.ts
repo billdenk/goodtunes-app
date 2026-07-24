@@ -373,6 +373,27 @@ async function bootstrapAccessGuard() {
     log(`saleWindow scheduler init failed: ${e?.message ?? e}`, "sale-window");
   }
 
+  // Shopify redemption-metafield reconciliation sweep. The metafield
+  // write at code-mint is fire-and-forget; this tick retries any code
+  // from the last 7 days whose write never landed so the $app-namespace
+  // order metafield is eventually guaranteed. Single-node only, same
+  // caveat as the sale-window scheduler above.
+  try {
+    const { sweepRedemptionMetafields } = await import("./shopify");
+    setInterval(() => {
+      sweepRedemptionMetafields()
+        .then(({ retried, failed }) => {
+          if (retried > 0 || failed > 0) {
+            log(`redemption metafield sweep: retried=${retried} failed=${failed}`, "shopify-sweep");
+          }
+        })
+        .catch((e) => log(`redemption metafield sweep failed: ${e?.message ?? e}`, "shopify-sweep"));
+    }, 10 * 60 * 1000);
+    log("shopify redemption-metafield sweep armed (10min tick)", "shopify-sweep");
+  } catch (e: any) {
+    log(`redemption metafield sweep init failed: ${e?.message ?? e}`, "shopify-sweep");
+  }
+
   // Task #475 — Soft-delete sweeper. Once a day, hard-delete any row
   // whose `deleted_at` is more than 30 days old across the 14 admin
   // tables that opted into soft-delete. The first tick fires ~60s

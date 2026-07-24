@@ -4,7 +4,7 @@ application_url = "https://admin.goodtunes.music/api/shopify/install"
 embedded = false
 
 [access_scopes]
-scopes = "read_orders,write_orders,read_products,write_script_tags"
+scopes = "read_orders,write_orders,read_products"
 
 [auth]
 redirect_urls = ["https://admin.goodtunes.music/api/shopify/callback"]

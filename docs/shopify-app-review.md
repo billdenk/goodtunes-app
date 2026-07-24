@@ -113,7 +113,6 @@ to Public. Copy-paste the answers below.
 | `read_orders` | Required to access the orders/paid and orders/refunded webhook payloads (customer identity, line items, totals, status) so GoodTunes can mint and revoke digital album unlocks. |
 | `write_orders` | Required to stamp a `note_attribute` (the redemption URL) onto the Shopify order record so it appears in the merchant's order confirmation email Liquid template. |
 | `read_products` | Required to enumerate the merchant's catalog in the admin product-mapping UI so the operator can link a Shopify product/variant to a GoodTunes album without typing product IDs by hand. |
-| `write_script_tags` | Required to inject the order-status-page script that displays a "Get your music" CTA and redemption code on the Shopify order confirmation page. Migration to a Checkout UI Extension is planned; `write_script_tags` is used for the current implementation. |
 
 ---
 
@@ -121,9 +120,9 @@ to Public. Copy-paste the answers below.
 
 The install→use→uninstall→reinstall flow is handled in `server/shopify.ts`:
 
-- **Fresh install:** `upsertStore` inserts a new row; `registerWebhooks` registers the four merchant webhooks; `installScriptTag` installs the order-status-page script. All three are idempotent (Shopify deduplicates on address/src).
+- **Fresh install:** `upsertStore` inserts a new row; `registerWebhooks` registers the four merchant webhooks. Both are idempotent (Shopify deduplicates on address). Post-purchase display is handled by the Checkout UI Extension (`extensions/goodtunes-redemption`) — no ScriptTag is installed.
 - **Uninstall (via app/uninstalled webhook):** Stamps `uninstalled_at`, clears `access_token`, `refresh_token`, and expiry timestamps. The store row is kept so historical order joins remain valid.
-- **Reinstall:** `upsertStore` finds the existing row by `shop_domain` and overwrites the token fields + clears `uninstalled_at`. Re-runs webhook and script tag registration.
+- **Reinstall:** `upsertStore` finds the existing row by `shop_domain` and overwrites the token fields + clears `uninstalled_at`. Re-runs webhook registration.
 - **Shop redact (48h after uninstall):** The GDPR `shop/redact` webhook deletes the store row and cascades cleanup (see §1).
 
 **No orphaned webhooks** — Shopify automatically deregisters app-level webhooks when the store uninstalls; reinstalling re-registers them via our callback.

@@ -2,7 +2,7 @@
 //
 // Owns: OAuth install/callback against a label's Shopify store, paid +
 // refunded webhook handlers, redemption-code minting + resolve, admin
-// CRUD for product↔album mappings, order-status-page ScriptTag install.
+// CRUD for product↔album mappings, checkout-extension redemption endpoint.
 //
 // Mounted by registerShopifyRoutes() from server/routes.ts. The webhook
 // endpoint reads the raw body (server/index.ts wires express.raw() for
@@ -15,7 +15,8 @@
 import type { Express, Request, Response } from "express";
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, scrypt as _scrypt, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { and, desc, eq, inArray, isNull, not, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, not, sql } from "drizzle-orm";
+import { jwtVerify } from "jose";
 import { db } from "./db";
 import {
   albums,
@@ -60,7 +61,7 @@ const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET ?? "";
 // write_orders is required so we can stamp the redemption URL onto the
 // Shopify order as a note_attribute — that's what merchants reference
 // from their email-template Liquid snippet (see install guide).
-const SHOPIFY_SCOPES = process.env.SHOPIFY_SCOPES ?? "read_orders,write_orders,read_products,write_script_tags";
+const SHOPIFY_SCOPES = process.env.SHOPIFY_SCOPES ?? "read_orders,write_orders,read_products";
 const SHOPIFY_TOKEN_KEY = createHash("sha256")
   .update(process.env.SHOPIFY_TOKEN_KEY ?? process.env.SESSION_SECRET ?? "goodtunes-shopify-fallback-dev-key")
   .digest();
@@ -390,19 +391,77 @@ async function writeRedemptionMetafield(
   const value = JSON.stringify({ code, url });
   const ownerId = `gid://shopify/Order/${shopifyOrderId}`;
 
+  // "$app:goodtunes" is the app-RESERVED namespace form: Shopify resolves
+  // it to app--<our-app-id>--goodtunes, which no other app can read or
+  // write and which merchants can't edit from the admin. A plain
+  // "goodtunes" namespace would be world-readable — never use it here.
   const result = await shopifyGraphql<{
     metafieldsSet: {
       metafields: Array<{ id: string }>;
       userErrors: Array<{ field: string; message: string }>;
     };
   }>(store, METAFIELDS_SET_MUTATION, {
-    metafields: [{ ownerId, namespace: "goodtunes", key: "redemption", type: "json", value }],
+    metafields: [
+      { ownerId, namespace: "$app:goodtunes", key: "redemption", type: "json", value },
+    ],
   });
 
   const errs = result.metafieldsSet?.userErrors ?? [];
   if (errs.length > 0) {
     throw new Error(errs.map((e) => `${e.field}: ${e.message}`).join("; "));
   }
+
+  // Success — stamp the row so the reconciliation sweep skips it.
+  await db
+    .update(shopifyRedemptionCodes)
+    .set({ metafieldWrittenAt: new Date() })
+    .where(eq(shopifyRedemptionCodes.code, code));
+}
+
+// ─── Reconciliation sweep: paid orders missing the redemption metafield ─
+// Safety net behind the fire-and-forget write above. Every tick it finds
+// codes minted in the last 7 days whose metafield write never landed
+// (metafield_written_at IS NULL) and retries them. Idempotent —
+// metafieldsSet is an upsert, so re-writing an already-present metafield
+// is harmless. Armed from server/index.ts on a 10-minute tick.
+export async function sweepRedemptionMetafields(): Promise<{ retried: number; failed: number }> {
+  const rows = await db
+    .select({
+      code: shopifyRedemptionCodes.code,
+      shopifyOrderId: orders.shopifyOrderId,
+      shopifyStoreId: orders.shopifyStoreId,
+    })
+    .from(shopifyRedemptionCodes)
+    .innerJoin(orders, eq(orders.id, shopifyRedemptionCodes.orderId))
+    .where(
+      and(
+        isNull(shopifyRedemptionCodes.metafieldWrittenAt),
+        sql`${shopifyRedemptionCodes.createdAt} > now() - interval '7 days'`,
+        isNotNull(orders.shopifyOrderId),
+        isNotNull(orders.shopifyStoreId),
+      ),
+    )
+    .limit(50);
+
+  let retried = 0;
+  let failed = 0;
+  for (const row of rows) {
+    try {
+      const store = await getStoreById(row.shopifyStoreId!);
+      if (!store) {
+        failed++;
+        continue;
+      }
+      await writeRedemptionMetafield(store, row.shopifyOrderId!, row.code);
+      retried++;
+    } catch (e: any) {
+      failed++;
+      console.error(
+        `[shopify] metafield sweep retry failed order=${row.shopifyOrderId}: ${e?.message ?? e}`,
+      );
+    }
+  }
+  return { retried, failed };
 }
 
 // ─── Post-install setup: register webhooks + script tag ───────────────
@@ -427,23 +486,6 @@ async function registerWebhooks(store: ShopifyStore, appUrl: string): Promise<vo
     }
   }
 }
-async function installScriptTag(store: ShopifyStore, appUrl: string): Promise<void> {
-  try {
-    await shopifyFetch(store, "script_tags.json", {
-      method: "POST",
-      body: JSON.stringify({
-        script_tag: {
-          event: "onload",
-          src: `${appUrl}/shopify/redeem-button.js`,
-          display_scope: "order_status",
-        },
-      }),
-    });
-  } catch (e: any) {
-    console.error(`[shopify] failed to install script tag for ${store.shopDomain}`, e?.message);
-  }
-}
-
 // Constant-time string compare. timingSafeEqual requires equal length;
 // we pad with a hash so unequal-length pairs still take the same time.
 function safeCompare(a: string, b: string): boolean {
@@ -534,6 +576,7 @@ type ShopifyOrder = {
   // Per-order unguessable token. Shopify exposes this on the buyer's
   // order status page; we use it to gate the public code lookup.
   token?: string | null;
+  confirmation_number?: string | null;
   email: string | null;
   total_price: string;
   currency: string;
@@ -665,6 +708,7 @@ async function materializeShopifyPlusFulfillmentOnly(args: {
       shopifyStoreId: store.id,
       shopifyOrderId,
       shopifyOrderToken: payload.token ?? null,
+      shopifyConfirmationNumber: payload.confirmation_number ?? null,
       skuKind,
       artistSnapshotId: album.primaryArtistId ?? null,
       labelSnapshotId: album.labelId ?? null,
@@ -903,6 +947,7 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
         shopifyStoreId: store.id,
         shopifyOrderId,
         shopifyOrderToken: payload.token ?? null,
+        shopifyConfirmationNumber: payload.confirmation_number ?? null,
         skuKind,
         artistSnapshotId,
         labelSnapshotId,
@@ -1451,11 +1496,12 @@ export function registerShopifyRoutes(app: Express) {
       personId: statePersonId || undefined,
     });
 
-    // Best-effort post-install setup. If either fails, the admin can hit
+    // Best-effort post-install setup. If it fails, the admin can hit
     // the /api/admin/shopify/stores/:id/reinstall-hooks endpoint to retry.
+    // Post-purchase display is handled by the Checkout UI Extension
+    // (extensions/goodtunes-redemption) — no ScriptTag install anymore.
     const appUrl = appOrigin(req);
     await registerWebhooks(store, appUrl);
-    await installScriptTag(store, appUrl);
 
     // Drop the operator back where they started: the artist's Overview tab
     // (Task #2435), the label's Shopify tab (Task #2030), otherwise the
@@ -2091,6 +2137,77 @@ export function registerShopifyRoutes(app: Express) {
     res.json({ ok: true, orderId: order.id, albumId: order.albumId, goodDeedNumber: order.goodDeedNumber });
   });
 
+  // ─── Checkout UI extension poll: is the redemption code ready? ────────
+  // GET /api/shopify/redemption-status?orderId=<numeric>&confirmation=<n>
+  // Called by extensions/goodtunes-redemption from the thank-you page and
+  // the customer-account order-status page (neither surface can read
+  // ORDER metafields — AppMetafieldEntryTarget has no 'order' owner — so
+  // this endpoint is the extension's data channel; the metafield stays as
+  // the durable record). Auth = the extension's Shopify session token
+  // (HS256, signed with our app secret; `dest` names the shop). The
+  // endpoint answers {ready:false} freely, but the code itself is only
+  // released when the caller also presents the order's confirmation
+  // number (which Shopify shows only to the buyer) — a valid session
+  // token proves shop+app context, not order ownership, and numeric
+  // order ids are enumerable.
+  const extensionCors = (res: Response) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  };
+  app.options("/api/shopify/redemption-status", (_req, res) => {
+    extensionCors(res);
+    res.sendStatus(204);
+  });
+  app.get("/api/shopify/redemption-status", async (req, res) => {
+    extensionCors(res);
+    try {
+      const auth = String(req.headers.authorization ?? "");
+      const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+      if (!token) return res.status(401).json({ message: "Missing session token" });
+      let shopDomain = "";
+      try {
+        const { payload } = await jwtVerify(token, new TextEncoder().encode(SHOPIFY_API_SECRET), {
+          algorithms: ["HS256"],
+          clockTolerance: 10,
+        });
+        const aud = Array.isArray(payload.aud) ? payload.aud[0] : payload.aud;
+        if (aud !== SHOPIFY_API_KEY) return res.status(401).json({ message: "Bad audience" });
+        shopDomain = new URL(String(payload.dest ?? "")).hostname;
+      } catch {
+        return res.status(401).json({ message: "Invalid session token" });
+      }
+      const store = await getStoreByDomain(shopDomain);
+      if (!store) return res.status(404).json({ message: "Unknown store" });
+      const orderId = String(req.query.orderId ?? "").replace(/\D/g, "");
+      if (!orderId) return res.status(400).json({ message: "orderId required" });
+      const [order] = await db
+        .select()
+        .from(orders)
+        .where(and(eq(orders.shopifyOrderId, orderId), eq(orders.shopifyStoreId, store.id)));
+      if (!order) return res.json({ ready: false });
+      const [row] = await db
+        .select()
+        .from(shopifyRedemptionCodes)
+        .where(eq(shopifyRedemptionCodes.orderId, order.id));
+      if (!row) return res.json({ ready: false });
+      // Code exists — require proof of order ownership before releasing it.
+      const provided = String(req.query.confirmation ?? "").trim().toUpperCase();
+      const expected = (order.shopifyConfirmationNumber ?? "").trim().toUpperCase();
+      if (!expected || !provided || provided !== expected) {
+        return res.status(403).json({ message: "Confirmation number mismatch" });
+      }
+      return res.json({
+        ready: true,
+        code: row.code,
+        url: `https://${GOODTUNES_FAN_HOST}/redeem/${row.code}`,
+      });
+    } catch (e: any) {
+      console.error(`[shopify] redemption-status failed: ${e?.message ?? e}`);
+      return res.status(500).json({ message: "Internal error" });
+    }
+  });
+
   // Promote a stub customer (password=null, created at webhook time)
   // into a real account by setting a password against a valid
   // redemption code. The redemption code is the proof — only the
@@ -2364,33 +2481,15 @@ export function registerShopifyRoutes(app: Express) {
         webhookErrors.push(`${topic}: ${e?.message}`);
       }
     }
-    let scriptTagResult = "unknown";
-    try {
-      const r = await shopifyFetch(store, "script_tags.json", {
-        method: "POST",
-        body: JSON.stringify({ script_tag: { event: "onload", src: `${appUrl}/shopify/redeem-button.js`, display_scope: "order_status" } }),
-      });
-      const j = await r.json() as any;
-      if (r.ok) {
-        scriptTagResult = "installed";
-      } else if (r.status === 422 && JSON.stringify(j).includes("already been taken")) {
-        scriptTagResult = "already_installed";
-      } else {
-        scriptTagResult = `error_${r.status}`;
-        webhookErrors.push(`script_tag: ${r.status}`);
-      }
-    } catch (e: any) {
-      scriptTagResult = "exception";
-      webhookErrors.push(`script_tag: ${e?.message}`);
-    }
-    res.json({ ok: webhookErrors.length === 0, webhooks: webhookResults, scriptTag: scriptTagResult, errors: webhookErrors });
+    res.json({ ok: webhookErrors.length === 0, webhooks: webhookResults, errors: webhookErrors });
   });
 
-  // Live install-state inspection — fetches webhook and script-tag lists
-  // from the Shopify Admin API so the operator can verify the install is
-  // healthy without opening the Shopify admin UI. Returns a summary of
-  // expected vs. found resources. Useful for the §4 hygiene checklist in
-  // docs/shopify-app-review.md.
+  // Live install-state inspection — fetches the webhook list from the
+  // Shopify Admin API so the operator can verify the install is healthy
+  // without opening the Shopify admin UI. Returns a summary of expected
+  // vs. found resources. Useful for the §4 hygiene checklist in
+  // docs/shopify-app-review.md. (ScriptTag inspection removed — the
+  // Checkout UI Extension replaced the order-status ScriptTag.)
   app.get("/api/admin/shopify/stores/:id/inspect", requireAdmin, async (req, res) => {
     const storeId = String(req.params.id);
     const store = await getStoreById(storeId);
@@ -2416,27 +2515,18 @@ export function registerShopifyRoutes(app: Express) {
 
     const EXPECTED_TOPICS = ["orders/paid", "orders/refunded", "refunds/create", "app/uninstalled"];
     let webhooks: any[] = [];
-    let scriptTags: any[] = [];
     let liveError: string | null = null;
 
     try {
-      const [whRes, stRes] = await Promise.all([
-        shopifyFetch(store, "webhooks.json?limit=50"),
-        shopifyFetch(store, "script_tags.json?limit=50"),
-      ]);
+      const whRes = await shopifyFetch(store, "webhooks.json?limit=50");
       if (whRes.ok) webhooks = ((await whRes.json() as any).webhooks ?? []);
       else liveError = `webhooks API ${whRes.status}`;
-      if (stRes.ok) scriptTags = ((await stRes.json() as any).script_tags ?? []);
-      else liveError = (liveError ? liveError + "; " : "") + `script_tags API ${stRes.status}`;
     } catch (e: any) {
       liveError = e?.message ?? "fetch failed";
     }
 
     const foundTopics = webhooks.map((w: any) => w.topic as string);
     const missingTopics = EXPECTED_TOPICS.filter((t) => !foundTopics.includes(t));
-    const appUrl = appOrigin(req);
-    const expectedScriptSrc = `${appUrl}/shopify/redeem-button.js`;
-    const scriptInstalled = scriptTags.some((s: any) => s.src === expectedScriptSrc);
 
     res.json({
       dbRow,
@@ -2447,9 +2537,7 @@ export function registerShopifyRoutes(app: Express) {
             foundTopics,
             missingTopics,
             allWebhooksPresent: missingTopics.length === 0,
-            scriptTagInstalled: scriptInstalled,
-            scriptTagCount: scriptTags.length,
-            healthy: missingTopics.length === 0 && scriptInstalled,
+            healthy: missingTopics.length === 0,
           },
     });
   });

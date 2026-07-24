@@ -4,8 +4,10 @@ import {
   BlockStack,
   Link,
   Text,
-  useMetafield,
+  useOrder,
+  useSessionToken,
 } from "@shopify/ui-extensions-react/customer-account";
+import { useRedemptionPoll } from "./useRedemptionPoll";
 
 export default reactExtension(
   "customer-account.order-status.block.render",
@@ -13,9 +15,11 @@ export default reactExtension(
 );
 
 function GoodTunesRedemption() {
-  const metafield = useMetafield({ namespace: "goodtunes", key: "redemption" });
+  const order = useOrder();
+  const sessionToken = useSessionToken();
+  const redemption = useRedemptionPoll(order?.id, order?.confirmationNumber, sessionToken);
 
-  if (!metafield?.value) {
+  if (!redemption) {
     return (
       <Banner title="Your digital album is being prepared" status="info">
         <BlockStack spacing="tight">
@@ -32,29 +36,14 @@ function GoodTunesRedemption() {
     );
   }
 
-  let code = "";
-  let url = "";
-  try {
-    const data = JSON.parse(metafield.value) as { code?: string; url?: string };
-    code = data.code ?? "";
-    url = data.url ?? "";
-  } catch {
-    return null;
-  }
-  if (!code || !url) return null;
-
   return (
     <Banner title="Your digital album is ready" status="success">
       <BlockStack spacing="tight">
-        <Text>
-          Your GoodTunes digital album is included with this order.
-        </Text>
-        <Link to={url} external>
+        <Text>Your GoodTunes digital album is included with this order.</Text>
+        <Link to={redemption.url} external>
           Get your music now →
         </Link>
-        <Text>
-          Or enter code {code} at goodtunes.music
-        </Text>
+        <Text>Or enter code {redemption.code} at goodtunes.music</Text>
       </BlockStack>
     </Banner>
   );
