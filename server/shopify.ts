@@ -39,6 +39,7 @@ import {
   type ShopifyPushSnapshot,
 } from "@shared/schema";
 import { lookupSignedCertRung } from "@shared/signedCertLadder";
+import { QA_TEST_ALBUM_ID } from "@shared/qaTest";
 import { grantLltBonusIfEligible } from "./lltBonus";
 import { z } from "zod";
 import { storage } from "./storage";
@@ -1168,6 +1169,12 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // per-order webhooks. Branch BEFORE the sale-mint below.
   const [spAlbum] = await db.select().from(albums).where(eq(albums.id, albumId));
   const isShopifyPlus = spAlbum?.sellMode === "shopify_plus";
+  // Task #2859 — Shopify E2E test purchases run against the permanent QA
+  // album. Stamp origin='qa:test' (so every admin/report/queue exclusion
+  // filter catches them) and skip fulfillment routing + money-side accruals,
+  // while keeping the Shopify columns, redemption code / metafield / email,
+  // and the ownership grant intact — the E2E suite relies on those.
+  const isQaTestOrder = albumId === QA_TEST_ALBUM_ID;
   // Task #2428 line 31 — a shopify_plus album may STILL opt a mapping in to
   // mint the GoodTunes digital unlock + GoodDeed "exactly as today". Only a
   // mapping with offersDigitalUnlock=false takes the pure fulfillment-only
@@ -1275,7 +1282,10 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
         buyerName,
         buyerPhone: payload.customer?.phone ?? null,
         goodDeedNumber,
-        origin: isShopifyPlus ? `shopify_plus:${store.id}` : `shopify:${store.id}`,
+        // Task #2859 — QA-album E2E test orders stamp qa:test so every
+        // admin/report/queue exclusion filter picks them up. The Shopify
+        // columns below stay populated so redemption polling keeps working.
+        origin: isQaTestOrder ? "qa:test" : isShopifyPlus ? `shopify_plus:${store.id}` : `shopify:${store.id}`,
         shopifyStoreId: store.id,
         shopifyOrderId,
         shopifyOrderToken: payload.token ?? null,
@@ -1286,8 +1296,9 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
         // Physical orders flag "pending" fulfillment — but a shopify_plus
         // album only routes per-order goods when its fulfillment toggle is
         // on (otherwise the finished run is dropshipped, nothing per order).
+        // Task #2859 — QA test orders never enter fulfillment routing.
         fulfillmentStatus:
-          isPhysicalSkuKind(skuKind) && (!isShopifyPlus || spAlbum?.shopifyPlusFulfillment)
+          !isQaTestOrder && isPhysicalSkuKind(skuKind) && (!isShopifyPlus || spAlbum?.shopifyPlusFulfillment)
             ? "pending"
             : null,
       })
@@ -1296,7 +1307,8 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
     return row;
   });
   // Task #79 — first paid order stamps the post-sale lock on the album.
-  if (order) {
+  // Task #2859 — QA test orders don't lock the QA album's metadata.
+  if (order && !isQaTestOrder) {
     const { stampFirstSoldAtIfNeeded } = await import("./auth/partnerPermissions");
     await stampFirstSoldAtIfNeeded(albumId);
   }
@@ -1341,7 +1353,8 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // Task #2428 — shopify_plus bypasses the fan-sale pool / early-cut
   // entirely: its manufacturing is prepaid via the ACH ledger, not funded
   // out of per-sale earmarks.
-  if (!isShopifyPlus) {
+  // Task #2859 — QA test orders never accrue the press pool.
+  if (!isShopifyPlus && !isQaTestOrder) {
     const { accruePressPool } = await import("./earlyCut");
     await accruePressPool(albumId, order.id, matchedLine.quantity).catch((e) =>
       console.error(`[shopify] press-pool accrual failed for ${order.id}`, (e as Error)?.message),
@@ -1356,7 +1369,8 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // (the orderId UNIQUE constraint on the ledger table silences replays).
   // shopify_plus external_paid orders DO accrue — GoodTunes still provides
   // the digital unlock and GoodDeed, so the platform fee applies.
-  try {
+  // Task #2859 — QA test orders never bill the wholesale platform charge.
+  if (!isQaTestOrder) try {
     const unitFeeCents = store.digitalUnitFeeCents ?? 350;
     const qty = matchedLine.quantity ?? 1;
     await db
@@ -1458,9 +1472,10 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // to the partner immediately (the goods are prepaid and already exist),
   // bypassing the deliberate auto-push gate that plain Shopify/direct orders
   // wait on until the press-run quantity is confirmed.
-  const shouldPushToOrderDesk = isShopifyPlus
+  // Task #2859 — QA test orders never reach Order Desk / fulfillment.
+  const shouldPushToOrderDesk = !isQaTestOrder && (isShopifyPlus
     ? isPhysicalSkuKind(skuKind) && !!spAlbum?.shopifyPlusFulfillment
-    : isPhysicalSkuKind(skuKind) && orderDeskAutoPushEnabled();
+    : isPhysicalSkuKind(skuKind) && orderDeskAutoPushEnabled());
   if (shouldPushToOrderDesk) {
     await pushOrderToOrderDesk(order.id).catch((e) =>
       console.error(`[shopify] OD handoff unexpected throw for ${order.id}`, e?.message),

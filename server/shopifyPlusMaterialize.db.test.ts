@@ -300,3 +300,50 @@ test("(f) plain shopify mode is unaffected — status stays 'paid'", async () =>
   assert.ok(String(row.origin).startsWith("shopify:"), "origin is plain shopify, not shopify_plus");
   assert.equal(await unlockCount(albumId, row.customer_id), 1, "album unlock granted");
 });
+
+// Task #2859 — Shopify E2E purchases against the permanent QA test album
+// must mint with origin='qa:test' (not 'shopify:<store>') so every admin
+// dashboard/queue exclusion filter catches them, and must never enter the
+// fulfillment queue (fulfillment_status stays NULL, no OD push). Redemption
+// code + album unlock still mint so the E2E redemption leg keeps working.
+test("(g) QA test album → origin qa:test, no fulfillment, code+unlock still mint", async () => {
+  const QA_ALBUM_ID = "a0000000-0000-4000-8000-00000000e2e0";
+  const store = await seedStore();
+  // The QA album may already exist in this environment — upsert, and only
+  // tear it down if this test created it.
+  const existing = await rows(sql`SELECT id FROM albums WHERE id = ${QA_ALBUM_ID}`);
+  const createdQaAlbum = existing.length === 0;
+  if (createdQaAlbum) {
+    await q(sql`
+      INSERT INTO albums (id, title, artist, artwork, sell_mode)
+      VALUES (${QA_ALBUM_ID}, ${"GoodTunes QA Test Album (do not sell)"}, ${"QA"}, ${"/album-placeholder.svg"}, ${"shopify"})
+    `);
+  }
+  const productId = String(++productSeq);
+  await seedMapping({ storeId: store.id, albumId: QA_ALBUM_ID, productId, offersDigitalUnlock: true });
+
+  const order = makeOrder({ productId, email: `g-${uid("f")}@${EMAIL_DOMAIN}` });
+  try {
+    const result = await materializeOrderFromShopify(store, order);
+    assert.ok(result?.code, "QA order still mints a redemption code");
+
+    const row = await orderRow(order.id);
+    assert.equal(row.origin, "qa:test", "origin is qa:test, not shopify:<store>");
+    assert.equal(row.fulfillment_status, null, "QA order never enters the fulfillment queue");
+    assert.equal(await unlockCount(QA_ALBUM_ID, row.customer_id), 1, "album unlock granted");
+    assert.equal(await poolCount(row.id), 0, "no press-pool accrual for QA orders");
+  } finally {
+    // Scoped cleanup — never bulk-delete rows for the shared QA album id.
+    const [row] = await rows(sql`SELECT id FROM orders WHERE shopify_order_id = ${String(order.id)}`);
+    if (row?.id) {
+      await q(sql`DELETE FROM shopify_redemption_codes WHERE order_id = ${row.id}`);
+      await q(sql`DELETE FROM order_items WHERE order_id = ${row.id}`);
+      await q(sql`DELETE FROM cert_reservations WHERE order_id = ${row.id}`);
+      await q(sql`DELETE FROM user_albums WHERE album_id = ${QA_ALBUM_ID} AND user_id IN (SELECT customer_id FROM orders WHERE id = ${row.id})`);
+      await q(sql`DELETE FROM orders WHERE id = ${row.id}`);
+    }
+    if (createdQaAlbum) {
+      await q(sql`DELETE FROM albums WHERE id = ${QA_ALBUM_ID}`);
+    }
+  }
+});

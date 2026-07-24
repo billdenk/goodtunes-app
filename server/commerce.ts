@@ -3562,6 +3562,10 @@ export function registerCommerceRoutes(app: Express) {
     }
 
     const conditions: any[] = [];
+    // Task #2859 — QA test purchases (native + Shopify E2E) never appear in
+    // the fan-orders queue / dashboard activity feed. The super-admin
+    // QA-orders cleanup tool is the only surface that lists them.
+    conditions.push(sql`${orders.origin} IS DISTINCT FROM 'qa:test'`);
     if (status) conditions.push(eq(orders.status, status));
     if (artistAlbumIds) conditions.push(inArray(orders.albumId, artistAlbumIds));
 

@@ -80,7 +80,11 @@ export async function platformKpis(ctx: AdminReportContext) {
       net += r.platformFeeCents ?? r.totalCents;
       buyers.add(r.customerId);
     }
-    const signups = await db.execute<{ c: string }>(sql`SELECT COUNT(*) AS c FROM customer_users WHERE created_at >= ${from} AND created_at <= ${to}`);
+    // Task #2859 — exclude QA-only accounts (every order they have is a
+    // qa:test purchase, e.g. the Shopify E2E stub) from signup counts.
+    const signups = await db.execute<{ c: string }>(sql`SELECT COUNT(*) AS c FROM customer_users WHERE created_at >= ${from} AND created_at <= ${to}
+      AND (NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = customer_users.id AND orders.origin = 'qa:test')
+           OR EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = customer_users.id AND orders.origin <> 'qa:test'))`);
     const plays = await db.execute<{ plays: string; listeners: string }>(sql`SELECT COUNT(*) AS plays, COUNT(DISTINCT COALESCE(user_id, session_id)) AS listeners FROM analytics_events WHERE name = 'play_start' AND ts >= ${from} AND ts <= ${to}`);
     return {
       gmvCents: safeNum(gmv),
@@ -94,10 +98,11 @@ export async function platformKpis(ctx: AdminReportContext) {
     };
   }
 
-  const paidFilters = [eq(orders.status, "paid"), gte(orders.createdAt, ctx.from), lte(orders.createdAt, ctx.to)];
+  // Task #2859 — QA test orders (native + Shopify E2E) never count anywhere.
+  const paidFilters = [eq(orders.status, "paid"), ne(orders.origin, "qa:test"), gte(orders.createdAt, ctx.from), lte(orders.createdAt, ctx.to)];
   const paid = await db.select({ id: orders.id, totalCents: orders.totalCents, customerId: orders.customerId, createdAt: orders.createdAt, platformFeeCents: orders.platformFeeCents, certCostCents: orders.certCostCents, refundedAt: orders.refundedAt }).from(orders).where(and(...paidFilters));
 
-  const refundedRows = await db.select({ id: orders.id }).from(orders).where(and(gte(orders.refundedAt, ctx.from), lte(orders.refundedAt, ctx.to), isNotNull(orders.refundedAt)));
+  const refundedRows = await db.select({ id: orders.id }).from(orders).where(and(gte(orders.refundedAt, ctx.from), lte(orders.refundedAt, ctx.to), isNotNull(orders.refundedAt), ne(orders.origin, "qa:test")));
 
   let gmvCents = 0;
   let netCents = 0;
@@ -135,7 +140,12 @@ export async function platformKpis(ctx: AdminReportContext) {
   const prior = await headline(priorFrom, priorTo);
 
   // Signups (customer side).
-  const newCustomers = await db.select({ id: customerUsers.id, createdAt: customerUsers.createdAt }).from(customerUsers).where(and(gte(customerUsers.createdAt, ctx.from), lte(customerUsers.createdAt, ctx.to)));
+  // Task #2859 — same QA-only exclusion as headline() signups.
+  const notQaOnlyCustomer = sql`(
+    NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = customer_users.id AND orders.origin = 'qa:test')
+    OR EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = customer_users.id AND orders.origin <> 'qa:test')
+  )`;
+  const newCustomers = await db.select({ id: customerUsers.id, createdAt: customerUsers.createdAt }).from(customerUsers).where(and(gte(customerUsers.createdAt, ctx.from), lte(customerUsers.createdAt, ctx.to), notQaOnlyCustomer));
   const dailySignups = emptySeries(ctx.from, ctx.to);
   for (const c of newCustomers) {
     if (!c.createdAt) continue;
@@ -161,7 +171,7 @@ export async function platformKpis(ctx: AdminReportContext) {
   const totalSessionsRow = await db.execute<{ c: string }>(sql`SELECT COUNT(DISTINCT session_id) AS c FROM analytics_events WHERE session_id IS NOT NULL AND ts >= ${ctx.from} AND ts <= ${ctx.to}`);
   const visits = Number((totalSessionsRow as any).rows?.[0]?.c ?? 0);
   // First-purchase customers in range — anyone whose MIN(orders.created_at WHERE status='paid') falls in window.
-  const firstPurchaseRow = await db.execute<{ c: string }>(sql`SELECT COUNT(*) AS c FROM (SELECT customer_id, MIN(created_at) AS first_paid FROM orders WHERE status = 'paid' GROUP BY customer_id) f WHERE f.first_paid >= ${ctx.from} AND f.first_paid <= ${ctx.to}`);
+  const firstPurchaseRow = await db.execute<{ c: string }>(sql`SELECT COUNT(*) AS c FROM (SELECT customer_id, MIN(created_at) AS first_paid FROM orders WHERE status = 'paid' AND origin IS DISTINCT FROM 'qa:test' GROUP BY customer_id) f WHERE f.first_paid >= ${ctx.from} AND f.first_paid <= ${ctx.to}`);
   const firstPurchases = Number((firstPurchaseRow as any).rows?.[0]?.c ?? 0);
 
   // Task #153 — every series entry must contain every numeric field so
@@ -616,11 +626,11 @@ export async function opsHealth(ctx: AdminReportContext) {
   const paidInRange = await db
     .select({ id: orders.id, refundedAt: orders.refundedAt })
     .from(orders)
-    .where(and(eq(orders.status, "paid"), gte(orders.createdAt, ctx.from), lte(orders.createdAt, ctx.to)));
+    .where(and(eq(orders.status, "paid"), ne(orders.origin, "qa:test"), gte(orders.createdAt, ctx.from), lte(orders.createdAt, ctx.to)));
   const refundedInRange = await db
     .select({ id: orders.id })
     .from(orders)
-    .where(and(gte(orders.refundedAt, ctx.from), lte(orders.refundedAt, ctx.to), isNotNull(orders.refundedAt)));
+    .where(and(gte(orders.refundedAt, ctx.from), lte(orders.refundedAt, ctx.to), isNotNull(orders.refundedAt), ne(orders.origin, "qa:test")));
 
   // Failed Stripe payments — Stripe doesn't write a row to `orders` when
   // a PaymentIntent fails (we only insert on session.completed). The
@@ -634,7 +644,7 @@ export async function opsHealth(ctx: AdminReportContext) {
   const last24h = new Date(now.getTime() - 24 * 3600_000);
   const last7d = new Date(now.getTime() - 7 * 86400_000);
   async function pendingCount(from: Date, to: Date): Promise<number> {
-    const r = await db.execute<{ c: string }>(sql`SELECT COUNT(*) AS c FROM orders WHERE status = 'pending' AND created_at >= ${from} AND created_at <= ${to}`);
+    const r = await db.execute<{ c: string }>(sql`SELECT COUNT(*) AS c FROM orders WHERE status = 'pending' AND origin IS DISTINCT FROM 'qa:test' AND created_at >= ${from} AND created_at <= ${to}`);
     return Number((r as any).rows?.[0]?.c ?? 0);
   }
   const [failed24h, failed7d] = await Promise.all([
@@ -646,6 +656,7 @@ export async function opsHealth(ctx: AdminReportContext) {
     .from(orders)
     .where(and(
       eq(orders.status, "pending"),
+      ne(orders.origin, "qa:test"),
       gte(orders.createdAt, ctx.from),
       lte(orders.createdAt, ctx.to),
     ))

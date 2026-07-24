@@ -10179,3 +10179,57 @@ mint_appreview_grant_numbers prod "${PROD_DATABASE_URL:-}"
 # Phase 6 (script_tags REST handling deleted along with the shopifyFetch
 # helper; the Checkout UI Extension replaced the ScriptTag and the ScriptTag
 # API itself shuts off 2026-08-26, after which any leftover tags are inert).
+
+# ─── Task #2859 — flip leaked Shopify QA-album orders to qa:test ─────────
+# Shopify E2E test purchases against the permanent QA test album
+# ("GoodTunes QA Test Album (do not sell)") minted with origin='shopify:<store>',
+# bypassing every qa:test exclusion filter and even carrying live fulfillment
+# buttons. New webhook orders now stamp qa:test in code; this backfill flips
+# any already-leaked rows (scoped strictly to the QA album id) and clears
+# their pending fulfillment_status so they leave the Orders queue.
+# Marker-guarded, idempotent, dev + prod. WARNING-not-fail on error.
+backfill_task_2859_shopify_qa_origin() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2859 shopify-qa-origin backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2859_shopify_qa_origin'
+  ) THEN
+    UPDATE orders
+    SET origin = 'qa:test',
+        fulfillment_status = CASE WHEN fulfillment_status = 'pending' THEN NULL ELSE fulfillment_status END
+    WHERE album_id = 'a0000000-0000-4000-8000-00000000e2e0'
+      AND origin LIKE 'shopify%';
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_2859_shopify_qa_origin');
+    RAISE NOTICE 'task-2859 backfill applied: % QA-album shopify orders flipped to qa:test', v_count;
+  ELSE
+    RAISE NOTICE 'task-2859 backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2859 shopify-qa-origin backfill ok on $label"
+    echo "$out" | grep -i 'task-2859' || true
+  else
+    echo "post-merge: WARNING — task-2859 shopify-qa-origin backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_2859_shopify_qa_origin dev  "${DATABASE_URL:-}"
+backfill_task_2859_shopify_qa_origin prod "${PROD_DATABASE_URL:-}"

@@ -4484,6 +4484,14 @@ export class DbStorage implements IStorage {
     // rows; only the surviving canonical account should appear anywhere in
     // the directory or count toward any segment total.
     const notMergedExpr = sql`${customerUsers.mergedIntoId} IS NULL`;
+    // Task #2859 — hide QA-only fan accounts (e.g. the Shopify E2E stub,
+    // delivered@resend.dev) from the roster: a customer whose ONLY orders
+    // are qa:test test purchases is a test artifact, not a fan. Customers
+    // with zero orders, or at least one real order, stay visible.
+    const notQaOnlyExpr = sql`(
+      NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = customer_users.id AND orders.origin = 'qa:test')
+      OR EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = customer_users.id AND orders.origin <> 'qa:test')
+    )`;
     // Segment expressions — applied server-side so filtering is correct
     // even across pagination. "buyers" and "no_sales" use EXISTS/NOT EXISTS
     // subqueries so the outer LEFT JOIN order count stays independent.
@@ -4521,8 +4529,8 @@ export class DbStorage implements IStorage {
     // When scoping to an artist's albums, restrict to customers who have
     // at least one order for one of those albums.
     const baseExpr = artistAlbumIds?.length
-      ? and(notMergedExpr, textExpr, sql`customer_users.id IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`)
-      : and(notMergedExpr, textExpr);
+      ? and(notMergedExpr, notQaOnlyExpr, textExpr, sql`customer_users.id IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`)
+      : and(notMergedExpr, notQaOnlyExpr, textExpr);
     const whereExpr = and(baseExpr, segmentExpr, cityExpr);
 
     const rows = await db
@@ -4534,7 +4542,8 @@ export class DbStorage implements IStorage {
         firstOrderAt: sql<Date | null>`min(${orders.createdAt})`,
       })
       .from(customerUsers)
-      .leftJoin(orders, eq(orders.customerId, customerUsers.id))
+      // Task #2859 — QA test orders don't count toward order/spend roll-ups.
+      .leftJoin(orders, and(eq(orders.customerId, customerUsers.id), sql`${orders.origin} <> 'qa:test'`))
       .where(whereExpr)
       .groupBy(customerUsers.id)
       .orderBy(desc(customerUsers.createdAt))
@@ -4552,8 +4561,8 @@ export class DbStorage implements IStorage {
     // artistAlbumIds scope still applies so artist-partner views stay bounded.
     // mergedIntoId IS NULL is always required so merged stubs never inflate counts.
     const countsBaseExpr = artistAlbumIds?.length
-      ? and(notMergedExpr, sql`customer_users.id IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`, cityExpr)
-      : and(notMergedExpr, cityExpr);
+      ? and(notMergedExpr, notQaOnlyExpr, sql`customer_users.id IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`, cityExpr)
+      : and(notMergedExpr, notQaOnlyExpr, cityExpr);
     const [countsRow] = await db
       .select({
         all: sql<number>`count(*)::int`,
