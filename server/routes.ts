@@ -25783,19 +25783,28 @@ export async function registerRoutes(
       // Per-track plays. Songs in this entity's connected albums; we
       // count any play_start-family event with a payload.songId that
       // resolves back to one of those songs.
+      // Grouped inner query first, song join outside — a correlated
+      // (SELECT … WHERE id = ae.payload->>'songId') in the SELECT list of a
+      // GROUP BY (ae.payload->>'songId') query is rejected by Postgres
+      // ("subquery uses ungrouped column ae.payload from outer query").
       const tr = await db.execute<{ song_id: string; title: string | null; album_id: string | null; plays: number }>(sql`
-        SELECT (ae.payload->>'songId') AS song_id,
-               (SELECT title FROM songs WHERE id = (ae.payload->>'songId')) AS title,
-               (SELECT album_id FROM songs WHERE id = (ae.payload->>'songId')) AS album_id,
-               COUNT(*)::int AS plays
-        FROM analytics_events ae
-        WHERE ae.name = 'play_start'
-          AND (ae.payload->>'songId') IS NOT NULL
-          AND (SELECT album_id FROM songs WHERE id = (ae.payload->>'songId')) = ANY(${pgArray(albumIds)})
-        ${fromSqlAe}
-        ${toSqlAe}
-        GROUP BY (ae.payload->>'songId')
-        ORDER BY plays DESC
+        SELECT p.song_id,
+               s.title AS title,
+               s.album_id AS album_id,
+               p.plays
+        FROM (
+          SELECT (ae.payload->>'songId') AS song_id,
+                 COUNT(*)::int AS plays
+          FROM analytics_events ae
+          WHERE ae.name = 'play_start'
+            AND (ae.payload->>'songId') IS NOT NULL
+          ${fromSqlAe}
+          ${toSqlAe}
+          GROUP BY (ae.payload->>'songId')
+        ) p
+        JOIN songs s ON s.id = p.song_id
+        WHERE s.album_id = ANY(${pgArray(albumIds)})
+        ORDER BY p.plays DESC
         LIMIT 50
       `);
       for (const row of ((tr as any).rows ?? []) as any[]) {
@@ -25842,17 +25851,24 @@ export async function registerRoutes(
     }
 
     if (gearVendorId) {
+      // Same ungrouped-correlated-subquery trap as the per-track query
+      // above — group first, join the instrument name outside.
       const r = await db.execute<{ instrument_id: string | null; name: string | null; clicks: number }>(sql`
-        SELECT (ae.payload->>'instrumentId') AS instrument_id,
-               (SELECT name FROM instruments WHERE id = (ae.payload->>'instrumentId')) AS name,
-               COUNT(*)::int AS clicks
-        FROM analytics_events ae
-        WHERE ae.name = 'gear_vendor_clicked'
-          AND (ae.payload->>'vendorId') = ${gearVendorId}
-        ${fromSqlAe}
-        ${toSqlAe}
-        GROUP BY (ae.payload->>'instrumentId')
-        ORDER BY clicks DESC
+        SELECT g.instrument_id,
+               i.name AS name,
+               g.clicks
+        FROM (
+          SELECT (ae.payload->>'instrumentId') AS instrument_id,
+                 COUNT(*)::int AS clicks
+          FROM analytics_events ae
+          WHERE ae.name = 'gear_vendor_clicked'
+            AND (ae.payload->>'vendorId') = ${gearVendorId}
+          ${fromSqlAe}
+          ${toSqlAe}
+          GROUP BY (ae.payload->>'instrumentId')
+        ) g
+        LEFT JOIN instruments i ON i.id = g.instrument_id
+        ORDER BY g.clicks DESC
         LIMIT 25
       `);
       for (const row of ((r as any).rows ?? []) as any[]) {
