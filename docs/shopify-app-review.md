@@ -50,6 +50,39 @@ above: they predate install/mapping, so they never minted codes. Spec (Bill, 202
   order-status page). Default OFF; no email without the artist's opt-in.
 - **Blocked on:** Niina's decision. Scope only — no implementation yet.
 
+### Pre-launch queue (Bill, 2026-07-24 — small items due before 8/14)
+1. **Redeem email-mismatch 403 copy.** `/redeem/:code` claim rejects when the signed-in
+   account's email ≠ the Shopify order's buyer email. Today that surfaces as a raw toast
+   ("Signed-in account doesn't match the order's email"). Replace with helpful copy:
+   *"This code belongs to the email used at purchase. Sign in with that email, or contact
+   support@goodtunes.music and we'll sort it out."* Fans buy with PayPal emails and
+   spouses' cards — some will hit this on launch day.
+2. **Support re-attach procedure (manual, until tooling exists).** When a fan writes in
+   because their GoodTunes account email differs from the Shopify buyer email:
+   a. Verify the fan owns the purchase (order number / confirmation number / receipt from
+      the Shopify store, and confirm the buyer email with them).
+   b. Find the order: `SELECT id, customer_id, album_id FROM orders WHERE
+      shopify_order_id = '<numeric id>'` (or via the redemption code →
+      `shopify_redemption_codes.order_id`).
+   c. Find the fan's real account id in `customer_users` by their GoodTunes email.
+   d. Mirror what claim does: `UPDATE orders SET customer_id = '<fan id>' WHERE id = …;`
+      then `INSERT INTO user_albums (id, user_id, album_id) VALUES (gen_random_uuid(),
+      '<fan id>', '<album id>') ON CONFLICT DO NOTHING;` and stamp
+      `shopify_redemption_codes.redeemed_at/redeemed_by_user_id` if unredeemed.
+      (The webhook-created stub account under the buyer email can be left; it holds no
+      password unless the fan set one.)
+3. **`external_paid` cert-PDF gap (Shopify+ / Niina).** The fan cert download
+   (`GET /api/orders/:orderId/cert/pdf`) gates on `FINALIZED_CERT_ORDER_STATUSES`
+   (`paid/complete/shipped/n/nd`) — it does **not** include `external_paid`, the status
+   Shopify+ unlock orders get. Niina's fans would 404 on the PDF download while normal
+   Shopify-store fans work. Add `external_paid` to the set (audit the other two uses of
+   the set in `server/certificates.ts` at the same time).
+4. **Checkout-editor block placement is per-store manual setup.** Both extension targets
+   are `block.render` (thank-you + customer-account order status), so each store's admin
+   must place the block once: Settings → Checkout → **Customize** (thank-you page) and
+   the customer-accounts editor (order status page) → Add app block → GoodTunes
+   Redemption → Save. This is a required step in Niina's store setup runbook.
+
 ---
 
 ## 1 — GDPR compliance webhooks (shipped)

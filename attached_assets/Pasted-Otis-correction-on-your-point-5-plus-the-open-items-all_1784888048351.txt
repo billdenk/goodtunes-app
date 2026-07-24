@@ -1,0 +1,11 @@
+Otis — correction on your point 5, plus the open items, all in one message.
+
+1. The digital GoodDeed is fully shipped, not in progress. I just downloaded my own: the rendered PDF certificate (numbered, personalized, my signature, QR provenance) AND all three social share formats — Story, Portrait, Square — personalized with handle and avatar. So the fan-facing cert experience exists end to end. Two questions from that: (a) Confirm a Shopify-webhook-origin ownership grant surfaces all of this identically — same PDF download, same share formats on the album's ownership page — since these should read off the grant regardless of origin. I'll verify on my incognito walk of the #1002 code, but tell me if there's any reason it wouldn't. (b) What were you actually referring to as 'canvas work in progress'? I want to know what's genuinely unbuilt, if anything.
+
+2. Still open: is extension version goodtunes-5 RELEASED, or only deployed? The #1002 order-status page shows no banner. If it's unreleased, release it (or tell me what to click); if it's released, tell me whether the customer-accounts order-status block needs manual placement in the checkout editor per store — and if so, that's a step for Niina's store setup too.
+
+3. Pre-launch task for the queue (small, before 8/14): the email-mismatch 403 on /redeem needs helpful failure copy — something like 'This code belongs to the email used at purchase. Sign in with that email, or contact support@goodtunes.music and we'll sort it out.' Fans buy with PayPal emails and spouses' cards; some will hit this on launch day. Also document the manual re-attach procedure support will use when they write in.
+
+4. Quick answer needed for Niina's pricing decision: what is the signed-cert floor price you mentioned (the 'clears the album's signed-cert floor' check), and where is it set per album? Her cert retail price has to clear it, so I need the number before her decision comes back.
+
+I'll do the incognito walk after your reply on 1a so I know exactly what to expect. Don't sweep #1002 until I say the walk is done.
