@@ -369,7 +369,8 @@ async function shopifyGraphql<T = Record<string, unknown>>(
 // Called fire-and-forget after the redemption code is minted so the
 // checkout UI extension (purchase.thank-you + customer-account order
 // status) can display the code and deep-link without the ScriptTag.
-// Namespace "goodtunes" is app-owned so only our extension can read it.
+// Written under the "$app:goodtunes" app-reserved namespace (see below)
+// so only our app can read it — NEVER a plain custom namespace.
 // Best-effort: a failure is logged but never blocks the webhook response.
 const GOODTUNES_FAN_HOST = process.env.GOODTUNES_HOST ?? "my.goodtunes.music";
 
@@ -1089,6 +1090,24 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   writeRedemptionMetafield(store, shopifyOrderId, code).catch((e: any) => {
     console.error(`[shopify] metafield write failed order=${shopifyOrderId}: ${e?.message ?? e}`);
   });
+
+  // Phase 1c — email the fan their personal redemption link directly.
+  // Guaranteed day-one path regardless of whether the merchant's checkout
+  // renders the UI Extension yet. Runs ONLY on a fresh code mint (webhook
+  // replays early-return above with the existing code, so this can't
+  // double-send). Fire-and-forget: mail failure never unwinds the order.
+  if (payload.email) {
+    (async () => {
+      const appUrl = process.env.APP_URL ?? `https://${process.env.GOODTUNES_HOST ?? "my.goodtunes.music"}`;
+      const redeemUrl = `${appUrl.replace(/\/$/, "")}/redeem/${code}`;
+      const [albumRow] = await db.select({ title: albums.title }).from(albums).where(eq(albums.id, albumId));
+      const { sendShopifyRedemptionEmail } = await import("./mail");
+      const r = await sendShopifyRedemptionEmail(payload.email!, albumRow?.title ?? null, redeemUrl);
+      if (!r.ok) console.error(`[shopify] redemption email failed order=${shopifyOrderId}: ${r.reason}`);
+    })().catch((e: any) => {
+      console.error(`[shopify] redemption email threw order=${shopifyOrderId}: ${e?.message ?? e}`);
+    });
+  }
 
   // Task #73 — physical bundles also flow through Order Desk so the
   // label's vinyl ships from the same warehouse pool as direct orders.

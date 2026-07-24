@@ -483,6 +483,55 @@ export async function sendCustomerSignupCodeEmail(toEmail: string, code: string,
   return sendViaResend("customer-signup-code", toEmail, subject, html, text);
 }
 
+// Phase 1c — Shopify-purchase redemption email. Guaranteed day-one
+// redemption path for stores whose checkout doesn't (yet) show the
+// Checkout UI Extension: after the orders/paid webhook mints the
+// fan's redemption code, we email their personal /redeem/<code> link
+// directly. Sent exactly once per order — the caller only invokes it
+// on a FRESH code mint (materializeOrderFromShopify early-returns the
+// existing code for replayed webhooks, skipping the send).
+export async function sendShopifyRedemptionEmail(
+  toEmail: string,
+  albumTitle: string | null,
+  redeemUrl: string,
+): Promise<SendResult> {
+  const titled = (albumTitle ?? "").trim();
+  const subject = titled
+    ? `Your GoodTunes music is ready — ${titled}`
+    : `Your GoodTunes music is ready — here's your link`;
+  const albumLine = titled ? `"${titled}" is` : "Your music is";
+  const text = [
+    `Thanks for your order!`,
+    ``,
+    `${albumLine} ready to play in your GoodTunes player. Tap your personal link to unlock it:`,
+    redeemUrl,
+    ``,
+    `The link is yours alone — it signs you in and drops the album straight into your library.`,
+    ``,
+    `— The GoodTunes team`,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Your music is ready</div>
+      <h1 style="font-size: 26px; margin: 12px 0 16px; font-weight: 700; line-height: 1.2;">${titled ? escapeHtml(titled) + " is waiting for you" : "Your album is waiting for you"}</h1>
+      <p style="font-size: 15px; color: #333; line-height: 1.55; margin: 0 0 20px;">
+        Thanks for your order! Tap your personal link below to unlock your album in the GoodTunes player.
+      </p>
+      <div style="margin: 28px 0 8px;">
+        ${bulletproofButton(redeemUrl, "Get my music", { bgColor: "#1D5E8F", gradient: "linear-gradient(135deg,#1D5E8F,#319ED8)", paddingV: 14, paddingH: 24, borderRadius: 12 })}
+      </div>
+      <p style="font-size: 13px; color: #888; line-height: 1.55; margin: 0 0 24px;">
+        Button not working? Open this link: <a href="${escapeHtml(redeemUrl)}" style="color: #319ED8; word-break: break-all;">${escapeHtml(redeemUrl)}</a>
+      </p>
+      <p style="font-size: 13px; color: #666; line-height: 1.55; margin: 0;">
+        This link is yours alone — it signs you in and drops the album straight into your library.
+      </p>
+    </div>
+  `;
+  return sendViaResend("shopify-redemption", toEmail, subject, html, text);
+}
+
 // Task #400 — One-time welcome-back mail for the ~1,850 imported
 // gogoods.com fans. The link below carries a single-use 30-day token
 // that signs the recipient straight in (no password) and drops them
