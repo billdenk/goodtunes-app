@@ -113,15 +113,18 @@ interface AlbumLite {
   primaryArtistId: string | null;
 }
 
-type Tab = "dashboard" | "overview" | "cover" | "artists" | "releases" | "payouts" | "permissions" | "shopify";
+type Tab = "dashboard" | "overview" | "people" | "cover" | "artists" | "releases" | "payouts" | "permissions" | "shopify";
 const TABS: { key: Tab; label: string }[] = [
   // Task #590 — Dashboard leads; Overview demoted to second.
   // Task #639 — Logo tab removed; header avatar's pencil-chip dialog is
   // now the only way to edit the logo (matches AdminPerson/AdminVendor).
   // Artists tab added between Cover and Releases for in-page roster
   // management without leaving for /admin/people.
+  // Task #2860 — People tab (parity with AdminManufacturer) hosts the
+  // label contacts / Add Admin panel that used to hide in Overview.
   { key: "dashboard", label: "Dashboard" },
   { key: "overview", label: "Overview" },
+  { key: "people", label: "People" },
   { key: "cover", label: "Cover" },
   { key: "artists", label: "Artists" },
   { key: "releases", label: "Releases" },
@@ -491,7 +494,9 @@ export function AdminLabel() {
           />
         )}
         {tab === "overview" && <OverviewPanel label={label} />}
-        {tab === "overview" && (
+        {/* Task #2860 — People moved out of Overview into its own tab,
+            matching AdminManufacturer's People tab. */}
+        {tab === "people" && (
           <OrganizationPeople
             apiPath={`/api/labels/${label.id}/people`}
             testIdPrefix="label"

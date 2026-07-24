@@ -10233,3 +10233,70 @@ SQL
 }
 backfill_task_2859_shopify_qa_origin dev  "${DATABASE_URL:-}"
 backfill_task_2859_shopify_qa_origin prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #2860 — backfill invite_subusers for existing label owners ─────
+# Label admins now receive an invite_subusers grant on their label scope at
+# grant time (invite-accept / partner-contacts add / direct grant), so the
+# label portal's People tab "+ Add ▾" menu works. This backfills the grant
+# for label admins minted BEFORE that change: every membership (or legacy
+# users.role) on a label scope gets a granted=true override, ON CONFLICT
+# DO NOTHING so any explicit operator deny survives. Also mirrors the flag
+# into memberships.permission_overrides (skipping rows that already carry
+# an invite_subusers key, i.e. explicit denies). Marker-guarded, dev + prod.
+backfill_task_2860_label_invite_subusers() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2860 label invite_subusers backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2860_label_invite_subusers'
+  ) THEN
+    INSERT INTO partner_permission_overrides (scope_kind, scope_id, user_id, verb, granted, updated_at)
+    SELECT DISTINCT 'label', t.scope_id, t.user_id, 'invite_subusers', true, NOW()
+    FROM (
+      SELECT m.scope_id, m.user_id
+      FROM memberships m
+      WHERE m.role = 'label' AND m.scope_kind = 'label' AND m.scope_id IS NOT NULL
+      UNION
+      SELECT u.role_scope_id, u.id
+      FROM users u
+      WHERE u.role = 'label' AND u.role_scope_id IS NOT NULL
+    ) t
+    ON CONFLICT (scope_kind, scope_id, user_id, verb) DO NOTHING;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    UPDATE memberships
+    SET permission_overrides = permission_overrides || '{"invite_subusers": true}'::jsonb,
+        updated_at = NOW()
+    WHERE role = 'label' AND scope_kind = 'label' AND scope_id IS NOT NULL
+      AND NOT (permission_overrides ? 'invite_subusers');
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_2860_label_invite_subusers');
+    RAISE NOTICE 'task-2860 backfill applied: % label invite_subusers grants inserted', v_count;
+  ELSE
+    RAISE NOTICE 'task-2860 backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2860 label invite_subusers backfill ok on $label"
+    echo "$out" | grep -i 'task-2860' || true
+  else
+    echo "post-merge: WARNING — task-2860 label invite_subusers backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_2860_label_invite_subusers dev  "${DATABASE_URL:-}"
+backfill_task_2860_label_invite_subusers prod "${PROD_DATABASE_URL:-}"

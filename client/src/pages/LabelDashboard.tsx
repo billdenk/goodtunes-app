@@ -143,9 +143,9 @@ type SortKey = "revenue" | "units" | "plays" | "listeners" | "buyers" | "albumCo
 export function LabelDashboard() {
   const [preset, setPreset] = useState<PresetId>(() => presetFromSearch(window.location.search) ?? "30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"dashboard" | "overview" | "acquisition" | "roster" | "catalog" | "orders" | "reports">(() => {
+  const [tab, setTab] = useState<"dashboard" | "people" | "overview" | "acquisition" | "roster" | "catalog" | "orders" | "reports">(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
-    if (t === "dashboard" || t === "overview" || t === "acquisition" || t === "roster" || t === "catalog" || t === "orders" || t === "reports") return t;
+    if (t === "dashboard" || t === "people" || t === "overview" || t === "acquisition" || t === "roster" || t === "catalog" || t === "orders" || t === "reports") return t;
     return "dashboard";
   });
   // Task #2486 — Dashboard-tab KPI tiles deep-link via `?tab=…` (wouter
@@ -154,7 +154,7 @@ export function LabelDashboard() {
   const search = useSearch();
   useEffect(() => {
     const t = new URLSearchParams(search).get("tab");
-    if (t === "dashboard" || t === "overview" || t === "acquisition" || t === "roster" || t === "catalog" || t === "orders" || t === "reports") {
+    if (t === "dashboard" || t === "people" || t === "overview" || t === "acquisition" || t === "roster" || t === "catalog" || t === "orders" || t === "reports") {
       setTab(t);
     }
     const p = presetFromSearch(search);
@@ -224,8 +224,9 @@ export function LabelDashboard() {
       hideHeaderIdentity={tab === "dashboard" || tab === "reports"}
       headerActions={
         // Dashboard and Reports both carry their own date range controls, so
-        // suppress the shell's range controls on those sections.
-        tab === "dashboard" || tab === "reports" ? undefined : (
+        // suppress the shell's range controls on those sections. People is a
+        // contacts directory — no date range applies there either.
+        tab === "dashboard" || tab === "reports" || tab === "people" ? undefined : (
           <>
             <RangePicker presets={RANGE_PRESETS} value={preset} onChange={applyPreset} />
             <CompareToggle active={compare} onToggle={setCompare} />
@@ -256,6 +257,11 @@ export function LabelDashboard() {
           scopeIdQs={labelIdParam}
         />
       )}
+      {/* Task #2860 — People tab (parity with the press portal): the
+          Contacts / Add Admin panel moved here from Overview. */}
+      {tab === "people" && me.data?.labelId && (
+        <LabelContactsPanel labelId={me.data.labelId} labelName={labelName} />
+      )}
       {tab === "overview" && <OverviewTab qs={qs} labelId={me.data?.labelId ?? null} labelName={labelName} />}
       {tab === "acquisition" && <AcquisitionTab kind="label" scopeId={labelIdParam} rangeQs={qs} />}
       {tab === "roster" && <RosterTab qs={qs} labelIdParam={labelIdParam} />}
@@ -271,7 +277,7 @@ export function LabelDashboard() {
 }
 
 const LABEL_TABS = modulesForRole("label") as ReadonlyArray<{
-  id: "dashboard" | "overview" | "acquisition" | "roster" | "catalog" | "orders" | "reports";
+  id: "dashboard" | "people" | "overview" | "acquisition" | "roster" | "catalog" | "orders" | "reports";
   label: string;
 }>;
 type LabelTabId = (typeof LABEL_TABS)[number]["id"];
@@ -368,15 +374,8 @@ function OverviewTab({ qs, labelId, labelName }: { qs: string; labelId: string |
 
       <CertRunsSection kind="label" qs={qs} />
 
-      {/* Task #665 — Contacts panel parity with /admin/labels/:id.
-          Same Add Admin dialog (pick existing Person or fill in
-          name+title+email+phone). Server gates POSTs by invite_subusers
-          on the caller; super-admins always pass. UI also gates the
-          "+ Add ▾" menu via the can-invite probe so label staff
-          without the verb don't see a button that would only 403. */}
-      {labelId && (
-        <LabelContactsPanel labelId={labelId} labelName={labelName} />
-      )}
+      {/* Task #2860 — the Contacts panel moved from here to the People
+          tab (parity with the press portal's People tab). */}
 
       {/* Task #952 — Self-serve "Invite an artist or label" panel. A
           label partner holding invite_subusers can onboard a fresh

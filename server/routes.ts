@@ -24896,6 +24896,13 @@ export async function registerRoutes(
         invite.createdByUserId ?? null,
       );
     }
+    // Task #2860 — label admins get invite_subusers on their label scope
+    // so the People tab's "+ Add ▾" menu (and Invite Artist) works out of
+    // the box. DO NOTHING on conflict, so an explicit deny survives.
+    if (invite.role === "label" && invite.roleScopeId) {
+      const { applyLabelOwnerInviteGrant } = await import("./auth/partnerPermissions");
+      await applyLabelOwnerInviteGrant(userId, invite.roleScopeId, invite.createdByUserId ?? null);
+    }
     // Task #1873 — write the real roster link when this invite names the
     // artist being assigned.  NULL-guarded so we never overwrite an
     // existing assignment and never clobber an operator's manual choice.
@@ -29510,6 +29517,12 @@ export async function registerRoutes(
         const { applyPressTeammateOverrides } = await import("./auth/partnerPermissions");
         await applyPressTeammateOverrides(adminUserId, entityId, level, req.session.userId!);
       }
+      // Task #2860 — a label admin gets invite_subusers on the label scope
+      // immediately, same as press teammates do above.
+      if (entityKind === "label") {
+        const { applyLabelOwnerInviteGrant } = await import("./auth/partnerPermissions");
+        await applyLabelOwnerInviteGrant(adminUserId, entityId, req.session.userId!);
+      }
       return res.json({ mode: "granted", personId, personName, adminUserId, role: targetRole, level });
     }
     // No admin row — check for an existing pending invite on the same
@@ -29774,6 +29787,11 @@ export async function registerRoutes(
       // account's other memberships and login survive. (setUserRole would
       // nuke every non-matching membership.)
       await addMembership(adminUserId, role as any, roleScopeId, null);
+      // Task #2860 — label grants carry invite_subusers on the label scope.
+      if (role === "label" && roleScopeId) {
+        const { applyLabelOwnerInviteGrant } = await import("./auth/partnerPermissions");
+        await applyLabelOwnerInviteGrant(adminUserId, roleScopeId, req.session.userId!);
+      }
       res.json({ adminUserId, role, roleScopeId });
     },
   );

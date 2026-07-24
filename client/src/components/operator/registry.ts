@@ -118,6 +118,9 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // Label shell — `/label` (LabelDashboard.tsx). Catalog section (Roster,
   // Albums) under Dashboard. "catalog" relabeled "Albums".
   { id: "dashboard",   label: "Dashboard",   icon: LayoutDashboard, roles: ["label"] },
+  // Task #2860 — People (label contacts / Add Admin) gets its own tab,
+  // parity with the press portal, instead of hiding inside Overview.
+  { id: "people",      label: "People",      icon: User,      section: "catalog", roles: ["label"] },
   { id: "roster",      label: "Roster",      icon: Users,     section: "catalog", roles: ["label"] },
   { id: "catalog",     label: "Albums",      icon: Disc3,     section: "catalog", roles: ["label"] },
   { id: "overview",    label: "Overview",    icon: Activity,  roles: ["label"] },

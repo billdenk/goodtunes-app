@@ -313,6 +313,27 @@ export async function applyPressTeammateOverrides(
   await rebuildMembershipOverrides(userId, "manufacturer", pressId);
 }
 
+// Task #2860 — grant `invite_subusers` on the label scope when a label
+// admin is granted (invite-accept, partner-contacts add, or direct
+// grant), mirroring how press teammates receive it. Labels have no
+// Owner/Staff tier model (out of scope), so every label grant gets the
+// invite verb. ON CONFLICT DO NOTHING so an operator's explicit deny
+// override (written from the Permissions tab) is never overwritten.
+export async function applyLabelOwnerInviteGrant(
+  userId: string,
+  labelId: string,
+  byUserId: string | null,
+): Promise<void> {
+  await db.execute(sql`
+    INSERT INTO partner_permission_overrides (scope_kind, scope_id, user_id, verb, granted, updated_by_user_id, updated_at)
+    VALUES ('label', ${labelId}, ${userId}, 'invite_subusers', true, ${byUserId}, NOW())
+    ON CONFLICT (scope_kind, scope_id, user_id, verb) DO NOTHING
+  `);
+  // Mirror the override state into the user's membership for this label
+  // scope (no-op when the memberships table is absent).
+  await rebuildMembershipOverrides(userId, "label", labelId);
+}
+
 // Task #699 — can this user edit the given press (settings, masters,
 // invoices, payouts, customer routing)? Super_admin / unscoped admin
 // always can. A scoped manufacturer admin can UNLESS they're Staff —
