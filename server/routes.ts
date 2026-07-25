@@ -8222,6 +8222,22 @@ export async function registerRoutes(
       return res.status(400).json({ message: "title, artist, artwork are required" });
     }
     try {
+      // #2820 — an artist-scoped account can only create albums under its
+      // OWN person scope. requireAdmin admits partner accounts, so without
+      // this an artist could POST an arbitrary primaryArtistId (or none)
+      // and mint albums outside their scope. Scope-less artist fails closed.
+      const creatorRole = await getUserRole(req.session.userId!);
+      let forcedArtistScopeId: string | null = null;
+      if (creatorRole?.role === "artist") {
+        if (!creatorRole.roleScopeId) {
+          return res.status(403).json({ message: "Artist account has no person scope" });
+        }
+        const bodyArtistId = req.body?.primaryArtistId ? String(req.body.primaryArtistId) : null;
+        if (bodyArtistId && bodyArtistId !== creatorRole.roleScopeId) {
+          return res.status(403).json({ message: "Artists can only create albums for their own artist profile" });
+        }
+        forcedArtistScopeId = creatorRole.roleScopeId;
+      }
       // Validate the FK up front so an unknown label id returns a clean 400
       // rather than a generic 500 from the underlying foreign-key violation.
       // Empty string is normalized to null (no label).
@@ -8264,7 +8280,7 @@ export async function registerRoutes(
         originalReleaseDate: normalizeReleaseDate(req.body?.originalReleaseDate),
         copyrightLine: req.body?.copyrightLine ? String(req.body.copyrightLine).trim() : null,
         copyrightSymbol: normalizeCopyrightSymbol(req.body?.copyrightSymbol),
-        primaryArtistId: await resolvePrimaryArtistId(req.body?.primaryArtistId),
+        primaryArtistId: forcedArtistScopeId ?? (await resolvePrimaryArtistId(req.body?.primaryArtistId)),
         // Discography "+ Add" + Apple-URL seed paths leave this off; admin
         // flips it on once an album is actually being released by GoodTunes.
         isGoodTunesRelease: !!req.body?.isGoodTunesRelease,
@@ -8572,6 +8588,20 @@ export async function registerRoutes(
   // The numeric collectionId at the end is the only piece we actually need
   // for iTunes Lookup. Falls back to "us" storefront if the URL omits one.
   app.post("/api/admin/albums/from-apple-url", requireAdmin, async (req, res) => {
+    // #2820 (follow-up) — this seeder mints a brand-new album with a
+    // primaryArtistId derived from Apple metadata, so a partner account
+    // (admitted by requireAdmin) could otherwise create out-of-scope albums.
+    // The "Seed an album" button only exists on the operator Albums column,
+    // so gate on the resolved role like the duplicate route does.
+    {
+      const role = await getUserRole(req.session.userId!);
+      const isOperator = role?.role === "super_admin" || role?.role === "admin";
+      if (!isOperator) {
+        return res
+          .status(403)
+          .json({ message: "Only GoodTunes operators can seed an album from a URL." });
+      }
+    }
     const url = String(req.body?.url ?? "").trim();
     if (!url || !/^https?:\/\//i.test(url)) {
       return res.status(400).json({ message: "A full https:// Apple Music album URL is required" });
