@@ -293,3 +293,15 @@ id = "opU_YqG5qsqkUaBV4qpoB"
 uri = "file://docs/sales/investor-overview.md"
 type = "text"
 title = "Investor Overview — docs/sales/investor-overview.md"
+
+[[outputs]]
+id = "hVMcDDr2bazClTUZpNuCy"
+uri = "file://docs/design-system.md"
+type = "text"
+title = "Design System (brand, tokens, primitives, admin chrome)"
+
+[[outputs]]
+id = "rNEiz3d2pgW4dGTewUTi9"
+uri = "file://docs/admin-conventions.md"
+type = "text"
+title = "Admin Conventions (patterns, dialogs, partner-portal rules)"
