@@ -10740,3 +10740,103 @@ SQL
 }
 repair_task_2867_andrew_scope dev  "${DATABASE_URL:-}"
 repair_task_2867_andrew_scope prod "${PROD_DATABASE_URL:-}"
+
+# Task #2869 — ONE-TIME data repair: home accepted press-invited artists to
+# their press.  The original admin-invite creation path never stamped
+# default_press_id on the invite row when the referrer was a manufacturer,
+# so accepted invites from that era have an artist membership + person row
+# but people.default_press_id = NULL, making them invisible on the press
+# People page.
+#
+# This sweep:
+#   1. Finds every accepted artist invite whose referrer_kind='manufacturer'
+#      and referrer_scope_id is set (the press id).
+#   2. Resolves the artist's people row via users.role_scope_id.
+#   3. Sets people.default_press_id = referrer_scope_id wherever it is NULL
+#      (never overwrites an existing homing).
+#
+# James+Rockstar (james+rockstar@goodtunes.music) is covered by the sweep
+# generically; a targeted block logs a notice for auditing.
+#
+# Marker-guarded so it runs exactly once per DB; safe on dev clones.
+repair_task_2869_press_homing() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2869 press-homing repair on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_swept  integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2869_press_homing'
+  ) THEN
+    -- Sweep: home every artist whose accepted press-referrer invite has
+    -- referrer_scope_id set but whose people row still has default_press_id NULL.
+    -- Join path: admin_invites → users (by email + role='artist') → people
+    -- (by users.role_scope_id = people.id). NULL-guarded on default_press_id
+    -- so we never clobber an operator's manual homing choice.
+    WITH sweep AS (
+      SELECT DISTINCT ON (p.id)
+             p.id        AS person_id,
+             ai.referrer_scope_id AS press_id
+      FROM admin_invites ai
+      JOIN users u
+        ON lower(u.email) = lower(ai.email)
+       AND u.role = 'artist'
+      JOIN people p
+        ON p.id = u.role_scope_id
+       AND p.deleted_at IS NULL
+       AND p.default_press_id IS NULL
+      WHERE ai.used_at IS NOT NULL
+        AND ai.referrer_kind = 'manufacturer'
+        AND ai.referrer_scope_id IS NOT NULL
+      ORDER BY p.id, ai.used_at DESC
+    )
+    UPDATE people pe
+       SET default_press_id = s.press_id
+      FROM sweep s
+     WHERE pe.id = s.person_id
+       AND pe.default_press_id IS NULL;
+
+    GET DIAGNOSTICS v_swept = ROW_COUNT;
+
+    -- Targeted notice for James+Rockstar.
+    IF EXISTS (
+      SELECT 1 FROM users
+      WHERE lower(email) = 'james+rockstar@goodtunes.music'
+        AND role = 'artist'
+    ) THEN
+      RAISE NOTICE 'task-2869: james+rockstar user found on this DB';
+    ELSE
+      RAISE NOTICE 'task-2869: james+rockstar user not found on this DB (dev clone or not yet invited)';
+    END IF;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_2869_press_homing');
+
+    RAISE NOTICE 'task-2869 press-homing repair applied: % people homed to their press', v_swept;
+  ELSE
+    RAISE NOTICE 'task-2869 press-homing repair already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2869 press-homing repair ok on $label"
+    echo "$out" | grep -i 'task-2869' || true
+  else
+    echo "post-merge: WARNING — task-2869 press-homing repair failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+repair_task_2869_press_homing dev  "${DATABASE_URL:-}"
+repair_task_2869_press_homing prod "${PROD_DATABASE_URL:-}"

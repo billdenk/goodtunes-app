@@ -5225,6 +5225,9 @@ export class DbStorage implements IStorage {
       targetPersonId: (data as any).targetPersonId ?? null,
       preFlightedAlbumId: (data as any).preFlightedAlbumId ?? null,
       reviewStatus: (data as any).reviewStatus ?? "not_required",
+      // Task #2869 — press homing: stamp the inviting manufacturer id so
+      // the accept handler can set people/labels.default_press_id at signup.
+      defaultPressId: (data as any).defaultPressId ?? null,
     } as any).returning();
     return row;
   }

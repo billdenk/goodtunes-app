@@ -27410,6 +27410,18 @@ export async function registerRoutes(
     const inviter = await storage.getUser(req.session.userId!);
     const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes admin";
 
+    // Task #2869 — when inviting an artist or label with a press as the
+    // referrer (either because a press admin used their portal to invite
+    // from this path, or because a super-admin filled in the referrer
+    // picker with "manufacturer"), stamp default_press_id on the invite
+    // row so the accept handler can home the person/label to that press.
+    // This mirrors what the press portal's per-person invite endpoint
+    // already does (POST /api/press/:id/people/:personId/invite).
+    const inviteDefaultPressId =
+      (referrerKind === "manufacturer" && referrerScopeId && (role === "artist" || role === "label"))
+        ? referrerScopeId
+        : null;
+
     const invite = await storage.createAdminInvite({
       email,
       role: role as any,
@@ -27424,6 +27436,7 @@ export async function registerRoutes(
       targetPersonId,
       preFlightedAlbumId,
       reviewStatus,
+      defaultPressId: inviteDefaultPressId,
     } as any);
 
     // Task #546 — If this email is on the earmarked-folks list, stamp
