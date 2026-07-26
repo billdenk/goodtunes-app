@@ -8242,7 +8242,7 @@ export async function registerRoutes(
       return res.status(400).json({ message: "title, artist, artwork are required" });
     }
     try {
-      // #2820 — an artist-scoped account can only create albums under its
+      // Task #2868 — an artist-scoped account can only create albums under its
       // OWN person scope. requireAdmin admits partner accounts, so without
       // this an artist could POST an arbitrary primaryArtistId (or none)
       // and mint albums outside their scope. Scope-less artist fails closed.

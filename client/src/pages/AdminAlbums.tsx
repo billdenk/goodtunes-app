@@ -883,7 +883,7 @@ export function AdminAlbums() {
               disabled={createAlbum.isPending}
               onClick={() => {
                 if (createAlbum.isPending) return;
-                // Task #1251 — artist-role users already are the artist,
+                // Task #2868 — artist-role users already are the artist,
                 // so skip the "Who's the artist?" picker and go straight
                 // to naming the album with their own identity attached.
                 // Other roles (super_admin/admin/label) keep the picker;

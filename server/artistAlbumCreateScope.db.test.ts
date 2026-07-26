@@ -1,4 +1,4 @@
-// #2820 — regression coverage for artist-scoped album creation.
+// Task #2868 — regression coverage for artist-scoped album creation.
 //
 // POST /api/admin/albums is gated by requireAdmin, which admits partner
 // accounts. An artist-scoped account must only be able to create albums
@@ -7,6 +7,9 @@
 //   - artist posting no primaryArtistId → created with their own scope forced
 //   - scope-less artist → 403 (fails closed)
 //   - operator (super_admin) keeps free choice of primaryArtistId
+//
+// Client-side: AdminAlbums.tsx skips NewAlbumArtistDialog for artist-scoped
+// users and pre-sets their own roleScopeId as the primaryArtistId.
 //
 // Same harness as partnerOrderPeopleScope.db.test.ts: full route tree over a
 // loopback socket, Bearer tokens via storage.createAuthToken. Real DB
@@ -57,8 +60,8 @@ before(async () => {
 
   const tag = randomUUID().slice(0, 8);
 
-  artistPersonId = await seedPerson(`T2820 Artist ${tag}`);
-  otherPersonId = await seedPerson(`T2820 Other ${tag}`);
+  artistPersonId = await seedPerson(`T2868 Artist ${tag}`);
+  otherPersonId = await seedPerson(`T2868 Other ${tag}`);
 
   scopedArtistToken = await tokenFor(await seedAdminUser("artist", artistPersonId, tag + "a"));
   scopelessArtistToken = await tokenFor(await seedAdminUser("artist", null, tag + "b"));
@@ -76,7 +79,7 @@ async function seedAdminUser(role: string, scopeId: string | null, tag: string):
   const id = randomUUID();
   await exec(sql`
     INSERT INTO users (id, username, password, display_name, email, is_admin, role, role_scope_id)
-    VALUES (${id}, ${"t2820_" + tag}, ${"x"}, ${"t2820"}, ${"t2820_" + tag + "@example.test"},
+    VALUES (${id}, ${"t2868_" + tag}, ${"x"}, ${"t2868"}, ${"t2868_" + tag + "@example.test"},
             true, ${role}, ${scopeId})
   `);
   created.users.add(id);
