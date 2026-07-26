@@ -10390,3 +10390,104 @@ SQL
 }
 repair_task_2865_dead_alive_scope dev  "${DATABASE_URL:-}"
 repair_task_2865_dead_alive_scope prod "${PROD_DATABASE_URL:-}"
+
+# Task #2866 — Repair ALL scopeless artist accounts (not just Dead Alive /
+# Andrew Rockstar). Any row where users.role='artist' AND role_scope_id IS
+# NULL (or empty) left that account invisible in the People list and
+# scopeless in every catalog read. For each, we mint a new Person row
+# (name from display_name → real_name → email local-part → "Artist") and
+# wire BOTH the legacy column (users.role_scope_id) AND the memberships
+# SET so the two never drift. Marker-guarded so a subsequent merge never
+# clobbers a scope that an operator already fixed manually. Safe to re-run
+# on a DB where the marker already exists — the DO $$ block no-ops.
+#
+# NOTE: the task-2865 block above already stamped the ONE known specific
+# case; this block is the broad sweep that catches any others (Andrew
+# Rockstar, any future edge case) on both dev and prod.
+repair_task_2866_scopeless_artists() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2866 scopeless-artist repair on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  r            RECORD;
+  v_person_id  varchar;
+  v_count      integer := 0;
+  v_person_name text;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2866_scopeless_artists'
+  ) THEN
+    -- Loop over every artist account with no scope linked.
+    FOR r IN (
+      SELECT
+        u.id AS user_id,
+        COALESCE(
+          NULLIF(trim(u.display_name), ''),
+          NULLIF(trim(u.real_name), ''),
+          NULLIF(split_part(u.email, '@', 1), ''),
+          'Artist'
+        ) AS person_name,
+        u.email AS contact_email
+      FROM users u
+      WHERE u.role = 'artist'
+        AND (u.role_scope_id IS NULL OR u.role_scope_id = '')
+    ) LOOP
+      -- Create a linked Person record for this artist account.
+      INSERT INTO people (id, name, contact_email)
+      VALUES (gen_random_uuid()::varchar, r.person_name, r.contact_email)
+      RETURNING id INTO v_person_id;
+
+      -- 1. Stamp the legacy column (source of truth + synth-fallback read).
+      UPDATE users
+         SET role_scope_id = v_person_id
+       WHERE id = r.user_id
+         AND (role_scope_id IS NULL OR role_scope_id = '');
+
+      -- 2. If a stale NULL-scope artist membership row exists (written by
+      --    the task-1036 backfill from the unlinked users row), replace it
+      --    with the correct scoped row.
+      DELETE FROM memberships
+       WHERE user_id = r.user_id
+         AND role = 'artist'
+         AND scope_id IS NULL;
+
+      -- 3. Upsert the correct scoped membership.
+      INSERT INTO memberships (user_id, role, scope_kind, scope_id)
+      VALUES (r.user_id, 'artist', 'artist', v_person_id)
+      ON CONFLICT (user_id, scope_kind, scope_id) WHERE scope_id IS NOT NULL
+      DO UPDATE SET role = EXCLUDED.role, updated_at = NOW();
+
+      v_count := v_count + 1;
+      RAISE NOTICE 'task-2866: created Person % (%) for scopeless artist user %', v_person_id, r.person_name, r.user_id;
+    END LOOP;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_2866_scopeless_artists');
+
+    RAISE NOTICE 'task-2866 scopeless-artist repair applied: % accounts fixed', v_count;
+  ELSE
+    RAISE NOTICE 'task-2866 scopeless-artist repair already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2866 scopeless-artist repair ok on $label"
+    echo "$out" | grep -i 'task-2866' || true
+  else
+    echo "post-merge: WARNING — task-2866 scopeless-artist repair failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+repair_task_2866_scopeless_artists dev  "${DATABASE_URL:-}"
+repair_task_2866_scopeless_artists prod "${PROD_DATABASE_URL:-}"

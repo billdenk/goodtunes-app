@@ -24852,6 +24852,48 @@ export async function registerRoutes(
     opts: { isNewAccount: boolean },
   ): Promise<void> {
     const ir = (invite.inviteRole ?? null) as string | null;
+
+    // Task #2866 — close the "scopeless artist" gap. An artist invite that
+    // reached accept-time without a roleScopeId (e.g. minted before Task
+    // #699 added auto-mint at creation, or via a direct-grant path) would
+    // hand the account an artist membership with scope=null — no catalog
+    // scope, invisible in the People list. Auto-create a Person here so
+    // every artist account always resolves to a real scope. Derivation
+    // order: users.display_name → users.real_name → email local-part →
+    // "Artist". This fires only once per invite (idempotent in the same
+    // transaction; a later repair backfill in post-merge.sh handles rows
+    // that already exist in the DB).
+    let effectiveRoleScopeId = invite.roleScopeId ?? null;
+    if (invite.role === "artist" && !effectiveRoleScopeId) {
+      try {
+        const uRow = await db.execute<{ display_name: string | null; real_name: string | null }>(
+          sql`SELECT display_name, real_name FROM users WHERE id = ${userId} LIMIT 1`,
+        );
+        const ur = ((uRow as any).rows ?? [])[0];
+        const rawName =
+          (ur?.display_name ?? "").trim() ||
+          (ur?.real_name ?? "").trim() ||
+          (invite.email ? invite.email.split("@")[0] : "") ||
+          "Artist";
+        const newPerson = await storage.createPerson({
+          name: rawName,
+          isGroup: false,
+          contactEmail: invite.email ?? null,
+        } as any);
+        effectiveRoleScopeId = newPerson.id;
+        console.log(
+          `[applyAdminInviteGrant] auto-created Person ${newPerson.id} ("${rawName}") for scopeless artist grant` +
+            ` (userId=${userId}, inviteId=${invite.id ?? "(direct)"})`,
+        );
+      } catch (e: any) {
+        // If auto-create fails, setUserRole / addMembership will throw
+        // their own guard (scopeKind!=null && scopeId==null) and surface
+        // the error. Log so ops can act without a silent miss.
+        console.error(`[applyAdminInviteGrant] failed to auto-create Person for scopeless artist (userId=${userId}): ${e?.message}`);
+        throw e;
+      }
+    }
+
     // Promote to admin. Stamp Terms only on a brand-new row — an existing
     // account already consented when it was first provisioned.
     if (opts.isNewAccount) {
@@ -24866,9 +24908,9 @@ export async function registerRoutes(
       ? (ir === "press_staff" ? "staff" : "owner_admin")
       : ir;
     if (opts.isNewAccount) {
-      await setUserRole(userId, invite.role as any, invite.roleScopeId ?? null);
+      await setUserRole(userId, invite.role as any, effectiveRoleScopeId);
     } else {
-      await addMembership(userId, invite.role as any, invite.roleScopeId ?? null, subRole ?? null);
+      await addMembership(userId, invite.role as any, effectiveRoleScopeId, subRole ?? null);
     }
     // Task #1037 — link to the same human's fan row if one exists so a
     // single login + OAuth identity serves both shells. Invite emails are
@@ -24889,12 +24931,12 @@ export async function registerRoutes(
     // Press provenance — invited_by_press_id drives the Sell-panel lock.
     const rk = invite.referrerKind ?? null;
     const rsi = invite.referrerScopeId ?? null;
-    if (rk === "manufacturer" && rsi && invite.roleScopeId) {
+    if (rk === "manufacturer" && rsi && effectiveRoleScopeId) {
       try {
         if (invite.role === "artist") {
-          await db.execute(sql`UPDATE people SET invited_by_press_id = ${rsi} WHERE id = ${invite.roleScopeId} AND invited_by_press_id IS NULL`);
+          await db.execute(sql`UPDATE people SET invited_by_press_id = ${rsi} WHERE id = ${effectiveRoleScopeId} AND invited_by_press_id IS NULL`);
         } else if (invite.role === "label") {
-          await db.execute(sql`UPDATE labels SET invited_by_press_id = ${rsi} WHERE id = ${invite.roleScopeId} AND invited_by_press_id IS NULL`);
+          await db.execute(sql`UPDATE labels SET invited_by_press_id = ${rsi} WHERE id = ${effectiveRoleScopeId} AND invited_by_press_id IS NULL`);
         }
       } catch (e: any) {
         console.warn(`[invite] press wiring failed: ${e?.message}`);
@@ -24902,12 +24944,12 @@ export async function registerRoutes(
     }
     // Mutable default press (NULL-guarded so a stale invite never resets it).
     const dpid = invite.defaultPressId ?? null;
-    if (dpid && invite.roleScopeId) {
+    if (dpid && effectiveRoleScopeId) {
       try {
         if (invite.role === "artist") {
-          await db.execute(sql`UPDATE people SET default_press_id = ${dpid} WHERE id = ${invite.roleScopeId} AND default_press_id IS NULL`);
+          await db.execute(sql`UPDATE people SET default_press_id = ${dpid} WHERE id = ${effectiveRoleScopeId} AND default_press_id IS NULL`);
         } else if (invite.role === "label") {
-          await db.execute(sql`UPDATE labels SET default_press_id = ${dpid} WHERE id = ${invite.roleScopeId} AND default_press_id IS NULL`);
+          await db.execute(sql`UPDATE labels SET default_press_id = ${dpid} WHERE id = ${effectiveRoleScopeId} AND default_press_id IS NULL`);
         }
       } catch (e: any) {
         console.warn(`[invite] default press stamp failed: ${e?.message}`);
@@ -24916,7 +24958,7 @@ export async function registerRoutes(
     // Task #351 — per-user override grants for artist team/manager tiers.
     // "label" maps to [] intentionally (recognition only); add verbs here
     // in a single place when Label edit permissions are opened up later.
-    if (ir && invite.role === "artist" && invite.roleScopeId) {
+    if (ir && invite.role === "artist" && effectiveRoleScopeId) {
       const verbsToGrant = ir === "team"
         ? ["edit_credits_and_gear"]
         : ir === "manager"
@@ -24927,21 +24969,21 @@ export async function registerRoutes(
       for (const verb of verbsToGrant) {
         await db.execute(sql`
           INSERT INTO partner_permission_overrides (scope_kind, scope_id, user_id, verb, granted, updated_by_user_id, updated_at)
-          VALUES ('artist', ${invite.roleScopeId}, ${userId}, ${verb}, true, ${invite.createdByUserId ?? null}, NOW())
+          VALUES ('artist', ${effectiveRoleScopeId}, ${userId}, ${verb}, true, ${invite.createdByUserId ?? null}, NOW())
           ON CONFLICT (scope_kind, scope_id, user_id, verb) DO NOTHING
         `);
       }
       if (verbsToGrant.length > 0) {
         const { rebuildMembershipOverrides } = await import("./auth/roles");
-        await rebuildMembershipOverrides(userId, "artist", invite.roleScopeId);
+        await rebuildMembershipOverrides(userId, "artist", effectiveRoleScopeId);
       }
     }
     // Task #699 — press (manufacturer) teammate tier overrides.
-    if (invite.role === "manufacturer" && invite.roleScopeId) {
+    if (invite.role === "manufacturer" && effectiveRoleScopeId) {
       const { applyPressTeammateOverrides } = await import("./auth/partnerPermissions");
       await applyPressTeammateOverrides(
         userId,
-        invite.roleScopeId,
+        effectiveRoleScopeId,
         ir === "press_staff" ? "staff" : "owner_admin",
         invite.createdByUserId ?? null,
       );
@@ -24949,24 +24991,24 @@ export async function registerRoutes(
     // Task #2860 — label admins get invite_subusers on their label scope
     // so the People tab's "+ Add ▾" menu (and Invite Artist) works out of
     // the box. DO NOTHING on conflict, so an explicit deny survives.
-    if (invite.role === "label" && invite.roleScopeId) {
+    if (invite.role === "label" && effectiveRoleScopeId) {
       const { applyLabelOwnerInviteGrant } = await import("./auth/partnerPermissions");
-      await applyLabelOwnerInviteGrant(userId, invite.roleScopeId, invite.createdByUserId ?? null);
+      await applyLabelOwnerInviteGrant(userId, effectiveRoleScopeId, invite.createdByUserId ?? null);
     }
     // Task #1873 — write the real roster link when this invite names the
     // artist being assigned.  NULL-guarded so we never overwrite an
     // existing assignment and never clobber an operator's manual choice.
     const rosterTargetId = invite.targetPersonId ?? null;
-    if (rosterTargetId && invite.roleScopeId) {
+    if (rosterTargetId && effectiveRoleScopeId) {
       try {
         if (invite.role === "manager") {
           await db.execute(sql`
-            UPDATE people SET manager_id = ${invite.roleScopeId}
+            UPDATE people SET manager_id = ${effectiveRoleScopeId}
              WHERE id = ${rosterTargetId} AND manager_id IS NULL
           `);
         } else if (invite.role === "label") {
           await db.execute(sql`
-            UPDATE people SET label_id = ${invite.roleScopeId}
+            UPDATE people SET label_id = ${effectiveRoleScopeId}
              WHERE id = ${rosterTargetId} AND label_id IS NULL
           `);
         }
