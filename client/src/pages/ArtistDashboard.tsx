@@ -85,6 +85,9 @@ type Audience = {
   repeatCohort: { range: string; listeners: number }[];
   topFans: { handle: string; plays: number }[];
   excludedPlays?: number;
+  // Task #2870 — grant/comp bucket surfaced separately on the Audience tab
+  grantPlays?: number;
+  grantListeners?: number;
 };
 
 // Brand palette + per-SKU chart mapping come from the shared token
@@ -489,9 +492,16 @@ function AudienceTab({ qs }: { qs: string }) {
         <Kpi label="Returning listeners" value={compact(d.returningListeners)} sub={total ? `${pct(d.returningListeners / total)} of total` : undefined} testId="kpi-returning-listeners" />
         <Kpi label="Engaged fans" value={compact(d.repeatCohort.filter((b) => b.range !== "1").reduce((s, b) => s + b.listeners, 0))} sub="2+ plays in window" testId="kpi-engaged" />
       </section>
+      {/* Task #2870 — two separate footnote lines: one for grant/comp plays,
+          one for staff/internal. Either can be zero independently. */}
+      {(d.grantPlays ?? 0) > 0 ? (
+        <p className="text-xs text-slate-400" data-testid="text-audience-grant">
+          {compact(d.grantPlays!)} grant/comp play{d.grantPlays === 1 ? "" : "s"} ({compact(d.grantListeners ?? 0)} listener{(d.grantListeners ?? 0) === 1 ? "" : "s"}) from comped copies & previews — not counted in fan totals above.
+        </p>
+      ) : null}
       {d.excludedPlays && d.excludedPlays > 0 ? (
         <p className="text-xs text-slate-400" data-testid="text-audience-excluded">
-          Excludes {compact(d.excludedPlays)} comp/preview, operator & internal play{d.excludedPlays === 1 ? "" : "s"} from these fan counts.
+          {compact(d.excludedPlays)} staff/internal play{d.excludedPlays === 1 ? "" : "s"} also excluded.
         </p>
       ) : null}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">

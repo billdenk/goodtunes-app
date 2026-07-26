@@ -1028,7 +1028,7 @@ async function audienceHandler(req: Request, res: Response) {
   if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
   const { range } = parseRange(req);
   if (!scope.songIds.length) {
-    return res.json({ range, newListeners: 0, returningListeners: 0, repeatCohort: [], topFans: [], excludedPlays: 0 });
+    return res.json({ range, newListeners: 0, returningListeners: 0, repeatCohort: [], topFans: [], excludedPlays: 0, grantPlays: 0, grantListeners: 0 });
   }
 
   // Genuine-fan cohort only — comp/preview grant holders, operators/staff,
@@ -1051,17 +1051,33 @@ async function audienceHandler(req: Request, res: Response) {
     WHERE plays_in_window > 0
   `);
 
-  // Excluded (comp/preview/operator/internal) plays in the window, surfaced
-  // to operators so the removed volume stays visible rather than vanishing.
-  const excludedRow = await db.execute<{ excluded: string }>(sql`
-    SELECT COUNT(*)::text AS excluded
-    FROM analytics_events e
-    WHERE e.name = 'play_start'
-      AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
-      AND e.ts >= ${range.from} AND e.ts < ${range.to}
-      AND ${nonFanListen()}
-  `);
+  // Task #2870 — split the excluded-plays bucket into two separate signals:
+  //   • excludedPlays: staff/operator/internal only (NOT grant holders)
+  //   • grantPlays / grantListeners: comp-copy & unexpired-preview holders (NOT staff)
+  // This mirrors the same split already done in computeKpis() and computeLifetime().
+  const [excludedRow, grantRow] = await Promise.all([
+    db.execute<{ excluded: string }>(sql`
+      SELECT COUNT(*)::text AS excluded
+      FROM analytics_events e
+      WHERE e.name = 'play_start'
+        AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
+        AND e.ts >= ${range.from} AND e.ts < ${range.to}
+        AND ${staffInternalListen()}
+    `),
+    db.execute<{ grant_plays: string; grant_listeners: string }>(sql`
+      SELECT
+        COUNT(*)::text AS grant_plays,
+        COUNT(DISTINCT COALESCE(e.user_id, e.session_id))::text AS grant_listeners
+      FROM analytics_events e
+      WHERE e.name = 'play_start'
+        AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
+        AND e.ts >= ${range.from} AND e.ts < ${range.to}
+        AND ${grantListen()}
+    `),
+  ]);
   const excludedPlays = Number((excludedRow as any).rows?.[0]?.excluded ?? 0);
+  const grantPlays = Number((grantRow as any).rows?.[0]?.grant_plays ?? 0);
+  const grantListeners = Number((grantRow as any).rows?.[0]?.grant_listeners ?? 0);
 
   const rows = (cohort as any).rows || [];
   let newCount = 0, retCount = 0;
@@ -1097,6 +1113,8 @@ async function audienceHandler(req: Request, res: Response) {
     repeatCohort,
     topFans,
     excludedPlays,
+    grantPlays,
+    grantListeners,
   });
 }
 
