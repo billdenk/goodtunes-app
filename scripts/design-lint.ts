@@ -335,6 +335,27 @@ function lintFile(rel: string, src: string): Violation[] {
     }
   }
 
+  // R13: non-shadcn filled buttons on admin surfaces. Dark-background
+  // filled buttons must use shadcn <Button> (which resolves to the
+  // gt-admin --primary brand-blue token), not raw <button> with
+  // inline bg-slate-700/800/900 or bg-gray-700/800/900 fill classes.
+  // Heuristic: a <button ...> tag on an admin file whose className
+  // contains bg-slate-{700,800,900} or bg-gray-{700,800,900}.
+  if (isAdmin) {
+    const filledBtnRe = /<button\b[^>]*\bclassName=[^>]*\bbg-(?:slate|gray)-(?:700|800|900)\b/g;
+    let fbm: RegExpExecArray | null;
+    while ((fbm = filledBtnRe.exec(src)) !== null) {
+      const lineNum = src.slice(0, fbm.index).split("\n").length;
+      out.push({
+        rule: "admin-filled-raw-button",
+        file: rel,
+        line: lineNum,
+        message: "Admin filled button uses raw <button> with dark bg-slate/gray-* — use shadcn <Button> for consistent styling under gt-admin --primary.",
+        snippet: lines[lineNum - 1]?.trim().slice(0, 200) ?? "",
+      });
+    }
+  }
+
   // R6: destructive button without a confirm primitive in the same file.
   // Heuristic: file contains "Trash" import from lucide-react AND a string
   // like "Delete" / "Remove forever" inside a Button label/text, but no

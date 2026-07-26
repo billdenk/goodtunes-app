@@ -35,6 +35,7 @@
 // jacket name).
 
 import type { Express, Request, Response } from "express";
+import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db";
@@ -73,10 +74,17 @@ export type CatalogColor = {
   name: string;
   swatchHex: string | null;
   swatchImageUrl: string | null;
+  // Task #2872 — ~150px thumbnail derivative for chip-grid rendering.
+  // Null = fall back to swatchImageUrl.
+  swatchThumbUrl: string | null;
   position: number;
   // Task #668 — stamped by the MRP importer with the canonical source
   // URL on memphisrecordpressing.com (null for hand-added swatches).
   importSourceUrl: string | null;
+  // Task #2872 — cross-format color identity. All format-copies share
+  // one colorGroupId so edits propagate to every copy. Null on pre-
+  // existing rows until backfill runs.
+  colorGroupId: string | null;
 };
 // Task #624 — each rung carries an optional `confirmed` flag. False
 // (or missing on legacy rows) means the rung was seeded as a placeholder
@@ -220,8 +228,10 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
       name: c.name,
       swatchHex: c.swatchHex,
       swatchImageUrl: c.swatchImageUrl,
+      swatchThumbUrl: (c as any).swatchThumbUrl ?? null,
       position: c.position,
       importSourceUrl: c.importSourceUrl ?? null,
+      colorGroupId: (c as any).colorGroupId ?? null,
     });
     colorsByTier.set(c.tierId, arr);
   }
@@ -2561,6 +2571,9 @@ export function registerPressCatalogRoutes(
     const siblings = await db.select().from(pressColors).where(eq(pressColors.tierId, tierId));
     const position = parsed.data.position ?? siblings.length;
     const sib = await siblingTwelveInchTier(tier);
+    // Task #2872 — stamp a new colorGroupId on every new color so later
+    // edits can propagate to all format-copies without relying on name-matching.
+    const colorGroupId = (req.body?.colorGroupId as string | null | undefined) ?? randomUUID();
     // Primary insert + sibling mirror commit together (all-or-nothing),
     // so the two 12" formats can't drift on a partial failure.
     const row = await db.transaction(async (tx) => {
@@ -2572,7 +2585,8 @@ export function registerPressCatalogRoutes(
           swatchHex: parsed.data.swatchHex ?? null,
           swatchImageUrl: parsed.data.swatchImageUrl ?? null,
           position,
-        })
+          colorGroupId,
+        } as any)
         .returning();
       if (sib) {
         // Skip if a color with this name already exists on the sibling.
@@ -2585,12 +2599,103 @@ export function registerPressCatalogRoutes(
             swatchHex: parsed.data.swatchHex ?? null,
             swatchImageUrl: parsed.data.swatchImageUrl ?? null,
             position: sibColors.length,
-          });
+            colorGroupId,
+          } as any);
         }
       }
       return created;
     });
     res.json(row);
+  });
+
+  // Task #2872 — server-side "Color applies to" copy. Reads the source
+  // color FRESH from the DB so the client snapshot is never trusted
+  // (the stale-snapshot bug that lost photos on the 7"↔12" toggle).
+  // Finds or creates the target format's same-named tier, then inserts
+  // a copy sharing the same colorGroupId so future edits propagate.
+  app.post("/api/admin/manufacturers/:id/catalog/colors/:colorId/mirror-to-format", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const colorId = String(req.params.colorId);
+    const { targetFormat, groupName } = req.body ?? {};
+    if (!targetFormat || typeof targetFormat !== "string") {
+      return res.status(400).json({ message: "targetFormat is required" });
+    }
+    // Fresh read of source color — never trust the client snapshot
+    const [color] = await db.select().from(pressColors).where(eq(pressColors.id, colorId));
+    if (!color) return res.status(404).json({ message: "Color not found" });
+    const [tier] = await db.select().from(pressColorTiers).where(eq(pressColorTiers.id, color.tierId));
+    if (!tier || tier.pressId !== pressId) return res.status(403).json({ message: "Forbidden" });
+    const resolvedGroupName = groupName ?? tier.name;
+    // Find or create the target format's tier with the same name
+    let [targetTier] = await db.select().from(pressColorTiers).where(
+      and(
+        eq(pressColorTiers.pressId, pressId),
+        eq(pressColorTiers.format, targetFormat),
+        sql`lower(trim(${pressColorTiers.name})) = ${resolvedGroupName.trim().toLowerCase()}`,
+      ),
+    );
+    if (!targetTier) {
+      const existingFmtTiers = await db.select().from(pressColorTiers).where(
+        and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, targetFormat)),
+      );
+      const [created] = await db.insert(pressColorTiers).values({
+        pressId,
+        format: targetFormat,
+        name: resolvedGroupName,
+        position: existingFmtTiers.length,
+        priceLadder: [],
+      }).returning();
+      targetTier = created;
+    }
+    // Check if a color with this name already exists in the target tier.
+    const existingInTarget = await db.select().from(pressColors).where(
+      and(
+        eq(pressColors.tierId, targetTier.id),
+        sql`lower(trim(${pressColors.name})) = ${color.name.trim().toLowerCase()}`,
+      ),
+    );
+    // Resolve the canonical group id for these two rows.
+    // Prefer the source's group id; fall back to the existing target's; mint a
+    // new one only when neither has one yet. Then stamp same-tier-group +
+    // same-color-name rows for this press in a single UPDATE so all format
+    // copies share the canonical id.
+    // IMPORTANT: scope to the tier GROUP NAME (pct.name) — not press-wide —
+    // so "Black" in a "Standard" tier group is never cross-linked with "Black"
+    // in a "Premium" tier group, even though they share a press and color name.
+    const sourceGroupId = (color as any).colorGroupId as string | null | undefined;
+    const targetGroupId = existingInTarget.length > 0
+      ? ((existingInTarget[0] as any).colorGroupId as string | null | undefined)
+      : null;
+    let groupId = sourceGroupId ?? targetGroupId ?? randomUUID();
+    const tierGroupNorm = tier.name.trim().toLowerCase();
+    await db.execute(sql`
+      UPDATE press_colors
+      SET color_group_id = ${groupId}
+      FROM press_color_tiers pct
+      WHERE press_colors.tier_id = pct.id
+        AND pct.press_id = ${pressId}
+        AND lower(trim(pct.name)) = ${tierGroupNorm}
+        AND lower(trim(press_colors.name)) = ${color.name.trim().toLowerCase()}
+        AND (press_colors.color_group_id IS NULL OR press_colors.color_group_id != ${groupId})
+    `);
+    if (existingInTarget.length > 0) {
+      // Return a fresh read of the (now-reconciled) existing target row.
+      const [reconciled] = await db.select().from(pressColors).where(eq(pressColors.id, existingInTarget[0].id));
+      return res.json(reconciled);
+    }
+    // Insert the copy in the target tier (fresh data from DB)
+    const targetColors = await db.select().from(pressColors).where(eq(pressColors.tierId, targetTier.id));
+    const [copy] = await db.insert(pressColors).values({
+      tierId: targetTier.id,
+      name: color.name,
+      swatchHex: color.swatchHex,
+      swatchImageUrl: color.swatchImageUrl,
+      swatchThumbUrl: (color as any).swatchThumbUrl ?? null,
+      position: targetColors.length,
+      colorGroupId: groupId,
+      importSourceUrl: null,
+    } as any).returning();
+    res.json(copy);
   });
 
   // Update color (name / hex / thumbnail URL / position). The
@@ -2627,24 +2732,35 @@ export function registerPressCatalogRoutes(
         }
       }
     }
-    // Primary update + sibling mirror commit together (all-or-nothing).
-    // Mirrors name / swatch edits (not position — ordering is per-tier)
-    // to the same-named color on the sibling 12" format's tier, matched
-    // deterministically (lowest position, then id) if names ever duplicate.
+    // Task #2872 — propagate edits through the colorGroupId group FIRST
+    // (all format-copies share one group), then fall back to the legacy
+    // name-match on the sibling 12" tier for rows that pre-date groups.
+    const groupId = (color as any).colorGroupId as string | null | undefined;
     const row = await db.transaction(async (tx) => {
       const [updated] = await tx.update(pressColors).set(patch as any).where(eq(pressColors.id, colorId)).returning();
-      if (sib) {
-        const sibPatch: Partial<PressColor> = {};
-        if (parsed.data.name !== undefined) (sibPatch as any).name = parsed.data.name;
-        if (parsed.data.swatchHex !== undefined) (sibPatch as any).swatchHex = parsed.data.swatchHex;
-        if (parsed.data.swatchImageUrl !== undefined) (sibPatch as any).swatchImageUrl = parsed.data.swatchImageUrl;
-        if (Object.keys(sibPatch).length > 0) {
-          const sibColors = await tx.select().from(pressColors).where(eq(pressColors.tierId, sib.id));
-          const match = sibColors
-            .filter((c) => c.name.trim().toLowerCase() === color.name.trim().toLowerCase())
-            .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))[0];
-          if (match) await tx.update(pressColors).set(sibPatch as any).where(eq(pressColors.id, match.id));
-        }
+      // Build the propagation patch (name + swatch fields, NOT position)
+      const propagatePatch: Record<string, unknown> = {};
+      if (parsed.data.name !== undefined) propagatePatch.name = parsed.data.name;
+      if (parsed.data.swatchHex !== undefined) propagatePatch.swatchHex = parsed.data.swatchHex;
+      if (parsed.data.swatchImageUrl !== undefined) propagatePatch.swatchImageUrl = parsed.data.swatchImageUrl;
+      if ((parsed.data as any).swatchThumbUrl !== undefined) propagatePatch.swatchThumbUrl = (parsed.data as any).swatchThumbUrl;
+      if (Object.keys(propagatePatch).length === 0) return updated;
+      if (groupId) {
+        // Propagate to all other colors in the same group (across all formats)
+        await tx
+          .update(pressColors)
+          .set(propagatePatch as any)
+          .where(and(
+            sql`(${pressColors}.color_group_id) = ${groupId}`,
+            sql`${pressColors}.id != ${colorId}`,
+          ));
+      } else if (sib) {
+        // Legacy fallback: mirror to the same-named color on the sibling 12" tier
+        const sibColors = await tx.select().from(pressColors).where(eq(pressColors.tierId, sib.id));
+        const match = sibColors
+          .filter((c) => c.name.trim().toLowerCase() === color.name.trim().toLowerCase())
+          .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))[0];
+        if (match) await tx.update(pressColors).set(propagatePatch as any).where(eq(pressColors.id, match.id));
       }
       return updated;
     });

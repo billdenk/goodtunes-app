@@ -2538,6 +2538,10 @@ export const pressColors = pgTable("press_colors", {
   // splatter / picture-disc / marbled stocks use the image.
   swatchHex: text("swatch_hex"),
   swatchImageUrl: text("swatch_image_url"),
+  // Task #2872 — ~150px thumbnail derivative generated at upload time
+  // for chip-grid rendering. Null = fall back to swatchImageUrl (no crop
+  // or resize happened yet). Only set when swatchImageUrl is set.
+  swatchThumbUrl: text("swatch_thumb_url"),
   position: integer("position").notNull().default(0),
   // Task #668/#669 — set by the per-vendor color-library importers
   // (MRP, Hellbender, …) to the upstream product/tile URL we pulled
@@ -2545,6 +2549,12 @@ export const pressColors = pgTable("press_colors", {
   // and to keep an audit trail in the importer batch entry. Manual
   // swatches stay null.
   importSourceUrl: text("import_source_url"),
+  // Task #2872 — cross-format color identity. All format-copies of the
+  // same color share one colorGroupId so edits (name/hex/photo) can be
+  // propagated to every copy without relying on name-matching (which
+  // breaks on rename). Stamped at create/copy time; null on pre-existing
+  // rows until the post-merge backfill runs.
+  colorGroupId: varchar("color_group_id"),
 });
 export type PressColor = typeof pressColors.$inferSelect;
 

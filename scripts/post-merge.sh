@@ -2155,6 +2155,158 @@ SQL
 migrate_press_colors_import_source_url dev  "${DATABASE_URL:-}"
 migrate_press_colors_import_source_url prod "${PROD_DATABASE_URL:-}"
 
+# Task #2872 — `press_colors.color_group_id` links all format-copies of
+# the same color so edits propagate without relying on name-matching.
+# `press_colors.swatch_thumb_url` stores the ~150px thumbnail generated
+# at upload time for chip-grid rendering. Pre-create on both DBs so the
+# catalog routes never 500 and publish diffs stay empty.
+migrate_press_colors_task_2872() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press_colors task-2872 columns on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE press_colors ADD COLUMN IF NOT EXISTS color_group_id varchar;
+ALTER TABLE press_colors ADD COLUMN IF NOT EXISTS swatch_thumb_url text;
+SQL
+  then
+    echo "post-merge: press_colors task-2872 columns ok on $label"
+  else
+    echo "post-merge: WARNING — press_colors task-2872 columns failed on $label (continuing)"
+  fi
+}
+migrate_press_colors_task_2872 dev  "${DATABASE_URL:-}"
+migrate_press_colors_task_2872 prod "${PROD_DATABASE_URL:-}"
+
+# Task #2872 — one-time backfill: stamp color_group_id on existing rows
+# by grouping colors across formats for the same press by normalized name
+# (name-match is the ONE-TIME seed only — not the ongoing propagation key).
+backfill_task_2872_color_group_id() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2872 color_group_id backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+BEGIN;
+DO $$
+DECLARE
+  v_count integer;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2872_color_group_id') THEN
+    -- Assign a shared color_group_id to all press_colors rows that share
+    -- the same (press_id, tier_group_name, normalized_color_name) across
+    -- formats, scoped by tier name so "Black" in "Standard" and "Black" in
+    -- "Premium" are never cross-linked.
+    WITH groups AS (
+      SELECT
+        min(pc.id) AS group_rep_id,
+        pct.press_id,
+        lower(trim(pct.name)) AS tier_norm_name,
+        lower(trim(pc.name)) AS color_norm_name
+      FROM press_colors pc
+      JOIN press_color_tiers pct ON pct.id = pc.tier_id
+      WHERE pc.color_group_id IS NULL
+      GROUP BY pct.press_id, lower(trim(pct.name)), lower(trim(pc.name))
+    ),
+    reps AS (
+      SELECT g.group_rep_id, g.press_id, g.tier_norm_name, g.color_norm_name, gen_random_uuid() AS new_group_id
+      FROM groups g
+    )
+    UPDATE press_colors
+    SET color_group_id = r.new_group_id
+    FROM reps r, press_color_tiers pct
+    WHERE press_colors.tier_id = pct.id
+      AND pct.press_id = r.press_id
+      AND lower(trim(pct.name)) = r.tier_norm_name
+      AND lower(trim(press_colors.name)) = r.color_norm_name
+      AND press_colors.color_group_id IS NULL;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_2872_color_group_id');
+    RAISE NOTICE 'task-2872 color_group_id backfill applied: % rows stamped', v_count;
+  ELSE
+    RAISE NOTICE 'task-2872 color_group_id backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2872 color_group_id backfill ok on $label"
+    echo "$out" | grep -i 'task-2872' || true
+  else
+    echo "post-merge: WARNING — task-2872 color_group_id backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_2872_color_group_id dev  "${DATABASE_URL:-}"
+backfill_task_2872_color_group_id prod "${PROD_DATABASE_URL:-}"
+
+# Task #2872 v2 — correct the v1 backfill which grouped by (press_id, color_name)
+# only and could cross-link "Black" in "Standard" with "Black" in "Premium".
+# Resets all color_group_ids and re-stamps scoped by (press_id, tier_name, color_name).
+backfill_task_2872_color_group_id_v2() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2872 color_group_id v2 resegment on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+BEGIN;
+DO $$
+DECLARE
+  v_count integer;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2872_color_group_id_v2') THEN
+    -- Reset all existing stamps (v1 may have cross-linked unrelated colors).
+    UPDATE press_colors SET color_group_id = NULL;
+    -- Re-stamp scoped by (press_id, tier_group_name, color_name) so colors in
+    -- different tier groups (e.g. Standard vs Premium) stay independent.
+    WITH groups AS (
+      SELECT
+        min(pc.id) AS group_rep_id,
+        pct.press_id,
+        lower(trim(pct.name)) AS tier_norm_name,
+        lower(trim(pc.name)) AS color_norm_name
+      FROM press_colors pc
+      JOIN press_color_tiers pct ON pct.id = pc.tier_id
+      GROUP BY pct.press_id, lower(trim(pct.name)), lower(trim(pc.name))
+    ),
+    reps AS (
+      SELECT g.group_rep_id, g.press_id, g.tier_norm_name, g.color_norm_name, gen_random_uuid() AS new_group_id
+      FROM groups g
+    )
+    UPDATE press_colors
+    SET color_group_id = r.new_group_id
+    FROM reps r, press_color_tiers pct
+    WHERE press_colors.tier_id = pct.id
+      AND pct.press_id = r.press_id
+      AND lower(trim(pct.name)) = r.tier_norm_name
+      AND lower(trim(press_colors.name)) = r.color_norm_name;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_2872_color_group_id_v2');
+    RAISE NOTICE 'task-2872 color_group_id v2 resegment applied: % rows stamped', v_count;
+  ELSE
+    RAISE NOTICE 'task-2872 color_group_id v2 resegment already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2872 color_group_id v2 resegment ok on $label"
+    echo "$out" | grep -i 'task-2872' || true
+  else
+    echo "post-merge: WARNING — task-2872 color_group_id v2 resegment failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_2872_color_group_id_v2 dev  "${DATABASE_URL:-}"
+backfill_task_2872_color_group_id_v2 prod "${PROD_DATABASE_URL:-}"
+
 # Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
 # marker on albums. Pre-create on both DBs to keep the publish dev→prod
 # diff empty (so publish never tries to DROP it off prod with data) and so

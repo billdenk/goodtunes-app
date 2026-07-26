@@ -17380,6 +17380,11 @@
     "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs\">"
   },
   {
+    "rule": "admin-filled-raw-button",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<button"
+  },
+  {
     "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/pages/AdminPerson.tsx",
     "snippet": "<Link"
@@ -18383,6 +18388,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
     "snippet": "<p className=\"text-[12px] text-rose-600 mt-1\" data-testid=\"text-confirm-password-error\">"
+  },
+  {
+    "rule": "admin-filled-raw-button",
+    "file": "client/src/pages/AdminShopify.tsx",
+    "snippet": "<button"
   },
   {
     "rule": "brand-hex-literal",

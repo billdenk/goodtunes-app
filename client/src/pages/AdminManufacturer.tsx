@@ -1244,10 +1244,14 @@ type CatalogColor = {
   name: string;
   swatchHex: string | null;
   swatchImageUrl: string | null;
+  // Task #2872 — ~150px thumbnail for chip grids. Null = fall back to swatchImageUrl.
+  swatchThumbUrl: string | null;
   position: number;
   // Task #668 — set when the row was created by the MRP color-library
   // importer. Used to flag "already imported" on subsequent runs.
   importSourceUrl: string | null;
+  // Task #2872 — cross-format color group id. Null on pre-existing rows.
+  colorGroupId: string | null;
 };
 type CatalogTier = {
   id: string;
@@ -1424,7 +1428,9 @@ function ReferralsPanel({ pressId }: { pressId: string }) {
 // "+ Add quantity" extras, so a press that priced an off-grid run keeps
 // it. Whether a press actually OFFERS each column is the per-cell eye
 // toggle (offered = a saved rung exists; not-offered = no rung).
-const DEFAULT_QTY_COLUMNS = [50, 100, 200, 300, 500, 1000, 2000, 3000];
+// Task #2872 — standard six rungs per Bill's catalog brief. 50 and 200
+// survive as priced custom extras (shown only when they carry saved data).
+const DEFAULT_QTY_COLUMNS = [100, 300, 500, 1000, 2000, 3000];
 
 async function uploadSwatchImage(
   file: File,
@@ -3558,6 +3564,11 @@ function FormatTurnaroundEditor({
           inputMode="numeric"
           value={min}
           onChange={(e) => setMin(e.target.value)}
+          onBlur={() => {
+            if (!minBad && !maxBad && !rangeBad && dirty) {
+              save.mutate({ turnaroundWeeksMin: parsedMin, turnaroundWeeksMax: parsedMax });
+            }
+          }}
           placeholder={pressMin != null ? String(pressMin) : "min"}
           aria-label="Minimum weeks"
           className={inputCls}
@@ -3568,23 +3579,17 @@ function FormatTurnaroundEditor({
           inputMode="numeric"
           value={max}
           onChange={(e) => setMax(e.target.value)}
+          onBlur={() => {
+            if (!minBad && !maxBad && !rangeBad && dirty) {
+              save.mutate({ turnaroundWeeksMin: parsedMin, turnaroundWeeksMax: parsedMax });
+            }
+          }}
           placeholder={pressMax != null ? String(pressMax) : "max"}
           aria-label="Maximum weeks"
           className={inputCls}
           data-testid={`input-format-turnaround-max-${format}`}
         />
         <span className="text-sm text-slate-500">weeks</span>
-        <button
-          type="button"
-          onClick={() =>
-            save.mutate({ turnaroundWeeksMin: parsedMin, turnaroundWeeksMax: parsedMax })
-          }
-          disabled={!dirty || rangeBad || minBad || maxBad || save.isPending}
-          className="inline-flex items-center h-8 px-3 rounded-md bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-40 disabled:cursor-not-allowed"
-          data-testid={`button-save-format-turnaround-${format}`}
-        >
-          {save.isPending ? "Saving…" : "Save"}
-        </button>
         {hasOverride && (
           <button
             type="button"
@@ -3678,6 +3683,8 @@ function CatalogEditor({
   const [selectedSwatchId, setSelectedSwatchId] = useState<string | null>(null);
   const [addingGroup, setAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
+  // Task #2872 — Manage colors panel (replaces Reorder Colors modal).
+  const [managePanelOpen, setManagePanelOpen] = useState(false);
 
   // Pricing drafts. Key = `${format}:${tierId}` (jacket is always the
   // format's resolved default — the jacket axis is no longer exposed).
@@ -4209,13 +4216,16 @@ function CatalogEditor({
                             disabled={deleteTier.isPending}
                           />
                         )}
-                        {selectedColorTier && selectedColorTier.colors.length >= 2 && (
-                          <ReorderColorsButton
-                            pressId={pressId}
-                            tier={selectedColorTier}
-                            fmt={fmt}
-                            onChanged={onChanged}
-                          />
+                        {selectedColorTier && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setManagePanelOpen(true)}
+                            data-testid={`button-manage-colors-open-${fmt}`}
+                          >
+                            Manage colors
+                          </Button>
                         )}
                         {!addingGroup ? (
                           <button
@@ -4252,9 +4262,26 @@ function CatalogEditor({
                       />
                     ))}
                     {editing && !isMirror && (
-                      <AddSwatchChip pressId={pressId} tierId={selectedColorTier.id} onChanged={onChanged} />
+                      <button
+                        type="button"
+                        onClick={() => setManagePanelOpen(true)}
+                        className="w-14 h-14 rounded-full border border-dashed border-slate-300 inline-flex items-center justify-center text-slate-400 hover:border-[color:var(--brand-blue)] hover:text-[color:var(--brand-blue)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]"
+                        data-testid={`button-add-color-${selectedColorTier.id}`}
+                        title="Add / manage colors"
+                      >
+                        <Plus className="w-5 h-5" />
+                      </button>
                     )}
                   </div>
+                )}
+                {editing && !isMirror && managePanelOpen && selectedColorTier && (
+                  <ManageColorsPanel
+                    key={selectedColorTier.id}
+                    pressId={pressId}
+                    tier={selectedColorTier}
+                    onChanged={onChanged}
+                    onClose={() => setManagePanelOpen(false)}
+                  />
                 )}
                 {selectedSwatch && (
                   <div
@@ -4420,7 +4447,7 @@ function CatalogEditor({
                               </span>
                             ) : (
                               <span
-                                className="inline-flex items-center justify-center h-6 px-2 rounded-full bg-slate-100 text-slate-500 text-xs font-medium"
+                                className="inline-flex items-center justify-center h-6 px-2 rounded-full bg-blue-50 text-blue-700 ring-1 ring-blue-200 text-xs font-medium"
                                 title="Awaiting quote"
                                 data-testid={`cell-ladder-quote-${selectedPriceTier.id}-${q}`}
                               >
@@ -4854,15 +4881,14 @@ function PressAudioSpecCard({ pressId }: { pressId: string }) {
       </label>
 
       <div className="mt-4 flex items-center gap-3">
-        <button
+        <Button
           type="button"
           disabled={busy}
           onClick={() => save.mutate()}
-          className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-900 disabled:opacity-50"
           data-testid="button-save-audio-spec"
         >
           {save.isPending ? "Saving…" : "Save audio spec"}
-        </button>
+        </Button>
         {spec && (
           <button
             type="button"
@@ -5384,176 +5410,361 @@ function DeleteTierButton({
   );
 }
 
-// Task #2647 — "Reorder Colors" modal. Draggable rows (native HTML5 DnD,
-// same pattern as the AdminAlbum tracklist) reorder the colors within the
-// selected color group; Save posts the full id list to the bulk reorder
-// endpoint, which also mirrors the new order to the sibling 12" tier's
-// same-named colors.
-function ReorderColorsButton({
+// Task #2872 — ManageColorsPanel: unified inline panel for adding,
+// renaming, reordering, and deleting colors within a tier. Replaces the
+// separate ReorderColorsButton modal and AddSwatchChip dialog. Multi-photo
+// drop zone at top; per-row thumbnail + editable name + delete; drag-to-
+// reorder with row numbers; footer: Reset + single "Save changes" (atomic
+// commit of creates, renames, deletes, and reorder in sequence).
+function ManageColorsPanel({
   pressId,
   tier,
-  fmt,
   onChanged,
+  onClose,
 }: {
   pressId: string;
   tier: CatalogTier;
-  fmt: AlbumFormat;
   onChanged: () => void;
+  onClose: () => void;
 }) {
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
-  const [ordered, setOrdered] = useState<CatalogColor[]>([]);
+
+  type DraftRow = {
+    key: string;
+    id: string | null; // null = new (not yet saved)
+    name: string;
+    swatchHex: string | null;
+    swatchImageUrl: string | null;
+    swatchThumbUrl: string | null;
+    isNew?: boolean;
+    uploading?: boolean;
+  };
+
+  const buildInitialRows = (): DraftRow[] =>
+    tier.colors
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((c) => ({
+        key: c.id,
+        id: c.id,
+        name: c.name,
+        swatchHex: c.swatchHex,
+        swatchImageUrl: c.swatchImageUrl,
+        swatchThumbUrl: c.swatchThumbUrl ?? null,
+      }));
+
+  const [rows, setRows] = useState<DraftRow[]>(buildInitialRows);
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropOnId, setDropOnId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleteConfirmKey, setDeleteConfirmKey] = useState<string | null>(null);
+  const [cropToDisc, setCropToDisc] = useState(false);
 
-  const openModal = () => {
-    setOrdered(tier.colors.slice());
-    setDragId(null);
-    setDropOnId(null);
-    setOpen(true);
-  };
+  const originalOrder = tier.colors.map((c) => c.id).join(",");
+  const originalNames = useMemo(
+    () => Object.fromEntries(tier.colors.map((c) => [c.id, c.name])) as Record<string, string>,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tier.id],
+  );
 
-  const save = useMutation({
-    mutationFn: async (colorIds: string[]) => {
-      await apiRequest(
-        "POST",
-        `/api/admin/manufacturers/${pressId}/catalog/tiers/${tier.id}/colors/reorder`,
-        { colorIds },
-      );
-    },
-    onSuccess: () => {
-      setOpen(false);
-      onChanged();
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Couldn't reorder colors",
-        description: e?.message || "Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
+  const isDirty = useMemo(() => {
+    const active = rows.filter((r) => !deletedIds.has(r.id ?? ""));
+    if (active.some((r) => r.id === null && !r.uploading)) return true;
+    if (deletedIds.size > 0) return true;
+    const existingOrder = active.filter((r) => r.id !== null).map((r) => r.id!).join(",");
+    if (existingOrder !== originalOrder) return true;
+    return active.some((r) => r.id !== null && originalNames[r.id!] !== r.name.trim());
+  }, [rows, deletedIds, originalOrder, originalNames]);
 
-  const handleDragStart = (id: string) => (e: React.DragEvent) => {
-    setDragId(id);
-    e.dataTransfer.effectAllowed = "move";
-    try {
-      e.dataTransfer.setData("text/plain", id);
-    } catch {
-      // Some browsers throw if setData is called too late; ignore.
+  const handleFileDrop = async (files: FileList | File[]) => {
+    const fileArr = Array.from(files).filter((f) => f.size <= 5 * 1024 * 1024);
+    if (files.length > fileArr.length)
+      toast({ title: "Some files skipped", description: "Each photo must be ≤ 5 MB.", variant: "destructive" });
+    for (const file of fileArr) {
+      const tempKey = `new-${Date.now()}-${Math.random()}`;
+      const placeholder = file.name.replace(/\.[^.]+$/, "");
+      setRows((prev) => [
+        ...prev,
+        { key: tempKey, id: null, name: placeholder, swatchHex: null, swatchImageUrl: null, swatchThumbUrl: null, isNew: true, uploading: true },
+      ]);
+      try {
+        const result = await postAdminImage(file, cropToDisc ? { mask: "disc" } : undefined);
+        setRows((prev) => prev.map((r) => (r.key === tempKey ? { ...r, swatchImageUrl: result.url, uploading: false } : r)));
+      } catch (e: any) {
+        toast({ title: "Upload failed", description: e?.message, variant: "destructive" });
+        setRows((prev) => prev.filter((r) => r.key !== tempKey));
+      }
     }
   };
-  const handleDragOver = (id: string) => (e: React.DragEvent) => {
-    if (!dragId || dragId === id) return;
+
+  const handleDragStart = (key: string) => (e: React.DragEvent) => {
+    setDragId(key);
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", key); } catch {}
+  };
+  const handleDragOver = (key: string) => (e: React.DragEvent) => {
+    if (!dragId || dragId === key) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    if (dropOnId !== id) setDropOnId(id);
+    if (dropOnId !== key) setDropOnId(key);
   };
-  const handleDragEnd = () => {
-    setDragId(null);
-    setDropOnId(null);
-  };
-  const handleDrop = (targetId: string) => (e: React.DragEvent) => {
+  const handleDragEnd = () => { setDragId(null); setDropOnId(null); };
+  const handleDrop = (targetKey: string) => (e: React.DragEvent) => {
     e.preventDefault();
     const src = dragId;
     setDragId(null);
     setDropOnId(null);
-    if (!src || src === targetId) return;
-    setOrdered((prev) => {
-      const ids = prev.map((c) => c.id);
-      const from = ids.indexOf(src);
-      const to = ids.indexOf(targetId);
+    if (!src || src === targetKey) return;
+    setRows((prev) => {
+      const keys = prev.map((r) => r.key);
+      const from = keys.indexOf(src);
+      const to = keys.indexOf(targetKey);
       if (from < 0 || to < 0) return prev;
-      const next = prev.slice();
+      const next = [...prev];
       const [moved] = next.splice(from, 1);
       next.splice(from < to ? to - 1 : to, 0, moved);
       return next;
     });
   };
 
-  const dirty =
-    ordered.length === tier.colors.length &&
-    ordered.some((c, i) => c.id !== tier.colors[i]?.id);
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      // Track server-assigned IDs for newly created rows so they can be
+      // included in the final reorder at their intended drag positions.
+      const newIdMap = new Map<string, string>(); // draft key → server id
+
+      // 1. Create new colors and capture their server IDs
+      for (const r of rows) {
+        if (r.id === null && !r.uploading && r.name.trim()) {
+          const resp = await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/tiers/${tier.id}/colors`, {
+            name: r.name.trim(),
+            swatchHex: r.swatchImageUrl ? null : (r.swatchHex ?? "#000000"),
+            swatchImageUrl: r.swatchImageUrl ?? null,
+          });
+          const created = (await resp.json()) as { id: string };
+          if (created.id) newIdMap.set(r.key, created.id);
+        }
+      }
+      // 2. Rename changed existing colors
+      for (const r of rows) {
+        if (r.id && !deletedIds.has(r.id) && originalNames[r.id] !== r.name.trim()) {
+          await apiRequest("PATCH", `/api/admin/manufacturers/${pressId}/catalog/colors/${r.id}`, {
+            name: r.name.trim(),
+          });
+        }
+      }
+      // 3. Delete removed colors
+      for (const id of Array.from(deletedIds)) {
+        await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/colors/${id}`);
+      }
+      // 4. Reorder: build a complete ordered list that includes newly created
+      //    IDs at their intended drag positions (not appended at the end).
+      //    Errors propagate to the outer catch — no silent swallow.
+      const allOrderedIds = rows
+        .filter((r) => !deletedIds.has(r.id ?? ""))
+        .map((r) => r.id !== null ? r.id : (newIdMap.get(r.key) ?? null))
+        .filter((id): id is string => id !== null);
+      const hasNewColors = newIdMap.size > 0;
+      const existingOriginalOrder = tier.colors
+        .map((c) => c.id)
+        .filter((id) => !deletedIds.has(id));
+      const orderChanged =
+        hasNewColors ||
+        allOrderedIds.join(",") !== existingOriginalOrder.join(",");
+      if (allOrderedIds.length > 1 && orderChanged) {
+        await apiRequest(
+          "POST",
+          `/api/admin/manufacturers/${pressId}/catalog/tiers/${tier.id}/colors/reorder`,
+          { colorIds: allOrderedIds },
+        );
+      }
+      onChanged();
+      onClose();
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e?.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const visibleRows = rows.filter((r) => !deletedIds.has(r.id ?? ""));
+  const deleteRow = rows.find((r) => r.key === deleteConfirmKey) ?? null;
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={openModal}
-        className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2"
-        data-testid={`button-reorder-colors-${fmt}`}
+    <div
+      className="mt-3 rounded-lg border border-slate-200 bg-white shadow-sm"
+      data-testid={`manage-colors-panel-${tier.id}`}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-100">
+        <span className="text-sm font-semibold text-slate-800">Manage colors — {tier.name}</span>
+        <IconButton type="button" variant="ghost" onClick={onClose} label="Close panel">
+          <X className="w-4 h-4" />
+        </IconButton>
+      </div>
+
+      {/* Photo drop zone */}
+      <div
+        className="mx-4 mt-3 mb-2 border-2 border-dashed border-slate-200 rounded-lg px-4 py-3 text-center hover:border-[color:var(--brand-blue)] transition-colors cursor-pointer"
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.files.length) handleFileDrop(e.dataTransfer.files); }}
+        onClick={() => {
+          const inp = document.createElement("input");
+          inp.type = "file"; inp.multiple = true;
+          inp.accept = ".jpg,.jpeg,.png,.webp,.heic,.heif";
+          inp.onchange = () => { if (inp.files?.length) handleFileDrop(inp.files); };
+          inp.click();
+        }}
       >
-        Reorder Colors
-      </button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Reorder colors — {tier.name}</DialogTitle>
-            <DialogDescription>
-              Drag rows into the order artists should see them.
-              {(fmt === "12_lp" || fmt === "12_double") &&
-                " The same order applies to the matching 12\u2033 group on the sibling format."}
-            </DialogDescription>
-          </DialogHeader>
+        <Upload className="w-4 h-4 mx-auto text-slate-400 mb-1" />
+        <p className="text-xs text-slate-500">Drop photos here or click — JPEG, PNG, WEBP, HEIC · max 5 MB each</p>
+        <label
+          className="flex items-center justify-center gap-1.5 mt-1.5 cursor-pointer select-none"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            checked={cropToDisc}
+            onChange={(e) => setCropToDisc(e.target.checked)}
+            className="accent-[color:var(--brand-blue)]"
+          />
+          <span className="text-xs text-slate-600">Crop to vinyl disc</span>
+        </label>
+      </div>
+
+      {/* Color rows */}
+      <div className="max-h-72 overflow-y-auto px-4 pb-2 space-y-0.5" data-testid={`manage-colors-list-${tier.id}`}>
+        {visibleRows.length === 0 && (
+          <p className="text-xs text-slate-400 py-3 text-center">No colors yet — drop photos above to add some.</p>
+        )}
+        {visibleRows.map((r, idx) => (
           <div
-            className="max-h-[50vh] overflow-y-auto -mx-1 px-1"
-            data-testid={`list-reorder-colors-${tier.id}`}
+            key={r.key}
+            draggable={!r.uploading && r.id !== null}
+            onDragStart={r.uploading || r.id === null ? undefined : handleDragStart(r.key)}
+            onDragOver={r.uploading ? undefined : handleDragOver(r.key)}
+            onDragEnd={handleDragEnd}
+            onDrop={r.uploading ? undefined : handleDrop(r.key)}
+            className={[
+              "flex items-center gap-2 py-1.5 rounded-md px-1 select-none",
+              dragId === r.key ? "opacity-50" : "",
+              dropOnId === r.key ? "border-t-2 border-[color:var(--brand-blue)]" : "border-t-2 border-transparent",
+              r.id !== null && !r.uploading ? "hover:bg-slate-50" : "",
+            ].join(" ")}
+            data-testid={`manage-color-row-${r.key}`}
           >
-            {ordered.map((c) => (
-              <div
-                key={c.id}
-                draggable
-                onDragStart={handleDragStart(c.id)}
-                onDragOver={handleDragOver(c.id)}
-                onDragEnd={handleDragEnd}
-                onDrop={handleDrop(c.id)}
-                className={[
-                  "flex items-center gap-2.5 px-2 py-2 rounded-md select-none cursor-grab active:cursor-grabbing",
-                  dragId === c.id ? "opacity-50" : "",
-                  dropOnId === c.id
-                    ? "border-t-2 border-[color:var(--brand-blue)]"
-                    : "border-t-2 border-transparent",
-                  "hover:bg-slate-50",
-                ].join(" ")}
-                data-testid={`row-reorder-color-${c.id}`}
-              >
-                <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />
-                <span
-                  className="w-6 h-6 rounded-full border border-slate-200 shrink-0 bg-cover bg-center"
-                  style={
-                    c.swatchImageUrl
-                      ? { backgroundImage: `url(${c.swatchImageUrl})` }
-                      : { background: c.swatchHex ?? "#cccccc" }
+            <GripVertical className={`w-4 h-4 shrink-0 ${r.id !== null && !r.uploading ? "text-slate-300 cursor-grab" : "text-slate-100"}`} />
+            <span className="text-xs text-slate-400 w-5 text-right shrink-0 tabular-nums">{idx + 1}</span>
+            <span
+              className="w-9 h-9 rounded-full border border-slate-200 shrink-0 relative overflow-hidden"
+              style={
+                r.swatchImageUrl
+                  ? { backgroundImage: `url(${r.swatchThumbUrl ?? r.swatchImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+                  : { background: r.swatchHex ?? "#cccccc" }
+              }
+            >
+              {r.uploading && (
+                <span className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                  <RefreshCw className="w-3 h-3 text-slate-400 animate-spin" />
+                </span>
+              )}
+              {r.isNew && !r.uploading && (
+                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-[color:var(--brand-blue)] rounded-full border border-white" aria-label="New" />
+              )}
+            </span>
+            <input
+              value={r.name}
+              onChange={(e) => {
+                const v = e.target.value;
+                setRows((prev) => prev.map((row) => (row.key === r.key ? { ...row, name: v } : row)));
+              }}
+              disabled={r.uploading}
+              className="flex-1 min-w-0 h-7 px-2 rounded border border-transparent hover:border-slate-200 focus:border-[color:var(--brand-blue)] focus:outline-none text-sm text-slate-800 bg-transparent focus:bg-white transition-colors disabled:opacity-50"
+              placeholder="Color name"
+              data-testid={`input-manage-color-name-${r.key}`}
+            />
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmKey(r.key)}
+              disabled={r.uploading}
+              className="shrink-0 text-rose-400 hover:text-rose-600 disabled:opacity-30 transition-colors p-0.5"
+              data-testid={`button-manage-color-delete-${r.key}`}
+              title="Remove color"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
+        <button
+          type="button"
+          onClick={() => { setRows(buildInitialRows()); setDeletedIds(new Set()); }}
+          disabled={saving || !isDirty}
+          className="text-xs text-slate-500 hover:underline underline-offset-2 disabled:opacity-40"
+          data-testid={`button-manage-colors-reset-${tier.id}`}
+        >
+          Reset
+        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="text-xs text-slate-500 hover:underline underline-offset-2"
+          >
+            Cancel
+          </button>
+          <Button
+            type="button"
+            onClick={handleSave}
+            disabled={!isDirty || saving || rows.some((r) => r.uploading)}
+            className="h-8 px-3 text-xs"
+            data-testid={`button-manage-colors-save-${tier.id}`}
+          >
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Delete confirm */}
+      <AlertDialog open={!!deleteConfirmKey} onOpenChange={(o) => !o && setDeleteConfirmKey(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this color?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteRow
+                ? deleteRow.id
+                  ? `"${deleteRow.name}" will be removed from this group and can't be recovered.`
+                  : `"${deleteRow.name}" (not yet saved) will be discarded.`
+                : "This color will be removed."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-rose-600 hover:bg-rose-700"
+              onClick={() => {
+                if (deleteRow) {
+                  if (deleteRow.id) {
+                    setDeletedIds((prev) => new Set(Array.from(prev).concat(deleteRow.id!)));
+                  } else {
+                    setRows((prev) => prev.filter((x) => x.key !== deleteRow.key));
                   }
-                  aria-hidden
-                />
-                <span className="text-sm text-slate-800 truncate">{c.name}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setOpen(false)}
-              data-testid="button-cancel-reorder-colors"
+                }
+                setDeleteConfirmKey(null);
+              }}
             >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={!dirty || save.isPending}
-              onClick={() => save.mutate(ordered.map((c) => c.id))}
-              data-testid="button-save-reorder-colors"
-            >
-              {save.isPending ? "Saving…" : "Save order"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 
@@ -5761,20 +5972,13 @@ function SwatchChip({
     mutationFn: async (on: boolean) => {
       if (!mirror || !otherFmt) return;
       if (on) {
-        let tierId = otherTier?.id;
-        if (!tierId) {
-          const tr = await apiRequest(
-            "POST",
-            `/api/admin/manufacturers/${pressId}/catalog/formats/${otherFmt}/tiers`,
-            { name: mirror.groupName },
-          );
-          tierId = ((await tr.json()) as { id: string }).id;
-        }
-        await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/tiers/${tierId}/colors`, {
-          name: color.name,
-          swatchHex: color.swatchImageUrl ? null : color.swatchHex,
-          swatchImageUrl: color.swatchImageUrl,
-        });
+        // Task #2872 — server-side copy reads source row fresh (fixes the
+        // stale-client-snapshot bug that lost photos on the 7"↔12" toggle).
+        await apiRequest(
+          "POST",
+          `/api/admin/manufacturers/${pressId}/catalog/colors/${color.id}/mirror-to-format`,
+          { targetFormat: otherFmt, groupName: mirror.groupName },
+        );
       } else if (mirroredColor) {
         await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/colors/${mirroredColor.id}`);
       }
@@ -5793,10 +5997,10 @@ function SwatchChip({
       : "";
     const discEl = (
       <span
-        className={`w-7 h-7 rounded-full border border-black/10 shrink-0 overflow-hidden block ${ringCls}`}
+        className={`w-14 h-14 rounded-full border border-black/10 shrink-0 overflow-hidden block ${ringCls}`}
         style={
           color.swatchImageUrl
-            ? { backgroundImage: `url(${color.swatchImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+            ? { backgroundImage: `url(${color.swatchThumbUrl ?? color.swatchImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
             : { background: color.swatchHex ?? "#cccccc" }
         }
       />
@@ -5832,10 +6036,10 @@ function SwatchChip({
           setEditing(true);
         }}
         aria-pressed={selected}
-        className={`w-7 h-7 rounded-full border border-black/10 overflow-hidden shrink-0 transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] ${ringCls}`}
+        className={`w-14 h-14 rounded-full border border-black/10 overflow-hidden shrink-0 transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] ${ringCls}`}
         style={
           color.swatchImageUrl
-            ? { backgroundImage: `url(${color.swatchImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+            ? { backgroundImage: `url(${color.swatchThumbUrl ?? color.swatchImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
             : { background: color.swatchHex ?? "#cccccc" }
         }
         data-testid={`chip-color-${color.id}`}
@@ -5987,7 +6191,7 @@ function SwatchChip({
                     }`}
                     data-testid={`toggle-color-applies-${otherSize}-${color.id}`}
                   >
-                    <EyeOff className={`w-3.5 h-3.5 ${mirroredOn ? "opacity-60" : ""}`} />
+                    {mirroredOn ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                     {sizeLabel(otherSize)}
                     {setMirror.isPending ? "…" : ""}
                   </button>
