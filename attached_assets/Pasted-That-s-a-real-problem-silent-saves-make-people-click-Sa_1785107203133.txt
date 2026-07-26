@@ -1,0 +1,23 @@
+That's a real problem — silent saves make people click Save three times and then distrust the whole form. And your second screenshot shows a related symptom: after saving, the mapped-products area just says "Loading..." with no indication the save worked. Here's an addendum for the brief:
+
+---
+
+Addendum — save feedback and post-save state
+
+Right now, saving a mapping gives no feedback: the form returns to its former state and it looks like nothing happened. Every action on these surfaces needs visible confirmation. Specifically:
+
+Save mapping: on click, the button goes to a disabled working state ("Saving…"). On success, the green Found panel closes, the newly mapped product appears immediately at the top of the mapped list — expanded, showing the store name, variant, and the options that were chosen — with a brief success indicator on the row (e.g. a checkmark that fades, or a toast: "Mapping saved"). The search field and URL field clear. The user should see their mapping in the list without refreshing or wondering.
+
+Save on Sale URL: same pattern — "Saving…" on the button, then a confirmation ("Saved") that appears briefly next to the button. The saved value stays in the field.
+
+Mint / bundle checkboxes on an already-mapped row: if these save on toggle, show a subtle inline "Saved" confirmation next to the row after each change. If they require an explicit save, make that button visible on the row. Either way, a toggle must never silently revert — if the write fails, keep the user's choice visible, show an error ("Couldn't save — retry"), and let them retry.
+
+Failures generally: on any failed save, do not reset the form to its prior state. Preserve what the user entered, show what went wrong, offer retry.
+
+Loading states: replace bare "Loading…" text with a skeleton row in the shape of the content being loaded, and never show "Loading…" indefinitely — if the fetch fails, switch to the error state with a reconnect path as specified above.
+
+---
+
+Also worth having Otis check one thing while he's in there: whether the mapping save is actually succeeding and only the UI feedback is missing, or whether the save itself is silently failing and the "back to former state" is a real rollback. Your first screenshot shows the mapping collapsed in the list, so it looks like the write works and this is purely a feedback gap — but he should confirm rather than assume, since a silently failing write would be a different bug with the same symptom.
+
+Want this appended to the full brief as section 4, or sent to Otis separately?

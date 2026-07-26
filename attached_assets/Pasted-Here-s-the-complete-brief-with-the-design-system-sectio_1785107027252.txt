@@ -1,0 +1,45 @@
+Here's the complete brief with the design system section folded in:
+
+---
+
+Otis, I want to simplify the Shopify surfaces so nobody has to read paragraphs of instructions. The principle: show short instructions tied to state, put explanations on the controls themselves, and keep the page layout stable — sections don't disappear and reappear. Three areas, plus design system notes at the end.
+
+1. Remove the signed-GoodDeed add-on option from product mapping
+
+On the album Shopify tab mapping form, remove the checkbox "This product is the signed-GoodDeed add-on for the album" and its helper text completely. Shopify doesn't support add-on products, so this option no longer exists — signed GoodDeed certificates are sold as bundle variants of the main product instead. Remove it from both the admin and artist portal versions of this form. If existing mappings have this flag set, leave the data intact in the database but stop reading or displaying it. Keep the "Bundle a printed & signed GoodDeed certificate" checkbox — that one stays.
+
+2. Album Shopify tab (admin and artist portal — same component, same copy)
+
+Delete the gray intro banner at the top of the tab entirely.
+
+Restructure the page as a three-step checklist. All three steps are always visible so the user sees the full shape of the task, but steps that aren't ready yet render locked (grayed out, not interactive) with a short line explaining what unlocks them. Completed steps collapse to a single line with a checkmark that can be expanded.
+
+Step 1, Connect a store. If no Shopify store is connected: "Connect the label's Shopify store to get started," with a button linking to /admin/shopify (or the portal equivalent). Once connected, this step collapses to a checkmark line showing the store name.
+
+Step 2, Map a product. Locked until a store is connected, with the locked state reading "Connect a store first." Once unlocked, show the product search with one line of helper text: "Pick which Shopify product is this album, so incoming orders route here." When a product is mapped, the mapped row shows the mint checkbox inline with this label: "Also mint the GoodTunes digital unlock + GoodDeed for buyers." Replace the current helper text under that checkbox with: "Off: we only fulfill the physical order. On: buyers also get the app unlock and a numbered GoodDeed." Drop the phrase "exactly like Shopify mode" — it's confusing on a form that is already Shopify mode.
+
+Step 3, Sale URL. Locked until a store is connected, same locked treatment. Helper text is one line: "Buy buttons on the preview page will open this link. Leave empty to use GoodTunes checkout." The "Must start with https://" line should only appear as a validation error when someone enters a URL that doesn't start with https://, not as permanent text.
+
+Error states: in the artist portal, "Couldn't load products" should say what happened and what to do, e.g. "We lost the connection to [store name] — reconnect at /admin/shopify." Never a dead end.
+
+3. Admin Shopify settings page (/admin/shopify)
+
+Replace the numbered 4-step instruction block with just the input field (placeholder: label-store.myshopify.com) and the two buttons, Copy install link and Install directly. Then deliver instructions one at a time as the user acts:
+
+After Copy install link is clicked, show a confirmation line under the input: "Link copied. Send it to someone with admin access on the label's store — only a store admin can approve the install."
+
+When an install link has been generated but not yet approved, show the store immediately under Connected stores with a "Waiting for install" chip. When the install is approved, the chip flips to Live. This replaces the old step 4 text entirely.
+
+Install directly gets a tooltip: "For stores you have admin access to, like a test store."
+
+GDPR data requests: keep this section always visible — do not hide it. When there are zero requests, show a compact empty state: "No requests received. When a customer requests their data through Shopify, it appears here — you have 30 days to fulfill it." When a request arrives, show the request with full detail (webhook source, data compiled, Mark fulfilled action).
+
+The "Get your music now" email button expander stays as is.
+
+Design system: all of this stays within the existing admin design system — Inter, slate token vocabulary under body.gt-admin, shadcn primitives, Lucide icons, brand blue #1f7fb8, h-9 control density, 6px border radius. The new elements map to existing primitives: checklist steps are standard cards, the "Waiting for install" and "Live" chips are shadcn badges, tooltips use the shadcn tooltip, locked steps are the standard disabled/muted treatment on slate tokens — no custom one-off styles. Checkmarks and lock icons come from Lucide. No fan/player chrome on these admin surfaces. The artist portal version of the album tab uses the portal's established styling — same structure and copy, portal skin. If the portal doesn't yet have equivalents for badges or tooltips, flag it rather than inventing something new.
+
+Please confirm which of these surfaces, if any, are part of the Shopify app the reviewer will see, before merging anything — I'll decide timing on those separately.
+
+---
+
+Ready to paste into Replit.
