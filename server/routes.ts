@@ -16609,7 +16609,11 @@ export async function registerRoutes(
     // Artist scoping (#2821): the PersonPicker typeahead must not let an
     // artist search the entire People catalog by name. Scope-less artist
     // fails closed; a scoped artist searches only their credited people.
-    const callerTypeahead = await getUserRole(req.session.userId!);
+    // Resolve the caller session-OR-Bearer (#2867): the admin SPA sends a
+    // Bearer token (no session cookie), so req.session.userId would be
+    // undefined for a Bearer-authed artist — same fix family as /api/people.
+    const callerIdTypeahead = await resolveAdminCallerId(req);
+    const callerTypeahead = callerIdTypeahead ? await getUserRole(callerIdTypeahead) : null;
     let typeaheadScope: Set<string> | null = null;
     if (callerTypeahead?.role === "artist") {
       if (!callerTypeahead.roleScopeId) return res.json([]);
@@ -16635,7 +16639,11 @@ export async function registerRoutes(
   app.get("/api/admin/people/:id", requireAdmin, denyScopedVendorFulfillment, async (req, res) => {
     const id = String(req.params.id);
     // Artist scope: only allow access to people credited on their albums.
-    const callerPeople = await getUserRole(req.session.userId!);
+    // Resolve the caller session-OR-Bearer (#2867): the admin SPA sends a
+    // Bearer token (no session cookie on that host) so req.session.userId
+    // is undefined for a Bearer-authed artist — reuse resolveAdminCallerId.
+    const callerIdPeopleDetail = await resolveAdminCallerId(req);
+    const callerPeople = callerIdPeopleDetail ? await getUserRole(callerIdPeopleDetail) : null;
     if (callerPeople?.role === "artist" && !callerPeople.roleScopeId) return res.status(403).json({ message: "Artist account has no person scope" });
     if (callerPeople?.role === "artist" && callerPeople.roleScopeId) {
       const artistPid = callerPeople.roleScopeId;

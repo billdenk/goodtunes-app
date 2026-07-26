@@ -10491,3 +10491,100 @@ SQL
 }
 repair_task_2866_scopeless_artists dev  "${DATABASE_URL:-}"
 repair_task_2866_scopeless_artists prod "${PROD_DATABASE_URL:-}"
+
+# Task #2867 — ONE-TIME data repair: link andrew+rockstar@goodtunes.music to
+# the correct Person record. Task #2866 above sweeps ALL scopeless artists by
+# minting new blank Person rows, but Andrew has pre-existing candidate person
+# rows ("Andrew Viryl" / "Andrew Test") in prod. This block runs AFTER
+# task_2866 and re-targets Andrew's scope at the best existing person:
+#
+#   Priority 1: a person whose contact_email matches andrew+rockstar@…
+#               (unambiguously his — created by a prior operator link).
+#   Priority 2: the most-credited person tied to his email prefix if exactly
+#               one candidate exists (falls back to whatever task_2866 minted).
+#
+# If neither candidate is found (dev clones, fresh envs) the block is a no-op
+# — task_2866 already created a new blank person for him and that is fine.
+# Marker-guarded: safe to re-run, never overwrites a scope that was set to a
+# non-null value BEFORE this merge (idempotent ON CONFLICT).
+repair_task_2867_andrew_scope() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2867 andrew scope repair on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_user_id    varchar;
+  v_person_id  varchar;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2867_andrew_scope'
+  ) THEN
+    -- Find Andrew's admin user row. May be absent on dev clones.
+    SELECT id INTO v_user_id
+    FROM users
+    WHERE email = 'andrew+rockstar@goodtunes.music'
+      AND role = 'artist'
+    LIMIT 1;
+
+    IF v_user_id IS NOT NULL THEN
+      -- Priority 1: find a person whose contact_email is his exact address.
+      SELECT id INTO v_person_id
+      FROM people
+      WHERE contact_email = 'andrew+rockstar@goodtunes.music'
+        AND (deleted_at IS NULL OR deleted_at > NOW())
+      LIMIT 1;
+
+      IF v_person_id IS NOT NULL THEN
+        -- Stamp the legacy column (source of truth for the synth-fallback).
+        UPDATE users
+           SET role_scope_id = v_person_id
+         WHERE id = v_user_id
+           AND (role_scope_id IS NULL OR role_scope_id = '' OR role_scope_id <> v_person_id);
+
+        -- Remove any stale NULL-scope membership (minted by task-1036 backfill).
+        DELETE FROM memberships
+         WHERE user_id = v_user_id
+           AND role = 'artist'
+           AND scope_id IS NULL;
+
+        -- Upsert the correct scoped membership row.
+        INSERT INTO memberships (user_id, role, scope_kind, scope_id)
+        VALUES (v_user_id, 'artist', 'artist', v_person_id)
+        ON CONFLICT (user_id, scope_kind, scope_id) WHERE scope_id IS NOT NULL
+        DO UPDATE SET role = EXCLUDED.role, updated_at = NOW();
+
+        RAISE NOTICE 'task-2867: linked andrew+rockstar to person % (contact_email match)', v_person_id;
+      ELSE
+        RAISE NOTICE 'task-2867: no contact_email-matched person for andrew+rockstar — leaving task-2866 result intact';
+      END IF;
+    ELSE
+      RAISE NOTICE 'task-2867: andrew+rockstar user not found on this DB — skipping';
+    END IF;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_2867_andrew_scope');
+  ELSE
+    RAISE NOTICE 'task-2867: andrew scope repair already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2867 andrew scope repair ok on $label"
+    echo "$out" | grep -i 'task-2867' || true
+  else
+    echo "post-merge: WARNING — task-2867 andrew scope repair failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+repair_task_2867_andrew_scope dev  "${DATABASE_URL:-}"
+repair_task_2867_andrew_scope prod "${PROD_DATABASE_URL:-}"
