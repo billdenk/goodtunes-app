@@ -123,6 +123,23 @@ interface PartnerSearchResult {
 }
 
 export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) {
+  // When embedded inside a partner portal (no AdminFrame wrapper), stamp
+  // `gt-admin` on <body> so shadcn semantic-token primitives (Input, Button,
+  // etc.) pick up the light admin tokens immediately — the same "had" guard
+  // pattern OperatorShell uses. AdminFrame does this too, but embedded mode
+  // skips AdminFrame, so without this effect the very first render frame sees
+  // the dark `:root` tokens (--background ≈ near-black) before OperatorShell's
+  // own effect fires (useEffect is after-paint). When not embedded, AdminFrame
+  // already owns the class and this effect is a safe no-op.
+  useEffect(() => {
+    const body = document.body;
+    const had = body.classList.contains("gt-admin");
+    body.classList.add("gt-admin");
+    return () => {
+      if (!had) body.classList.remove("gt-admin");
+    };
+  }, []);
+
   const { from, to, setFrom, setTo } = useDateRange();
   // Task #1456 — partner dashboards deep-link here scoped to a single
   // partner via `?asPartner=<id>&asPartnerKind=<kind>&asPartnerName=<name>`.
@@ -581,11 +598,11 @@ function DateRangePicker({ from, to, setFrom, setTo }: { from: string; to: strin
     <div className="flex items-end gap-2" data-testid="date-range-picker">
       <div className="flex flex-col gap-1">
         <Label htmlFor="date-from" className="text-[11px] text-slate-500">From</Label>
-        <Input id="date-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 w-[140px]" data-testid="input-date-from" />
+        <Input id="date-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 w-[140px] bg-white border-slate-200 text-slate-900" data-testid="input-date-from" />
       </div>
       <div className="flex flex-col gap-1">
         <Label htmlFor="date-to" className="text-[11px] text-slate-500">To</Label>
-        <Input id="date-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 w-[140px]" data-testid="input-date-to" />
+        <Input id="date-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 w-[140px] bg-white border-slate-200 text-slate-900" data-testid="input-date-to" />
       </div>
       <div className="flex gap-1">
         {presets.map((p) => (
@@ -595,7 +612,7 @@ function DateRangePicker({ from, to, setFrom, setTo }: { from: string; to: strin
             variant="outline"
             size="sm"
             onClick={() => setPreset(p.days)}
-            className="h-9"
+            className="h-9 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
             data-testid={`button-preset-${p.label.toLowerCase()}`}
           >
             {p.label}
