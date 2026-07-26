@@ -1496,10 +1496,10 @@ function ReleasePicker({
 
 function NativeFunnel({ qs }: { qs: string }) {
   const [albumId, setAlbumId] = useState<string>("");
-  // Task #2257 — opt-in: drop operator/staff + flagged-internal-device
-  // sessions from every funnel step. Off by default so the headline number
-  // stays the raw total until the operator chooses to filter.
-  const [excludeInternal, setExcludeInternal] = useState(false);
+  // Task #2257 — on by default so the headline number reflects real fans,
+  // not the team's own page loads and preview opens. The toggle lets the
+  // operator see the raw total when needed.
+  const [excludeInternal, setExcludeInternal] = useState(true);
   const { data: releaseData, isLoading: loadingReleases } = useQuery<{ releases: ReleaseLite[] }>({
     queryKey: ["/api/admin/reports/funnel/releases"],
     queryFn: () => fetchJson(`/api/admin/reports/funnel/releases`),
@@ -1536,7 +1536,11 @@ function NativeFunnel({ qs }: { qs: string }) {
           <h3 className="text-sm font-semibold text-slate-700">Acquisition funnel</h3>
           <p className="text-xs text-slate-500 mt-0.5">
             Landed → viewed the offer → started checkout → bought. Distinct sessions, computed from
-            first-party analytics — no PostHog required.
+            first-party analytics — no PostHog required.{" "}
+            <span className="text-slate-400">
+              "Landed" counts unique sessions that opened the release page. Operator/staff
+              views and preview-link opens are filtered out by default.
+            </span>
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">

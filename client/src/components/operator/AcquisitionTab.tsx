@@ -238,7 +238,7 @@ export function AcquisitionTab({
   }, [effectiveRangeQs, scopeId, kind]);
 
   const [albumId, setAlbumId] = useState<string>("");
-  const [excludeInternal, setExcludeInternal] = useState(false);
+  const [excludeInternal, setExcludeInternal] = useState(true);
 
   const { data: releaseData, isLoading: loadingReleases } = useQuery<{ releases: ReleaseLite[] }>({
     queryKey: ["/api/partner/reports/funnel/releases", reportQs],
@@ -269,7 +269,11 @@ export function AcquisitionTab({
             <h3 className="text-sm font-semibold text-slate-700">Acquisition funnel</h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Landed → viewed the offer → started checkout → bought, for your own
-              releases. Distinct sessions from first-party analytics.
+              releases. Distinct sessions from first-party analytics.{" "}
+              <span className="text-slate-400">
+                "Landed" counts unique sessions that opened the release page. Your team's
+                own views and preview-link opens are filtered out by default.
+              </span>
             </p>
           </div>
           <div className="flex flex-wrap items-end gap-3">
