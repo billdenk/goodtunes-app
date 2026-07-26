@@ -66,10 +66,27 @@ export function ViewAsPartnerButton({
         scopeId,
         label,
       });
-      const { token } = (await r.json()) as { token: string; label: string };
+      const { token, scopeDivergentWarning } = (await r.json()) as {
+        token: string;
+        label: string;
+        /** Task #2865 — set when one or more accounts with this role have
+         * a NULL scope, meaning God Mode view-as may show more than the
+         * real partner login. Operator should investigate & repair the
+         * affected account before relying on this view. */
+        scopeDivergentWarning?: string;
+      };
       const portalPath = PORTAL_PATH[role];
       const hash = `viewas=${encodeURIComponent(token)}&viewaslabel=${encodeURIComponent(label)}`;
       window.open(`${portalPath}#${hash}`, "_blank", "noopener,noreferrer");
+      // Warn the operator that the real account may look different from
+      // what view-as is showing (scope-less account defect).
+      if (scopeDivergentWarning) {
+        toast({
+          title: "⚠ View-as may not match the real login",
+          description: scopeDivergentWarning,
+          variant: "destructive",
+        });
+      }
     } catch (e: any) {
       toast({
         title: "Couldn't open partner view",

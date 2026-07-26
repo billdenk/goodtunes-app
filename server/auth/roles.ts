@@ -342,6 +342,13 @@ export async function setUserRole(
   role: AdminRole,
   roleScopeId: string | null,
 ): Promise<void> {
+  // Guard: partner roles require a non-null scope (Task #2865 root-cause).
+  const wantedScopeKind = roleToScopeKind(role);
+  if (wantedScopeKind !== null && roleScopeId === null) {
+    const msg = `[roles] Refusing scope-less partner role write: role=${role} userId=${userId}. Partner roles require a non-null roleScopeId.`;
+    console.error(msg);
+    throw new Error(msg);
+  }
   await db.execute(
     sql`UPDATE users SET role = ${role}, role_scope_id = ${roleScopeId} WHERE id = ${userId}`,
   );
@@ -376,6 +383,17 @@ export async function addMembership(
     return;
   }
   const scopeKind = roleToScopeKind(role);
+  // Guard: partner roles (label, artist, manufacturer, …) MUST carry a
+  // non-null scopeId. A NULL scope means every catalog / dashboard read
+  // silently scopes to nothing, producing a broken "0 albums" account
+  // (Task #2865 root-cause). Fail loudly here — the 500 auto-alerts ops
+  // via the per-request 5xx hook — so no future invite/grant path can
+  // produce a scope-less partner account.
+  if (scopeKind !== null && scopeId === null) {
+    const msg = `[roles] Refusing scope-less partner grant: role=${role} userId=${userId}. Partner roles require a non-null scopeId.`;
+    console.error(msg);
+    throw new Error(msg);
+  }
   const before = await db.execute<{ ct: number }>(
     sql`SELECT COUNT(*)::int AS ct FROM memberships WHERE user_id = ${userId}`,
   );

@@ -10300,3 +10300,93 @@ SQL
 }
 backfill_task_2860_label_invite_subusers dev  "${DATABASE_URL:-}"
 backfill_task_2860_label_invite_subusers prod "${PROD_DATABASE_URL:-}"
+
+# Task #2865 — ONE-TIME data repair: stamp the missing role_scope_id /
+# membership scope_id for the Dead Alive artist account
+# (deadalivenashville@gmail.com). The account was granted role='artist' but
+# role_scope_id was left NULL, so every artist-portal read scoped to
+# nothing — 0 albums, no OperatorShell, edits diverted to review queue.
+#
+# The correct person id (confirmed via God-Mode view-as which had the right
+# scope from the person row) is: 3456257e-90f9-494a-9c67-2339266f53da.
+#
+# If the task_1036_memberships backfill already ran (it did), it created a
+# memberships row with scope_id=NULL (the "god hat" partial-unique slot) from
+# the broken users.role_scope_id=NULL. This repair:
+#   1. Sets users.role_scope_id to the correct person id (idempotent).
+#   2. Upserts the correct scoped memberships row (scope_id IS NOT NULL).
+#   3. Deletes the stale NULL-scope membership row that was seeded from
+#      the broken state.
+#
+# andrew+rockstar@goodtunes.music has the same defect but the correct person
+# id is unconfirmed — that account is handled by the follow-up task
+# "Fix scopeless artist accounts (Andrew Rockstar)".
+repair_task_2865_dead_alive_scope() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2865 dead-alive scope repair on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_user_id varchar;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2865_dead_alive_scope'
+  ) THEN
+    -- Find the Dead Alive user row (may not exist on dev clones).
+    SELECT id INTO v_user_id
+    FROM users
+    WHERE email = 'deadalivenashville@gmail.com' AND role = 'artist'
+    LIMIT 1;
+
+    IF v_user_id IS NOT NULL THEN
+      -- 1. Stamp the legacy column (source of truth for single-hat synth fallback).
+      UPDATE users
+         SET role_scope_id = '3456257e-90f9-494a-9c67-2339266f53da'
+       WHERE id = v_user_id AND role_scope_id IS NULL;
+
+      -- 2. Upsert the correct scoped membership row.
+      INSERT INTO memberships (user_id, role, scope_kind, scope_id)
+      VALUES (v_user_id, 'artist', 'artist', '3456257e-90f9-494a-9c67-2339266f53da')
+      ON CONFLICT (user_id, scope_kind, scope_id) WHERE scope_id IS NOT NULL
+      DO UPDATE SET role = EXCLUDED.role, updated_at = NOW();
+
+      -- 3. Delete the stale NULL-scope membership row that was seeded from
+      --    the broken users.role_scope_id=NULL by the task-1036 backfill.
+      --    (scope_id IS NULL = "god hat" partial unique slot — wrong for artist.)
+      DELETE FROM memberships
+       WHERE user_id = v_user_id
+         AND role = 'artist'
+         AND scope_id IS NULL;
+
+      RAISE NOTICE 'task-2865: Dead Alive scope repaired for user %', v_user_id;
+    ELSE
+      RAISE NOTICE 'task-2865: Dead Alive user not found on this DB — skipping';
+    END IF;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_2865_dead_alive_scope');
+  ELSE
+    RAISE NOTICE 'task-2865: Dead Alive scope repair already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-2865 dead-alive scope repair ok on $label"
+    echo "$out" | grep -i 'task-2865' || true
+  else
+    echo "post-merge: WARNING — task-2865 dead-alive scope repair failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+repair_task_2865_dead_alive_scope dev  "${DATABASE_URL:-}"
+repair_task_2865_dead_alive_scope prod "${PROD_DATABASE_URL:-}"

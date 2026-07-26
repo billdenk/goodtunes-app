@@ -3715,7 +3715,27 @@ export async function registerRoutes(
       label,
     });
     await logViewAsAudit(a.userId, role, scopeKind ?? null, scopeId ?? null, label);
-    return res.json({ token, label });
+    // Task #2865 — parity guard: detect scope-less partner accounts that
+    // would produce a God-Mode-vs-real-login divergence. When the operator
+    // supplies a scopeId (the correct person/label/etc. id) but one or more
+    // users with this role have a NULL role_scope_id, view-as shows MORE than
+    // the real login. Surface a warning so the operator knows the underlying
+    // account is broken before they rely on what they're seeing.
+    let scopeDivergentWarning: string | undefined;
+    if (scopeId) {
+      try {
+        const scopelessCheck = await db.execute<{ ct: string }>(
+          sql`SELECT COUNT(*)::text AS ct FROM users WHERE role = ${role} AND role_scope_id IS NULL`,
+        );
+        const scopelessCount = Number(((scopelessCheck as any).rows ?? [])[0]?.ct ?? 0);
+        if (scopelessCount > 0) {
+          scopeDivergentWarning = `${scopelessCount} account(s) with role="${role}" have no scope assigned — view-as may show more than the real login. Data repair may be needed.`;
+        }
+      } catch {
+        // best-effort, never block the mint
+      }
+    }
+    return res.json({ token, label, ...(scopeDivergentWarning ? { scopeDivergentWarning } : {}) });
   });
 
   // ----- Admin bootstrap + CMS -------------------------------------------

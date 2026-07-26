@@ -196,11 +196,24 @@ export function ArtistDashboard() {
   // instead of a blank page.
   if (me.error) {
     const msg = (me.error as any)?.message ?? "";
+    // Determine the most actionable error copy for this error class.
+    const errorCopy = msg.includes("Super-admin")
+      ? "Pass ?personId= to inspect a specific artist."
+      : msg.includes("no person scope") || msg.includes("no artist scope") || msg.includes("no scope")
+      // Task #2865 — scope-less partner account: account exists but was
+      // granted artist role without a person scope ID (DB data defect).
+      // Shown instead of a blank page so the artist knows to contact support.
+      ? "Your artist account isn't fully set up yet — our team has been notified. Please contact GoodTunes support to get access to your dashboard."
+      : msg.includes("Insufficient")
+      ? "This dashboard is for artist accounts. Ask your label admin to invite you."
+      : msg.includes("Unauthorized")
+      ? "Sign in with your artist account to continue."
+      : "We couldn't load your artist scope. Please try again.";
     return (
       <main className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-6">
         <div className="max-w-md text-center" data-testid="artist-dashboard-gate">
           <h1 className="text-2xl font-bold mb-2">Artist dashboard</h1>
-          <p className="text-slate-500 text-sm">{msg.includes("Super-admin") ? "Pass ?personId= to inspect a specific artist." : msg.includes("Insufficient") ? "This dashboard is for artist accounts. Ask your label admin to invite you." : msg.includes("Unauthorized") ? "Sign in with your artist account to continue." : "We couldn't load your artist scope. Please try again."}</p>
+          <p className="text-slate-500 text-sm">{errorCopy}</p>
         </div>
       </main>
     );
