@@ -172,13 +172,14 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // the VINYL PRODUCT catalog (not releases) — relabeled "Vinyl catalog"
   // alongside GoodDeed pricing + Settings. GoodDeed pricing renders
   // INLINE (Task #2075).
-  { id: "dashboard", label: "Dashboard",        icon: LayoutDashboard,  roles: ["press"] },
-  { id: "people",    label: "Clients",          icon: User,             roles: ["press"] },
-  { id: "albums",    label: "Projects",         icon: Disc3,            roles: ["press"] },
-  { id: "catalog",   label: "Vinyl catalog",    icon: BookOpen,         roles: ["press"] },
-  { id: "pricing",   label: "GoodDeed pricing", icon: Receipt,          roles: ["press"] },
-  { id: "settings",  label: "Settings",         icon: Cog,              roles: ["press"] },
-  { id: "referrals", label: "Referrals",        icon: UserPlus,         roles: ["press"] },
+  { id: "dashboard",   label: "Dashboard",        icon: LayoutDashboard,  roles: ["press"] },
+  { id: "people",     label: "Clients",          icon: User,             roles: ["press"] },
+  { id: "albums",     label: "Projects",         icon: Disc3,            roles: ["press"] },
+  { id: "acquisition", label: "Acquisition",    icon: Megaphone,        roles: ["press"] },
+  { id: "catalog",    label: "Vinyl catalog",    icon: BookOpen,         roles: ["press"] },
+  { id: "pricing",    label: "GoodDeed pricing", icon: Receipt,          roles: ["press"] },
+  { id: "settings",   label: "Settings",         icon: Cog,              roles: ["press"] },
+  { id: "referrals",  label: "Referrals",        icon: UserPlus,         roles: ["press"] },
 
   // GoodDeed Quickprinter shell — `/vendor` routed via VendorScopeRouter
   // for is_quickprinter vendors (PrinterPortal.tsx). Print Queue stays the

@@ -194,15 +194,22 @@ function ReleasePicker({
  * labelId / npoId from the URL) or null for a real partner viewing their own
  * scope; `rangeQs` carries the dashboard's from/to window (other params are
  * ignored — only from/to + impersonation reach the report endpoints).
+ *
+ * `apiBase` overrides the report endpoint root (default `/api/partner/reports`).
+ * Press portals pass `/api/press/<pressId>` so the requests go to the press-
+ * specific funnel routes gated by requirePressScope instead of requireReportScope
+ * (which explicitly 403s manufacturer-role callers).
  */
 export function AcquisitionTab({
   kind,
   scopeId,
   rangeQs,
+  apiBase = "/api/partner/reports",
 }: {
   kind: PartnerKind;
   scopeId: string | null;
   rangeQs?: string;
+  apiBase?: string;
 }) {
   // Partner surfaces with a page-level RangePicker (artist/label) pass `rangeQs`
   // in; surfaces without one (non-profit) fall back to this in-tab picker so the
@@ -241,18 +248,18 @@ export function AcquisitionTab({
   const [excludeInternal, setExcludeInternal] = useState(true);
 
   const { data: releaseData, isLoading: loadingReleases } = useQuery<{ releases: ReleaseLite[] }>({
-    queryKey: ["/api/partner/reports/funnel/releases", reportQs],
-    queryFn: () => fetchJson(`/api/partner/reports/funnel/releases?${reportQs}`),
+    queryKey: [`${apiBase}/funnel/releases`, reportQs],
+    queryFn: () => fetchJson(`${apiBase}/funnel/releases?${reportQs}`),
   });
   const releases = releaseData?.releases ?? [];
   const effectiveAlbumId = albumId || releases[0]?.albumId || "";
   const selectedRelease = releases.find((r) => r.albumId === effectiveAlbumId) ?? null;
 
   const { data, isLoading, isError, error, refetch } = useQuery<FunnelData>({
-    queryKey: ["/api/partner/reports/funnel", effectiveAlbumId, reportQs, excludeInternal],
+    queryKey: [`${apiBase}/funnel`, effectiveAlbumId, reportQs, excludeInternal],
     queryFn: () =>
       fetchJson(
-        `/api/partner/reports/funnel?albumId=${encodeURIComponent(effectiveAlbumId)}${
+        `${apiBase}/funnel?albumId=${encodeURIComponent(effectiveAlbumId)}${
           excludeInternal ? "&excludeInternal=1" : ""
         }&${reportQs}`,
       ),

@@ -2731,6 +2731,61 @@ export function registerPressPortalRoutes(
     `);
     res.json({ ok: true });
   });
+
+  // ─── Press acquisition funnel routes ─────────────────────────────────
+  // Mirrors /api/partner/reports/funnel* but gated by requirePressScope
+  // instead of requireReportScope (which explicitly 403s manufacturer
+  // role). Builds the same ReportContext with the press's manufacturer
+  // scope so partnerFunnelReleases / partnerAcquisitionFunnel return only
+  // albums whose pressing_order_requests reference this press.
+  function parsePressRange(req: Request): { from: Date; to: Date } {
+    const fromStr = String(req.query.from || "");
+    const toStr = String(req.query.to || "");
+    const now = new Date();
+    const to = toStr ? new Date(toStr) : now;
+    const from = fromStr ? new Date(fromStr) : new Date(now.getTime() - 30 * 86400_000);
+    from.setUTCHours(0, 0, 0, 0);
+    const toEnd = new Date(to);
+    toEnd.setUTCHours(23, 59, 59, 999);
+    return { from, to: toEnd };
+  }
+
+  app.get("/api/press/:id/funnel/releases", requireAdmin, requirePressScope, async (req, res) => {
+    const { partnerFunnelReleases } = await import("./reports/index");
+    const pressId = String(req.params.id);
+    try {
+      const ctx = {
+        scope: { role: "manufacturer" as const, roleScopeId: pressId },
+        ...parsePressRange(req),
+        albumId: null,
+      };
+      const data = await partnerFunnelReleases(ctx);
+      res.json(data);
+    } catch (e: any) {
+      console.error("[press/funnel/releases]", e);
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/press/:id/funnel", requireAdmin, requirePressScope, async (req, res) => {
+    const { partnerAcquisitionFunnel } = await import("./reports/index");
+    const pressId = String(req.params.id);
+    try {
+      const ctx = {
+        scope: { role: "manufacturer" as const, roleScopeId: pressId },
+        ...parsePressRange(req),
+        albumId: null,
+      };
+      const data = await partnerAcquisitionFunnel(ctx, {
+        albumId: String(req.query.albumId || ""),
+        excludeInternal: req.query.excludeInternal === "1" || req.query.excludeInternal === "true",
+      });
+      res.json(data);
+    } catch (e: any) {
+      console.error("[press/funnel]", e);
+      res.status(500).json({ message: e.message });
+    }
+  });
 }
 
 // ─── Side-effect helpers ───────────────────────────────────────────────

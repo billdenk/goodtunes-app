@@ -51,6 +51,7 @@ import { AdminAlbum } from "@/pages/AdminAlbum";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
 import { AdminReports } from "@/pages/AdminReports";
+import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { AdminGoodDeedPricing } from "@/pages/AdminGoodDeedPricing";
 import { PressCatalogPanel } from "@/pages/AdminManufacturer";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
@@ -75,9 +76,9 @@ import { PRIMARY_CREATIVE_CREDITS } from "@/components/admin/RolePicker";
 
 // pipeline + reports stay in the union so direct ?tab= URLs still render
 // their content (they're just hidden from the nav per Task #2188).
-type TabId = "dashboard" | "people" | "catalog" | "albums" | "pipeline" | "reports" | "pricing" | "referrals" | "settings";
+type TabId = "dashboard" | "people" | "catalog" | "albums" | "pipeline" | "reports" | "pricing" | "referrals" | "acquisition" | "settings";
 
-const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "catalog", "albums", "pipeline", "reports", "pricing", "referrals", "settings"];
+const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "catalog", "albums", "pipeline", "reports", "pricing", "referrals", "acquisition", "settings"];
 
 interface MeRole { role: string; roleScopeId: string | null; }
 interface PressMe {
@@ -311,7 +312,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       // while the embedded album view is open (it brings its own chrome).
       pageTitle={
         albumViewId ||
-        ["dashboard", "catalog", "pricing", "referrals", "reports", "people", "albums"].includes(tab)
+        ["dashboard", "catalog", "pricing", "referrals", "reports", "people", "albums", "acquisition"].includes(tab)
           ? undefined
           : tab === "pipeline"
             ? "Pipeline"
@@ -362,6 +363,18 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       {tab === "pipeline" && <PipelineTab pressId={pressId} />}
       {tab === "reports" && <AdminReports embedded />}
       {tab === "pricing" && <AdminGoodDeedPricing embedded />}
+      {tab === "acquisition" && (
+        // Use press-specific funnel routes (/api/press/:id/funnel*) gated by
+        // requirePressScope. requireReportScope explicitly 403s manufacturer-role
+        // callers so we cannot use the shared /api/partner/reports/funnel* routes.
+        // scopeId=null: the press's own bearer/session is already authenticated by
+        // requirePressScope on the server; no asPartner param needed.
+        <AcquisitionTab
+          kind="artist"
+          scopeId={null}
+          apiBase={`/api/press/${pressId}`}
+        />
+      )}
       {tab === "referrals" && (
         <div className="space-y-4" data-testid="press-referrals-tab">
           <AdminPageHeader
