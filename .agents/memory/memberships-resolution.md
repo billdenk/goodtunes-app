@@ -41,3 +41,8 @@ unchanged and behavior is byte-for-byte identical for single-membership users.
 - Two PARTIAL unique indexes guard it: one god membership per account
   (`WHERE scope_id IS NULL`), one per `(user_id, scope_kind, scope_id)`
   (`WHERE scope_id IS NOT NULL`).
+
+## Operator-vs-partner classification must be membership-aware
+Any surface that splits accounts into "operators" vs "partners" (rosters, exclusion filters, fan-outs) must check memberships god rows (`role IN ('super_admin','admin')`, scope_id IS NULL), not just legacy `users.role` — a multi-hat account keeps its legacy partner role while the god hat lives only in memberships.
+**Why:** the Team-accounts roster shipped with a legacy-role-only filter and would have listed operator accounts as partners (architect review caught it).
+**How to apply:** fetch memberships for the candidate set, build an operator-id set from god rows, exclude those accounts AND never render god rows as scope attachments. Table-absent clones: treat as no exclusions (legacy filter already applied).

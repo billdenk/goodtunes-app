@@ -27496,6 +27496,171 @@ export async function registerRoutes(
       claimedReason,
     });
   };
+  // ── Team accounts roster ────────────────────────────────────────────
+  // "Someone accepted an invite — where are they now?" The invite
+  // directory answers by INVITE; this answers by ACCOUNT: every partner
+  // sign-in (any non-operator admin account) with the scope(s) it's
+  // attached to, its sub-role, how it got in (invite provenance when we
+  // have it), and when it last signed in. Accounts added directly via
+  // partner-contacts (no admin_invites row) appear here too — that's the
+  // invite directory's blind spot. Super-admin-only (mirrors
+  // /api/admin/invites/review).
+  app.get("/api/admin/team-accounts", requireAdmin, requireRole("super_admin"), async (_req, res) => {
+    try {
+      // users.role / users.role_scope_id live outside the drizzle pgTable
+      // (see server/auth/roles.ts) — raw SQL by design.
+      const uRes: any = await db.execute(sql`
+        SELECT id, email, username, display_name, created_at, role, role_scope_id
+        FROM users
+        WHERE is_admin = true AND role IS NOT NULL AND role NOT IN ('super_admin', 'admin')
+        ORDER BY created_at DESC
+      `);
+      const uRows = (uRes.rows ?? []) as Array<{
+        id: string; email: string; username: string; display_name: string;
+        created_at: string; role: string; role_scope_id: string | null;
+      }>;
+      if (uRows.length === 0) return res.json({ accounts: [] });
+      const userIds = uRows.map((u) => u.id);
+
+      // Memberships are additive (dual-written beside the legacy role
+      // columns) — an account with no rows gets one synthesized from
+      // users.role/role_scope_id, same policy as getUserMemberships.
+      type MRow = { user_id: string; role: string; scope_kind: string | null; scope_id: string | null; sub_role: string | null };
+      let mRows: MRow[] = [];
+      try {
+        const mRes: any = await db.execute(sql`
+          SELECT user_id, role, scope_kind, scope_id, sub_role
+          FROM memberships
+          WHERE user_id = ANY(${pgArray(userIds, "varchar")})
+          ORDER BY created_at ASC
+        `);
+        mRows = (mRes.rows ?? []) as MRow[];
+      } catch {
+        mRows = []; // table absent on an old clone — legacy synth covers everyone
+      }
+      // Effective role is membership-based: an account can hold an
+      // operator (god) hat via a memberships row while its legacy
+      // users.role still reads as a partner role. Those are operators —
+      // exclude the whole account, and never surface god rows as
+      // attachments.
+      const isOperatorHat = (role: string) => role === "super_admin" || role === "admin";
+      const operatorIds = new Set(mRows.filter((m) => isOperatorHat(m.role)).map((m) => m.user_id));
+      const memByUser = new Map<string, MRow[]>();
+      for (const m of mRows) {
+        if (isOperatorHat(m.role)) continue;
+        const list = memByUser.get(m.user_id) ?? [];
+        list.push(m);
+        memByUser.set(m.user_id, list);
+      }
+      const roster = uRows.filter((u) => !operatorIds.has(u.id));
+      const legacyKind = (role: string): string => (role === "team" ? "artist" : role);
+      const attachmentsFor = (u: (typeof uRows)[number]): MRow[] => {
+        const rows = memByUser.get(u.id);
+        if (rows && rows.length) return rows;
+        return [{
+          user_id: u.id,
+          role: u.role,
+          scope_kind: legacyKind(u.role),
+          scope_id: u.role_scope_id,
+          sub_role: u.role === "team" ? "team" : null,
+        }];
+      };
+
+      // Resolve scope display names + thumbs per kind (mirrors the
+      // invite-directory's storage-getter approach).
+      const idsFor = (kind: string) => Array.from(new Set(
+        roster.flatMap((u) => attachmentsFor(u))
+          .filter((a) => a.scope_kind === kind && a.scope_id)
+          .map((a) => a.scope_id as string),
+      ));
+      const [people, labels, managers, mfgs, ffs, vends, npos] = await Promise.all([
+        Promise.all(idsFor("artist").map((id) => storage.getPersonById(id))),
+        Promise.all(idsFor("label").map((id) => storage.getLabelById(id))),
+        Promise.all(idsFor("manager").map((id) => storage.getManagerById(id))),
+        Promise.all(idsFor("manufacturer").map((id) => storage.getManufacturerById(id))),
+        Promise.all(idsFor("fulfillment").map((id) => storage.getFulfillmentPartnerById(id))),
+        Promise.all(idsFor("vendor").map((id) => storage.getVendorById(id))),
+        (() => {
+          const ids = idsFor("non_profit");
+          return ids.length
+            ? db.execute(sql`SELECT id, name, logo_url FROM organizations WHERE id = ANY(${pgArray(ids, "varchar")})`).then((r: any) => r.rows ?? [])
+            : Promise.resolve([] as any[]);
+        })(),
+      ]);
+      const nameIdx = new Map<string, { name: string; thumbUrl: string | null }>();
+      const put = (kind: string, row: any, name?: string, thumb?: string | null) => {
+        if (!row) return;
+        nameIdx.set(`${kind}:${row.id}`, {
+          name: name ?? row.name ?? row.displayName ?? "",
+          thumbUrl: thumb !== undefined ? thumb : (row.imageUrl ?? row.logoUrl ?? row.thumbnailUrl ?? null),
+        });
+      };
+      for (const p of people) put("artist", p);
+      for (const l of labels) put("label", l);
+      for (const m of managers) put("manager", m);
+      for (const m of mfgs) put("manufacturer", m);
+      for (const f of ffs) put("fulfillment", f);
+      for (const v of vends) put("vendor", v);
+      for (const o of npos as any[]) put("non_profit", o, o.name, o.logo_url ?? null);
+
+      // Invite provenance — the latest accepted invite per account. An
+      // account with no row here was added directly (partner-contacts).
+      const invRes: any = await db.execute(sql`
+        SELECT DISTINCT ON (accepted_user_id)
+               accepted_user_id, created_at AS invited_at, used_at AS joined_at
+        FROM admin_invites
+        WHERE used_at IS NOT NULL AND accepted_user_id = ANY(${pgArray(userIds, "varchar")})
+        ORDER BY accepted_user_id, used_at DESC
+      `);
+      const invByUser = new Map<string, { invited_at: string; joined_at: string }>(
+        ((invRes.rows ?? []) as any[]).map((r) => [r.accepted_user_id, r]),
+      );
+
+      // Last sign-in — newest bearer token per account. Browser-session
+      // sign-ins don't mint tokens, so this can be null; the UI renders
+      // "—" rather than pretending to know.
+      const tokRes: any = await db.execute(sql`
+        SELECT admin_user_id, MAX(created_at) AS last_at
+        FROM auth_tokens
+        WHERE admin_user_id = ANY(${pgArray(userIds, "varchar")})
+        GROUP BY admin_user_id
+      `);
+      const lastByUser = new Map<string, string>(
+        ((tokRes.rows ?? []) as any[]).map((r) => [r.admin_user_id, r.last_at]),
+      );
+
+      res.json({
+        accounts: roster.map((u) => {
+          const inv = invByUser.get(u.id) ?? null;
+          return {
+            id: u.id,
+            email: u.email,
+            username: u.username,
+            displayName: u.display_name,
+            role: u.role,
+            createdAt: u.created_at,
+            lastSignInAt: lastByUser.get(u.id) ?? null,
+            invitedAt: inv?.invited_at ?? null,
+            joinedAt: inv?.joined_at ?? null,
+            attachments: attachmentsFor(u).map((a) => {
+              const hit = a.scope_id ? nameIdx.get(`${a.scope_kind}:${a.scope_id}`) : undefined;
+              return {
+                scopeKind: a.scope_kind,
+                scopeId: a.scope_id,
+                scopeName: hit?.name ?? null,
+                thumbUrl: hit?.thumbUrl ?? null,
+                subRole: a.sub_role ?? null,
+              };
+            }),
+          };
+        }),
+      });
+    } catch (e) {
+      console.error("[team-accounts] failed", e);
+      res.status(500).json({ message: "Failed to load team accounts" });
+    }
+  });
+
   app.post("/api/admin/invites", requireAdmin, adminCreateInviteHandler);
 
   // Task #351 — Super-admin review queue for held invites. Lists every

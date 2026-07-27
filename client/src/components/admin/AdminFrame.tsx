@@ -14,6 +14,7 @@ import {
   Truck,
   Radar,
   Users,
+  UserCheck,
   UserPlus,
   ArrowLeft,
   BarChart3,
@@ -93,6 +94,7 @@ const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   "payment-requests": "system",
   invites: "system",
   "invite-directory": "system",
+  "team-accounts": "partners",
   trash: "system",
 };
 
@@ -151,6 +153,7 @@ export type EntityKey =
   | "invites"
   | "invite-tree"
   | "invite-directory"
+  | "team-accounts"
   | "payment-requests"
   | "trash"
   | "none";
@@ -929,6 +932,18 @@ export function AdminFrame({
                 active={active === "fulfillment"}
                 onClick={() => navigate("/admin/fulfillment-partners")}
                 testId="nav-fulfillment"
+              />
+              {/* Team accounts — account-centric roster: every partner
+                  sign-in and the scope(s) it represents, whether it came
+                  in via invite or was added directly. The invite
+                  directory (System) stays invite-centric. */}
+              <SidebarLink
+                icon={UserCheck}
+                label="Team accounts"
+                count={-1}
+                active={active === "team-accounts"}
+                onClick={() => navigate("/admin/team-accounts")}
+                testId="nav-team-accounts"
               />
             </Section>
 

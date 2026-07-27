@@ -104,6 +104,7 @@ import { AdminInvites } from "@/pages/AdminInvites";
 import { AdminPressEarlyCutQueue } from "@/pages/AdminPressEarlyCutQueue";
 import { AdminInviteTree } from "@/pages/AdminInviteTree";
 import { AdminInviteDirectory } from "@/pages/AdminInviteDirectory";
+import { AdminTeamAccounts } from "@/pages/AdminTeamAccounts";
 import { AdminReview } from "@/pages/AdminReview";
 import { AdminPressingOrders } from "@/pages/AdminPressingOrders";
 import AcceptInvite from "@/pages/AcceptInvite";
@@ -872,6 +873,12 @@ function Router() {
         {/* Task #1198 — Invite directory (read-only list of every invite). */}
         <Route path="/admin/invite-directory">
           <ProtectedRoute component={AdminInviteDirectory} />
+        </Route>
+        {/* Team accounts — operator-only account roster. Deliberately NOT
+            in any partner allowlist above, so partner roles bounce to
+            their portal; the API is super-admin-gated as well. */}
+        <Route path="/admin/team-accounts">
+          <ProtectedRoute component={AdminTeamAccounts} />
         </Route>
         {/* Task #79 — Super-admin queue of partner-submitted metadata
             edits awaiting review. */}
