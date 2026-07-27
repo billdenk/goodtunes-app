@@ -4274,9 +4274,10 @@ function CatalogEditor({
                     )}
                   </div>
                 )}
-                {editing && !isMirror && managePanelOpen && selectedColorTier && (
+                {editing && !isMirror && selectedColorTier && (
                   <ManageColorsPanel
                     key={selectedColorTier.id}
+                    open={managePanelOpen}
                     pressId={pressId}
                     tier={selectedColorTier}
                     onChanged={onChanged}
@@ -5417,11 +5418,13 @@ function DeleteTierButton({
 // reorder with row numbers; footer: Reset + single "Save changes" (atomic
 // commit of creates, renames, deletes, and reorder in sequence).
 function ManageColorsPanel({
+  open,
   pressId,
   tier,
   onChanged,
   onClose,
 }: {
+  open: boolean;
   pressId: string;
   tier: CatalogTier;
   onChanged: () => void;
@@ -5438,6 +5441,7 @@ function ManageColorsPanel({
     swatchThumbUrl: string | null;
     isNew?: boolean;
     uploading?: boolean;
+    hexPickerOpen?: boolean;
   };
 
   const buildInitialRows = (): DraftRow[] =>
@@ -5460,6 +5464,7 @@ function ManageColorsPanel({
   const [saving, setSaving] = useState(false);
   const [deleteConfirmKey, setDeleteConfirmKey] = useState<string | null>(null);
   const [cropToDisc, setCropToDisc] = useState(false);
+  const [rowErrors, setRowErrors] = useState<Set<string>>(new Set());
 
   const originalOrder = tier.colors.map((c) => c.id).join(",");
   const originalNames = useMemo(
@@ -5529,6 +5534,15 @@ function ManageColorsPanel({
   };
 
   const handleSave = async () => {
+    // Validate: every non-deleted, non-uploading row needs a photo or hex
+    const activeRows = rows.filter((r) => !deletedIds.has(r.id ?? "") && !r.uploading);
+    const invalid = activeRows.filter((r) => !r.swatchImageUrl && !r.swatchHex);
+    if (invalid.length > 0) {
+      setRowErrors(new Set(invalid.map((r) => r.key)));
+      return;
+    }
+    setRowErrors(new Set());
+
     setSaving(true);
     try {
       // Track server-assigned IDs for newly created rows so they can be
@@ -5540,7 +5554,7 @@ function ManageColorsPanel({
         if (r.id === null && !r.uploading && r.name.trim()) {
           const resp = await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/tiers/${tier.id}/colors`, {
             name: r.name.trim(),
-            swatchHex: r.swatchImageUrl ? null : (r.swatchHex ?? "#000000"),
+            swatchHex: r.swatchImageUrl ? null : (r.swatchHex ?? null),
             swatchImageUrl: r.swatchImageUrl ?? null,
           });
           const created = (await resp.json()) as { id: string };
@@ -5593,178 +5607,287 @@ function ManageColorsPanel({
   const deleteRow = rows.find((r) => r.key === deleteConfirmKey) ?? null;
 
   return (
-    <div
-      className="mt-3 rounded-lg border border-slate-200 bg-white shadow-sm"
-      data-testid={`manage-colors-panel-${tier.id}`}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-100">
-        <span className="text-sm font-semibold text-slate-800">Manage colors — {tier.name}</span>
-        <IconButton type="button" variant="ghost" onClick={onClose} label="Close panel">
-          <X className="w-4 h-4" />
-        </IconButton>
-      </div>
-
-      {/* Photo drop zone */}
-      <div
-        className="mx-4 mt-3 mb-2 border-2 border-dashed border-slate-200 rounded-lg px-4 py-3 text-center hover:border-[color:var(--brand-blue)] transition-colors cursor-pointer"
-        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.files.length) handleFileDrop(e.dataTransfer.files); }}
-        onClick={() => {
-          const inp = document.createElement("input");
-          inp.type = "file"; inp.multiple = true;
-          inp.accept = ".jpg,.jpeg,.png,.webp,.heic,.heif";
-          inp.onchange = () => { if (inp.files?.length) handleFileDrop(inp.files); };
-          inp.click();
-        }}
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent
+        className="sm:max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden"
+        data-testid={`manage-colors-panel-${tier.id}`}
       >
-        <Upload className="w-4 h-4 mx-auto text-slate-400 mb-1" />
-        <p className="text-xs text-slate-500">Drop photos here or click — JPEG, PNG, WEBP, HEIC · max 5 MB each</p>
-        <label
-          className="flex items-center justify-center gap-1.5 mt-1.5 cursor-pointer select-none"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <input
-            type="checkbox"
-            checked={cropToDisc}
-            onChange={(e) => setCropToDisc(e.target.checked)}
-            className="accent-[color:var(--brand-blue)]"
-          />
-          <span className="text-xs text-slate-600">Crop to vinyl disc</span>
-        </label>
-      </div>
+        {/* Header — shadcn DialogContent auto-adds a close ✕ in the top-right */}
+        <div className="flex items-center px-6 py-4 border-b border-slate-100 shrink-0">
+          <span className="text-base font-medium text-slate-900">Manage colors — {tier.name}</span>
+        </div>
 
-      {/* Color rows */}
-      <div className="max-h-72 overflow-y-auto px-4 pb-2 space-y-0.5" data-testid={`manage-colors-list-${tier.id}`}>
-        {visibleRows.length === 0 && (
-          <p className="text-xs text-slate-400 py-3 text-center">No colors yet — drop photos above to add some.</p>
-        )}
-        {visibleRows.map((r, idx) => (
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {/* Photo drop zone */}
           <div
-            key={r.key}
-            draggable={!r.uploading && r.id !== null}
-            onDragStart={r.uploading || r.id === null ? undefined : handleDragStart(r.key)}
-            onDragOver={r.uploading ? undefined : handleDragOver(r.key)}
-            onDragEnd={handleDragEnd}
-            onDrop={r.uploading ? undefined : handleDrop(r.key)}
-            className={[
-              "flex items-center gap-2 py-1.5 rounded-md px-1 select-none",
-              dragId === r.key ? "opacity-50" : "",
-              dropOnId === r.key ? "border-t-2 border-[color:var(--brand-blue)]" : "border-t-2 border-transparent",
-              r.id !== null && !r.uploading ? "hover:bg-slate-50" : "",
-            ].join(" ")}
-            data-testid={`manage-color-row-${r.key}`}
+            className="mx-6 mt-4 mb-1 border-2 border-dashed border-slate-200 rounded-lg px-4 py-3 text-center hover:border-[color:var(--brand-blue)] transition-colors cursor-pointer"
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.files.length) handleFileDrop(e.dataTransfer.files); }}
+            onClick={() => {
+              const inp = document.createElement("input");
+              inp.type = "file"; inp.multiple = true;
+              inp.accept = ".jpg,.jpeg,.png,.webp,.heic,.heif";
+              inp.onchange = () => { if (inp.files?.length) handleFileDrop(inp.files); };
+              inp.click();
+            }}
           >
-            <GripVertical className={`w-4 h-4 shrink-0 ${r.id !== null && !r.uploading ? "text-slate-300 cursor-grab" : "text-slate-100"}`} />
-            <span className="text-xs text-slate-400 w-5 text-right shrink-0 tabular-nums">{idx + 1}</span>
-            <span
-              className="w-9 h-9 rounded-full border border-slate-200 shrink-0 relative overflow-hidden"
-              style={
-                r.swatchImageUrl
-                  ? { backgroundImage: `url(${r.swatchThumbUrl ?? r.swatchImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
-                  : { background: r.swatchHex ?? "#cccccc" }
-              }
+            <Upload className="w-4 h-4 mx-auto text-slate-400 mb-1" />
+            <p className="text-xs text-slate-500">Drop photos here or click — JPEG, PNG, WEBP, HEIC · max 5 MB each</p>
+            <label
+              className="flex items-center justify-center gap-1.5 mt-1.5 cursor-pointer select-none"
+              onClick={(e) => e.stopPropagation()}
             >
-              {r.uploading && (
-                <span className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                  <RefreshCw className="w-3 h-3 text-slate-400 animate-spin" />
-                </span>
-              )}
-              {r.isNew && !r.uploading && (
-                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-[color:var(--brand-blue)] rounded-full border border-white" aria-label="New" />
-              )}
-            </span>
-            <input
-              value={r.name}
-              onChange={(e) => {
-                const v = e.target.value;
-                setRows((prev) => prev.map((row) => (row.key === r.key ? { ...row, name: v } : row)));
-              }}
-              disabled={r.uploading}
-              className="flex-1 min-w-0 h-7 px-2 rounded border border-transparent hover:border-slate-200 focus:border-[color:var(--brand-blue)] focus:outline-none text-sm text-slate-800 bg-transparent focus:bg-white transition-colors disabled:opacity-50"
-              placeholder="Color name"
-              data-testid={`input-manage-color-name-${r.key}`}
-            />
+              <input
+                type="checkbox"
+                checked={cropToDisc}
+                onChange={(e) => setCropToDisc(e.target.checked)}
+                className="accent-[color:var(--brand-blue)]"
+              />
+              <span className="text-xs text-slate-600">Crop to vinyl disc</span>
+            </label>
+          </div>
+
+          {/* + Add color manually */}
+          <p className="text-sm px-6 mt-2 mb-3">
             <button
               type="button"
-              onClick={() => setDeleteConfirmKey(r.key)}
-              disabled={r.uploading}
-              className="shrink-0 text-rose-400 hover:text-rose-600 disabled:opacity-30 transition-colors p-0.5"
-              data-testid={`button-manage-color-delete-${r.key}`}
-              title="Remove color"
+              onClick={() => {
+                const tempKey = `manual-${Date.now()}-${Math.random()}`;
+                setRows((prev) => [
+                  ...prev,
+                  { key: tempKey, id: null, name: "", swatchHex: null, swatchImageUrl: null, swatchThumbUrl: null, isNew: true },
+                ]);
+              }}
+              className="text-[color:var(--brand-blue)] hover:underline underline-offset-2"
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              + Add color manually
+            </button>
+            <span className="text-slate-400"> — name and hex, no photo needed</span>
+          </p>
+
+          {/* Color rows */}
+          <div className="px-6 pb-2" data-testid={`manage-colors-list-${tier.id}`}>
+            {visibleRows.length === 0 && (
+              <p className="text-xs text-slate-400 py-3 text-center border-t border-slate-100">No colors yet — drop photos above or add manually.</p>
+            )}
+            {visibleRows.map((r, idx) => (
+              <div key={r.key}>
+                {/* Main row */}
+                <div
+                  draggable={!r.uploading && r.id !== null}
+                  onDragStart={r.uploading || r.id === null ? undefined : handleDragStart(r.key)}
+                  onDragOver={r.uploading ? undefined : handleDragOver(r.key)}
+                  onDragEnd={handleDragEnd}
+                  onDrop={r.uploading ? undefined : handleDrop(r.key)}
+                  className={[
+                    "flex items-center gap-3 py-2.5 border-t border-slate-100 select-none",
+                    dragId === r.key ? "opacity-50" : "",
+                    dropOnId === r.key ? "!border-t-2 !border-[color:var(--brand-blue)]" : "",
+                  ].join(" ")}
+                  data-testid={`manage-color-row-${r.key}`}
+                >
+                  <GripVertical className={`w-4 h-4 shrink-0 ${r.id !== null && !r.uploading ? "text-slate-300 cursor-grab" : "text-slate-100"}`} />
+                  <span className="text-xs text-slate-400 w-4 text-right shrink-0 tabular-nums">{idx + 1}</span>
+
+                  {/* Color chip — click to toggle inline hex picker */}
+                  <button
+                    type="button"
+                    disabled={r.uploading}
+                    onClick={() => {
+                      setRows((prev) => prev.map((row) =>
+                        row.key === r.key
+                          ? { ...row, hexPickerOpen: !row.hexPickerOpen }
+                          : { ...row, hexPickerOpen: false },
+                      ));
+                    }}
+                    className="w-[34px] h-[34px] rounded-full shrink-0 relative overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] disabled:opacity-50 transition-transform hover:scale-105"
+                    style={
+                      r.swatchImageUrl
+                        ? { backgroundImage: `url(${r.swatchThumbUrl ?? r.swatchImageUrl})`, backgroundSize: "cover", backgroundPosition: "center", border: "1px solid #e2e8f0" }
+                        : r.swatchHex
+                          ? { background: r.swatchHex, border: "1px solid #e2e8f0" }
+                          : { background: "#FFFFFF", border: "1.5px dashed #cbd5e1" }
+                    }
+                    title="Click to set hex color"
+                  >
+                    {r.uploading && (
+                      <span className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                        <RefreshCw className="w-3 h-3 text-slate-400 animate-spin" />
+                      </span>
+                    )}
+                    {r.isNew && !r.uploading && (
+                      <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-[color:var(--brand-blue)] rounded-full border border-white" aria-label="New" />
+                    )}
+                  </button>
+
+                  {/* Name input */}
+                  <input
+                    value={r.name}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setRows((prev) => prev.map((row) => (row.key === r.key ? { ...row, name: v } : row)));
+                    }}
+                    disabled={r.uploading}
+                    className="flex-1 min-w-0 h-9 px-2.5 rounded-md border border-transparent hover:border-slate-200 focus:border-[color:var(--brand-blue)] focus:outline-none text-sm text-slate-800 bg-transparent focus:bg-white transition-colors disabled:opacity-50"
+                    placeholder="Color name"
+                    data-testid={`input-manage-color-name-${r.key}`}
+                  />
+
+                  {/* Hex value pill — visible for hex-only rows */}
+                  {!r.swatchImageUrl && r.swatchHex && (
+                    <span className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-full px-2.5 py-1 whitespace-nowrap font-mono shrink-0">
+                      {r.swatchHex.toUpperCase()}
+                    </span>
+                  )}
+
+                  {/* "Set hex" dashed pill — visible for rows with neither photo nor hex */}
+                  {!r.swatchImageUrl && !r.swatchHex && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRows((prev) => prev.map((row) =>
+                          row.key === r.key
+                            ? { ...row, hexPickerOpen: !row.hexPickerOpen }
+                            : { ...row, hexPickerOpen: false },
+                        ));
+                      }}
+                      className="text-xs text-slate-400 border border-dashed border-slate-300 rounded-full px-2.5 py-1 whitespace-nowrap shrink-0 hover:border-[color:var(--brand-blue)] hover:text-[color:var(--brand-blue)] transition-colors"
+                    >
+                      Set hex
+                    </button>
+                  )}
+
+                  {/* Delete */}
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirmKey(r.key)}
+                    disabled={r.uploading}
+                    className="shrink-0 text-rose-400 hover:text-rose-600 disabled:opacity-30 transition-colors p-0.5"
+                    data-testid={`button-manage-color-delete-${r.key}`}
+                    title="Remove color"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Inline hex picker — opens below the row when chip/Set-hex is clicked */}
+                {r.hexPickerOpen && !r.swatchImageUrl && (
+                  <div className="flex items-center gap-2 pb-2.5 pl-[62px]">
+                    <input
+                      type="color"
+                      value={r.swatchHex ?? "#000000"}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setRows((prev) => prev.map((row) => (row.key === r.key ? { ...row, swatchHex: v } : row)));
+                        setRowErrors((prev) => { const next = new Set(prev); next.delete(r.key); return next; });
+                      }}
+                      className="h-9 w-9 shrink-0 rounded border border-slate-200 cursor-pointer p-0.5"
+                    />
+                    <input
+                      value={r.swatchHex ?? ""}
+                      onChange={(e) => {
+                        let v = e.target.value;
+                        if (v && !v.startsWith("#")) v = "#" + v;
+                        setRows((prev) => prev.map((row) => (row.key === r.key ? { ...row, swatchHex: v || null } : row)));
+                        setRowErrors((prev) => { const next = new Set(prev); next.delete(r.key); return next; });
+                      }}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+                          setRows((prev) => prev.map((row) => (row.key === r.key ? { ...row, swatchHex: v.toUpperCase() } : row)));
+                        }
+                      }}
+                      placeholder="#000000"
+                      className="w-28 h-9 px-2.5 rounded-md border border-slate-200 text-sm font-mono focus:outline-none focus:border-[color:var(--brand-blue)] bg-white"
+                    />
+                  </div>
+                )}
+
+                {/* Per-row validation error */}
+                {rowErrors.has(r.key) && (
+                  <p className="text-xs text-rose-600 pb-1.5 pl-[62px]">Add a photo or hex color to save this swatch.</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 shrink-0">
+          <div className="flex gap-4">
+            <button type="button" disabled className="text-sm text-slate-300 cursor-not-allowed" title="Undo — coming soon">
+              Undo
+            </button>
+            <button type="button" disabled className="text-sm text-slate-300 cursor-not-allowed" title="Redo — coming soon">
+              Redo
+            </button>
+            <button
+              type="button"
+              onClick={() => { setRows(buildInitialRows()); setDeletedIds(new Set()); setRowErrors(new Set()); }}
+              disabled={saving || !isDirty}
+              className="text-sm text-slate-500 hover:underline underline-offset-2 disabled:opacity-40 disabled:no-underline"
+              data-testid={`button-manage-colors-reset-${tier.id}`}
+            >
+              Reset
             </button>
           </div>
-        ))}
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
-        <button
-          type="button"
-          onClick={() => { setRows(buildInitialRows()); setDeletedIds(new Set()); }}
-          disabled={saving || !isDirty}
-          className="text-xs text-slate-500 hover:underline underline-offset-2 disabled:opacity-40"
-          data-testid={`button-manage-colors-reset-${tier.id}`}
-        >
-          Reset
-        </button>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="text-xs text-slate-500 hover:underline underline-offset-2"
-          >
-            Cancel
-          </button>
-          <Button
-            type="button"
-            onClick={handleSave}
-            disabled={!isDirty || saving || rows.some((r) => r.uploading)}
-            className="h-8 px-3 text-xs"
-            data-testid={`button-manage-colors-save-${tier.id}`}
-          >
-            {saving ? "Saving…" : "Save changes"}
-          </Button>
-        </div>
-      </div>
-
-      {/* Delete confirm */}
-      <AlertDialog open={!!deleteConfirmKey} onOpenChange={(o) => !o && setDeleteConfirmKey(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove this color?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteRow
-                ? deleteRow.id
-                  ? `"${deleteRow.name}" will be removed from this group and can't be recovered.`
-                  : `"${deleteRow.name}" (not yet saved) will be discarded.`
-                : "This color will be removed."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-rose-600 hover:bg-rose-700"
-              onClick={() => {
-                if (deleteRow) {
-                  if (deleteRow.id) {
-                    setDeletedIds((prev) => new Set(Array.from(prev).concat(deleteRow.id!)));
-                  } else {
-                    setRows((prev) => prev.filter((x) => x.key !== deleteRow.key));
-                  }
-                }
-                setDeleteConfirmKey(null);
-              }}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="text-sm text-slate-500 hover:underline underline-offset-2"
             >
-              Remove
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+              Cancel
+            </button>
+            <Button
+              type="button"
+              onClick={handleSave}
+              disabled={!isDirty || saving || rows.some((r) => r.uploading)}
+              className="h-9 px-4 text-sm"
+              data-testid={`button-manage-colors-save-${tier.id}`}
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
+        </div>
+
+        {/* Delete confirm */}
+        <AlertDialog open={!!deleteConfirmKey} onOpenChange={(o) => !o && setDeleteConfirmKey(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove this color?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {deleteRow
+                  ? deleteRow.id
+                    ? `"${deleteRow.name}" will be removed from this group and can't be recovered.`
+                    : `"${deleteRow.name}" (not yet saved) will be discarded.`
+                  : "This color will be removed."}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-rose-600 hover:bg-rose-700"
+                onClick={() => {
+                  if (deleteRow) {
+                    if (deleteRow.id) {
+                      setDeletedIds((prev) => new Set(Array.from(prev).concat(deleteRow.id!)));
+                    } else {
+                      setRows((prev) => prev.filter((x) => x.key !== deleteRow.key));
+                    }
+                  }
+                  setDeleteConfirmKey(null);
+                }}
+              >
+                Remove
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -6053,11 +6176,11 @@ function SwatchChip({
               Rename the color, input the hex code, or upload a photo for the vinyl swatch.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            {/* Row 1: Name (wide) + Hex (narrow) side by side */}
-            <div className="flex gap-3 items-end">
+          <div className="space-y-5">
+            {/* Name + Hex — one row, matched h-9 controls */}
+            <div className="flex gap-3 items-start">
               <div className="flex-1 min-w-0">
-                <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Name</span>
+                <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Name</span>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -6066,7 +6189,7 @@ function SwatchChip({
                 />
               </div>
               <div className="w-36 shrink-0">
-                <span className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${imageUrl ? "text-slate-300" : "text-slate-500"}`}>
+                <span className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${imageUrl ? "text-slate-300" : "text-slate-500"}`}>
                   Hex
                 </span>
                 <div className={`flex items-center gap-1.5 ${imageUrl ? "opacity-50 pointer-events-none" : ""}`}>
@@ -6091,10 +6214,10 @@ function SwatchChip({
               </div>
             </div>
 
-            {/* Row 2: Photo — round disc preview + Upload button + helper text + drag-and-drop */}
+            {/* Photo — disc + Upload/Clear centered, helper text + crop below */}
             <div>
-              <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-2">Photo</span>
-              <div className="flex items-start gap-3">
+              <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Photo</span>
+              <div className="flex items-center gap-3">
                 {/* Round disc preview — drag-and-drop target; clicking also triggers the picker */}
                 <div
                   className={`w-14 h-14 rounded-full overflow-hidden shrink-0 border cursor-pointer transition-opacity ${
@@ -6114,60 +6237,58 @@ function SwatchChip({
                   }}
                   data-testid={`preview-swatch-photo-${color.id}`}
                 />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                {/* Upload + Clear — vertically centered against the disc */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={upload.isPending}
+                    className="inline-flex items-center gap-1.5 h-9 px-3 text-xs font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                    data-testid={`button-swatch-upload-${color.id}`}
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    {upload.isPending ? "Uploading…" : "Upload"}
+                  </button>
+                  {imageUrl && (
                     <button
                       type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={upload.isPending}
-                      className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
-                      data-testid={`button-swatch-upload-${color.id}`}
+                      onClick={() => setImageUrl(null)}
+                      className="h-9 px-3 text-xs text-slate-500 hover:underline underline-offset-2"
                     >
-                      <Upload className="w-3.5 h-3.5" />
-                      {upload.isPending ? "Uploading…" : "Upload"}
+                      Clear
                     </button>
-                    {imageUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setImageUrl(null)}
-                        className="text-xs text-slate-500 hover:underline underline-offset-2"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                    Drag an image onto the photo, or click upload.{" "}
-                    JPEG, PNG, WEBP, or HEIC — up to 5 MB.
-                  </p>
-                  {/* Compact "Crop to vinyl disc" toggle folded into the Photo row */}
-                  <label className="flex items-center gap-1.5 mt-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={cropToDisc}
-                      onChange={(e) => setCropToDisc(e.target.checked)}
-                      className="accent-[color:var(--brand-blue)]"
-                      data-testid={`toggle-crop-disc-${color.id}`}
-                    />
-                    <span className="text-xs text-slate-600 font-medium">Crop to vinyl disc</span>
-                  </label>
+                  )}
                 </div>
-                {/* Hidden file input — triggered programmatically */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic"
-                  className="sr-only"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) { setSelectedFileName(f.name); upload.mutate(f); e.target.value = ""; }
-                  }}
-                  data-testid={`input-swatch-upload-${color.id}`}
-                />
               </div>
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) { setSelectedFileName(f.name); upload.mutate(f); e.target.value = ""; }
+                }}
+                data-testid={`input-swatch-upload-${color.id}`}
+              />
+              {/* Helper text + crop below the photo row */}
+              <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                Drag an image onto the photo, or click upload. JPEG, PNG, WEBP, or HEIC — up to 5 MB.
+              </p>
+              <label className="flex items-center gap-1.5 mt-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={cropToDisc}
+                  onChange={(e) => setCropToDisc(e.target.checked)}
+                  className="accent-[color:var(--brand-blue)]"
+                  data-testid={`toggle-crop-disc-${color.id}`}
+                />
+                <span className="text-xs text-slate-600 font-medium">Crop to vinyl disc</span>
+              </label>
             </div>
 
-            {/* Row 3: Color applies to — segmented pill toggles */}
+            {/* Color applies to — segmented pill toggles */}
             {mirror && otherSize && (
               <div>
                 <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-2">
