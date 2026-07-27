@@ -2094,6 +2094,48 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Investor snapshot (Task #2900) ────────────────────────────────
+  // Self-contained HTML investor deck (built externally by Bill), shared
+  // with investors by direct URL only — it is deliberately not linked
+  // from any site navigation. Public (no login for now), but kept out of
+  // search engines via the X-Robots-Tag header here plus the matching
+  // <meta name="robots"> tag baked into the file itself.
+  //
+  // robots.txt (client/public/robots.txt) deliberately stays `Allow: /`:
+  // Disallow-ing the path there would stop Google from ever FETCHING the
+  // page and seeing the noindex directive — a robots-blocked URL can
+  // still show up in results if something links to it. Header + meta are
+  // the correct "keep out of the index" mechanism.
+  //
+  // The file lives in server/assets/ (NOT attached_assets/, which
+  // .replitignore drops from the published image) and is read via
+  // process.cwd() at runtime — same pattern as certOgImage.ts fonts.
+  // no-store matches the top-level-HTML convention (server/static.ts) so
+  // a future re-upload of the snapshot takes effect immediately. Being
+  // registered here means it wins over both the dev Vite catch-all and
+  // the prod SPA fallback, on every host.
+  app.get("/investors", async (_req, res) => {
+    const path = await import("path");
+    res.sendFile(
+      path.join(process.cwd(), "server", "assets", "investor-snapshot.html"),
+      {
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "X-Robots-Tag": "noindex, nofollow",
+          "Cache-Control": "no-store, must-revalidate",
+        },
+      },
+      (err?: Error) => {
+        // Mid-stream aborts (client navigated away) arrive here with
+        // headersSent=true — nothing to do. A genuinely missing file
+        // (should never happen; it's committed) gets a plain 404.
+        if (err && !res.headersSent) {
+          res.status(404).type("text/plain").send("investor snapshot is not available");
+        }
+      },
+    );
+  });
+
   // ─── OAuth: Google + Apple ─────────────────────────────────────────
   // Start endpoints redirect to the provider; callback endpoints come
   // back here. The `kind` (admin | customer) is taken from the host on

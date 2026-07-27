@@ -111,6 +111,12 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   // Task #2399 — /join/:code (reusable artist referral links).
   // First segment must be reserved so an artist share slug can never shadow it.
   "join",
+  // Task #2900 — /investors hosts the (unlisted, noindex) investor snapshot
+  // page served straight from registerRoutes. Reserved — with the singular
+  // variant for good measure — so an artist share slug can never be saved
+  // that shadows the path on get.goodtunes.music.
+  "investors",
+  "investor",
 ]);
 
 export const SHARE_SLUG_MIN = 2;
