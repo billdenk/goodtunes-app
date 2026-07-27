@@ -12,14 +12,17 @@ import { useEffect, useMemo, useState } from "react";
 import { formatUsd, formatUsdCents } from "@shared/money";
 import { Link, useSearch, useRoute, useLocation } from "wouter";
 import { SalesMap, type SalesGeoPayload } from "@/components/partner/SalesMap";
-import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
+// Task #2893 — the merged Dashboard reuses the shared partner activity list
+// for its Recent-activity rail (the rest of the old PartnerDashboard tab is
+// replaced by the tier-disciplined merged page below).
+import { ActivityList } from "@/components/partner/PartnerDashboard";
 import { BreakEvenBar } from "@/components/BreakEvenBar";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis,
-  Tooltip, CartesianGrid, ResponsiveContainer, Legend,
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis,
+  Tooltip, CartesianGrid, ResponsiveContainer,
 } from "recharts";
 // Heart for song-favorite metrics — keeps the artist dashboard's
 // favourites column visually paired with the player's heart action.
@@ -40,7 +43,7 @@ import { AdminReports } from "@/pages/AdminReports";
 import { AdminAlbum } from "@/pages/AdminAlbum";
 import { CertRunsSection } from "@/components/partner/cert-runs-section";
 import { BuyerReport } from "@/components/partner/BuyerReport";
-import { BRAND, SKU_COLORS, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
+import { BRAND, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 import {
   KpiCard, KpiCardSkeleton, kpiInfoKeyFromTestId, type KpiCardModel,
 } from "@/components/admin/KpiCard";
@@ -49,32 +52,35 @@ import {
 // Referrals invite, instead of a bespoke name field.
 import { PersonPicker, type PersonLite } from "@/components/admin/AddPeopleMenu";
 import { PartnerOrdersTable } from "@/components/partner/PartnerOrdersTable";
+// Task #2893 — merged Dashboard card builder + shared formatters live in a
+// pure module so the nine-card set is unit-testable without the page graph.
+import {
+  buildArtistDashboardCards, dailyGross, dailyPlays, dailyListeners,
+  dollars, compact, pct, excludedNote, joinSub,
+  type ArtistKpis, type ArtistSalesStack, type ArtistTimeseries,
+} from "@/pages/artistDashboardCards";
 
 // PersonPicker needs an excludeIds set; the artist invite never excludes
 // anyone, so reuse one stable empty set.
 const NO_EXCLUDE: Set<string> = new Set();
 
 type Range = { from: string; to: string };
-type Kpis = {
-  grossCents: number; artistShareCents: number; refundedCents: number;
-  units: number; orders: number; buyers: number;
-  plays: number; completions: number; completionRate: number; listeners: number;
-  excludedPlays?: number;
-  grantPlays?: number; grantCompletes?: number; grantListeners?: number;
-  topTrack: { song_id: string; title: string; plays: string } | null;
-  topAlbum: { album_id: string; title: string; revenue: string } | null;
-};
+type Kpis = ArtistKpis;
 type Lifetime = {
   grossCents: number; units: number; orders: number; buyers: number;
   refundedCents: number; plays: number; listeners: number; excludedPlays?: number;
   grantPlays?: number; grantListeners?: number;
+  // Task #2673/#2893 — owner-vs-preview split (banner headline = ownerPlays)
+  ownerPlays?: number; uniqueOwners?: number; ownerCompletes?: number;
+  previewPlays?: number; uniquePreviewSessions?: number;
 };
-type Summary = { range: Range; compare: Range | null; current: Kpis; previous: Kpis | null; lifetime?: Lifetime | null };
-type Timeseries = {
-  range: Range;
-  revenue: { day: string; skuKind: string; revenueCents: number }[];
-  plays: { day: string; starts: number; completes: number; listeners: number }[];
+type ActivityItem = { kind: string; ts: string; title: string; detail?: string; href?: string };
+type Summary = {
+  range: Range; compare: Range | null; current: Kpis; previous: Kpis | null; lifetime?: Lifetime | null;
+  stack?: ArtistSalesStack | null; stackPrevious?: ArtistSalesStack | null;
+  activity?: ActivityItem[];
 };
+type Timeseries = ArtistTimeseries;
 type GeoPayload = {
   sales?: SalesGeoPayload;
 };
@@ -94,18 +100,9 @@ type Audience = {
 // module so this dashboard reads from the same source as the CSS vars
 // (see client/src/lib/brand-tokens.ts and client/src/index.css).
 const C = BRAND;
-const SKU_COLOR = SKU_COLORS;
 
-const dollars = (c: number) => formatUsdCents(c, { maximumFractionDigits: 0 });
-const dollarsCents = (c: number) => formatUsdCents(c);
-const compact = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n));
-const pct = (x: number) => `${Math.round(x * 100)}%`;
-// Task #2525 — staff/operator/internal listens are stripped from every fan
-// metric; surface the removed volume so operators still see it wasn't lost.
-// Task #2815 — grant/comp listens are no longer in this footnote: they get
-// their own KPI + table columns, so this note is staff/internal only.
-const excludedNote = (n?: number) => (n && n > 0 ? `${compact(n)} staff/internal excluded` : undefined);
-const joinSub = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(" · ") || undefined;
+// (dollars/compact/pct/excludedNote/joinSub now come from
+// ./artistDashboardCards so the card builder and the page share one set.)
 
 const RANGE_PRESETS = [
   { id: "7d", label: "Last 7 days", days: 7 },
@@ -138,9 +135,13 @@ function rangeFor(preset: PresetId): Range {
 export function ArtistDashboard() {
   const [preset, setPreset] = useState<PresetId>(() => presetFromSearch(window.location.search) ?? "30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"dashboard" | "overview" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people" | "reports">(() => {
+  const [tab, setTab] = useState<"dashboard" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people" | "reports">(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
-    if (t === "dashboard" || t === "overview" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals" || t === "people" || t === "reports") return t;
+    // Task #2893 — Overview merged into Dashboard. Stale ?tab=overview deep
+    // links (bookmarks, old KPI tiles) land on the merged Dashboard; their
+    // ?range= param still applies via presetFromSearch below.
+    if (t === "overview") return "dashboard";
+    if (t === "dashboard" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals" || t === "people" || t === "reports") return t;
     return "dashboard";
   });
   // Task #2486 — Dashboard-tab KPI tiles deep-link via `?tab=…` (wouter
@@ -150,7 +151,8 @@ export function ArtistDashboard() {
   const search = useSearch();
   useEffect(() => {
     const t = new URLSearchParams(search).get("tab");
-    if (t === "dashboard" || t === "overview" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals" || t === "people" || t === "reports") {
+    if (t === "overview") setTab("dashboard"); // merged — Task #2893
+    else if (t === "dashboard" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals" || t === "people" || t === "reports") {
       setTab(t);
     }
     const p = presetFromSearch(search);
@@ -243,15 +245,16 @@ export function ArtistDashboard() {
       // highlighted nav item. The artist's identity (avatar + name) lives only
       // in the rail + mobile top strip, so it isn't repeated as the page H1.
       //
-      // Dashboard renders the shared PartnerDashboard primitive and Reports
-      // renders the embedded AdminReports — both carry their OWN section
-      // header + date range — so on those two sections we suppress the shell
-      // page header entirely (no pageTitle, hideHeaderIdentity, no
-      // headerActions) to avoid a duplicate title + duplicate range control.
-      pageTitle={albumViewId || tab === "dashboard" || tab === "reports" ? undefined : currentTabLabel}
-      hideHeaderIdentity={!!albumViewId || tab === "dashboard" || tab === "reports"}
+      // Reports renders the embedded AdminReports — it carries its OWN
+      // section header + date range — so there we suppress the shell page
+      // header entirely (no pageTitle, hideHeaderIdentity, no headerActions)
+      // to avoid a duplicate title + duplicate range control. The merged
+      // Dashboard (Task #2893) uses THIS header's range picker + compare
+      // toggle like every other section — no second picker variant.
+      pageTitle={albumViewId || tab === "reports" ? undefined : currentTabLabel}
+      hideHeaderIdentity={!!albumViewId || tab === "reports"}
       headerActions={
-        albumViewId || tab === "dashboard" || tab === "reports" ? undefined : (
+        albumViewId || tab === "reports" ? undefined : (
           <>
             <RangePicker presets={RANGE_PRESETS} value={preset} onChange={applyPreset} />
             <CompareToggle active={compare} onToggle={setCompare} />
@@ -286,33 +289,9 @@ export function ArtistDashboard() {
         />
       ) : (
         <>
-      {tab === "dashboard" && (
-        <PartnerDashboard
-          scope="artist"
-          sectionTitle="Dashboard"
-          title={artistName}
-          subtitle={
-            <>
-              {albumCount} album{albumCount === 1 ? "" : "s"} ·{" "}
-              <button
-                type="button"
-                onClick={() => {
-                  setTab("catalog");
-                  const sp = new URLSearchParams(window.location.search);
-                  sp.set("tab", "catalog");
-                  history.replaceState(null, "", `${window.location.pathname}?${sp}`);
-                }}
-                className="underline underline-offset-2 decoration-slate-300 hover:text-slate-700 transition-colors"
-                data-testid="link-credited-tracks"
-              >
-                {songCount} credited track{songCount === 1 ? "" : "s"}
-              </button>
-            </>
-          }
-          scopeIdQs={new URLSearchParams(window.location.search).get("personId")}
-        />
-      )}
-      {tab === "overview" && <OverviewTab qs={qs} />}
+      {/* Task #2893 — single merged, tier-disciplined Dashboard (the old
+          shared PartnerDashboard tab + Overview tab are one page now). */}
+      {tab === "dashboard" && <DashboardTab qs={qs} />}
       {tab === "audience" && <AudienceTab qs={qs} />}
       {tab === "acquisition" && (
         <AcquisitionTab
@@ -338,7 +317,7 @@ export function ArtistDashboard() {
 }
 
 const ARTIST_TABS = modulesForRole("artist") as ReadonlyArray<{
-  id: "dashboard" | "overview" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people" | "reports";
+  id: "dashboard" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people" | "reports";
   label: string;
 }>;
 type ArtistTabId = (typeof ARTIST_TABS)[number]["id"];
@@ -369,23 +348,7 @@ function Kpi({
   return <KpiCard model={model} testId={testId} spark={spark ?? null} />;
 }
 
-// Daily series → sparkline points for the range-windowed KPIs. Gross rolls
-// per-SKU revenue rows up by day; plays/listeners ride the daily plays rows.
-// Empty series returns [] so KpiCard simply omits the spark.
-function dailyGross(series?: Timeseries): number[] {
-  if (!series?.revenue?.length) return [];
-  const byDay = new Map<string, number>();
-  for (const r of series.revenue) byDay.set(r.day, (byDay.get(r.day) ?? 0) + r.revenueCents);
-  return Array.from(byDay.keys()).sort().map((d) => byDay.get(d)!);
-}
-function dailyPlays(series?: Timeseries): number[] {
-  if (!series?.plays?.length) return [];
-  return [...series.plays].sort((a, b) => (a.day < b.day ? -1 : 1)).map((p) => p.starts);
-}
-function dailyListeners(series?: Timeseries): number[] {
-  if (!series?.plays?.length) return [];
-  return [...series.plays].sort((a, b) => (a.day < b.day ? -1 : 1)).map((p) => p.listeners);
-}
+// (dailyGross/dailyPlays/dailyListeners moved to ./artistDashboardCards.)
 
 // Task #1334 — All-time "since launch" headline. Lives ABOVE the
 // range-windowed KPI grid and is visually distinct (mint accent, "All
@@ -414,7 +377,14 @@ function LifetimeBanner({ data, loading }: { data?: Lifetime | null; loading?: b
             <Kpi label="Gross revenue" value={data ? dollars(data.grossCents) : "—"} sub={data && data.refundedCents ? `${dollars(data.refundedCents)} refunded` : undefined} testId="lifetime-gross" />
             <Kpi label="Orders" value={data ? compact(data.orders) : "—"} sub={data ? `${compact(data.buyers)} unique fan${data.buyers === 1 ? "" : "s"}` : undefined} testId="lifetime-orders" />
             <Kpi label="Units sold" value={data ? compact(data.units) : "—"} testId="lifetime-units" />
-            <Kpi label="Fan plays" value={data ? compact(data.plays) : "—"} sub={data ? joinSub(`${compact(data.listeners)} listeners`, data.grantPlays ? `${compact(data.grantPlays)} grant plays` : undefined, excludedNote(data.excludedPlays)) : undefined} testId="lifetime-plays" />
+            {/* Task #2893 — tier-disciplined headline: purchaser plays only,
+                with the other tiers spelled out (never summed in). */}
+            <Kpi
+              label="Fan plays"
+              value={data ? compact(data.ownerPlays ?? data.plays) : "—"}
+              sub={data ? `${compact(data.uniqueOwners ?? data.listeners)} listener${(data.uniqueOwners ?? data.listeners) === 1 ? "" : "s"} · ${compact(data.grantPlays ?? 0)} grant plays · ${compact(data.previewPlays ?? 0)} previews · internal excluded` : undefined}
+              testId="lifetime-plays"
+            />
           </>
         )}
       </section>
@@ -423,13 +393,25 @@ function LifetimeBanner({ data, loading }: { data?: Lifetime | null; loading?: b
 }
 
 // ─── Tabs ─────────────────────────────────────────────────────────────
-function OverviewTab({ qs }: { qs: string }) {
+// Task #2893 — the merged, tier-disciplined Dashboard (old Dashboard tab +
+// Overview tab in one). Top to bottom: all-time banner (never affected by
+// the date-range picker) → nine date-range cards → trend chart with a
+// Plays/Revenue/Orders toggle stacked over the fan map, with Recent
+// activity on the right rail (below on narrow) → cert-run status.
+function DashboardTab({ qs }: { qs: string }) {
   const summary = useQuery<Summary>({ queryKey: [`/api/artist/summary?${qs}`] });
   const series = useQuery<Timeseries>({ queryKey: [`/api/artist/timeseries?${qs}`] });
   const geo = useQuery<GeoPayload & { range: Range }>({ queryKey: [`/api/artist/geo?${qs}`] });
   const cur = summary.data?.current;
   const prev = summary.data?.previous ?? null;
   const lifetime = summary.data?.lifetime ?? null;
+  const cards = buildArtistDashboardCards({
+    cur,
+    prev,
+    stack: summary.data?.stack ?? null,
+    stackPrevious: summary.data?.stackPrevious ?? null,
+    series: series.data,
+  });
 
   return (
     <>
@@ -440,42 +422,146 @@ function OverviewTab({ qs }: { qs: string }) {
           Selected date range
         </p>
       </div>
-      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3" data-testid="kpi-grid">
+      <section className="grid grid-cols-2 sm:grid-cols-3 gap-3" data-testid="kpi-grid">
         {summary.isLoading ? (
-          Array.from({ length: 10 }).map((_, i) => (
+          Array.from({ length: 9 }).map((_, i) => (
             <KpiCardSkeleton key={i} testId={`kpi-skeleton-${i}`} />
           ))
         ) : (
-          <>
-            <Kpi label="Gross revenue" value={cur ? dollars(cur.grossCents) : "—"} sub={cur && cur.refundedCents ? `${dollars(cur.refundedCents)} refunded` : undefined} prev={cur ? { cur: cur.grossCents, prev: prev?.grossCents ?? null } : null} spark={dailyGross(series.data)} testId="kpi-gross" />
-            <Kpi label="Artist share" value={cur ? dollars(cur.artistShareCents) : "—"} prev={cur ? { cur: cur.artistShareCents, prev: prev?.artistShareCents ?? null } : null} testId="kpi-artist-share" />
-            <Kpi label="Units sold" value={cur ? compact(cur.units) : "—"} sub={cur ? `${cur.buyers} unique buyer${cur.buyers === 1 ? "" : "s"}` : undefined} prev={cur ? { cur: cur.units, prev: prev?.units ?? null } : null} testId="kpi-units" />
-            <Kpi label="Orders" value={cur ? compact(cur.orders) : "—"} sub={cur ? `${compact(cur.units)} cop${cur.units === 1 ? "y" : "ies"}` : undefined} prev={cur ? { cur: cur.orders, prev: prev?.orders ?? null } : null} testId="kpi-orders" />
-            <Kpi label="Fan plays" value={cur ? compact(cur.plays) : "—"} sub={cur ? joinSub(`${compact(cur.listeners)} listeners · ${pct(cur.completionRate)} complete`, excludedNote(cur.excludedPlays)) : undefined} prev={cur ? { cur: cur.plays, prev: prev?.plays ?? null } : null} spark={dailyPlays(series.data)} testId="kpi-plays" />
-            <Kpi label="Grant plays" value={cur ? compact(cur.grantPlays ?? 0) : "—"} sub={cur ? `${compact(cur.grantListeners ?? 0)} grant listener${(cur.grantListeners ?? 0) === 1 ? "" : "s"} · comped copies & previews` : undefined} prev={cur ? { cur: cur.grantPlays ?? 0, prev: prev ? (prev.grantPlays ?? 0) : null } : null} testId="kpi-grant-plays" />
-            <Kpi label="Unique listeners" value={cur ? compact(cur.listeners) : "—"} prev={cur ? { cur: cur.listeners, prev: prev?.listeners ?? null } : null} spark={dailyListeners(series.data)} testId="kpi-listeners" />
-            <Kpi label="Top track" value={cur?.topTrack?.title ?? "—"} sub={cur?.topTrack ? `${Number(cur.topTrack.plays).toLocaleString()} plays` : undefined} testId="kpi-top-track" />
-            <Kpi label="Top album" value={cur?.topAlbum?.title ?? "—"} sub={cur?.topAlbum ? dollars(Number(cur.topAlbum.revenue)) : undefined} testId="kpi-top-album" />
-            <Kpi label="Completion rate" value={cur ? pct(cur.completionRate) : "—"} sub={cur ? `${compact(cur.completions)} completions` : undefined} testId="kpi-completion" />
-          </>
+          cards.map((c) => (
+            <KpiCard key={c.testId} model={c.model} testId={c.testId} spark={c.spark ?? null} />
+          ))
         )}
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card title="Daily revenue" subtitle="By SKU type" testId="chart-revenue">
-          <RevenueChart data={series.data?.revenue ?? []} loading={series.isLoading} />
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        <div className="lg:col-span-2 space-y-4 min-w-0">
+          <TrendPanel series={series.data} loading={series.isLoading} />
+          <section className="rounded-2xl bg-white ring-1 ring-slate-200 p-4" data-testid="chart-geo">
+            <SalesMap
+              data={geo.data?.sales}
+              loading={geo.isLoading}
+              emptyCopy="Once orders come in, you'll see where your fans are buying on this map."
+            />
+          </section>
+        </div>
+        <Card title="Recent activity" subtitle="Orders & releases in this range" testId="panel-activity">
+          <ActivityList items={summary.data?.activity ?? []} loading={summary.isLoading} />
         </Card>
-        <Card title="Daily plays" subtitle="Starts & unique listeners" testId="chart-plays">
-          <PlaysChart data={series.data?.plays ?? []} loading={series.isLoading} />
-        </Card>
-      </section>
-
-      <section className="rounded-2xl bg-white ring-1 ring-slate-200 p-4" data-testid="chart-geo">
-        <SalesMap data={geo.data?.sales} loading={geo.isLoading} />
       </section>
 
       <CertRunsSection kind="artist" qs={qs} />
     </>
+  );
+}
+
+// One trend chart with a Plays / Revenue / Orders toggle (default Plays) —
+// replaces the old side-by-side Daily-revenue + Daily-plays pair. Series are
+// tier-disciplined upstream: plays/day counts fan (purchaser) starts only.
+const TREND_METRICS = [
+  { id: "plays", label: "Plays" },
+  { id: "revenue", label: "Revenue" },
+  { id: "orders", label: "Orders" },
+] as const;
+type TrendMetricId = (typeof TREND_METRICS)[number]["id"];
+const TREND_EMPTY: Record<TrendMetricId, string> = {
+  plays: "No fan plays in this window yet.",
+  revenue: "No revenue in this window yet.",
+  orders: "No orders in this window yet.",
+};
+
+function TrendPanel({ series, loading }: { series?: Timeseries; loading: boolean }) {
+  const [metric, setMetric] = useState<TrendMetricId>("plays");
+  const rows = useMemo(() => {
+    if (!series) return [] as { day: string; value: number }[];
+    if (metric === "plays") {
+      return [...series.plays]
+        .sort((a, b) => a.day.localeCompare(b.day))
+        .map((p) => ({ day: p.day.slice(5), value: p.starts }));
+    }
+    if (metric === "orders") {
+      return [...(series.orders ?? [])]
+        .sort((a, b) => a.day.localeCompare(b.day))
+        .map((o) => ({ day: o.day.slice(5), value: o.orders }));
+    }
+    const byDay = new Map<string, number>();
+    for (const r of series.revenue) byDay.set(r.day, (byDay.get(r.day) ?? 0) + r.revenueCents);
+    return Array.from(byDay.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, cents]) => ({ day: day.slice(5), value: cents / 100 }));
+  }, [series, metric]);
+
+  const subtitle =
+    metric === "plays" ? "Daily fan plays" : metric === "revenue" ? "Daily gross revenue" : "Daily orders";
+
+  return (
+    <Card
+      title="Trends"
+      subtitle={subtitle}
+      testId="chart-trend"
+      action={
+        <div
+          className="inline-flex items-center bg-slate-100 rounded-md p-0.5"
+          role="group"
+          aria-label="Trend metric"
+          data-testid="trend-toggle"
+        >
+          {TREND_METRICS.map((m) => {
+            const active = metric === m.id;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setMetric(m.id)}
+                aria-pressed={active}
+                className={`h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors ${active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+                data-testid={`button-trend-${m.id}`}
+              >
+                {m.label}
+              </button>
+            );
+          })}
+        </div>
+      }
+    >
+      {loading ? (
+        <SkeletonBlock />
+      ) : rows.length === 0 ? (
+        <p className="py-10 text-center text-slate-400 text-sm" data-testid="trend-empty">
+          {TREND_EMPTY[metric]}
+        </p>
+      ) : (
+        <div style={{ width: "100%", height: 260 }}>
+          <ResponsiveContainer>
+            <AreaChart data={rows}>
+              <defs>
+                <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={C.blue} stopOpacity={0.7} />
+                  <stop offset="100%" stopColor={C.blue} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
+              <XAxis dataKey="day" stroke="#64748b" tick={{ fontSize: 11 }} />
+              <YAxis
+                stroke="#64748b"
+                tick={{ fontSize: 11 }}
+                tickFormatter={(v) => (metric === "revenue" ? `$${v}` : compact(Number(v)))}
+                allowDecimals={false}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                formatter={(v: any) =>
+                  metric === "revenue"
+                    ? [formatUsd(Number(v), { maximumFractionDigits: 0 }), "Revenue"]
+                    : [Number(v).toLocaleString(), metric === "plays" ? "Plays" : "Orders"]
+                }
+              />
+              <Area type="monotone" dataKey="value" stroke={C.blue} strokeWidth={2} fill="url(#trendFill)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -682,69 +768,6 @@ function CsvButton({ href, label, testId }: { href: string; label: string; testI
 
 function SkeletonBlock() {
   return <div className="h-48 rounded-2xl bg-white ring-1 ring-slate-200 animate-pulse" />;
-}
-
-function RevenueChart({ data, loading }: { data: Timeseries["revenue"]; loading: boolean }) {
-  // Pivot from rows-per-day-per-sku → wide rows for stacked bars.
-  const { rows, skuKinds } = useMemo(() => {
-    const byDay = new Map<string, Record<string, number>>();
-    const skus = new Set<string>();
-    for (const r of data) {
-      if (!byDay.has(r.day)) byDay.set(r.day, {});
-      const row = byDay.get(r.day)!;
-      row[r.skuKind] = (row[r.skuKind] || 0) + r.revenueCents / 100;
-      skus.add(r.skuKind);
-    }
-    const rows = Array.from(byDay.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([day, vals]) => ({ day: day.slice(5), ...vals }));
-    return { rows, skuKinds: Array.from(skus) };
-  }, [data]);
-  if (loading) return <SkeletonBlock />;
-  if (rows.length === 0) return <p className="py-10 text-center text-slate-400 text-[13px]">No revenue in this window.</p>;
-  return (
-    <div style={{ width: "100%", height: 260 }}>
-      <ResponsiveContainer>
-        <BarChart data={rows}>
-          <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
-          <XAxis dataKey="day" stroke="#64748b" tick={{ fontSize: 11 }} />
-          <YAxis stroke="#64748b" tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-          <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => formatUsd(Number(v), { maximumFractionDigits: 0 })} />
-          <Legend wrapperStyle={{ fontSize: 11, color: "#64748b" }} />
-          {skuKinds.map((sku) => (
-            <Bar key={sku} dataKey={sku} stackId="rev" fill={SKU_COLOR[sku] || "rgba(15,23,42,0.25)"} />
-          ))}
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-function PlaysChart({ data, loading }: { data: Timeseries["plays"]; loading: boolean }) {
-  const rows = useMemo(() => data.map((r) => ({ day: r.day.slice(5), plays: r.starts, listeners: r.listeners })), [data]);
-  if (loading) return <SkeletonBlock />;
-  if (rows.length === 0) return <p className="py-10 text-center text-slate-400 text-[13px]">No plays in this window.</p>;
-  return (
-    <div style={{ width: "100%", height: 260 }}>
-      <ResponsiveContainer>
-        <AreaChart data={rows}>
-          <defs>
-            <linearGradient id="playsFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={C.blue} stopOpacity={0.7} />
-              <stop offset="100%" stopColor={C.blue} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
-          <XAxis dataKey="day" stroke="#64748b" tick={{ fontSize: 11 }} />
-          <YAxis stroke="#64748b" tick={{ fontSize: 11 }} />
-          <Tooltip contentStyle={tooltipStyle} />
-          <Legend wrapperStyle={{ fontSize: 11, color: "#64748b" }} />
-          <Area type="monotone" dataKey="plays" stroke={C.blue} fill="url(#playsFill)" strokeWidth={2} />
-          <Line type="monotone" dataKey="listeners" stroke={C.mint} strokeWidth={2} dot={false} />
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
-  );
 }
 
 // ─── Referrals tab (Task #78) ─────────────────────────────────────────

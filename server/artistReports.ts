@@ -35,6 +35,7 @@ import { getUserRole } from "./auth/roles";
 import { storage } from "./storage";
 import { LOC_CITY, LOC_REGION, LOC_COUNTRY } from "./reports/buyers";
 import { FULL_ACCESS_EMAILS } from "@shared/fullAccess";
+import { salesStack } from "./partnerDashboard";
 
 // ─── Date range helpers ─────────────────────────────────────────────────
 type Range = { from: Date; to: Date };
@@ -308,6 +309,30 @@ export function grantListen() {
   return sql`(COALESCE(${grantBranch()}, FALSE) AND NOT COALESCE(${staffInternalBranches()}, FALSE))`;
 }
 
+// ownerListen — TRUE when the event's listener is an authenticated user
+// holding a user_albums grant for the event's own album WITH a paid order
+// (a purchaser). Extracted from computeLifetime's owner split (Task #2673)
+// so the windowed KPIs, top-track ranking, and timeseries all classify
+// "fan" identically. Callers AND this with `NOT nonFanListen()`; on its own
+// it can also be true for staff who bought a copy.
+export function ownerListen() {
+  return sql`(
+    e.user_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM user_albums ua
+      JOIN songs sg ON sg.id = (e.payload->>'songId')
+      WHERE ua.album_id = sg.album_id
+        AND ua.user_id = e.user_id
+        AND EXISTS (
+          SELECT 1 FROM orders o2
+          WHERE o2.customer_id = e.user_id
+            AND o2.album_id = sg.album_id
+            AND o2.status IN ('paid','shipped','complete','completed')
+        )
+    )
+  )`;
+}
+
 // ─── KPIs ─────────────────────────────────────────────────────────────
 export async function computeKpis(scope: ArtistScope, r: Range) {
   if (scope.albumIds.length === 0 && scope.songIds.length === 0) {
@@ -331,34 +356,44 @@ export async function computeKpis(scope: ArtistScope, r: Range) {
   `) : ({ rows: [{ gross: "0", units: "0", orders: "0", buyers: "0", refunded: "0" }] } as any);
   const rev = (revRow as any).rows?.[0] ?? { gross: "0", units: "0", orders: "0", buyers: "0", refunded: "0" };
 
-  // Fan-only play counts (non-fan listens excluded via nonFanListen), plus
-  // the excluded play_start count so operators still see what was removed.
-  // `nonfan` is computed ONCE per event in the inner subquery, then the
-  // outer FILTERs partition genuine-fan vs. excluded without re-evaluating
-  // the correlated comp/preview lookup.
-  // Task #2815 — `grant` (comp/preview holder, minus staff) is split out as
-  // its own bucket; `excluded` narrows to staff/internal only so the footnote
-  // no longer swallows grant listening. Fan columns unchanged (NOT nonfan).
+  // Four-tier play split (Task #2893 — merged tier-disciplined Dashboard).
+  // `nonfan`/`grant`/`is_owner` are computed ONCE per event in the inner
+  // subquery, then the outer FILTERs partition the tiers without
+  // re-evaluating the correlated lookups:
+  //   • fan      = NOT nonfan AND is_owner    (purchasers — the headline)
+  //   • preview  = NOT nonfan AND NOT is_owner (anon / logged-in non-owners;
+  //     previously these leaked into the windowed fan plays)
+  //   • grant    = comp/preview holder, minus staff (Task #2815)
+  //   • excluded = staff/internal only (footnote)
+  // `listeners` is the Unique-listeners card: DISTINCT fan + grant
+  // listeners only (anon preview sessions and staff never count). The
+  // is_owner classifier mirrors computeLifetime's owner split exactly.
   const emptyPlayRow = {
-    starts: "0", completes: "0", listeners: "0", excluded: "0",
+    starts: "0", completes: "0", listeners: "0", fan_listeners: "0",
+    preview_plays: "0", excluded: "0",
     grant_plays: "0", grant_completes: "0", grant_listeners: "0",
   };
   const playRow = scope.songIds.length ? await db.execute<{
-    starts: string; completes: string; listeners: string; excluded: string;
+    starts: string; completes: string; listeners: string; fan_listeners: string;
+    preview_plays: string; excluded: string;
     grant_plays: string; grant_completes: string; grant_listeners: string;
   }>(sql`
     SELECT
-      COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS starts,
-      COUNT(*) FILTER (WHERE t.name = 'play_complete' AND NOT t.nonfan)::text AS completes,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND t.is_owner)::text AS starts,
+      COUNT(*) FILTER (WHERE t.name = 'play_complete' AND NOT t.nonfan AND t.is_owner)::text AS completes,
+      COUNT(DISTINCT t.user_id)
+        FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND t.is_owner AND t.user_id IS NOT NULL)::text AS fan_listeners,
       COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
-        FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS listeners,
+        FILTER (WHERE t.name = 'play_start' AND ((NOT t.nonfan AND t.is_owner) OR t.grant))::text AS listeners,
+      COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND NOT t.is_owner)::text AS preview_plays,
       COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.nonfan AND NOT t.grant)::text AS excluded,
       COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.grant)::text AS grant_plays,
       COUNT(*) FILTER (WHERE t.name = 'play_complete' AND t.grant)::text AS grant_completes,
       COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
         FILTER (WHERE t.name = 'play_start' AND t.grant)::text AS grant_listeners
     FROM (
-      SELECT e.name, e.user_id, e.session_id, ${nonFanListen()} AS nonfan, ${grantListen()} AS grant
+      SELECT e.name, e.user_id, e.session_id, ${nonFanListen()} AS nonfan, ${grantListen()} AS grant,
+        ${ownerListen()} AS is_owner
       FROM analytics_events e
       WHERE ${playsFilter(scope)}
         AND e.ts >= ${r.from} AND e.ts < ${r.to}
@@ -366,6 +401,32 @@ export async function computeKpis(scope: ArtistScope, r: Range) {
   `) : ({ rows: [emptyPlayRow] } as any);
   const p = (playRow as any).rows?.[0] ?? emptyPlayRow;
 
+  // New fans — listeners whose FIRST fan-or-grant play ever lands inside
+  // this window. Fan (purchaser) and grant events both carry a user_id by
+  // definition, so the listener key is the user id; anonymous preview
+  // sessions and staff/internal never count. Scans the full event history
+  // for first-play detection (same approach as the audience first-ever
+  // query), then buckets by the window.
+  const newFansRow = scope.songIds.length ? await db.execute<{ n: string }>(sql`
+    SELECT COUNT(*)::text AS n FROM (
+      SELECT t.user_id, MIN(t.ts) AS first_ts
+      FROM (
+        SELECT e.user_id, e.ts,
+          ${grantListen()} AS grant, ${ownerListen()} AS is_owner,
+          ${staffInternalListen()} AS staff
+        FROM analytics_events e
+        WHERE ${playsFilter(scope)}
+          AND e.name = 'play_start'
+          AND e.user_id IS NOT NULL
+      ) t
+      WHERE NOT t.staff AND (t.is_owner OR t.grant)
+      GROUP BY t.user_id
+    ) f
+    WHERE f.first_ts >= ${r.from} AND f.first_ts < ${r.to}
+  `) : ({ rows: [{ n: "0" }] } as any);
+
+  // Top track ranks by fan (purchaser) plays — same tier as the headline
+  // Fan-plays card, so the two never disagree about what "a play" is.
   const topTrack = scope.songIds.length ? await db.execute<{
     song_id: string; title: string; plays: string;
   }>(sql`
@@ -376,6 +437,7 @@ export async function computeKpis(scope: ArtistScope, r: Range) {
       AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
       AND e.ts >= ${r.from} AND e.ts < ${r.to}
       AND NOT ${nonFanListen()}
+      AND ${ownerListen()}
     GROUP BY s.id, s.title
     ORDER BY COUNT(*) DESC
     LIMIT 1
@@ -397,26 +459,30 @@ export async function computeKpis(scope: ArtistScope, r: Range) {
 
   const starts = Number(p.starts);
   const completes = Number(p.completes);
-  // Artist share == gross today (no payout split in live DB yet — see
-  // module header). UI labels it "Artist share" and renders matching
-  // value so the column is wired the moment payout_amount_cents ships.
   const gross = Number(rev.gross);
   return {
     grossCents: gross,
-    artistShareCents: gross,
     refundedCents: Number(rev.refunded),
     units: Number(rev.units),
     orders: Number(rev.orders),
     buyers: Number(rev.buyers),
+    // Fan (purchaser) tier — the headline numbers. Completion rate is
+    // computed within the same tier so the two cards never disagree.
     plays: starts,
     completions: completes,
     completionRate: starts > 0 ? completes / starts : 0,
+    fanListeners: Number(p.fan_listeners),
+    // Unique listeners card: DISTINCT fan + grant listeners.
     listeners: Number(p.listeners),
+    // Anonymous / non-owner preview starts (secondary line, never summed).
+    previewPlays: Number(p.preview_plays),
     excludedPlays: Number(p.excluded),
     // Task #2815 — grant/comp bucket (comp copies + unexpired previews, staff excluded)
     grantPlays: Number(p.grant_plays),
     grantCompletes: Number(p.grant_completes),
     grantListeners: Number(p.grant_listeners),
+    // First-time fan+grant listeners in this window.
+    newFans: Number(((newFansRow as any).rows?.[0]?.n) ?? 0),
     topTrack: ((topTrack as any).rows?.[0]) ?? null,
     topAlbum: ((topAlbum as any).rows?.[0]) ?? null,
   };
@@ -424,10 +490,11 @@ export async function computeKpis(scope: ArtistScope, r: Range) {
 
 function emptyKpis() {
   return {
-    grossCents: 0, artistShareCents: 0, refundedCents: 0,
+    grossCents: 0, refundedCents: 0,
     units: 0, orders: 0, buyers: 0, plays: 0, completions: 0, completionRate: 0,
-    listeners: 0, excludedPlays: 0,
+    fanListeners: 0, listeners: 0, previewPlays: 0, excludedPlays: 0,
     grantPlays: 0, grantCompletes: 0, grantListeners: 0,
+    newFans: 0,
     topTrack: null, topAlbum: null,
   };
 }
@@ -662,14 +729,77 @@ async function summaryHandler(req: Request, res: Response) {
     totalCents: Number(r.total_cents),
   }));
   const npoPayout = Number(((npoCents as any).rows?.[0]?.total) ?? 0);
-  return res.json({ range, compare, current: kpis, previous, lifetime, topFans, npoPayout });
+
+  // Task #2893 — merged Dashboard card inputs. Net (artist) reuses the ONE
+  // cost-stack implementation (partnerDashboard.salesStack: per-copy product
+  // revenue − manufacturing − publishing mechanicals − platform fee − Stripe
+  // fees); price-per-unit rides the Gross card's breakdown and keeps the same
+  // per-copy product-price base as Net (top-line gross itself stays
+  // order-total inclusive of tax + shipping, per house convention).
+  const [stack, stackPrevious] = await Promise.all([
+    salesStack(scope.albumIds, range),
+    compare ? salesStack(scope.albumIds, compare) : Promise.resolve(null),
+  ]);
+  const ppu = (s: { grossCents: number; units: number } | null) =>
+    s && s.units > 0 ? Math.round(s.grossCents / s.units) : null;
+
+  // Recent activity — window-scoped orders + album releases, same shape the
+  // partner-dashboard feed used, but scoped by scope.albumIds (payout-owner
+  // albums included) and linking into the artist portal's own embedded album
+  // route rather than the admin chrome.
+  const activity: Array<{ kind: string; ts: string; title: string; detail?: string; href?: string }> = [];
+  if (scope.albumIds.length) {
+    const [ordersRows, releaseRows] = await Promise.all([
+      db.execute<any>(sql`
+        SELECT o.id, o.created_at, o.total_cents, a.title AS album_title, a.id AS album_id
+        FROM orders o
+        JOIN albums a ON a.id = o.album_id
+        WHERE o.status IN ('paid','shipped')
+          AND o.album_id = ANY(${pgArray(scope.albumIds)})
+          AND o.created_at >= ${range.from} AND o.created_at < ${range.to}
+        ORDER BY o.created_at DESC LIMIT 10
+      `).catch(() => ({ rows: [] }) as any),
+      // good_tunes_release_date is a TEXT column — window-filter in JS
+      // (mirrors buildArtistPayload) so a malformed value can't abort the SQL.
+      db.execute<any>(sql`
+        SELECT id, title, good_tunes_release_date AS rd
+        FROM albums
+        WHERE id = ANY(${pgArray(scope.albumIds)})
+          AND good_tunes_release_date IS NOT NULL
+      `).catch(() => ({ rows: [] }) as any),
+    ]);
+    for (const o of ((ordersRows as any).rows ?? []) as any[]) {
+      activity.push({
+        kind: "order",
+        ts: new Date(o.created_at).toISOString(),
+        title: `Order — ${o.album_title}`,
+        detail: `$${(Number(o.total_cents) / 100).toFixed(2)}`,
+        href: `/artist/albums/${o.album_id}`,
+      });
+    }
+    for (const a of ((releaseRows as any).rows ?? []) as any[]) {
+      const rd = a.rd ? new Date(a.rd) : null;
+      if (!rd || Number.isNaN(rd.getTime()) || rd < range.from || rd >= range.to) continue;
+      activity.push({
+        kind: "release",
+        ts: rd.toISOString(),
+        title: `Album released — ${a.title}`,
+        href: `/artist/albums/${a.id}`,
+      });
+    }
+    activity.sort((x, y) => (y.ts < x.ts ? -1 : 1));
+  }
+
+  return res.json({
+    range, compare, current: kpis, previous, lifetime, topFans, npoPayout,
+    stack: { ...stack, pricePerUnitCents: ppu(stack) },
+    stackPrevious: stackPrevious ? { ...stackPrevious, pricePerUnitCents: ppu(stackPrevious) } : null,
+    activity: activity.slice(0, 15),
+  });
 }
 
-async function timeseriesHandler(req: Request, res: Response) {
-  const scope = await resolveArtistScope(req);
-  if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
-  const { range } = parseRange(req);
-
+// Exported for the DB tests (Task #2893) — the handler is a thin wrapper.
+export async function computeTimeseries(scope: ArtistScope, range: Range) {
   // Single revenue series today (no sku_kind in live orders table yet —
   // UI bucket-labels it "All formats"; once #73 columns ship, swap to
   // the per-skuKind GROUP BY without changing the wire shape).
@@ -686,27 +816,52 @@ async function timeseriesHandler(req: Request, res: Response) {
       `)
     : ({ rows: [] } as any);
 
-  const playsDaily = scope.songIds.length
-    ? await db.execute<{ day: string; starts: string; completes: string; listeners: string }>(sql`
+  // Orders/day — third toggle on the merged Dashboard's trend chart.
+  const ordersDaily = scope.albumIds.length
+    ? await db.execute<{ day: string; orders: string }>(sql`
         SELECT
-          date_trunc('day', e.ts)::date::text AS day,
-          COUNT(*) FILTER (WHERE e.name = 'play_start')::text AS starts,
-          COUNT(*) FILTER (WHERE e.name = 'play_complete')::text AS completes,
-          COUNT(DISTINCT COALESCE(e.user_id, e.session_id))
-            FILTER (WHERE e.name = 'play_start')::text AS listeners
-        FROM analytics_events e
-        WHERE ${playsFilter(scope)}
-          AND e.ts >= ${range.from} AND e.ts < ${range.to}
-          AND NOT ${nonFanListen()}
+          date_trunc('day', o.created_at)::date::text AS day,
+          COUNT(*) FILTER (WHERE o.status <> 'refunded')::text AS orders
+        FROM orders o
+        WHERE ${ordersFilter(scope)}
+          AND o.created_at >= ${range.from} AND o.created_at < ${range.to}
         GROUP BY 1
         ORDER BY 1 ASC
       `)
     : ({ rows: [] } as any);
 
-  return res.json({
+  // Task #2893 — tier discipline on the daily series: starts/completes are
+  // fan (purchaser) plays only, matching the Fan-plays card; `listeners` is
+  // the per-day DISTINCT fan+grant listener count, matching the
+  // Unique-listeners card. Anonymous previews and staff/internal never
+  // appear in either column.
+  const playsDaily = scope.songIds.length
+    ? await db.execute<{ day: string; starts: string; completes: string; listeners: string }>(sql`
+        SELECT
+          date_trunc('day', t.ts)::date::text AS day,
+          COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND t.is_owner)::text AS starts,
+          COUNT(*) FILTER (WHERE t.name = 'play_complete' AND NOT t.nonfan AND t.is_owner)::text AS completes,
+          COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
+            FILTER (WHERE t.name = 'play_start' AND ((NOT t.nonfan AND t.is_owner) OR t.grant))::text AS listeners
+        FROM (
+          SELECT e.name, e.ts, e.user_id, e.session_id,
+            ${nonFanListen()} AS nonfan, ${grantListen()} AS grant, ${ownerListen()} AS is_owner
+          FROM analytics_events e
+          WHERE ${playsFilter(scope)}
+            AND e.ts >= ${range.from} AND e.ts < ${range.to}
+        ) t
+        GROUP BY 1
+        ORDER BY 1 ASC
+      `)
+    : ({ rows: [] } as any);
+
+  return {
     range,
     revenue: ((revDaily as any).rows || []).map((r: any) => ({
       day: r.day, skuKind: "all", revenueCents: Number(r.revenue),
+    })),
+    orders: ((ordersDaily as any).rows || []).map((r: any) => ({
+      day: r.day, orders: Number(r.orders),
     })),
     plays: ((playsDaily as any).rows || []).map((r: any) => ({
       day: r.day,
@@ -714,7 +869,14 @@ async function timeseriesHandler(req: Request, res: Response) {
       completes: Number(r.completes),
       listeners: Number(r.listeners),
     })),
-  });
+  };
+}
+
+async function timeseriesHandler(req: Request, res: Response) {
+  const scope = await resolveArtistScope(req);
+  if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
+  const { range } = parseRange(req);
+  return res.json(await computeTimeseries(scope, range));
 }
 
 async function geoHandler(req: Request, res: Response) {

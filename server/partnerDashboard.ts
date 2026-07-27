@@ -121,7 +121,7 @@ const PLATFORM_FEE_CENTS = 450;
 // copies it actually manufactures (digital copies aren't pressed).
 const PHYSICAL_FORMATS = ["7_inch", "12_lp", "12_double", "cassette", "cd"];
 
-type SalesStack = {
+export type SalesStack = {
   units: number;
   grossCents: number;
   manufacturingCents: number;
@@ -131,9 +131,13 @@ type SalesStack = {
   netCents: number;
 };
 
-async function salesStack(
+// Exported for the merged artist Dashboard (server/artistReports.ts
+// summaryHandler): the Net (artist) card must use the exact same
+// cost-stack math as this module's partner payload, so there is ONE
+// implementation. The window only needs from/to (RangeWindow satisfies it).
+export async function salesStack(
   albumIds: string[],
-  window: RangeWindow | null,
+  window: { from: Date; to: Date } | null,
 ): Promise<SalesStack> {
   const empty: SalesStack = {
     units: 0, grossCents: 0, manufacturingCents: 0, publishingCents: 0,

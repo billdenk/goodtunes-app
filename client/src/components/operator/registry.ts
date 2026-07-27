@@ -105,7 +105,7 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "dashboard",   label: "Dashboard",   icon: LayoutDashboard, roles: ["artist"] },
   { id: "people",      label: "People",      icon: User,      section: "catalog", roles: ["artist"] },
   { id: "catalog",     label: "Albums",      icon: Disc3,     section: "catalog", roles: ["artist"] },
-  { id: "overview",    label: "Overview",    icon: Activity,  roles: ["artist"] },
+  // (Overview merged into Dashboard — Task #2893. Label/manager keep theirs.)
   { id: "audience",    label: "Audience",    icon: Users,     roles: ["artist"] },
   { id: "acquisition", label: "Acquisition", icon: Megaphone, roles: ["artist"] },
   { id: "orders",      label: "Orders",      icon: ShoppingBag, roles: ["artist"] },

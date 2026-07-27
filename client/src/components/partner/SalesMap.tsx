@@ -199,10 +199,14 @@ export function SalesMap({
   data,
   loading,
   title = "Where your fans are buying",
+  // Task #2893 — per-portal empty copy (artist Dashboard passes a friendlier
+  // line); default preserves the other portals' existing wording.
+  emptyCopy = "No sales with location data in this range yet.",
 }: {
   data: SalesGeoPayload;
   loading?: boolean;
   title?: string;
+  emptyCopy?: string;
 }) {
   const [metric, setMetric] = useState<Metric>("units");
   const [drillUs, setDrillUs] = useState(false);
@@ -480,7 +484,7 @@ export function SalesMap({
             </div>
           ) : isEmpty ? (
             <p className="py-8 text-center text-sm text-slate-500" data-testid="sales-map-empty">
-              No sales with location data in this range yet.
+              {emptyCopy}
             </p>
           ) : (
             <ul className="space-y-1.5" data-testid="ranked-list">

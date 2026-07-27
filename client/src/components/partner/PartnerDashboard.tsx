@@ -212,9 +212,11 @@ function partnerTabDest(scope: PartnerScopeKind, k: DashboardKpi): string | null
   if (k.comingSoon) return null;
   switch (scope) {
     case "artist":
-      // dashboard/overview/audience/acquisition/catalog/orders/buyers/referrals
+      // dashboard/audience/acquisition/catalog/orders/buyers/referrals —
+      // Task #2893: Overview merged into the artist Dashboard, so the
+      // units/gross/pricePerUnit/net tiles stay inert (their numbers live
+      // on the merged Dashboard itself now).
       if (k.id === "orders") return "orders";
-      if (k.id === "units" || k.id === "gross" || k.id === "pricePerUnit" || k.id === "net") return "overview";
       if (k.id === "plays" || k.id === "newFans") return "audience";
       return null;
     case "label":
