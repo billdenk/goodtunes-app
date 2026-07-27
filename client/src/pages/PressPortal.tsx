@@ -708,7 +708,7 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
   return (
     <div className="space-y-5">
       <AdminPageHeader
-        title="People"
+        title="Clients"
         subtitle="Artists homed to your press, plus anyone leading an album you're pressing."
         testId="heading-press-people"
         actions={
