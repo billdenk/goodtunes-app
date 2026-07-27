@@ -27592,7 +27592,10 @@ export async function registerRoutes(
         if (!row) return;
         nameIdx.set(`${kind}:${row.id}`, {
           name: name ?? row.name ?? row.displayName ?? "",
-          thumbUrl: thumb !== undefined ? thumb : (row.imageUrl ?? row.logoUrl ?? row.thumbnailUrl ?? null),
+          // People carry `photoUrl`; org-ish scopes carry `logoUrl` (mirrors
+          // the invite-directory's chain — dropping photoUrl left every
+          // artist attachment iconless).
+          thumbUrl: thumb !== undefined ? thumb : (row.photoUrl ?? row.imageUrl ?? row.logoUrl ?? row.thumbnailUrl ?? null),
         });
       };
       for (const p of people) put("artist", p);

@@ -99,9 +99,13 @@ before(async () => {
   artistToken = await tokenFor(memberUserId);
 });
 
+// People store their picture as `photo_url` — the roster's thumb chain
+// must include it (regressed once: artists rendered an empty gray dot).
+const personPhoto = "/objects/uploads/tteam-test-photo.png";
+
 async function seedPerson(name: string): Promise<string> {
   const id = randomUUID();
-  await exec(sql`INSERT INTO people (id, name) VALUES (${id}, ${name})`);
+  await exec(sql`INSERT INTO people (id, name, photo_url) VALUES (${id}, ${name}, ${personPhoto})`);
   created.people.add(id);
   return id;
 }
@@ -150,6 +154,7 @@ test("operator sees membership-backed and legacy-only accounts", async () => {
   assert.equal(member.attachments[0].scopeId, personId);
   assert.equal(member.attachments[0].subRole, "manager");
   assert.equal(member.attachments[0].scopeName, personName);
+  assert.equal(member.attachments[0].thumbUrl, personPhoto, "artist scope must surface the person's photo");
 
   const legacy = accts.find((a) => a.id === legacyUserId);
   assert.ok(legacy, "legacy-only account (no memberships rows) must still appear");

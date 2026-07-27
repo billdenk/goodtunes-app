@@ -602,8 +602,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => { durationRef.current = duration; }, [duration]);
 
   // Reset per-play analytics milestones whenever the current song changes.
+  // Only when the id actually differs from the in-flight instance: a manual
+  // playSong already called beginPlayInstance (reset + started=true), and
+  // blindly re-resetting here wiped `started` so the audio 'playing' handler
+  // double-fired play_start ~4ms after the first. Auto-advance still resets
+  // (milestones carry the previous song's id). Repeat-one/replay of the same
+  // song goes through beginPlayInstance, which always resets explicitly.
   useEffect(() => {
-    resetMilestones(currentSong?.id ?? null);
+    if (milestonesRef.current.songId !== (currentSong?.id ?? null)) {
+      resetMilestones(currentSong?.id ?? null);
+    }
   }, [currentSong?.id, resetMilestones]);
 
   // Begin a new analytics play instance: reset milestones and emit play_start.

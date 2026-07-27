@@ -35,3 +35,6 @@ Completion rate, Top track, New fans — pinned by
   (mapped in ArtistDashboard's tab-state init + URL effect).
 - Label/manager portals still have their own Dashboard+Overview pair by
   design (separate briefs); their reports keep their own computeKpis.
+
+## "My plays don't show" triage (recurs)
+Bill's own fan account (billdenk@mac.com / @billy) is platform-internal THREE ways: events stamped `_internal:true`, email on FULL_ACCESS_EMAILS (shared/fullAccess.ts), and device denylist — `staffInternalListen()` drops all of it from every partner-facing report (Top tracks, funnel, dashboards) BY DESIGN. His CALIFORNIALAND copy is also comp/grant #1, so even un-flagged his plays would bucket under Grant, never Fan. When an operator reports "play numbers look off", check `analytics_events` for their user_id + `_internal` BEFORE suspecting the tracking pipeline — the data is all there.
