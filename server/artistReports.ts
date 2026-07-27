@@ -65,6 +65,12 @@ export type ArtistScope = {
   albumIds: string[];
   songIds: string[];
   ownedSongIds: string[];
+  // TRUE only when the signed-in viewer is a super_admin (god-view drill-in).
+  // Gates the operator-only staff/internal listening columns on Top tracks.
+  // Optional + default-absent so directly-constructed scopes (tests,
+  // computeArtistDatasetScope callers) stay partner-safe: falsy = no staff
+  // fields computed or serialized.
+  viewerIsOperator?: boolean;
 };
 
 async function resolveArtistScope(req: Request): Promise<ArtistScope | { error: string; status: number }> {
@@ -119,7 +125,11 @@ async function resolveArtistScope(req: Request): Promise<ArtistScope | { error: 
     return { error: "Insufficient role", status: 403 };
   }
 
-  return computeArtistDatasetScope(personId, info.role, info.roleScopeId);
+  const dataset = await computeArtistDatasetScope(personId, info.role, info.roleScopeId);
+  // Stamp the viewer's role class HERE (the auth choke point), not inside
+  // computeArtistDatasetScope: scope.db tests construct dataset scopes
+  // directly and must stay partner-shaped by default.
+  return { ...dataset, viewerIsOperator: info.role === "super_admin" };
 }
 
 // Dataset narrowing for an already-resolved (role, personId). Split out from
@@ -933,6 +943,70 @@ async function geoHandler(req: Request, res: Response) {
   });
 }
 
+// ─── Operator-only staff/internal listening (Top tracks) ─────────────────
+// Operators asked to SEE the listening that staffInternalListen() hides
+// (2026-07): a separate "Staff plays" column, super_admin god-view only.
+// This counts EXACTLY the events every partner-facing bucket drops —
+// internal-stamped devices, operator accounts, full-access emails — and is
+// never summed into fan or grant numbers. Callers gate on
+// scope.viewerIsOperator, so partner responses never carry these fields and
+// the partner-facing SQL above stays bit-for-bit untouched.
+export type StaffTrackCounts = {
+  songId: string; title: string; albumId: string; albumTitle: string | null;
+  albumArtist: string | null; staffPlays: number; staffCompletes: number;
+};
+export async function staffTopTrackCounts(
+  songIds: string[],
+  range: { from: Date; to: Date },
+): Promise<StaffTrackCounts[]> {
+  if (!songIds.length) return [];
+  const rows = await db.execute<{
+    song_id: string; title: string; album_id: string; album_title: string | null;
+    album_artist: string | null; staff_plays: string; staff_completes: string;
+  }>(sql`
+    SELECT s.id AS song_id, s.title, s.album_id, a.title AS album_title, a.artist AS album_artist,
+      COUNT(*) FILTER (WHERE e.name = 'play_start')::text AS staff_plays,
+      COUNT(*) FILTER (WHERE e.name = 'play_complete')::text AS staff_completes
+    FROM analytics_events e
+    JOIN songs s ON s.id = e.payload->>'songId'
+    LEFT JOIN albums a ON a.id = s.album_id
+    WHERE e.payload->>'songId' = ANY(${pgArray(songIds)})
+      AND e.name IN ('play_start','play_complete')
+      AND e.ts >= ${range.from} AND e.ts < ${range.to}
+      AND ${staffInternalListen()}
+    GROUP BY s.id, s.title, s.album_id, a.title, a.artist
+    ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC
+  `);
+  return (((rows as any).rows || []) as any[]).map((r: any) => ({
+    songId: r.song_id, title: r.title, albumId: r.album_id, albumTitle: r.album_title,
+    albumArtist: r.album_artist, staffPlays: Number(r.staff_plays), staffCompletes: Number(r.staff_completes),
+  }));
+}
+
+// Shared merge for the three top-tracks sites (artist inline handler, label
+// computeTopTracks, manager computeTopTracks). Stamps staffPlays/Completes
+// on EVERY row (0 default) so CSV exports keep uniform columns, and appends
+// staff-only tracks (no fan/grant activity at all) AFTER the fan-sorted
+// list — operator visibility must not re-rank the partner ordering.
+export function mergeStaffIntoTracks<T extends { songId: string }>(
+  tracks: T[],
+  staff: StaffTrackCounts[],
+  emptyRow: (s: StaffTrackCounts) => T,
+): Array<T & { staffPlays: number; staffCompletes: number }> {
+  const byId = new Map(staff.map((s) => [s.songId, s]));
+  const out: Array<T & { staffPlays: number; staffCompletes: number }> = tracks.map((t) => ({
+    ...t,
+    staffPlays: byId.get(t.songId)?.staffPlays ?? 0,
+    staffCompletes: byId.get(t.songId)?.staffCompletes ?? 0,
+  }));
+  const seen = new Set(tracks.map((t) => t.songId));
+  for (const s of staff) {
+    if (seen.has(s.songId)) continue;
+    out.push({ ...emptyRow(s), staffPlays: s.staffPlays, staffCompletes: s.staffCompletes });
+  }
+  return out;
+}
+
 async function topTracksHandler(req: Request, res: Response) {
   const scope = await resolveArtistScope(req);
   if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
@@ -973,13 +1047,23 @@ async function topTracksHandler(req: Request, res: Response) {
     LIMIT ${limit}
   `);
 
-  const tracks = ((rows as any).rows || []).map((r: any) => ({
+  let tracks: any[] = ((rows as any).rows || []).map((r: any) => ({
     songId: r.song_id, title: r.title, albumId: r.album_id, albumTitle: r.album_title,
     plays: Number(r.plays), completes: Number(r.completes),
     favorites: Number(r.favorites), playlistAdds: Number(r.playlist_adds),
     shares: Number(r.shares),
     grantPlays: Number(r.grant_plays),
   }));
+
+  // Operator-only staff/internal column (see staffTopTrackCounts above).
+  // Partner scopes never carry viewerIsOperator, so their payload — and the
+  // CSV export — is byte-identical to before.
+  if (scope.viewerIsOperator) {
+    tracks = mergeStaffIntoTracks(tracks, await staffTopTrackCounts(scope.songIds, range), (s) => ({
+      songId: s.songId, title: s.title, albumId: s.albumId, albumTitle: s.albumTitle,
+      plays: 0, completes: 0, favorites: 0, playlistAdds: 0, shares: 0, grantPlays: 0,
+    }));
+  }
 
   if (req.query.format === "csv") return sendCsv(res, "top-tracks.csv", tracks);
   return res.json({ range, tracks });

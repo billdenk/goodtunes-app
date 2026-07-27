@@ -94,7 +94,7 @@ type Tracks = {
   tracks: {
     songId: string; title: string; albumTitle: string; albumArtist: string;
     plays: number; completes: number; favorites: number; playlistAdds: number; shares: number;
-    grantPlays?: number;
+    grantPlays?: number; staffPlays?: number; staffCompletes?: number;
   }[];
 };
 
@@ -792,6 +792,9 @@ function SortableTh({ label, k, sortKey, sortDir, onSort, className }: {
 function CatalogTab({ qs }: { qs: string }) {
   const tracks = useQuery<Tracks>({ queryKey: [`/api/label/top-tracks?${qs}`] });
   const albums = useQuery<AlbumsPayload>({ queryKey: [`/api/label/top-albums?${qs}`] });
+  // Server sends staffPlays only on operator (super_admin) responses;
+  // partners never get the field, so the column doesn't exist for them.
+  const hasStaff = (tracks.data?.tracks ?? []).some((t) => t.staffPlays !== undefined);
   return (
     <>
       <Card
@@ -855,6 +858,7 @@ function CatalogTab({ qs }: { qs: string }) {
                 <th className="text-left font-medium py-2 pr-3">Track</th>
                 <th className="text-right font-medium px-2">Fan plays</th>
                 <th className="text-right font-medium px-2">Grant plays</th>
+                {hasStaff && <th className="text-right font-medium px-2">Staff plays</th>}
                 <th className="text-right font-medium px-2">Completes</th>
                 <th className="text-right font-medium px-2">
                   <span className="inline-flex items-center gap-1 justify-end">
@@ -866,8 +870,8 @@ function CatalogTab({ qs }: { qs: string }) {
               </tr>
             </thead>
             <tbody>
-              {tracks.isLoading && <tr><td colSpan={7} className="py-6 text-center text-slate-400">Loading…</td></tr>}
-              {!tracks.isLoading && (tracks.data?.tracks.length ?? 0) === 0 && <tr><td colSpan={7} className="py-6 text-center text-slate-400">No plays yet in this window.</td></tr>}
+              {tracks.isLoading && <tr><td colSpan={hasStaff ? 8 : 7} className="py-6 text-center text-slate-400">Loading…</td></tr>}
+              {!tracks.isLoading && (tracks.data?.tracks.length ?? 0) === 0 && <tr><td colSpan={hasStaff ? 8 : 7} className="py-6 text-center text-slate-400">No plays yet in this window.</td></tr>}
               {tracks.data?.tracks.map((t) => (
                 <tr key={t.songId} className="border-t border-slate-100" data-testid={`row-track-${t.songId}`}>
                   <td className="py-2 pr-3">
@@ -876,6 +880,11 @@ function CatalogTab({ qs }: { qs: string }) {
                   </td>
                   <td className="px-2 text-right tabular-nums">{compact(t.plays)}</td>
                   <td className="px-2 text-right tabular-nums text-slate-500" data-testid={`text-grant-plays-track-${t.songId}`}>{compact(t.grantPlays ?? 0)}</td>
+                  {hasStaff && (
+                    <td className="px-2 text-right tabular-nums text-slate-400" title={`${t.staffCompletes ?? 0} full listens`} data-testid={`text-staff-plays-track-${t.songId}`}>
+                      {compact(t.staffPlays ?? 0)}
+                    </td>
+                  )}
                   <td className="px-2 text-right tabular-nums">{compact(t.completes)}</td>
                   <td className="px-2 text-right tabular-nums text-rose-500">{compact(t.favorites)}</td>
                   <td className="px-2 text-right tabular-nums">{compact(t.playlistAdds)}</td>
@@ -885,6 +894,11 @@ function CatalogTab({ qs }: { qs: string }) {
             </tbody>
           </table>
         </div>
+        {hasStaff && (
+          <p className="mt-2 text-xs text-slate-400" data-testid="text-staff-note">
+            Staff/internal listening is visible to operators only — partners never see this column, and it is never added to fan or grant totals.
+          </p>
+        )}
       </Card>
     </>
   );

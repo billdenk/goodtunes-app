@@ -21,7 +21,7 @@ import { sql } from "drizzle-orm";
 import { pgArray } from "./lib/pgArray";
 import { getUserRole } from "./auth/roles";
 import { LOC_COUNTRY } from "./reports/buyers";
-import { grantListen, nonFanListen, staffInternalListen } from "./artistReports";
+import { grantListen, nonFanListen, staffInternalListen, staffTopTrackCounts, mergeStaffIntoTracks } from "./artistReports";
 
 // ─── Date range helpers ─────────────────────────────────────────────────
 type Range = { from: Date; to: Date };
@@ -51,6 +51,9 @@ export type ManagerScope = {
   albumIds: string[];
   songIds: string[];
   rosterPersonIds: string[];
+  // TRUE only for super_admin god-view — see ArtistScope.viewerIsOperator.
+  // Falsy/absent = partner-safe (no staff/internal fields in responses).
+  viewerIsOperator?: boolean;
 };
 
 export async function resolveManagerScope(req: Request): Promise<ManagerScope | { error: string; status: number }> {
@@ -92,7 +95,7 @@ export async function resolveManagerScope(req: Request): Promise<ManagerScope | 
     : ({ rows: [] } as any);
   const songIds = ((songRows as any).rows || []).map((r: any) => r.id);
 
-  return { managerId, albumIds, songIds, rosterPersonIds };
+  return { managerId, albumIds, songIds, rosterPersonIds, viewerIsOperator: info.role === "super_admin" };
 }
 
 // ─── SQL fragments ────────────────────────────────────────────────────
@@ -534,12 +537,23 @@ export async function computeTopTracks(scope: ManagerScope, range: Range, limit:
     LIMIT ${limit}
   `);
 
-  return (((rows as any).rows || []) as any[]).map((r: any) => ({
+  const tracks: any[] = (((rows as any).rows || []) as any[]).map((r: any) => ({
     songId: r.song_id, title: r.title, albumId: r.album_id, albumTitle: r.album_title, albumArtist: r.album_artist,
     plays: Number(r.plays), completes: Number(r.completes),
     favorites: Number(r.favorites), playlistAdds: Number(r.playlist_adds), shares: Number(r.shares),
     grantPlays: Number(r.grant_plays),
   }));
+
+  // Operator-only staff/internal column — super_admin god-view scopes only.
+  // Directly-constructed scopes (tests, partner sessions) skip this branch,
+  // so partner payloads and the exclusion-test assertions stay unchanged.
+  if (scope.viewerIsOperator) {
+    return mergeStaffIntoTracks(tracks, await staffTopTrackCounts(scope.songIds, range), (s) => ({
+      songId: s.songId, title: s.title, albumId: s.albumId, albumTitle: s.albumTitle, albumArtist: s.albumArtist,
+      plays: 0, completes: 0, favorites: 0, playlistAdds: 0, shares: 0, grantPlays: 0,
+    }));
+  }
+  return tracks;
 }
 
 async function topTracksHandler(req: Request, res: Response) {

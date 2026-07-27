@@ -28,7 +28,7 @@ import { sql } from "drizzle-orm";
 import { pgArray } from "./lib/pgArray";
 import { LOC_COUNTRY } from "./reports/buyers";
 import { getUserRole } from "./auth/roles";
-import { nonFanListen, grantListen, staffInternalListen } from "./artistReports";
+import { nonFanListen, grantListen, staffInternalListen, staffTopTrackCounts, mergeStaffIntoTracks } from "./artistReports";
 import { storage } from "./storage";
 
 // ─── Date range helpers ─────────────────────────────────────────────────
@@ -59,6 +59,9 @@ export type LabelScope = {
   albumIds: string[];
   songIds: string[];
   rosterPersonIds: string[];
+  // TRUE only for super_admin god-view — see ArtistScope.viewerIsOperator.
+  // Falsy/absent = partner-safe (no staff/internal fields in responses).
+  viewerIsOperator?: boolean;
 };
 
 export async function resolveLabelScope(req: Request): Promise<LabelScope | { error: string; status: number }> {
@@ -96,7 +99,7 @@ export async function resolveLabelScope(req: Request): Promise<LabelScope | { er
   const labeledPeople = ((peopleRows as any).rows || []).map((r: any) => r.id) as string[];
   const rosterPersonIds = Array.from(new Set([...primaryArtistIds, ...labeledPeople]));
 
-  return { labelId, albumIds, songIds, rosterPersonIds };
+  return { labelId, albumIds, songIds, rosterPersonIds, viewerIsOperator: info.role === "super_admin" };
 }
 
 // ─── SQL fragments ────────────────────────────────────────────────────
@@ -610,12 +613,23 @@ export async function computeTopTracks(scope: LabelScope, range: Range, limit: n
     LIMIT ${limit}
   `);
 
-  return (((rows as any).rows || []) as any[]).map((r: any) => ({
+  const tracks: any[] = (((rows as any).rows || []) as any[]).map((r: any) => ({
     songId: r.song_id, title: r.title, albumId: r.album_id, albumTitle: r.album_title, albumArtist: r.album_artist,
     plays: Number(r.plays), completes: Number(r.completes),
     favorites: Number(r.favorites), playlistAdds: Number(r.playlist_adds), shares: Number(r.shares),
     grantPlays: Number(r.grant_plays),
   }));
+
+  // Operator-only staff/internal column — super_admin god-view scopes only.
+  // Directly-constructed scopes (tests, partner sessions) skip this branch,
+  // so partner payloads and the exclusion-test assertions stay unchanged.
+  if (scope.viewerIsOperator) {
+    return mergeStaffIntoTracks(tracks, await staffTopTrackCounts(scope.songIds, range), (s) => ({
+      songId: s.songId, title: s.title, albumId: s.albumId, albumTitle: s.albumTitle, albumArtist: s.albumArtist,
+      plays: 0, completes: 0, favorites: 0, playlistAdds: 0, shares: 0, grantPlays: 0,
+    }));
+  }
+  return tracks;
 }
 
 async function topTracksHandler(req: Request, res: Response) {

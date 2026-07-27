@@ -6,6 +6,10 @@
 // Conservation: total seeded plays == fan + grant + staff (nothing lost,
 // nothing double-counted).
 //
+// 2026-07 addition: operators (super_admin god-view) get a SEPARATE
+// staffPlays/staffCompletes column on top tracks — never summed into fan or
+// grant numbers, and fail-closed ABSENT from partner-scoped responses.
+//
 // Exercises computeKpis in server/labelReports.ts and server/managerReports.ts
 // against a real Postgres (DATABASE_URL). Seed mirrors
 // server/artistReports.exclusion.db.test.ts. All rows torn down in `after`.
@@ -26,6 +30,9 @@ const managerId = `lmx-mgr-${tag}`;
 const personId = `lmx-person-${tag}`;
 const albumId = `lmx-album-${tag}`;
 const songId = `lmx-song-${tag}`;
+// Second song with ONLY staff/internal plays: invisible to partners, but
+// appended (after the fan-sorted rows) for operator god-view.
+const songId2 = `lmx-song2-${tag}`;
 const adminUserId = `lmx-admin-${tag}`;
 
 // Fan bucket: buyer (2 plays) + anonymous session (1 play) = 3 plays, 2 listeners.
@@ -80,6 +87,10 @@ before(async () => {
     VALUES (${songId}, ${albumId}, ${"LMX Track"}, ${1})
   `);
   await exec(sql`
+    INSERT INTO songs (id, album_id, title, track_number)
+    VALUES (${songId2}, ${albumId}, ${"LMX Staff Only Track"}, ${2})
+  `);
+  await exec(sql`
     INSERT INTO users (id, username, email, display_name, password)
     VALUES (${adminUserId}, ${`lmx-admin-${tag}`}, ${`lmx-admin-${tag}@example.com`}, ${"LMX Admin"}, ${"x"})
   `);
@@ -109,6 +120,8 @@ before(async () => {
   // Staff/internal: admin users-row (1 play) + internal-stamped session (1 play).
   await ev(`${sInternal}-admin`, {}, adminUserId);
   await ev(sInternal, { _internal: true });
+  // Staff-only second track: one internal-stamped play, nothing else.
+  await ev(`${sInternal}-s2`, { _internal: true, songId: songId2 });
 
   // Engagement events for the top-tracks split: only the buyer's complete is
   // a fan metric; grant-holder complete and staff favorite must be excluded.
@@ -118,10 +131,10 @@ before(async () => {
 });
 
 after(async () => {
-  await exec(sql`DELETE FROM analytics_events WHERE payload->>'songId' = ${songId}`);
+  await exec(sql`DELETE FROM analytics_events WHERE payload->>'songId' IN (${songId}, ${songId2})`);
   await exec(sql`DELETE FROM orders WHERE id = ${paidOrderId}`);
   await exec(sql`DELETE FROM user_albums WHERE album_id = ${albumId}`);
-  await exec(sql`DELETE FROM songs WHERE id = ${songId}`);
+  await exec(sql`DELETE FROM songs WHERE id IN (${songId}, ${songId2})`);
   await exec(sql`DELETE FROM customer_users WHERE id IN (${buyerId}, ${compId}, ${previewId})`);
   await exec(sql`DELETE FROM albums WHERE id = ${albumId}`);
   await exec(sql`DELETE FROM people WHERE id = ${personId}`);
@@ -197,4 +210,50 @@ test("label top tracks: every metric fan-only, grant separate, staff nowhere; so
 test("manager top tracks: every metric fan-only, grant separate, staff nowhere; sorted by fan plays", async () => {
   const tracks = await managerTopTracks(managerScope(), range(), 25);
   assertTopTrackRow(tracks.find((t: any) => t.songId === songId));
+});
+
+// ─── Operator-only staff/internal column ─────────────────────────────────
+
+test("partner top tracks: staff fields ABSENT and staff-only tracks invisible (fail-closed)", async () => {
+  const tracks = await labelTopTracks({ ...labelScope(), songIds: [songId, songId2] }, range(), 25);
+  const row = tracks.find((t: any) => t.songId === songId);
+  assert.ok(row, "fan track present for partners");
+  assert.ok(!("staffPlays" in row) && !("staffCompletes" in row), "no staff keys on partner payloads");
+  assert.equal(tracks.find((t: any) => t.songId === songId2), undefined, "staff-only track hidden from partners");
+});
+
+test("label top tracks (operator god-view): staff column present, fan/grant untouched, staff-only track appended last", async () => {
+  const tracks = await labelTopTracks(
+    { ...labelScope(), songIds: [songId, songId2], viewerIsOperator: true },
+    range(), 25,
+  );
+  const row = tracks.find((t: any) => t.songId === songId);
+  assertTopTrackRow(row); // fan + grant numbers identical to the partner view
+  assert.equal(row.staffPlays, 2, "staff plays = admin users-row(1) + _internal(1)");
+  assert.equal(row.staffCompletes, 0, "no staff completes seeded");
+  const staffOnly = tracks.find((t: any) => t.songId === songId2);
+  assert.ok(staffOnly, "staff-only track appended for operators");
+  assert.equal(staffOnly.plays, 0, "no fan plays on the staff-only track");
+  assert.equal(staffOnly.grantPlays, 0, "no grant plays on the staff-only track");
+  assert.equal(staffOnly.staffPlays, 1, "one internal play on the staff-only track");
+  assert.ok(tracks.indexOf(staffOnly) > tracks.indexOf(row), "appended AFTER fan-sorted rows, never re-ranked");
+});
+
+test("manager top tracks (operator god-view): staff column matches label semantics", async () => {
+  const tracks = await managerTopTracks(
+    { ...managerScope(), songIds: [songId, songId2], viewerIsOperator: true },
+    range(), 25,
+  );
+  const row = tracks.find((t: any) => t.songId === songId);
+  assertTopTrackRow(row);
+  assert.equal(row.staffPlays, 2);
+  assert.equal(row.staffCompletes, 0);
+  assert.ok(tracks.find((t: any) => t.songId === songId2), "staff-only track appended");
+});
+
+test("operator conservation: fan + grant + staff columns = total seeded plays (spelled out, never summed)", async () => {
+  const tracks = await labelTopTracks({ ...labelScope(), viewerIsOperator: true }, range(), 25);
+  const row = tracks.find((t: any) => t.songId === songId);
+  const { total } = await seededCounts();
+  assert.equal(total, row.plays + row.grantPlays + row.staffPlays, "exact three-way partition, visible");
 });
