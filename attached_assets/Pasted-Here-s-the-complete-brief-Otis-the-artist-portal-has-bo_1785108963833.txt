@@ -1,0 +1,25 @@
+Here's the complete brief:
+
+---
+
+Otis, the artist portal has both a Dashboard page and an Overview page, and they're largely redundant — both show units sold, gross revenue, orders, plays, top track, completion rate, a trend chart, and vs-prior comparisons. I want them merged into a single Dashboard and Overview removed from the nav. Structure the merged page top to bottom as follows.
+
+1. All-time banner. Keep the "All time · since launch" banner from Overview at the top: gross revenue, orders, units sold, fan plays. This banner is not affected by the date-range picker — it always shows totals since launch.
+
+2. Date-range stat cards. Below the banner, one consolidated set of cards governed by the date-range picker: Units sold, Gross revenue, Net (artist), Orders, Fan plays, Unique listeners, Completion rate, Top track. Notes on consolidation: remove the Price/unit card (move the value into the Gross revenue card's info tooltip if we want to keep it accessible). Remove the separate Grant plays card — grant plays move into the Fan plays card's secondary line as described below. Remove the Artist share card as a duplicate of Net (artist) — keep whichever label we've used consistently elsewhere; if they're actually computed differently, flag it and stop, don't guess. Remove Top album — with the current single-album catalog it's always either empty or identical to the page context; we can revisit when multi-album artists need it.
+
+3. Play counts and traffic tiers. Plays break into four categories — fan plays (purchasers streaming in the app), grant plays (comped copies and friends), preview plays (anonymous 30-second previews on the public page), and staff/internal activity. On the merged dashboard: the Plays card headline shows fan plays only. The secondary line on that card shows the rest, labeled: "X listeners · Y grant plays · Z previews · internal excluded." Never sum these tiers into a single headline number — Dashboard's current 412 appears to blend previews and internal into one figure, and that's the bug this replaces. Unique listeners counts fan listeners plus grant listeners — grant plays are real people listening and should be reflected there; previews and internal activity do not count toward unique listeners. The trend chart plots fan plays. All other cards (revenue, orders, units, completion) likewise exclude internal activity from headlines. Audit both existing pages' queries so every metric on the merged page uses consistent definitions; if any metric can't cleanly separate these tiers, flag it to me rather than guessing.
+
+4. Trend chart. One chart panel with a toggle for Plays / Revenue / Orders, replacing the separate Daily revenue and Daily plays panels. Default to Plays (fan plays, per above). When a series has no data in the window, the toggle option stays available but the chart shows a light empty state within the panel — never a whole card that just says "No revenue in this window."
+
+5. Where your fans are buying. Keep this section, including the Units sold / Revenue / Customers toggle. Give it a proper empty state: "Once orders come in, you'll see where your fans are buying on this map" — not just "No sales with location data in this range yet."
+
+6. Recent activity. Keep the Recent activity feed from Dashboard, placed in the right rail next to the trend chart on wide screens, below it on narrow.
+
+Nav: remove Overview from the portal sidebar. Any internal links or redirects that pointed to /overview should route to the merged dashboard. Deeper breakdowns (revenue by SKU type, source-level detail) belong on the Reports page — do not add them back to the dashboard.
+
+Styling: this is the artist portal, so use the portal's established styling throughout. Same date-range picker component we already have; don't introduce a second variant.
+
+---
+
+Ready to paste. Since he's got two briefs in flight already, worth telling him this one queues after those rather than starting in parallel.
