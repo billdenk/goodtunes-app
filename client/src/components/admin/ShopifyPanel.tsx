@@ -798,7 +798,12 @@ export function ShopifyPanel({
 
   return (
     <div className="py-6" data-testid="panel-shopify">
-      <div className="max-w-3xl">
+      {/* No inner max-w wrapper here (same rule as SellPanel, Task #427).
+          The album page column is already centered + width-capped by the
+          frame (AdminFrame in god-view, OperatorShell in the portals), and
+          the tab rule spans that full column — so the cards inherit the
+          page column and stay exactly as wide as the rule. */}
+      <div>
         {/* Task #2892 — Shopify+ renders as a three-step checklist: all
             three steps always visible, locked until their prerequisite is
             met, collapsed to a checkmark line once complete. */}
