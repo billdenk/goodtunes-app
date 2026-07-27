@@ -2894,7 +2894,7 @@ export function PressCatalogPanel({
   const offered = new Set((data?.formats ?? []).map((f) => f.format));
   const offeredFormats = ALBUM_FORMATS.filter((f) => offered.has(f));
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-press-catalog">
+    <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4 max-w-[1100px] lg:max-w-[1400px]" data-testid="panel-press-catalog">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
           {!hideHeading && (
@@ -4402,37 +4402,94 @@ function CatalogEditor({
             <span className="text-xs text-slate-500">
               Price per unit (USD){isVinyl ? ` — ${selectedPriceTier.name}` : ""}
             </span>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-xs border-separate border-spacing-0">
-                <thead>
-                  <tr>
-                    {columns.map((q) => (
-                      <th
-                        key={q}
-                        className="px-2 py-1 text-slate-500 font-semibold text-center border-b border-slate-200"
-                      >
-                        {q}
-                      </th>
-                    ))}
-                    {editing && (
-                      <th className="px-2 py-1 border-b border-slate-200 text-left">
-                        <AddQuantityButton
-                          existing={columns}
-                          onAdd={(q) => setExtraQuantities((prev) => [...prev, q])}
-                          fmt={fmt}
-                        />
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    {columns.map((q) => {
-                      const offeredQ = offeredFor(q);
-                      const saved = savedLadder.find((r) => r.qty === q);
-                      const hasPrice = saved !== undefined && saved.confirmed !== false;
-
-                      if (!editing) {
+            {editing ? (
+              /* Edit mode: flex-wrap so rung set wraps to a second row rather than clipping */
+              <div className="flex flex-wrap gap-x-2 gap-y-3 items-end">
+                {columns.map((q) => {
+                  const offeredQ = offeredFor(q);
+                  return (
+                    <div key={q} className="flex flex-col gap-1 shrink-0">
+                      <span className="text-xs text-slate-500 font-semibold text-center">{q}</span>
+                      <div className="flex items-center gap-1">
+                        <div className="relative">
+                          {offeredQ && (
+                            <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                              $
+                            </span>
+                          )}
+                          <input
+                            value={offeredQ ? cellValue(q) : ""}
+                            onChange={(e) => setCellValue(q, e.target.value)}
+                            disabled={!offeredQ}
+                            placeholder={offeredQ ? "Quote" : "—"}
+                            inputMode="decimal"
+                            className={[
+                              "w-20 h-8 pr-2 rounded-md border text-xs tabular-nums text-right focus:outline-none focus:border-[color:var(--brand-blue)]",
+                              offeredQ
+                                ? "pl-6 border-slate-200 bg-white"
+                                : "pl-2 border-slate-100 bg-slate-50 text-slate-300 placeholder:text-slate-300",
+                            ].join(" ")}
+                            data-testid={`input-ladder-cell-${selectedPriceTier.id}-${q}`}
+                            aria-label={offeredQ ? `Quantity ${q}` : `Quantity ${q} — not offered`}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleOffered(q)}
+                          aria-pressed={offeredQ}
+                          className={[
+                            "h-8 w-8 inline-flex items-center justify-center rounded-md border transition-colors shrink-0",
+                            offeredQ
+                              ? "border-[color:var(--brand-blue)] text-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)]"
+                              : "border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300",
+                          ].join(" ")}
+                          title={
+                            offeredQ
+                              ? "Offered at this quantity — click to stop offering"
+                              : "Not offered — click to offer this quantity"
+                          }
+                          data-testid={`button-toggle-offered-${selectedPriceTier.id}-${q}`}
+                        >
+                          {offeredQ ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                          <span className="sr-only">{offeredQ ? "Offered" : "Not offered"}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="flex flex-col gap-1 shrink-0">
+                  <span className="invisible text-xs">0</span>
+                  <div className="flex items-center h-8">
+                    <AddQuantityButton
+                      existing={columns}
+                      onAdd={(q) => setExtraQuantities((prev) => [...prev, q])}
+                      fmt={fmt}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Read mode: compact table */
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs border-separate border-spacing-0">
+                  <thead>
+                    <tr>
+                      {columns.map((q) => (
+                        <th
+                          key={q}
+                          className="px-2 py-1 text-slate-500 font-semibold text-center border-b border-slate-200"
+                        >
+                          {q}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      {columns.map((q) => {
+                        const offeredQ = offeredFor(q);
+                        const saved = savedLadder.find((r) => r.qty === q);
+                        const hasPrice = saved !== undefined && saved.confirmed !== false;
                         return (
                           <td key={q} className="px-2 py-1.5 text-center align-middle">
                             {!offeredQ ? (
@@ -4457,66 +4514,16 @@ function CatalogEditor({
                             )}
                           </td>
                         );
-                      }
-
-                      return (
-                        <td key={q} className="px-1 py-1.5 align-middle">
-                          <div className="flex items-center gap-1">
-                            <div className="relative">
-                              {offeredQ && (
-                                <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">
-                                  $
-                                </span>
-                              )}
-                              <input
-                                value={offeredQ ? cellValue(q) : ""}
-                                onChange={(e) => setCellValue(q, e.target.value)}
-                                disabled={!offeredQ}
-                                placeholder={offeredQ ? "Quote" : "—"}
-                                inputMode="decimal"
-                                className={[
-                                  "w-20 h-8 pr-2 rounded-md border text-xs tabular-nums text-right focus:outline-none focus:border-[color:var(--brand-blue)]",
-                                  offeredQ
-                                    ? "pl-6 border-slate-200 bg-white"
-                                    : "pl-2 border-slate-100 bg-slate-50 text-slate-300 placeholder:text-slate-300",
-                                ].join(" ")}
-                                data-testid={`input-ladder-cell-${selectedPriceTier.id}-${q}`}
-                                aria-label={offeredQ ? `Quantity ${q}` : `Quantity ${q} — not offered`}
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => toggleOffered(q)}
-                              aria-pressed={offeredQ}
-                              className={[
-                                "h-8 w-8 inline-flex items-center justify-center rounded-md border transition-colors shrink-0",
-                                offeredQ
-                                  ? "border-[color:var(--brand-blue)] text-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)]"
-                                  : "border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300",
-                              ].join(" ")}
-                              title={
-                                offeredQ
-                                  ? "Offered at this quantity — click to stop offering"
-                                  : "Not offered — click to offer this quantity"
-                              }
-                              data-testid={`button-toggle-offered-${selectedPriceTier.id}-${q}`}
-                            >
-                              {offeredQ ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                              <span className="sr-only">{offeredQ ? "Offered" : "Not offered"}</span>
-                            </button>
-                          </div>
-                        </td>
-                      );
-                    })}
-                    {editing && <td className="px-2 py-1.5" />}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
             {editing && (
               <p className="text-xs text-slate-400">
                 Toggle the eye to set which run quantities this {isVinyl ? "color group" : "product"} is offered
-                at. Offered with a price shows the price; offered with no price shows a “Quote” chip; not
+                at. Offered with a price shows the price; offered with no price shows a "Quote" chip; not
                 offered is hidden from the artist's Sell panel.
               </p>
             )}
@@ -4875,6 +4882,7 @@ function PressAudioSpecCard({ pressId }: { pressId: string }) {
           value={notes}
           disabled={busy}
           onChange={(e) => setNotes(e.target.value)}
+          onBlur={() => { if (notes !== (spec?.notes ?? "")) save.mutate(); }}
           placeholder="Optional context for operators (e.g. source of these numbers)."
           className="rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-800 focus:border-slate-400 focus:outline-none disabled:opacity-50"
           data-testid="input-audio-notes"
@@ -5176,23 +5184,12 @@ function TemplateComponentRow({
             onKeyDown={(e) => {
               if (e.key === "Enter") commitUrl();
             }}
+            onBlur={() => { if (urlDraft.trim()) commitUrl(); }}
             placeholder="Paste a URL"
-            className="flex-1 min-w-0 h-9 px-3 rounded-md border border-slate-300 bg-white text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-[color:var(--brand-blue)] focus:ring-1 focus:ring-[color:var(--brand-blue)]"
+            className="w-full max-w-[560px] h-9 px-3 rounded-md border border-slate-300 bg-white text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-[color:var(--brand-blue)] focus:ring-1 focus:ring-[color:var(--brand-blue)]"
             disabled={busy || uploading}
             data-testid={`input-template-url-${label.toLowerCase().replace(/\s+/g, "-")}`}
           />
-        )}
-
-        {!fileUrl && urlDraft.trim() && (
-          <button
-            type="button"
-            onClick={commitUrl}
-            disabled={busy}
-            className="h-9 px-3 rounded-md border border-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)] text-xs font-medium text-[color:var(--brand-blue)] hover:opacity-90 disabled:opacity-50 shrink-0"
-            data-testid={`button-save-template-url-${label.toLowerCase().replace(/\s+/g, "-")}`}
-          >
-            {busy ? "Saving…" : "Save"}
-          </button>
         )}
 
         {!fileUrl && (
