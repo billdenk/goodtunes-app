@@ -1,11 +1,17 @@
 // ShopifyPanel — per-album Shopify mapping UI (Task #49, step 3).
 //
-// Lives on the AdminAlbum "Shopify" tab. Lets the operator paste a
-// product URL from a connected Shopify store, pick a variant (or
-// "all variants"), and toggle whether the printed-signed-cert add-on
-// is bundled into the same Shopify order — at a price floor-checked
-// against the album's signed_cert min.
-import { useEffect, useMemo, useState } from "react";
+// Lives on the AdminAlbum "Shopify" tab (operator admin AND the embedded
+// artist-portal album view). Lets the operator pick or paste a product
+// from a connected Shopify store, choose a variant (or "all variants"),
+// and toggle whether a printed & signed GoodDeed certificate is bundled
+// into the same Shopify order — at a price floor-checked against the
+// album's signed_cert min.
+//
+// Task #2892 — for shopify_plus albums the panel renders as a three-step
+// checklist (Connect a store → Map a product → Sale URL); all steps stay
+// visible, locked until ready, collapsing to a checkmark line once done.
+// Every save confirms inline (Saving… → Saved) instead of via toasts.
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { formatUsdCents } from "@shared/money";
 import { apiRequest, queryClient, apiErrorBody } from "@/lib/queryClient";
@@ -23,10 +29,13 @@ import {
   X as XIcon,
   Copy,
   Image as ImageIcon,
+  Loader2,
+  Lock,
   Music,
   Scissors,
   Video,
 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import {
   AlertDialog,
@@ -130,6 +139,7 @@ export function ShopifyPanel({
   onJumpToTab,
   readyToPush = false,
   pushBlockers = [],
+  embedded = false,
 }: {
   albumId: string;
   album?: ShopifyPanelAlbum;
@@ -142,12 +152,26 @@ export function ShopifyPanel({
   // `pushBlockers` name what's still outstanding for the quiet helper note.
   readyToPush?: boolean;
   pushBlockers?: string[];
+  // Task #2892 — true inside the artist-portal embedded album view, where
+  // operator-only pages like /admin/shopify aren't reachable. Every state
+  // that would link there says what to do instead (connect/reconnect is
+  // operator-side), so no state is a dead end in the portal.
+  embedded?: boolean;
 }) {
   const { toast } = useToast();
-  const { data: mappings, isLoading } = useQuery<Mapping[]>({
+  const {
+    data: mappings,
+    isLoading,
+    isError: mappingsError,
+    refetch: refetchMappings,
+  } = useQuery<Mapping[]>({
     queryKey: ["/api/admin/albums", albumId, "shopify-mappings"],
   });
-  const { data: pushStatus } = useQuery<PushStatus>({
+  const {
+    data: pushStatus,
+    isError: pushStatusError,
+    refetch: refetchPushStatus,
+  } = useQuery<PushStatus>({
     queryKey: ["/api/admin/albums", albumId, "shopify-push"],
   });
   // Exclusive-disclosure for the linked-mapping rows — at most one
@@ -165,16 +189,30 @@ export function ShopifyPanel({
   const [pickerStoreId, setPickerStoreId] = useState<string>("");
   const [offerCert, setOfferCert] = useState(false);
   const [certPrice, setCertPrice] = useState("9.99");
-  // Addon-line detection flag: this mapping is the "Signed GoodDeed add-on"
-  // product for the album (not the primary album product). When an order
-  // contains this line item alongside the primary mapping, a signed cert is
-  // minted at the retail price the fan paid on Shopify.
-  const [isAddon, setIsAddon] = useState(false);
   // Task #2428 — for a shopify_plus album the operator opts a mapping in to
   // ALSO mint the GoodTunes digital unlock + GoodDeed (default OFF =
   // fulfillment-only). Not shown for plain "shopify" (a mapping always mints).
   const isShopifyPlus = sellMode === "shopify_plus";
   const [offerUnlock, setOfferUnlock] = useState(false);
+
+  // Task #2892 — visible save lifecycle for the mapping form. On success the
+  // Found panel closes, the fields reset, and the new row shows a brief
+  // "Saved" chip at the top of the mapped list; on failure the form keeps
+  // what the user entered and shows the error inline next to the Save button.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [justSavedMappingId, setJustSavedMappingId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!justSavedMappingId) return;
+    const t = window.setTimeout(() => setJustSavedMappingId(null), 2500);
+    return () => window.clearTimeout(t);
+  }, [justSavedMappingId]);
+  // Bumped after a successful save so the product browser resets its
+  // internal search state (its search box is uncontrolled from here).
+  const [browserKey, setBrowserKey] = useState(0);
+  // Task #2892 — three-step checklist (shopify_plus). Completed steps
+  // collapse to a checkmark line; clicking the header re-expands them.
+  const [openSteps, setOpenSteps] = useState<Record<number, boolean>>({});
+  const toggleStep = (i: number) => setOpenSteps((s) => ({ ...s, [i]: !s[i] }));
 
   // Task #2714 — operator-entered "Sale URL" (shopify_plus only). When set,
   // the public Preview & Purchase page reroutes every Buy affordance to this
@@ -186,6 +224,16 @@ export function ShopifyPanel({
     // shared album query — don't wipe in-progress edits).
     if (!saleUrlDirty) setSaleUrl(album?.externalSaleUrl ?? "");
   }, [album?.externalSaleUrl, saleUrlDirty]);
+  // Task #2892 — inline save feedback ("Saving…" on the button, a brief
+  // "Saved" beside it) instead of a toast; validation and save failures show
+  // inline under the input, and only on a bad entry — never as permanent text.
+  const [saleUrlError, setSaleUrlError] = useState<string | null>(null);
+  const [saleUrlSaved, setSaleUrlSaved] = useState(false);
+  useEffect(() => {
+    if (!saleUrlSaved) return;
+    const t = window.setTimeout(() => setSaleUrlSaved(false), 2000);
+    return () => window.clearTimeout(t);
+  }, [saleUrlSaved]);
   const saveSaleUrl = useMutation({
     mutationFn: async () => {
       const trimmed = saleUrl.trim();
@@ -207,11 +255,27 @@ export function ShopifyPanel({
       );
       setSaleUrlDirty(false);
       queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId] });
-      toast({ title: "Shopify Sale URL saved" });
+      setSaleUrlError(null);
+      setSaleUrlSaved(true);
+      // Keep the step expanded once the save completes it, so the
+      // confirmation stays visible instead of collapsing away.
+      setOpenSteps((s) => ({ ...s, 3: true }));
     },
-    onError: (e: any) =>
-      toast({ title: "Couldn't save Shopify Sale URL", description: e?.message, variant: "destructive" }),
+    onError: (e: unknown) =>
+      setSaleUrlError(
+        apiErrorBody<{ message?: string }>(e)?.message ??
+          (e instanceof Error ? e.message.replace(/^\d+:\s*/, "") : "Couldn't save the Sale URL"),
+      ),
   });
+  const onSaveSaleUrl = () => {
+    const trimmed = saleUrl.trim();
+    if (trimmed && !/^https:\/\//i.test(trimmed)) {
+      setSaleUrlError("Must start with https://");
+      return;
+    }
+    setSaleUrlError(null);
+    saveSaleUrl.mutate();
+  };
   // Task #2724 — deliberate clear via the trash affordance (confirm-gated,
   // since clearing flips live fan Buy behavior back to GoodTunes checkout).
   const [confirmClearSaleUrl, setConfirmClearSaleUrl] = useState(false);
@@ -339,37 +403,50 @@ export function ShopifyPanel({
   const save = useMutation({
     mutationFn: async () => {
       if (!resolved) throw new Error("Resolve a product first");
+      // Note: no isSignedGooddeedAddon — the add-on option is retired from
+      // the form (Task #2892). The server preserves any stored legacy flag
+      // when the field is omitted.
       const body: any = {
         storeId: resolved.storeId,
         shopifyProductId: resolved.shopifyProductId,
         shopifyVariantId: variantId,
         shopifyProductTitle: resolved.shopifyProductTitle,
         albumId,
-        offerSignedCert: isAddon ? false : offerCert,
-        isSignedGooddeedAddon: isAddon,
+        offerSignedCert: offerCert,
       };
       // Task #2428 — only meaningful for shopify_plus; the server ignores it
       // for plain shopify (a mapping always mints the unlock there).
       if (isShopifyPlus) body.offersDigitalUnlock = offerUnlock;
-      if (!isAddon && offerCert) {
+      if (offerCert) {
         const cents = parseDollars(certPrice);
         if (cents == null) throw new Error("Enter a valid cert price");
         body.signedCertPriceCents = cents;
       }
       const r = await apiRequest("POST", `/api/admin/albums/${albumId}/shopify-mappings`, body);
-      return r.json();
+      return r.json() as Promise<Mapping>;
     },
-    onSuccess: () => {
+    onSuccess: (row) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "shopify-mappings"] });
+      // Post-save choreography (Task #2892): the Found panel closes, the
+      // search + URL fields reset, and the new mapping lands at the top of
+      // the mapped list expanded with a brief "Saved" chip.
       setUrl("");
       setResolved(null);
       setVariantId(null);
       setOfferCert(false);
       setOfferUnlock(false);
-      setIsAddon(false);
-      toast({ title: "Mapping saved" });
+      setCertPrice("9.99");
+      setSaveError(null);
+      setBrowserKey((k) => k + 1);
+      disclosure.setOpen(row.id, true);
+      setJustSavedMappingId(row.id);
+      setOpenSteps((s) => ({ ...s, 2: true }));
     },
-    onError: (e: any) => toast({ title: "Couldn't save mapping", description: e?.message, variant: "destructive" }),
+    onError: (e: unknown) =>
+      setSaveError(
+        apiErrorBody<{ message?: string }>(e)?.message ??
+          (e instanceof Error ? e.message.replace(/^\d+:\s*/, "") : "Couldn't save the mapping"),
+      ),
   });
 
   const remove = useMutation({
@@ -386,100 +463,443 @@ export function ShopifyPanel({
       }
     : null;
 
+  // ── Task #2892 — checklist state + shared JSX sections ──────────────
+  const stores = pushStatus?.stores ?? [];
+  const hasStore = stores.length > 0;
+  const mappingCount = mappings?.length ?? 0;
+  const storeSummary =
+    stores.map((s) => s.storeName ?? s.shopDomain).slice(0, 2).join(", ") +
+    (stores.length > 2 ? ` +${stores.length - 2} more` : "");
+  const pickerStore = stores.find((s) => s.id === pickerStoreId) ?? null;
+  const manageStoresNode = embedded ? (
+    <>Store connections are managed by your GoodTunes team.</>
+  ) : (
+    <>
+      Manage connected stores at{" "}
+      <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
+        /admin/shopify
+      </a>
+      .
+    </>
+  );
+
+  // Mapped list + add form — shared between the shopify_plus checklist
+  // (step 2) and the plain "shopify" layout.
+  const mappingSection = (
+    <>
+      {/* Mapped products (Task #2892: rows are MappingRow with editable flags) */}
+      <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 mb-6">
+        {isLoading && (
+          <div data-testid="shopify-mappings-loading">
+            {[0, 1].map((i) => (
+              <div key={i} className="px-4 py-3 flex items-center gap-3">
+                <Skeleton className="h-4 w-4 rounded" />
+                <Skeleton className="h-4 w-56" />
+              </div>
+            ))}
+          </div>
+        )}
+        {!isLoading && mappingsError && (
+          <div
+            className="px-4 py-4 text-[13px] text-slate-600 flex items-center justify-between gap-3"
+            data-testid="shopify-mappings-error"
+          >
+            <span>Couldn't load the mapped products for this album.</span>
+            <button
+              type="button"
+              onClick={() => refetchMappings()}
+              className="h-8 px-3 rounded-md border border-slate-300 bg-white text-[12.5px] font-medium text-slate-700 hover:bg-slate-50 shrink-0"
+              data-testid="button-retry-mappings"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+        {!isLoading && !mappingsError && mappingCount === 0 && (
+          <div className="px-4 py-6 text-slate-500 text-[13px] text-center leading-snug" data-testid="shopify-mappings-empty">
+            No Shopify products linked to this album yet.{" "}
+            {hasStore ? (
+              "Link one below to route its orders to this release."
+            ) : embedded ? (
+              "Once your GoodTunes contact connects the store, link a product below."
+            ) : (
+              <>
+                First connect {isShopifyPlus ? "the customer's" : "the artist's"} Shopify store on their
+                profile's Overview tab, or at{" "}
+                <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
+                  /admin/shopify
+                </a>
+                , then link a product below.
+              </>
+            )}
+          </div>
+        )}
+        {(mappings ?? []).map((m) => (
+          <MappingRow
+            key={m.id}
+            m={m}
+            albumId={albumId}
+            isShopifyPlus={isShopifyPlus}
+            expanded={disclosure.isOpen(m.id)}
+            onToggleExpand={() => disclosure.setOpen(m.id, !disclosure.isOpen(m.id))}
+            onRemove={() => remove.mutate(m.id)}
+            removePending={remove.isPending}
+            justSaved={justSavedMappingId === m.id}
+          />
+        ))}
+      </div>
+
+      {/* Add a new mapping */}
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <h3 className="text-[13.5px] font-semibold text-slate-900 mb-2">Link a Shopify product</h3>
+
+        {hasStore && (
+          <div className="mb-4">
+            {stores.length > 1 && (
+              <select
+                value={pickerStoreId}
+                onChange={(e) => {
+                  setPickerStoreId(e.target.value);
+                }}
+                className="w-full h-9 border border-slate-300 rounded-md px-2 text-[13px] bg-white mb-2"
+                data-testid="select-shopify-picker-store"
+              >
+                <option value="">Choose a store…</option>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.storeName ?? s.shopDomain}
+                  </option>
+                ))}
+              </select>
+            )}
+            {pickerStoreId && (
+              <ShopifyProductBrowser
+                key={browserKey}
+                storeId={pickerStoreId}
+                storeName={pickerStore ? pickerStore.storeName ?? pickerStore.shopDomain : null}
+                selectedProductId={
+                  resolved?.storeId === pickerStoreId ? resolved?.shopifyProductId : null
+                }
+                onPick={pickBrowsedProduct}
+                helpNode={
+                  embedded ? (
+                    <>Ask your GoodTunes contact to reconnect the store if products won't load.</>
+                  ) : (
+                    <>
+                      Manage or reconnect stores at{" "}
+                      <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
+                        /admin/shopify
+                      </a>
+                      .
+                    </>
+                  )
+                }
+              />
+            )}
+          </div>
+        )}
+
+        <div className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold mb-1.5">
+          Or paste a product URL directly
+        </div>
+        <div className="flex gap-2 mb-3">
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://store.myshopify.com/products/album-vinyl"
+            className="flex-1 h-9 border border-slate-300 rounded-md px-3 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
+            data-testid="input-shopify-product-url"
+          />
+          <button
+            type="button"
+            onClick={() => resolve.mutate()}
+            disabled={resolve.isPending || !url.trim()}
+            className="h-9 px-3 rounded-md bg-slate-900 text-white text-[12px] font-medium hover:bg-slate-800 disabled:opacity-50"
+            data-testid="button-shopify-resolve"
+          >
+            {resolve.isPending ? "Finding…" : "Find product"}
+          </button>
+        </div>
+
+        {resolved && (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50/40 p-3 space-y-3" data-testid="shopify-resolved">
+            <div>
+              <div className="text-[12px] font-semibold text-slate-700">Found</div>
+              <div className="text-[13.5px] text-slate-900">{resolved.shopifyProductTitle}</div>
+            </div>
+            <div>
+              <label className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Variant</label>
+              <select
+                value={variantId ?? ""}
+                onChange={(e) => setVariantId(e.target.value || null)}
+                className="w-full h-8 border border-slate-300 rounded-md px-2 text-[13px] bg-white"
+                data-testid="select-shopify-variant"
+              >
+                <option value="">All variants of this product</option>
+                {resolved.variants.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.title} · ${v.price}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {isShopifyPlus && (
+              <div>
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={offerUnlock}
+                    onChange={(e) => setOfferUnlock(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
+                    data-testid="toggle-shopify-unlock"
+                  />
+                  <span className="text-[13px] text-slate-800">Also mint the GoodTunes digital unlock + GoodDeed for buyers</span>
+                </label>
+                <p className="text-[11.5px] text-slate-400 mt-0.5 ml-6">
+                  Off: we only fulfill the physical order. On: buyers also get the app unlock and a numbered GoodDeed.
+                </p>
+              </div>
+            )}
+            <div>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={offerCert}
+                  onChange={(e) => setOfferCert(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
+                  data-testid="toggle-shopify-cert"
+                />
+                <span className="text-[13px] text-slate-800">Bundle a printed & signed GoodDeed certificate</span>
+              </label>
+              {offerCert && (
+                <div className="flex items-center gap-1.5 mt-2 ml-6">
+                  <span className="text-slate-500 text-[12px]">Price $</span>
+                  <input
+                    type="text"
+                    value={certPrice}
+                    onChange={(e) => setCertPrice(e.target.value)}
+                    inputMode="decimal"
+                    className="w-24 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
+                    data-testid="input-shopify-cert-price"
+                  />
+                  <span className="text-[11.5px] text-slate-400">Must be ≥ the album's per-album minimum floor.</span>
+                </div>
+              )}
+            </div>
+            {saveError && (
+              <p className="text-[12px] text-rose-600" data-testid="text-mapping-save-error">
+                {saveError}
+              </p>
+            )}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => save.mutate()}
+                disabled={save.isPending}
+                className="h-8 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-medium hover:bg-[var(--brand-blue-hover)] disabled:opacity-50"
+                data-testid="button-shopify-save-mapping"
+              >
+                {save.isPending ? "Saving…" : "Save mapping"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  // Sale URL editor — step 3 of the shopify_plus checklist (Task #2714,
+  // reworked for Task #2892: one-line helper, inline Saving…/Saved, and
+  // "Must start with https://" only as a validation error on a bad entry).
+  const saleUrlSection = (
+    <div data-testid="section-external-sale-url">
+      <p className="text-[12.5px] text-slate-500 mb-3 leading-snug">
+        Buy buttons on the preview page will open this link. Leave empty to use GoodTunes checkout.
+      </p>
+      <div className="flex items-center gap-2">
+        <input
+          type="url"
+          value={saleUrl}
+          onChange={(e) => {
+            setSaleUrl(e.target.value);
+            setSaleUrlDirty(true);
+            if (saleUrlError) setSaleUrlError(null);
+          }}
+          placeholder="https://the-artists-store.com/products/album"
+          className="flex-1 h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]"
+          data-testid="input-external-sale-url"
+        />
+        <button
+          type="button"
+          onClick={onSaveSaleUrl}
+          disabled={saveSaleUrl.isPending || !saleUrlDirty}
+          className="h-9 px-4 rounded-md bg-slate-900 text-white text-sm font-medium disabled:opacity-50"
+          data-testid="button-save-external-sale-url"
+        >
+          {saveSaleUrl.isPending ? "Saving…" : "Save"}
+        </button>
+        {saleUrlSaved && !saveSaleUrl.isPending && (
+          <span
+            className="text-emerald-600 text-[12.5px] font-medium inline-flex items-center gap-1 shrink-0"
+            data-testid="text-sale-url-saved"
+          >
+            <Check className="w-3.5 h-3.5" /> Saved
+          </span>
+        )}
+        {/* Task #2724 — deliberate clear. Only shown when a URL is
+            actually saved; hairline + gap keep it clear of Save
+            (destructive breathing-room rule). */}
+        {!!album?.externalSaleUrl && (
+          <>
+            <span className="mx-1 h-4 w-px bg-slate-200" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={() => setConfirmClearSaleUrl(true)}
+              disabled={clearSaleUrl.isPending}
+              className="w-9 h-9 shrink-0 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50"
+              aria-label="Remove the Shopify Sale URL"
+              data-testid="button-clear-external-sale-url"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </>
+        )}
+      </div>
+      {saleUrlError && (
+        <p className="text-[12px] text-rose-600 mt-1.5" data-testid="text-sale-url-error">
+          {saleUrlError}
+        </p>
+      )}
+      <AlertDialog open={confirmClearSaleUrl} onOpenChange={setConfirmClearSaleUrl}>
+        <AlertDialogContent data-testid="dialog-confirm-clear-sale-url">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove the Shopify Sale URL?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Fans will check out through GoodTunes again — every Buy button
+              on the public preview page goes back to the GoodTunes Buy sheet.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-clear-sale-url">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => clearSaleUrl.mutate()}
+              disabled={clearSaleUrl.isPending}
+              className="bg-rose-600 text-white hover:bg-rose-700"
+              data-testid="button-confirm-clear-sale-url"
+            >
+              {clearSaleUrl.isPending ? "Removing…" : "Remove URL"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+
   return (
     <div className="py-6" data-testid="panel-shopify">
       <div className="max-w-3xl">
-        {isShopifyPlus && (
-          <div
-            className="rounded-lg border border-slate-200 bg-white p-4 mb-6 text-[13px] text-slate-600 leading-snug"
-            data-testid="shopify-plus-mapping-note"
-          >
-            This release sells on the customer's own Shopify. GoodTunes runs manufacturing
-            behind it — map each of their Shopify products to this album below so incoming
-            orders route here. A mapped product is fulfillment-only by default; tick “Also mint
-            the GoodTunes digital unlock + GoodDeed” to also hand buyers the app.
-          </div>
-        )}
-        {/* Task #2714 — Sale URL (shopify_plus only). Reroutes the public
-            Preview & Purchase page's Buy affordances to the artist's own
-            store in a new tab. Empty clears (Buy sheet returns). */}
-        {isShopifyPlus && (
-          <div
-            className="rounded-lg border border-slate-200 bg-white p-4 mb-6"
-            data-testid="section-external-sale-url"
-          >
-            <h2 className="text-sm font-semibold text-slate-900 mb-1">Shopify Sale URL</h2>
-            <p className="text-sm text-slate-500 mb-3 leading-snug">
-              Where fans buy this release. When set, every Buy button on the public
-              preview page opens this link in a new tab instead of GoodTunes checkout.
-              Leave empty to use GoodTunes checkout.
-            </p>
-            <div className="flex items-center gap-2">
-              <input
-                type="url"
-                value={saleUrl}
-                onChange={(e) => {
-                  setSaleUrl(e.target.value);
-                  setSaleUrlDirty(true);
-                }}
-                placeholder="https://the-artists-store.com/products/album"
-                className="flex-1 h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]"
-                data-testid="input-external-sale-url"
-              />
+        {/* Task #2892 — Shopify+ renders as a three-step checklist: all
+            three steps always visible, locked until their prerequisite is
+            met, collapsed to a checkmark line once complete. */}
+        {isShopifyPlus && pushStatusError && (
+          <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid="shopify-plus-status-error">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+              <div className="flex-1 text-[13px] text-slate-600 leading-snug">
+                Couldn't load this album's Shopify status, so the checklist can't tell which steps are ready.
+              </div>
               <button
                 type="button"
-                onClick={() => saveSaleUrl.mutate()}
-                disabled={saveSaleUrl.isPending || !saleUrlDirty}
-                className="h-9 px-4 rounded-md bg-slate-900 text-white text-sm font-medium disabled:opacity-50"
-                data-testid="button-save-external-sale-url"
+                onClick={() => refetchPushStatus()}
+                className="h-8 px-3 rounded-md border border-slate-300 bg-white text-[12.5px] font-medium text-slate-700 hover:bg-slate-50 shrink-0"
+                data-testid="button-retry-push-status"
               >
-                {saveSaleUrl.isPending ? "Saving…" : "Save"}
+                Retry
               </button>
-              {/* Task #2724 — deliberate clear. Only shown when a URL is
-                  actually saved; hairline + gap keep it clear of Save
-                  (destructive breathing-room rule). */}
-              {!!album?.externalSaleUrl && (
-                <>
-                  <span className="mx-1 h-4 w-px bg-slate-200" aria-hidden="true" />
-                  <button
-                    type="button"
-                    onClick={() => setConfirmClearSaleUrl(true)}
-                    disabled={clearSaleUrl.isPending}
-                    className="w-9 h-9 shrink-0 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50"
-                    aria-label="Remove the Shopify Sale URL"
-                    data-testid="button-clear-external-sale-url"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </>
-              )}
             </div>
-            <AlertDialog open={confirmClearSaleUrl} onOpenChange={setConfirmClearSaleUrl}>
-              <AlertDialogContent data-testid="dialog-confirm-clear-sale-url">
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Remove the Shopify Sale URL?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Fans will check out through GoodTunes again — every Buy button
-                    on the public preview page goes back to the GoodTunes Buy sheet.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel data-testid="button-cancel-clear-sale-url">Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => clearSaleUrl.mutate()}
-                    disabled={clearSaleUrl.isPending}
-                    className="bg-rose-600 text-white hover:bg-rose-700"
-                    data-testid="button-confirm-clear-sale-url"
+          </div>
+        )}
+        {isShopifyPlus && !pushStatusError && !pushStatus && (
+          <div className="space-y-4" data-testid="shopify-plus-checklist-loading">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="rounded-lg border border-slate-200 bg-white px-4 py-3 flex items-center gap-3">
+                <Skeleton className="w-6 h-6 rounded-full" />
+                <Skeleton className="h-4 w-44" />
+              </div>
+            ))}
+          </div>
+        )}
+        {isShopifyPlus && !pushStatusError && pushStatus && (
+          <div className="space-y-4" data-testid="shopify-plus-checklist">
+            <StepSection
+              index={1}
+              title="Connect a store"
+              state={hasStore ? "complete" : "active"}
+              summary={hasStore ? storeSummary : undefined}
+              open={!!openSteps[1]}
+              onToggle={() => toggleStep(1)}
+              testId="step-shopify-connect"
+            >
+              <div className="space-y-2">
+                {stores.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center gap-2 text-[13px] text-slate-700"
+                    data-testid={`step-store-${s.id}`}
                   >
-                    {clearSaleUrl.isPending ? "Removing…" : "Remove URL"}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-            <p className="text-xs text-slate-400 mt-2">
-              Must start with https://. Fans see “You'll complete your purchase on the
-              artist's store.”
-            </p>
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span className="font-medium">{s.storeName ?? s.shopDomain}</span>
+                    {s.storeName && <span className="text-slate-400 text-[12px] truncate">{s.shopDomain}</span>}
+                  </div>
+                ))}
+                {!hasStore && (
+                  <p className="text-[13px] text-slate-600 leading-snug">
+                    {embedded ? (
+                      "Ask your GoodTunes contact to connect the customer's Shopify store — mapping and the Sale URL unlock here as soon as it's live."
+                    ) : (
+                      <>
+                        Connect the customer's Shopify store at{" "}
+                        <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
+                          /admin/shopify
+                        </a>{" "}
+                        — mapping and the Sale URL unlock here as soon as it's live.
+                      </>
+                    )}
+                  </p>
+                )}
+                {hasStore && <p className="text-[12px] text-slate-400">{manageStoresNode}</p>}
+              </div>
+            </StepSection>
+
+            <StepSection
+              index={2}
+              title="Map a product"
+              state={!hasStore ? "locked" : mappingCount > 0 ? "complete" : "active"}
+              lockNote="Connect a store first."
+              summary={mappingCount === 1 ? "1 product mapped" : `${mappingCount} products mapped`}
+              open={!!openSteps[2]}
+              onToggle={() => toggleStep(2)}
+              testId="step-shopify-map"
+            >
+              <p className="text-[12.5px] text-slate-500 mb-3 leading-snug">
+                Link each product on the customer's store to this album so its orders route to the right release.
+              </p>
+              {mappingSection}
+            </StepSection>
+
+            <StepSection
+              index={3}
+              title="Sale URL"
+              state={!hasStore ? "locked" : album?.externalSaleUrl ? "complete" : "active"}
+              lockNote="Connect a store first."
+              summary={album?.externalSaleUrl ?? undefined}
+              open={!!openSteps[3]}
+              onToggle={() => toggleStep(3)}
+              testId="step-shopify-sale-url"
+            >
+              {saleUrlSection}
+            </StepSection>
           </div>
         )}
         {!isShopifyPlus && (
@@ -508,8 +928,14 @@ export function ShopifyPanel({
 
           {pushStatus && pushStatus.stores.length === 0 && (
             <div className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-[12.5px] text-slate-600">
-              No Shopify store connected. Install GoodTunes on a store at{" "}
-              <a className="text-[var(--brand-blue)] underline" href="/admin/shopify">/admin/shopify</a> first.
+              {embedded ? (
+                <>No Shopify store connected. Ask your GoodTunes contact to connect the artist's store first.</>
+              ) : (
+                <>
+                  No Shopify store connected. Install GoodTunes on a store at{" "}
+                  <a className="text-[var(--brand-blue)] underline" href="/admin/shopify">/admin/shopify</a> first.
+                </>
+              )}
             </div>
           )}
 
@@ -699,277 +1125,362 @@ export function ShopifyPanel({
             pushed (edition + optional cert variant ids on the row).
             Refresh pulls live retail past the 60s server cache. */}
         <ShopifySalesPanel albumId={albumId} />
+
+        <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Sell this album on Shopify</h2>
+        <p className="text-[13px] text-slate-500 mb-4 leading-snug">
+          Paste a Shopify product URL from a connected store and we'll bundle GoodTunes digital access into every paid
+          order on that product. {manageStoresNode}
+        </p>
+        {mappingSection}
         </>
         )}
 
-        <h2 className="text-[15px] font-semibold text-slate-900 mb-1">
-          {isShopifyPlus ? "Map the customer's Shopify products" : "Sell this album on Shopify"}
-        </h2>
-        <p className="text-[13px] text-slate-500 mb-4 leading-snug">
-          {isShopifyPlus ? (
-            <>
-              Link each product on the customer's connected Shopify store to this album so incoming
-              orders route to the right release. Manage connected stores at{" "}
-              <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
-                /admin/shopify
-              </a>
-              .
-            </>
-          ) : (
-            <>
-              Paste a Shopify product URL from a connected store and we'll bundle GoodTunes digital access into every paid
-              order on that product. Manage connected stores at{" "}
-              <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
-                /admin/shopify
-              </a>
-              .
-            </>
-          )}
-        </p>
+      </div>
+    </div>
+  );
+}
 
-        {/* Existing mappings */}
-        <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 mb-6">
-          {isLoading && <div className="px-4 py-3 text-slate-400 text-sm">Loading…</div>}
-          {!isLoading && (mappings?.length ?? 0) === 0 && (
-            <div className="px-4 py-6 text-slate-500 text-[13px] text-center leading-snug" data-testid="shopify-mappings-empty">
-              No Shopify products linked to this album yet.{" "}
-              {(pushStatus?.stores.length ?? 0) > 0 ? (
-                "Link one below to route its orders to this release."
-              ) : (
-                <>
-                  First connect {isShopifyPlus ? "the customer's" : "the artist's"} Shopify store on their
-                  profile's Overview tab, or at{" "}
-                  <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
-                    /admin/shopify
-                  </a>
-                  , then link a product below.
-                </>
-              )}
-            </div>
-          )}
-          {(mappings ?? []).map((m) => {
-            const expanded = disclosure.isOpen(m.id);
-            return (
-            <div key={m.id} data-testid={`row-shopify-mapping-${m.id}`}>
-              <div
-                role="button"
-                tabIndex={0}
-                aria-expanded={expanded}
-                onClick={() => disclosure.setOpen(m.id, !expanded)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    disclosure.setOpen(m.id, !expanded);
-                  }
-                }}
-                className="px-4 py-3 flex items-center gap-3 cursor-pointer select-none hover:bg-slate-50"
-                data-testid={`button-toggle-mapping-${m.id}`}
-              >
-                <LinkIcon className="w-4 h-4 text-slate-400 shrink-0" />
-                <div className="min-w-0 flex-1 text-[13.5px] font-medium text-slate-900 truncate">
-                  {m.shopifyProductTitle ?? m.shopifyProductId}
-                </div>
-                <ChevronDown
-                  className={[
-                    "w-4 h-4 text-slate-400 transition-transform shrink-0",
-                    expanded ? "rotate-180" : "",
-                  ].join(" ")}
-                />
-              </div>
-              {expanded && (
-                <div className="px-4 pb-3 pl-11 flex items-start justify-between gap-3">
-                  <div className="text-[11.5px] text-slate-500 min-w-0 flex-1">
-                    {m.storeName ?? m.shopDomain ?? "—"}
-                    {m.shopifyVariantId ? ` · variant ${m.shopifyVariantId}` : " · all variants"}
-                    {m.isSignedGooddeedAddon ? " · signed-cert add-on" : m.offerSignedCert ? ` · cert ${dollars(m.signedCertPriceCents)}` : ""}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      remove.mutate(m.id);
-                    }}
-                    disabled={remove.isPending}
-                    className="text-slate-400 hover:text-rose-600 p-1 shrink-0"
-                    data-testid={`button-remove-mapping-${m.id}`}
-                    aria-label="Remove mapping"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </div>
-            );
-          })}
-        </div>
-
-        {/* Add a new mapping */}
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <h3 className="text-[13.5px] font-semibold text-slate-900 mb-2">Link a Shopify product</h3>
-
-          {pushStatus && pushStatus.stores.length > 0 && (
-            <div className="mb-4">
-              {pushStatus.stores.length > 1 && (
-                <select
-                  value={pickerStoreId}
-                  onChange={(e) => {
-                    setPickerStoreId(e.target.value);
-                  }}
-                  className="w-full h-9 border border-slate-300 rounded-md px-2 text-[13px] bg-white mb-2"
-                  data-testid="select-shopify-picker-store"
-                >
-                  <option value="">Choose a store…</option>
-                  {pushStatus.stores.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.storeName ?? s.shopDomain}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {pickerStoreId && (
-                <ShopifyProductBrowser
-                  storeId={pickerStoreId}
-                  selectedProductId={
-                    resolved?.storeId === pickerStoreId ? resolved?.shopifyProductId : null
-                  }
-                  onPick={pickBrowsedProduct}
-                  helpNode={
-                    <>
-                      Manage connected stores at{" "}
-                      <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
-                        /admin/shopify
-                      </a>
-                      .
-                    </>
-                  }
-                />
-              )}
-            </div>
-          )}
-
-          <div className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold mb-1.5">
-            Or paste a product URL directly
+// ── StepSection (Task #2892) ─────────────────────────────────────────
+// One step card of the Shopify+ checklist. Three states:
+//   locked   — grayed, not interactive, one line saying what unlocks it;
+//              content never renders.
+//   active   — numbered badge, content always expanded (this is the step
+//              the operator should do next).
+//   complete — checkmark badge + summary line, collapsed by default;
+//              clicking the header expands/collapses the content.
+// Steps never appear/disappear — only their state changes, so the page
+// layout stays stable.
+function StepSection({
+  index,
+  title,
+  state,
+  lockNote,
+  summary,
+  open,
+  onToggle,
+  children,
+  testId,
+}: {
+  index: number;
+  title: string;
+  state: "locked" | "active" | "complete";
+  lockNote?: string;
+  summary?: ReactNode;
+  open?: boolean;
+  onToggle?: () => void;
+  children?: ReactNode;
+  testId: string;
+}) {
+  const expanded = state === "active" || (state === "complete" && !!open);
+  const interactive = state === "complete";
+  return (
+    <div
+      className={[
+        "rounded-lg border border-slate-200",
+        state === "locked" ? "bg-slate-50/60" : "bg-white",
+      ].join(" ")}
+      data-testid={testId}
+      data-state={state}
+    >
+      <div
+        role={interactive ? "button" : undefined}
+        tabIndex={interactive ? 0 : undefined}
+        aria-expanded={interactive ? expanded : undefined}
+        onClick={interactive ? onToggle : undefined}
+        onKeyDown={
+          interactive
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onToggle?.();
+                }
+              }
+            : undefined
+        }
+        className={[
+          "px-4 py-3 flex items-center gap-3 rounded-lg",
+          interactive ? "cursor-pointer select-none hover:bg-slate-50" : "",
+        ].join(" ")}
+        data-testid={`${testId}-header`}
+      >
+        {state === "complete" ? (
+          <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+            <Check className="w-3.5 h-3.5" />
+          </span>
+        ) : state === "locked" ? (
+          <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">
+            <Lock className="w-3 h-3" />
+          </span>
+        ) : (
+          <span className="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-[12px] font-semibold shrink-0">
+            {index}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div
+            className={[
+              "text-[14px] font-semibold",
+              state === "locked" ? "text-slate-400" : "text-slate-900",
+            ].join(" ")}
+          >
+            {title}
           </div>
-          <div className="flex gap-2 mb-3">
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://store.myshopify.com/products/album-vinyl"
-              className="flex-1 h-9 border border-slate-300 rounded-md px-3 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
-              data-testid="input-shopify-product-url"
-            />
+          {state === "locked" && lockNote && (
+            <div className="text-[12.5px] text-slate-400" data-testid={`${testId}-lock-note`}>
+              {lockNote}
+            </div>
+          )}
+          {state === "complete" && summary && (
+            <div className="text-[12.5px] text-slate-500 truncate" data-testid={`${testId}-summary`}>
+              {summary}
+            </div>
+          )}
+        </div>
+        {interactive && (
+          <ChevronDown
+            className={[
+              "w-4 h-4 text-slate-400 transition-transform shrink-0",
+              expanded ? "rotate-180" : "",
+            ].join(" ")}
+          />
+        )}
+      </div>
+      {expanded && children != null && (
+        <div className="px-4 pb-4 pt-3 border-t border-slate-100">{children}</div>
+      )}
+    </div>
+  );
+}
+
+// ── MappingRow (Task #2892) ──────────────────────────────────────────
+// One linked-product row. Collapsed shows the product title (+ a brief
+// "Saved" chip right after creation); expanded shows store/variant meta,
+// the editable mint + bundle-cert controls (auto-save on change), and
+// remove. A failed write never silently reverts the user's choice — the
+// checkbox stays where they put it with an inline "Couldn't save — Retry".
+// Legacy signed-cert add-on rows (stored flag untouched by this UI) just
+// don't show the bundle control; their webhook behavior is unchanged.
+function MappingRow({
+  m,
+  albumId,
+  isShopifyPlus,
+  expanded,
+  onToggleExpand,
+  onRemove,
+  removePending,
+  justSaved,
+}: {
+  m: Mapping;
+  albumId: string;
+  isShopifyPlus: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onRemove: () => void;
+  removePending: boolean;
+  justSaved: boolean;
+}) {
+  // Local, user-authoritative control state, seeded from the row once (the
+  // component is keyed by m.id) so a refetch can never stomp an in-flight
+  // or failed-but-kept choice.
+  const [unlock, setUnlock] = useState(m.offersDigitalUnlock);
+  const [cert, setCert] = useState(m.offerSignedCert);
+  const [price, setPrice] = useState(
+    m.signedCertPriceCents != null ? (m.signedCertPriceCents / 100).toFixed(2) : "",
+  );
+  const lastSavedPriceCents = useRef<number | null>(m.signedCertPriceCents);
+  const [rowError, setRowError] = useState<string | null>(null);
+  const [rowSaved, setRowSaved] = useState(false);
+  useEffect(() => {
+    if (!rowSaved) return;
+    const t = window.setTimeout(() => setRowSaved(false), 2000);
+    return () => window.clearTimeout(t);
+  }, [rowSaved]);
+
+  const patch = useMutation({
+    mutationFn: async (body: {
+      offersDigitalUnlock: boolean;
+      offerSignedCert: boolean;
+      signedCertPriceCents?: number | null;
+    }) => {
+      const r = await apiRequest("PATCH", `/api/admin/albums/${albumId}/shopify-mappings/${m.id}`, body);
+      return r.json() as Promise<Mapping>;
+    },
+    onSuccess: (row) => {
+      // Write-through so the cached list matches without an invalidate
+      // racing the inline confirmation.
+      queryClient.setQueryData<Mapping[] | undefined>(
+        ["/api/admin/albums", albumId, "shopify-mappings"],
+        (prev) => prev?.map((x) => (x.id === row.id ? row : x)),
+      );
+      lastSavedPriceCents.current = row.signedCertPriceCents;
+      setRowError(null);
+      setRowSaved(true);
+    },
+    onError: (e: unknown) => {
+      setRowSaved(false);
+      setRowError(
+        apiErrorBody<{ message?: string }>(e)?.message ??
+          (e instanceof Error ? e.message.replace(/^\d+:\s*/, "") : "Something went wrong"),
+      );
+    },
+  });
+
+  const commit = (next: { unlock: boolean; cert: boolean; priceStr: string }) => {
+    const body: {
+      offersDigitalUnlock: boolean;
+      offerSignedCert: boolean;
+      signedCertPriceCents?: number | null;
+    } = { offersDigitalUnlock: next.unlock, offerSignedCert: next.cert };
+    if (next.cert) body.signedCertPriceCents = parseDollars(next.priceStr);
+    patch.mutate(body);
+  };
+
+  return (
+    <div data-testid={`row-shopify-mapping-${m.id}`}>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={onToggleExpand}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggleExpand();
+          }
+        }}
+        className="px-4 py-3 flex items-center gap-3 cursor-pointer select-none hover:bg-slate-50"
+        data-testid={`button-toggle-mapping-${m.id}`}
+      >
+        <LinkIcon className="w-4 h-4 text-slate-400 shrink-0" />
+        <div className="min-w-0 flex-1 text-[13.5px] font-medium text-slate-900 truncate">
+          {m.shopifyProductTitle ?? m.shopifyProductId}
+        </div>
+        {justSaved && (
+          <span
+            className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded inline-flex items-center gap-1 shrink-0"
+            data-testid={`chip-mapping-saved-${m.id}`}
+          >
+            <Check className="w-3 h-3" /> Saved
+          </span>
+        )}
+        <ChevronDown
+          className={[
+            "w-4 h-4 text-slate-400 transition-transform shrink-0",
+            expanded ? "rotate-180" : "",
+          ].join(" ")}
+        />
+      </div>
+      {expanded && (
+        <div className="px-4 pb-3 pl-11 space-y-2.5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="text-[11.5px] text-slate-500 min-w-0 flex-1">
+              {m.storeName ?? m.shopDomain ?? "—"}
+              {m.shopifyVariantId ? ` · variant ${m.shopifyVariantId}` : " · all variants"}
+            </div>
             <button
               type="button"
-              onClick={() => resolve.mutate()}
-              disabled={resolve.isPending || !url.trim()}
-              className="h-9 px-3 rounded-md bg-slate-900 text-white text-[12px] font-medium hover:bg-slate-800 disabled:opacity-50"
-              data-testid="button-shopify-resolve"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+              disabled={removePending}
+              className="text-slate-400 hover:text-rose-600 p-1 shrink-0"
+              data-testid={`button-remove-mapping-${m.id}`}
+              aria-label="Remove mapping"
             >
-              {resolve.isPending ? "Finding…" : "Find product"}
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
-
-          {resolved && (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50/40 p-3 space-y-3" data-testid="shopify-resolved">
-              <div>
-                <div className="text-[12px] font-semibold text-slate-700">Found</div>
-                <div className="text-[13.5px] text-slate-900">{resolved.shopifyProductTitle}</div>
-              </div>
-              <div>
-                <label className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">Variant</label>
-                <select
-                  value={variantId ?? ""}
-                  onChange={(e) => setVariantId(e.target.value || null)}
-                  className="w-full h-8 border border-slate-300 rounded-md px-2 text-[13px] bg-white"
-                  data-testid="select-shopify-variant"
-                >
-                  <option value="">All variants of this product</option>
-                  {resolved.variants.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.title} · ${v.price}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {isShopifyPlus && (
-                <div>
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={offerUnlock}
-                      onChange={(e) => setOfferUnlock(e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
-                      data-testid="toggle-shopify-unlock"
-                    />
-                    <span className="text-sm text-slate-800">Also mint the GoodTunes digital unlock + GoodDeed</span>
-                  </label>
-                  <p className="text-xs text-slate-400 mt-1 ml-6">
-                    Off routes the order to fulfillment only. On also grants buyers the app unlock and a GoodDeed number — exactly like Shopify mode.
-                  </p>
-                </div>
-              )}
-              <div>
-                <label className="inline-flex items-center gap-2">
+          {isShopifyPlus && (
+            <label className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={unlock}
+                onChange={(e) => {
+                  const v = e.target.checked;
+                  setUnlock(v);
+                  commit({ unlock: v, cert, priceStr: price });
+                }}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
+                data-testid={`row-mint-toggle-${m.id}`}
+              />
+              <span className="min-w-0">
+                <span className="block text-[13px] text-slate-800">
+                  Also mint the GoodTunes digital unlock + GoodDeed for buyers
+                </span>
+                <span className="block text-[11.5px] text-slate-400">
+                  Off: we only fulfill the physical order. On: buyers also get the app unlock and a numbered GoodDeed.
+                </span>
+              </span>
+            </label>
+          )}
+          {!m.isSignedGooddeedAddon && (
+            <div>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={cert}
+                  onChange={(e) => {
+                    const v = e.target.checked;
+                    let p = price;
+                    if (v && parseDollars(price) == null) {
+                      p = "9.99";
+                      setPrice(p);
+                    }
+                    setCert(v);
+                    commit({ unlock, cert: v, priceStr: p });
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
+                  data-testid={`row-cert-toggle-${m.id}`}
+                />
+                <span className="text-[13px] text-slate-800">Bundle a printed & signed GoodDeed certificate</span>
+              </label>
+              {cert && (
+                <div className="flex items-center gap-1.5 mt-1.5 ml-6">
+                  <span className="text-slate-500 text-[12px]">Price $</span>
                   <input
-                    type="checkbox"
-                    checked={isAddon}
-                    onChange={(e) => {
-                      setIsAddon(e.target.checked);
-                      if (e.target.checked) setOfferCert(false);
+                    type="text"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    onBlur={() => {
+                      const cents = parseDollars(price);
+                      if (cents !== lastSavedPriceCents.current) {
+                        commit({ unlock, cert, priceStr: price });
+                      }
                     }}
-                    className="h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
-                    data-testid="toggle-shopify-addon"
+                    inputMode="decimal"
+                    className="w-24 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
+                    data-testid={`row-cert-price-${m.id}`}
                   />
-                  <span className="text-[13px] text-slate-800">This product is the signed-GoodDeed add-on for the album</span>
-                </label>
-                <p className="text-[11.5px] text-slate-400 mt-0.5 ml-6">
-                  Fan adds it to their cart separately. Mints a signed cert at the retail price they paid.
-                </p>
-              </div>
-              {!isAddon && (
-                <div>
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={offerCert}
-                      onChange={(e) => setOfferCert(e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
-                      data-testid="toggle-shopify-cert"
-                    />
-                    <span className="text-[13px] text-slate-800">Bundle a printed & signed GoodDeed certificate</span>
-                  </label>
-                  {offerCert && (
-                    <div className="flex items-center gap-1.5 mt-2 ml-6">
-                      <span className="text-slate-500 text-[12px]">Price $</span>
-                      <input
-                        type="text"
-                        value={certPrice}
-                        onChange={(e) => setCertPrice(e.target.value)}
-                        inputMode="decimal"
-                        className="w-24 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
-                        data-testid="input-shopify-cert-price"
-                      />
-                      <span className="text-[11.5px] text-slate-400">Must be ≥ the album's per-album minimum floor.</span>
-                    </div>
-                  )}
                 </div>
               )}
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => save.mutate()}
-                  disabled={save.isPending}
-                  className="h-8 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-medium hover:bg-[var(--brand-blue-hover)] disabled:opacity-50"
-                  data-testid="button-shopify-save-mapping"
-                >
-                  {save.isPending ? "Saving…" : "Save mapping"}
-                </button>
-              </div>
             </div>
           )}
+          <div className="min-h-[18px] text-[12px]" data-testid={`row-save-status-${m.id}`} aria-live="polite">
+            {patch.isPending ? (
+              <span className="text-slate-400 inline-flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" /> Saving…
+              </span>
+            ) : rowError ? (
+              <span className="text-rose-600">
+                Couldn't save — {rowError}{" "}
+                <button
+                  type="button"
+                  onClick={() => commit({ unlock, cert, priceStr: price })}
+                  className="underline underline-offset-2 font-medium"
+                  data-testid={`button-row-retry-${m.id}`}
+                >
+                  Retry
+                </button>
+              </span>
+            ) : rowSaved ? (
+              <span className="text-emerald-600 inline-flex items-center gap-1">
+                <Check className="w-3 h-3" /> Saved
+              </span>
+            ) : null}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

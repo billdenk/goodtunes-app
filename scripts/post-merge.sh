@@ -10840,3 +10840,34 @@ SQL
 }
 repair_task_2869_press_homing dev  "${DATABASE_URL:-}"
 repair_task_2869_press_homing prod "${PROD_DATABASE_URL:-}"
+
+# Task #2892 — install-link tracking for the progressive /admin/shopify
+# install flow. shared/schema.ts declares shopify_install_links; hand-apply
+# the canonical CREATE TABLE on BOTH dev and prod to keep the schema-drift
+# guard green and the publish dev→prod diff empty. Idempotent.
+migrate_shopify_install_links() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping shopify_install_links migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS shopify_install_links (
+  id                varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  shop_domain       text    NOT NULL UNIQUE,
+  created_at        timestamp DEFAULT now(),
+  last_generated_at timestamp DEFAULT now(),
+  installed_at      timestamp,
+  dismissed_at      timestamp
+);
+COMMIT;
+SQL
+  then
+    echo "post-merge: shopify_install_links migration ok on $label"
+  else
+    echo "post-merge: WARNING — shopify_install_links migration failed on $label (continuing)"
+  fi
+}
+migrate_shopify_install_links dev  "${DATABASE_URL:-}"
+migrate_shopify_install_links prod "${PROD_DATABASE_URL:-}"

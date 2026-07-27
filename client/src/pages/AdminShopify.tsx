@@ -6,9 +6,11 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ExternalLink, Trash2, CheckCircle2, FlaskConical, Copy, Check, DollarSign, Pencil, ShieldAlert, ChevronDown, ChevronUp, TriangleAlert } from "lucide-react";
+import { ExternalLink, Trash2, CheckCircle2, FlaskConical, Copy, Check, DollarSign, Pencil, ShieldAlert, ChevronDown, ChevronUp, TriangleAlert, X } from "lucide-react";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type Store = {
   id: string;
@@ -32,6 +34,17 @@ type GdprRequest = {
   fulfilledAt: string | null;
 };
 
+// Task #2892 — a generated-but-not-yet-approved install link. Server
+// returns only pending entries (installed/dismissed/live-store domains
+// are filtered out), so every row here renders a "Waiting for install"
+// chip under Connected stores.
+type InstallLink = {
+  id: string;
+  shopDomain: string;
+  createdAt: string;
+  lastGeneratedAt: string;
+};
+
 export function AdminShopify() {
   return (
     <AdminErrorBoundary title="Shopify admin failed to render">
@@ -44,6 +57,10 @@ function AdminShopifyInner() {
   const { toast } = useToast();
   const [shop, setShop] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
+  // Task #2892 — which shop domain the confirmation line under the input
+  // refers to. Cleared implicitly when the input changes (compared against
+  // the current normalized value on render).
+  const [copiedShop, setCopiedShop] = useState<string | null>(null);
 
   const { data: cfg } = useQuery<{ configured: boolean; apiKey: string | null; scopes: string }>({
     queryKey: ["/api/admin/shopify/config"],
@@ -83,13 +100,39 @@ function AdminShopifyInner() {
   // OAuth callback redirects with.
   const justInstalledId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("installed") : null;
   useEffect(() => {
-    if (justInstalledId) toast({ title: "Store connected", description: "Webhooks + redemption button installed." });
+    if (justInstalledId) {
+      toast({ title: "Store connected", description: "Webhooks + redemption button installed." });
+      // The callback stamped the pending install-link row — drop its
+      // "Waiting for install" chip now that the store row is Live.
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/shopify/install-links"] });
+    }
   }, [justInstalledId, toast]);
 
   const remove = useMutation({
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/admin/shopify/stores/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/shopify/stores"] }),
   });
+
+  // Task #2892 — pending install links ("Waiting for install" chips).
+  const { data: pendingInstalls } = useQuery<InstallLink[]>({
+    queryKey: ["/api/admin/shopify/install-links"],
+  });
+  const dismissInstall = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/admin/shopify/install-links/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/shopify/install-links"] }),
+    onError: (e: any) => toast({ title: "Couldn't dismiss", description: e?.message, variant: "destructive" }),
+  });
+  // Record that an install link was generated for a shop, so the pending
+  // chip survives reload and shows for other admins too. Best-effort: the
+  // copy/install action itself must never fail on this bookkeeping write.
+  const recordInstallLink = async (domain: string) => {
+    try {
+      await apiRequest("POST", "/api/admin/shopify/install-links", { shopDomain: domain });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/shopify/install-links"] });
+    } catch {
+      // Non-fatal — the chip is a convenience, not the install itself.
+    }
+  };
 
   // Per-store digital unit fee inline edit state
   const [editingFeeStoreId, setEditingFeeStoreId] = useState<string | null>(null);
@@ -165,7 +208,10 @@ function AdminShopifyInner() {
     try {
       await navigator.clipboard.writeText(installLink);
       setLinkCopied(true);
-      toast({ title: "Install link copied", description: "Send it to someone on the label's team with Shopify admin access." });
+      // Task #2892 — confirmation lives inline under the input (not a
+      // toast), and the domain gets a "Waiting for install" chip below.
+      setCopiedShop(normalizedShop);
+      void recordInstallLink(normalizedShop);
       setTimeout(() => setLinkCopied(false), 1500);
     } catch {
       toast({ title: "Couldn't copy", description: "Copy the link shown below by hand instead.", variant: "destructive" });
@@ -175,8 +221,11 @@ function AdminShopifyInner() {
   // "Install directly" — only useful when the operator themselves has admin
   // access to the target store (e.g. a GoodTunes dev/test store). Otherwise
   // Shopify shows "Unauthorized Access" and the label must use the link.
-  const startInstall = () => {
+  const startInstall = async () => {
     if (!normalizedShop) return;
+    // Record first so an abandoned OAuth approval still leaves a pending
+    // chip; the callback stamps it installed when the flow completes.
+    await recordInstallLink(normalizedShop);
     window.location.href = `/api/shopify/install?shop=${encodeURIComponent(normalizedShop)}`;
   };
 
@@ -191,15 +240,6 @@ function AdminShopifyInner() {
         {/* Install guide */}
         <section className="rounded-xl border border-slate-200 bg-white p-6 mb-8" data-testid="shopify-install-guide">
           <h2 className="text-[15px] font-semibold text-slate-900 mb-3">Install on a label's store</h2>
-          <ol className="text-[13.5px] text-slate-700 space-y-2 list-decimal list-inside mb-4">
-            <li>Ask the label for their Shopify store URL (e.g. <code className="font-mono text-[12px] bg-slate-100 px-1.5 py-0.5 rounded">tim-snider-records.myshopify.com</code>).</li>
-            <li>Paste it below and click <strong>Copy install link</strong>.</li>
-            <li>Send that link to someone on the label's team who has admin access to their Shopify store. They open it and click <strong>Install</strong> on Shopify's approval screen — only a store admin can approve, so this can't be done from your side.</li>
-            <li>Once approved, the store appears under <strong>Connected stores</strong> below. Open any album's <strong>Shopify</strong> tab to map a product.</li>
-          </ol>
-          <p className="text-[12.5px] text-slate-500 mb-4">
-            Installing on a store <em>you</em> have Shopify admin access to (e.g. a test store)? Use <strong>Install directly</strong> to skip the link and approve it yourself.
-          </p>
           {cfg && !cfg.configured && (
             <div className="rounded-md bg-rose-50 border border-rose-200 px-3 py-2 text-[12.5px] text-rose-700 mb-4">
               <strong>Not configured yet.</strong> Set <code>SHOPIFY_API_KEY</code> and <code>SHOPIFY_API_SECRET</code> in
@@ -234,7 +274,7 @@ Get your music now
               type="text"
               value={shop}
               onChange={(e) => setShop(e.target.value)}
-              placeholder="example.myshopify.com"
+              placeholder="label-store.myshopify.com"
               className="flex-1 h-10 rounded-md border border-slate-300 px-3 text-[14px] focus:outline-none focus:border-[var(--brand-blue)]"
               data-testid="input-shopify-shop"
             />
@@ -250,18 +290,31 @@ Get your music now
                 {linkCopied ? "Copied" : "Copy install link"}
               </span>
             </button>
-            <button
-              type="button"
-              onClick={startInstall}
-              disabled={!cfg?.configured || !normalizedShop}
-              className="h-10 px-4 rounded-md border border-slate-300 bg-white text-slate-700 text-[13px] font-medium hover:bg-slate-50 disabled:opacity-50 shrink-0"
-              data-testid="button-shopify-install"
-            >
-              <span className="inline-flex items-center gap-1.5">
-                Install directly <ExternalLink className="w-3.5 h-3.5" />
-              </span>
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={startInstall}
+                  disabled={!cfg?.configured || !normalizedShop}
+                  className="h-10 px-4 rounded-md border border-slate-300 bg-white text-slate-700 text-[13px] font-medium hover:bg-slate-50 disabled:opacity-50 shrink-0"
+                  data-testid="button-shopify-install"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    Install directly <ExternalLink className="w-3.5 h-3.5" />
+                  </span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[240px]">
+                For stores you have admin access to, like a test store.
+              </TooltipContent>
+            </Tooltip>
           </div>
+          {copiedShop && copiedShop === normalizedShop && (
+            <p className="mt-2 text-[12.5px] text-emerald-700" data-testid="text-copy-install-confirmation">
+              Link copied. Send it to someone with admin access on the label's store — only a store admin can
+              approve the install.
+            </p>
+          )}
           {installLink && (
             <div className="mt-3 rounded-md bg-slate-50 border border-slate-200 px-3 py-2" data-testid="shopify-install-link-readout">
               <div className="text-[11.5px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Install link to send</div>
@@ -365,17 +418,27 @@ Get your music now
             <ShieldAlert className="w-4 h-4 text-slate-500" />
             GDPR data requests
           </h2>
-          <p className="text-[12.5px] text-slate-500 mb-4">
-            When a customer exercises their right of data access, Shopify sends a <code>customers/data_request</code> webhook and GoodTunes compiles all personal data we hold for them. Return the data to the customer within 30 days, then click <strong>Mark fulfilled</strong>.
-          </p>
-
           {(gdprRequests === undefined) && (
-            <div className="text-slate-400 text-sm">Loading…</div>
+            <div className="space-y-2" data-testid="gdpr-requests-loading">
+              {[0].map((i) => (
+                <div key={i} className="rounded-lg border border-slate-200 bg-white px-4 py-3 flex items-center gap-3">
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-4 w-52" />
+                    <Skeleton className="h-3 w-72" />
+                  </div>
+                  <Skeleton className="h-8 w-24 rounded-md" />
+                </div>
+              ))}
+            </div>
           )}
 
           {gdprRequests !== undefined && gdprRequests.length === 0 && (
-            <div className="rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-slate-400 text-[13.5px]">
-              No data requests received yet.
+            <div
+              className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-center text-slate-400 text-[13px] leading-snug"
+              data-testid="gdpr-requests-empty"
+            >
+              No requests received. When a customer requests their data through Shopify, it appears here — you
+              have 30 days to fulfill it.
             </div>
           )}
 
@@ -457,7 +520,19 @@ Get your music now
         {/* Connected stores */}
         <section data-testid="shopify-stores-list">
           <h2 className="text-[15px] font-semibold text-slate-900 mb-3">Connected stores</h2>
-          {isLoading && <div className="text-slate-400 text-sm">Loading…</div>}
+          {isLoading && (
+            <div className="space-y-2" data-testid="shopify-stores-loading">
+              {[0, 1].map((i) => (
+                <div key={i} className="rounded-lg border border-slate-200 bg-white px-4 py-3 flex items-center gap-3">
+                  <Skeleton className="w-9 h-9 rounded-md" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-4 w-44" />
+                    <Skeleton className="h-3 w-64" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {storesError && (
             <ErrorState
               error={storesErrorObj}
@@ -466,12 +541,51 @@ Get your music now
               testId="shopify-stores-error"
             />
           )}
-          {!isLoading && !storesError && (stores?.length ?? 0) === 0 && (
+          {!isLoading && !storesError && (stores?.length ?? 0) === 0 && (pendingInstalls?.length ?? 0) === 0 && (
             <div className="rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-slate-400 text-[13.5px]">
               No stores connected yet.
             </div>
           )}
           <div className="space-y-2">
+            {/* Task #2892 — generated-but-unapproved install links. Server
+                returns only pending entries; the OAuth callback stamps the
+                row so the chip flips to the Live store row on approval. */}
+            {(pendingInstalls ?? []).map((p) => (
+              <div
+                key={p.id}
+                className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-3 flex items-center gap-3"
+                data-testid={`row-pending-install-${p.id}`}
+              >
+                <div className="w-9 h-9 rounded-md bg-slate-100 text-slate-400 flex items-center justify-center text-[13px] font-bold shrink-0">
+                  {p.shopDomain.slice(0, 1).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[14px] font-medium text-slate-900 truncate flex items-center gap-2">
+                    {p.shopDomain}
+                    <span
+                      className="text-[11px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded shrink-0"
+                      data-testid={`chip-waiting-install-${p.id}`}
+                    >
+                      Waiting for install
+                    </span>
+                  </div>
+                  <div className="text-[12px] text-slate-500 truncate">
+                    Install link generated {new Date(p.lastGeneratedAt).toLocaleDateString()} — flips to Live once a
+                    store admin approves it.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => dismissInstall.mutate(p.id)}
+                  disabled={dismissInstall.isPending}
+                  className="text-slate-400 hover:text-slate-700 p-1.5 shrink-0"
+                  aria-label={`Dismiss pending install for ${p.shopDomain}`}
+                  data-testid={`button-dismiss-install-${p.id}`}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
             {(stores ?? []).map((s) => {
               const live = !s.uninstalledAt;
               return (

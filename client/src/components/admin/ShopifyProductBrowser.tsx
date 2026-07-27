@@ -23,6 +23,7 @@ type ProductsResponse = { products: ShopifyBrowseProduct[]; nextCursor: string |
  */
 export function ShopifyProductBrowser({
   storeId,
+  storeName,
   selectedProductId,
   onPick,
   layout = "list",
@@ -30,6 +31,9 @@ export function ShopifyProductBrowser({
   helpNode,
 }: {
   storeId: string;
+  // Task #2892 — display name worked into load-failure copy so the error
+  // names WHICH store couldn't load ("Couldn't load products from Hoku…").
+  storeName?: string | null;
   selectedProductId?: string | null;
   onPick: (p: ShopifyBrowseProduct) => void;
   layout?: "list" | "grid";
@@ -89,8 +93,8 @@ export function ShopifyProductBrowser({
         const body = apiErrorBody<{ code?: string }>(err);
         setError(
           body?.code === "shopify_reconnect_required"
-            ? "This Shopify connection expired. Reconnect the store to load products."
-            : "Couldn't load products",
+            ? `The Shopify connection${storeName ? ` for ${storeName}` : ""} expired. Reconnect the store to load products.`
+            : `Couldn't load products${storeName ? ` from ${storeName}` : ""}.`,
         );
         setItems([]);
         setCursor(null);

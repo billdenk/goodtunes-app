@@ -3207,6 +3207,27 @@ export const shopifyProductMappings = pgTable(
   // of the two partial indexes).
 );
 
+// Task #2892 — install-link tracking for the progressive /admin/shopify
+// install flow. One row per shop domain an operator generated an install
+// link for (or started a direct install on). A pending row surfaces a
+// "Waiting for install" chip under Connected stores until the OAuth
+// callback stamps installedAt, and the operator can dismiss abandoned
+// entries. Deliberately a separate lightweight table — NOT columns on
+// shopify_stores — so every existing store read stays untouched.
+export const shopifyInstallLinks = pgTable("shopify_install_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Canonical *.myshopify.com domain the link targets. Unique — re-copying
+  // a link for the same shop bumps lastGeneratedAt on the same row.
+  shopDomain: text("shop_domain").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow(),
+  lastGeneratedAt: timestamp("last_generated_at").defaultNow(),
+  // Stamped by the OAuth callback when the install lands ("Waiting for
+  // install" flips to the live store row). Null = still pending.
+  installedAt: timestamp("installed_at"),
+  // Operator dismissed the stale pending entry. Null = visible.
+  dismissedAt: timestamp("dismissed_at"),
+});
+
 // Per-order wholesale platform charge accrual. Every Shopify order that
 // mints a digital unlock accrues the store's digitalUnitFeeCents rate
 // (default $3.50) per unit into this ledger — the per-unit wholesale
@@ -4308,6 +4329,7 @@ export const insertShopifyProductMappingSchema = createInsertSchema(shopifyProdu
   });
 export type InsertShopifyProductMapping = z.infer<typeof insertShopifyProductMappingSchema>;
 export type ShopifyProductMapping = typeof shopifyProductMappings.$inferSelect;
+export type ShopifyInstallLink = typeof shopifyInstallLinks.$inferSelect;
 
 export type ShopifyRedemptionCode = typeof shopifyRedemptionCodes.$inferSelect;
 export type PlatformWholesaleLedgerEntry = typeof platformWholesaleLedger.$inferSelect;

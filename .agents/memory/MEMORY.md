@@ -1,3 +1,4 @@
+- [Authed admin screenshots](admin-authed-screenshots.md) — Screenshot tool keeps cookies across calls: shoot /dev-login?email=<admin> once, then shoot the /admin page; isDev panels hide (host=127.0.0.1).
 - [Grant numbers GR sequence](grant-numbers-gr-sequence.md) — comped copies use user_albums.grant_number ("GR NN"), separate from paid certificate_number; no ??1 fallbacks; mint via assignNextGrantNumber + retry.
 - [Vendor → Maker/Reseller rename scope](vendor-maker-reseller-rename-scope.md) — gear-supplier `vendor` shows to operators as Maker/Reseller (UI copy ONLY, never identifiers/role value/table/routes/testids); GoodDeed printing/payout "vendor" is a DIFFERENT concept, left alone.
 - [Partner portals light-only](partner-portals-light-only.md) — invited-partner/operator portals use the LIGHT admin slate theme (not dark fan navy); the order-status pill is duplicated across 3 dashboards — keep colors in sync with AdminCustomerDetail.

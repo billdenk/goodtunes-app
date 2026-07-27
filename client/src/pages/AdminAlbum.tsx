@@ -1909,6 +1909,7 @@ export function AdminAlbum({
                   albumId={album.id}
                   album={album}
                   sellMode={album.sellMode ?? null}
+                  embedded={embedded}
                   readyToPush={completeness?.shopifyReadyToPush ?? false}
                   pushBlockers={completeness?.shopify.missing ?? []}
                   onJumpToTab={(t) => {

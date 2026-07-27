@@ -29,6 +29,7 @@ import {
   userAlbums,
   shopifyStores,
   shopifyProductMappings,
+  shopifyInstallLinks,
   platformWholesaleLedger,
   shopifyRedemptionCodes,
   shopifyPushLog,
@@ -1945,6 +1946,19 @@ export function registerShopifyRoutes(app: Express) {
       personId: statePersonId || undefined,
     });
 
+    // Task #2892 — flip any pending "Waiting for install" chip for this
+    // shop to installed. Best-effort: a missing row (install started
+    // straight from Shopify, or a link generated before this feature) is
+    // normal, and a failure here must never break the install itself.
+    try {
+      await db
+        .update(shopifyInstallLinks)
+        .set({ installedAt: new Date() })
+        .where(eq(shopifyInstallLinks.shopDomain, shop));
+    } catch (e: any) {
+      console.error(`[shopify-oauth] install-link stamp failed for ${shop}: ${e?.message ?? e}`);
+    }
+
     // Best-effort post-install setup. If it fails, the admin can hit
     // the /api/admin/shopify/stores/:id/reinstall-hooks endpoint to retry.
     // Post-purchase display is handled by the Checkout UI Extension
@@ -3012,6 +3026,60 @@ export function registerShopifyRoutes(app: Express) {
     res.json({ ...updated, accessToken: undefined });
   });
 
+  // ─── Install-link tracking (Task #2892) ───────────────────────────
+  // Backs the progressive install flow on /admin/shopify: copying an
+  // install link (or starting a direct install) records the target shop
+  // domain, which surfaces as a "Waiting for install" chip under
+  // Connected stores until the OAuth callback stamps installedAt.
+
+  // Pending entries only — installed, dismissed, and already-live domains
+  // are excluded server-side so the client renders exactly what it gets.
+  app.get("/api/admin/shopify/install-links", requireAdmin, async (_req, res) => {
+    const rows = await db
+      .select()
+      .from(shopifyInstallLinks)
+      .where(and(isNull(shopifyInstallLinks.installedAt), isNull(shopifyInstallLinks.dismissedAt)))
+      .orderBy(desc(shopifyInstallLinks.lastGeneratedAt));
+    if (rows.length === 0) return res.json([]);
+    // A live store for the same domain supersedes the pending chip even if
+    // the callback stamp was missed (e.g. install predates this feature).
+    const liveStores = await db
+      .select({ shopDomain: shopifyStores.shopDomain })
+      .from(shopifyStores)
+      .where(isNull(shopifyStores.uninstalledAt));
+    const live = new Set(liveStores.map((s) => s.shopDomain));
+    res.json(rows.filter((r) => !live.has(r.shopDomain)));
+  });
+
+  // Upsert by shop domain. Re-copying a link for the same shop bumps
+  // lastGeneratedAt and revives a dismissed/installed row (a fresh link
+  // means a fresh install attempt is in flight).
+  app.post("/api/admin/shopify/install-links", requireAdmin, async (req, res) => {
+    const shop = String(req.body?.shopDomain ?? "").trim().toLowerCase();
+    if (!isValidShopDomain(shop)) {
+      return res.status(400).json({ message: "Enter a *.myshopify.com store domain" });
+    }
+    const [row] = await db
+      .insert(shopifyInstallLinks)
+      .values({ shopDomain: shop })
+      .onConflictDoUpdate({
+        target: shopifyInstallLinks.shopDomain,
+        set: { lastGeneratedAt: new Date(), installedAt: null, dismissedAt: null },
+      })
+      .returning();
+    res.json(row);
+  });
+
+  // Dismiss an abandoned pending entry (soft — the row survives so a
+  // re-copy for the same domain revives it instead of duplicating).
+  app.delete("/api/admin/shopify/install-links/:id", requireAdmin, async (req, res) => {
+    await db
+      .update(shopifyInstallLinks)
+      .set({ dismissedAt: new Date() })
+      .where(eq(shopifyInstallLinks.id, String(req.params.id)));
+    res.json({ ok: true });
+  });
+
   // Fee ledger — accrued digital per-unit fees per store, grouped or
   // per-row. Returns rows with totals so the operator can review what
   // has been earned and what has been reversed (refunded). Query params:
@@ -3397,7 +3465,12 @@ export function registerShopifyRoutes(app: Express) {
       );
     let row;
     if (existing) {
-      const isAddon = d.isSignedGooddeedAddon ?? false;
+      // Task #2892 — the mapping form no longer offers the signed-GoodDeed
+      // add-on option (signed certs are bundle variants of the main product
+      // now), so the client no longer sends isSignedGooddeedAddon. Preserve
+      // the stored flag on re-save unless the caller explicitly sends one —
+      // legacy add-on rows keep their paid-order webhook semantics untouched.
+      const isAddon = d.isSignedGooddeedAddon ?? existing.isSignedGooddeedAddon;
       [row] = await db
         .update(shopifyProductMappings)
         .set({
@@ -3415,6 +3488,80 @@ export function registerShopifyRoutes(app: Express) {
       [row] = await db.insert(shopifyProductMappings).values(d as any).returning();
     }
     res.json(row);
+  });
+
+  // Task #2892 — inline flag edits on an already-mapped row (mint /
+  // bundle-cert / cert price). Same map_shopify gate as create/delete.
+  // Never touches isSignedGooddeedAddon: the add-on option is retired
+  // from the form but stored legacy flags must survive edits.
+  app.patch("/api/admin/albums/:albumId/shopify-mappings/:id", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.albumId);
+    {
+      const { gateAlbumRoute } = await import("./auth/partnerPermissions");
+      if (await gateAlbumRoute(req, res, "map_shopify", albumId)) return;
+    }
+    const parsed = z
+      .object({
+        offersDigitalUnlock: z.boolean().optional(),
+        offerSignedCert: z.boolean().optional(),
+        signedCertPriceCents: z.number().int().min(0).nullable().optional(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid body" });
+
+    const [existing] = await db
+      .select()
+      .from(shopifyProductMappings)
+      .where(
+        and(
+          eq(shopifyProductMappings.id, String(req.params.id)),
+          eq(shopifyProductMappings.albumId, albumId),
+        ),
+      );
+    if (!existing) return res.status(404).json({ message: "Mapping not found" });
+
+    const next = {
+      offersDigitalUnlock: parsed.data.offersDigitalUnlock ?? existing.offersDigitalUnlock,
+      offerSignedCert: parsed.data.offerSignedCert ?? existing.offerSignedCert,
+      // Keep the stored price when the caller doesn't send one, so toggling
+      // the bundle off and back on remembers the last price.
+      signedCertPriceCents:
+        parsed.data.signedCertPriceCents === undefined
+          ? existing.signedCertPriceCents
+          : parsed.data.signedCertPriceCents,
+    };
+
+    if (next.offerSignedCert && existing.isSignedGooddeedAddon) {
+      return res.status(400).json({
+        message:
+          "This mapping is a legacy signed-cert add-on product — it can't also bundle a certificate. Remove it and link the product again to bundle.",
+      });
+    }
+    if (next.offerSignedCert) {
+      if (next.signedCertPriceCents == null) {
+        return res.status(400).json({ message: "Enter a certificate price" });
+      }
+      // Same floor enforcement as create.
+      const [floor] = await db
+        .select()
+        .from(albumAddons)
+        .where(and(eq(albumAddons.albumId, albumId), eq(albumAddons.kind, "signed_cert")));
+      if (floor && next.signedCertPriceCents < floor.minPriceCents) {
+        return res.status(400).json({
+          message: `Signed certificate must be at least $${(floor.minPriceCents / 100).toFixed(2)} on this album`,
+        });
+      }
+    }
+
+    const [row] = await db
+      .update(shopifyProductMappings)
+      .set(next)
+      .where(eq(shopifyProductMappings.id, existing.id))
+      .returning();
+    // Mirror the list GET's shape (storeName/shopDomain joined in) so the
+    // client can write the response straight into the query cache.
+    const store = await getStoreById(row.storeId);
+    res.json({ ...row, storeName: store?.storeName ?? null, shopDomain: store?.shopDomain ?? null });
   });
 
   app.delete("/api/admin/albums/:albumId/shopify-mappings/:id", requireAdmin, async (req, res) => {
