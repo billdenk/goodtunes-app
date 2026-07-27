@@ -41,7 +41,10 @@ let personId = "";
 let memberUserId = "";
 let legacyUserId = "";
 let multiHatUserId = "";
+let memberEmail = "";
+let multiHatEmail = "";
 let operatorToken = "";
+let plainAdminToken = "";
 let artistToken = "";
 let personName = "";
 
@@ -88,7 +91,11 @@ before(async () => {
   `);
   created.memberships.add(gid);
 
+  memberEmail = "tteam_" + tag + "a@example.test";
+  multiHatEmail = "tteam_" + tag + "d@example.test";
+
   operatorToken = await tokenFor(await seedAdminUser("super_admin", null, tag + "c"));
+  plainAdminToken = await tokenFor(await seedAdminUser("admin", null, tag + "e"));
   artistToken = await tokenFor(memberUserId);
 });
 
@@ -165,6 +172,61 @@ test("multi-hat operator (god membership + legacy partner role) is excluded", as
 
 test("partner token is refused", async () => {
   const r = await getRoster(artistToken);
+  assert.equal(r.status, 403);
+});
+
+// ─── Global ⌘K search — Team accounts group ──────────────────────────
+
+async function getSearch(token: string | undefined, q: string): Promise<{ status: number; json: any }> {
+  const res = await fetch(`${baseUrl}/api/admin/search?q=${encodeURIComponent(q)}`, {
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  });
+  let json: any = null;
+  try {
+    json = await res.json();
+  } catch {
+    json = null;
+  }
+  return { status: res.status, json };
+}
+
+test("global search surfaces a team account by email for super_admin", async () => {
+  const r = await getSearch(operatorToken, memberEmail);
+  assert.equal(r.status, 200);
+  const hits = r.json.teamAccounts as any[];
+  assert.ok(Array.isArray(hits), "payload must include a teamAccounts group");
+  const hit = hits.find((t) => t.id === memberUserId);
+  assert.ok(hit, "member account must match by email");
+  assert.equal(hit.subtitle, memberEmail);
+  assert.ok(
+    String(hit.href).startsWith("/admin/team-accounts?search="),
+    "href must deep-link into the roster with the search pre-filled",
+  );
+});
+
+test("global search excludes multi-hat operators from team accounts", async () => {
+  const r = await getSearch(operatorToken, multiHatEmail);
+  assert.equal(r.status, 200);
+  assert.ok(
+    !(r.json.teamAccounts as any[]).some((t) => t.id === multiHatUserId),
+    "multi-hat operator must not surface as a team account",
+  );
+});
+
+test("plain admin sees no team-accounts group even after super_admin warmed the cache", async () => {
+  // Warm the super_admin-side cache for this exact query…
+  const warm = await getSearch(operatorToken, memberEmail);
+  assert.equal(warm.status, 200);
+  assert.ok((warm.json.teamAccounts as any[]).length > 0);
+  // …then the same query as a plain admin must not leak the group (the
+  // cache key carries the role class).
+  const r = await getSearch(plainAdminToken, memberEmail);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.json.teamAccounts ?? [], [], "plain admin must never receive team-account rows");
+});
+
+test("partner token is refused by global search", async () => {
+  const r = await getSearch(artistToken, "anything");
   assert.equal(r.status, 403);
 });
 

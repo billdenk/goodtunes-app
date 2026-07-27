@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link } from "wouter";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
@@ -78,10 +78,37 @@ function fmtDate(s: string | null): string {
 }
 
 export function AdminTeamAccounts() {
-  const [search, setSearch] = useState("");
+  // Deep-link support: /admin/team-accounts?search=<email> — the global
+  // ⌘K search's "Team accounts" rows land here with the email pre-filled
+  // so the roster opens already filtered to that account.
+  const urlSearch = useSearch();
+  const [search, setSearch] = useState<string>(
+    () => new URLSearchParams(urlSearch).get("search") ?? "",
+  );
   const [kindFilter, setKindFilter] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  // Re-sync from the URL when it changes while already mounted (e.g.
+  // picking a second search result from the ⌘K palette on this page).
+  // A removed param clears the box — the ⌘K "Team accounts" page
+  // shortcut navigates here without a query and must reset the filter.
+  useEffect(() => {
+    setSearch(new URLSearchParams(urlSearch).get("search") ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlSearch]);
+
+  // Mirror the box back into the URL (replace, not push) so the current
+  // view survives refresh and can be shared — same pattern as the admin
+  // Albums list.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const cur = url.searchParams.get("search") ?? "";
+    if (cur === search) return;
+    if (search) url.searchParams.set("search", search);
+    else url.searchParams.delete("search");
+    window.history.replaceState(null, "", url.pathname + url.search);
+  }, [search]);
 
   const {
     data,

@@ -17,6 +17,7 @@ import {
   Disc3,
   Guitar,
   Users,
+  UserCheck,
   Factory,
   Truck,
   Music,
@@ -58,7 +59,8 @@ export type SearchResult = {
     | "song"
     | "playlist"
     | "fanOrder"
-    | "pressingOrder";
+    | "pressingOrder"
+    | "teamAccount";
   id: string;
   title: string;
   subtitle?: string | null;
@@ -80,6 +82,7 @@ type ServerPayload = {
   playlists: SearchResult[];
   fanOrders: SearchResult[];
   pressingOrders: SearchResult[];
+  teamAccounts?: SearchResult[];
 };
 
 // Static nav config — mirrors AdminFrame's sidebar order. Keeping the
@@ -100,6 +103,7 @@ const NAV_PAGES: SearchResult[] = [
   { kind: "page", id: "fan-orders", title: "Fan orders", badge: "Page", href: "/admin/fan-orders" },
   { kind: "page", id: "jobs", title: "Jobs", badge: "Page", href: "/admin/jobs" },
   { kind: "page", id: "customers", title: "Customers", badge: "Page", href: "/admin/customers" },
+  { kind: "page", id: "team-accounts", title: "Team accounts", badge: "Page", href: "/admin/team-accounts" },
   { kind: "page", id: "reports", title: "Reports", badge: "Page", href: "/admin/reports" },
   { kind: "page", id: "platform-pricing", title: "Platform pricing", badge: "Page", href: "/admin/platform-pricing" },
 ];
@@ -178,6 +182,7 @@ const KIND_ICON: Record<SearchResult["kind"], LucideIcon> = {
   playlist: ListMusic,
   fanOrder: ShoppingBag,
   pressingOrder: ClipboardList,
+  teamAccount: UserCheck,
 };
 
 // Group order in the dropdown. Pages always sit at the top.
@@ -190,6 +195,7 @@ const GROUP_ORDER: Array<{ key: keyof ServerPayload | "pages"; label: string }> 
   { key: "albums", label: "Albums" },
   { key: "gear", label: "Gear" },
   { key: "customers", label: "Customers" },
+  { key: "teamAccounts", label: "Team accounts" },
   { key: "manufacturers", label: "Presses" },
   { key: "fulfillment", label: "Fulfillment" },
   { key: "songs", label: "Songs" },

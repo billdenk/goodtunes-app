@@ -30348,14 +30348,36 @@ export async function registerRoutes(
   app.get("/api/admin/search", requireAdmin, async (req, res) => {
     const q = String(req.query.q ?? "").trim();
     const perGroup = Math.min(Math.max(Number(req.query.limit) || 5, 1), 10);
+    // Operator-only god-view surface. requireAdmin admits ALL partner
+    // accounts and denyAllReportingPartners only covers label/manager/
+    // non_profit, so fail-close the rest here — every partner portal has
+    // its own scoped search endpoint and never calls this one.
+    // Membership-aware on purpose: a multi-hat account's operator hat may
+    // live only in memberships while legacy users.role reads as a partner.
+    let callerRole: string | null = null;
+    try {
+      const callerId = await getUserIdFromRequest(req);
+      callerRole = callerId ? ((await getUserRole(callerId))?.role ?? null) : null;
+    } catch {
+      callerRole = null;
+    }
+    if (callerRole !== "super_admin" && callerRole !== "admin") {
+      return res.status(403).json({ message: "Operator access required" });
+    }
+    // Team accounts (partner sign-ins) are a super_admin-only group — it
+    // mirrors the requireRole("super_admin") gate on the roster endpoint,
+    // and the cache key carries the role class so a super_admin payload
+    // can never be served to a plain-admin caller.
+    const isSuper = callerRole === "super_admin";
     if (q.length < 1) {
       return res.json({
         people: [], vendors: [], labels: [], nonprofits: [], albums: [],
         gear: [], customers: [], manufacturers: [], fulfillment: [],
         songs: [], playlists: [], fanOrders: [], pressingOrders: [],
+        teamAccounts: [],
       });
     }
-    const cacheKey = `${q.toLowerCase()}|${perGroup}`;
+    const cacheKey = `${isSuper ? "sa" : "op"}|${q.toLowerCase()}|${perGroup}`;
     const cached = searchCache.get(cacheKey);
     if (cached && Date.now() - cached.at < SEARCH_TTL_MS) {
       // Touch for LRU recency.
@@ -30376,7 +30398,7 @@ export async function registerRoutes(
     const [
       people, vendors, labelsRows, nonprofits, albumsRows,
       gear, customers, manufacturers, fulfillment,
-      songsRows, playlistsRows, ordersRows,
+      songsRows, playlistsRows, ordersRows, teamAccountRows,
     ] = await Promise.all([
       storage.searchPeople(q, perGroup),
       storage.searchVendorsAdmin(q, perGroup),
@@ -30390,6 +30412,38 @@ export async function registerRoutes(
       storage.searchSongsAdmin(q, perGroup),
       storage.searchPlaylistsAdmin(q, perGroup),
       storage.searchOrdersAdmin(q, perGroup),
+      // Team accounts — partner sign-ins by email/username/display name.
+      // super_admin-only (mirrors the roster endpoint's gate); raw SQL
+      // because users.role lives outside the drizzle pgTable.
+      (async (): Promise<Array<{ id: string; email: string | null; username: string | null; display_name: string | null }>> => {
+        if (!isSuper) return [];
+        const like = `%${q.toLowerCase()}%`;
+        const uRes: any = await db.execute(sql`
+          SELECT id, email, username, display_name
+          FROM users
+          WHERE is_admin = true
+            AND role NOT IN ('super_admin', 'admin')
+            AND (lower(email) LIKE ${like} OR lower(username) LIKE ${like} OR lower(display_name) LIKE ${like})
+          ORDER BY created_at DESC
+          LIMIT ${perGroup + 10}
+        `);
+        const rows = (uRes.rows ?? []) as Array<{ id: string; email: string | null; username: string | null; display_name: string | null }>;
+        if (rows.length === 0) return rows;
+        // Membership-aware operator exclusion: multi-hat accounts whose
+        // god hat lives only in memberships are staff, not partners.
+        let godIds = new Set<string>();
+        try {
+          const mRes: any = await db.execute(sql`
+            SELECT DISTINCT user_id FROM memberships
+            WHERE user_id = ANY(${pgArray(rows.map((r) => r.id), "varchar")})
+              AND role IN ('super_admin', 'admin')
+          `);
+          godIds = new Set(((mRes.rows ?? []) as Array<{ user_id: string }>).map((r) => r.user_id));
+        } catch {
+          godIds = new Set(); // memberships table absent on an old clone
+        }
+        return rows.filter((r) => !godIds.has(r.id)).slice(0, perGroup);
+      })(),
     ]);
     return {
       people: people.map((p) => ({
@@ -30485,6 +30539,14 @@ export async function registerRoutes(
           href: `/admin/pressing-orders?orderId=${o.id}`,
         };
       }),
+      teamAccounts: teamAccountRows.map((u) => ({
+        kind: "teamAccount", id: u.id,
+        title: u.display_name || u.username || u.email || "Team account",
+        subtitle: u.email, badge: "Team account",
+        // Deep-link with the email pre-filled so the roster page opens
+        // already filtered down to this exact account.
+        href: `/admin/team-accounts?search=${encodeURIComponent(u.email || u.username || "")}`,
+      })),
     };
     })();
     searchInflight.set(cacheKey, build);
