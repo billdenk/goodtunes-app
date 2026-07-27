@@ -1,0 +1,18 @@
+Subject: Manage colors — corrections to match the original spec
+The Manage colors work diverged from the brief and mockups I sent for the press catalog redesign. Three corrections plus one addition. This replaces my earlier note about hex support — treat this as the single authoritative instruction.
+Panel must present as a modal overlay, not inline
+The spec said the panel replaces the Reorder Colors modal. That means it presents the way that modal did: centered overlay with a scrim, page behind it untouched. Right now it renders inline and pushes the whole page down. Convert it to an overlay. Everything inside stays as built — drop zone, rows, drag reorder, footer with Undo/Redo/Reset on the left and Save on the right. Size it generously (it's a working surface), with internal scroll for long color lists.
+The + chip must open the panel
+Clicking the + chip at the end of the swatch row currently does nothing visible. Per the original brief, the add-swatch path opens the Manage colors panel. Wire the + chip to open the overlay from item 1.
+Add colors without photos, and expose hex in the panel
+The Edit swatch modal already supports hex with photo-overrides-hex behavior, so the data model is there. The panel needs to expose it:
+Add a text link under the drop zone: "+ Add color manually". It creates a new empty row with a blank name field and an unset hex chip.
+Every row gets a color chip: photo thumbnail when a photo exists, flat hex-colored disc when only hex exists, neutral outline chip when neither is set yet. Clicking the chip opens a hex input plus the native color picker. Normalize to #RRGGBB on save.
+Save rule: every swatch needs at least one of photo or hex. Block save with an inline error on any row that has neither.
+Hex stays stored when a photo is added; photo overrides hex for rendering, same rule the Edit swatch modal already states.
+Manually added rows participate fully in reorder, rename, delete, format pills, and the Undo/Redo/Reset dirty-state logic.
+Tier page chips and thumbnails use the same fallback: photo if present, else flat hex disc.
+Edit swatch modal stays, but fix the layout
+Keep this modal as the quick single-edit path from the tier page. Fix the visual issues: the Upload/Clear buttons sit higher than the photo row they belong to, the hex chip and hex input are mismatched heights and widths, and spacing between the Name, Hex, Photo, and Color Applies To groups is uneven. Bring it in line with the admin design system — shadcn primitives, h-9 control density, 6px radius, consistent label/field spacing. No functional changes to this modal.
+Out of scope: no changes to the tier page preview image, pricing table, dropdown, or anything outside the surfaces named above.
+Before marking this done, verify all four against the mockups from the original press-catalog brief and confirm: + chip opens the overlay, a color can be created with hex only, and the page no longer reflows when the panel opens.
