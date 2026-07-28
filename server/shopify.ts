@@ -1232,20 +1232,31 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   //              if the cart contained an isSignedGooddeedAddon line item.
   const totalCents = dollarsToCents(payload.total_price);
   let signedCertCents = 0;
-  // Method A: legacy mapping-level offerSignedCert (album-wide toggle).
+  // Whether this order carries the printed & signed cert bundle at all —
+  // drives the cert reservation. Distinct from signedCertCents (the retail
+  // dollar line): new mappings store NO per-mapping cert price (billing is
+  // computed after the pre-order window from the wholesale ladder), so a
+  // bundled cert with no price still mints its reservation, just without
+  // an addon dollar line on the order.
+  let bundleSignedCert = false;
+  // Method A: mapping-level offerSignedCert (album-wide toggle).
   if (
     matchedMapping.offerSignedCert &&
-    matchedMapping.signedCertPriceCents != null &&
     // Task #2428 — on a shopify_plus album the signed GoodDeed is additionally
     // gated by the album-level value-add toggle; plain shopify is unaffected.
     (!isShopifyPlus || spAlbum?.shopifyPlusSignedGooddeed)
   ) {
-    const [floor] = await db
-      .select()
-      .from(albumAddons)
-      .where(and(eq(albumAddons.albumId, albumId), eq(albumAddons.kind, "signed_cert")));
-    if (!floor || matchedMapping.signedCertPriceCents >= floor.minPriceCents) {
-      signedCertCents = matchedMapping.signedCertPriceCents;
+    bundleSignedCert = true;
+    // Legacy price column: when present (old mappings), keep the retail
+    // dollar line, still enforcing the album's floor.
+    if (matchedMapping.signedCertPriceCents != null) {
+      const [floor] = await db
+        .select()
+        .from(albumAddons)
+        .where(and(eq(albumAddons.albumId, albumId), eq(albumAddons.kind, "signed_cert")));
+      if (!floor || matchedMapping.signedCertPriceCents >= floor.minPriceCents) {
+        signedCertCents = matchedMapping.signedCertPriceCents;
+      }
     }
   }
   // Method B: per-order add-on line item detection. A separate Shopify
@@ -1264,6 +1275,7 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
     // it. (Per-unit price vs floor; multiply quantity after the check.)
     if (!floor || dollarsToCents(signedAddonLine.price) >= floor.minPriceCents) {
       signedCertCents = addonLineCents;
+      bundleSignedCert = true;
     }
   }
 
@@ -1412,7 +1424,9 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // signed-cert add-on. Window status drives variantKind: in-window =
   // printed (eligible for batch); post-window = digital_only (fan keeps
   // the digital provenance page but no print row is produced).
-  if (signedCertCents > 0) {
+  // Gated on bundleSignedCert (not the dollar line) — new mappings carry
+  // no per-mapping cert price, but the physical cert must still reserve.
+  if (bundleSignedCert) {
     try {
       const { reservationKindForWindowStatus } = await import("./saleWindow");
       const { certReservations } = await import("@shared/schema");
@@ -3473,19 +3487,12 @@ export function registerShopifyRoutes(app: Express) {
     // then-update-or-insert is simple, race-safe enough for an
     // admin-only endpoint, and avoids materializing two upsert paths.
     const d = parsed.data;
-    // Task #2428 — offers_digital_unlock: for a shopify_plus album the
-    // fulfillment-only feed is the baseline (Step 8), so a mapping only mints
-    // the GoodTunes unlock + GoodDeed when the operator explicitly opts in.
-    // Plain "shopify" albums always mint, so the flag is irrelevant there —
-    // leave it at its true default. If the client sent an explicit value (the
-    // mapping checkbox on a shopify_plus album), honor it.
-    if (d.offersDigitalUnlock === undefined) {
-      const [alb] = await db
-        .select({ sellMode: albums.sellMode })
-        .from(albums)
-        .where(eq(albums.id, albumId));
-      d.offersDigitalUnlock = alb?.sellMode === "shopify_plus" ? false : true;
-    }
+    // Digital access + PDF GoodDeed are intrinsic to every mapping — there
+    // is no digital sale without a GoodDeed. The old per-mapping opt-in
+    // (Task #2428, shopify_plus fulfillment-only default) is retired; the
+    // flag is forced true regardless of what the client sends. The column
+    // stays for the webhook's defensive branch only.
+    d.offersDigitalUnlock = true;
     const variantId = d.shopifyVariantId ?? null;
     const [existing] = await db
       .select()
@@ -3557,10 +3564,13 @@ export function registerShopifyRoutes(app: Express) {
     if (!existing) return res.status(404).json({ message: "Mapping not found" });
 
     const next = {
-      offersDigitalUnlock: parsed.data.offersDigitalUnlock ?? existing.offersDigitalUnlock,
+      // Digital access + PDF GoodDeed are intrinsic — force true regardless
+      // of what the caller sends (the toggle is gone from the UI).
+      offersDigitalUnlock: true,
       offerSignedCert: parsed.data.offerSignedCert ?? existing.offerSignedCert,
-      // Keep the stored price when the caller doesn't send one, so toggling
-      // the bundle off and back on remembers the last price.
+      // Cert price field is retired from the form; keep any stored legacy
+      // value untouched unless explicitly sent (signed-cert billing is
+      // computed after the pre-order window closes, not from this column).
       signedCertPriceCents:
         parsed.data.signedCertPriceCents === undefined
           ? existing.signedCertPriceCents
@@ -3573,10 +3583,9 @@ export function registerShopifyRoutes(app: Express) {
           "This mapping is a legacy signed-cert add-on product — it can't also bundle a certificate. Remove it and link the product again to bundle.",
       });
     }
-    if (next.offerSignedCert) {
-      if (next.signedCertPriceCents == null) {
-        return res.status(400).json({ message: "Enter a certificate price" });
-      }
+    // No price requirement anymore — cert billing happens post-window. Only
+    // validate the floor when a caller explicitly sends a price (legacy API).
+    if (next.offerSignedCert && next.signedCertPriceCents != null) {
       // Same floor enforcement as create.
       const [floor] = await db
         .select()

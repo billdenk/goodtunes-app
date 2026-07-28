@@ -143,8 +143,8 @@ export function ShopifyPanel({
 }: {
   albumId: string;
   album?: ShopifyPanelAlbum;
-  // Task #2428 — drives the shopify_plus-only "also mint the digital unlock"
-  // mapping checkbox. Passed from AdminAlbum's album.sellMode.
+  // Passed from AdminAlbum's album.sellMode. (The old shopify_plus-only
+  // "also mint" mapping checkbox is retired — digital access is intrinsic.)
   sellMode?: "direct" | "shopify" | "shopify_plus" | null;
   onJumpToTab?: (tab: ShopifyJumpTab) => void;
   // Task #1530 — completeness gating for the push action. `readyToPush`
@@ -188,12 +188,11 @@ export function ShopifyPanel({
   // the sole connected store when there's only one.
   const [pickerStoreId, setPickerStoreId] = useState<string>("");
   const [offerCert, setOfferCert] = useState(false);
-  const [certPrice, setCertPrice] = useState("9.99");
   // Task #2428 — for a shopify_plus album the operator opts a mapping in to
-  // ALSO mint the GoodTunes digital unlock + GoodDeed (default OFF =
-  // fulfillment-only). Not shown for plain "shopify" (a mapping always mints).
+  // Digital access + PDF GoodDeed are intrinsic to every mapping now — the
+  // per-mapping unlock toggle was removed (there is no digital sale without
+  // a GoodDeed). Minting is implied by the mapping existing.
   const isShopifyPlus = sellMode === "shopify_plus";
-  const [offerUnlock, setOfferUnlock] = useState(false);
 
   // Task #2892 — visible save lifecycle for the mapping form. On success the
   // Found panel closes, the fields reset, and the new row shows a brief
@@ -414,14 +413,9 @@ export function ShopifyPanel({
         albumId,
         offerSignedCert: offerCert,
       };
-      // Task #2428 — only meaningful for shopify_plus; the server ignores it
-      // for plain shopify (a mapping always mints the unlock there).
-      if (isShopifyPlus) body.offersDigitalUnlock = offerUnlock;
-      if (offerCert) {
-        const cents = parseDollars(certPrice);
-        if (cents == null) throw new Error("Enter a valid cert price");
-        body.signedCertPriceCents = cents;
-      }
+      // No offersDigitalUnlock — the server forces it true (digital access +
+      // PDF GoodDeed are intrinsic). No cert price — signed-cert billing is
+      // computed after the pre-order window closes, not stored per mapping.
       const r = await apiRequest("POST", `/api/admin/albums/${albumId}/shopify-mappings`, body);
       return r.json() as Promise<Mapping>;
     },
@@ -434,8 +428,6 @@ export function ShopifyPanel({
       setResolved(null);
       setVariantId(null);
       setOfferCert(false);
-      setOfferUnlock(false);
-      setCertPrice("9.99");
       setSaveError(null);
       setBrowserKey((k) => k + 1);
       disclosure.setOpen(row.id, true);
@@ -644,23 +636,9 @@ export function ShopifyPanel({
                 ))}
               </select>
             </div>
-            {isShopifyPlus && (
-              <div>
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={offerUnlock}
-                    onChange={(e) => setOfferUnlock(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
-                    data-testid="toggle-shopify-unlock"
-                  />
-                  <span className="text-[13px] text-slate-800">Also include the GoodTunes digital unlock + GoodDeed for buyers</span>
-                </label>
-                <p className="text-[11.5px] text-slate-400 mt-0.5 ml-6">
-                  Off: we only fulfill the physical order. On: buyers also get the app unlock and a numbered GoodDeed.
-                </p>
-              </div>
-            )}
+            <p className="text-[12.5px] text-slate-600" data-testid="text-shopify-included-access">
+              Buyers get GoodTunes digital access and a numbered GoodDeed (PDF).
+            </p>
             <div>
               <label className="inline-flex items-center gap-2">
                 <input
@@ -670,24 +648,11 @@ export function ShopifyPanel({
                   className="h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
                   data-testid="toggle-shopify-cert"
                 />
-                <span className="text-[13px] text-slate-800">Bundle a printed & signed GoodDeed certificate</span>
+                <span className="text-[13px] text-slate-800">Also bundle a printed & signed GoodDeed certificate</span>
               </label>
-              {offerCert && (
-                <div className="flex items-center gap-1.5 mt-2 ml-6">
-                  <span className="text-slate-500 text-[12px]">Price $</span>
-                  <input
-                    type="text"
-                    value={certPrice}
-                    onChange={(e) => setCertPrice(e.target.value)}
-                    inputMode="decimal"
-                    className="w-24 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
-                    data-testid="input-shopify-cert-price"
-                  />
-                  <span className="text-[11.5px] text-slate-400">
-                    The certificate's share of the Shopify price — nothing extra is charged; buyers pay only the price set on Shopify. Must be ≥ the album's minimum.
-                  </span>
-                </div>
-              )}
+              <p className="text-[11.5px] text-slate-400 mt-0.5 ml-6">
+                Adds a physical, signed certificate on top of the PDF GoodDeed every buyer receives.
+              </p>
             </div>
             {saveError && (
               <p className="text-[12px] text-rose-600" data-testid="text-mapping-save-error">
@@ -1289,12 +1254,7 @@ function MappingRow({
   // Local, user-authoritative control state, seeded from the row once (the
   // component is keyed by m.id) so a refetch can never stomp an in-flight
   // or failed-but-kept choice.
-  const [unlock, setUnlock] = useState(m.offersDigitalUnlock);
   const [cert, setCert] = useState(m.offerSignedCert);
-  const [price, setPrice] = useState(
-    m.signedCertPriceCents != null ? (m.signedCertPriceCents / 100).toFixed(2) : "",
-  );
-  const lastSavedPriceCents = useRef<number | null>(m.signedCertPriceCents);
   const [rowError, setRowError] = useState<string | null>(null);
   const [rowSaved, setRowSaved] = useState(false);
   useEffect(() => {
@@ -1304,11 +1264,7 @@ function MappingRow({
   }, [rowSaved]);
 
   const patch = useMutation({
-    mutationFn: async (body: {
-      offersDigitalUnlock: boolean;
-      offerSignedCert: boolean;
-      signedCertPriceCents?: number | null;
-    }) => {
+    mutationFn: async (body: { offerSignedCert: boolean }) => {
       const r = await apiRequest("PATCH", `/api/admin/albums/${albumId}/shopify-mappings/${m.id}`, body);
       return r.json() as Promise<Mapping>;
     },
@@ -1319,7 +1275,6 @@ function MappingRow({
         ["/api/admin/albums", albumId, "shopify-mappings"],
         (prev) => prev?.map((x) => (x.id === row.id ? row : x)),
       );
-      lastSavedPriceCents.current = row.signedCertPriceCents;
       setRowError(null);
       setRowSaved(true);
     },
@@ -1332,14 +1287,10 @@ function MappingRow({
     },
   });
 
-  const commit = (next: { unlock: boolean; cert: boolean; priceStr: string }) => {
-    const body: {
-      offersDigitalUnlock: boolean;
-      offerSignedCert: boolean;
-      signedCertPriceCents?: number | null;
-    } = { offersDigitalUnlock: next.unlock, offerSignedCert: next.cert };
-    if (next.cert) body.signedCertPriceCents = parseDollars(next.priceStr);
-    patch.mutate(body);
+  // Only the cert bundle flag is editable — digital unlock is intrinsic
+  // (server forces it true) and cert pricing moved to post-window billing.
+  const commit = (next: { cert: boolean }) => {
+    patch.mutate({ offerSignedCert: next.cert });
   };
 
   return (
@@ -1383,29 +1334,9 @@ function MappingRow({
             {m.storeName ?? m.shopDomain ?? "—"}
             {m.shopifyVariantId ? ` · variant ${m.shopifyVariantId}` : " · all variants"}
           </div>
-          {isShopifyPlus && (
-            <label className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                checked={unlock}
-                onChange={(e) => {
-                  const v = e.target.checked;
-                  setUnlock(v);
-                  commit({ unlock: v, cert, priceStr: price });
-                }}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
-                data-testid={`row-mint-toggle-${m.id}`}
-              />
-              <span className="min-w-0">
-                <span className="block text-[13px] text-slate-800">
-                  Also include the GoodTunes digital unlock + GoodDeed for buyers
-                </span>
-                <span className="block text-[11.5px] text-slate-400">
-                  Off: we only fulfill the physical order. On: buyers also get the app unlock and a numbered GoodDeed.
-                </span>
-              </span>
-            </label>
-          )}
+          <p className="text-[12.5px] text-slate-600" data-testid={`text-included-access-${m.id}`}>
+            Buyers get GoodTunes digital access and a numbered GoodDeed (PDF).
+          </p>
           {!m.isSignedGooddeedAddon && (
             <div>
               <label className="inline-flex items-center gap-2">
@@ -1414,43 +1345,17 @@ function MappingRow({
                   checked={cert}
                   onChange={(e) => {
                     const v = e.target.checked;
-                    let p = price;
-                    if (v && parseDollars(price) == null) {
-                      p = "9.99";
-                      setPrice(p);
-                    }
                     setCert(v);
-                    commit({ unlock, cert: v, priceStr: p });
+                    commit({ cert: v });
                   }}
                   className="h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
                   data-testid={`row-cert-toggle-${m.id}`}
                 />
-                <span className="text-[13px] text-slate-800">Bundle a printed & signed GoodDeed certificate</span>
+                <span className="text-[13px] text-slate-800">Also bundle a printed & signed GoodDeed certificate</span>
               </label>
-              {cert && (
-                <div className="flex items-center gap-1.5 mt-1.5 ml-6">
-                  <span className="text-slate-500 text-[12px]">Price $</span>
-                  <input
-                    type="text"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    onBlur={() => {
-                      const cents = parseDollars(price);
-                      if (cents !== lastSavedPriceCents.current) {
-                        commit({ unlock, cert, priceStr: price });
-                      }
-                    }}
-                    inputMode="decimal"
-                    className="w-24 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
-                    data-testid={`row-cert-price-${m.id}`}
-                  />
-                </div>
-              )}
-              {cert && (
-                <p className="text-[11.5px] text-slate-400 mt-1 ml-6">
-                  The certificate's share of the Shopify price — nothing extra is charged; buyers pay only the price set on Shopify.
-                </p>
-              )}
+              <p className="text-[11.5px] text-slate-400 mt-0.5 ml-6">
+                Adds a physical, signed certificate on top of the PDF GoodDeed every buyer receives.
+              </p>
             </div>
           )}
           <div className="min-h-[18px] text-[12px]" data-testid={`row-save-status-${m.id}`} aria-live="polite">
@@ -1463,7 +1368,7 @@ function MappingRow({
                 Couldn't save — {rowError}{" "}
                 <button
                   type="button"
-                  onClick={() => commit({ unlock, cert, priceStr: price })}
+                  onClick={() => commit({ cert })}
                   className="underline underline-offset-2 font-medium"
                   data-testid={`button-row-retry-${m.id}`}
                 >

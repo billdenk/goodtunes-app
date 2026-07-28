@@ -204,8 +204,8 @@ test("no connected store: steps 2 and 3 are locked with the unlock hint", async 
   }
 });
 
-// ── 2. complete collapse + mint toggle saves with inline "Saved" ─────
-test("store + mapping + sale URL: steps collapse complete; mint toggle PATCHes and confirms", async () => {
+// ── 2. complete collapse + cert toggle saves with inline "Saved" ─────
+test("store + mapping + sale URL: steps collapse complete; cert toggle PATCHes and confirms", async () => {
   pushFixture = { ...PUSH_BASE, stores: [STORE] };
   mappingsFixture = [{ ...M1 }];
   const { container, q, cleanup } = await mount({
@@ -235,21 +235,29 @@ test("store + mapping + sale URL: steps collapse complete; mint toggle PATCHes a
     assert.ok(!/add-on for the album/i.test(container.textContent ?? ""));
     assert.equal(q("checkbox-signed-addon"), null);
 
-    // Expand the row, flip the mint checkbox off.
+    // Expand the row — the retired mint toggle is gone; digital access is
+    // stated as intrinsic and only the cert bundle checkbox is editable.
     await click(q("button-toggle-mapping-m1"));
-    const mint = q("row-mint-toggle-m1") as HTMLInputElement | null;
-    assert.ok(mint, "mint toggle renders on the expanded row");
-    assert.equal(mint!.checked, true);
-    await click(mint);
+    assert.equal(q("row-mint-toggle-m1"), null, "mint toggle is retired");
+    assert.match(
+      q("text-included-access-m1")!.textContent ?? "",
+      /digital access and a numbered GoodDeed \(PDF\)/,
+    );
+    assert.equal(q("row-cert-price-m1"), null, "cert price field is retired");
+    const cert = q("row-cert-toggle-m1") as HTMLInputElement | null;
+    assert.ok(cert, "cert toggle renders on the expanded row");
+    assert.equal(cert!.checked, false);
+    await click(cert);
 
     assert.equal(patchCalls.length, 1);
     assert.match(patchCalls[0].url, /\/api\/admin\/albums\/a1\/shopify-mappings\/m1$/);
-    assert.equal(patchCalls[0].body.offersDigitalUnlock, false);
-    assert.equal(patchCalls[0].body.offerSignedCert, false);
+    assert.equal(patchCalls[0].body.offerSignedCert, true);
+    assert.equal(patchCalls[0].body.offersDigitalUnlock, undefined);
+    assert.equal(patchCalls[0].body.signedCertPriceCents, undefined);
 
     // Inline confirmation, not a toast.
     assert.match(q("row-save-status-m1")!.textContent ?? "", /Saved/);
-    assert.equal((q("row-mint-toggle-m1") as HTMLInputElement).checked, false);
+    assert.equal((q("row-cert-toggle-m1") as HTMLInputElement).checked, true);
   } finally {
     await cleanup();
   }
@@ -264,24 +272,24 @@ test("failed flag save keeps the user's choice with Couldn't save + Retry", asyn
   try {
     await click(stepHeader(q("step-shopify-map")!));
     await click(q("button-toggle-mapping-m1"));
-    const mint = q("row-mint-toggle-m1") as HTMLInputElement;
-    await click(mint);
+    const cert = q("row-cert-toggle-m1") as HTMLInputElement;
+    await click(cert);
 
     assert.equal(patchCalls.length, 1);
     const status = q("row-save-status-m1")!;
     assert.match(status.textContent ?? "", /Couldn't save/);
     assert.match(status.textContent ?? "", /below the album's signed-cert floor/);
     // The user's choice is NOT silently reverted.
-    assert.equal((q("row-mint-toggle-m1") as HTMLInputElement).checked, false);
+    assert.equal((q("row-cert-toggle-m1") as HTMLInputElement).checked, true);
 
     // Retry re-sends the same flags and lands on Saved.
     patchResponder = (body) => ({
       status: 200,
-      json: { ...M1, offersDigitalUnlock: body.offersDigitalUnlock, offerSignedCert: body.offerSignedCert },
+      json: { ...M1, offerSignedCert: body.offerSignedCert },
     });
     await click(q("button-row-retry-m1"));
     assert.equal(patchCalls.length, 2);
-    assert.equal(patchCalls[1].body.offersDigitalUnlock, false);
+    assert.equal(patchCalls[1].body.offerSignedCert, true);
     assert.match(q("row-save-status-m1")!.textContent ?? "", /Saved/);
   } finally {
     await cleanup();
