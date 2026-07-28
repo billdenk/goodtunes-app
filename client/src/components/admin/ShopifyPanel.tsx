@@ -683,7 +683,9 @@ export function ShopifyPanel({
                     className="w-24 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
                     data-testid="input-shopify-cert-price"
                   />
-                  <span className="text-[11.5px] text-slate-400">Must be ≥ the album's per-album minimum floor.</span>
+                  <span className="text-[11.5px] text-slate-400">
+                    The certificate's share of the Shopify price — nothing extra is charged; buyers pay only the price set on Shopify. Must be ≥ the album's minimum.
+                  </span>
                 </div>
               )}
             </div>
@@ -1443,6 +1445,11 @@ function MappingRow({
                     data-testid={`row-cert-price-${m.id}`}
                   />
                 </div>
+              )}
+              {cert && (
+                <p className="text-[11.5px] text-slate-400 mt-1 ml-6">
+                  The certificate's share of the Shopify price — nothing extra is charged; buyers pay only the price set on Shopify.
+                </p>
               )}
             </div>
           )}
