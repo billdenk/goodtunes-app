@@ -1,0 +1,19 @@
+Otis — final design + build brief for the Shopify tab mapping flow. I ran the design through a review pass; you'll get a zip containing a design board (GoodTunes Shopify Mapping.dc.html), a README, and the original brief. The README is thorough and mostly right — build to it, with the corrections and boundaries below. Workspace only. No publish, no deploy. Everything batches with the crash fix, portal auth fix, and form model change when I say go.
+What to build, by option id from the board:
+Empty state: option 1b. No dashed box. "Link with GoodTunes" lives in the section header row permanently (same position empty or populated). Empty state is one sentence. Shopify escape hatch is the footer strip: "Not in Shopify yet? Create the product in your store ↗" — opens the store's new-product page (admin.shopify.com/store/{handle}/products/new) in a new tab.
+Linked list: option 1d resting, option 1f on hover. Rows silent at rest — variant title with price, gid in small mono, status badge ("Digital + PDF GoodDeed" neutral, "+ Signed GoodDeed" brand tint). On hover: row washes 
+#f8fafc, borderless text "Edit" plus a ⋯ menu containing "Edit mapping" and "Remove link" (red). Hover fades 140ms; hover is never the only path — Remove also lives in the edit panel.
+Picker: options 1h and 1i. Dialog, search on top, results are variants grouped under uppercase product headers with stock counts. Already-linked variants stay visible at reduced opacity with an "Already linked" tag — variant-level graying, never product-level. Footer: paste-a-URL fallback. No-results state names the fix and repeats the create-in-store link.
+Configure: option 1j. Chosen variant row with Change button, the inclusion chip (stated fact, not a success banner), the single cert checkbox with the wholesale-ladder helper text, no price field. Save mapping is the one solid 
+#1f7fb8 primary; Cancel outline. Edit mode: option 1l — variant fixed with link date shown, checkbox pre-set, borderless red "Remove link" bottom-left.
+Sale URL field — keep it, upgrade it: do NOT build the destination-radio section from the board (see out of scope). The field stays, with two additions: (a) prefill — when a variant is mapped, fetch the product's online store URL from Shopify and prefill the field with it (this respects the custom domain); artist can edit. Helper: "Filled in from your linked product. Edit it if the sale lives on a different page." (b) a "Test link" button beside it that opens the URL in a new tab (noopener).
+Design tokens: use the README's token table as written — it matches our system. Light mode only.
+Out of scope — do not build:
+The store-connection "Request access" flow (options 2b's input + request pattern). Store connections stay team-managed; that's a commercial gate, not a UI gap. You may adopt the connected-state row visual (green check, mono domain, Manage link) if it's a drop-in.
+The "Where the Buy button goes" destination radios. No GoodTunes-checkout option per album; the Sale URL field upgrade above is the whole scope.
+Bulk/multi-link.
+Notes:
+The board's sample data includes a standalone "CALIFORNIALAND Digital Album · $12.00" variant. That violates our waterfall — digital is never sold standalone on Shopify. Do not copy the sample data into seeds, fixtures, or docs.
+The README flags two states it didn't draw: pending-approval for store connection (skip — connection flow is out of scope) and a warning state for a linked variant deleted in Shopify. Build the deleted-variant warning as a simple amber row state with "This variant no longer exists in Shopify" and the Remove action; nothing fancier.
+Both surfaces: admin and artist portal, same layout.
+Send screenshots when done: empty state, list resting, list with hover, picker with a grayed row, picker no-results, configure, edit mode, and the upgraded Sale URL field. Stills only. Task #2843 stays on hold. No publish until I give the word.
