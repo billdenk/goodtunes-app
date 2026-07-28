@@ -48,6 +48,25 @@ export function Redeem() {
     onError: (e: any) => toast({ title: "Couldn't claim", description: e?.message, variant: "destructive" }),
   });
 
+  // Stub-promotion mutation. MUST be declared above the early-return
+  // guards below: it used to live after them, so the sign-in transition
+  // (form render → `if (user)` return) dropped a hook between renders and
+  // crashed the whole app with React #310 at the exact "unlock" moment.
+  const setStubPassword = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/shopify/redemption/${code}/set-password`, { password });
+      return r.json() as Promise<{ token: string; user: { id: string; email: string; username: string; displayName: string } }>;
+    },
+    onSuccess: (resp) => {
+      // Mirror useAuth's loginMutation onSuccess so the rest of the
+      // page sees us as signed in — token in storage, /api/me primed.
+      setAuthToken(resp.token);
+      queryClient.setQueryData(["/api/me"], resp.user);
+      queryClient.invalidateQueries();
+    },
+    onError: (e: any) => toast({ title: "Couldn't set password", description: e?.message, variant: "destructive" }),
+  });
+
   // Once the user is signed in, run claim automatically — they've already
   // proven identity, no extra tap required.
   useEffect(() => {
@@ -137,20 +156,6 @@ export function Redeem() {
   // /set-password endpoint that promotes the stub atomically using the
   // redemption code as proof.
   const needsExisting = !!data.customer?.hasPassword;
-  const setStubPassword = useMutation({
-    mutationFn: async () => {
-      const r = await apiRequest("POST", `/api/shopify/redemption/${code}/set-password`, { password });
-      return r.json() as Promise<{ token: string; user: { id: string; email: string; username: string; displayName: string } }>;
-    },
-    onSuccess: (resp) => {
-      // Mirror useAuth's loginMutation onSuccess so the rest of the
-      // page sees us as signed in — token in storage, /api/me primed.
-      setAuthToken(resp.token);
-      queryClient.setQueryData(["/api/me"], resp.user);
-      queryClient.invalidateQueries();
-    },
-    onError: (e: any) => toast({ title: "Couldn't set password", description: e?.message, variant: "destructive" }),
-  });
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (needsExisting || mode === "signin") {
