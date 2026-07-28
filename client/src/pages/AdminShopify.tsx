@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ExternalLink, Trash2, CheckCircle2, FlaskConical, Copy, Check, DollarSign, Pencil, ShieldAlert, ChevronDown, ChevronUp, TriangleAlert, X } from "lucide-react";
+import { ExternalLink, Trash2, CheckCircle2, FlaskConical, Copy, Check, Pencil, ShieldAlert, ChevronDown, ChevronUp, TriangleAlert, X } from "lucide-react";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -611,7 +611,6 @@ Get your music now
                   </div>
                   {/* Digital unit fee inline edit */}
                   <div className="flex items-center gap-1 shrink-0">
-                    <DollarSign className="w-3.5 h-3.5 text-slate-400" />
                     {editingFeeStoreId === s.id ? (
                       <form
                         onSubmit={(e) => {
