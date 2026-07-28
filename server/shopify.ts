@@ -3403,6 +3403,107 @@ export function registerShopifyRoutes(app: Express) {
       .leftJoin(shopifyStores, eq(shopifyProductMappings.storeId, shopifyStores.id))
       .where(eq(shopifyProductMappings.albumId, albumId))
       .orderBy(desc(shopifyProductMappings.createdAt));
+
+    // Task #2912 — legacy rows created before the #2909 redesign never
+    // cached variant metadata (title/price/product url), so they render
+    // bare. Backfill it best-effort from the store's Admin API and PERSIST
+    // the snapshot onto the row (same shape new rows get at link time), so
+    // the round-trip happens once per legacy row, not on every list load.
+    // Failures fall through to whatever is stored — the list must never
+    // 500 because Shopify is unreachable. A variant-pinned row whose
+    // variant no longer exists on Shopify is flagged `variantRemoved` for
+    // the amber row treatment (not persisted — it's live state). Existence
+    // is checked for EVERY variant-pinned row (not just backfill-needing
+    // ones), throttled through the 60s variantRetailCache so repeat list
+    // loads don't hammer Shopify.
+    const removedIds = new Set<string>();
+    await Promise.all(
+      rows.map(async (r) => {
+        const m = r.m;
+        const needsVariant = m.shopifyVariantId != null && (!m.shopifyVariantTitle || !m.shopifyVariantPrice);
+        const needsProduct = !m.shopifyProductTitle || !m.shopifyProductUrl;
+        const store = r.s;
+        if (!store) return;
+        // Fresh cache entry answers the existence question without a
+        // round-trip; only skip the fetch when nothing else is missing.
+        if (m.shopifyVariantId != null && !needsVariant && !needsProduct) {
+          const cached = variantRetailCache.get(`${store.id}:${m.shopifyVariantId}`);
+          if (cached && Date.now() - cached.at < VARIANT_RETAIL_TTL_MS) {
+            if (cached.value.removed) removedIds.add(m.id);
+            return;
+          }
+        } else if (m.shopifyVariantId == null && !needsProduct) {
+          return; // product-wide row, fully populated — nothing to do
+        }
+        try {
+          if (m.shopifyVariantId != null) {
+            const data = await shopifyGraphql<{
+              productVariant: {
+                title: string;
+                price: string;
+                product: { title: string; onlineStoreUrl: string | null };
+              } | null;
+            }>(
+              store,
+              /* GraphQL */ `
+                query mappingVariant($id: ID!) {
+                  productVariant(id: $id) {
+                    title
+                    price
+                    product { title onlineStoreUrl }
+                  }
+                }
+              `,
+              { id: variantGid(m.shopifyVariantId) },
+            );
+            // Seed the shared retail cache so the next list load (and the
+            // sales panel) answers existence/price without a round-trip.
+            variantRetailCache.set(`${store.id}:${m.shopifyVariantId}`, {
+              at: Date.now(),
+              value: data.productVariant
+                ? {
+                    priceCents: data.productVariant.price ? dollarsToCents(data.productVariant.price) : null,
+                    currency: "USD",
+                    removed: false,
+                  }
+                : { priceCents: null, currency: null, removed: true },
+            });
+            if (!data.productVariant) {
+              removedIds.add(m.id);
+              return;
+            }
+            m.shopifyVariantTitle = m.shopifyVariantTitle ?? data.productVariant.title ?? null;
+            m.shopifyVariantPrice = m.shopifyVariantPrice ?? data.productVariant.price ?? null;
+            m.shopifyProductTitle = m.shopifyProductTitle ?? data.productVariant.product?.title ?? null;
+            m.shopifyProductUrl = m.shopifyProductUrl ?? data.productVariant.product?.onlineStoreUrl ?? null;
+          } else if (needsProduct) {
+            // Product-wide row (variantId=null) — backfill product title/url only.
+            const product = await fetchProductByLegacyId(store, m.shopifyProductId);
+            if (!product) return;
+            m.shopifyProductTitle = m.shopifyProductTitle ?? (product.title as string) ?? null;
+            m.shopifyProductUrl = m.shopifyProductUrl ?? product.onlineStoreUrl ?? null;
+          }
+          // Persist only when the row was actually missing fields — a
+          // complete row re-fetched for the existence check writes nothing.
+          if (needsVariant || needsProduct) {
+            await db
+              .update(shopifyProductMappings)
+              .set({
+                shopifyVariantTitle: m.shopifyVariantTitle,
+                shopifyVariantPrice: m.shopifyVariantPrice,
+                shopifyProductTitle: m.shopifyProductTitle,
+                shopifyProductUrl: m.shopifyProductUrl,
+              })
+              .where(eq(shopifyProductMappings.id, m.id));
+          }
+        } catch (e: any) {
+          console.warn(
+            `[shopify-mappings] metadata backfill failed mapping=${m.id} store=${store.shopDomain}: ${e?.message ?? e}`,
+          );
+        }
+      }),
+    );
+
     res.json(
       rows.map((r) => ({
         ...r.m,
@@ -3410,6 +3511,8 @@ export function registerShopifyRoutes(app: Express) {
         shopDomain: r.s?.shopDomain ?? null,
         // Task #2909 — cached at creation time for Sale URL prefill.
         shopifyProductUrl: r.m.shopifyProductUrl ?? null,
+        // Task #2912 — live "this variant no longer exists" flag.
+        variantRemoved: removedIds.has(r.m.id),
       })),
     );
   });

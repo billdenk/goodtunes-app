@@ -11782,6 +11782,16 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<span className=\"text-[11.5px] text-[#94a3b8]\">All variants</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-amber-100 text-amber-800\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "<span className=\"inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-[#1f7fb8]/10 text-[#1f7fb8]\">"
   },
   {

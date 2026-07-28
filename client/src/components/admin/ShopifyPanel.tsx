@@ -15,7 +15,8 @@
 // Task #2909 — mapping section redesigned: variant-level picker dialog,
 // silent list rows with hover-only controls, configure/edit panel, Sale
 // URL prefill from onlineStoreUrl.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { formatUsdCents } from "@shared/money";
 import { apiRequest, queryClient, apiErrorBody } from "@/lib/queryClient";
@@ -41,6 +42,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToastAction } from "@/components/ui/toast";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -97,6 +99,9 @@ type Mapping = {
   shopDomain: string | null;
   isSignedGooddeedAddon: boolean;
   createdAt: string | null;
+  // Task #2912 — live flag from the mappings endpoint: the pinned variant
+  // no longer exists on Shopify (deleted after linking).
+  variantRemoved?: boolean;
 };
 // Resolved type kept for paste-URL path inside the picker dialog (server shape).
 type Resolved = {
@@ -472,15 +477,66 @@ export function ShopifyPanel({
       ),
   });
 
+  // Removal is confirm-gated (removing a mapping stops orders for that
+  // variant from routing to this release). The confirm dialog holds the
+  // full row so the success toast can offer Undo — which re-creates the
+  // mapping from the deleted row's snapshot via the normal POST (no
+  // soft-delete column; a schema change isn't warranted for this).
+  const [confirmRemove, setConfirmRemove] = useState<Mapping | null>(null);
+  const undoRemove = useMutation({
+    mutationFn: async (m: Mapping) => {
+      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/shopify-mappings`, {
+        storeId: m.storeId,
+        shopifyProductId: m.shopifyProductId,
+        shopifyVariantId: m.shopifyVariantId,
+        shopifyProductTitle: m.shopifyProductTitle,
+        shopifyVariantTitle: m.shopifyVariantTitle,
+        shopifyVariantPrice: m.shopifyVariantPrice,
+        shopifyProductUrl: m.shopifyProductUrl,
+        albumId,
+        offerSignedCert: m.offerSignedCert,
+        // Behavior-critical legacy fields — Undo must be a faithful
+        // restore, not a fresh mapping: signed-add-on rows change webhook
+        // semantics, and stored cert prices keep legacy pricing behavior.
+        isSignedGooddeedAddon: m.isSignedGooddeedAddon,
+        signedCertPriceCents: m.signedCertPriceCents,
+      });
+      return r.json() as Promise<Mapping>;
+    },
+    onSuccess: (row) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "shopify-mappings"] });
+      setJustSavedMappingId(row.id);
+      toast({ title: "Mapping restored" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't restore the mapping", description: e?.message, variant: "destructive" }),
+  });
   const remove = useMutation({
-    mutationFn: async (id: string) => apiRequest("DELETE", `/api/admin/albums/${albumId}/shopify-mappings/${id}`),
-    onSuccess: () => {
+    mutationFn: async (m: Mapping) => {
+      await apiRequest("DELETE", `/api/admin/albums/${albumId}/shopify-mappings/${m.id}`);
+      return m;
+    },
+    onSuccess: (m) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "shopify-mappings"] });
       // If we were editing the row we just removed, exit edit mode.
       if (panelMode === "edit") {
         setPanelMode("list");
         setEditMappingId(null);
       }
+      setConfirmRemove(null);
+      toast({
+        title: "Mapping removed",
+        description: "Orders for this variant no longer route to this release.",
+        action: (
+          <ToastAction altText="Undo remove" onClick={() => undoRemove.mutate(m)} data-testid="button-undo-remove-mapping">
+            Undo
+          </ToastAction>
+        ),
+      });
+    },
+    onError: (e: any) => {
+      setConfirmRemove(null);
+      toast({ title: "Couldn't remove the mapping", description: e?.message, variant: "destructive" });
     },
   });
 
@@ -636,7 +692,7 @@ export function ShopifyPanel({
                 setSaveError(null);
                 setPanelMode("edit");
               }}
-              onRemove={() => remove.mutate(m.id)}
+              onRemove={() => setConfirmRemove(m)}
               removePending={remove.isPending}
             />
           ))}
@@ -785,7 +841,7 @@ export function ShopifyPanel({
             <div className="flex items-center gap-2 pt-1">
               <button
                 type="button"
-                onClick={() => remove.mutate(m.id)}
+                onClick={() => setConfirmRemove(m)}
                 disabled={remove.isPending}
                 className="text-[13px] text-rose-600 hover:text-rose-700 disabled:opacity-50 mr-auto"
                 data-testid={`button-remove-mapping-${m.id}`}
@@ -955,8 +1011,39 @@ export function ShopifyPanel({
     </div>
   );
 
+  // Confirm dialog for removing a mapping — shared by the list row's ⋯ menu
+  // and the edit panel's "Remove link". Removal stops order routing, so it
+  // is never a single silent click.
+  const confirmRemoveDialog = (
+    <AlertDialog
+      open={confirmRemove != null}
+      onOpenChange={(open) => { if (!open) setConfirmRemove(null); }}
+    >
+      <AlertDialogContent data-testid="dialog-confirm-remove-mapping">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove this mapping?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Orders for this variant will stop routing to this release.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="button-cancel-remove-mapping">Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => confirmRemove && remove.mutate(confirmRemove)}
+            disabled={remove.isPending}
+            className="bg-rose-600 text-white hover:bg-rose-700"
+            data-testid="button-confirm-remove-mapping"
+          >
+            {remove.isPending ? "Removing…" : "Remove mapping"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
   return (
     <div className="py-6" data-testid="panel-shopify">
+      {confirmRemoveDialog}
       {/* No inner max-w wrapper here (same rule as SellPanel, Task #427).
           The album page column is already centered + width-capped by the
           frame (AdminFrame in god-view, OperatorShell in the portals), and
@@ -1419,8 +1506,10 @@ function StepSection({
 // ── MappingListRow (Task #2909) ──────────────────────────────────────
 // Silent at rest — shows variant title, price, variant GID in mono, and
 // status badge. On hover: #f8fafc wash + borderless "Edit" + ⋯ menu.
-// Deleted-variant detection is not yet live; the amber row is wired but
-// never triggered (future follow-up).
+// Task #2912 — deleted-variant detection is live: the mappings endpoint
+// flags rows whose pinned variant no longer exists (variantRemoved) and
+// they render with the amber warning treatment. Product-wide rows
+// (variantId=null) label themselves "All variants" instead of a GID.
 function MappingListRow({
   m,
   justSaved,
@@ -1437,19 +1526,39 @@ function MappingListRow({
   const [hovered, setHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  // Task #2912 — the mapping card is overflow-hidden (rounded corners), so
+  // the dropdown portals to <body> and positions off the button rect —
+  // otherwise the last row's menu clips inside the card boundary.
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!menuOpen) { setMenuPos(null); return; }
+    const rect = menuButtonRef.current?.getBoundingClientRect();
+    if (rect) setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+  }, [menuOpen]);
 
-  // Close menu on outside click.
+  // Close menu on outside click (button and portaled menu both count as
+  // inside) and on scroll/resize (the fixed-position menu would drift).
   useEffect(() => {
     if (!menuOpen) return;
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
+      const t = e.target as Node;
+      if (menuRef.current?.contains(t)) return;
+      if (menuButtonRef.current?.contains(t)) return;
+      setMenuOpen(false);
     };
+    const close = () => setMenuOpen(false);
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
   }, [menuOpen]);
 
+  const isProductWide = m.shopifyVariantId == null;
   const variantLabel =
     m.shopifyVariantTitle && m.shopifyVariantTitle !== "Default Title"
       ? `${m.shopifyProductTitle ?? ""} — ${m.shopifyVariantTitle}`
@@ -1460,12 +1569,13 @@ function MappingListRow({
   const shortGid = gid ? gid.replace(/^gid:\/\/shopify\/ProductVariant\//, "") : null;
 
   const isSigned = m.offerSignedCert || m.isSignedGooddeedAddon;
+  const removed = !!m.variantRemoved;
 
   return (
     <div
       className="relative px-5 py-3.5 flex items-center gap-3"
       style={{
-        backgroundColor: hovered ? "#f8fafc" : undefined,
+        backgroundColor: removed ? "#fffbeb" : hovered ? "#f8fafc" : undefined,
         transition: "background-color 140ms",
       }}
       onMouseEnter={() => setHovered(true)}
@@ -1479,8 +1589,19 @@ function MappingListRow({
           {price && <span className="text-[13px] text-slate-500 shrink-0">{price}</span>}
         </div>
         <div className="flex items-center gap-2 mt-0.5">
-          {shortGid && (
+          {shortGid ? (
             <span className="font-mono text-[11.5px] text-[#94a3b8]">{shortGid}</span>
+          ) : isProductWide ? (
+            <span className="text-[11.5px] text-[#94a3b8]">All variants</span>
+          ) : null}
+          {/* Task #2912 — amber deleted-variant warning */}
+          {removed && (
+            <span
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-amber-100 text-amber-800"
+              data-testid={`chip-variant-removed-${m.id}`}
+            >
+              <AlertTriangle className="w-3 h-3" /> Variant removed on Shopify
+            </span>
           )}
           {/* Status badge */}
           {isSigned ? (
@@ -1520,18 +1641,26 @@ function MappingListRow({
         >
           Edit
         </button>
-        <div className="relative" ref={menuRef}>
-          <button
-            type="button"
-            onClick={() => setMenuOpen((v) => !v)}
-            className="w-8 h-8 inline-flex items-center justify-center rounded text-slate-400 hover:text-slate-700 transition-colors duration-[140ms]"
-            data-testid={`button-menu-mapping-${m.id}`}
-            aria-label="More options"
-          >
-            <MoreHorizontal className="w-[15px] h-[15px]" strokeWidth={1.75} />
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 top-full mt-1 w-44 rounded-lg border border-[#e2e8f0] bg-white shadow-[0_12px_32px_rgba(15,23,42,.10)] py-1 z-50">
+        <button
+          type="button"
+          ref={menuButtonRef}
+          onClick={() => setMenuOpen((v) => !v)}
+          className="w-8 h-8 inline-flex items-center justify-center rounded text-slate-400 hover:text-slate-700 transition-colors duration-[140ms]"
+          data-testid={`button-menu-mapping-${m.id}`}
+          aria-label="More options"
+        >
+          <MoreHorizontal className="w-[15px] h-[15px]" strokeWidth={1.75} />
+        </button>
+        {/* Task #2912 — portaled to <body>: the card is overflow-hidden, so an
+            in-card absolute dropdown clips on the last row. Fixed position off
+            the button rect; closes on outside click / scroll / resize. */}
+        {menuOpen && menuPos &&
+          createPortal(
+            <div
+              ref={menuRef}
+              className="fixed w-44 rounded-lg border border-[#e2e8f0] bg-white shadow-[0_12px_32px_rgba(15,23,42,.10)] py-1 z-50"
+              style={{ top: menuPos.top, right: menuPos.right }}
+            >
               <button
                 type="button"
                 onClick={() => { setMenuOpen(false); onEdit(); }}
@@ -1549,9 +1678,9 @@ function MappingListRow({
               >
                 Remove link
               </button>
-            </div>
+            </div>,
+            document.body,
           )}
-        </div>
       </div>
     </div>
   );
