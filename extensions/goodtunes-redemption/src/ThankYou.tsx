@@ -4,17 +4,25 @@ import {
   BlockStack,
   Link,
   Text,
-  useOrder,
+  useApi,
   useSessionToken,
+  useSubscription,
 } from "@shopify/ui-extensions-react/checkout";
 import { useRedemptionPoll } from "./useRedemptionPoll";
 
 export default reactExtension("purchase.thank-you.block.render", () => <GoodTunesRedemption />);
 
 function GoodTunesRedemption() {
-  const order = useOrder();
+  // purchase.thank-you has NO `order` in its API — useOrder() throws
+  // ExtensionHasNoMethodError on this target, which blanked the whole
+  // block. The thank-you surface exposes `orderConfirmation` instead:
+  // `.order.id` is the (future) Order gid and `.number` is the
+  // buyer-visible confirmation number the redemption-status endpoint
+  // verifies before releasing the code.
+  const api = useApi<"purchase.thank-you.block.render">();
+  const confirmation = useSubscription(api.orderConfirmation);
   const sessionToken = useSessionToken();
-  const redemption = useRedemptionPoll(order?.id, order?.confirmationNumber, sessionToken);
+  const redemption = useRedemptionPoll(confirmation?.order?.id, confirmation?.number, sessionToken);
 
   if (!redemption) {
     return (

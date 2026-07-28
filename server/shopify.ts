@@ -1137,7 +1137,26 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
       break;
     }
   }
-  if (!albumId || !matchedMapping || !matchedLine) return null;
+  if (!albumId || !matchedMapping || !matchedLine) {
+    // The product IS mapped (mappings.length > 0) but no line item matched —
+    // almost always a variant-pinned mapping and the fan bought a different
+    // variant of the same product (orders #1004/#1005 on goodtunes-test hit
+    // exactly this and the bail was silent). Log it so a delivered-but-not-
+    // materialized webhook is diagnosable from logs.
+    const lines = payload.line_items.map((li) => `${li.product_id ?? "?"}:${li.variant_id ?? "-"}`).join(", ");
+    const mapped = mappings
+      .map((m) => `${m.shopifyProductId}:${m.shopifyVariantId ?? "*"}${m.isSignedGooddeedAddon ? ":addon" : ""}`)
+      .join(", ");
+    const primaryCount = mappings.filter((m) => !m.isSignedGooddeedAddon).length;
+    const reason =
+      primaryCount === 0
+        ? "only addon mappings exist for this product (no primary album mapping)"
+        : "variant-pinned primary mapping and the order bought a different variant";
+    console.warn(
+      `[shopify-webhook] order ${shopifyOrderId} on ${store.shopDomain}: no line item matched a primary mapping (${reason}) — lines=[${lines}] mappings=[${mapped}] — skipping`,
+    );
+    return null;
+  }
 
   // Scan the rest of the cart for a signed-GoodDeed add-on product mapped
   // to the same album. When found, an order that contains the primary album
