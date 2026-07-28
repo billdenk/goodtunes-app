@@ -414,6 +414,53 @@ The sibling sale-window batch task (signed-cert wholesale true-up) is
 unchanged — its credit/debit lines just drop into the next week's
 invoice naturally under this model.
 
+## Signed-cert billing: provisional accrual + true-up (post-submission)
+
+Decided July 28, 2026. **Build only after the Shopify App Store
+submission is in — nothing here ships before then.** Does not touch
+the fan-facing flow, the cert reservation logic, or anything in the
+pre-submission publish batch.
+
+### Accrual model
+
+- **Provision-time accrual.** When a bundled-cert order provisions
+  (any artist, any release), post a provisional cert accrual of
+  **$13/unit** — always the top rung of the wholesale ladder above,
+  regardless of expected volume. True-ups only ever adjust
+  **downward**; expectations aren't orders.
+- **Window-close true-up.** At pre-order window close, compute the
+  actual tier from the actual order count (25–49 = $13, 50–99 = $12,
+  100–199 = $9, 200–299 = $7, 300+ = $6) and post **one downward
+  adjustment per release** truing the accruals to the real rate.
+- **Below 25 units:** existing rule — cert add-on auto-refunds, no
+  print run, and the provisional accruals are **reversed**, not
+  trued up.
+- **Batch size = actual orders at window close** (the artist is
+  billed on what sold, not what they hoped).
+- **Backfill:** on ship, run the same $13 accrual over any
+  bundled-cert orders that provisioned before this feature existed
+  (they currently carry no cert line), so nothing sits at zero.
+
+### Retail cert attribution: dropped — wholesale is the only cert number
+
+Decided (not defaulted) July 28, 2026: with the mapping form's cert
+price field removed, we do **not** derive a retail cert line from the
+Shopify variant price delta. Wholesale (the ladder above) is the only
+cert number in the system.
+
+- Rationale: retail money never touches GoodTunes on the Shopify path
+  (`external_paid`); the retail line was informational and nothing
+  settles or reports against it. The variant-delta approach is
+  fragile (single-variant mappings, zero/negative deltas, price drift
+  after mapping) and every edge case collapses to "no retail number"
+  anyway.
+- Legacy mappings with a stored `signedCertPriceCents` keep their
+  behavior and their historical order lines; the column stays. New
+  mappings simply mint no retail line — now intentional.
+- If artist-facing analytics ever want a "fans paid your store ~$X
+  for certs" figure, that is a reporting-layer estimate off Shopify
+  order data, never an accounting line on our orders.
+
 ## Open questions to revisit before signing the first label
 
 - Volume tiers: at what redemption count does $1 drop to $0.50? Is
