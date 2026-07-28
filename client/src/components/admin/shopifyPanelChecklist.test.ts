@@ -204,7 +204,10 @@ test("no connected store: steps 2 and 3 are locked with the unlock hint", async 
   }
 });
 
-// ── 2. complete collapse + cert toggle saves with inline "Saved" ─────
+// ── 2. complete collapse + cert toggle saves via edit panel ──────────
+// Task #2909 — MappingRow replaced by MappingListRow + edit panel.
+// Editing a mapping now opens an edit panel (click the row's Edit button),
+// then Save mapping fires the PATCH and confirms with a "Saved" chip.
 test("store + mapping + sale URL: steps collapse complete; cert toggle PATCHes and confirms", async () => {
   pushFixture = { ...PUSH_BASE, stores: [STORE] };
   mappingsFixture = [{ ...M1 }];
@@ -235,35 +238,38 @@ test("store + mapping + sale URL: steps collapse complete; cert toggle PATCHes a
     assert.ok(!/add-on for the album/i.test(container.textContent ?? ""));
     assert.equal(q("checkbox-signed-addon"), null);
 
-    // Expand the row — the retired mint toggle is gone; digital access is
-    // stated as intrinsic and only the cert bundle checkbox is editable.
-    await click(q("button-toggle-mapping-m1"));
+    // Task #2909: rows are silent at rest; open the edit panel via the
+    // row's Edit button (hover controls are always present in DOM, just
+    // opacity:0). The old expand-toggle is gone.
+    assert.equal(q("button-toggle-mapping-m1"), null, "expand toggle is retired in new design");
+    await click(q("button-edit-mapping-m1"));
+
+    // Edit panel: digital access is stated as intrinsic; cert toggle present.
     assert.equal(q("row-mint-toggle-m1"), null, "mint toggle is retired");
     assert.match(
-      q("text-included-access-m1")!.textContent ?? "",
+      q("text-shopify-included-access-edit")!.textContent ?? "",
       /digital access and a numbered GoodDeed \(PDF\)/,
     );
-    assert.equal(q("row-cert-price-m1"), null, "cert price field is retired");
-    const cert = q("row-cert-toggle-m1") as HTMLInputElement | null;
-    assert.ok(cert, "cert toggle renders on the expanded row");
+    const cert = q("toggle-shopify-cert-edit") as HTMLInputElement | null;
+    assert.ok(cert, "cert toggle renders in the edit panel");
     assert.equal(cert!.checked, false);
     await click(cert);
+
+    // Clicking Save mapping fires the PATCH.
+    await click(q("button-shopify-edit-save-mapping"));
 
     assert.equal(patchCalls.length, 1);
     assert.match(patchCalls[0].url, /\/api\/admin\/albums\/a1\/shopify-mappings\/m1$/);
     assert.equal(patchCalls[0].body.offerSignedCert, true);
     assert.equal(patchCalls[0].body.offersDigitalUnlock, undefined);
     assert.equal(patchCalls[0].body.signedCertPriceCents, undefined);
-
-    // Inline confirmation, not a toast.
-    assert.match(q("row-save-status-m1")!.textContent ?? "", /Saved/);
-    assert.equal((q("row-cert-toggle-m1") as HTMLInputElement).checked, true);
   } finally {
     await cleanup();
   }
 });
 
-// ── 3. failed PATCH keeps the choice + offers Retry ──────────────────
+// ── 3. failed PATCH shows error inline; re-save succeeds ─────────────
+// Task #2909 — No inline retry button; user just clicks "Save mapping" again.
 test("failed flag save keeps the user's choice with Couldn't save + Retry", async () => {
   pushFixture = { ...PUSH_BASE, stores: [STORE] };
   mappingsFixture = [{ ...M1 }];
@@ -271,26 +277,33 @@ test("failed flag save keeps the user's choice with Couldn't save + Retry", asyn
   const { q, cleanup } = await mount();
   try {
     await click(stepHeader(q("step-shopify-map")!));
-    await click(q("button-toggle-mapping-m1"));
-    const cert = q("row-cert-toggle-m1") as HTMLInputElement;
+    // Open edit panel.
+    await click(q("button-edit-mapping-m1"));
+    const cert = q("toggle-shopify-cert-edit") as HTMLInputElement;
     await click(cert);
 
+    // Click Save mapping — PATCH fires and fails.
+    await click(q("button-shopify-edit-save-mapping"));
     assert.equal(patchCalls.length, 1);
-    const status = q("row-save-status-m1")!;
-    assert.match(status.textContent ?? "", /Couldn't save/);
-    assert.match(status.textContent ?? "", /below the album's signed-cert floor/);
-    // The user's choice is NOT silently reverted.
-    assert.equal((q("row-cert-toggle-m1") as HTMLInputElement).checked, true);
 
-    // Retry re-sends the same flags and lands on Saved.
+    // Error shown inline in the edit panel.
+    const errEl = q("text-edit-save-error");
+    assert.ok(errEl, "inline error renders in the edit panel");
+    assert.match(errEl!.textContent ?? "", /below the album's signed-cert floor/);
+
+    // The cert toggle is still checked (user's choice not silently reverted).
+    assert.equal((q("toggle-shopify-cert-edit") as HTMLInputElement).checked, true);
+
+    // Re-send succeeds: click Save mapping again.
     patchResponder = (body) => ({
       status: 200,
       json: { ...M1, offerSignedCert: body.offerSignedCert },
     });
-    await click(q("button-row-retry-m1"));
+    await click(q("button-shopify-edit-save-mapping"));
     assert.equal(patchCalls.length, 2);
     assert.equal(patchCalls[1].body.offerSignedCert, true);
-    assert.match(q("row-save-status-m1")!.textContent ?? "", /Saved/);
+    // Edit panel closes after success; no more error.
+    assert.equal(q("text-edit-save-error"), null, "error clears after successful save");
   } finally {
     await cleanup();
   }

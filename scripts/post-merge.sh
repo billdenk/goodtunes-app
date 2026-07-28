@@ -10871,3 +10871,25 @@ SQL
 }
 migrate_shopify_install_links dev  "${DATABASE_URL:-}"
 migrate_shopify_install_links prod "${PROD_DATABASE_URL:-}"
+
+# Task #2909 — shopify_product_url cache column on shopify_product_mappings.
+# Populated at mapping creation from the Shopify product's onlineStoreUrl
+# so the Sale URL field can be prefilled without a live Shopify round-trip.
+for _url in "${DATABASE_URL:-}" "${PROD_DATABASE_URL:-}"; do
+  [ -z "$_url" ] && continue
+  psql "$_url" -v ON_ERROR_STOP=1 -c \
+    "ALTER TABLE shopify_product_mappings ADD COLUMN IF NOT EXISTS shopify_product_url TEXT;" \
+    >/dev/null 2>&1 \
+    && echo "post-merge: shopify_product_url column ok" \
+    || echo "post-merge: WARNING — shopify_product_url migration failed (continuing)"
+done
+
+# Task #2909 — variant snapshot columns for the redesigned mapping list rows.
+for _url in "${DATABASE_URL:-}" "${PROD_DATABASE_URL:-}"; do
+  [ -z "$_url" ] && continue
+  psql "$_url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE shopify_product_mappings ADD COLUMN IF NOT EXISTS shopify_variant_title TEXT;
+ALTER TABLE shopify_product_mappings ADD COLUMN IF NOT EXISTS shopify_variant_price TEXT;
+SQL
+  echo "post-merge: shopify variant snapshot columns ok"
+done

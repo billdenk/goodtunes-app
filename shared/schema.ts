@@ -3190,6 +3190,14 @@ export const shopifyProductMappings = pgTable(
     // album-level all-or-nothing offerSignedCert approach for Shopify stores
     // where the cert is a separate purchasable SKU rather than always bundled.
     isSignedGooddeedAddon: boolean("is_signed_gooddeed_addon").notNull().default(false),
+    // Snapshot of the variant title and price captured at link time so the
+    // mapping list rows can display them without a live Shopify round-trip.
+    shopifyVariantTitle: text("shopify_variant_title"),
+    shopifyVariantPrice: text("shopify_variant_price"),
+    // Cached storefront URL for Sale URL prefill, populated at mapping
+    // creation from the Shopify product's onlineStoreUrl so the operator
+    // doesn't have to copy it manually.
+    shopifyProductUrl: text("shopify_product_url"),
     createdAt: timestamp("created_at").defaultNow(),
   },
   // No table-level uniqueness here — Postgres treats NULL variantId as

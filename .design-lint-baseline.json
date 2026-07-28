@@ -11455,11 +11455,6 @@
     "snippet": "<button type=\"button\" onClick={onDelete} className=\"h-8 w-8 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center transition-colors\" aria-label={isDraf"
   },
   {
-    "rule": "admin-filled-raw-button",
-    "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<button"
-  },
-  {
     "rule": "brand-hex-literal",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "<div style=\"margin:16px 0;padding:14px 16px;border:1px solid #319ED8;border-radius:10px;background:#f3fbff;font-family:-apple-system,Segoe UI,sans-serif;\">"
@@ -11477,92 +11472,67 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "className=\"px-4 py-4 text-[13px] text-slate-600 flex items-center justify-between gap-3\""
+    "snippet": "<h3 className=\"text-[14px] font-semibold text-slate-900\">Linked products</h3>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "className=\"h-8 px-3 rounded-md border border-slate-300 bg-white text-[12.5px] font-medium text-slate-700 hover:bg-slate-50 shrink-0\""
+    "snippet": "<p className=\"text-[12.5px] text-slate-500\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<div className=\"px-4 py-6 text-slate-500 text-[13px] text-center leading-snug\" data-testid=\"shopify-mappings-empty\">"
+    "snippet": "className=\"h-9 border border-[#e2e8f0] rounded-md px-2 text-[13px] bg-white text-slate-700\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<h3 className=\"text-[13.5px] font-semibold text-slate-900 mb-2\">Link a Shopify product</h3>"
+    "snippet": "className=\"h-9 px-3.5 rounded-md border border-[#1f7fb8] text-[#1f7fb8] text-[13px] font-medium hover:bg-[#1f7fb8]/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-[140ms]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "className=\"w-full h-9 border border-slate-300 rounded-md px-2 text-[13px] bg-white mb-2\""
+    "snippet": "className=\"px-5 py-4 text-[13px] text-slate-600 flex items-center justify-between gap-3 border-t border-[#e2e8f0]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<div className=\"text-[11px] text-slate-400 uppercase tracking-wider font-semibold mb-1.5\">"
+    "snippet": "className=\"h-8 px-3 rounded-md border border-[#e2e8f0] bg-white text-[12.5px] font-medium text-slate-700 hover:bg-[#f8fafc] shrink-0 transition-colors duration-[140ms]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "className=\"flex-1 h-9 border border-slate-300 rounded-md px-3 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]\""
+    "snippet": "<div className=\"px-5 py-5 text-[13px] text-slate-500\" data-testid=\"shopify-mappings-empty\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "className=\"h-9 px-3 rounded-md bg-slate-900 text-white text-[12px] font-medium hover:bg-slate-800 disabled:opacity-50\""
+    "snippet": "<div className=\"text-[14px] text-slate-900 font-medium\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<div className=\"text-[12px] font-semibold text-slate-700\">Found</div>"
+    "snippet": "<div className=\"text-[12.5px] text-slate-500 mt-0.5\">${configVariant.price}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<div className=\"text-[13.5px] text-slate-900\">{resolved.shopifyProductTitle}</div>"
+    "snippet": "className=\"text-[13px] text-[#1f7fb8] hover:underline shrink-0 font-medium\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<label className=\"text-[11px] text-slate-500 uppercase tracking-wider font-semibold block mb-1\">Variant</label>"
+    "snippet": "<p className=\"text-[13px] text-slate-700 leading-snug\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "className=\"w-full h-8 border border-slate-300 rounded-md px-2 text-[13px] bg-white\""
+    "snippet": "<span className=\"text-[13px] text-slate-800\">Also bundle a printed &amp; signed GoodDeed certificate</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<span className=\"text-[13px] text-slate-800\">Also mint the GoodTunes digital unlock + GoodDeed for buyers</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<p className=\"text-[11.5px] text-slate-400 mt-0.5 ml-6\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<span className=\"text-[13px] text-slate-800\">Bundle a printed & signed GoodDeed certificate</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<span className=\"text-slate-500 text-[12px]\">Price $</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "className=\"w-24 h-8 border border-slate-300 rounded-md px-2 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<span className=\"text-[11.5px] text-slate-400\">Must be ≥ the album's per-album minimum floor.</span>"
+    "snippet": "<p className=\"text-[11.5px] text-slate-400 mt-0.5 leading-snug\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -11572,12 +11542,57 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "className=\"h-8 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-medium hover:bg-[var(--brand-blue-hover)] disabled:opacity-50\""
+    "snippet": "className=\"h-9 px-3.5 rounded-md border border-[#e2e8f0] text-[13px] text-slate-700 hover:bg-[#f8fafc] transition-colors duration-[140ms]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"h-9 px-3.5 rounded-md bg-[#1f7fb8] text-white text-[13px] font-medium hover:bg-[#1a6da0] disabled:opacity-50 transition-colors duration-[140ms]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<div className=\"text-[14px] text-slate-900 font-medium\">{variantLabel}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<div className=\"text-[12px] text-slate-400 mt-0.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<p className=\"text-[12px] text-rose-600\" data-testid=\"text-edit-save-error\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"text-[13px] text-rose-600 hover:text-rose-700 disabled:opacity-50 mr-auto\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"text-[12.5px] text-slate-500 hover:text-[#1f7fb8] inline-flex items-center gap-1.5 transition-colors duration-[140ms]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "<p className=\"text-[12.5px] text-slate-500 mb-3 leading-snug\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"flex-1 h-9 rounded-md border border-[#e2e8f0] px-3 text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#1f7fb8]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"h-9 px-4 rounded-md bg-[#1f7fb8] text-white text-[13px] font-medium hover:bg-[#1a6da0] disabled:opacity-50 transition-colors duration-[140ms]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"text-[13px] text-[#1f7fb8] hover:underline shrink-0 inline-flex items-center gap-1\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -11593,6 +11608,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "<div className=\"flex-1 text-[13px] text-slate-600 leading-snug\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"h-8 px-3 rounded-md border border-slate-300 bg-white text-[12.5px] font-medium text-slate-700 hover:bg-slate-50 shrink-0\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -11633,6 +11653,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "<label className=\"text-[11px] text-slate-500 uppercase tracking-wider font-semibold block mb-1\">Store</label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"w-full h-8 border border-slate-300 rounded-md px-2 text-[13px] bg-white\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -11742,32 +11767,47 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<div className=\"min-w-0 flex-1 text-[13.5px] font-medium text-slate-900 truncate\">"
+    "snippet": "<span className=\"text-[14px] font-medium text-slate-900 truncate\">{variantLabel}</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "className=\"text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded inline-flex items-center gap-1 shrink-0\""
+    "snippet": "{price && <span className=\"text-[13px] text-slate-500 shrink-0\">{price}</span>}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<div className=\"text-[11.5px] text-slate-500 min-w-0 flex-1\">"
+    "snippet": "<span className=\"font-mono text-[11.5px] text-[#94a3b8]\">{shortGid}</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<span className=\"block text-[13px] text-slate-800\">"
+    "snippet": "<span className=\"inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-[#1f7fb8]/10 text-[#1f7fb8]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<span className=\"block text-[11.5px] text-slate-400\">"
+    "snippet": "<span className=\"inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-500\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<div className=\"min-h-[18px] text-[12px]\" data-testid={`row-save-status-${m.id}`} aria-live=\"polite\">"
+    "snippet": "className=\"text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded inline-flex items-center gap-1\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"h-8 px-3 text-[13px] text-slate-600 hover:text-slate-900 rounded transition-colors duration-[140ms]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"w-full px-4 py-2 text-left text-[13px] text-slate-700 hover:bg-[#f8fafc] transition-colors duration-[140ms]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"w-full px-4 py-2 text-left text-[13px] text-rose-600 hover:bg-rose-50 disabled:opacity-50 transition-colors duration-[140ms]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -11828,6 +11868,96 @@
     "rule": "naked-icon-button",
     "file": "client/src/components/admin/ShopifyPlusPanel.tsx",
     "snippet": "<button onClick={onRemove} disabled={busy === `delq-${quote.id}`} aria-label=\"Remove quote\" className=\"h-9 inline-flex items-center justify-center rounded-lg px-2 text-slate-400 hover:text-rose-600 ho"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<DialogTitle className=\"text-[15px] font-semibold text-slate-900\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "className=\"flex-1 bg-transparent text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<div className=\"px-5 py-6 text-center text-[12.5px] text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<p className=\"text-[13px] text-slate-600 mb-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<p className=\"text-[12.5px] text-slate-400\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<p className=\"text-[12.5px] text-slate-400\">No products found in this store.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<span className=\"text-[11px] font-semibold uppercase tracking-wider text-slate-400\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<span className=\"text-[13px] text-slate-900\">{v.title}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<span className=\"text-[12.5px] text-slate-500 ml-2\">${v.price}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<span className=\"text-[11.5px] text-slate-400 ml-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<span className=\"text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "className=\"w-full h-9 rounded-md border border-[#e2e8f0] bg-white text-[12.5px] font-medium text-slate-700 hover:bg-[#f8fafc] disabled:opacity-50 transition-colors duration-[140ms]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "className=\"flex-1 h-9 rounded-md border border-[#e2e8f0] bg-white px-3 text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#1f7fb8]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "className=\"h-9 px-3.5 rounded-md bg-[#1f7fb8] text-white text-[13px] font-medium hover:bg-[#1a6da0] disabled:opacity-50 transition-colors duration-[140ms]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "className=\"h-9 px-3 rounded-md border border-[#e2e8f0] bg-white text-[13px] text-slate-600 hover:bg-[#f8fafc] transition-colors duration-[140ms]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "<p className=\"text-[12px] text-rose-600\" data-testid=\"text-picker-paste-error\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "className=\"text-[12.5px] text-slate-500 hover:text-[#1f7fb8] transition-colors duration-[140ms]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyProductBrowser.tsx",
+    "snippet": "className=\"text-[12px] text-slate-400 hover:text-[#1f7fb8] inline-flex items-center gap-1 transition-colors duration-[140ms]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -19593,16 +19723,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
     "snippet": "{subtitle && <p className=\"text-slate-400 text-[12px] mt-0.5\">{subtitle}</p>}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-slate-400 text-[13px]\">No revenue in this window.</p>;"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-slate-400 text-[13px]\">No plays in this window.</p>;"
   },
   {
     "rule": "hardcoded-font-size",

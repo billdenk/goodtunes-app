@@ -364,6 +364,7 @@ const PRODUCT_FIELDS = /* GraphQL */ `
   vendor
   tags
   productType
+  onlineStoreUrl
   featuredMedia { preview { image { url } } }
   variants(first: 100) {
     nodes {
@@ -385,6 +386,7 @@ type GqlProductNode = {
   vendor: string | null;
   tags: string[];
   productType: string | null;
+  onlineStoreUrl: string | null;
   featuredMedia: { preview: { image: { url: string } | null } | null } | null;
   variants: {
     nodes: Array<{
@@ -411,6 +413,7 @@ function gqlProductToRest(p: GqlProductNode) {
     // an array. diffPushSnapshot compares against the string form.
     tags: (p.tags ?? []).join(", "),
     product_type: p.productType ?? "",
+    onlineStoreUrl: p.onlineStoreUrl ?? null,
     image: imageUrl ? { src: imageUrl } : null,
     images: imageUrl ? [{ src: imageUrl }] : [],
     variants: p.variants.nodes.map((v) => ({
@@ -2932,10 +2935,14 @@ export function registerShopifyRoutes(app: Express) {
         // lightweight client-side product-type filter over loaded items.
         productType: p.product_type || null,
         image: p.image?.src ?? null,
+        // Task #2909 — the variant picker dialog and Sale URL prefill need
+        // the public storefront URL and per-variant stock counts.
+        onlineStoreUrl: p.onlineStoreUrl ?? null,
         variants: p.variants.map((v) => ({
           id: String(v.id),
           title: v.title,
           price: v.price,
+          inventoryQuantity: (v as any).inventory_quantity ?? null,
         })),
       })),
       nextCursor,
@@ -3401,6 +3408,8 @@ export function registerShopifyRoutes(app: Express) {
         ...r.m,
         storeName: r.s?.storeName ?? r.s?.shopDomain ?? null,
         shopDomain: r.s?.shopDomain ?? null,
+        // Task #2909 — cached at creation time for Sale URL prefill.
+        shopifyProductUrl: r.m.shopifyProductUrl ?? null,
       })),
     );
   });
@@ -3524,6 +3533,16 @@ export function registerShopifyRoutes(app: Express) {
           signedCertPriceCents: isAddon ? null : (d.signedCertPriceCents ?? null),
           offersDigitalUnlock: d.offersDigitalUnlock,
           shopifyProductTitle: d.shopifyProductTitle ?? null,
+          // Task #2909 — snapshot variant display fields at link time.
+          ...("shopifyVariantTitle" in d && d.shopifyVariantTitle != null
+            ? { shopifyVariantTitle: d.shopifyVariantTitle }
+            : {}),
+          ...("shopifyVariantPrice" in d && d.shopifyVariantPrice != null
+            ? { shopifyVariantPrice: d.shopifyVariantPrice }
+            : {}),
+          ...("shopifyProductUrl" in d && d.shopifyProductUrl != null
+            ? { shopifyProductUrl: d.shopifyProductUrl }
+            : {}),
         })
         .where(eq(shopifyProductMappings.id, existing.id))
         .returning();
