@@ -2816,7 +2816,24 @@ export function registerShopifyRoutes(app: Express) {
   //     substring search, so we instead pull a larger page (up to 250)
   //     and filter case-insensitively in-process. Single-page best-effort
   //     — fine for the store sizes this picker targets.
-  app.get("/api/admin/shopify/stores/:storeId/products", requireAdmin, async (req, res) => {
+  // Session-OR-bearer variant of requireAdmin, for endpoints the partner
+  // portals hit directly. The portals are session-authed (no Bearer header),
+  // so the bearer-only guard 401'd artists before the map_shopify scope gate
+  // below ever ran — super-admin god-view worked only because it carries a
+  // token. Mirrors routes.ts requireAdmin's session path.
+  async function requireAdminSessionOrBearer(req: Request, res: Response, next: Function) {
+    const auth = req.headers.authorization;
+    if (auth?.startsWith("Bearer ")) return requireAdmin(req, res, next);
+    const sessUserId = (req as any).session?.userId as string | undefined;
+    const sessKind = (req as any).session?.kind as string | undefined;
+    if (!sessUserId || sessKind !== "admin") return res.status(401).json({ message: "Sign in required" });
+    const u = await storage.getUser(sessUserId);
+    if (!u?.isAdmin) return res.status(403).json({ message: "Admin only" });
+    (req as any).adminUser = u;
+    next();
+  }
+
+  app.get("/api/admin/shopify/stores/:storeId/products", requireAdminSessionOrBearer, async (req, res) => {
     const storeId = String(req.params.storeId);
     const store = await getStoreById(storeId);
     if (!store) return res.status(404).json({ message: "Store not found" });

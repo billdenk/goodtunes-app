@@ -654,7 +654,7 @@ export function ShopifyPanel({
                     className="h-4 w-4 rounded border-slate-300 text-[var(--brand-blue)] focus:ring-[var(--brand-blue)]"
                     data-testid="toggle-shopify-unlock"
                   />
-                  <span className="text-[13px] text-slate-800">Also mint the GoodTunes digital unlock + GoodDeed for buyers</span>
+                  <span className="text-[13px] text-slate-800">Also include the GoodTunes digital unlock + GoodDeed for buyers</span>
                 </label>
                 <p className="text-[11.5px] text-slate-400 mt-0.5 ml-6">
                   Off: we only fulfill the physical order. On: buyers also get the app unlock and a numbered GoodDeed.
@@ -1377,24 +1377,9 @@ function MappingRow({
       </div>
       {expanded && (
         <div className="px-4 pb-3 pl-11 space-y-2.5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="text-[11.5px] text-slate-500 min-w-0 flex-1">
-              {m.storeName ?? m.shopDomain ?? "—"}
-              {m.shopifyVariantId ? ` · variant ${m.shopifyVariantId}` : " · all variants"}
-            </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove();
-              }}
-              disabled={removePending}
-              className="text-slate-400 hover:text-rose-600 p-1 shrink-0"
-              data-testid={`button-remove-mapping-${m.id}`}
-              aria-label="Remove mapping"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+          <div className="text-[11.5px] text-slate-500 min-w-0">
+            {m.storeName ?? m.shopDomain ?? "—"}
+            {m.shopifyVariantId ? ` · variant ${m.shopifyVariantId}` : " · all variants"}
           </div>
           {isShopifyPlus && (
             <label className="flex items-start gap-2">
@@ -1411,7 +1396,7 @@ function MappingRow({
               />
               <span className="min-w-0">
                 <span className="block text-[13px] text-slate-800">
-                  Also mint the GoodTunes digital unlock + GoodDeed for buyers
+                  Also include the GoodTunes digital unlock + GoodDeed for buyers
                 </span>
                 <span className="block text-[11.5px] text-slate-400">
                   Off: we only fulfill the physical order. On: buyers also get the app unlock and a numbered GoodDeed.
@@ -1483,6 +1468,22 @@ function MappingRow({
                 <Check className="w-3 h-3" /> Saved
               </span>
             ) : null}
+          </div>
+          {/* Remove sits at the bottom of the expanded card — up top it
+              crowded the collapse chevron and invited misclicks. */}
+          <div className="pt-1 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+              disabled={removePending}
+              className="inline-flex items-center gap-1.5 text-[12px] text-slate-400 hover:text-rose-600 py-1 disabled:opacity-50"
+              data-testid={`button-remove-mapping-${m.id}`}
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Remove product link
+            </button>
           </div>
         </div>
       )}
