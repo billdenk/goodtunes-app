@@ -22077,11 +22077,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Redeem.tsx",
-    "snippet": "className=\"w-full h-11 rounded-lg bg-white/5 border border-white/10 px-3 text-[14px] text-white focus:outline-none focus:border-[#319ED8]\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Redeem.tsx",
     "snippet": "className=\"w-full h-12 rounded-full bg-gradient-to-br from-[#1D5E8F] to-[#319ED8] text-white font-semibold disabled:opacity-50\""
   },
   {
@@ -22117,7 +22112,7 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/Redeem.tsx",
-    "snippet": "className=\"w-full h-11 rounded-lg bg-white/5 border border-white/10 px-3 text-[14px] text-white/85\""
+    "snippet": "className=\"w-full h-11 rounded-lg bg-[color:var(--fan-surface-strong)] border border-white/20 px-3 text-[14px] text-white/85 placeholder:text-white/45\""
   },
   {
     "rule": "fan-text-tone",
@@ -22157,7 +22152,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Redeem.tsx",
-    "snippet": "className=\"w-full h-11 rounded-lg bg-white/5 border border-white/10 px-3 text-[14px] text-white/85\""
+    "snippet": "className=\"w-full h-11 rounded-lg bg-[color:var(--fan-surface-strong)] border border-white/20 px-3 text-[14px] text-white/85 placeholder:text-white/45\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -22167,7 +22162,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Redeem.tsx",
-    "snippet": "className=\"w-full h-11 rounded-lg bg-white/5 border border-white/10 px-3 text-[14px] text-white focus:outline-none focus:border-[#319ED8]\""
+    "snippet": "className={`w-full h-11 rounded-lg bg-[color:var(--fan-surface-strong)] px-3 text-[14px] text-white placeholder:text-white/45 focus:outline-none border transition-[border-color,box-shadow] ${"
   },
   {
     "rule": "hardcoded-font-size",

@@ -269,7 +269,13 @@ export function FinishSetup() {
 
         {/* Handle */}
         <label className="block mt-8 text-xs uppercase tracking-wider text-white/50">Your handle</label>
-        <div className="mt-2 flex items-center bg-[color:var(--fan-surface-strong)] border border-[color:var(--fan-field-border)] rounded-xl px-4 py-3 focus-within:border-[var(--brand-blue)]">
+        <div
+          className={`mt-2 flex items-center bg-[color:var(--fan-surface-strong)] rounded-xl px-4 py-3 border transition-[border-color,box-shadow] ${
+            handleStatus.kind === "ok"
+              ? "border-[color:rgba(74,255,202,0.55)] shadow-[0_0_0_3px_rgba(74,255,202,0.12)]"
+              : "border-white/20 focus-within:border-[var(--brand-blue)] focus-within:shadow-[0_0_0_3px_rgba(49,158,216,0.18)]"
+          }`}
+        >
           <span className="text-white/40 text-lg">@</span>
           <input
             type="text"
@@ -320,7 +326,7 @@ export function FinishSetup() {
           onChange={(e) => setRealName(e.target.value.slice(0, 120))}
           placeholder="Your name"
           autoComplete="name"
-          className="mt-2 w-full bg-[color:var(--fan-surface-strong)] border border-[color:var(--fan-field-border)] rounded-xl px-4 py-3 outline-none text-lg focus:border-[var(--brand-blue)]"
+          className="mt-2 w-full bg-[color:var(--fan-surface-strong)] border border-white/20 rounded-xl px-4 py-3 outline-none text-lg placeholder-white/45 transition-[border-color,box-shadow] focus:border-[var(--brand-blue)] focus:shadow-[0_0_0_3px_rgba(49,158,216,0.18)]"
           data-testid="input-real-name"
         />
 
@@ -331,7 +337,7 @@ export function FinishSetup() {
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value.slice(0, 80))}
           placeholder="What should we call you?"
-          className="mt-2 w-full bg-[color:var(--fan-surface-strong)] border border-[color:var(--fan-field-border)] rounded-xl px-4 py-3 outline-none text-lg focus:border-[var(--brand-blue)]"
+          className="mt-2 w-full bg-[color:var(--fan-surface-strong)] border border-white/20 rounded-xl px-4 py-3 outline-none text-lg placeholder-white/45 transition-[border-color,box-shadow] focus:border-[var(--brand-blue)] focus:shadow-[0_0_0_3px_rgba(49,158,216,0.18)]"
           data-testid="input-display-name"
         />
 
@@ -350,7 +356,7 @@ export function FinishSetup() {
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
-              className="mt-2 w-full bg-[color:var(--fan-surface-strong)] border border-[color:var(--fan-field-border)] rounded-xl px-4 py-3 outline-none text-lg focus:border-[var(--brand-blue)]"
+              className="mt-2 w-full bg-[color:var(--fan-surface-strong)] border border-white/20 rounded-xl px-4 py-3 outline-none text-lg placeholder-white/45 transition-[border-color,box-shadow] focus:border-[var(--brand-blue)] focus:shadow-[0_0_0_3px_rgba(49,158,216,0.18)]"
               data-testid="input-contact-email"
             />
             <p className="mt-3 text-center text-xs text-white/40">or</p>
@@ -360,7 +366,7 @@ export function FinishSetup() {
               value={contactPhone}
               onChange={(e) => setContactPhone(e.target.value)}
               placeholder="+1 555 555 5555"
-              className="mt-2 w-full bg-[color:var(--fan-surface-strong)] border border-[color:var(--fan-field-border)] rounded-xl px-4 py-3 outline-none text-lg focus:border-[var(--brand-blue)]"
+              className="mt-2 w-full bg-[color:var(--fan-surface-strong)] border border-white/20 rounded-xl px-4 py-3 outline-none text-lg placeholder-white/45 transition-[border-color,box-shadow] focus:border-[var(--brand-blue)] focus:shadow-[0_0_0_3px_rgba(49,158,216,0.18)]"
               data-testid="input-contact-phone"
             />
           </div>

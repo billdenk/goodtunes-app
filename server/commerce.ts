@@ -2124,7 +2124,19 @@ export function registerCommerceRoutes(app: Express) {
     // defense-in-depth.
     const existingCustomer = await storage.getCustomerByEmail(email);
     if (existingCustomer) {
-      return res.json({ ok: true, accountExists: true });
+      // Task #2921 — a purchase-created stub (Shopify orders/paid webhook
+      // mints the customer_users row with password=null and no identities)
+      // is NOT "already registered" in any sense the fan can act on:
+      // Create Account said "sign in instead" while sign-in rejected them
+      // for having no password. When the row is still unclaimed
+      // (credential-less, unmerged — same guard the OAuth auto-link path
+      // uses), let signup proceed: the 6-digit code proves email control
+      // and signup-with-code below promotes the stub in place instead of
+      // inserting a duplicate. Claimed accounts keep the exists-branch.
+      const { isUnclaimedCustomer } = await import("./auth/identityLink");
+      if (!(await isUnclaimedCustomer(existingCustomer.id))) {
+        return res.json({ ok: true, accountExists: true });
+      }
     }
     const code = generateSixDigitCode();
     const codeHash = await hashCode(code);
@@ -2198,6 +2210,38 @@ export function registerCommerceRoutes(app: Express) {
     await db.delete(signupVerifyTokens).where(eq(signupVerifyTokens.token, verifyToken));
 
     const existing = await storage.getCustomerByEmail(email);
+    // Task #2921 — promote an unclaimed purchase-created stub in place.
+    // The verified code proves control of the email; isUnclaimedCustomer
+    // proves there is no credential to hijack (no password, no OAuth
+    // identity, not merged) — the same posture as the OAuth auto-link
+    // branch. Claimed accounts keep the 409 (defense-in-depth behind the
+    // /start pre-check).
+    const { isUnclaimedCustomer: isUnclaimedForSignup } = await import("./auth/identityLink");
+    if (existing && (await isUnclaimedForSignup(existing.id))) {
+      const _salt0 = randomBytes(16).toString("hex");
+      const _scryptFn0 = promisify(_scrypt);
+      const _buf0 = (await _scryptFn0(password, _salt0, 64)) as Buffer;
+      await storage.updateCustomer(existing.id, {
+        password: `${_buf0.toString("hex")}.${_salt0}`,
+        emailVerifiedAt: new Date(),
+        termsAcceptedAt: new Date(),
+        termsVersion: TERMS_VERSION,
+      });
+      const token0 = generateToken();
+      await storage.createAuthToken(token0, existing.id, "customer");
+      (req.session as any).userId = existing.id;
+      (req.session as any).kind = "customer";
+      return res.status(201).json({
+        id: existing.id,
+        username: existing.username,
+        email: existing.email,
+        displayName: existing.displayName,
+        realName: existing.realName,
+        isAdmin: false,
+        kind: "customer",
+        token: token0,
+      });
+    }
     if (existing) return res.status(409).json({ message: "An account with that email already exists — sign in instead" });
 
     // Pick a placeholder username from the email; the fan can rename on /welcome.

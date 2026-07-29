@@ -188,7 +188,7 @@ export function Redeem() {
               type="email"
               value={prefilledEmail}
               readOnly
-              className="w-full h-11 rounded-lg bg-white/5 border border-white/10 px-3 text-[14px] text-white/85"
+              className="w-full h-11 rounded-lg bg-[color:var(--fan-surface-strong)] border border-white/20 px-3 text-[14px] text-white/85 placeholder:text-white/45"
               data-testid="input-redeem-email"
             />
           </div>
@@ -202,7 +202,11 @@ export function Redeem() {
               onChange={(e) => setPassword(e.target.value)}
               minLength={6}
               required
-              className="w-full h-11 rounded-lg bg-white/5 border border-white/10 px-3 text-[14px] text-white focus:outline-none focus:border-[#319ED8]"
+              className={`w-full h-11 rounded-lg bg-[color:var(--fan-surface-strong)] px-3 text-[14px] text-white placeholder:text-white/45 focus:outline-none border transition-[border-color,box-shadow] ${
+                password.length >= 6
+                  ? "border-[color:rgba(74,255,202,0.55)] shadow-[0_0_0_3px_rgba(74,255,202,0.12)]"
+                  : "border-white/20 focus:border-[var(--brand-blue)] focus:shadow-[0_0_0_3px_rgba(49,158,216,0.18)]"
+              }`}
               data-testid="input-redeem-password"
             />
           </div>

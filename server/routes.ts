@@ -3581,10 +3581,18 @@ export async function registerRoutes(
           // session and drops them straight into their library, where they
           // can set a password if they want one.
           const { mintWelcomeBackToken, customerOriginFromReq } = await import("./welcomeBack");
-          const { sendWelcomeBackEmail } = await import("./mail");
+          const { sendWelcomeBackEmail, sendSignInLinkEmail } = await import("./mail");
           const token = await mintWelcomeBackToken(c.id);
           const signInUrl = `${customerOriginFromReq(req)}/api/welcome-back/redeem/${token}`;
-          await sendWelcomeBackEmail(c.email, c.displayName ?? null, signInUrl);
+          // Task #2921 — only legacy gogoods imports get the migration-
+          // flavored "major upgrade / welcome back" template. A brand-new
+          // passwordless account (e.g. a Shopify purchase-created stub)
+          // gets a neutral sign-in link instead.
+          if (c.legacyGogoodsId) {
+            await sendWelcomeBackEmail(c.email, c.displayName ?? null, signInUrl);
+          } else {
+            await sendSignInLinkEmail(c.email, c.displayName ?? null, signInUrl);
+          }
           if (process.env.NODE_ENV !== "production") {
             console.log(`[forgot-password] customer passwordless sign-in link: ${signInUrl}`);
           }

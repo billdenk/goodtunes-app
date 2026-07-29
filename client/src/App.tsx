@@ -1163,6 +1163,16 @@ function Router() {
         <Route path="/admin">
           <Redirect to="/admin/dashboard" />
         </Route>
+        {/* Task #2921 — /library alias. The Shopify checkout-extension's
+            pending-state fallback CTA ("Go to my music library") links to
+            https://my.goodtunes.music/library, which had no client route:
+            it fell through to the /:slug share-slug resolver and rendered
+            "We couldn't find that album" for every logged-out buyer.
+            "library" is already in RESERVED_SLUGS, so this literal route
+            safely wins over the catch-all. */}
+        <Route path="/library">
+          <Redirect to="/collection" />
+        </Route>
         {/* Task #1310 — two-part artist/album share link. MUST stay below
             every literal two-segment route above (e.g. /album/:id,
             /artist/:slug, /instrument/:id) so those win; falls through to

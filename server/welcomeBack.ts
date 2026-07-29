@@ -42,7 +42,7 @@ import {
   playlists,
   authTokens,
 } from "@shared/schema";
-import { sendWelcomeBackEmail } from "./mail";
+import { sendWelcomeBackEmail, sendSignInLinkEmail } from "./mail";
 import { originForKind } from "./auth/host";
 
 // ─── helpers ──────────────────────────────────────────────────────
@@ -248,7 +248,13 @@ export function registerWelcomeBackRoutes(
         const token = await mintWelcomeBackToken(customer.id);
         const origin = customerOriginFromReq(req);
         const signInUrl = `${origin}/api/welcome-back/redeem/${token}`;
-        const r = await sendWelcomeBackEmail(raw, customer.displayName ?? null, signInUrl);
+        // Task #2921 — the migration-flavored "major upgrade" template is
+        // for legacy gogoods imports only; everyone else (e.g. a Shopify
+        // purchase-created stub minted minutes ago) gets neutral sign-in
+        // copy. Same token, same redeem path.
+        const r = customer.legacyGogoodsId
+          ? await sendWelcomeBackEmail(raw, customer.displayName ?? null, signInUrl)
+          : await sendSignInLinkEmail(raw, customer.displayName ?? null, signInUrl);
         await db.insert(welcomeBackEmailSends).values({
           customerId: customer.id,
           email: raw,

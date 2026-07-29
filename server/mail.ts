@@ -607,6 +607,51 @@ export async function sendWelcomeBackEmail(toEmail: string, displayName: string 
   return sendViaResend("customer-welcome-back", toEmail, subject, html, text);
 }
 
+// Task #2921 — neutral one-tap sign-in link for fans who are NOT legacy
+// gogoods imports. A brand-new purchase-created account (Shopify webhook
+// stub) was getting the "major upgrade / welcome back / while you were
+// away" migration mail above, which reads as nonsense to someone who
+// signed up ten minutes ago. Same token mechanics, neutral copy.
+export async function sendSignInLinkEmail(toEmail: string, displayName: string | null, signInUrl: string): Promise<SendResult> {
+  const friendly = (displayName ?? "").trim() || "there";
+  const subject = "Your GoodTunes sign-in link";
+  const text = [
+    `Hi ${friendly},`,
+    ``,
+    `Here's your one-tap sign-in link — no password needed:`,
+    signInUrl,
+    ``,
+    `It signs you straight in to your GoodTunes library. If you'd like a password, you can set one anytime from your Account page.`,
+    ``,
+    `The link is good for 30 days and works once. If you didn't request it, you can safely ignore this email.`,
+    ``,
+    `— The GoodTunes team`,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Sign in</div>
+      <h1 style="font-size: 26px; margin: 12px 0 16px; font-weight: 700; line-height: 1.2;">Hi ${escapeHtml(friendly)}, here's your sign-in link.</h1>
+      <p style="font-size: 15px; color: #333; line-height: 1.55; margin: 0 0 20px;">
+        Tap the button below to sign straight in to your GoodTunes library — no password needed.
+      </p>
+      <div style="margin: 28px 0 8px;">
+        ${bulletproofButton(signInUrl, "Open my GoodTunes library", { bgColor: "#1D5E8F", gradient: "linear-gradient(135deg,#1D5E8F,#319ED8)", paddingV: 14, paddingH: 24, borderRadius: 12 })}
+      </div>
+      <p style="font-size: 13px; color: #888; line-height: 1.55; margin: 0 0 24px;">
+        Button not working? Open this link: <a href="${signInUrl}" style="color: #319ED8; word-break: break-all;">${signInUrl}</a>
+      </p>
+      <p style="font-size: 13px; color: #666; line-height: 1.55; margin: 0 0 6px;">
+        If you'd like a password, you can set one anytime from your Account page. The link is good for 30 days and works once.
+      </p>
+      <p style="font-size: 13px; color: #888; line-height: 1.55; margin: 24px 0 0;">
+        Didn't request this? You can safely ignore this email.
+      </p>
+    </div>
+  `;
+  return sendViaResend("customer-signin-link", toEmail, subject, html, text);
+}
+
 // Task #1772 — the "early access is open" email blasted to a release's
 // waitlist when the operator presses "Send early access email". One-tap link
 // straight to the album page where they can now buy.
