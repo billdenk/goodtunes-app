@@ -1107,7 +1107,13 @@ export function ShopifyPanel({
                 {!hasStore && (
                   <p className="text-[13px] text-slate-600 leading-snug">
                     {embedded ? (
-                      "Ask your GoodTunes contact to connect the customer's Shopify store — mapping and the Sale URL unlock here as soon as it's live."
+                      <>
+                        Connect your Shopify store from your portal's{" "}
+                        <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/artist?tab=shopify">
+                          Shopify section
+                        </a>{" "}
+                        — mapping and the Sale URL unlock here as soon as it's live.
+                      </>
                     ) : (
                       <>
                         Connect the customer's Shopify store at{" "}
@@ -1180,7 +1186,10 @@ export function ShopifyPanel({
           {pushStatus && pushStatus.stores.length === 0 && (
             <div className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-[12.5px] text-slate-600">
               {embedded ? (
-                <>No Shopify store connected. Ask your GoodTunes contact to connect the artist's store first.</>
+                <>
+                  No Shopify store connected. Connect yours from your portal's{" "}
+                  <a className="text-[var(--brand-blue)] underline" href="/artist?tab=shopify">Shopify section</a> first.
+                </>
               ) : (
                 <>
                   No Shopify store connected. Install GoodTunes on a store at{" "}

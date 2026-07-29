@@ -3234,6 +3234,16 @@ export const shopifyInstallLinks = pgTable("shopify_install_links", {
   installedAt: timestamp("installed_at"),
   // Operator dismissed the stale pending entry. Null = visible.
   dismissedAt: timestamp("dismissed_at"),
+  // Task #2914 — attribution carried BY the link. When set at mint time
+  // (artist portal mints with their own scope; super-admin can pick an
+  // owner), the install route threads the link id through the signed
+  // OAuth state (`nonce:link:<id>`) and the callback stamps the store
+  // row with this owner even when the clicker is anonymous (e.g. the
+  // artist's third-party Shopify developer). Authorization happened at
+  // mint time, gated by the minting session. Loose ids on purpose — no
+  // FK constraint, mirroring how attribution rides on shopify_stores.
+  personId: varchar("person_id"),
+  labelId: varchar("label_id"),
 });
 
 // Per-order wholesale platform charge accrual. Every Shopify order that

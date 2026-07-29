@@ -36,6 +36,7 @@ import {
 import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
 import { OperatorShell } from "@/components/operator/OperatorShell";
+import { ArtistShopifyTab } from "@/components/operator/ArtistShopifyTab";
 import { modulesForRole } from "@/components/operator/registry";
 import { AdminReports } from "@/pages/AdminReports";
 // Task #2524 — an artist opening one of their albums stays INSIDE this portal
@@ -135,13 +136,13 @@ function rangeFor(preset: PresetId): Range {
 export function ArtistDashboard() {
   const [preset, setPreset] = useState<PresetId>(() => presetFromSearch(window.location.search) ?? "30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"dashboard" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people" | "reports">(() => {
+  const [tab, setTab] = useState<"dashboard" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people" | "shopify" | "reports">(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
     // Task #2893 — Overview merged into Dashboard. Stale ?tab=overview deep
     // links (bookmarks, old KPI tiles) land on the merged Dashboard; their
     // ?range= param still applies via presetFromSearch below.
     if (t === "overview") return "dashboard";
-    if (t === "dashboard" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals" || t === "people" || t === "reports") return t;
+    if (t === "dashboard" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals" || t === "people" || t === "shopify" || t === "reports") return t;
     return "dashboard";
   });
   // Task #2486 — Dashboard-tab KPI tiles deep-link via `?tab=…` (wouter
@@ -152,7 +153,7 @@ export function ArtistDashboard() {
   useEffect(() => {
     const t = new URLSearchParams(search).get("tab");
     if (t === "overview") setTab("dashboard"); // merged — Task #2893
-    else if (t === "dashboard" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals" || t === "people" || t === "reports") {
+    else if (t === "dashboard" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals" || t === "people" || t === "shopify" || t === "reports") {
       setTab(t);
     }
     const p = presetFromSearch(search);
@@ -254,7 +255,7 @@ export function ArtistDashboard() {
       pageTitle={albumViewId || tab === "reports" ? undefined : currentTabLabel}
       hideHeaderIdentity={!!albumViewId || tab === "reports"}
       headerActions={
-        albumViewId || tab === "reports" ? undefined : (
+        albumViewId || tab === "reports" || tab === "shopify" ? undefined : (
           <>
             <RangePicker presets={RANGE_PRESETS} value={preset} onChange={applyPreset} />
             <CompareToggle active={compare} onToggle={setCompare} />
@@ -305,6 +306,9 @@ export function ArtistDashboard() {
       {tab === "buyers" && <BuyersTab qs={qs} personId={me.data?.personId ?? null} />}
       {tab === "referrals" && <ReferralsTab />}
       {tab === "people" && <ArtistPeoplePanel />}
+      {/* Task #2914 — artists connect their own Shopify store from the
+          portal (same connect card as /admin/shopify, artist copy). */}
+      {tab === "shopify" && <ArtistShopifyTab />}
       {/* Task #2522 — Reports renders the shared AdminReports in `embedded`
           mode so the artist stays inside their own portal shell (no /admin
           chrome). Scope is resolved server-side from the caller (or ?personId=
@@ -317,7 +321,7 @@ export function ArtistDashboard() {
 }
 
 const ARTIST_TABS = modulesForRole("artist") as ReadonlyArray<{
-  id: "dashboard" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people" | "reports";
+  id: "dashboard" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people" | "shopify" | "reports";
   label: string;
 }>;
 type ArtistTabId = (typeof ARTIST_TABS)[number]["id"];

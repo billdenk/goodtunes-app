@@ -10893,3 +10893,16 @@ ALTER TABLE shopify_product_mappings ADD COLUMN IF NOT EXISTS shopify_variant_pr
 SQL
   echo "post-merge: shopify variant snapshot columns ok"
 done
+
+# Task #2914 — attribution columns on shopify_install_links. A link minted
+# from the artist portal (or by super-admin with an owner picked) carries
+# the owner so the OAuth callback can stamp the store row even when the
+# clicker is anonymous. Loose ids, no FK (matches shopify_stores usage).
+for _url in "${DATABASE_URL:-}" "${PROD_DATABASE_URL:-}"; do
+  [ -z "$_url" ] && continue
+  psql "$_url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE shopify_install_links ADD COLUMN IF NOT EXISTS person_id varchar;
+ALTER TABLE shopify_install_links ADD COLUMN IF NOT EXISTS label_id varchar;
+SQL
+  echo "post-merge: shopify_install_links attribution columns ok"
+done

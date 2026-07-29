@@ -47,6 +47,7 @@ import {
   Cog,
   Printer,
   Truck,
+  Store,
   type LucideIcon,
 } from "lucide-react";
 
@@ -111,6 +112,9 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "orders",      label: "Orders",      icon: ShoppingBag, roles: ["artist"] },
   { id: "buyers",      label: "Buyers",      icon: UserCheck, roles: ["artist"] },
   { id: "referrals",   label: "Referrals",   icon: UserPlus,  roles: ["artist"] },
+  // Task #2914 — artists connect their own Shopify store from the portal
+  // (pre-vetted, no approval gate). Same connect card as /admin/shopify.
+  { id: "shopify",     label: "Shopify",     icon: Store,     roles: ["artist"] },
   // Reports renders the shared AdminReports in `embedded` mode INSIDE the
   // artist portal shell (no /admin chrome). See ArtistDashboard.tsx.
   { id: "reports",     label: "Reports",     icon: BarChart3, roles: ["artist"] },

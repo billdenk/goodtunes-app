@@ -11455,6 +11455,56 @@
     "snippet": "<button type=\"button\" onClick={onDelete} className=\"h-8 w-8 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center transition-colors\" aria-label={isDraf"
   },
   {
+    "rule": "admin-filled-raw-button",
+    "file": "client/src/components/admin/ShopifyConnectCard.tsx",
+    "snippet": "<button"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyConnectCard.tsx",
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\" data-testid=\"text-connect-heading\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyConnectCard.tsx",
+    "snippet": "<p className=\"text-[12.5px] text-slate-500 mb-3 leading-snug\" data-testid=\"text-connect-helper\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyConnectCard.tsx",
+    "snippet": "className=\"flex-1 h-10 rounded-md border border-slate-300 px-3 text-[14px] focus:outline-none focus:border-[var(--brand-blue)]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyConnectCard.tsx",
+    "snippet": "className=\"h-10 px-4 rounded-md bg-slate-900 text-white text-[13px] font-medium hover:bg-slate-800 disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyConnectCard.tsx",
+    "snippet": "className=\"h-10 px-4 rounded-md border border-slate-300 bg-white text-slate-700 text-[13px] font-medium hover:bg-slate-50 disabled:opacity-50 shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyConnectCard.tsx",
+    "snippet": "<p className=\"mt-1.5 text-[12px] text-slate-400\" data-testid=\"text-copy-link-sublabel\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyConnectCard.tsx",
+    "snippet": "<p className=\"mt-2 text-[12.5px] text-emerald-700\" data-testid=\"text-copy-install-confirmation\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyConnectCard.tsx",
+    "snippet": "<div className=\"text-[11.5px] uppercase tracking-wider text-slate-500 font-semibold mb-1\">Install link to send</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyConnectCard.tsx",
+    "snippet": "<div className=\"font-mono text-[12.5px] text-slate-700 break-all\" data-testid=\"text-shopify-install-link\">{copiedLink}</div>"
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "<div style=\"margin:16px 0;padding:14px 16px;border:1px solid #319ED8;border-radius:10px;background:#f3fbff;font-family:-apple-system,Segoe UI,sans-serif;\">"
@@ -13003,6 +13053,41 @@
     "rule": "fan-text-tone",
     "file": "client/src/components/NpoAlbumLedger.tsx",
     "snippet": "<td className=\"px-3 py-2 text-right tabular-nums text-white/70\">{fmt(a.paidCents)}</td>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/operator/ArtistShopifyTab.tsx",
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-2\">Connected stores</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/operator/ArtistShopifyTab.tsx",
+    "snippet": "className=\"rounded-lg border border-slate-200 bg-white px-4 py-6 text-center text-slate-400 text-[13px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/operator/ArtistShopifyTab.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-medium text-slate-900 truncate\">{s.storeName ?? s.shopDomain}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/operator/ArtistShopifyTab.tsx",
+    "snippet": "<div className=\"text-[12px] text-slate-500 truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/operator/ArtistShopifyTab.tsx",
+    "snippet": "<span className=\"text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded shrink-0\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/operator/ArtistShopifyTab.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-medium text-slate-700 truncate\">{l.shopDomain}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/operator/ArtistShopifyTab.tsx",
+    "snippet": "<div className=\"text-[12px] text-slate-500\">Waiting for install — link generated {new Date(l.lastGeneratedAt).toLocaleDateString()}</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18625,11 +18710,6 @@
     "snippet": "<p className=\"text-[12px] text-rose-600 mt-1\" data-testid=\"text-confirm-password-error\">"
   },
   {
-    "rule": "admin-filled-raw-button",
-    "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "<button"
-  },
-  {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AdminShopify.tsx",
     "snippet": "<table cellpadding=\"0\" cellspacing=\"0\" style=\"margin:24px 0;\"><tr><td style=\"background:#319ED8;border-radius:999px;\">"
@@ -18642,17 +18722,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-3\">Install on a label's store</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminShopify.tsx",
     "snippet": "<div className=\"rounded-md bg-rose-50 border border-rose-200 px-3 py-2 text-[12.5px] text-rose-700 mb-4\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "<details className=\"text-[12.5px] text-slate-600 mb-2\" data-testid=\"shopify-email-snippet\">"
+    "snippet": "<details className=\"text-[12.5px] text-slate-600 mb-3\" data-testid=\"shopify-email-snippet\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18662,32 +18737,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "className=\"flex-1 h-10 rounded-md border border-slate-300 px-3 text-[14px] focus:outline-none focus:border-[var(--brand-blue)]\""
+    "snippet": "<div className=\"text-[12px] font-medium text-slate-600 mb-1.5\">Store owner (optional)</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "className=\"h-10 px-4 rounded-md bg-slate-900 text-white text-[13px] font-medium hover:bg-slate-800 disabled:opacity-50 shrink-0\""
+    "snippet": "className=\"h-10 rounded-md border border-slate-300 px-2 text-[13px] bg-white\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "className=\"h-10 px-4 rounded-md border border-slate-300 bg-white text-slate-700 text-[13px] font-medium hover:bg-slate-50 disabled:opacity-50 shrink-0\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "<p className=\"mt-2 text-[12.5px] text-emerald-700\" data-testid=\"text-copy-install-confirmation\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "<div className=\"text-[11.5px] uppercase tracking-wider text-slate-500 font-semibold mb-1\">Install link to send</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "<div className=\"font-mono text-[12.5px] text-slate-700 break-all\" data-testid=\"text-shopify-install-link\">{installLink}</div>"
+    "snippet": "<p className=\"mt-1.5 text-[12px] text-slate-500\" data-testid=\"text-store-owner-note\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18698,11 +18758,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminShopify.tsx",
     "snippet": "<p className=\"text-[12.5px] text-slate-600 mb-4\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "className=\"h-10 rounded-md border border-slate-300 px-2 text-[13px] bg-white\""
   },
   {
     "rule": "hardcoded-font-size",

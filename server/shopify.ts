@@ -42,6 +42,7 @@ import {
 import { lookupSignedCertRung } from "@shared/signedCertLadder";
 import { QA_TEST_ALBUM_ID } from "@shared/qaTest";
 import { grantLltBonusIfEligible } from "./lltBonus";
+import { requireRole } from "./auth/roles";
 import { z } from "zod";
 import { storage } from "./storage";
 
@@ -1789,6 +1790,17 @@ async function requireAdmin(req: Request, res: Response, next: Function) {
   next();
 }
 
+// Minimal HTML text escaper for the link-install confirmation page
+// (Task #2914) — the store name comes from Shopify's API, so treat it as
+// untrusted before interpolating into markup.
+function escapeHtmlText(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 // ─── Routes ───────────────────────────────────────────────────────────
 export function registerShopifyRoutes(app: Express) {
   // ─── Operator-facing config probe ─────────────────────────────────
@@ -1830,6 +1842,26 @@ export function registerShopifyRoutes(app: Express) {
       const [personRow] = await db.select({ id: people.id }).from(people).where(eq(people.id, rawPersonId));
       if (personRow) personId = personRow.id;
     }
+    // Task #2914 — link-token context. An install link minted with an
+    // owner (artist portal, or super-admin with the owner picker) carries
+    // `?link=<install-link id>`. The mint was authorized by the minting
+    // session, so the CLICKER needs no GoodTunes session at all — this is
+    // exactly the "send the link to whoever manages your Shopify store"
+    // path. The link id (uuid) rides through the signed state as
+    // `nonce:link:<id>`; the callback re-reads the row and stamps the
+    // owner. The link's attribution only applies to ITS shop domain — a
+    // clicker who swaps the ?shop= param gets a context-less install.
+    let linkId = "";
+    const rawLinkId = String(req.query.link ?? "").trim();
+    if (rawLinkId && !personId && !labelId) {
+      const [linkRow] = await db
+        .select()
+        .from(shopifyInstallLinks)
+        .where(eq(shopifyInstallLinks.id, rawLinkId));
+      if (linkRow && linkRow.shopDomain === shop && (linkRow.personId || linkRow.labelId)) {
+        linkId = linkRow.id;
+      }
+    }
     // Task #2435 — connecting a store to a specific label or artist is a
     // `map_shopify` action, so gate the install the same way attach/detach are.
     // This path is a top-level browser navigation (window.location.href), so
@@ -1852,11 +1884,13 @@ export function registerShopifyRoutes(app: Express) {
     // Task #2030), or `nonce:person:<personId>` (3-part, Task #2435). labelId
     // and personId are uuids (no `:`) and nonce is hex, so split-on-`:`
     // round-trips cleanly and old `nonce.sig` states stay valid.
-    const statePayload = personId
-      ? `${nonce}:person:${personId}`
-      : labelId
-        ? `${nonce}:${labelId}`
-        : nonce;
+    const statePayload = linkId
+      ? `${nonce}:link:${linkId}`
+      : personId
+        ? `${nonce}:person:${personId}`
+        : labelId
+          ? `${nonce}:${labelId}`
+          : nonce;
     const stateSig = createHmac("sha256", SHOPIFY_API_SECRET).update(statePayload).digest("hex").slice(0, 16);
     const state = `${statePayload}.${stateSig}`;
     const redirectUri = `${appOrigin(req)}/api/shopify/callback`;
@@ -1897,10 +1931,35 @@ export function registerShopifyRoutes(app: Express) {
     const stateParts = statePayload.split(":");
     let stateLabelId = "";
     let statePersonId = "";
+    // Task #2914 — link-token context (`nonce:link:<install-link id>`).
+    // The attribution rides ON the link row, not on the clicker's session:
+    // the mint was authorized by the artist's (or operator's) session, so
+    // an anonymous clicker — the store's own Shopify manager — can finish
+    // the install and the store still lands attributed correctly.
+    let stateLinkId = "";
     if (stateParts.length === 3 && stateParts[1] === "person") {
       statePersonId = stateParts[2];
+    } else if (stateParts.length === 3 && stateParts[1] === "link") {
+      stateLinkId = stateParts[2];
     } else if (stateParts.length === 2) {
       stateLabelId = stateParts[1];
+    }
+    if (stateLinkId) {
+      const [linkRow] = await db
+        .select()
+        .from(shopifyInstallLinks)
+        .where(eq(shopifyInstallLinks.id, stateLinkId));
+      // Same defenses as install: the link's attribution only applies to
+      // its own shop domain. A missing row (dismissed and purged, or a
+      // replayed old state) degrades to a context-less install rather
+      // than failing the handshake.
+      if (linkRow && linkRow.shopDomain === shop) {
+        statePersonId = linkRow.personId ?? "";
+        stateLabelId = linkRow.labelId ?? "";
+        if (statePersonId) stateLabelId = "";
+      } else {
+        stateLinkId = "";
+      }
     }
 
     // Task #2435 — defense in depth: the signed state is only ever minted by
@@ -1909,7 +1968,10 @@ export function registerShopifyRoutes(app: Express) {
     // callback is a top-level nav back from Shopify, so the Lax admin session
     // cookie is present. Context-less (global / Shopify-initiated) states skip
     // this, exactly like install.
-    if (statePersonId || stateLabelId) {
+    // Link-token installs skip this: their authorization happened at mint
+    // time (the artist's or operator's session gated the mint), and the
+    // clicker is expected to be an anonymous third party (Task #2914).
+    if ((statePersonId || stateLabelId) && !stateLinkId) {
       const userId = req.session?.userId;
       if (!userId) return res.status(401).send("Sign in as an operator to finish connecting the store");
       const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
@@ -2006,7 +2068,23 @@ export function registerShopifyRoutes(app: Express) {
     // (Task #2435), the label's Shopify tab (Task #2030), otherwise the
     // global admin install guide. All key their success toast off
     // ?installed=<id>.
-    if (statePersonId) {
+    if (stateLinkId) {
+      // Task #2914 — the clicker may be an anonymous third party (the
+      // store's Shopify manager), so don't bounce them into an admin
+      // login wall. A minimal confirmation page is the honest landing.
+      res
+        .status(200)
+        .type("html")
+        .send(
+          `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Store connected — GoodTunes</title></head>` +
+            `<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafc;display:flex;align-items:center;justify-content:center;min-height:100vh;">` +
+            `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:32px 36px;max-width:420px;text-align:center;">` +
+            `<div style="font-size:32px;margin-bottom:8px;">&#10003;</div>` +
+            `<h1 style="font-size:18px;margin:0 0 8px;color:#0f172a;">Store connected</h1>` +
+            `<p style="font-size:14px;color:#475569;margin:0;">${escapeHtmlText(store.storeName ?? shop)} is now linked to GoodTunes. You can close this tab &mdash; whoever sent you this link will see the store as connected.</p>` +
+            `</div></body></html>`,
+        );
+    } else if (statePersonId) {
       res.redirect(`/admin/people/${statePersonId}?tab=overview&installed=${store.id}`);
     } else if (stateLabelId) {
       res.redirect(`/admin/labels/${stateLabelId}?tab=shopify&installed=${store.id}`);
@@ -3116,15 +3194,125 @@ export function registerShopifyRoutes(app: Express) {
     if (!isValidShopDomain(shop)) {
       return res.status(400).json({ message: "Enter a *.myshopify.com store domain" });
     }
+    // Task #2914 — optional owner attribution from the super-admin card's
+    // "Store owner" picker. Operator-only route (strict requireAdmin), so
+    // accepting the ids here is an operator assignment, not a client
+    // claim. Validate they're real rows; person wins over label (mutually
+    // exclusive, same contract as the install route). Blank = today's
+    // unattributed behavior.
+    let personId: string | null = null;
+    let labelId: string | null = null;
+    const rawPersonId = String(req.body?.personId ?? "").trim();
+    const rawLabelId = String(req.body?.labelId ?? "").trim();
+    if (rawPersonId) {
+      const [p] = await db.select({ id: people.id }).from(people).where(eq(people.id, rawPersonId));
+      if (!p) return res.status(400).json({ message: "Unknown person for store owner" });
+      personId = p.id;
+    } else if (rawLabelId) {
+      const [l] = await db.select({ id: labels.id }).from(labels).where(eq(labels.id, rawLabelId));
+      if (!l) return res.status(400).json({ message: "Unknown label for store owner" });
+      labelId = l.id;
+    }
     const [row] = await db
       .insert(shopifyInstallLinks)
-      .values({ shopDomain: shop })
+      .values({ shopDomain: shop, personId, labelId })
       .onConflictDoUpdate({
         target: shopifyInstallLinks.shopDomain,
-        set: { lastGeneratedAt: new Date(), installedAt: null, dismissedAt: null },
+        set: { lastGeneratedAt: new Date(), installedAt: null, dismissedAt: null, personId, labelId },
       })
       .returning();
     res.json(row);
+  });
+
+  // ─── Artist-portal Shopify connect (Task #2914) ────────────────────
+  // Artists are pre-vetted — they connect their OWN store from the
+  // portal with no approval gate. Scope is derived from the SESSION
+  // user's role grant, never from a client-supplied id (super_admin may
+  // pass ?personId= for god-view). These are deliberately separate from
+  // the operator-only /api/admin/shopify/* list — an artist only ever
+  // sees stores and pending links attributed to their own person scope.
+  // requireRole handles session-OR-bearer auth (and backfills the
+  // session), matching how the rest of the artist portal's endpoints
+  // authenticate (see server/auth/roles.ts).
+  const artistShopifyGate = requireRole("artist", "super_admin");
+  const resolveArtistShopifyScope = async (
+    req: Request,
+  ): Promise<{ personId: string } | { error: string; status: number }> => {
+    const info = (req as any).userRole as { role: string; roleScopeId: string | null } | undefined;
+    if (!info) return { error: "Sign in required", status: 401 };
+    if (info.role === "super_admin") {
+      const personId = String(req.query.personId ?? "").trim();
+      if (!personId) return { error: "Super-admin must pass ?personId=", status: 400 };
+      // Validate the god-view target actually exists — a typo'd id must
+      // not mint an orphan-attributed install link.
+      const [p] = await db.select({ id: people.id }).from(people).where(eq(people.id, personId)).limit(1);
+      if (!p) return { error: "No person with that id", status: 400 };
+      return { personId };
+    }
+    if (!info.roleScopeId) return { error: "Artist account has no person scope", status: 403 };
+    return { personId: info.roleScopeId };
+  };
+
+  // Everything the portal's Shopify section needs in one read: config
+  // state, the artist's own connected stores, and their pending links.
+  app.get("/api/artist/shopify/overview", artistShopifyGate, async (req, res) => {
+    const scope = await resolveArtistShopifyScope(req);
+    if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
+    const storeRows = await db
+      .select()
+      .from(shopifyStores)
+      .where(and(eq(shopifyStores.personId, scope.personId), isNull(shopifyStores.uninstalledAt)))
+      .orderBy(desc(shopifyStores.installedAt));
+    const linkRows = await db
+      .select()
+      .from(shopifyInstallLinks)
+      .where(and(
+        eq(shopifyInstallLinks.personId, scope.personId),
+        isNull(shopifyInstallLinks.installedAt),
+        isNull(shopifyInstallLinks.dismissedAt),
+      ))
+      .orderBy(desc(shopifyInstallLinks.lastGeneratedAt));
+    const live = new Set(storeRows.map((s) => s.shopDomain));
+    res.json({
+      configured: shopifyConfigured(),
+      stores: storeRows.map((s) => ({
+        id: s.id,
+        shopDomain: s.shopDomain,
+        storeName: s.storeName,
+        installedAt: s.installedAt,
+      })),
+      pendingLinks: linkRows
+        .filter((r) => !live.has(r.shopDomain))
+        .map((r) => ({ id: r.id, shopDomain: r.shopDomain, lastGeneratedAt: r.lastGeneratedAt })),
+    });
+  });
+
+  // Mint (or refresh) an install link carrying the artist's OWN
+  // attribution. The returned id doubles as the link token the install
+  // route threads through the signed OAuth state, so a copied link works
+  // in an anonymous third party's hands and still lands attributed.
+  app.post("/api/artist/shopify/install-links", artistShopifyGate, async (req, res) => {
+    const scope = await resolveArtistShopifyScope(req);
+    if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
+    const shop = String(req.body?.shopDomain ?? "").trim().toLowerCase();
+    if (!isValidShopDomain(shop)) {
+      return res.status(400).json({ message: "Enter a *.myshopify.com store domain" });
+    }
+    // If the domain's pending link already belongs to a DIFFERENT owner
+    // (another artist, a label, or an operator's unattributed link),
+    // re-minting reassigns it to this artist — acceptable because the
+    // domain itself is the natural key and the newest mint reflects the
+    // freshest install attempt. The OAuth handshake is what actually
+    // authorizes the store, so there's nothing to hijack here.
+    const [row] = await db
+      .insert(shopifyInstallLinks)
+      .values({ shopDomain: shop, personId: scope.personId, labelId: null })
+      .onConflictDoUpdate({
+        target: shopifyInstallLinks.shopDomain,
+        set: { lastGeneratedAt: new Date(), installedAt: null, dismissedAt: null, personId: scope.personId, labelId: null },
+      })
+      .returning();
+    res.json({ id: row.id, shopDomain: row.shopDomain });
   });
 
   // Dismiss an abandoned pending entry (soft — the row survives so a

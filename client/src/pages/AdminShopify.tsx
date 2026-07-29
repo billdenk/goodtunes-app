@@ -6,11 +6,12 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ExternalLink, Trash2, CheckCircle2, FlaskConical, Copy, Check, Pencil, ShieldAlert, ChevronDown, ChevronUp, TriangleAlert, X } from "lucide-react";
+import { Trash2, CheckCircle2, FlaskConical, Copy, Check, Pencil, ShieldAlert, ChevronDown, ChevronUp, TriangleAlert, X, Info } from "lucide-react";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { ShopifyConnectCard } from "@/components/admin/ShopifyConnectCard";
+import { PersonPicker, type PersonLite } from "@/components/admin/AddPeopleMenu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type Store = {
   id: string;
@@ -55,12 +56,15 @@ export function AdminShopify() {
 
 function AdminShopifyInner() {
   const { toast } = useToast();
-  const [shop, setShop] = useState("");
-  const [linkCopied, setLinkCopied] = useState(false);
-  // Task #2892 — which shop domain the confirmation line under the input
-  // refers to. Cleared implicitly when the input changes (compared against
-  // the current normalized value on render).
-  const [copiedShop, setCopiedShop] = useState<string | null>(null);
+  // Task #2914 — optional "Store owner" attribution for the connect card.
+  // Picking an artist (or label) stamps the install-link record so the
+  // eventual store row lands attributed; blank keeps today's
+  // unattributed behavior. Mutually exclusive: picking one clears the other.
+  const [ownerPerson, setOwnerPerson] = useState<PersonLite | null>(null);
+  const [ownerLabelId, setOwnerLabelId] = useState("");
+  const { data: labelsList } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ["/api/labels"],
+  });
 
   const { data: cfg } = useQuery<{ configured: boolean; apiKey: string | null; scopes: string }>({
     queryKey: ["/api/admin/shopify/config"],
@@ -123,14 +127,25 @@ function AdminShopifyInner() {
     onError: (e: any) => toast({ title: "Couldn't dismiss", description: e?.message, variant: "destructive" }),
   });
   // Record that an install link was generated for a shop, so the pending
-  // chip survives reload and shows for other admins too. Best-effort: the
-  // copy/install action itself must never fail on this bookkeeping write.
-  const recordInstallLink = async (domain: string) => {
+  // chip survives reload and shows for other admins too. When a store
+  // owner is picked the link becomes ATTRIBUTED — the returned id rides
+  // the install URL as `?link=` and failures surface (a silently
+  // unattributed link would be worse); unattributed mints stay
+  // best-effort like before (the chip is a convenience, not the install).
+  const recordInstallLink = async (domain: string): Promise<string | null> => {
+    const attributed = !!(ownerPerson || ownerLabelId);
     try {
-      await apiRequest("POST", "/api/admin/shopify/install-links", { shopDomain: domain });
+      const res = await apiRequest("POST", "/api/admin/shopify/install-links", {
+        shopDomain: domain,
+        personId: ownerPerson?.id || undefined,
+        labelId: !ownerPerson && ownerLabelId ? ownerLabelId : undefined,
+      });
+      const row = (await res.json()) as { id: string };
       queryClient.invalidateQueries({ queryKey: ["/api/admin/shopify/install-links"] });
-    } catch {
-      // Non-fatal — the chip is a convenience, not the install itself.
+      return attributed ? row.id : null;
+    } catch (e) {
+      if (attributed) throw e;
+      return null;
     }
   };
 
@@ -179,56 +194,6 @@ function AdminShopifyInner() {
   });
   const mintedUrl = mintedCode ? `${window.location.origin}/redeem/${mintedCode}` : "";
 
-  // Accept either the bare subdomain or the full myshopify.com URL and
-  // normalize to the canonical `<sub>.myshopify.com`. Returns "" when the
-  // input can't be coerced into a valid shop domain.
-  const normalizeShop = (raw: string): string => {
-    let s = raw.trim().toLowerCase();
-    if (!s) return "";
-    s = s.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-    // A bare subdomain (no dots) gets the myshopify.com suffix. A dotted host
-    // must already be a *.myshopify.com domain — a custom storefront domain
-    // (www.label.com) can't be turned into an install target, so reject it
-    // rather than silently coercing it to a bogus www.myshopify.com link.
-    if (!s.includes(".")) s = `${s}.myshopify.com`;
-    return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(s) ? s : "";
-  };
-  const normalizedShop = normalizeShop(shop);
-  // Absolute link a label's team member (who has Shopify admin access to
-  // their own store) opens to approve the install. The install route needs
-  // no GoodTunes login, so this link works in the label's hands — the
-  // operator almost never has admin access to a label's Shopify store, so
-  // handing over a link is the normal path, not clicking Install here.
-  const installLink = normalizedShop
-    ? `${window.location.origin}/api/shopify/install?shop=${encodeURIComponent(normalizedShop)}`
-    : "";
-
-  const copyInstallLink = async () => {
-    if (!installLink) return;
-    try {
-      await navigator.clipboard.writeText(installLink);
-      setLinkCopied(true);
-      // Task #2892 — confirmation lives inline under the input (not a
-      // toast), and the domain gets a "Waiting for install" chip below.
-      setCopiedShop(normalizedShop);
-      void recordInstallLink(normalizedShop);
-      setTimeout(() => setLinkCopied(false), 1500);
-    } catch {
-      toast({ title: "Couldn't copy", description: "Copy the link shown below by hand instead.", variant: "destructive" });
-    }
-  };
-
-  // "Install directly" — only useful when the operator themselves has admin
-  // access to the target store (e.g. a GoodTunes dev/test store). Otherwise
-  // Shopify shows "Unauthorized Access" and the label must use the link.
-  const startInstall = async () => {
-    if (!normalizedShop) return;
-    // Record first so an abandoned OAuth approval still leaves a pending
-    // chip; the callback stamps it installed when the flow completes.
-    await recordInstallLink(normalizedShop);
-    window.location.href = `/api/shopify/install?shop=${encodeURIComponent(normalizedShop)}`;
-  };
-
   return (
     <AdminFrame active="shopify" contentWidth="wide">
       <div data-testid="page-admin-shopify">
@@ -237,9 +202,8 @@ function AdminShopifyInner() {
           Connect a label's Shopify store. Their physical orders flow into GoodTunes and bundled fans land on a "Get your music" CTA.
         </p>
 
-        {/* Install guide */}
-        <section className="rounded-xl border border-slate-200 bg-white p-6 mb-8" data-testid="shopify-install-guide">
-          <h2 className="text-[15px] font-semibold text-slate-900 mb-3">Install on a label's store</h2>
+        {/* Connect card (shared with the artist portal — Task #2914) */}
+        <ShopifyConnectCard variant="admin" configured={!!cfg?.configured} recordLink={recordInstallLink}>
           {cfg && !cfg.configured && (
             <div className="rounded-md bg-rose-50 border border-rose-200 px-3 py-2 text-[12.5px] text-rose-700 mb-4">
               <strong>Not configured yet.</strong> Set <code>SHOPIFY_API_KEY</code> and <code>SHOPIFY_API_SECRET</code> in
@@ -249,8 +213,14 @@ function AdminShopifyInner() {
               omitted = derives from <code>SESSION_SECRET</code>.
             </div>
           )}
-          <details className="text-[12.5px] text-slate-600 mb-2" data-testid="shopify-email-snippet">
-            <summary className="cursor-pointer text-slate-700 font-medium">
+          <details className="text-[12.5px] text-slate-600 mb-3" data-testid="shopify-email-snippet">
+            {/* Task #2914 — Info glyph instead of the native disclosure
+                triangle, which read as a play button next to "Get your
+                music now". list-none + marker:hidden kills the triangle
+                in both Firefox and WebKit; the details/summary toggle
+                behavior is unchanged. */}
+            <summary className="cursor-pointer text-slate-700 font-medium list-none [&::-webkit-details-marker]:hidden inline-flex items-center gap-1.5">
+              <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               Add the "Get your music now" button to the label's order-confirmation email
             </summary>
             <p className="mt-2 text-slate-500">
@@ -269,59 +239,46 @@ Get your music now
             </p>
           </details>
 
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={shop}
-              onChange={(e) => setShop(e.target.value)}
-              placeholder="label-store.myshopify.com"
-              className="flex-1 h-10 rounded-md border border-slate-300 px-3 text-[14px] focus:outline-none focus:border-[var(--brand-blue)]"
-              data-testid="input-shopify-shop"
-            />
-            <button
-              type="button"
-              onClick={copyInstallLink}
-              disabled={!cfg?.configured || !normalizedShop}
-              className="h-10 px-4 rounded-md bg-slate-900 text-white text-[13px] font-medium hover:bg-slate-800 disabled:opacity-50 shrink-0"
-              data-testid="button-shopify-copy-link"
-            >
-              <span className="inline-flex items-center gap-1.5">
-                {linkCopied ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
-                {linkCopied ? "Copied" : "Copy install link"}
-              </span>
-            </button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={startInstall}
-                  disabled={!cfg?.configured || !normalizedShop}
-                  className="h-10 px-4 rounded-md border border-slate-300 bg-white text-slate-700 text-[13px] font-medium hover:bg-slate-50 disabled:opacity-50 shrink-0"
-                  data-testid="button-shopify-install"
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    Install directly <ExternalLink className="w-3.5 h-3.5" />
-                  </span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-[240px]">
-                For stores you have admin access to, like a test store.
-              </TooltipContent>
-            </Tooltip>
-          </div>
-          {copiedShop && copiedShop === normalizedShop && (
-            <p className="mt-2 text-[12.5px] text-emerald-700" data-testid="text-copy-install-confirmation">
-              Link copied. Send it to someone with admin access on the label's store — only a store admin can
-              approve the install.
-            </p>
-          )}
-          {installLink && (
-            <div className="mt-3 rounded-md bg-slate-50 border border-slate-200 px-3 py-2" data-testid="shopify-install-link-readout">
-              <div className="text-[11.5px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Install link to send</div>
-              <div className="font-mono text-[12.5px] text-slate-700 break-all" data-testid="text-shopify-install-link">{installLink}</div>
+          {/* Task #2914 — optional owner attribution. Picking an artist or
+              label stamps the install-link record so the connected store
+              lands attributed; blank = today's unattributed connect. */}
+          <div className="mb-4" data-testid="shopify-store-owner-picker">
+            <div className="text-[12px] font-medium text-slate-600 mb-1.5">Store owner (optional)</div>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <div>
+                <PersonPicker
+                  value={ownerPerson}
+                  onChange={(p) => {
+                    setOwnerPerson(p);
+                    if (p) setOwnerLabelId("");
+                  }}
+                  excludeIds={new Set()}
+                  testIdPrefix="store-owner"
+                  hidePaste
+                />
+              </div>
+              <select
+                value={ownerLabelId}
+                onChange={(e) => {
+                  setOwnerLabelId(e.target.value);
+                  if (e.target.value) setOwnerPerson(null);
+                }}
+                className="h-10 rounded-md border border-slate-300 px-2 text-[13px] bg-white"
+                data-testid="select-store-owner-label"
+              >
+                <option value="">…or a label</option>
+                {(labelsList ?? []).map((l) => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
             </div>
-          )}
-        </section>
+            {(ownerPerson || ownerLabelId) && (
+              <p className="mt-1.5 text-[12px] text-slate-500" data-testid="text-store-owner-note">
+                The copied install link carries this owner — the store shows up in their portal once installed.
+              </p>
+            )}
+          </div>
+        </ShopifyConnectCard>
 
         {/* Dev-only test mint */}
         {isDev && (
