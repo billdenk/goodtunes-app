@@ -380,6 +380,36 @@ Run **Partner Dashboard → Apps → [your app] → App setup → Run automated 
 
 ---
 
+## 5b — Reviewer demo environment (Task #2925 — use THIS in Test Instructions)
+
+The 2.1.1 rejection came from pointing the reviewer at the Apple-review sampler
+account (`appreview@goodtunes.music`), which has **zero Shopify wiring** — the
+reviewer wandered into operator-only surfaces and hit 403 error cards. A
+dedicated GoodTunes-for-Shopify environment now exists on prod (seeded via
+`seed_task_2925_shopify_review_env` in `scripts/post-merge.sh`, idempotent):
+
+| What | Value |
+|------|-------|
+| Login URL | the prod admin host login (same as other partner accounts) |
+| Email / username | `shopifyreview@goodtunes.music` / `shopifyreview` |
+| Password | Not committed — held by Bill (handed off out-of-band; paste into the Shopify Test Instructions form only). Rotate via admin reset — the seed never re-clobbers. |
+| 2FA | skipped (`skip_second_factor=true`) — no OTP inbox needed |
+| Scope | artist → `person-shopifydemo-artist` ("GoodTunes Demo Band") |
+| Release | `album-shopifydemo` "Storefront Sessions" — `sell_mode='shopify_plus'`, 2 playable tracks |
+| Permissions | `map_shopify` + metadata/masters/payouts ON, approval-divert OFF (no 202 queue surprises) |
+
+**Reviewer path (put this in Test Instructions):** log in → Albums →
+*Storefront Sessions* → **Shopify** tab → step 1 links to the portal's
+**Shopify** section → enter their dev store's `.myshopify.com` domain →
+Install directly → approve on Shopify → back on the album's Shopify tab, map a
+product → set the Sale URL. Every surface on this path is partner-scoped and
+verified 403-free (operator-only album tabs are now hidden for partners, the
+person Permissions tab renders a read-only summary instead of a disabled
+control wall, and the store pickers only list the partner's own stores).
+
+Never attach test mappings/orders to a real artist's album — the QA rules in
+"Test hygiene rule" above still apply to this environment.
+
 ## 6 — Submission sequence (do not skip steps)
 
 1. **Ship GDPR webhooks** (done — merged in this task).

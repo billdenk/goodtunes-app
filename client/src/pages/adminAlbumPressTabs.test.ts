@@ -1,14 +1,12 @@
-// Task #2256 — regression guard for the press-partner tab gating in
-// AdminAlbum. A press (manufacturer-role admin) views an album with
-// `hideCustomers` set (AdminAlbum passes `hideCustomers: isPress`, where
-// `isPress = adminRoleInfo?.role === "manufacturer"`). When it's set,
-// `visibleTabsFor` must drop the operator-only Customers + Early-access
-// (waitlist) tabs — a press never sees the artist's buyer roster — while
-// KEEPING the Physical tab (the press's whole reason to be here). The
-// customers/waitlist append hangs off one ternary
-// (`opts?.hidePress || opts?.hideCustomers ? tabs : [...]`), so a refactor
-// could silently re-expose the buyer roster to a press, or conflate
-// hideCustomers with hidePress and hide Physical too.
+// Task #2256 / #2925 — regression guard for partner tab gating in
+// AdminAlbum. The operator-only Customers + Early-access (waitlist) tabs
+// are gated on an explicit `operatorTabs` flag (AdminAlbum passes
+// `operatorTabs: isOperator`, the same super_admin/admin predicate the
+// endpoints enforce) and FAIL CLOSED: any caller that doesn't assert
+// operator-ness gets no buyer roster and no waitlist. This replaced the
+// old `hidePress || hideCustomers` exclude-list, which failed OPEN — when
+// Task #2578 narrowed `hidePress` to labels-only, artists silently
+// regained both tabs and the Shopify reviewer hit two 403 error cards.
 //
 // `visibleTabsFor` is a pure function, so this imports + calls it directly
 // rather than rendering the whole AdminFrame page (the delete-gating test
@@ -36,31 +34,41 @@ const DIRECT_ALBUM = {
   isPrepping: false,
 };
 
-const keys = (opts?: { hidePress?: boolean; hideCustomers?: boolean }) =>
+const keys = (opts?: { hidePress?: boolean; operatorTabs?: boolean }) =>
   visibleTabsFor(DIRECT_ALBUM, opts).map((t) => t.key);
 
-test("operator (no opts) sees Customers + Early access + Physical on a direct album", () => {
-  const k = keys();
+test("operator (operatorTabs) sees Customers + Early access + Physical on a direct album", () => {
+  const k = keys({ operatorTabs: true });
   assert.ok(k.includes("customers"), "operator sees the Customers buyer roster");
   assert.ok(k.includes("waitlist"), "operator sees the Early-access waitlist");
   assert.ok(k.includes("press"), "operator sees the Physical tab");
 });
 
-test("hideCustomers drops Customers + Early access but KEEPS Physical", () => {
-  const k = keys({ hideCustomers: true });
-  assert.ok(!k.includes("customers"), "a press never sees the buyer roster");
-  assert.ok(!k.includes("waitlist"), "a press never sees the Early-access waitlist");
+test("no opts FAILS CLOSED: Customers + Early access hidden, Physical kept", () => {
+  // A press (manufacturer) partner: no operatorTabs, no hidePress. It must
+  // keep Physical (its whole reason to be here) but never see the buyer
+  // roster or waitlist. Same shape covers any FUTURE partner role a caller
+  // forgets to gate — absence of the flag hides the operator tabs.
+  const k = keys();
+  assert.ok(!k.includes("customers"), "non-operator never sees the buyer roster");
+  assert.ok(!k.includes("waitlist"), "non-operator never sees the Early-access waitlist");
   assert.ok(k.includes("press"), "a press STILL sees the Physical tab — its reason to be here");
 });
 
-test("hidePress (artist/label partner) drops Customers, Early access AND Physical", () => {
-  // The other partner path: artist/label partners get neither the buyer
-  // roster nor the manufacturing tab. This pins that hideCustomers is the
-  // narrower of the two and doesn't accidentally take Physical with it.
+test("artist partner (no flags) — the exact reviewer scenario — gets neither tab", () => {
+  // Task #2925 root cause: artists stopped passing hidePress (Task #2578
+  // unhid Physical for them) and the old exclude-list then showed them
+  // Customers + Early access, whose endpoints 403 non-operators.
+  const k = keys();
+  assert.ok(!k.includes("customers"), "artist: no buyer roster");
+  assert.ok(!k.includes("waitlist"), "artist: no waitlist");
+});
+
+test("hidePress (label partner) drops Physical too", () => {
   const k = keys({ hidePress: true });
-  assert.ok(!k.includes("customers"), "artist/label partner: no buyer roster");
-  assert.ok(!k.includes("waitlist"), "artist/label partner: no waitlist");
-  assert.ok(!k.includes("press"), "artist/label partner: no Physical tab");
+  assert.ok(!k.includes("customers"), "label partner: no buyer roster");
+  assert.ok(!k.includes("waitlist"), "label partner: no waitlist");
+  assert.ok(!k.includes("press"), "label partner: no Physical tab");
 });
 
 // Task #2428 — a shopify_plus album MUST expose the Shopify mapping tab to the

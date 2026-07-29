@@ -369,7 +369,7 @@ export function visibleTabsFor(
     isPrepping?: boolean;
     isSpinPromo?: boolean;
   },
-  opts?: { hidePress?: boolean; hideCustomers?: boolean; canManagePayouts?: boolean },
+  opts?: { hidePress?: boolean; operatorTabs?: boolean; canManagePayouts?: boolean },
 ): { key: Tab; label: string }[] {
   // SPIN Promo albums are digital-only legacy releases. The Package /
   // Physical / Shopify manufacturing surfaces are irrelevant and are
@@ -402,21 +402,24 @@ export function visibleTabsFor(
   // Path-to-press strip (the `art` chip routed to a hidden tab and
   // did nothing). The panels themselves render their own pre-lock
   // empty/early states.
-  // Task #1499 — Customers tab (per-album buyer roster) is operator-only,
-  // hidden for artist/label partners (same gating as Physical, via
-  // `hidePress`) and never for SPIN-promo (returned above). Appended after
-  // the sell-mode-specific tabs so it always reads last in the bar.
-  // Task #1772 — the Early-access waitlist panel rides alongside Customers:
-  // operator-only (hidden for artist/label partners via `hidePress`) and reads
-  // last in the bar, right after Customers.
+  // Task #1499 — Customers tab (per-album buyer roster) is operator-only.
+  // Task #1772 — the Early-access waitlist panel rides alongside Customers.
+  // Task #2925 — these used to hang off `hidePress || hideCustomers`, an
+  // exclude-list that FAILED OPEN: when Task #2578 narrowed `hidePress` to
+  // labels-only (so artists could see Physical), artists silently regained
+  // Customers + Early access — whose endpoints are operator-only, so the
+  // Shopify reviewer's artist-scoped session saw two red 403 cards
+  // ("Operators only"). Now gated on an explicit `operatorTabs` flag that
+  // callers set from the SAME super_admin/admin predicate the endpoints
+  // enforce; any new partner role fails CLOSED (no flag → no tabs).
   const withCustomers = (tabs: { key: Tab; label: string }[]) =>
-    opts?.hidePress || opts?.hideCustomers
-      ? tabs
-      : [
+    opts?.operatorTabs
+      ? [
           ...tabs,
           { key: "customers" as Tab, label: "Customers" },
           { key: "waitlist" as Tab, label: "Early access" },
-        ];
+        ]
+      : tabs;
   // Task #2428 — GoodTunes Shopify+ reuses the Direct production pipeline, so
   // it shows the same Physical (press + master preflight) tab plus a prepaid
   // manufacturing "Payments" ledger. It ALSO shows a Shopify tab: the customer
@@ -516,6 +519,14 @@ export function AdminAlbum({
   // the Releases grid (other-press rows are locked), so role alone is a safe
   // signal here.
   const isPress = adminRoleInfo?.role === "manufacturer";
+  // Task #2925 — Customers + Early access are operator-only tabs; gate them
+  // on the SAME predicate their endpoints enforce (super_admin/admin) so
+  // partner roles fail CLOSED instead of riding an exclude-list. Until the
+  // role query resolves this is false (tabs hidden), so the re-pin effect
+  // below must wait for `adminRoleInfo` before kicking a deep-linked
+  // operator off a not-yet-allowed tab.
+  const isOperator =
+    adminRoleInfo?.role === "super_admin" || adminRoleInfo?.role === "admin";
   // Task #2578 — Bill asked for artists to see the Physical tab (masters
   // on file, tracklist FLAC table, side assignments, Go-to-Press status)
   // since it's their own release, and the underlying endpoints already
@@ -1111,9 +1122,13 @@ export function AdminAlbum({
   // avoid TDZ on `album` in the dependency array.
   useEffect(() => {
     if (!album) return;
-    const allowed = visibleTabsFor(album, { hidePress: hidePressSection, hideCustomers: isPress, canManagePayouts: albumEditAccess?.canManagePayouts }).map((t) => t.key);
+    // Task #2925 — don't re-pin before the role loads: operator tabs are
+    // fail-closed (hidden while adminRoleInfo is undefined), so acting early
+    // would bounce a deep-linked ?tab=customers operator to Dashboard.
+    if (!adminRoleInfo) return;
+    const allowed = visibleTabsFor(album, { hidePress: hidePressSection, operatorTabs: isOperator, canManagePayouts: albumEditAccess?.canManagePayouts }).map((t) => t.key);
     if (!allowed.includes(tab)) setTab("dashboard");
-  }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, album?.isSpinPromo, tab, album, hidePressSection, isPress, albumEditAccess?.canManagePayouts]);
+  }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, album?.isSpinPromo, tab, album, hidePressSection, isOperator, adminRoleInfo, albumEditAccess?.canManagePayouts]);
 
   // Task #674 — Mirror the active tab into the URL (`?tab=`) so a refresh
   // reopens the same tab. Uses `replace` so repeated tab clicks don't
@@ -1593,7 +1608,7 @@ export function AdminAlbum({
           data-testid="tabs-admin-album"
         >
           <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
-            {visibleTabsFor(album, { hidePress: hidePressSection, hideCustomers: isPress, canManagePayouts: albumEditAccess?.canManagePayouts }).map((t) => {
+            {visibleTabsFor(album, { hidePress: hidePressSection, operatorTabs: isOperator, canManagePayouts: albumEditAccess?.canManagePayouts }).map((t) => {
               const status = (completeness as any)?.[t.key] as
                 | SectionStatus
                 | undefined;
@@ -1822,7 +1837,7 @@ export function AdminAlbum({
             `tab` back to "sell" whenever the current tab leaves the
             allowed set. */}
         {(() => {
-          const allowed = new Set(visibleTabsFor(album, { hidePress: hidePressSection, hideCustomers: isPress, canManagePayouts: albumEditAccess?.canManagePayouts }).map((t) => t.key));
+          const allowed = new Set(visibleTabsFor(album, { hidePress: hidePressSection, operatorTabs: isOperator, canManagePayouts: albumEditAccess?.canManagePayouts }).map((t) => t.key));
           const safeTab: Tab = allowed.has(tab) ? tab : "dashboard";
           return (
             <>

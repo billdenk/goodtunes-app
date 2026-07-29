@@ -1787,6 +1787,12 @@ async function requireAdmin(req: Request, res: Response, next: Function) {
   const u = await storage.getUser(a.userId);
   if (!u?.isAdmin) return res.status(403).json({ message: "Admin only" });
   (req as any).adminUser = u;
+  // Task #2925 — downstream gates (gateAlbumRoute and friends) read
+  // req.session.userId. This guard is Bearer-only, so backfill the
+  // session identity or those gates 401 every legit bearer caller
+  // (see requirerole-vs-requireadmin memory lesson).
+  if (!(req as any).session) (req as any).session = {};
+  if (!(req as any).session.userId) (req as any).session.userId = u.id;
   next();
 }
 
@@ -3627,6 +3633,12 @@ export function registerShopifyRoutes(app: Express) {
   // AdminAlbum Shopify panel can render them in one query.
   app.get("/api/admin/albums/:id/shopify-mappings", requireAdmin, async (req, res) => {
     const albumId = String(req.params.id);
+    // Task #2925 — album-scope gate (requireAdmin admits ALL partners; an
+    // out-of-scope partner must not read another album's store mappings).
+    {
+      const { gateAlbumRoute } = await import("./auth/partnerPermissions");
+      if (await gateAlbumRoute(req, res, "map_shopify", albumId)) return;
+    }
     const rows = await db
       .select({ m: shopifyProductMappings, s: shopifyStores })
       .from(shopifyProductMappings)
@@ -4332,9 +4344,34 @@ export function registerShopifyRoutes(app: Express) {
   // and saves the panel a second round-trip for the store list.
   app.get("/api/admin/albums/:id/shopify-push", requireAdmin, async (req, res) => {
     const albumId = String(req.params.id);
+    // Task #2925 — same album-scope gate as the POST push route: an
+    // out-of-scope partner must not read another album's push metadata
+    // / audit trail (requireAdmin admits ALL partner accounts).
+    {
+      const { gateAlbumRoute } = await import("./auth/partnerPermissions");
+      if (await gateAlbumRoute(req, res, "map_shopify", albumId)) return;
+    }
     const album = await storage.getAlbumById(albumId, { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
-    const stores = await db.select().from(shopifyStores).where(isNull(shopifyStores.uninstalledAt));
+    let stores = await db.select().from(shopifyStores).where(isNull(shopifyStores.uninstalledAt));
+    // Task #2925 — requireAdmin admits ALL partner accounts, but this list
+    // used to return EVERY connected store platform-wide, so a partner's
+    // Shopify tab showed other artists'/labels' store names in the store
+    // pickers (cross-partner leak + reviewer confusion). Operators keep the
+    // full list; a partner only sees stores attributed to their own scope.
+    {
+      const userId = ((req as any).adminUser?.id as string | undefined) ?? req.session?.userId;
+      const { getUserRole } = await import("./auth/roles");
+      const role = userId ? await getUserRole(userId) : null;
+      if (role?.role !== "super_admin" && role?.role !== "admin") {
+        const scopeId = role?.roleScopeId ?? null;
+        stores = stores.filter((s) =>
+          scopeId != null &&
+          ((role?.role === "artist" && s.personId === scopeId) ||
+            (role?.role === "label" && s.labelId === scopeId)),
+        );
+      }
+    }
     const [certAddon] = await db
       .select()
       .from(albumAddons)
@@ -4425,6 +4462,11 @@ export function registerShopifyRoutes(app: Express) {
   //   enough to run on every open; a manual Refresh clears both.
   app.get("/api/admin/albums/:id/shopify-sales", requireAdmin, async (req, res) => {
     const albumId = String(req.params.id);
+    // Task #2925 — album-scope gate (see GET shopify-push above).
+    {
+      const { gateAlbumRoute } = await import("./auth/partnerPermissions");
+      if (await gateAlbumRoute(req, res, "map_shopify", albumId)) return;
+    }
     const album = await storage.getAlbumById(albumId, { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
     if (!album.shopifyPushStoreId || !album.shopifyPushProductId) {

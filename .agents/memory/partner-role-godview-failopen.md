@@ -100,3 +100,10 @@ in client/src/App.tsx (mirror the `isArtistPartner` / `isPublisherPartner` block
 For a scoped reporting role, also decide which global registries to deny via
 `denyReportingPartnerRegistry` — but confirm the portal's real fetches first
 (People/invites/partner-contacts are shared by design; see point 4).
+
+**2026-07 additions (Shopify review 2.1.1 sweep):**
+- Client nav gating must be fail-CLOSED too: AdminAlbum's operator-only tabs were once gated by an exclude-list of partner roles (narrowing `hidePress` to labels-only made newer roles fail open). Gate on an explicit `operatorTabs` (super_admin/admin) flag instead.
+- The Shopify album READ routes (shopify-push/-mappings/-sales) sat behind `requireAdmin` with no `gateAlbumRoute` — any partner could read any album's push metadata, and the push-status `stores` list returned EVERY connected store platform-wide. All three now gate on `map_shopify` and the stores list is role-scoped. Regression test: `server/shopifyAlbumReadScope.db.test.ts`.
+- shopify.ts's local Bearer-only `requireAdmin` did not backfill `req.session.userId`, so adding `gateAlbumRoute` (which reads session) 401'd every bearer caller until the guard backfilled it — same landmine as requirerole-vs-requireadmin-session-backfill.md.
+- Frame-level badge queries (e.g. AdminFrame's feedback count) must be `enabled:`-gated on operator role or every partner page collects console 403s — reviewer-visible noise.
+- Shopify reviewer demo env (shopifyreview@goodtunes.music, artist person-shopifydemo-artist, album album-shopifydemo) is seeded idempotently via post-merge; runbook section 5b in docs/shopify-app-review.md.

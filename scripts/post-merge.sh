@@ -10906,3 +10906,138 @@ ALTER TABLE shopify_install_links ADD COLUMN IF NOT EXISTS label_id varchar;
 SQL
   echo "post-merge: shopify_install_links attribution columns ok"
 done
+
+# ─── Task #2925 — GoodTunes-for-Shopify review environment ─────────────────
+# The Shopify App Store reviewer previously evaluated our Shopify app from the
+# task-939 sampler account, which has ZERO Shopify wiring — steering them into
+# operator-only surfaces (the 2.1.1 rejection). This seeds a dedicated
+# reviewer environment our Test Instructions can point at instead:
+#   • artist Person "GoodTunes Demo Band" + a shopify_plus release
+#     "Storefront Sessions" (Shopify tab present in the portal album view;
+#     the connect-a-store checklist is step 1 — the reviewer connects their
+#     own dev store via the portal's own flow, one click from login).
+#   • admin user shopifyreview@goodtunes.music (artist scope,
+#     skip_second_factor=true so no OTP inbox is needed).
+#   • partner_permissions with map_shopify (+ metadata/masters/payouts) so
+#     every surface the reviewer can reach is live, and approval-divert is
+#     OFF so edits apply directly instead of 202-ing to a queue.
+# Songs are copied INSERT…SELECT from static-seed rows so each environment
+# inherits its own valid Mux ids (same trick as task-939). Idempotent +
+# ID-preserving; the committed password value is a one-way scrypt HASH —
+# the plaintext is NEVER committed (handed to Bill out-of-band for the
+# Test Instructions; rotatable via admin reset — DO UPDATE deliberately
+# omits password so a rotation is never clobbered).
+seed_task_2925_shopify_review_env() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2925 shopify-review-env seed on $label (no URL set)"
+    return 0
+  fi
+  local out rc
+  out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+DO $$
+DECLARE
+  v_uid text;
+BEGIN
+  INSERT INTO people (id, name, photo_url, bio)
+  VALUES ('person-shopifydemo-artist', 'GoodTunes Demo Band',
+          '/figmaAssets/album-1-cover.jpg',
+          'Demo artist used for the GoodTunes-for-Shopify app review.')
+  ON CONFLICT (id) DO NOTHING;
+
+  INSERT INTO albums
+    (id, title, artist, artwork, year, type, description, genre,
+     good_tunes_release_date, is_goodtunes_release, is_prepping, is_hidden,
+     sell_mode, primary_artist_id)
+  VALUES
+    ('album-shopifydemo', 'Storefront Sessions', 'GoodTunes Demo Band',
+     '/figmaAssets/album-1-cover.jpg', 2026, 'EP',
+     'A short EP wired for the GoodTunes-for-Shopify review: connect a store, map products, sell.',
+     'Indie', '2026-07-01', true, false, false,
+     'shopify_plus', 'person-shopifydemo-artist')
+  ON CONFLICT (id) DO NOTHING;
+
+  INSERT INTO songs
+    (id, album_id, title, track_number, duration, lyrics, synced_lyrics,
+     audio_url, mux_playback_id, mux_asset_id, mux_status)
+  SELECT 'song-shopifydemo-1', 'album-shopifydemo', title, 1, duration, lyrics,
+         synced_lyrics, audio_url, mux_playback_id, mux_asset_id, mux_status
+  FROM songs WHERE id = 'song-1-1'
+  ON CONFLICT (id) DO NOTHING;
+
+  INSERT INTO songs
+    (id, album_id, title, track_number, duration, lyrics, synced_lyrics,
+     audio_url, mux_playback_id, mux_asset_id, mux_status)
+  SELECT 'song-shopifydemo-2', 'album-shopifydemo', title, 2, duration, lyrics,
+         synced_lyrics, audio_url, mux_playback_id, mux_asset_id, mux_status
+  FROM songs WHERE id = 'song-5-1'
+  ON CONFLICT (id) DO NOTHING;
+
+  INSERT INTO users
+    (id, username, email, display_name, real_name, password,
+     is_admin, role, role_scope_id, factor_pref, skip_second_factor,
+     terms_accepted_at, terms_version, created_at)
+  VALUES
+    ('admin-shopifyreview-demo', 'shopifyreview', 'shopifyreview@goodtunes.music',
+     'Shopify Review', 'Shopify Review',
+     '9348b235d2458a1143b27df986e29010f06a0a07ca977b7a5fbee97329e64760c77f379d34d4c0c77d2a212f6cb8896939b62540d608f31990acaea1b573e9f4.a9855ae69817cc4e51d8f51e613a60b1',
+     true, 'artist', 'person-shopifydemo-artist', 'email', true,
+     now(), '2026-05-31', now())
+  ON CONFLICT (email) DO UPDATE SET
+    role               = EXCLUDED.role,
+    role_scope_id      = EXCLUDED.role_scope_id,
+    is_admin           = EXCLUDED.is_admin,
+    skip_second_factor = EXCLUDED.skip_second_factor,
+    factor_pref        = EXCLUDED.factor_pref;
+  -- password deliberately excluded from DO UPDATE — preserves operator resets.
+
+  SELECT id INTO STRICT v_uid
+    FROM users WHERE email = 'shopifyreview@goodtunes.music';
+
+  INSERT INTO memberships (user_id, role, scope_kind, scope_id, sub_role)
+  VALUES (v_uid, 'artist', 'artist', 'person-shopifydemo-artist', NULL)
+  ON CONFLICT (user_id, scope_kind, scope_id) WHERE scope_id IS NOT NULL
+  DO UPDATE SET role = EXCLUDED.role;
+
+  -- Verbs mirror a real Shopify+ artist (Niina) but with approval-divert OFF
+  -- and manage_payouts ON so no reviewer-reachable surface 403s or diverts.
+  INSERT INTO partner_permissions
+    (scope_kind, scope_id, edit_metadata, upload_masters, map_shopify,
+     manage_payouts, invite_subusers, metadata_edits_require_approval)
+  VALUES ('artist', 'person-shopifydemo-artist', true, true, true, true, false, false)
+  ON CONFLICT (scope_kind, scope_id) DO UPDATE SET
+    map_shopify = true;
+  -- Only map_shopify is re-asserted on conflict; later operator tuning of the
+  -- other verbs survives merges.
+
+  IF NOT EXISTS (
+    SELECT 1 FROM users u
+      JOIN memberships m ON m.user_id = u.id
+      JOIN partner_permissions pp
+        ON pp.scope_kind = 'artist' AND pp.scope_id = u.role_scope_id
+      JOIN albums a ON a.primary_artist_id = u.role_scope_id
+    WHERE u.email = 'shopifyreview@goodtunes.music'
+      AND u.is_admin = true AND u.skip_second_factor = true
+      AND u.role = 'artist' AND u.role_scope_id = 'person-shopifydemo-artist'
+      AND m.scope_kind = 'artist' AND m.scope_id = 'person-shopifydemo-artist'
+      AND pp.map_shopify = true
+      AND a.id = 'album-shopifydemo' AND a.sell_mode = 'shopify_plus'
+  ) THEN
+    RAISE EXCEPTION 'task-2925 post-seed verification failed — required state not present';
+  END IF;
+
+  RAISE NOTICE 'task-2925 ok: shopify review env seeded (user_id=%)', v_uid;
+END$$;
+SQL
+  )
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    echo "post-merge: task-2925 shopify-review-env seed ok on $label"
+  else
+    echo "post-merge: ERROR — task-2925 shopify-review-env seed FAILED on $label"
+    echo "$out" | tail -10
+    return 1
+  fi
+}
+seed_task_2925_shopify_review_env dev  "${DATABASE_URL:-}"
+seed_task_2925_shopify_review_env prod "${PROD_DATABASE_URL:-}"

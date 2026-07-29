@@ -226,11 +226,15 @@ function AssignNonProfitDialog({
   );
 }
 
-function AmbassadorToggle({ personId, canInviteAmbassadors, referredByOrgId, earnsReferralPayout }: {
+function AmbassadorToggle({ personId, canInviteAmbassadors, referredByOrgId, earnsReferralPayout, showPayoutSection = true }: {
   personId: string;
   canInviteAmbassadors: boolean;
   referredByOrgId: string | null;
   earnsReferralPayout: boolean;
+  // Task #2925 — the earns-referral-payout PATCH is operator-only
+  // (super_admin/admin); an NPO partner viewing their ambassador's page can
+  // toggle can-invite but must not see the payout-policy checkbox.
+  showPayoutSection?: boolean;
 }) {
   const { toast } = useToast();
   const [enabled, setEnabled] = useState(canInviteAmbassadors);
@@ -307,6 +311,7 @@ function AmbassadorToggle({ personId, canInviteAmbassadors, referredByOrgId, ear
         </div>
       </div>
 
+      {showPayoutSection && (
       <div className="flex items-start gap-3 border-t border-slate-100 pt-5">
         <input
           type="checkbox"
@@ -326,6 +331,7 @@ function AmbassadorToggle({ personId, canInviteAmbassadors, referredByOrgId, ear
           </span>
         </label>
       </div>
+      )}
 
       <AssignNonProfitDialog personId={personId} open={assignOpen} onOpenChange={setAssignOpen} />
     </Card>
@@ -1180,12 +1186,24 @@ export function AdminPerson() {
                 can attribute invites to this person and the new
                 artist's referral credits flow to the ambassador (with
                 the NPO still seeing them in their roll-up). */}
-            <AmbassadorToggle
-              personId={person.id}
-              canInviteAmbassadors={person.canInviteAmbassadors ?? false}
-              referredByOrgId={person.referredByOrgId ?? null}
-              earnsReferralPayout={person.earnsReferralPayout ?? true}
-            />
+            {/* Task #2925 — the ambassador card's two checkboxes are gated
+                server-side (can-invite: super_admin OR the person's own NPO;
+                earns-payout: super_admin/admin only), but the card rendered
+                for EVERY partner viewing their own Permissions tab — either
+                dead-disabled or a guaranteed 403 on click (2.1.1). Mirror
+                the endpoint gates client-side; hide the card when the
+                viewer can't act on either section. */}
+            {(roleInfo?.role === "super_admin" ||
+              roleInfo?.role === "admin" ||
+              (!!person.referredByOrgId && roleInfo?.roleScopeId === person.referredByOrgId)) && (
+              <AmbassadorToggle
+                personId={person.id}
+                canInviteAmbassadors={person.canInviteAmbassadors ?? false}
+                referredByOrgId={person.referredByOrgId ?? null}
+                earnsReferralPayout={person.earnsReferralPayout ?? true}
+                showPayoutSection={roleInfo?.role === "super_admin" || roleInfo?.role === "admin"}
+              />
+            )}
           </>
         )}
       </div>

@@ -387,9 +387,19 @@ export function AdminFrame({
   // Feedback badge counts all unresolved reports (everything except terminal
   // statuses). Terminal = operator explicitly closed the item.
   const FEEDBACK_TERMINAL_STATUSES = new Set(["closed"]);
+  // Task #2925 — the feedback triage endpoint is operator-only; partner
+  // admins used to fire this badge query anyway and collect a console 403
+  // on every admin page. Gate it on the resolved role (same queryKey as the
+  // role query below, so react-query dedupes the fetch).
+  const { data: feedbackRoleInfo } = useQuery<{ role?: string }>({
+    queryKey: ["/api/me/role"],
+    enabled: !!user?.isAdmin,
+  });
+  const feedbackIsOperator =
+    feedbackRoleInfo?.role === "super_admin" || feedbackRoleInfo?.role === "admin";
   const { data: feedbackRows = [] } = useQuery<Array<{ status: string }>>({
     queryKey: ["/api/admin/feedback"],
-    enabled: !!user?.isAdmin,
+    enabled: !!user?.isAdmin && feedbackIsOperator,
   });
   const feedbackNewCount = feedbackRows.filter((f) => !FEEDBACK_TERMINAL_STATUSES.has(f.status)).length;
   // Task #2279 — QA Orders cleanup nav entry is only meaningful when

@@ -88,13 +88,55 @@ export function PartnerPermissionsPanel({ scopeKind, scopeId, scopeName }: Props
     );
   }
 
+  // Task #2925 — non-super-admin viewers (partners on their own scope page,
+  // plain `admin` operators) used to get the full toggle wall with every
+  // Switch disabled + a "Read-only" pill, which the Shopify reviewer read as
+  // broken UI (2.1.1). Replace it with a compact plain-text summary: what's
+  // enabled, what's off, and the approval note. No form controls, nothing to
+  // dead-click. Super-admin keeps the editable panel unchanged.
+  if (!isSuperAdmin) {
+    const enabled = VERBS.filter((v) => !!draft[v.key]);
+    return (
+      <Card className="p-6 mt-6 bg-white border border-slate-200" data-testid="card-partner-permissions-summary">
+        <h2 className="text-[15px] font-semibold text-slate-900">Partner permissions</h2>
+        <p className="text-[12.5px] text-slate-500 mt-0.5">
+          What signed-in users scoped to <span className="font-medium text-slate-700">{scopeName}</span> can
+          do in admin. Managed by the GoodTunes team — ask us if something here should change.
+        </p>
+        <div className="mt-4 space-y-2">
+          {enabled.length === 0 ? (
+            <p className="text-sm text-slate-600" data-testid="text-permissions-none">
+              No self-service permissions are enabled for this scope yet.
+            </p>
+          ) : (
+            <ul className="space-y-1.5" data-testid="list-permissions-enabled">
+              {enabled.map((v) => (
+                <li key={v.key} className="flex items-baseline gap-2 text-sm text-slate-700">
+                  <span className="text-[color:var(--brand-mint)]" aria-hidden="true">✓</span>
+                  <span>
+                    <span className="font-medium text-slate-900">{v.label}</span>
+                    <span className="text-slate-500"> — {v.hint}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-xs text-slate-500 pt-2 border-t border-slate-100" data-testid="text-permissions-approval-note">
+            {draft.metadataEditsRequireApproval
+              ? "Metadata edits are reviewed by GoodTunes before they go live."
+              : "Metadata edits apply directly without GoodTunes review."}
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
   const dirty = data
     ? VERBS.some((v) => draft[v.key] !== data[v.key]) ||
       draft.metadataEditsRequireApproval !== data.metadataEditsRequireApproval
     : false;
 
   function toggle(key: keyof Permissions) {
-    if (!isSuperAdmin) return;
     setDraft((d) => (d ? { ...d, [key]: !d[key] } : d));
   }
 
@@ -108,14 +150,6 @@ export function PartnerPermissionsPanel({ scopeKind, scopeId, scopeName }: Props
             in admin. Super-admin always bypasses these gates.
           </p>
         </div>
-        {!isSuperAdmin && (
-          <span
-            className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500"
-            data-testid="badge-read-only-permissions"
-          >
-            Read-only
-          </span>
-        )}
       </div>
 
       <div className="space-y-1 divide-y divide-slate-100">
@@ -131,7 +165,7 @@ export function PartnerPermissionsPanel({ scopeKind, scopeId, scopeName }: Props
             </div>
             <Switch
               checked={!!draft[v.key]}
-              disabled={!isSuperAdmin || save.isPending}
+              disabled={save.isPending}
               onCheckedChange={() => toggle(v.key)}
               data-testid={`switch-permission-${v.key}`}
             />
@@ -149,7 +183,7 @@ export function PartnerPermissionsPanel({ scopeKind, scopeId, scopeName }: Props
           </div>
           <Switch
             checked={!!draft.metadataEditsRequireApproval}
-            disabled={!isSuperAdmin || save.isPending}
+            disabled={save.isPending}
             onCheckedChange={() => toggle("metadataEditsRequireApproval")}
             data-testid="switch-permission-metadataEditsRequireApproval"
           />
