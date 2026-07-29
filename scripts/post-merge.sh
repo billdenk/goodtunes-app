@@ -10938,6 +10938,8 @@ seed_task_2925_shopify_review_env() {
 DO $$
 DECLARE
   v_uid text;
+  v_src1 text;
+  v_src2 text;
 BEGIN
   INSERT INTO people (id, name, photo_url, bio)
   VALUES ('person-shopifydemo-artist', 'GoodTunes Demo Band',
@@ -10957,12 +10959,34 @@ BEGIN
      'shopify_plus', 'person-shopifydemo-artist')
   ON CONFLICT (id) DO NOTHING;
 
+  -- Demo tracks: copy Mux fields from THIS environment's own mux-ready
+  -- songs. Dev↔prod Mux assets don't interchange, and the static seed rows
+  -- (song-1-1 / song-5-1) exist only in dev — on prod the old INSERT…SELECT
+  -- silently matched 0 rows and the album shipped trackless. Prefer the
+  -- static seed rows when present, then the Apple app-review demo song,
+  -- then any mux-ready song; FATAL when no source exists (never a silent
+  -- 0-track seed again).
+  SELECT id INTO v_src1 FROM songs
+    WHERE mux_status = 'ready' AND mux_playback_id IS NOT NULL
+      AND album_id <> 'album-shopifydemo'
+    ORDER BY (id = 'song-1-1') DESC, (id LIKE 'song-appreview%') DESC, id
+    LIMIT 1;
+  SELECT id INTO v_src2 FROM songs
+    WHERE mux_status = 'ready' AND mux_playback_id IS NOT NULL
+      AND album_id <> 'album-shopifydemo' AND id <> v_src1
+    ORDER BY (id = 'song-5-1') DESC, (id LIKE 'song-appreview%') DESC, id
+    LIMIT 1;
+  IF v_src1 IS NULL THEN
+    RAISE EXCEPTION 'task-2925 seed: no mux-ready source song in this DB — demo album would be trackless';
+  END IF;
+  v_src2 := COALESCE(v_src2, v_src1);
+
   INSERT INTO songs
     (id, album_id, title, track_number, duration, lyrics, synced_lyrics,
      audio_url, mux_playback_id, mux_asset_id, mux_status)
   SELECT 'song-shopifydemo-1', 'album-shopifydemo', title, 1, duration, lyrics,
          synced_lyrics, audio_url, mux_playback_id, mux_asset_id, mux_status
-  FROM songs WHERE id = 'song-1-1'
+  FROM songs WHERE id = v_src1
   ON CONFLICT (id) DO NOTHING;
 
   INSERT INTO songs
@@ -10970,8 +10994,13 @@ BEGIN
      audio_url, mux_playback_id, mux_asset_id, mux_status)
   SELECT 'song-shopifydemo-2', 'album-shopifydemo', title, 2, duration, lyrics,
          synced_lyrics, audio_url, mux_playback_id, mux_asset_id, mux_status
-  FROM songs WHERE id = 'song-5-1'
+  FROM songs WHERE id = v_src2
   ON CONFLICT (id) DO NOTHING;
+
+  -- Track-presence assertion joins the existing verification block below.
+  IF (SELECT count(*) FROM songs WHERE album_id = 'album-shopifydemo') < 2 THEN
+    RAISE EXCEPTION 'task-2925 seed: album-shopifydemo has fewer than 2 tracks after seed';
+  END IF;
 
   INSERT INTO users
     (id, username, email, display_name, real_name, password,
@@ -10980,7 +11009,7 @@ BEGIN
   VALUES
     ('admin-shopifyreview-demo', 'shopifyreview', 'shopifyreview@goodtunes.music',
      'Shopify Review', 'Shopify Review',
-     '9348b235d2458a1143b27df986e29010f06a0a07ca977b7a5fbee97329e64760c77f379d34d4c0c77d2a212f6cb8896939b62540d608f31990acaea1b573e9f4.a9855ae69817cc4e51d8f51e613a60b1',
+     'a014d6d02627ba71cfac4163bc14125ae6f417c894cf9726dc3bd18d7e438ed1219b8c5d933e362a1da57edf1a8472068735ab09d8e6392a6104c70377ac773a.4220c96e7f9e2802f5dd5900b1bfcec4',
      true, 'artist', 'person-shopifydemo-artist', 'email', true,
      now(), '2026-05-31', now())
   ON CONFLICT (email) DO UPDATE SET

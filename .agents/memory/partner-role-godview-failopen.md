@@ -107,3 +107,18 @@ For a scoped reporting role, also decide which global registries to deny via
 - shopify.ts's local Bearer-only `requireAdmin` did not backfill `req.session.userId`, so adding `gateAlbumRoute` (which reads session) 401'd every bearer caller until the guard backfilled it — same landmine as requirerole-vs-requireadmin-session-backfill.md.
 - Frame-level badge queries (e.g. AdminFrame's feedback count) must be `enabled:`-gated on operator role or every partner page collects console 403s — reviewer-visible noise.
 - Shopify reviewer demo env (shopifyreview@goodtunes.music, artist person-shopifydemo-artist, album album-shopifydemo) is seeded idempotently via post-merge; runbook section 5b in docs/shopify-app-review.md.
+
+## Render-then-redirect flash (client guard fail-open while role loads)
+The App.tsx partner route guards read the ["/api/me/role"] query; while it is
+pending every isXPartner flag is false, so an operator page mounts and PAINTS
+before the redirect fires. Fixed with a fail-closed neutral shell (`admin-role-gate`)
+on all non-auth /admin/* paths while `adminRole.isPending`. Any NEW guard that
+derives from that query inherits the protection — don't add per-route flashes back.
+Artist eviction target is /artist (the portal where they work), not /admin/dashboard.
+
+## ShopifyPanel viewer-role copy
+Partners legitimately browse the god-view album route (/admin/albums/:id is in the
+artist allowlist) where `embedded=false` — operator-directed pointers (/admin/shopify)
+must branch on `portalViewer` (embedded OR partner role), never `embedded` alone.
+Artist self-serve store connect lives at /artist?tab=shopify (ArtistShopifyTab, #2892).
+Fresh artist login lands on /admin/albums (landingPathForUser), NOT the /artist portal.

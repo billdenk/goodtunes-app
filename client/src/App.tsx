@@ -553,6 +553,23 @@ function Router() {
     }
   }
 
+  // Fail closed while the admin role is still resolving. Every partner
+  // guard below reads adminRole.data — during the fetch window all the
+  // isXPartner flags are false, so an operator page could mount, fire its
+  // fetches, and PAINT for a partner before the redirect fires (the
+  // render-then-redirect flash Bill hit on /admin/shopify). Hold all
+  // /admin/* rendering behind a neutral shell until the role is known.
+  // Auth paths stay live so sign-in/reset never block on the role probe.
+  if (
+    !!user &&
+    kind === "admin" &&
+    location.startsWith("/admin") &&
+    !onAdminAuthPath &&
+    adminRole.isPending
+  ) {
+    return <div className="min-h-screen bg-slate-50" data-testid="admin-role-gate" />;
+  }
+
   // Artist partner route guard. Artists now have a full sectioned nav;
   // god-view surfaces (presses, labels, makers, jobs, platform pricing,
   // payouts, invite tree, etc.) remain blocked. Auth paths stay open so
@@ -596,7 +613,9 @@ function Router() {
               location.startsWith(p + "/"),
           ));
     if (!isAllowed) {
-      return <Redirect to="/admin/dashboard" />;
+      // Evict to the artist PORTAL — the surface where an artist actually
+      // works — not /admin/dashboard (which just relocates the confusion).
+      return <Redirect to="/artist" />;
     }
   }
 

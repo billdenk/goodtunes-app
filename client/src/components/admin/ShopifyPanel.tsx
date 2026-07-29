@@ -552,6 +552,17 @@ export function ShopifyPanel({
 
   // ── Task #2892 — checklist state + shared JSX sections ──────────────
   const stores = pushStatus?.stores ?? [];
+  // Viewer role — partners can legitimately land on the god-view album
+  // route (/admin/albums/:id is in the artist allowlist), where `embedded`
+  // is false. Every operator-directed pointer below (/admin/shopify) must
+  // still swap to the portal copy for them, so branch on `portalViewer`
+  // (embedded OR partner role), never on `embedded` alone. Shares the
+  // ["/api/me/role"] cache with the App.tsx route guards.
+  const meRole = useQuery<{ role: string | null }>({ queryKey: ["/api/me/role"] });
+  const partnerViewer =
+    !!meRole.data?.role && meRole.data.role !== "super_admin" && meRole.data.role !== "admin";
+  const portalViewer = embedded || partnerViewer;
+
   const hasStore = stores.length > 0;
   const mappingCount = mappings?.length ?? 0;
   const storeSummary =
@@ -561,7 +572,7 @@ export function ShopifyPanel({
   // Task #2918 — embedded (partner-facing) mode renders NOTHING here: the
   // old "managed by your GoodTunes team" line contradicted the self-serve
   // connect flow. Operators keep the /admin/shopify pointer.
-  const manageStoresNode = embedded ? null : (
+  const manageStoresNode = portalViewer ? null : (
     <>
       Manage connected stores at{" "}
       <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
@@ -668,7 +679,16 @@ export function ShopifyPanel({
       {!isLoading && !mappingsError && mappingCount === 0 && panelMode === "list" && (
         <div className="px-5 py-5 text-[13px] text-slate-500" data-testid="shopify-mappings-empty">
           No Shopify products linked to this album yet.
-          {!hasStore && !embedded && (
+          {!hasStore && portalViewer && (
+            <span>
+              {" "}Connect your store from your portal's{" "}
+              <a className="text-[#1f7fb8] underline underline-offset-2" href="/artist?tab=shopify">
+                Shopify section
+              </a>{" "}
+              first.
+            </span>
+          )}
+          {!hasStore && !portalViewer && (
             <span>
               {" "}Connect the {isShopifyPlus ? "customer's" : "artist's"} store at{" "}
               <a className="text-[#1f7fb8] underline underline-offset-2" href="/admin/shopify">
@@ -1111,7 +1131,7 @@ export function ShopifyPanel({
                 ))}
                 {!hasStore && (
                   <p className="text-[13px] text-slate-600 leading-snug">
-                    {embedded ? (
+                    {portalViewer ? (
                       <>
                         Connect your Shopify store from your portal's{" "}
                         <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/artist?tab=shopify">
@@ -1190,7 +1210,7 @@ export function ShopifyPanel({
 
           {pushStatus && pushStatus.stores.length === 0 && (
             <div className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-[12.5px] text-slate-600">
-              {embedded ? (
+              {portalViewer ? (
                 <>
                   No Shopify store connected. Connect yours from your portal's{" "}
                   <a className="text-[var(--brand-blue)] underline" href="/artist?tab=shopify">Shopify section</a> first.
