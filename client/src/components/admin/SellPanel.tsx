@@ -548,13 +548,38 @@ export function SellPanel({
       locked?: boolean;
     }) => {
       const r = await apiRequest("PUT", `/api/admin/albums/${albumId}/skus/${body.format}`, body);
-      return r.json();
+      const json = await r.json();
+      // First-vinyl-SKU sync: the Side Breaks / Tracklist panel reads
+      // `albums.physicalFormat`, not the SKU rows, and until now that
+      // column was only stamped by the New Album dialog or a format
+      // SWAP (Task #1360). Saving the album's FIRST vinyl SKU via
+      // "Add physical good" left it NULL, so Side Breaks kept saying
+      // "no sides to cut". Stamp it here — but ONLY when it's still
+      // unset, so re-saving a secondary vinyl SKU can never clobber a
+      // side layout the operator already chose (swap remains the
+      // deliberate way to change it).
+      const stampPhysical = isVinylFormat(body.format)
+        ? ALBUM_FORMAT_TO_PHYSICAL_FORMAT[body.format]
+        : null;
+      let stamped = false;
+      if (stampPhysical && !physicalFormat) {
+        await apiRequest("PUT", `/api/admin/albums/${albumId}`, {
+          physicalFormat: stampPhysical,
+        });
+        stamped = true;
+      }
+      return { ...json, __stampedPhysicalFormat: stamped };
     },
-    onSuccess: () => {
+    onSuccess: (json: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "skus"] });
       // Task #533 — tier/format change can move the resolved press tier the
       // early-cut consent was snapshotted against; refresh the opt-in state.
       queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "early-cut"] });
+      if (json?.__stampedPhysicalFormat) {
+        // Same as the swap path: refresh the album detail so the
+        // vinyl-order panel re-derives its side layout without a reload.
+        queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+      }
     },
     onError: (e: any) => toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
   });
