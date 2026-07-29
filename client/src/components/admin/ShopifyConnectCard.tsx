@@ -71,10 +71,15 @@ export function ShopifyConnectCard({ variant, configured, recordLink, children }
 
   const normalizedShop = normalizeShopDomain(shop);
 
-  const buildInstallUrl = (domain: string, linkId: string | null) => {
+  const buildInstallUrl = (domain: string, linkId: string | null, direct: boolean) => {
     const u = new URL("/api/shopify/install", window.location.origin);
     u.searchParams.set("shop", domain);
     if (linkId) u.searchParams.set("link", linkId);
+    // Task #2918 — "Install directly" marks the initiating surface so the
+    // OAuth return routes the user forward (admin Shopify page or the
+    // artist portal's Shopify section) instead of the anonymous
+    // close-this-tab page. Copied links never carry it.
+    if (linkId && direct) u.searchParams.set("direct", variant === "artist" ? "portal" : "admin");
     return u.toString();
   };
 
@@ -87,7 +92,7 @@ export function ShopifyConnectCard({ variant, configured, recordLink, children }
       toast({ title: "Couldn't prepare the install link", description: e?.message, variant: "destructive" });
       return;
     }
-    const url = buildInstallUrl(normalizedShop, linkId);
+    const url = buildInstallUrl(normalizedShop, linkId, false);
     try {
       await navigator.clipboard.writeText(url);
       setLinkCopied(true);
@@ -114,7 +119,7 @@ export function ShopifyConnectCard({ variant, configured, recordLink, children }
       toast({ title: "Couldn't start the install", description: e?.message, variant: "destructive" });
       return;
     }
-    window.location.href = buildInstallUrl(normalizedShop, linkId);
+    window.location.href = buildInstallUrl(normalizedShop, linkId, true);
   };
 
   return (

@@ -1862,6 +1862,15 @@ export function registerShopifyRoutes(app: Express) {
         linkId = linkRow.id;
       }
     }
+    // Task #2918 — presentation-only direct-install marker. "Install
+    // directly" (same-browser, from the admin page or artist portal) adds
+    // `&direct=admin|portal` so the callback can route the user forward
+    // into the surface they started from instead of the anonymous
+    // close-this-tab page. It changes NOTHING about attribution or the
+    // shop-domain-match defenses — a tampered value just changes which
+    // page the clicker lands on after connecting.
+    const rawDirect = String(req.query.direct ?? "").trim();
+    const directReturn = linkId && (rawDirect === "admin" || rawDirect === "portal") ? rawDirect : "";
     // Task #2435 — connecting a store to a specific label or artist is a
     // `map_shopify` action, so gate the install the same way attach/detach are.
     // This path is a top-level browser navigation (window.location.href), so
@@ -1884,8 +1893,13 @@ export function registerShopifyRoutes(app: Express) {
     // Task #2030), or `nonce:person:<personId>` (3-part, Task #2435). labelId
     // and personId are uuids (no `:`) and nonce is hex, so split-on-`:`
     // round-trips cleanly and old `nonce.sig` states stay valid.
+    // Task #2918 — direct installs ride a 4-part `nonce:link:<id>:<surface>`
+    // flavor; delegated (copied) links keep the 3-part form, so old states
+    // round-trip unchanged.
     const statePayload = linkId
-      ? `${nonce}:link:${linkId}`
+      ? directReturn
+        ? `${nonce}:link:${linkId}:${directReturn}`
+        : `${nonce}:link:${linkId}`
       : personId
         ? `${nonce}:person:${personId}`
         : labelId
@@ -1937,10 +1951,23 @@ export function registerShopifyRoutes(app: Express) {
     // an anonymous clicker — the store's own Shopify manager — can finish
     // the install and the store still lands attributed correctly.
     let stateLinkId = "";
+    // Task #2918 — 4-part `nonce:link:<id>:<admin|portal>` marks a
+    // direct install (same-browser "Install directly" click): after the
+    // connect we route that user forward instead of dead-ending on the
+    // anonymous close-this-tab page. Presentation-only; attribution and
+    // the shop-domain checks below are identical for both flavors.
+    let stateDirect = "";
     if (stateParts.length === 3 && stateParts[1] === "person") {
       statePersonId = stateParts[2];
     } else if (stateParts.length === 3 && stateParts[1] === "link") {
       stateLinkId = stateParts[2];
+    } else if (
+      stateParts.length === 4 &&
+      stateParts[1] === "link" &&
+      (stateParts[3] === "admin" || stateParts[3] === "portal")
+    ) {
+      stateLinkId = stateParts[2];
+      stateDirect = stateParts[3];
     } else if (stateParts.length === 2) {
       stateLabelId = stateParts[1];
     }
@@ -2068,7 +2095,18 @@ export function registerShopifyRoutes(app: Express) {
     // (Task #2435), the label's Shopify tab (Task #2030), otherwise the
     // global admin install guide. All key their success toast off
     // ?installed=<id>.
-    if (stateLinkId) {
+    if (stateLinkId && stateDirect) {
+      // Task #2918 — direct install ("Install directly" clicked in the
+      // same browser by a signed-in operator/artist): route them forward
+      // into the surface they started from instead of dead-ending on the
+      // close-this-tab page. The ?installed= param drives the success
+      // toast + refresh on both destinations.
+      res.redirect(
+        stateDirect === "portal"
+          ? `/artist?tab=shopify&installed=${store.id}`
+          : `/admin/shopify?installed=${store.id}`,
+      );
+    } else if (stateLinkId) {
       // Task #2914 — the clicker may be an anonymous third party (the
       // store's Shopify manager), so don't bounce them into an admin
       // login wall. A minimal confirmation page is the honest landing.

@@ -34,7 +34,7 @@ import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminSearchBar } from "@/components/admin/AdminSearchBar";
 import { FeedbackLauncher } from "@/components/operator/FeedbackLauncher";
-import { ViewAsBanner } from "@/components/admin/ViewAsBanner";
+import { ViewAsBanner, ViewAsRestoreButton } from "@/components/admin/ViewAsBanner";
 import { cn } from "@/lib/utils";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 
@@ -443,6 +443,7 @@ export function OperatorShell<TabId extends string>({
             </span>
             {superAdminBadge}
             <div className="ml-auto flex items-center gap-3" data-testid="operator-shell-account">
+              <ViewAsRestoreButton />
               <FeedbackLauncher />
               <AdminUserMenu />
             </div>
@@ -527,6 +528,7 @@ export function OperatorShell<TabId extends string>({
             {identity}
             {superAdminBadge}
             <div className="ml-auto shrink-0 self-start flex items-center gap-3" data-testid="operator-shell-account">
+              <ViewAsRestoreButton />
               <FeedbackLauncher />
               <AdminUserMenu />
             </div>

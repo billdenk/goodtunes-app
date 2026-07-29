@@ -46,6 +46,9 @@ export function clearViewAsSession() {
   try {
     window.sessionStorage?.removeItem(VIEW_AS_TOKEN_KEY);
     window.sessionStorage?.removeItem(VIEW_AS_LABEL_KEY);
+    // Task #2918 — the banner-dismissed flag dies with the impersonation,
+    // so the banner always comes back on the next view-as session.
+    window.sessionStorage?.removeItem("gt:viewAsBannerDismissed");
   } catch {}
 }
 

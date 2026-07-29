@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Clock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ShopifyConnectCard } from "@/components/admin/ShopifyConnectCard";
+import { ShopifyDisconnectButton } from "@/components/admin/ShopifyDisconnectButton";
 
 type Overview = {
   configured: boolean;
@@ -27,10 +28,10 @@ export function ArtistShopifyTab() {
 
   const { data, isLoading } = useQuery<Overview>({ queryKey: [overviewKey] });
 
-  // The OAuth callback redirects an in-portal "Install directly" flow of a
-  // signed-in artist back here is not wired (link installs land on a
-  // neutral confirmation page) — but ?installed= may still arrive via
-  // admin-style redirects when a super-admin drives the flow. Toast + refresh.
+  // Task #2918 — an in-portal "Install directly" flow now round-trips: the
+  // OAuth callback redirects the signed-in artist back here with
+  // ?installed=<storeId> (delegated copied links still land on the neutral
+  // confirmation page). Toast + refresh so the new store shows as Live.
   const justInstalledId =
     typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("installed") : null;
   useEffect(() => {
@@ -98,6 +99,7 @@ export function ArtistShopifyTab() {
               <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded shrink-0">
                 Live
               </span>
+              <ShopifyDisconnectButton shopDomain={s.shopDomain} testId={`button-disconnect-artist-store-${s.id}`} />
             </div>
           ))}
           {(data?.pendingLinks ?? []).map((l) => (

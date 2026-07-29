@@ -42,6 +42,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ShopifyDisconnectButton } from "@/components/admin/ShopifyDisconnectButton";
 import { ToastAction } from "@/components/ui/toast";
 import {
   AlertDialog,
@@ -557,9 +558,10 @@ export function ShopifyPanel({
     stores.map((s) => s.storeName ?? s.shopDomain).slice(0, 2).join(", ") +
     (stores.length > 2 ? ` +${stores.length - 2} more` : "");
   const pickerStore = stores.find((s) => s.id === pickerStoreId) ?? null;
-  const manageStoresNode = embedded ? (
-    <>Store connections are managed by your GoodTunes team.</>
-  ) : (
+  // Task #2918 — embedded (partner-facing) mode renders NOTHING here: the
+  // old "managed by your GoodTunes team" line contradicted the self-serve
+  // connect flow. Operators keep the /admin/shopify pointer.
+  const manageStoresNode = embedded ? null : (
     <>
       Manage connected stores at{" "}
       <a className="text-[var(--brand-blue)] underline underline-offset-2" href="/admin/shopify">
@@ -1102,6 +1104,9 @@ export function ShopifyPanel({
                     <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     <span className="font-medium">{s.storeName ?? s.shopDomain}</span>
                     {s.storeName && <span className="text-slate-400 text-[12px] truncate">{s.shopDomain}</span>}
+                    <span className="ml-auto">
+                      <ShopifyDisconnectButton shopDomain={s.shopDomain} testId={`button-disconnect-store-${s.id}`} />
+                    </span>
                   </div>
                 ))}
                 {!hasStore && (
@@ -1125,7 +1130,7 @@ export function ShopifyPanel({
                     )}
                   </p>
                 )}
-                {hasStore && <p className="text-[12px] text-slate-400">{manageStoresNode}</p>}
+                {hasStore && manageStoresNode && <p className="text-[12px] text-slate-400">{manageStoresNode}</p>}
               </div>
             </StepSection>
 
