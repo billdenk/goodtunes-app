@@ -10943,7 +10943,7 @@ DECLARE
 BEGIN
   INSERT INTO people (id, name, photo_url, bio)
   VALUES ('person-shopifydemo-artist', 'GoodTunes Demo Band',
-          '/figmaAssets/album-1-cover.jpg',
+          '/album-placeholder.svg',
           'Demo artist used for the GoodTunes-for-Shopify app review.')
   ON CONFLICT (id) DO NOTHING;
 
@@ -10953,7 +10953,7 @@ BEGIN
      sell_mode, primary_artist_id)
   VALUES
     ('album-shopifydemo', 'Storefront Sessions', 'GoodTunes Demo Band',
-     '/figmaAssets/album-1-cover.jpg', 2026, 'EP',
+     '/album-placeholder.svg', 2026, 'EP',
      'A short EP wired for the GoodTunes-for-Shopify review: connect a store, map products, sell.',
      'Indie', '2026-07-01', true, false, false,
      'shopify_plus', 'person-shopifydemo-artist')

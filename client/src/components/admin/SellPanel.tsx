@@ -2253,43 +2253,45 @@ function AddPhysicalGoodButton({
 }) {
   const [open, setOpen] = useState(false);
 
+  // The menu used to render `absolute` inside the Package card, whose
+  // `overflow-hidden` clipped it. Popover portals to <body>, so the
+  // list floats above the card no matter where the trigger sits.
   return (
-    <div className="relative">
-      <AddEntityButton
-        label="Add physical good"
-        onClick={() => setOpen((v) => !v)}
-        testId="button-add-physical-good"
-      />
-      {open && (
-        <>
-          <div
-            className="fixed inset-0 z-10"
-            onClick={() => setOpen(false)}
-            aria-hidden="true"
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <span className="inline-flex">
+          {/* Radix's trigger handles the toggle; a second manual toggle
+              here would cancel it out and the menu would never open. */}
+          <AddEntityButton
+            label="Add physical good"
+            onClick={() => {}}
+            testId="button-add-physical-good"
           />
-          <div
-            className="absolute right-0 top-full mt-1 z-20 w-52 rounded-md border border-slate-200 bg-white shadow-lg py-1"
-            data-testid="menu-add-physical-good"
+        </span>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={4}
+        className="w-52 p-0 py-1 rounded-md border border-slate-200 bg-white shadow-lg"
+        data-testid="menu-add-physical-good"
+      >
+        {availableFormats.map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => {
+              onAdd(f);
+              setOpen(false);
+            }}
+            className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
+            data-testid={`menu-item-add-${f}`}
           >
-            {availableFormats.map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => {
-                  onAdd(f);
-                  setOpen(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
-                data-testid={`menu-item-add-${f}`}
-              >
-                <Plus className="w-3 h-3 text-slate-400" />
-                {ALBUM_FORMAT_LABEL[f]}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
+            <Plus className="w-3 h-3 text-slate-400" />
+            {ALBUM_FORMAT_LABEL[f]}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }
 
