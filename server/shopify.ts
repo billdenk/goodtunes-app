@@ -2095,7 +2095,11 @@ export function registerShopifyRoutes(app: Express) {
     // (Task #2435), the label's Shopify tab (Task #2030), otherwise the
     // global admin install guide. All key their success toast off
     // ?installed=<id>.
-    if (stateLinkId && stateDirect) {
+    if (stateDirect) {
+      // Even if the link row degraded above (shop mismatch → stateLinkId
+      // cleared, attribution context-less), a direct installer is a
+      // signed-in user in their own browser — never show them the
+      // anonymous close-this-tab page.
       // Task #2918 — direct install ("Install directly" clicked in the
       // same browser by a signed-in operator/artist): route them forward
       // into the surface they started from instead of dead-ending on the

@@ -137,30 +137,28 @@ export function ShopifyConnectCard({ variant, configured, recordLink, children }
           value={shop}
           onChange={(e) => setShop(e.target.value)}
           placeholder="your-store.myshopify.com"
-          className="flex-1 h-10 rounded-md border border-slate-300 px-3 text-[14px] focus:outline-none focus:border-[var(--brand-blue)]"
+          className="flex-1 h-9 rounded-md border border-slate-300 bg-white px-3 font-sans text-[14px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[var(--brand-blue)]"
           data-testid="input-shopify-shop"
         />
-        <div className="shrink-0 flex flex-col items-stretch">
-          <button
-            type="button"
-            onClick={copyInstallLink}
-            disabled={!configured || !normalizedShop}
-            className="h-10 px-4 rounded-md bg-slate-900 text-white text-[13px] font-medium hover:bg-slate-800 disabled:opacity-50"
-            data-testid="button-shopify-copy-link"
-          >
-            <span className="inline-flex items-center gap-1.5">
-              {linkCopied ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
-              {linkCopied ? "Copied" : "Copy install link"}
-            </span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={copyInstallLink}
+          disabled={!configured || !normalizedShop}
+          className="h-9 px-4 rounded-md bg-slate-900 text-white text-[13px] font-medium hover:bg-slate-800 disabled:opacity-50 shrink-0"
+          data-testid="button-shopify-copy-link"
+        >
+          <span className="inline-flex items-center gap-1.5">
+            {linkCopied ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+            {linkCopied ? "Copied" : "Copy install link"}
+          </span>
+        </button>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
               onClick={startInstall}
               disabled={!configured || !normalizedShop}
-              className="h-10 px-4 rounded-md border border-slate-300 bg-white text-slate-700 text-[13px] font-medium hover:bg-slate-50 disabled:opacity-50 shrink-0"
+              className="h-9 px-4 rounded-md border border-slate-300 bg-white text-slate-700 text-[13px] font-medium hover:bg-slate-50 disabled:opacity-50 shrink-0"
               data-testid="button-shopify-install"
             >
               <span className="inline-flex items-center gap-1.5">
@@ -175,11 +173,13 @@ export function ShopifyConnectCard({ variant, configured, recordLink, children }
           </TooltipContent>
         </Tooltip>
       </div>
-      {variant === "artist" && (
-        <p className="mt-1.5 text-[12px] text-slate-400" data-testid="text-copy-link-sublabel">
-          Send this link to whoever manages your Shopify store.
-        </p>
-      )}
+      {/* Task #2918 (rev2) — static text, not a tooltip: hover-only
+          explanations get missed on tablets. Anchored to the Copy button's
+          side of the row, never under the input field. */}
+      <p className="mt-1.5 text-[12px] text-slate-400 text-right" data-testid="text-copy-link-explainer">
+        Copy a link and send it to whoever manages your store. When they open it, they'll approve the install on
+        Shopify.
+      </p>
       {copiedShop && copiedShop === normalizedShop && (
         <p className="mt-2 text-[12.5px] text-emerald-700" data-testid="text-copy-install-confirmation">
           {copy.copiedNote}

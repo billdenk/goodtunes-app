@@ -11472,22 +11472,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyConnectCard.tsx",
-    "snippet": "className=\"flex-1 h-10 rounded-md border border-slate-300 px-3 text-[14px] focus:outline-none focus:border-[var(--brand-blue)]\""
+    "snippet": "className=\"flex-1 h-9 rounded-md border border-slate-300 bg-white px-3 font-sans text-[14px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[var(--brand-blue)]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyConnectCard.tsx",
-    "snippet": "className=\"h-10 px-4 rounded-md bg-slate-900 text-white text-[13px] font-medium hover:bg-slate-800 disabled:opacity-50\""
+    "snippet": "className=\"h-9 px-4 rounded-md bg-slate-900 text-white text-[13px] font-medium hover:bg-slate-800 disabled:opacity-50 shrink-0\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyConnectCard.tsx",
-    "snippet": "className=\"h-10 px-4 rounded-md border border-slate-300 bg-white text-slate-700 text-[13px] font-medium hover:bg-slate-50 disabled:opacity-50 shrink-0\""
+    "snippet": "className=\"h-9 px-4 rounded-md border border-slate-300 bg-white text-slate-700 text-[13px] font-medium hover:bg-slate-50 disabled:opacity-50 shrink-0\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyConnectCard.tsx",
-    "snippet": "<p className=\"mt-1.5 text-[12px] text-slate-400\" data-testid=\"text-copy-link-sublabel\">"
+    "snippet": "<p className=\"mt-1.5 text-[12px] text-slate-400 text-right\" data-testid=\"text-copy-link-explainer\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -11503,6 +11503,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyConnectCard.tsx",
     "snippet": "<div className=\"font-mono text-[12.5px] text-slate-700 break-all\" data-testid=\"text-shopify-install-link\">{copiedLink}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyDisconnectButton.tsx",
+    "snippet": "className=\"text-[12px] text-slate-400 hover:text-slate-600 underline underline-offset-2 shrink-0\""
   },
   {
     "rule": "brand-hex-literal",
@@ -11682,7 +11687,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "{hasStore && <p className=\"text-[12px] text-slate-400\">{manageStoresNode}</p>}"
+    "snippet": "{hasStore && manageStoresNode && <p className=\"text-[12px] text-slate-400\">{manageStoresNode}</p>}"
   },
   {
     "rule": "hardcoded-font-size",
