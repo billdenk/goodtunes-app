@@ -11138,3 +11138,100 @@ SQL
 }
 reset_task_2929_stuck_payment_step dev  "${DATABASE_URL:-}"
 reset_task_2929_stuck_payment_step prod "${PROD_DATABASE_URL:-}"
+
+# Task #2928 — Let billed artists open and pay their manufacturing ledger.
+# Niina Soleil (CALIFORNIALAND, Shopify+ prepaid) was invited onto her OWN
+# artist scope as a teammate (memberships.sub_role='manager'), so she never
+# held the implicit artist-scope OWNER self-serve verbs (incl.
+# manage_payouts) and the ledger GET 403'd her off her own bill. The repair
+# promotes an artist-scope teammate membership to OWNER (sub_role=NULL) only
+# when the account demonstrably IS the person the scope represents:
+#   • the explicit Niina pair (email + person), OR
+#   • the person's contact_email equals the account email, OR
+#   • the account email's domain (TLD stripped) equals the person's
+#     normalized name (hello@niinasoleil.com ↔ "Niina Soleil").
+# A scope that already has a DIFFERENT owner account is skipped — that row
+# really is a teammate (e.g. mitch@nightbirdefoundation.org managing the
+# Nightbirde scope stays a manager: domain 'nightbirdefoundation' ≠
+# 'nightbirde', and the equality test is exact, never contains). Every
+# promotion is logged. Marker-guarded (post_merge_data_backfills) so a later
+# deliberate operator demotion is never clobbered by a subsequent merge.
+repair_task_2928_owner_memberships() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2928 owner-membership repair on $label (no URL set)"
+    return 0
+  fi
+  local out rc
+  out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  r RECORD;
+  v_count integer := 0;
+BEGIN
+  IF EXISTS (SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2928_owner_membership_repair') THEN
+    RAISE NOTICE 'task-2928 owner-membership repair already applied — skipping';
+    RETURN;
+  END IF;
+
+  FOR r IN
+    SELECT m.id AS membership_id, m.user_id, u.email, m.scope_id, m.sub_role, p.name AS person_name
+    FROM memberships m
+    JOIN users u  ON u.id = m.user_id
+    JOIN people p ON p.id = m.scope_id
+    WHERE m.scope_kind = 'artist'
+      AND m.role = 'artist'
+      AND m.sub_role IS NOT NULL
+      AND (
+        -- the reported case, keyed by identity (not by conversation ids)
+        (lower(u.email) = 'hello@niinasoleil.com' AND p.name = 'Niina Soleil')
+        -- the person's own contact email is this account
+        OR (p.contact_email IS NOT NULL AND p.contact_email <> ''
+            AND lower(p.contact_email) = lower(u.email))
+        -- the account email's domain IS the artist's name (exact, TLD stripped)
+        OR lower(split_part(split_part(u.email, '@', 2), '.', 1))
+           = regexp_replace(lower(p.name), '[^a-z0-9]', '', 'g')
+      )
+      -- never demote-around a real owner: skip scopes that already have a
+      -- DIFFERENT owner account
+      AND NOT EXISTS (
+        SELECT 1 FROM memberships o
+        WHERE o.scope_kind = 'artist' AND o.scope_id = m.scope_id
+          AND o.sub_role IS NULL AND o.user_id <> m.user_id
+      )
+  LOOP
+    UPDATE memberships SET sub_role = NULL, updated_at = now()
+     WHERE id = r.membership_id;
+    v_count := v_count + 1;
+    RAISE NOTICE 'task-2928: promoted % (%) to OWNER of artist scope % ("%"), was sub_role=%',
+      r.user_id, r.email, r.scope_id, r.person_name, r.sub_role;
+  END LOOP;
+
+  IF v_count = 0 THEN
+    RAISE NOTICE 'task-2928: no mis-seeded owner memberships on this DB';
+  ELSE
+    RAISE NOTICE 'task-2928: promoted % membership(s) to owner', v_count;
+  END IF;
+
+  INSERT INTO post_merge_data_backfills (name) VALUES ('task_2928_owner_membership_repair');
+END$$;
+COMMIT;
+SQL
+  )
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    echo "post-merge: task-2928 owner-membership repair ok on $label"
+    echo "$out" | grep -i 'task-2928' || true
+  else
+    echo "post-merge: ERROR — task-2928 owner-membership repair FAILED on $label"
+    echo "$out" | tail -10
+    return 1
+  fi
+}
+repair_task_2928_owner_memberships dev  "${DATABASE_URL:-}"
+repair_task_2928_owner_memberships prod "${PROD_DATABASE_URL:-}"

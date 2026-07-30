@@ -445,7 +445,15 @@ function ManufacturingLedger({
         className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm text-xs text-slate-500"
         data-testid="note-ledger-forbidden"
       >
-        You don't have access to this release's manufacturing payments.
+        <p className="font-medium text-slate-600">
+          Your account doesn't have payment access for this release yet.
+        </p>
+        <p className="mt-1">
+          Manufacturing payments are limited to the release owner and teammates
+          with payment access. If you were sent a payment request for this
+          release, contact GoodTunes and ask for payment access — we'll get you
+          set up so you can view and pay the ledger.
+        </p>
       </div>
     );
   }

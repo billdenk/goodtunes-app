@@ -167,6 +167,47 @@ test("an editor-only scope is refused the pay verb", async () => {
   }
 });
 
+// Task #2928 — the ledger GET (gatePayouts → manage_payouts) must be
+// readable by the artist-scope OWNER even when the scope grants NOTHING
+// (a brand-new artist has no partner_permissions row), while a verb-less
+// teammate (the Niina mis-seed shape: sub_role='manager' on her own scope)
+// still 403s, and a teammate explicitly granted manage_payouts reads OK.
+test("ledger access: owner implicit / verb-less teammate 403 / granted teammate OK", async () => {
+  const ledgerScope = id("artist-ledger");
+  const ownerUser = id("owner");
+  const teammateUser = id("teammate");
+  const grantedUser = id("granted");
+  try {
+    // NO partner_permissions row at all — the owner must self-serve.
+    await seedUser(ownerUser, "artist", ledgerScope, null);
+    await seedUser(teammateUser, "artist", ledgerScope, "manager");
+    await seedUser(grantedUser, "artist", ledgerScope, "manager");
+    const s = { kind: "artist" as const, id: ledgerScope };
+
+    const ownerOk = await checkPartnerVerbForScope(ownerUser, "manage_payouts", s);
+    assert.equal(ownerOk, null, "scope OWNER (sub_role NULL) reads the ledger with no grant");
+
+    const teammateDeny = await checkPartnerVerbForScope(teammateUser, "manage_payouts", s);
+    assert.equal(teammateDeny?.status, 403, "verb-less teammate must 403 on the ledger");
+
+    // Grant manage_payouts to ONE teammate via a per-user override.
+    await exec(sql`
+      INSERT INTO partner_permission_overrides (scope_kind, scope_id, user_id, verb, granted)
+      VALUES ('artist', ${ledgerScope}, ${grantedUser}, 'manage_payouts', true)
+    `);
+    const grantedOk = await checkPartnerVerbForScope(grantedUser, "manage_payouts", s);
+    assert.equal(grantedOk, null, "manage_payouts-granted teammate reads the ledger");
+
+    // And the un-granted teammate is STILL refused (grant is per-user).
+    const stillDeny = await checkPartnerVerbForScope(teammateUser, "manage_payouts", s);
+    assert.equal(stillDeny?.status, 403, "other teammate stays refused");
+  } finally {
+    await exec(sql`DELETE FROM partner_permission_overrides WHERE scope_id = ${ledgerScope}`);
+    await exec(sql`DELETE FROM memberships WHERE user_id IN (${ownerUser}, ${teammateUser}, ${grantedUser})`);
+    await exec(sql`DELETE FROM users WHERE id IN (${ownerUser}, ${teammateUser}, ${grantedUser})`);
+  }
+});
+
 test("a partner in a DIFFERENT scope is out-of-scope for either verb", async () => {
   const payErr = await checkPartnerVerbForScope(outUser, "manage_payouts", scope());
   const editErr = await checkPartnerVerbForScope(outUser, "edit_metadata", scope());
