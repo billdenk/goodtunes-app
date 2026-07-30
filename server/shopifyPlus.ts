@@ -29,7 +29,7 @@
 // authenticates with a Bearer token.
 
 import type { Express, Request, Response } from "express";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db";
 import {
@@ -429,6 +429,236 @@ async function releaseAbandonedStep(stepId: string, sessionId: string) {
       .where(eq(manufacturerPaymentSteps.id, step.id));
     console.log(`[shopify-plus] step ${step.id} → unpaid (checkout expired)`);
   }
+}
+
+// ── Task #2929 — operator reset for a stuck "Paying" step ─────────────
+// Clicking Pay flips a step to `processing` the moment the Stripe ACH
+// Checkout Session is minted; if the payer abandons the checkout the step
+// is stuck on "Paying" until checkout.session.expired fires (and forever
+// if that webhook is missed). This lets an operator expire the session and
+// return the step to payable — but it REFUSES whenever the session has
+// completed or a payment intent is actually moving money, so a real
+// in-flight ACH debit is never silently orphaned.
+//
+// The Stripe surface is injected so tests can drive it hermetically
+// (mirrors the materializeOrderFromSession {stripe} seam).
+export type StepResetStripe = {
+  checkout: {
+    sessions: {
+      retrieve: (id: string) => Promise<{
+        status?: string | null;
+        payment_status?: string | null;
+        payment_intent?: string | { id: string; status?: string } | null;
+      }>;
+      expire: (id: string) => Promise<unknown>;
+    };
+  };
+  paymentIntents: {
+    retrieve: (id: string) => Promise<{ status?: string | null }>;
+  };
+};
+
+export type StepResetResult =
+  | { ok: true; step: ManufacturerPaymentStep }
+  | { ok: false; status: number; message: string };
+
+// Payment-intent states where real money is (or already has been) moving.
+const PI_IN_FLIGHT = new Set(["processing", "succeeded", "requires_capture"]);
+
+export async function resetStuckPaymentStep(opts: {
+  albumId: string;
+  stepId: string;
+  /** Caller's resolved primary role — only operators may reset. */
+  callerRole: string | null;
+  stripe: StepResetStripe;
+}): Promise<StepResetResult> {
+  const { albumId, stepId, callerRole, stripe } = opts;
+  if (callerRole !== "super_admin" && callerRole !== "admin") {
+    return {
+      ok: false,
+      status: 403,
+      message: "Only GoodTunes operators can cancel a payment link.",
+    };
+  }
+
+  const [step] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, stepId));
+  if (!step || step.albumId !== albumId) {
+    return { ok: false, status: 404, message: "Step not found" };
+  }
+  if (step.status !== "processing") {
+    return {
+      ok: false,
+      status: 409,
+      message: `Only a step that's currently Paying can be reset (this one is ${step.status}).`,
+    };
+  }
+
+  // 1) A payment intent stored on the step means the webhook saw money
+  //    moving — check its live state before touching anything.
+  let intentId: string | null = step.stripePaymentIntentId ?? null;
+
+  // 2) Check the checkout session itself.
+  if (step.stripeCheckoutSessionId) {
+    let session: Awaited<
+      ReturnType<StepResetStripe["checkout"]["sessions"]["retrieve"]>
+    > | null = null;
+    try {
+      session = await stripe.checkout.sessions.retrieve(
+        step.stripeCheckoutSessionId,
+      );
+    } catch (e: any) {
+      // FAIL CLOSED unless Stripe positively says the session doesn't
+      // exist (resource_missing — e.g. test/live key drift on a dev
+      // clone). A transient network/auth error means we can't prove the
+      // payment isn't completing, so we must not reset.
+      const missing =
+        e?.code === "resource_missing" ||
+        (e?.statusCode === 404 && e?.type === "StripeInvalidRequestError");
+      if (!missing) {
+        return {
+          ok: false,
+          status: 502,
+          message: `Couldn't verify the checkout session's state at Stripe (${e?.message ?? "error"}) — not resetting.`,
+        };
+      }
+      console.warn(
+        `[shopify-plus] reset: session ${step.stripeCheckoutSessionId} unknown to Stripe (resource_missing) — treating as dead`,
+      );
+    }
+    if (session) {
+      if (session.status === "complete" || session.payment_status === "paid") {
+        return {
+          ok: false,
+          status: 409,
+          message:
+            "This payment was actually completed at Stripe — it can't be reset. If the step hasn't flipped to Paid yet, the webhook is still catching up.",
+        };
+      }
+      const sessionIntent =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : (session.payment_intent?.id ?? null);
+      if (sessionIntent) intentId = sessionIntent;
+    }
+    // Verify any known payment intent isn't mid-debit before expiring.
+    if (intentId) {
+      try {
+        const pi = await stripe.paymentIntents.retrieve(intentId);
+        if (pi?.status && PI_IN_FLIGHT.has(pi.status)) {
+          return {
+            ok: false,
+            status: 409,
+            message: `A bank debit for this step is ${pi.status === "succeeded" ? "already settled" : "in flight"} at Stripe — it can't be reset. Wait for the webhook to finish it.`,
+          };
+        }
+      } catch (e: any) {
+        return {
+          ok: false,
+          status: 502,
+          message: `Couldn't verify the payment's state at Stripe (${e?.message ?? "error"}) — not resetting.`,
+        };
+      }
+    }
+    if (session && session.status === "open") {
+      try {
+        await stripe.checkout.sessions.expire(step.stripeCheckoutSessionId);
+      } catch (e: any) {
+        // Expire refuses on a session that is no longer open — which
+        // includes one that COMPLETED between our retrieve and now. Fail
+        // closed: re-retrieve and only proceed if the session is now
+        // positively expired (or gone); anything else refuses the reset.
+        let recheck: typeof session | null = null;
+        try {
+          recheck = await stripe.checkout.sessions.retrieve(
+            step.stripeCheckoutSessionId,
+          );
+        } catch (re: any) {
+          if (re?.code !== "resource_missing") {
+            return {
+              ok: false,
+              status: 502,
+              message: `Couldn't expire or re-verify the checkout session at Stripe (${e?.message ?? "error"}) — not resetting.`,
+            };
+          }
+        }
+        if (recheck && recheck.status !== "expired") {
+          return {
+            ok: false,
+            status: 409,
+            message:
+              "The checkout session changed state while cancelling (it may have just been completed) — not resetting. Refresh to see the step's status.",
+          };
+        }
+      }
+    }
+  } else if (intentId) {
+    // No session id but an intent — same in-flight guard.
+    try {
+      const pi = await stripe.paymentIntents.retrieve(intentId);
+      if (pi?.status && PI_IN_FLIGHT.has(pi.status)) {
+        return {
+          ok: false,
+          status: 409,
+          message:
+            "A bank debit for this step is in flight at Stripe — it can't be reset.",
+        };
+      }
+    } catch (e: any) {
+      return {
+        ok: false,
+        status: 502,
+        message: `Couldn't verify the payment's state at Stripe (${e?.message ?? "error"}) — not resetting.`,
+      };
+    }
+  }
+
+  // Guarded flip: only while the step is EXACTLY as we verified it —
+  // still processing, still pointing at the same checkout session, and
+  // with the payment-intent column unchanged. A webhook that raced us
+  // (marked it paid, or attached a fresh payment intent) changes one of
+  // those and wins; we bail instead of clobbering live Stripe IDs.
+  const [reset] = await db
+    .update(manufacturerPaymentSteps)
+    .set({
+      status: "unpaid",
+      stripeCheckoutSessionId: null,
+      stripePaymentIntentId: null,
+      lastError: null,
+    })
+    .where(
+      and(
+        eq(manufacturerPaymentSteps.id, step.id),
+        eq(manufacturerPaymentSteps.status, "processing"),
+        step.stripeCheckoutSessionId
+          ? eq(
+              manufacturerPaymentSteps.stripeCheckoutSessionId,
+              step.stripeCheckoutSessionId,
+            )
+          : isNull(manufacturerPaymentSteps.stripeCheckoutSessionId),
+        step.stripePaymentIntentId
+          ? eq(
+              manufacturerPaymentSteps.stripePaymentIntentId,
+              step.stripePaymentIntentId,
+            )
+          : isNull(manufacturerPaymentSteps.stripePaymentIntentId),
+      ),
+    )
+    .returning();
+  if (!reset) {
+    return {
+      ok: false,
+      status: 409,
+      message:
+        "The step's status changed while resetting (likely the payment just settled) — refresh to see it.",
+    };
+  }
+  console.log(
+    `[shopify-plus] step ${step.id} → unpaid (operator reset, session ${step.stripeCheckoutSessionId ?? "none"})`,
+  );
+  return { ok: true, step: reset };
 }
 
 // Called from the commerce.ts Stripe webhook BEFORE materializeOrderFromSession.
@@ -1386,6 +1616,35 @@ export function registerShopifyPlusRoutes(app: Express) {
         console.error(`[shopify-plus] checkout session create failed: ${e?.message}`);
         res.status(502).json({ message: e?.message ?? "Failed to create checkout session" });
       }
+    },
+  );
+
+  // Task #2929 — operator-only reset for a step stuck on "Paying" after an
+  // abandoned checkout. Expires the Stripe session and returns the step to
+  // payable; refuses when the payment actually completed / is mid-debit.
+  app.post(
+    "/api/admin/albums/:albumId/manufacturing-ledger/steps/:stepId/reset-payment",
+    async (req, res) => {
+      const albumId = String(req.params.albumId);
+      const stepId = String(req.params.stepId);
+      const ctx = await resolveAdmin(req, res);
+      if (!ctx) return;
+      // resolveAdmin admits ALL partner accounts (kind "admin" covers
+      // partners too) — the reset is operator-only, so check the primary
+      // role explicitly. resetStuckPaymentStep re-checks it as the
+      // authority; this is just the early HTTP shape.
+      const callerRole = (await getUserRole(ctx.userId))?.role ?? null;
+      const stripe = await getStripe();
+      const result = await resetStuckPaymentStep({
+        albumId,
+        stepId,
+        callerRole,
+        stripe,
+      });
+      if (!result.ok) {
+        return res.status(result.status).json({ message: result.message });
+      }
+      res.json({ ok: true, step: result.step });
     },
   );
 }

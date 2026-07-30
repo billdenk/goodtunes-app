@@ -33,7 +33,7 @@ export type CompletenessAlbum = {
   type?: string | null;
   genre?: string | null;
   goodTunesReleaseDate?: string | null;
-  sellMode?: "direct" | "shopify" | null;
+  sellMode?: "direct" | "shopify" | "shopify_plus" | null;
   sellQuoteLockedAt?: string | null;
   songs: CompletenessSong[];
 };
@@ -55,6 +55,22 @@ export type ShopifyPushLite = { push?: { pushedAt?: string | null } | null } | n
 
 export type PreflightRollup = "pass" | "warn" | "fail" | "overridden" | null;
 
+// Task #2929 — the Payments (prepaid manufacturing) tab of a shopify_plus
+// album. Shaped after the manufacturing-ledger GET so the caller can pass
+// the ledger payload straight through.
+export type CompletenessLedgerStep = {
+  status?: string | null;
+};
+
+export type CompletenessLedger = {
+  steps?: CompletenessLedgerStep[] | null;
+  totals?: {
+    quotedCents?: number | null;
+    paidCents?: number | null;
+    outstandingCents?: number | null;
+  } | null;
+} | null;
+
 export interface CompletenessInput {
   album: CompletenessAlbum;
   skus: CompletenessSku[];
@@ -62,6 +78,8 @@ export interface CompletenessInput {
   pressingOrder?: PressingOrderLite;
   shopifyPush?: ShopifyPushLite;
   shopifyMappings?: unknown[] | null;
+  /** Manufacturing-payments ledger (shopify_plus albums only). */
+  ledger?: CompletenessLedger;
 }
 
 export interface AlbumCompleteness {
@@ -70,6 +88,12 @@ export interface AlbumCompleteness {
   tracks: SectionStatus;
   press: SectionStatus;
   shopify: SectionStatus;
+  /**
+   * Task #2929 — prepaid-manufacturing Payments tab (shopify_plus).
+   * Empty until a payment request exists; complete once every request is
+   * paid with no outstanding balance.
+   */
+  payments: SectionStatus;
   /**
    * True when Overview + Package + Digital read complete AND the press
    * preflight is clean with masters on file — i.e. the album is ready to
@@ -225,12 +249,52 @@ export function deriveSectionCompleteness(
   const shopifyReadyToPush =
     overview.state === "complete" && tracks.state === "complete";
 
+  // ── Payments (Shopify+ prepaid manufacturing) ─────────────────────
+  // Empty before any payment request or quote exists; complete once every
+  // request is paid and nothing is outstanding; in-progress in between.
+  const ledger = input.ledger ?? null;
+  const ledgerSteps = ledger?.steps ?? [];
+  const quotedCents = ledger?.totals?.quotedCents ?? 0;
+  const paidCents = ledger?.totals?.paidCents ?? 0;
+  const outstandingCents = ledger?.totals?.outstandingCents ?? 0;
+  const awaiting = ledgerSteps.filter(
+    (s) => s.status === "unpaid" || s.status === "failed",
+  ).length;
+  const clearing = ledgerSteps.filter((s) => s.status === "processing").length;
+  const allStepsPaid =
+    ledgerSteps.length > 0 && ledgerSteps.every((s) => s.status === "paid");
+  const paymentsMissing: string[] = [];
+  if (awaiting > 0)
+    paymentsMissing.push(
+      `${awaiting} payment request${awaiting === 1 ? "" : "s"} awaiting payment`,
+    );
+  if (clearing > 0)
+    paymentsMissing.push(
+      `${clearing} payment${clearing === 1 ? "" : "s"} clearing the bank`,
+    );
+  if (allStepsPaid && outstandingCents > 0)
+    paymentsMissing.push(
+      `$${(outstandingCents / 100).toLocaleString("en-US")} still outstanding`,
+    );
+  let paymentsState: SectionState;
+  if (ledgerSteps.length === 0 && quotedCents <= 0) paymentsState = "empty";
+  else if (allStepsPaid && outstandingCents <= 0) paymentsState = "complete";
+  else if (ledgerSteps.length === 0 && paidCents <= 0) paymentsState = "empty";
+  else paymentsState = "in-progress";
+  if (paymentsState !== "complete" && paymentsMissing.length === 0)
+    paymentsMissing.push("Request a payment");
+  const payments: SectionStatus = {
+    state: paymentsState,
+    missing: paymentsState === "complete" ? [] : paymentsMissing,
+  };
+
   return {
     overview,
     sell,
     tracks,
     press,
     shopify,
+    payments,
     pressReadyToSend,
     shopifyReadyToPush,
   };

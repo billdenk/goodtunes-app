@@ -975,6 +975,16 @@ export function AdminAlbum({
     queryKey: ["/api/admin/albums", albumId, "shopify-mappings"],
     enabled: isShopifyMode,
   });
+  // Task #2929 — feed for the Payments tab dot on shopify_plus albums.
+  // Same key ShopifyPlusPanel's ledger uses, so the cache keeps the dot in
+  // sync with the panel. A partner without manage_payouts 403s here; the
+  // dot then just reads empty (the tab itself is hidden for them anyway).
+  const isShopifyPlusMode = album?.sellMode === "shopify_plus";
+  const { data: manufacturingLedger } = useQuery<any>({
+    queryKey: ["/api/admin/albums", albumId, "manufacturing-ledger"],
+    enabled: isShopifyPlusMode,
+    retry: false,
+  });
   const completeness = useMemo(() => {
     if (!album) return null;
     return deriveSectionCompleteness({
@@ -984,6 +994,7 @@ export function AdminAlbum({
       pressingOrder: pressingOrder ?? null,
       shopifyPush: shopifyPushStatus ?? null,
       shopifyMappings: shopifyMappings ?? [],
+      ledger: manufacturingLedger ?? null,
     });
   }, [
     album,
@@ -992,6 +1003,7 @@ export function AdminAlbum({
     pressingOrder,
     shopifyPushStatus,
     shopifyMappings,
+    manufacturingLedger,
   ]);
 
 

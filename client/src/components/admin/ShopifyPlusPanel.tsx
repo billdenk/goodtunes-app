@@ -508,6 +508,36 @@ function ManufacturingLedger({
     }
   }
 
+  // Task #2929 — operator-only reset for a step stuck on "Paying" after an
+  // abandoned checkout. Server refuses if the payment actually completed
+  // or a bank debit is in flight.
+  async function resetPayment(step: LedgerStep) {
+    if (
+      !window.confirm(
+        "Cancel this payment link? The Stripe checkout session is expired and the request goes back to payable. If the payment actually went through, this is refused.",
+      )
+    ) {
+      return;
+    }
+    setBusy(`reset-${step.id}`);
+    try {
+      await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/manufacturing-ledger/steps/${step.id}/reset-payment`,
+      );
+      toast({ title: "Payment link cancelled — the request is payable again" });
+      await refresh();
+    } catch (e: any) {
+      toast({
+        title: "Couldn't cancel the payment link",
+        description: String(e?.message ?? e),
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function sendReminder(step: LedgerStep) {
     setBusy(`remind-${step.id}`);
     try {
@@ -992,6 +1022,27 @@ function ManufacturingLedger({
                           >
                             {STATUS_LABELS[step.status]}
                           </span>
+
+                          {/* Task #2929 — operator escape hatch for a step
+                              stuck on "Paying" after an abandoned checkout. */}
+                          {isOperatorView &&
+                            isSuperAdmin &&
+                            step.status === "processing" && (
+                              <button
+                                onClick={() => resetPayment(step)}
+                                disabled={busy === `reset-${step.id}`}
+                                className="h-9 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                data-testid={`button-reset-step-${step.id}`}
+                                title="Expire the Stripe checkout session and make this request payable again"
+                              >
+                                {busy === `reset-${step.id}` ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Undo2 className="w-3.5 h-3.5" />
+                                )}
+                                Cancel payment link
+                              </button>
+                            )}
 
                           {/* Pay button — shown only to the right party. */}
                           {canPayThisStep &&

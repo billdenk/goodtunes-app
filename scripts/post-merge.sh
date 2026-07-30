@@ -11070,3 +11070,71 @@ SQL
 }
 seed_task_2925_shopify_review_env dev  "${DATABASE_URL:-}"
 seed_task_2925_shopify_review_env prod "${PROD_DATABASE_URL:-}"
+
+# ── Task #2929 — unstick Niina's CALIFORNIALAND "Set up Costs (Test
+# Pressings)" payment step, stuck on `processing` after Bill abandoned the
+# ACH checkout (Stripe session verified open/unpaid with NO payment intent
+# at task time — no money was moving; the live session self-expires within
+# 30 min of creation, so no Stripe-side write is needed here). Naturally
+# idempotent: the reset only fires while the step still points at Bill's
+# exact abandoned session with no payment intent, so a later real payment
+# (new session id) or a settled debit (payment intent stored / status
+# advanced) makes this a no-op. Marker-stamped per convention.
+reset_task_2929_stuck_payment_step() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2929 stuck-payment reset on $label (no URL set)"
+    return 0
+  fi
+  local out rc
+  out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_reset integer := 0;
+BEGIN
+  IF EXISTS (SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2929_reset_stuck_payment_step') THEN
+    RAISE NOTICE 'task-2929 reset already applied — skipping';
+    RETURN;
+  END IF;
+
+  UPDATE manufacturer_payment_steps
+     SET status = 'unpaid',
+         stripe_checkout_session_id = NULL,
+         stripe_payment_intent_id = NULL,
+         last_error = NULL
+   WHERE album_id = 'a5e96e28-1961-4dd4-8184-e0ebf6446143'
+     AND id = 'd389c849-b4c1-47b7-92ba-985cfcebcace'
+     AND status = 'processing'
+     AND stripe_payment_intent_id IS NULL
+     AND stripe_checkout_session_id = 'cs_live_a1FJeDWyiQAtVAumjSvKYkycdaohEfOtwH7SQvKLC9jK4z5isc6mNws9qU';
+  GET DIAGNOSTICS v_reset = ROW_COUNT;
+
+  IF v_reset = 0 THEN
+    -- Step absent (dev clone), already released by the expired-session
+    -- webhook, or already re-paid — all fine; stamp so we never re-check.
+    RAISE NOTICE 'task-2929: nothing to reset on this DB (already released/paid or row absent)';
+  ELSE
+    RAISE NOTICE 'task-2929: reset % stuck step(s) to unpaid', v_reset;
+  END IF;
+
+  INSERT INTO post_merge_data_backfills (name) VALUES ('task_2929_reset_stuck_payment_step');
+END$$;
+COMMIT;
+SQL
+  )
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    echo "post-merge: task-2929 stuck-payment reset ok on $label"
+  else
+    echo "post-merge: ERROR — task-2929 stuck-payment reset FAILED on $label"
+    echo "$out" | tail -10
+    return 1
+  fi
+}
+reset_task_2929_stuck_payment_step dev  "${DATABASE_URL:-}"
+reset_task_2929_stuck_payment_step prod "${PROD_DATABASE_URL:-}"

@@ -240,6 +240,68 @@ test("shopify completes on push and shopifyReadyToPush needs overview + digital"
   assert.equal(pushedViaMapping.shopify.state, "complete");
 });
 
+// Task #2929 — Payments (shopify_plus prepaid manufacturing) tab dot.
+test("payments reads empty with no ledger or an empty ledger", () => {
+  assert.equal(deriveSectionCompleteness(base()).payments.state, "empty");
+  const c = deriveSectionCompleteness(
+    base({
+      ledger: {
+        steps: [],
+        totals: { quotedCents: 0, paidCents: 0, outstandingCents: 0 },
+      },
+    }),
+  );
+  assert.equal(c.payments.state, "empty");
+});
+
+test("payments is in-progress with requests awaiting payment or clearing", () => {
+  const awaiting = deriveSectionCompleteness(
+    base({
+      ledger: {
+        steps: [{ status: "unpaid" }, { status: "processing" }],
+        totals: { quotedCents: 200000, paidCents: 0, outstandingCents: 200000 },
+      },
+    }),
+  );
+  assert.equal(awaiting.payments.state, "in-progress");
+  assert.ok(
+    awaiting.payments.missing.some((m) => m.includes("awaiting payment")),
+  );
+  assert.ok(
+    awaiting.payments.missing.some((m) => m.includes("clearing the bank")),
+  );
+});
+
+test("payments completes when every request is paid with nothing outstanding", () => {
+  const c = deriveSectionCompleteness(
+    base({
+      ledger: {
+        steps: [{ status: "paid" }, { status: "paid" }],
+        totals: { quotedCents: 200000, paidCents: 200000, outstandingCents: 0 },
+      },
+    }),
+  );
+  assert.equal(c.payments.state, "complete");
+  assert.deepEqual(c.payments.missing, []);
+});
+
+test("payments stays in-progress when all steps are paid but a balance is outstanding", () => {
+  const c = deriveSectionCompleteness(
+    base({
+      ledger: {
+        steps: [{ status: "paid" }],
+        totals: {
+          quotedCents: 300000,
+          paidCents: 100000,
+          outstandingCents: 200000,
+        },
+      },
+    }),
+  );
+  assert.equal(c.payments.state, "in-progress");
+  assert.ok(c.payments.missing.some((m) => m.includes("outstanding")));
+});
+
 test("sectionTooltip names what's missing", () => {
   const status = { state: "in-progress" as const, missing: ["Genre", "Artwork"] };
   assert.equal(
