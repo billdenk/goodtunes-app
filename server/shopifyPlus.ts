@@ -1377,37 +1377,44 @@ export function registerShopifyPlusRoutes(app: Express) {
   );
 
   // Task #2785 — Re-send the artist payment request email for an unpaid
-  // artist_direct step. Operator-only (gateEditMetadata). Best-effort.
+  // artist_direct step. Gated on manage_payouts (not edit_metadata) because
+  // sending a reminder is a payout-management action; it must work even when
+  // the album is post-sale locked.
   app.post(
     "/api/admin/albums/:albumId/manufacturing-ledger/steps/:stepId/remind",
     async (req, res) => {
-      const albumId = String(req.params.albumId);
-      const stepId = String(req.params.stepId);
-      const userId = await gateEditMetadata(req, res, albumId);
-      if (!userId) return;
+      try {
+        const albumId = String(req.params.albumId);
+        const stepId = String(req.params.stepId);
+        const userId = await gatePayouts(req, res, albumId);
+        if (!userId) return;
 
-      const [step] = await db
-        .select()
-        .from(manufacturerPaymentSteps)
-        .where(eq(manufacturerPaymentSteps.id, stepId));
-      if (!step || step.albumId !== albumId) {
-        return res.status(404).json({ message: "Step not found" });
+        const [step] = await db
+          .select()
+          .from(manufacturerPaymentSteps)
+          .where(eq(manufacturerPaymentSteps.id, stepId));
+        if (!step || step.albumId !== albumId) {
+          return res.status(404).json({ message: "Step not found" });
+        }
+        if (step.fundingSource !== "artist_direct") {
+          return res
+            .status(400)
+            .json({ message: "Reminders only apply to artist-pays steps." });
+        }
+        if (step.status === "paid") {
+          return res.status(409).json({ message: "Step is already paid." });
+        }
+        void notifyScopeOfPaymentRequest({
+          req,
+          albumId,
+          description: step.description,
+          totalCents: step.amountCents + step.marginCents,
+        });
+        res.json({ ok: true });
+      } catch (e) {
+        console.error("[shopify-plus] remind step error:", (e as Error)?.message ?? e);
+        res.status(500).json({ message: "Failed to send reminder." });
       }
-      if ((step as any).fundingSource !== "artist_direct") {
-        return res
-          .status(400)
-          .json({ message: "Reminders only apply to artist-pays steps." });
-      }
-      if (step.status === "paid") {
-        return res.status(409).json({ message: "Step is already paid." });
-      }
-      void notifyScopeOfPaymentRequest({
-        req,
-        albumId,
-        description: step.description,
-        totalCents: step.amountCents + step.marginCents,
-      });
-      res.json({ ok: true });
     },
   );
 
