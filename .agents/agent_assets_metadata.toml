@@ -305,3 +305,10 @@ id = "rNEiz3d2pgW4dGTewUTi9"
 uri = "file://docs/admin-conventions.md"
 type = "text"
 title = "Admin Conventions (patterns, dialogs, partner-portal rules)"
+
+[[outputs]]
+id = "1bqNDTfYBYzsg7uG2tNSU"
+uri = "file://attached_assets/exports/goodtunes-design-system-pack.zip"
+type = "unspecified"
+title = "GoodTunes Design System Pack (Super-Admin)"
+description = "Self-contained handoff bundle: README for AI design tools, full design-system + admin-conventions docs, live CSS tokens (incl. the gt-admin light theme), and the style-guide components."
