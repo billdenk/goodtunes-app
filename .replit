@@ -176,7 +176,7 @@ integrations = ["javascript_object_storage:2.0.0", "javascript_openai_ai_integra
 
 [postMerge]
 path = "scripts/post-merge.sh"
-timeoutMs = 300000
+timeoutMs = 600000
 
 [userenv]
 

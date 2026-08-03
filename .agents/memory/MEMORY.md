@@ -155,4 +155,5 @@
 - [Album tab panels full column](album-tab-panel-full-column.md) — no max-w wrapper at any album tab panel root; cards must match the tab rule width (regressed twice: Sell, Shopify checklist).
 - [Cert accrual + true-up (post-submission)](cert-accrual-trueup.md) — $13/unit provisional at provision, downward-only true-up at window close, <25 reverses; retail attribution dropped, wholesale-only; do NOT build before Shopify submission.
 - [Investor snapshot re-uploads](investor-snapshot-updates.md) — Bill's standalone exports LACK the noindex meta; re-inject after charset on every swap; file streams from disk (no restart), prod updates on publish.
+- [Post-merge timeout bounces merges](post-merge-timeout-bounce.md) — "Apply changes"→back to review with no error = post-merge.sh (~250s) blowing its timeout; check durationMs vs timeoutMs, prune old one-shots.
 - [Payment-state resets fail closed](payment-state-reset-fail-closed.md) — reverting a "Paying" row needs resource_missing-only fail-open, expire re-verify, and an UPDATE predicate matching the full verified snapshot (status+session id+PI col).
