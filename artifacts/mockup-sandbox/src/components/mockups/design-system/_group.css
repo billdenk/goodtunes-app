@@ -1,0 +1,30 @@
+/* GoodTunes design-system style guide — brand tokens mirrored from client/src/index.css */
+.gt-ds {
+  --brand-blue: #319ED8;
+  --brand-blue-hover: #2a8cc1;
+  --brand-blue-soft: rgba(49, 158, 216, 0.10);
+  --brand-purple: #7F10A7;
+  --brand-mint: #4AFFCA;
+  --brand-pink: #FF5470;
+  --brand-orange: #FF7C06;
+  --brand-bg: #00062B;
+  --brand-bg-rgb: 0, 6, 43;
+  --brand-header-gradient-top: #0B1457;
+  --fan-surface: rgba(49, 158, 216, 0.08);
+  --fan-surface-strong: rgba(49, 158, 216, 0.14);
+  --fan-field-border: rgba(255, 255, 255, 0.14);
+  --brand-pink-soft: rgba(255, 84, 112, 0.18);
+  --brand-purple-soft: rgba(127, 16, 167, 0.32);
+  --fan-text-primary: rgba(255, 255, 255, 0.90);
+  --fan-text-secondary: rgba(255, 255, 255, 0.55);
+  --fan-text-faint: rgba(255, 255, 255, 0.40);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Mirrors body.gt-admin in client/src/index.css: admin scope retunes --brand-blue
+   to the Stripe-calm shade; soft fill becomes a light blue-50 tint (mint/pink-on-white
+   is illegible, so admin uses tinted pills instead). */
+.gt-ds-admin {
+  --brand-blue: #1f7fb8;
+  --brand-blue-soft: rgba(31, 127, 184, 0.10);
+}
