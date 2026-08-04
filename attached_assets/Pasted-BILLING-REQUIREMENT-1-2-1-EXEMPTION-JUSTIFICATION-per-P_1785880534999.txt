@@ -1,0 +1,34 @@
+BILLING / REQUIREMENT 1.2.1 — EXEMPTION JUSTIFICATION (per Partner Support ticket #69153170, we were directed to present this here):
+
+This app is free. There are no charges for installing or using the app or its functionality. Separately, GoodTunes (GoGoods Inc.) is a wholesale vendor to merchants (music artists) through a relationship that exists independently of Shopify and this app. Artists buy at per-unit wholesale and resell to fans at prices they set:
+
+(1) vinyl manufacturing (optional);
+(2) digital access units to our platform, my.goodtunes.music, which we host and operate — artists set fan-facing retail and keep the margin;
+(3) GoodDeed printed certificates (optional), individually numbered;
+(4) fulfillment/shipping (optional, flat pass-through).
+
+We invoice artists directly, as any wholesale supplier; nothing is charged through Shopify or the app, and no charge is tied to app functionality. Removing the app would not change what an artist buys from us or owes us. We believe this complies with 1.2.1 as written; to the extent the review team considers any line (specifically digital access) to require an exemption, we request it here.
+
+NOTE: Install only via the portal in step 1, not from the App Store listing.
+
+REVIEW ACCOUNT: https://admin.goodtunes.music/admin/login — email shopifyreview@goodtunes.music, password GT-Amber-Drums-8642 (2FA is skipped for this account).
+
+TEST STORE: use your own development store.
+
+TEST STEPS (these match screencast sections 1–7):
+
+1. Sign in at https://admin.goodtunes.music/admin/login with the review account. You land on the Albums list — click "Storefront Sessions," then open its Shopify tab. In "Connect a store," click the Shopify section link, enter your development store's .myshopify.com address, and click Install directly. Approve the install; your store appears under Connected stores. The app does not embed in the Shopify admin.
+
+2. Back on the album's Shopify tab, Map a product from your development store (create one first if the store is empty, e.g. "Storefront Sessions — Vinyl"). Keep the checkbox at its default and Save mapping.
+
+3. In Shopify admin → Settings → Checkout → Customize, add the GoodTunes block to the Thank you page.
+
+4. Add the GoodTunes block to the Order status page.
+
+5. In your storefront, purchase the mapped product using Shopify's test payment (any fake address).
+
+6. On the Thank you page, click the GoodTunes block CTA, claim the order, and create a fan account — the album unlocks with its numbered GoodDeed certificate.
+
+7. In the player at my.goodtunes.music, verify playback, bonus content, and the GoodDeed certificate download; then open the order's Order status page and confirm the block links back into the player.
+
+CONTACT: bill@goodtunes.music with any access issues.
