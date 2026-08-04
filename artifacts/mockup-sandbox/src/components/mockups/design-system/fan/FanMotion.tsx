@@ -9,10 +9,10 @@ function Row({ k, v }: { k: string; v: string }) {
   );
 }
 
-export function MotionRules() {
+export function FanMotion() {
   return (
     <div className="gt-ds min-h-screen p-8" style={{ background: "var(--brand-bg)" }}>
-      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: "var(--brand-mint)" }}>Motion & system rules</p>
+      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: "var(--brand-mint)" }}>Fan styles · motion</p>
       <h1 className="text-3xl font-bold mb-6" style={{ color: "var(--fan-text-primary)" }}>One motion language</h1>
 
       <div className="max-w-3xl rounded-2xl p-5 mb-6" style={{ background: "var(--fan-surface)" }}>
@@ -39,11 +39,9 @@ export function MotionRules() {
         <ul className="space-y-1.5 text-sm list-disc pl-5" style={{ color: "var(--fan-text-secondary)" }}>
           <li>No raw brand hex outside index.css + primitives — use <code>var(--brand-*)</code>.</li>
           <li>Icons: Lucide for UI chrome, react-icons/si for company logos. Nothing else.</li>
-          <li>No native <code>&lt;select&gt;</code> or hand-rolled menus on admin — shadcn Select / DropdownMenu.</li>
           <li>Lone-icon buttons use the IconButton primitive; sub-44px circles on fan surfaces are flagged.</li>
-          <li>Admin buttons stay h-8/h-9 — no h-10/11/12.</li>
           <li>Every Trash/Delete pairs with an AlertDialog in the same file.</li>
-          <li>Surface judgment: player = Apple Music; admin = Stripe/Mac app. Never cross the chrome.</li>
+          <li>Surface judgment: the player is Apple Music. Never bring slate chrome onto the navy.</li>
           <li>Mockups prove patterns in the sandbox first, then graduate to <code>client/src/components/ui/</code>.</li>
         </ul>
       </div>

@@ -7956,157 +7956,152 @@
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/AdminSurface.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminSurface.tsx",
     "snippet": "<p className=\"text-xs uppercase tracking-widest mb-1 text-slate-400\">Admin CMS + all partner portals · light-only</p>"
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/AdminSurface.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminSurface.tsx",
     "snippet": "<p className=\"mb-8 max-w-2xl text-sm text-slate-600\">"
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/AdminSurface.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminSurface.tsx",
     "snippet": "<p className=\"text-sm text-slate-600 mb-4\">"
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/AdminSurface.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminSurface.tsx",
     "snippet": "<button className=\"h-9 px-3 rounded-md text-sm font-medium text-slate-600 hover:bg-slate-100\">Ghost</button>"
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/AdminSurface.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminSurface.tsx",
     "snippet": "<div className=\"text-sm text-slate-600 mb-2\">Per-row <b>SaveLink</b> — invisible until dirty, then quiet brand-blue ghost pill:</div>"
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/AdminSurface.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminSurface.tsx",
     "snippet": "<span className=\"text-sm text-slate-500\">{p.note}</span>"
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/AdminSurface.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminSurface.tsx",
     "snippet": "<p className=\"text-sm text-slate-600 mb-3\">Fields save on blur/change; a quiet \"Saved\" toast confirms. Explicit Save is reserved for exactly four cases:</p>"
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/AdminSurface.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminSurface.tsx",
     "snippet": "<ol className=\"text-sm text-slate-600 space-y-1.5 list-decimal pl-5\">"
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/AdminSurface.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminSurface.tsx",
     "snippet": "<ul className=\"text-sm text-slate-600 space-y-1.5 list-disc pl-5\">"
   },
   {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/BrandColors.tsx",
-    "snippet": "{ name: \"Navy background\", varName: \"--brand-bg\", hex: \"#00062B\", note: \"The fan shell. Every fan surface reads on this navy — never test against white.\", dark: false },"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/BrandColors.tsx",
-    "snippet": "{ name: \"Brand blue\", varName: \"--brand-blue\", hex: \"#319ED8\", note: \"Primary actions, links, artist deep-links. Admin retunes it to #1f7fb8 (Stripe-calm).\", dark: true },"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/BrandColors.tsx",
-    "snippet": "{ name: \"Brand purple\", varName: \"--brand-purple\", hex: \"#7F10A7\", note: \"Fan chips + gradient partner. Never on admin surfaces.\", dark: true },"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/BrandColors.tsx",
-    "snippet": "{ name: \"Mint\", varName: \"--brand-mint\", hex: \"#4AFFCA\", note: \"Accent / success on dark. Illegible on white — admin uses emerald-50/700 pills instead.\", dark: false },"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/BrandColors.tsx",
-    "snippet": "{ name: \"Heart pink\", varName: \"--brand-pink\", hex: \"#FF5470\", note: \"Now-playing rose accent, unread badges, preview tags. NOT the favorite-heart color.\", dark: true },"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/BrandColors.tsx",
-    "snippet": "<div className=\"h-24 flex items-end p-3\" style={{ background: c.hex, border: c.hex === \"#00062B\" ? \"1px solid rgba(255,255,255,0.14)\" : \"none\" }}>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/BrandColors.tsx",
-    "snippet": "<span className={`font-mono text-sm ${c.dark || c.hex === \"#4AFFCA\" ? \"text-black/70\" : \"text-white/80\"}`} style={c.hex === \"#00062B\" ? { color: \"rgba(255,255,255,0.8)\" } : {}}>{c.hex}</span>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/BrandColors.tsx",
-    "snippet": "<li><b style={{ color: \"var(--fan-text-primary)\" }}>Never inline a brand hex.</b> <code>bg-[color:var(--brand-blue)]</code>, not <code>bg-[#319ED8]</code>. design:lint enforces this.</li>"
+    "rule": "fan-text-tone",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminTypography.tsx",
+    "snippet": "<p className=\"text-xs uppercase tracking-widest mb-1 text-slate-400\">Admin styles · typography</p>"
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/BrandColors.tsx",
-    "snippet": "<span className={`font-mono text-sm ${c.dark || c.hex === \"#4AFFCA\" ? \"text-black/70\" : \"text-white/80\"}`} style={c.hex === \"#00062B\" ? { color: \"rgba(255,255,255,0.8)\" } : {}}>{c.hex}</span>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/FanSurface.tsx",
-    "snippet": "Pink #FF5470 keeps its other jobs (now-playing rose, badges)."
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/FanSurface.tsx",
-    "snippet": "<span className=\"text-[15px]\" style={{ color: \"var(--fan-text-primary)\" }}>{t}</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/Typography.tsx",
-    "snippet": "<p className=\"text-xs uppercase tracking-widest mb-1 text-slate-400\">Admin / partner portals · light slate</p>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/Typography.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminTypography.tsx",
     "snippet": "<p className=\"mb-6 text-sm max-w-md text-slate-600\">"
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/Typography.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminTypography.tsx",
     "snippet": "<div className=\"text-base text-slate-600\">slate-600 — body</div>"
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/Typography.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminTypography.tsx",
     "snippet": "<div className=\"text-sm text-slate-500\">slate-500 — secondary / labels</div>"
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/Typography.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminTypography.tsx",
     "snippet": "<div className=\"text-sm text-slate-400\">slate-400 — faint / placeholders</div>"
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/Typography.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminTypography.tsx",
     "snippet": "<p className=\"text-sm text-slate-600\">"
   },
   {
     "rule": "fan-text-tone",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/Typography.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/admin/AdminTypography.tsx",
     "snippet": "<ul className=\"space-y-1.5 text-sm list-disc pl-5 text-slate-600\">"
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/fan/FanColors.tsx",
+    "snippet": "{ name: \"Navy background\", varName: \"--brand-bg\", hex: \"#00062B\", note: \"The fan shell. Every fan surface reads on this navy — never test against white.\", dark: false },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/fan/FanColors.tsx",
+    "snippet": "{ name: \"Brand blue\", varName: \"--brand-blue\", hex: \"#319ED8\", note: \"Primary actions, links, artist deep-links.\", dark: true },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/fan/FanColors.tsx",
+    "snippet": "{ name: \"Brand purple\", varName: \"--brand-purple\", hex: \"#7F10A7\", note: \"Fan chips + gradient partner. Fan-only — never on admin surfaces.\", dark: true },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/fan/FanColors.tsx",
+    "snippet": "{ name: \"Mint\", varName: \"--brand-mint\", hex: \"#4AFFCA\", note: \"Accent / success on dark navy. Illegible on white — stays on fan surfaces.\", dark: false },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/fan/FanColors.tsx",
+    "snippet": "{ name: \"Heart pink\", varName: \"--brand-pink\", hex: \"#FF5470\", note: \"Now-playing rose accent, unread badges, preview tags. NOT the favorite-heart color.\", dark: true },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/fan/FanColors.tsx",
+    "snippet": "<div className=\"h-24 flex items-end p-3\" style={{ background: c.hex, border: c.hex === \"#00062B\" ? \"1px solid rgba(255,255,255,0.14)\" : \"none\" }}>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/fan/FanColors.tsx",
+    "snippet": "<span className={`font-mono text-sm ${c.dark || c.hex === \"#4AFFCA\" ? \"text-black/70\" : \"text-white/80\"}`} style={c.hex === \"#00062B\" ? { color: \"rgba(255,255,255,0.8)\" } : {}}>{c.hex}</span>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/fan/FanColors.tsx",
+    "snippet": "<span className={`font-mono text-sm ${c.dark || c.hex === \"#4AFFCA\" ? \"text-black/70\" : \"text-white/80\"}`} style={c.hex === \"#00062B\" ? { color: \"rgba(255,255,255,0.8)\" } : {}}>{c.hex}</span>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/fan/FanSurface.tsx",
+    "snippet": "Pink #FF5470 keeps its other jobs (now-playing rose, badges)."
+  },
+  {
     "rule": "hardcoded-font-size",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/Typography.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/fan/FanSurface.tsx",
+    "snippet": "<span className=\"text-[15px]\" style={{ color: \"var(--fan-text-primary)\" }}>{t}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/fan/FanTypography.tsx",
     "snippet": "<div style={{ color: \"var(--fan-text-primary)\" }} className=\"text-[17px]\">Body — 17pt</div>"
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/Typography.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/fan/FanTypography.tsx",
     "snippet": "<div style={{ color: \"var(--fan-text-secondary)\" }} className=\"text-[15px]\">Secondary — 15pt</div>"
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/Typography.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/fan/FanTypography.tsx",
     "snippet": "<div style={{ color: \"var(--fan-text-secondary)\" }} className=\"text-[13px]\">Footnote — 13pt</div>"
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/Typography.tsx",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/design-system/fan/FanTypography.tsx",
     "snippet": "<div style={{ color: \"var(--fan-text-faint)\" }} className=\"text-[11px]\">Caption — 11pt</div>"
   },
   {
