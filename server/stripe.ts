@@ -47,18 +47,34 @@ async function getCredentials() {
   url.searchParams.set("connector_names", "stripe");
   url.searchParams.set("environment", targetEnvironment);
   let item: any = null;
+  let connectorError: string | null = null;
   try {
     const response = await fetch(url.toString(), {
       headers: { Accept: "application/json", "X-Replit-Token": xReplitToken },
     });
-    const data = await response.json();
-    item = data.items?.[0];
-  } catch {
-    item = null;
+    if (!response.ok) {
+      connectorError = `connector API HTTP ${response.status}`;
+    } else {
+      const data = await response.json();
+      item = data.items?.[0];
+    }
+  } catch (err: any) {
+    // Sanitized: message only, never response bodies or headers.
+    connectorError = `connector fetch failed: ${err?.message ?? "unknown error"}`;
   }
   if (!item || !item.settings?.publishable || !item.settings?.secret) {
     const fallback = envFallbackCredentials(targetEnvironment);
-    if (fallback) return fallback;
+    if (fallback) {
+      // Loud but secret-free signal so operators can tell connector outage
+      // apart from a genuinely missing connection while the fallback carries.
+      console.warn(
+        `[stripe] using env-secret live-key fallback (${connectorError ?? "connector returned no usable production connection"})`,
+      );
+      return fallback;
+    }
+    if (connectorError) {
+      throw new Error(`Stripe ${targetEnvironment} connection unavailable (${connectorError})`);
+    }
     throw new Error(`Stripe ${targetEnvironment} connection not found`);
   }
   // Webhook secret: prefer the connector value if it ever exposes one,
