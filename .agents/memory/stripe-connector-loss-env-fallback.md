@@ -12,3 +12,7 @@ description: Enterprise migration severed the Replit Stripe production connectio
 **How to apply / unwind:** once Replit support restores the production connection, the connector takes over automatically; the fallback secrets (and the "GoodTunes Replit fallback" key in Stripe) can then be deleted. Diagnose connection state by fetching `https://$REPLIT_CONNECTORS_HOSTNAME/api/v2/connection?connector_names=stripe&environment=production&include_secrets=true` with `X-Replit-Token: repl $REPL_IDENTITY`.
 
 **Gotcha:** users pasting keys from Stripe's list often paste the truncated display text — validate prefix AND length (~100+ chars) before trusting a pasted key.
+
+## Migration damage tally (Aug 2026 Enterprise move)
+- Stripe production connector connection (worked around via env fallback above; Replit ticket pending).
+- `GITHUB_MIRROR_DEPLOY_KEY` secret also dropped — mirror-freshness SKIPs, Codemagic builds blocked until restored (Task queue has the fix). When diagnosing any "X stopped working" after a platform migration, check BOTH connector connections AND workspace secrets for silent loss.
