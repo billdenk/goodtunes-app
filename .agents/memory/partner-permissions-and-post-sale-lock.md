@@ -88,3 +88,8 @@ gates in the same request see the memo and pass without re-consuming.
 **Why:** super-admin unlock is meant to re-open partner edits for one
 *save*, not one *gate check* — a single save commonly touches both
 metadata and master in one round trip.
+
+## Dual-scope album write gates (label-attached albums)
+A label-attached album has TWO candidate owning scopes: label (labelId) AND primary artist (primaryArtistId). Every partner write gate (requirePartnerPermission, partnerEditGate, checkPartnerVerbForScope via gateAlbumRoute, getAlbumEditAccess) resolves label-first but FALLS BACK to any candidate scope the user holds a membership in (`findAlbumScopeMembership`), applying the MATCHED scope's perms + artist-owner phase policy. Fail-closed for users in neither scope; label members unchanged. Divert routes should stamp pending_changes with `req.partnerGate.targetScope` (the matched scope), not the label-first resolution. Exception: checkPartnerVerbForScope's `ownerOnly` (commerce pricing) path deliberately keeps the legacy single-scope owner check — artist owner on a label album stays ungated there.
+**Why:** artist adding tracks to their own label-attached album got "403: Out of scope" (write gate was label-first only while read surfaces already treated primary_artist as in-scope).
+**How to apply:** any new album/song write gate must thread the album id (`albumIdForScope`) so the dual-scope fallback can run.

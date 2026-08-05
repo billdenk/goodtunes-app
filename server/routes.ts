@@ -9711,9 +9711,13 @@ export async function registerRoutes(
         const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: String(albumId) });
         if (outcome === "deny") return;
         if (outcome === "divert") {
+          // Task #2896 — stamp the scope that actually authorized the
+          // request (partnerEditGate's dual-scope match), not the
+          // label-first resolution.
+          const matchedScope = req.partnerGate?.targetScope ?? albumScope.scope;
           const row = await createPendingChange({
             targetTable: "songs", targetId: String(albumId), albumId: String(albumId),
-            scopeKind: albumScope.scope.kind, scopeId: albumScope.scope.id,
+            scopeKind: matchedScope.kind, scopeId: matchedScope.id,
             patch: { __op: "create", title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl },
             submittedByUserId: req.session.userId!,
           });

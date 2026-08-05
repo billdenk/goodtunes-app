@@ -6632,9 +6632,12 @@ function AddTrackForm({
         });
       }
       if (result.transcoded) {
+        // Deliberately phrased as an in-progress step — the track is NOT
+        // saved until Add succeeds, so an Add failure (e.g. a 403 from
+        // the partner gate) can't be misread against a "success" toast.
         toast({
-          title: "Master converted for browser playback",
-          description: `${result.sourceBitsPerSample ?? "high"}-bit WAV preserved as the archival original; a FLAC copy will stream in browsers.`,
+          title: "Master ready — click Add to save the track",
+          description: `${result.sourceBitsPerSample ?? "high"}-bit WAV preserved as the archival original; a FLAC copy will stream in browsers. The track isn't added yet.`,
         });
       }
     } catch (e: any) {
@@ -6800,12 +6803,20 @@ function AddTrackForm({
       setError(null);
       queueMicrotask(() => titleRef.current?.focus());
     },
-    onError: (e: any) =>
+    onError: (e: any) => {
+      // Surface the failure inline (next to the Add button) as well as via
+      // toast, with the server's message. The staged upload state
+      // (audioUrl/audioSourceUrl/specs/filename) is deliberately NOT
+      // cleared here, so the operator can fix the issue and hit Add again
+      // without re-uploading the master.
+      const msg = e?.message || "Try again in a moment.";
+      setError(`Couldn't add the track — ${msg} Your uploaded audio is still attached; you can retry Add without re-uploading.`);
       toast({
-        title: "Couldn't add the track",
-        description: e?.message || "Try again in a moment.",
+        title: "Track NOT added",
+        description: msg,
         variant: "destructive",
-      }),
+      });
+    },
   });
 
   const submit = async () => {

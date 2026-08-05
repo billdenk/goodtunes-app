@@ -103,10 +103,55 @@ export async function getAlbumIdForCreditRow(
   return r?.albumId ?? null;
 }
 
+// Task #2896 — a label-attached album has TWO candidate owning scopes:
+// the label (labelId) AND the primary artist (primaryArtistId). Read
+// surfaces already treat "primary artist" as in-scope (artist dashboard /
+// roster scope is primary_artist OR payout-owner); the write gates must
+// honor the same relationship. Candidates are ordered label-first so the
+// legacy single-scope resolution (`candidates[0]`) is byte-for-byte
+// unchanged for every existing caller.
+export function albumScopeCandidates(row: {
+  labelId: string | null;
+  primaryArtistId: string | null;
+}): { kind: PartnerScopeKind; id: string }[] {
+  const out: { kind: PartnerScopeKind; id: string }[] = [];
+  if (row.labelId) out.push({ kind: "label", id: row.labelId });
+  if (row.primaryArtistId) out.push({ kind: "artist", id: row.primaryArtistId });
+  return out;
+}
+
+// Task #2896 — given an album, find a membership the user holds in ANY of
+// the album's candidate scopes (skipping `exclude`, which the caller
+// already tried). Fail-closed: returns null when the user is in neither
+// scope. Used by the gates to let an album's primary artist through even
+// when the album also carries a labelId (label-first resolution would
+// otherwise 403 them "Out of scope").
+export async function findAlbumScopeMembership(
+  userId: string,
+  albumId: string,
+  exclude: { kind: PartnerScopeKind; id: string } | null,
+): Promise<{ scope: { kind: PartnerScopeKind; id: string }; match: ResolvedMembership } | null> {
+  const [row] = await db
+    .select({ labelId: albums.labelId, primaryArtistId: albums.primaryArtistId })
+    .from(albums)
+    .where(eq(albums.id, albumId));
+  if (!row) return null;
+  for (const c of albumScopeCandidates(row)) {
+    if (exclude && c.kind === exclude.kind && c.id === exclude.id) continue;
+    const m = await findMembershipForScope(userId, c.kind, c.id);
+    if (m) return { scope: c, match: m };
+  }
+  return null;
+}
+
 // Resolve target → { scope, albumId } for the two row kinds we gate
-// today. Extend here if we widen the surface.
+// today. Extend here if we widen the surface. `scopes` carries EVERY
+// candidate owning scope (label first, then artist) so the gate can match
+// the caller's membership against either; `scope` stays the legacy
+// label-first primary for callers that only want one.
 async function resolveTarget(targetTable: "albums" | "songs", targetId: string): Promise<{
   scope: { kind: PartnerScopeKind; id: string } | null;
+  scopes: { kind: PartnerScopeKind; id: string }[];
   albumId: string | null;
   firstSoldAt: Date | null;
   // Task #2468 — pre-sunrise flag drives the artist-owner phase policy
@@ -119,12 +164,8 @@ async function resolveTarget(targetTable: "albums" | "songs", targetId: string):
       .from(albums)
       .where(eq(albums.id, targetId));
     if (!row) return null;
-    const scope: { kind: PartnerScopeKind; id: string } | null = row.labelId
-      ? { kind: "label", id: row.labelId }
-      : row.primaryArtistId
-        ? { kind: "artist", id: row.primaryArtistId }
-        : null;
-    return { scope, albumId: row.id, firstSoldAt: row.firstSoldAt ?? null, isPrepping: !!row.isPrepping };
+    const scopes = albumScopeCandidates(row);
+    return { scope: scopes[0] ?? null, scopes, albumId: row.id, firstSoldAt: row.firstSoldAt ?? null, isPrepping: !!row.isPrepping };
   }
   // songs
   const [row] = await db
@@ -139,12 +180,8 @@ async function resolveTarget(targetTable: "albums" | "songs", targetId: string):
     .innerJoin(albums, eq(albums.id, songs.albumId))
     .where(eq(songs.id, targetId));
   if (!row) return null;
-  const scope: { kind: PartnerScopeKind; id: string } | null = row.labelId
-    ? { kind: "label", id: row.labelId }
-    : row.primaryArtistId
-      ? { kind: "artist", id: row.primaryArtistId }
-      : null;
-  return { scope, albumId: row.albumId, firstSoldAt: row.firstSoldAt ?? null, isPrepping: !!row.isPrepping };
+  const scopes = albumScopeCandidates(row);
+  return { scope: scopes[0] ?? null, scopes, albumId: row.albumId, firstSoldAt: row.firstSoldAt ?? null, isPrepping: !!row.isPrepping };
 }
 
 // Task #351 — verb → partner_permissions column name.
@@ -652,18 +689,33 @@ export function requirePartnerPermission(
     if (!target.scope) {
       return res.status(403).json({ message: "Out of scope" });
     }
-    const match = await findMembershipForScope(userId, target.scope.kind, target.scope.id);
+    // Task #2896 — try EVERY candidate scope (label first, then artist)
+    // so the album's primary artist matches even when the album carries a
+    // labelId. The matched scope's permissions + phase policy apply below.
+    let scope = target.scope;
+    let match = await findMembershipForScope(userId, scope.kind, scope.id);
+    if (!match) {
+      for (const c of target.scopes) {
+        if (c.kind === scope.kind && c.id === scope.id) continue;
+        const m = await findMembershipForScope(userId, c.kind, c.id);
+        if (m) {
+          scope = c;
+          match = m;
+          break;
+        }
+      }
+    }
     if (!match) {
       return res.status(403).json({ message: "Out of scope" });
     }
 
-    const perms = await getPartnerPermissions(target.scope.kind, target.scope.id);
+    const perms = await getPartnerPermissions(scope.kind, scope.id);
     // Task #351 — per-(scope, user) override layer. An explicit override
     // (granted=true or false) wins over the scope default. NULL row =>
     // fall back to the scope verb, then to the Task #2468 implicit
     // artist-owner self-serve grant.
-    const override = await getUserPermissionOverride(target.scope.kind, target.scope.id, userId, verb);
-    const allowed = resolveVerbAllowed(target.scope.kind, match, perms, verb, override);
+    const override = await getUserPermissionOverride(scope.kind, scope.id, userId, verb);
+    const allowed = resolveVerbAllowed(scope.kind, match, perms, verb, override);
     if (!allowed) {
       return res.status(403).json({ message: `Missing permission: ${verb}` });
     }
@@ -676,7 +728,7 @@ export function requirePartnerPermission(
     if (!opts.skipPostSaleLock) {
       const ownerPhase = await resolveArtistOwnerPhaseOutcome(
         verb,
-        target.scope.kind,
+        scope.kind,
         match,
         target.albumId,
         { isPrepping: target.isPrepping, firstSoldAt: target.firstSoldAt },
@@ -694,7 +746,7 @@ export function requirePartnerPermission(
         req.partnerGate = {
           role: match.role,
           roleScopeId: match.scopeId,
-          targetScope: target.scope,
+          targetScope: scope,
           albumId: target.albumId,
           divert: ownerPhase.kind === "divert",
           divertReason: ownerPhase.kind === "divert" ? ownerPhase.reason : undefined,
@@ -730,7 +782,7 @@ export function requirePartnerPermission(
       req.partnerGate = {
         role: match.role,
         roleScopeId: match.scopeId,
-        targetScope: target.scope,
+        targetScope: scope,
         albumId: target.albumId,
         divert: true,
         divertReason: "approval_required",
@@ -741,7 +793,7 @@ export function requirePartnerPermission(
     req.partnerGate = {
       role: match.role,
       roleScopeId: match.scopeId,
-      targetScope: target.scope,
+      targetScope: scope,
       albumId: target.albumId,
       divert: false,
     };
@@ -804,6 +856,10 @@ export async function gateAlbumRoute(
     // metadata edits, track listing, master audio. Mirror the verb
     // set in checkPartnerVerbForScope.
     albumIdForLock: verb === "edit_metadata" || verb === "upload_masters" ? albumId : null,
+    // Task #2896 — always thread the album id for the dual-scope
+    // membership fallback (primary artist on a label-attached album),
+    // independent of whether the verb is lock-relevant.
+    albumIdForScope: albumId,
     // Thread the request so override consumption is memoized for the
     // life of the request — see consumeActiveOverride() comment.
     req,
@@ -855,11 +911,33 @@ export async function partnerEditGate(
 
   // Task #1036 — match against the membership SET (identical to the
   // legacy single-role check for single-membership users).
-  const match = await findMembershipForScope(userId, scope.kind, scope.id);
+  let match = await findMembershipForScope(userId, scope.kind, scope.id);
+  // Task #2896 — dual-scope fallback: when the caller passed the album's
+  // label-first scope but the user is actually a member of the OTHER
+  // candidate scope (the album's primary artist), match that scope
+  // instead and apply ITS permissions + phase policy. Fail-closed for
+  // users in neither scope.
+  if (!match && opts.albumIdForLock) {
+    const alt = await findAlbumScopeMembership(userId, opts.albumIdForLock, scope);
+    if (alt) {
+      scope = alt.scope;
+      match = alt.match;
+    }
+  }
   if (!match) {
     res.status(403).json({ message: "Out of scope" });
     return "deny";
   }
+  // Surface the MATCHED scope so a divert route can stamp the pending
+  // change with the scope that actually authorized the request (not the
+  // label-first scope it originally resolved).
+  req.partnerGate = {
+    role: match.role,
+    roleScopeId: match.scopeId,
+    targetScope: scope,
+    albumId: opts.albumIdForLock ?? null,
+    divert: false,
+  };
 
   const perms = await getPartnerPermissions(scope.kind, scope.id);
   const override = await getUserPermissionOverride(scope.kind, scope.id, userId, verb);
@@ -942,7 +1020,7 @@ export async function checkPartnerVerbForScope(
   userId: string,
   verb: PartnerVerb,
   scope: { kind: PartnerScopeKind; id: string },
-  opts: { albumIdForLock?: string | null; req?: Request; phaseAware?: boolean; ownerOnly?: boolean } = {},
+  opts: { albumIdForLock?: string | null; req?: Request; phaseAware?: boolean; ownerOnly?: boolean; albumIdForScope?: string | null } = {},
 ): Promise<{ status: number; body: any } | null> {
   const role = await getUserRole(userId);
   if (!role) return { status: 403, body: { message: "No role" } };
@@ -950,7 +1028,7 @@ export async function checkPartnerVerbForScope(
 
   // Task #1036 — match against the membership SET (identical to the
   // legacy single-role check for single-membership users).
-  const match = await findMembershipForScope(userId, scope.kind, scope.id);
+  let match = await findMembershipForScope(userId, scope.kind, scope.id);
   // Task #2468 — `ownerOnly` (commerce pricing routes) applies the phase
   // gate to the artist-scope OWNER and passes EVERYONE else through
   // byte-for-byte unchanged. commerce's bearer-only requireAdmin never
@@ -960,6 +1038,20 @@ export async function checkPartnerVerbForScope(
   // checks — or we'd change a previously-ungated path.
   if (opts.ownerOnly && !(match && isArtistScopeOwner(scope.kind, match))) {
     return null;
+  }
+  // Task #2896 — dual-scope fallback (see partnerEditGate): the album's
+  // primary artist stays in-scope even when the album carries a labelId
+  // and the caller resolved the label-first scope. Requires an album id
+  // to look the candidates up (albumIdForScope, else albumIdForLock).
+  if (!match) {
+    const albumIdForScope = opts.albumIdForScope ?? opts.albumIdForLock ?? null;
+    if (albumIdForScope) {
+      const alt = await findAlbumScopeMembership(userId, albumIdForScope, scope);
+      if (alt) {
+        scope = alt.scope;
+        match = alt.match;
+      }
+    }
   }
   if (!match) {
     return { status: 403, body: { message: "Out of scope" } };
@@ -1051,11 +1143,8 @@ export async function getAlbumEditAccess(userId: string, albumId: string) {
   if (!album) return null;
   const locked = !!album.firstSoldAt;
   const isPrepping = !!album.isPrepping;
-  const scope: { kind: PartnerScopeKind; id: string } | null = album.labelId
-    ? { kind: "label", id: album.labelId }
-    : album.primaryArtistId
-      ? { kind: "artist", id: album.primaryArtistId }
-      : null;
+  const scopeCandidates = albumScopeCandidates(album);
+  let scope: { kind: PartnerScopeKind; id: string } | null = scopeCandidates[0] ?? null;
 
   if (!role || role.role === "super_admin" || role.role === "admin") {
     return {
@@ -1074,7 +1163,18 @@ export async function getAlbumEditAccess(userId: string, albumId: string) {
 
   // Task #1036 — match against the membership SET (identical yes/no to
   // the legacy single-role check for single-membership users).
-  const match = scope ? await findMembershipForScope(userId, scope.kind, scope.id) : null;
+  // Task #2896 — dual-scope: try every candidate scope (label first, then
+  // primary artist) so a label-attached album still reads as editable to
+  // its primary artist; the matched scope's permissions apply below.
+  let match: ResolvedMembership | null = null;
+  for (const c of scopeCandidates) {
+    const m = await findMembershipForScope(userId, c.kind, c.id);
+    if (m) {
+      scope = c;
+      match = m;
+      break;
+    }
+  }
   const inScope = !!match;
   if (!inScope) {
     return {
