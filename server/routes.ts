@@ -15921,7 +15921,9 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Operators only." });
     }
     const albumId = String(req.params.id);
-    const album = await storage.getAlbumById(albumId);
+    // Admin-inclusive lookup — the operator is viewing this album, so a
+    // prepping/hidden/future-dated release must still resolve here.
+    const album = await storage.getAlbumById(albumId, { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
     const rows = await storage.listReleaseNotifySignups(albumId);
     const stats = await storage.releaseNotifyStats(albumId);
@@ -15959,7 +15961,9 @@ export async function registerRoutes(
     }
 
     const albumId = String(req.params.id);
-    const album = await storage.getAlbumById(albumId);
+    // Admin-inclusive lookup — early access is exactly for not-yet-live
+    // releases, so staged/hidden albums must resolve.
+    const album = await storage.getAlbumById(albumId, { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
 
     let artistName: string | null = null;
@@ -16015,7 +16019,9 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Operators only." });
     }
     const albumId = String(req.params.id);
-    const album = await storage.getAlbumById(albumId);
+    // Admin-inclusive lookup — the status read must work while the release
+    // is still prepping/hidden/future-dated (the panel shows "publish first").
+    const album = await storage.getAlbumById(albumId, { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
     const recipientCount = await storage.countNewMusicOptInRecipients();
     return res.json({
@@ -16036,7 +16042,9 @@ export async function registerRoutes(
     }
 
     const albumId = String(req.params.id);
-    const album = await storage.getAlbumById(albumId);
+    // Admin-inclusive lookup; the isPrepping guard below still refuses to
+    // actually announce a release that isn't live yet.
+    const album = await storage.getAlbumById(albumId, { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
 
     // Refuse to announce a release that isn't live yet — an opted-in fan who

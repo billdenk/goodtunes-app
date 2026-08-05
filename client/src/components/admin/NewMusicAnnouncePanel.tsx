@@ -85,7 +85,9 @@ export function NewMusicAnnouncePanel({ albumId }: { albumId: string }) {
   if (isError) {
     return (
       <ErrorState
-        error={error}
+        // Plain-language copy instead of the raw status/message text
+        // (e.g. "404: Album not found") — friendlier for operators.
+        error="We couldn't load the new-music list right now — try again."
         onRetry={() => refetch()}
         title="Couldn't load the new-music list"
         testId="new-music-announce-error"
