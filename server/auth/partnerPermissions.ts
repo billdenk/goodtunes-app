@@ -1137,7 +1137,15 @@ export async function checkPartnerVerbForScope(
 export async function getAlbumEditAccess(userId: string, albumId: string) {
   const role = await getUserRole(userId);
   const [album] = await db
-    .select({ id: albums.id, labelId: albums.labelId, primaryArtistId: albums.primaryArtistId, firstSoldAt: albums.firstSoldAt, isPrepping: albums.isPrepping })
+    .select({
+      id: albums.id,
+      labelId: albums.labelId,
+      primaryArtistId: albums.primaryArtistId,
+      firstSoldAt: albums.firstSoldAt,
+      isPrepping: albums.isPrepping,
+      createdByScopeKind: albums.createdByScopeKind,
+      createdByScopeId: albums.createdByScopeId,
+    })
     .from(albums)
     .where(eq(albums.id, albumId));
   if (!album) return null;
@@ -1158,8 +1166,66 @@ export async function getAlbumEditAccess(userId: string, albumId: string) {
       hasActiveOverride: false,
       requiresApproval: false,
       missingPermissions: [] as string[],
+      canDelete: true,
+      deleteBlockedReason: null as string | null,
     };
   }
+
+  // Delete affordance pre-check — mirrors the DELETE /api/admin/albums/:id
+  // partner gate so the UI can disable (not hide) the Delete action with the
+  // right explanation. Provenance-scoped for press/label: they may delete
+  // only albums their own scope CREATED (created_by_scope_kind/_id); the
+  // artist path stays provenance-independent. Reasons:
+  //   'sold'           — hard sold-block
+  //   'artist_created' — in-scope press/label but not the recorded creator
+  //   'permission'     — creator scope matches but the verb is denied
+  //   'out_of_scope'   — no qualifying membership at all
+  const creatorKind = album.createdByScopeKind ?? null;
+  const creatorScopeId = album.createdByScopeId ?? null;
+  const computePartnerDelete = async (): Promise<{
+    canDelete: boolean;
+    deleteBlockedReason: "sold" | "artist_created" | "permission" | "out_of_scope" | null;
+  }> => {
+    if (creatorKind === "manufacturer" && creatorScopeId) {
+      const m = await findMembershipForScope(userId, "manufacturer", creatorScopeId);
+      if (m) {
+        if (!(await pressUserCanEdit(userId, creatorScopeId)))
+          return { canDelete: false, deleteBlockedReason: "permission" };
+        if (locked) return { canDelete: false, deleteBlockedReason: "sold" };
+        return { canDelete: true, deleteBlockedReason: null };
+      }
+    }
+    if (role.role === "manufacturer") {
+      return { canDelete: false, deleteBlockedReason: locked ? "sold" : "artist_created" };
+    }
+    if (album.primaryArtistId) {
+      const m = await findMembershipForScope(userId, "artist", album.primaryArtistId);
+      if (m) {
+        const scopeA = { kind: "artist" as PartnerScopeKind, id: album.primaryArtistId };
+        const permsA = await getPartnerPermissions("artist", album.primaryArtistId);
+        const ok = await resolvePartnerVerb(userId, "edit_metadata", scopeA, m, permsA ?? undefined);
+        if (!ok) return { canDelete: false, deleteBlockedReason: "permission" };
+        if (locked) return { canDelete: false, deleteBlockedReason: "sold" };
+        return { canDelete: true, deleteBlockedReason: null };
+      }
+    }
+    if (creatorKind === "label" && creatorScopeId) {
+      const m = await findMembershipForScope(userId, "label", creatorScopeId);
+      if (m) {
+        const scopeL = { kind: "label" as PartnerScopeKind, id: creatorScopeId };
+        const permsL = await getPartnerPermissions("label", creatorScopeId);
+        const ok = await resolvePartnerVerb(userId, "edit_metadata", scopeL, m, permsL ?? undefined);
+        if (!ok) return { canDelete: false, deleteBlockedReason: "permission" };
+        if (locked) return { canDelete: false, deleteBlockedReason: "sold" };
+        return { canDelete: true, deleteBlockedReason: null };
+      }
+    }
+    if (album.labelId && (await findMembershipForScope(userId, "label", album.labelId))) {
+      return { canDelete: false, deleteBlockedReason: locked ? "sold" : "artist_created" };
+    }
+    return { canDelete: false, deleteBlockedReason: "out_of_scope" };
+  };
+  const deleteAccess = await computePartnerDelete();
 
   // Task #1036 — match against the membership SET (identical yes/no to
   // the legacy single-role check for single-membership users).
@@ -1187,6 +1253,8 @@ export async function getAlbumEditAccess(userId: string, albumId: string) {
       hasActiveOverride: false,
       requiresApproval: false,
       missingPermissions: ["out_of_scope"],
+      canDelete: deleteAccess.canDelete,
+      deleteBlockedReason: deleteAccess.deleteBlockedReason,
     };
   }
 
@@ -1261,6 +1329,8 @@ export async function getAlbumEditAccess(userId: string, albumId: string) {
     hasActiveOverride,
     requiresApproval,
     missingPermissions: missing,
+    canDelete: deleteAccess.canDelete,
+    deleteBlockedReason: deleteAccess.deleteBlockedReason,
   };
 }
 

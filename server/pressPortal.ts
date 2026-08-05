@@ -1853,6 +1853,13 @@ export function registerPressPortalRoutes(
       isGoodTunesRelease: true,
       isPrepping: true,
       primaryArtistId: personId,
+      // Creation provenance — this draft was minted by the press portal's
+      // own start-album flow, so the press is the recorded creator. This is
+      // what later lets the press delete its own unsold test records (and
+      // ONLY those) from the portal.
+      createdByUserId: (req.session as any).userId,
+      createdByScopeKind: "manufacturer",
+      createdByScopeId: pressId,
     } as any);
 
     // Mint the held invite. createAdminInvite carries the base fields; a

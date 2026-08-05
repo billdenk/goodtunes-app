@@ -422,6 +422,52 @@ SQL
 migrate_manufacturer_payment_steps_funding_source dev  "${DATABASE_URL:-}"
 migrate_manufacturer_payment_steps_funding_source prod "${PROD_DATABASE_URL:-}"
 
+# Press/label delete for self-created albums — creation provenance columns on
+# albums (created_by_user_id / created_by_scope_kind / created_by_scope_id).
+# NULL scope kind = unknown legacy provenance (treated as artist/operator
+# created, never partner-deletable). Deliberately NO foreign keys (loose-FK
+# drift landmine — these are historical stamps, not live references).
+# After the columns exist, backfill the ONE provable press origin: albums
+# minted by the press portal's own start-album flow, evidenced by an
+# admin_invites row whose pre_flighted_album_id points at the album with
+# referrer_kind='manufacturer' and whose creating user actually held the
+# manufacturer role for that press. Everything else stays NULL. Idempotent —
+# the UPDATE only touches rows whose created_by_scope_kind IS NULL.
+migrate_album_creation_provenance() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping album creation provenance migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE albums
+  ADD COLUMN IF NOT EXISTS created_by_user_id    varchar,
+  ADD COLUMN IF NOT EXISTS created_by_scope_kind text,
+  ADD COLUMN IF NOT EXISTS created_by_scope_id   varchar;
+UPDATE albums a
+   SET created_by_user_id    = ai.created_by_user_id,
+       created_by_scope_kind = 'manufacturer',
+       created_by_scope_id   = ai.referrer_scope_id
+  FROM admin_invites ai
+  JOIN users u ON u.id = ai.created_by_user_id
+ WHERE ai.pre_flighted_album_id = a.id
+   AND ai.referrer_kind = 'manufacturer'
+   AND ai.referrer_scope_id IS NOT NULL
+   AND u.role = 'manufacturer'
+   AND u.role_scope_id = ai.referrer_scope_id
+   AND a.created_by_scope_kind IS NULL;
+COMMIT;
+SQL
+  then
+    echo "post-merge: album creation provenance migration ok on $label"
+  else
+    echo "post-merge: WARNING — album creation provenance migration failed on $label (continuing)"
+  fi
+}
+migrate_album_creation_provenance dev  "${DATABASE_URL:-}"
+migrate_album_creation_provenance prod "${PROD_DATABASE_URL:-}"
+
 # Task #1036 — TRUE ONE-TIME backfill: give every existing account exactly
 # ONE membership reproducing its current users.role / role_scope_id +
 # folded partner_permission_overrides. Marker-guarded in

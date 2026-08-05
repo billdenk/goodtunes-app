@@ -54,6 +54,7 @@ const created = {
   perms: new Set<string>(),
   customers: new Set<string>(),
   orders: new Set<string>(),
+  manufacturers: new Set<string>(),
 };
 
 let baseUrl = "";
@@ -94,14 +95,40 @@ async function seedPerson(): Promise<string> {
   return id;
 }
 
-async function seedAlbum(opts: { primaryArtistId?: string; sold?: boolean } = {}): Promise<string> {
+async function seedAlbum(
+  opts: {
+    primaryArtistId?: string;
+    sold?: boolean;
+    labelId?: string;
+    createdByScopeKind?: string;
+    createdByScopeId?: string;
+    createdByUserId?: string;
+  } = {},
+): Promise<string> {
   const id = randomUUID();
   await exec(sql`
-    INSERT INTO albums (id, title, artist, artwork, primary_artist_id, first_sold_at)
+    INSERT INTO albums (id, title, artist, artwork, primary_artist_id, first_sold_at,
+                        label_id, created_by_user_id, created_by_scope_kind, created_by_scope_id)
     VALUES (${id}, ${"t1266 album"}, ${"t1266 artist"}, ${""},
-            ${opts.primaryArtistId ?? null}, ${opts.sold ? new Date() : null})
+            ${opts.primaryArtistId ?? null}, ${opts.sold ? new Date() : null},
+            ${opts.labelId ?? null}, ${opts.createdByUserId ?? null},
+            ${opts.createdByScopeKind ?? null}, ${opts.createdByScopeId ?? null})
   `);
   created.albums.add(id);
+  return id;
+}
+
+async function seedLabel(): Promise<string> {
+  const id = randomUUID();
+  await exec(sql`INSERT INTO labels (id, name) VALUES (${id}, ${"t1266 label " + id.slice(0, 8)})`);
+  created.labels.add(id);
+  return id;
+}
+
+async function seedPress(): Promise<string> {
+  const id = randomUUID();
+  await exec(sql`INSERT INTO manufacturers (id, name) VALUES (${id}, ${"t1266 press " + id.slice(0, 8)})`);
+  created.manufacturers.add(id);
   return id;
 }
 
@@ -127,11 +154,11 @@ async function tokenFor(userId: string): Promise<string> {
   return token;
 }
 
-async function seedPartnerPermission(scopeId: string, editMetadata: boolean): Promise<void> {
+async function seedPartnerPermission(scopeId: string, editMetadata: boolean, scopeKind = "artist"): Promise<void> {
   const id = randomUUID();
   await exec(sql`
     INSERT INTO partner_permissions (id, scope_kind, scope_id, edit_metadata)
-    VALUES (${id}, ${"artist"}, ${scopeId}, ${editMetadata})
+    VALUES (${id}, ${scopeKind}, ${scopeId}, ${editMetadata})
   `);
   created.perms.add(id);
 }
@@ -277,6 +304,156 @@ test("an in-scope OWNER without an explicit edit_metadata grant still gets owner
   assert.equal((await pendingDeleteRows(albumId)).length, 0, "no pending_changes row is queued");
 });
 
+// ─── Press/label delete for self-created albums (creation provenance) ──
+//
+// A press (manufacturer) or label may delete an UNSOLD album ONLY when its
+// scope is the album's recorded creator (created_by_scope_kind/_id). NULL
+// provenance = legacy/artist-created, never partner-deletable by press/label.
+// Artist deletes stay provenance-independent.
+
+test("a press deletes its OWN unsold press-created album (200, soft-deleted)", async () => {
+  const pressId = await seedPress();
+  const person = await seedPerson();
+  const pressUser = await seedUser({ role: "manufacturer", roleScopeId: pressId });
+  const token = await tokenFor(pressUser);
+  const albumId = await seedAlbum({
+    primaryArtistId: person,
+    createdByScopeKind: "manufacturer",
+    createdByScopeId: pressId,
+    createdByUserId: pressUser,
+  });
+
+  const res = await del(`/api/admin/albums/${albumId}`, token);
+
+  assert.equal(res.status, 200, "press deletes its own created album directly");
+  assert.notEqual(await albumDeletedAt(albumId), null, "album is soft-deleted (30-day trash)");
+  assert.equal((await pendingDeleteRows(albumId)).length, 0, "no review queue row");
+});
+
+test("a press CANNOT delete an artist-created (null-provenance) album (403 with clear reason)", async () => {
+  const pressId = await seedPress();
+  const person = await seedPerson();
+  const pressUser = await seedUser({ role: "manufacturer", roleScopeId: pressId });
+  const token = await tokenFor(pressUser);
+  // No provenance stamped — legacy/artist-created.
+  const albumId = await seedAlbum({ primaryArtistId: person });
+
+  const res = await del(`/api/admin/albums/${albumId}`, token);
+
+  assert.equal(res.status, 403, "press is refused on an album its press didn't create");
+  assert.equal(res.json?.createdByArtist, true, "refusal carries createdByArtist so the UI can explain");
+  assert.equal(await albumDeletedAt(albumId), null, "album untouched");
+});
+
+test("a press CANNOT delete an album created by a DIFFERENT press", async () => {
+  const pressA = await seedPress();
+  const pressB = await seedPress();
+  const person = await seedPerson();
+  const pressUser = await seedUser({ role: "manufacturer", roleScopeId: pressA });
+  const token = await tokenFor(pressUser);
+  const albumId = await seedAlbum({
+    primaryArtistId: person,
+    createdByScopeKind: "manufacturer",
+    createdByScopeId: pressB,
+  });
+
+  const res = await del(`/api/admin/albums/${albumId}`, token);
+
+  assert.equal(res.status, 403, "creator scope must match the caller's press");
+  assert.equal(res.json?.createdByArtist, true);
+  assert.equal(await albumDeletedAt(albumId), null, "album untouched");
+});
+
+test("a press CANNOT delete its own created album after a sale (403 sold:true)", async () => {
+  const pressId = await seedPress();
+  const person = await seedPerson();
+  const pressUser = await seedUser({ role: "manufacturer", roleScopeId: pressId });
+  const token = await tokenFor(pressUser);
+  const albumId = await seedAlbum({
+    primaryArtistId: person,
+    sold: true,
+    createdByScopeKind: "manufacturer",
+    createdByScopeId: pressId,
+    createdByUserId: pressUser,
+  });
+
+  const res = await del(`/api/admin/albums/${albumId}`, token);
+
+  assert.equal(res.status, 403, "sold albums stay hard-blocked even for the creator press");
+  assert.equal(res.json?.sold, true, "the block carries sold:true");
+  assert.equal(await albumDeletedAt(albumId), null, "album untouched");
+});
+
+test("a label deletes its OWN unsold label-created album (200, soft-deleted)", async () => {
+  const labelId = await seedLabel();
+  await seedPartnerPermission(labelId, true, "label"); // labels need the edit_metadata grant (no owner-self-serve)
+  const labelUser = await seedUser({ role: "label", roleScopeId: labelId });
+  const token = await tokenFor(labelUser);
+  const albumId = await seedAlbum({
+    labelId,
+    createdByScopeKind: "label",
+    createdByScopeId: labelId,
+    createdByUserId: labelUser,
+  });
+
+  const res = await del(`/api/admin/albums/${albumId}`, token);
+
+  assert.equal(res.status, 200, "label deletes its own created album directly");
+  assert.notEqual(await albumDeletedAt(albumId), null, "album is soft-deleted");
+});
+
+test("a label CANNOT delete an artist-created (null-provenance) album on its roster (403 with clear reason)", async () => {
+  const labelId = await seedLabel();
+  const person = await seedPerson();
+  const labelUser = await seedUser({ role: "label", roleScopeId: labelId });
+  const token = await tokenFor(labelUser);
+  // In the label's scope (label_id set) but NOT created by the label.
+  const albumId = await seedAlbum({ labelId, primaryArtistId: person });
+
+  const res = await del(`/api/admin/albums/${albumId}`, token);
+
+  assert.equal(res.status, 403, "label is refused on an album it didn't create");
+  assert.equal(res.json?.createdByArtist, true, "refusal carries createdByArtist");
+  assert.equal(await albumDeletedAt(albumId), null, "album untouched");
+});
+
+test("a label CANNOT delete its own created album after a sale (403 sold:true)", async () => {
+  const labelId = await seedLabel();
+  await seedPartnerPermission(labelId, true, "label");
+  const labelUser = await seedUser({ role: "label", roleScopeId: labelId });
+  const token = await tokenFor(labelUser);
+  const albumId = await seedAlbum({
+    labelId,
+    sold: true,
+    createdByScopeKind: "label",
+    createdByScopeId: labelId,
+  });
+
+  const res = await del(`/api/admin/albums/${albumId}`, token);
+
+  assert.equal(res.status, 403, "sold hard-block wins over creator provenance");
+  assert.equal(res.json?.sold, true);
+  assert.equal(await albumDeletedAt(albumId), null, "album untouched");
+});
+
+test("an artist still deletes their own unsold album even when a press created it (provenance-independent)", async () => {
+  const pressId = await seedPress();
+  const person = await seedPerson();
+  await seedPartnerPermission(person, true);
+  const artist = await seedUser({ role: "artist", roleScopeId: person });
+  const token = await tokenFor(artist);
+  const albumId = await seedAlbum({
+    primaryArtistId: person,
+    createdByScopeKind: "manufacturer",
+    createdByScopeId: pressId,
+  });
+
+  const res = await del(`/api/admin/albums/${albumId}`, token);
+
+  assert.equal(res.status, 200, "artist self-delete is unchanged by provenance");
+  assert.notEqual(await albumDeletedAt(albumId), null, "album is soft-deleted");
+});
+
 after(async () => {
   try {
     if (httpServer) await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
@@ -294,6 +471,7 @@ after(async () => {
     }
     for (const id of created.people) await exec(sql`DELETE FROM people WHERE id = ${id}`);
     for (const id of created.labels) await exec(sql`DELETE FROM labels WHERE id = ${id}`);
+    for (const id of created.manufacturers) await exec(sql`DELETE FROM manufacturers WHERE id = ${id}`);
   } finally {
     await pool.end();
   }

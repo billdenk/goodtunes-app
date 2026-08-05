@@ -8366,6 +8366,19 @@ export async function registerRoutes(
             : !!req.body?.isGoodTunesRelease,
         sellMode: rawSellMode ?? null,
         physicalFormat: rawPhysicalFormat ?? null,
+        // Creation provenance — who minted this row and under which scope.
+        // Operators stamp "operator" (no scope id); a partner account stamps
+        // its own role + scope so the press/label self-created-album delete
+        // gate can later prove origin.
+        createdByUserId: req.session.userId!,
+        createdByScopeKind:
+          creatorRole?.role && creatorRole.role !== "super_admin" && creatorRole.role !== "admin" && creatorRole.roleScopeId
+            ? creatorRole.role
+            : "operator",
+        createdByScopeId:
+          creatorRole?.role && creatorRole.role !== "super_admin" && creatorRole.role !== "admin"
+            ? creatorRole.roleScopeId ?? null
+            : null,
       } as any);
       // Task #644 — same auto-sign behaviour the PUT path uses. On create
       // we don't have a UI to confirm a reassign, so a conflict is left
@@ -8468,7 +8481,13 @@ export async function registerRoutes(
       if (!source) {
         return res.status(404).json({ message: "Album not found" });
       }
-      const draft = await storage.duplicateAlbum(sourceId);
+      // Provenance: stamp the duplicator (an operator — gated above), not
+      // the source album's original creator.
+      const draft = await storage.duplicateAlbum(sourceId, {
+        userId,
+        scopeKind: "operator",
+        scopeId: null,
+      });
       return res.status(201).json(draft);
     } catch (err: any) {
       console.error("[admin] POST /api/admin/albums/:id/duplicate failed", {
@@ -8803,6 +8822,10 @@ export async function registerRoutes(
       description: null,
       labelId: null,
       isHidden: false,
+      // Creation provenance — this seeder is operator-only (gated above).
+      createdByUserId: req.session.userId!,
+      createdByScopeKind: "operator",
+      createdByScopeId: null,
       appleMusicUrl: String(collection.collectionViewUrl || url),
       spotifyUrl: resolvedSpotifyUrl,
       tidalUrl: extraLinks.tidalUrl,
@@ -9533,6 +9556,43 @@ export async function registerRoutes(
     return res.json(artistLabelConflict ? { ...updated, artistLabelConflict } : updated);
   });
 
+  // Best-effort super-admin notice for any PARTNER album delete (artist,
+  // label, or press): nothing disappears silently now that unsold deletes
+  // skip the review queue. Failure must never fail the request — the album
+  // is already soft-deleted by the time this runs. Routed through the
+  // shared operator-notify guard (Task #2547) so test/dev runs never reach
+  // a real inbox and duplicate notices are coalesced.
+  const notifyPartnerAlbumDeleted = async (
+    req: Request,
+    userId: string,
+    albumId: string,
+    albumTitle: string | null,
+  ) => {
+    try {
+      const { listSuperAdminEmails } = await import("./auth/roles");
+      const superEmails = await listSuperAdminEmails();
+      const requesterRow = await storage.getUser(userId);
+      const requester = {
+        displayName: requesterRow?.displayName || requesterRow?.username || requesterRow?.email || "A partner",
+        email: requesterRow?.email || "",
+      };
+      const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+      const host = req.headers["x-forwarded-host"] || req.headers.host || "admin.goodtunes.music";
+      const trashUrl = `${proto}://${host}/admin/trash`;
+      const { sendAlbumDeletedNoticeEmail, notifySuperAdmins } = await import("./mail");
+      await notifySuperAdmins({
+        template: "album-deleted-notice",
+        recipients: superEmails,
+        requesterEmail: requester.email,
+        dedupeKey: `album-deleted-notice:${userId}:${albumId}`,
+        send: (email) =>
+          sendAlbumDeletedNoticeEmail(email, requester, { id: albumId, title: albumTitle ?? "Untitled album" }, trashUrl),
+      });
+    } catch (e) {
+      console.warn("[album-delete] deleted-notice notify lookup failed", e);
+    }
+  };
+
   app.delete("/api/admin/albums/:id", requireAdmin, async (req, res) => {
     // Task #79 / #1250 — deleting an album is a content mutation.
     //
@@ -9549,75 +9609,116 @@ export async function registerRoutes(
     const isOperator = role?.role === "super_admin" || role?.role === "admin";
 
     if (!isOperator) {
-      const { resolveAlbumScope, checkPartnerVerbForScope } =
+      const { checkPartnerVerbForScope, pressUserCanEdit } =
         await import("./auth/partnerPermissions");
-      const albumScope = await resolveAlbumScope(id);
-      if (!albumScope) return res.status(404).json({ message: "Album not found" });
-      const scope = albumScope.scope;
-      if (!scope) {
-        return res.status(403).json({ message: "This album isn't managed by your team" });
-      }
-      // Membership + edit_metadata permission + per-user override, all via
-      // the shared partner gate so this endpoint honors the same auth
-      // semantics as every other partner edit. We intentionally DON'T pass
-      // albumIdForLock — a partner can never delete a sold album (even with
-      // an unlock override), so we apply our own hard sold-block below
-      // instead of the lock's softer override path.
-      const gate = await checkPartnerVerbForScope(userId, "edit_metadata", scope, { req });
-      if (gate) return res.status(gate.status).json(gate.body);
+      const { findMembershipForScope } = await import("./auth/roles");
+      const [albumMeta] = await db
+        .select({
+          labelId: albums.labelId,
+          primaryArtistId: albums.primaryArtistId,
+          firstSoldAt: albums.firstSoldAt,
+          createdByScopeKind: albums.createdByScopeKind,
+          createdByScopeId: albums.createdByScopeId,
+        })
+        .from(albums)
+        .where(eq(albums.id, id));
+      if (!albumMeta) return res.status(404).json({ message: "Album not found" });
       // A sold album can never be deleted by a partner — hard block.
       // `firstSoldAt` is the source of truth (stamped by
       // stampFirstSoldAtIfNeeded on the first paid order), but as a
       // belt-and-suspenders guard we also check for any live paid order in
       // case a stamp was ever missed (e.g. legacy imports).
-      let sold = !!albumScope.firstSoldAt;
-      if (!sold) {
+      const albumIsSold = async (): Promise<boolean> => {
+        if (albumMeta.firstSoldAt) return true;
         const paid = await db.execute<{ one: number }>(sql`
           SELECT 1 AS one FROM orders WHERE album_id = ${id} AND status = 'paid' LIMIT 1
         `);
-        sold = ((paid as any)?.rows?.length ?? 0) > 0;
-      }
-      if (sold) {
-        return res.status(403).json({
+        return ((paid as any)?.rows?.length ?? 0) > 0;
+      };
+      const soldBlock = () =>
+        res.status(403).json({
           message: "This album is sold, and cannot be deleted.",
           sold: true,
         });
+      // Provenance-scoped press/label delete — a press (manufacturer) or a
+      // label may delete an UNSOLD album ONLY when their scope is the
+      // album's recorded creator (created_by_scope_kind/_id, stamped on
+      // every create path). NULL provenance = legacy/artist-created and is
+      // never partner-deletable by press/label. Artist deletes below stay
+      // provenance-independent (an artist may always self-delete their own
+      // unsold release).
+      const creatorKind = albumMeta.createdByScopeKind ?? null;
+      const creatorScopeId = albumMeta.createdByScopeId ?? null;
+      const CREATOR_REFUSAL = {
+        message:
+          "You can't delete this album — it was created by the artist (or GoodTunes), not by your team. Only albums your team created can be deleted.",
+        createdByArtist: true,
+      };
+      // Press path first: presses never hold label/artist scope, so without
+      // this branch they'd fall to a generic "Out of scope" 403.
+      if (creatorKind === "manufacturer" && creatorScopeId) {
+        const pressMembership = await findMembershipForScope(userId, "manufacturer", creatorScopeId);
+        if (pressMembership) {
+          if (!(await pressUserCanEdit(userId, creatorScopeId))) {
+            return res.status(403).json({ message: "Missing permission: edit_metadata" });
+          }
+          if (await albumIsSold()) return soldBlock();
+          const albumRow = await storage.getAlbumById(id, { includeHidden: true, includeTrashed: true });
+          await storage.deleteAlbum(id, userId ?? null);
+          await notifyPartnerAlbumDeleted(req, userId, id, albumRow?.title ?? null);
+          return res.json({ message: "Deleted" });
+        }
       }
+      if (role?.role === "manufacturer") {
+        // A press user on an album its press did NOT create: explain why
+        // instead of a bare out-of-scope 403 (sold albums keep the sold
+        // reason so the UI shows the right popup).
+        if (await albumIsSold()) return soldBlock();
+        return res.status(403).json(CREATOR_REFUSAL);
+      }
+      // Artist path — unchanged semantics: an in-scope artist (owner or
+      // permitted teammate) deletes their own unsold release directly.
+      const artistScopeId = albumMeta.primaryArtistId ?? null;
+      const artistMembership = artistScopeId
+        ? await findMembershipForScope(userId, "artist", artistScopeId)
+        : null;
+      if (artistMembership) {
+        const gate = await checkPartnerVerbForScope(
+          userId,
+          "edit_metadata",
+          { kind: "artist", id: artistScopeId! },
+          { req },
+        );
+        if (gate) return res.status(gate.status).json(gate.body);
+      } else if (creatorKind === "label" && creatorScopeId && (await findMembershipForScope(userId, "label", creatorScopeId))) {
+        // Label path — only when this label is the album's recorded
+        // creator. Verb + override semantics via the shared partner gate on
+        // the CREATOR label scope.
+        const gate = await checkPartnerVerbForScope(
+          userId,
+          "edit_metadata",
+          { kind: "label", id: creatorScopeId },
+          { req },
+        );
+        if (gate) return res.status(gate.status).json(gate.body);
+      } else if (albumMeta.labelId && (await findMembershipForScope(userId, "label", albumMeta.labelId))) {
+        // In-scope label member, but the label didn't create this album —
+        // clear refusal (sold albums keep the sold reason).
+        if (await albumIsSold()) return soldBlock();
+        return res.status(403).json(CREATOR_REFUSAL);
+      } else if (!albumMeta.labelId && !albumMeta.primaryArtistId) {
+        return res.status(403).json({ message: "This album isn't managed by your team" });
+      } else {
+        return res.status(403).json({ message: "Out of scope" });
+      }
+      if (await albumIsSold()) return soldBlock();
       // Unsold: the artist/label owner deletes their own draft directly —
       // same soft-delete the operator path uses (restorable from Trash),
       // no review-queue divert. The scope + edit_metadata gate above
       // already established this partner may mutate this album.
       const albumRow = await storage.getAlbumById(id, { includeHidden: true, includeTrashed: true });
       await storage.deleteAlbum(id, userId ?? null);
-      // Best-effort: tell every super-admin an artist deleted an unsold
-      // album, so nothing disappears silently now that deletes skip the
-      // review queue. Failure must never fail the request — the album is
-      // already soft-deleted.
-      try {
-        const superEmails = await listSuperAdminEmails();
-        const requesterRow = await storage.getUser(userId);
-        const requester = {
-          displayName: requesterRow?.displayName || requesterRow?.username || requesterRow?.email || "A partner",
-          email: requesterRow?.email || "",
-        };
-        const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
-        const host = req.headers["x-forwarded-host"] || req.headers.host || "admin.goodtunes.music";
-        const trashUrl = `${proto}://${host}/admin/trash`;
-        // Task #2547 — route through the shared operator-notify guard so a
-        // test/dev run (or a synthetic requester) never reaches Bill's real
-        // inbox, and duplicate notices are coalesced.
-        const { sendAlbumDeletedNoticeEmail, notifySuperAdmins } = await import("./mail");
-        await notifySuperAdmins({
-          template: "album-deleted-notice",
-          recipients: superEmails,
-          requesterEmail: requester.email,
-          dedupeKey: `album-deleted-notice:${userId}:${id}`,
-          send: (email) =>
-            sendAlbumDeletedNoticeEmail(email, requester, { id, title: albumRow?.title ?? "Untitled album" }, trashUrl),
-        });
-      } catch (e) {
-        console.warn("[album-delete] deleted-notice notify lookup failed", e);
-      }
+      await notifyPartnerAlbumDeleted(req, userId, id, albumRow?.title ?? null);
       return res.json({ message: "Deleted" });
     }
 

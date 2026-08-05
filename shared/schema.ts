@@ -412,6 +412,17 @@ export const albums = pgTable("albums", {
   // pending_changes queue. Super-admin is never blocked. Idempotent —
   // only written when currently null, never reset on refund.
   firstSoldAt: timestamp("first_sold_at"),
+  // Creation provenance — which account created this album and under which
+  // scope: "operator" | "artist" | "label" | "manufacturer". Drives the
+  // press/label self-created-album delete gate: a press or label may delete
+  // an UNSOLD album only when it is the album's recorded creator scope.
+  // NULL scope kind = unknown legacy provenance, treated as artist/operator
+  // created (never partner-deletable). Deliberately NO foreign keys — loose
+  // FKs on provenance columns are pure drift risk (see auth-tokens FK
+  // landmine) and the ids are historical stamps, not live references.
+  createdByUserId: varchar("created_by_user_id"),
+  createdByScopeKind: text("created_by_scope_kind"),
+  createdByScopeId: varchar("created_by_scope_id"),
   // Task #242 — One-click Push to Shopify (draft product).
   // `maxRedemptions` is the inventory cap for the digital-edition
   // variant on Shopify (label can leave NULL to leave inventory

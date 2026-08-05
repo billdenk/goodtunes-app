@@ -541,7 +541,7 @@ export function AdminAlbum({
   // direct-delete chrome (track multi-select, "delete all tracks") stays
   // operator-only for both partner kinds. The backend DELETE flow already
   // applies the sold-block / queue-a-request behavior to all partners.
-  const partnerDelete = isArtist || isLabel;
+  const partnerDelete = isArtist || isLabel || isPress;
   // Smart-back deep link: `/admin/albums/:id?track=<songId>` lands the
   // Tracks tab with that row already open + scrolled into view, so a
   // user returning from a credit-tapped Person page comes back to the
@@ -1079,6 +1079,11 @@ export function AdminAlbum({
     isPrepping?: boolean;
     requestOnly?: boolean;
     missingPermissions: string[];
+    // Press/label self-created-album delete: whether THIS caller may delete
+    // the album, and why not ('sold' | 'artist_created' | 'permission' |
+    // 'out_of_scope'). Optional for older cached payloads.
+    canDelete?: boolean;
+    deleteBlockedReason?: string | null;
   }>({
     queryKey: ["/api/admin/albums", albumId, "edit-access"],
     queryFn: async () => {
@@ -1696,28 +1701,60 @@ export function AdminAlbum({
             </button>
           )}
           {partnerDelete ? (
-            // Artists and labels get a single album-delete affordance (no
-            // track multi-select / delete-all chrome). The click routes to
-            // the sold-blocked popup or the delete confirmation based on
-            // the album's sold state.
-            <button
-              type="button"
-              onClick={() => {
-                if (album.firstSoldAt) {
-                  setArtistDeleteSoldOpen(true);
-                } else {
-                  setArtistDeleteRequestOpen(true);
-                }
-              }}
-              aria-label="Delete album"
-              className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 flex-shrink-0"
-              data-testid="button-request-delete-album"
-            >
-              <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                Delete
-              </span>
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            // Artists, labels, and presses get a single album-delete
+            // affordance (no track multi-select / delete-all chrome). The
+            // click routes to the sold-blocked popup or the delete
+            // confirmation based on the album's sold state. For a press or
+            // label, deleting is provenance-scoped: they can only delete
+            // albums their own team created, so an artist-created album
+            // shows a DISABLED trashcan with an explanation instead of
+            // hiding silently (server enforces the same rule).
+            (() => {
+              const creatorBlocked =
+                (isPress || isLabel) &&
+                albumEditAccess?.deleteBlockedReason === "artist_created";
+              return (
+                <button
+                  type="button"
+                  disabled={creatorBlocked}
+                  onClick={() => {
+                    if (creatorBlocked) return;
+                    if (album.firstSoldAt) {
+                      setArtistDeleteSoldOpen(true);
+                    } else {
+                      setArtistDeleteRequestOpen(true);
+                    }
+                  }}
+                  aria-label={
+                    creatorBlocked
+                      ? "Delete unavailable — this album was created by the artist"
+                      : "Delete album"
+                  }
+                  title={
+                    creatorBlocked
+                      ? "You can't delete this album — it was created by the artist, not by your team. Only albums your team created can be deleted."
+                      : undefined
+                  }
+                  className={
+                    creatorBlocked
+                      ? "group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-300 cursor-not-allowed flex-shrink-0"
+                      : "group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 flex-shrink-0"
+                  }
+                  data-testid="button-request-delete-album"
+                >
+                  <span
+                    className={
+                      creatorBlocked
+                        ? "text-xs font-medium opacity-100"
+                        : "text-xs font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity"
+                    }
+                  >
+                    {creatorBlocked ? "Artist-created" : "Delete"}
+                  </span>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              );
+            })()
           ) : selectionMode ? (
             <div className="flex items-center gap-2 mb-1 flex-shrink-0">
               <button
@@ -2179,9 +2216,10 @@ export function AdminAlbum({
               Delete <span className="italic">{album.title}</span>?
             </DialogTitle>
             <DialogDescription className="text-[13px] font-normal text-slate-500">
-              This permanently removes the album from your catalog, along
-              with its tracks and content. This can’t be undone from your
-              side — contact GoodTunes if you delete something by mistake.
+              This removes the album from your catalog, along with its tracks
+              and content. It goes to the GoodTunes trash, where operators can
+              restore it for 30 days — contact GoodTunes if you delete
+              something by mistake. After 30 days it's gone for good.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-3 sm:gap-3">

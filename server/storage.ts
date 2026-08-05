@@ -214,7 +214,10 @@ export interface IStorage {
   // CMS mutations (admin-only at the route layer).
   createAlbum(data: Omit<Album, "id"> & { id?: string }): Promise<Album>;
   updateAlbum(id: string, data: Partial<Album>): Promise<Album | undefined>;
-  duplicateAlbum(sourceId: string): Promise<Album>;
+  duplicateAlbum(
+    sourceId: string,
+    createdBy?: { userId: string; scopeKind: string; scopeId: string | null } | null,
+  ): Promise<Album>;
   deleteAlbum(id: string): Promise<void>;
   createSong(data: Omit<Song, "id"> & { id?: string }): Promise<Song>;
   updateSong(id: string, data: Partial<Song>): Promise<Song | undefined>;
@@ -1468,7 +1471,10 @@ export class DbStorage implements IStorage {
   // the duplicate references the SAME mux asset / object-storage master as the
   // source (no new exposure — and the draft is Prepping, so it's not
   // buy-eligible / not in any fan catalog/slug read until promoted).
-  async duplicateAlbum(sourceId: string): Promise<Album> {
+  async duplicateAlbum(
+    sourceId: string,
+    createdBy?: { userId: string; scopeKind: string; scopeId: string | null } | null,
+  ): Promise<Album> {
     const source = await this.getAlbumById(sourceId, { includeHidden: true });
     if (!source) throw new Error("Source album not found");
 
@@ -1498,6 +1504,11 @@ export class DbStorage implements IStorage {
       // Always lands as a Prepping draft — kept out of every public album
       // read (fan catalog/buy/search/slug all filter isPrepping=false).
       isPrepping: true,
+      // Creation provenance — the DUPLICATOR is the creator of the new
+      // draft, never the source album's original creator.
+      createdByUserId: createdBy?.userId ?? null,
+      createdByScopeKind: createdBy?.scopeKind ?? null,
+      createdByScopeId: createdBy?.scopeId ?? null,
     } as any);
 
     // Tracks, in track-number order. We copy the audio/Mux REFERENCE fields
