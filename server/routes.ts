@@ -9537,10 +9537,11 @@ export async function registerRoutes(
     // Task #79 / #1250 — deleting an album is a content mutation.
     //
     //  • super_admin / admin keep DIRECT delete.
-    //  • A partner (artist/label) NEVER deletes directly. A sold album is
-    //    hard-blocked with a plain-language reason; an unsold album always
-    //    writes a delete REQUEST to the super-admin review queue — even
-    //    when approval-mode is off — and every super-admin is emailed.
+    //  • A partner (artist/label) on a SOLD album is hard-blocked with a
+    //    plain-language reason.
+    //  • A partner on an UNSOLD album deletes DIRECTLY (soft-delete,
+    //    restorable from Trash) — no review-queue divert — and every
+    //    super-admin gets an after-the-fact notice email.
     const id = String(req.params.id);
     const userId = req.session.userId!;
     const { getUserRole, listSuperAdminEmails } = await import("./auth/roles");
@@ -9548,7 +9549,7 @@ export async function registerRoutes(
     const isOperator = role?.role === "super_admin" || role?.role === "admin";
 
     if (!isOperator) {
-      const { resolveAlbumScope, checkPartnerVerbForScope, createPendingChange } =
+      const { resolveAlbumScope, checkPartnerVerbForScope } =
         await import("./auth/partnerPermissions");
       const albumScope = await resolveAlbumScope(id);
       if (!albumScope) return res.status(404).json({ message: "Album not found" });
@@ -9565,52 +9566,59 @@ export async function registerRoutes(
       const gate = await checkPartnerVerbForScope(userId, "edit_metadata", scope, { req });
       if (gate) return res.status(gate.status).json(gate.body);
       // A sold album can never be deleted by a partner — hard block.
-      if (albumScope.firstSoldAt) {
+      // `firstSoldAt` is the source of truth (stamped by
+      // stampFirstSoldAtIfNeeded on the first paid order), but as a
+      // belt-and-suspenders guard we also check for any live paid order in
+      // case a stamp was ever missed (e.g. legacy imports).
+      let sold = !!albumScope.firstSoldAt;
+      if (!sold) {
+        const paid = await db.execute<{ one: number }>(sql`
+          SELECT 1 AS one FROM orders WHERE album_id = ${id} AND status = 'paid' LIMIT 1
+        `);
+        sold = ((paid as any)?.rows?.length ?? 0) > 0;
+      }
+      if (sold) {
         return res.status(403).json({
           message: "This album is sold, and cannot be deleted.",
           sold: true,
         });
       }
-      // Otherwise always queue a delete request (independent of approval mode).
-      const row = await createPendingChange({
-        targetTable: "albums", targetId: id, albumId: id,
-        scopeKind: scope.kind, scopeId: scope.id,
-        patch: { __op: "delete" },
-        submittedByUserId: userId,
-      });
-      // Best-effort: email every super-admin (membership-aware lookup, so
-      // multi-hat super-admins aren't missed). Failure must never fail the
-      // request — the queue row is already written.
+      // Unsold: the artist/label owner deletes their own draft directly —
+      // same soft-delete the operator path uses (restorable from Trash),
+      // no review-queue divert. The scope + edit_metadata gate above
+      // already established this partner may mutate this album.
+      const albumRow = await storage.getAlbumById(id, { includeHidden: true, includeTrashed: true });
+      await storage.deleteAlbum(id, userId ?? null);
+      // Best-effort: tell every super-admin an artist deleted an unsold
+      // album, so nothing disappears silently now that deletes skip the
+      // review queue. Failure must never fail the request — the album is
+      // already soft-deleted.
       try {
         const superEmails = await listSuperAdminEmails();
         const requesterRow = await storage.getUser(userId);
-        const albumRow = await storage.getAlbumById(id, { includeHidden: true, includeTrashed: true });
         const requester = {
           displayName: requesterRow?.displayName || requesterRow?.username || requesterRow?.email || "A partner",
           email: requesterRow?.email || "",
         };
         const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
         const host = req.headers["x-forwarded-host"] || req.headers.host || "admin.goodtunes.music";
-        const reviewUrl = `${proto}://${host}/admin/review`;
+        const trashUrl = `${proto}://${host}/admin/trash`;
         // Task #2547 — route through the shared operator-notify guard so a
         // test/dev run (or a synthetic requester) never reaches Bill's real
-        // inbox, and a burst of identical delete requests is coalesced.
-        const { sendAlbumDeleteRequestEmail, notifySuperAdmins } = await import("./mail");
+        // inbox, and duplicate notices are coalesced.
+        const { sendAlbumDeletedNoticeEmail, notifySuperAdmins } = await import("./mail");
         await notifySuperAdmins({
-          template: "album-delete-request",
+          template: "album-deleted-notice",
           recipients: superEmails,
           requesterEmail: requester.email,
-          dedupeKey: `album-delete-request:${userId}:${id}`,
+          dedupeKey: `album-deleted-notice:${userId}:${id}`,
           send: (email) =>
-            sendAlbumDeleteRequestEmail(email, requester, { id, title: albumRow?.title ?? "Untitled album" }, reviewUrl),
+            sendAlbumDeletedNoticeEmail(email, requester, { id, title: albumRow?.title ?? "Untitled album" }, trashUrl),
         });
       } catch (e) {
-        console.warn("[task-1250] delete-request notify lookup failed", e);
+        console.warn("[album-delete] deleted-notice notify lookup failed", e);
       }
-      return res.status(202).json({
-        pendingChange: row,
-        message: "Your request was sent to GoodTunes for review.",
-      });
+      return res.json({ message: "Deleted" });
     }
 
     await storage.deleteAlbum(id, userId ?? null);

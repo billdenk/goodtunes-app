@@ -906,6 +906,42 @@ export async function sendAlbumDeleteRequestEmail(
   return sendViaResend("album-delete-request", toEmail, subject, html, text);
 }
 
+// Artist self-delete for unsold albums — deletes no longer flow through
+// the review queue, so this after-the-fact notice tells operators an
+// artist removed an unsold album themselves. The album is soft-deleted
+// and restorable from Trash. Best-effort: callers swallow send failures.
+export async function sendAlbumDeletedNoticeEmail(
+  toEmail: string,
+  requester: { displayName: string; email: string },
+  album: { id: string; title: string },
+  trashUrl: string,
+): Promise<SendResult> {
+  const subject = `${requester.displayName} deleted "${album.title}"`;
+  const text = [
+    `${requester.displayName} <${requester.email}> deleted their unsold album "${album.title}".`,
+    ``,
+    `The album was removed from their catalog immediately (it had never had a paid sale).`,
+    `It's soft-deleted — you can still see and restore it from Trash:`,
+    trashUrl,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Heads up</div>
+      <h1 style="font-size: 22px; margin: 12px 0 12px; font-weight: 700;">An artist deleted an unsold album</h1>
+      <p style="font-size: 15px; line-height: 1.5; color: #333;">
+        <strong>${escapeHtml(requester.displayName)}</strong> &lt;${escapeHtml(requester.email)}&gt; deleted their unsold album <strong>${escapeHtml(album.title)}</strong>.
+      </p>
+      <p style="font-size: 14px; line-height: 1.5; color: #555;">The album never had a paid sale, so it was removed immediately. It's soft-deleted — you can still see and restore it from Trash.</p>
+      <div style="margin: 24px 0;">
+        ${bulletproofButton(trashUrl, "Open Trash", { bgColor: "#319ED8", paddingV: 12, paddingH: 20, borderRadius: 8, fontSize: 14 })}
+      </div>
+      <p style="font-size: 13px; color: #888; line-height: 1.5;">No action is needed unless the deletion looks wrong.</p>
+    </div>
+  `;
+  return sendViaResend("album-deleted-notice", toEmail, subject, html, text);
+}
+
 // Task #2468 — a release owner (or partner) whose release is out of
 // prepping can file a free-text "request a change" for the pieces that
 // can't be self-served through the review queue (master audio, pricing).

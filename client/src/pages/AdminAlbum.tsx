@@ -657,13 +657,11 @@ export function AdminAlbum({
   // flag flips on the useEffect below once the row arrives.
   const [modeDialogOpen, setModeDialogOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  // Task #1250 — Artist request-to-delete flow. Artists don't delete
-  // directly: a sold album is blocked with a plain-language popup, and an
-  // unsold album opens a "Request to delete" confirmation that fires a
-  // review-queue request and shows a success state in place.
+  // Artist album-delete flow. A sold album is blocked with a
+  // plain-language popup; an unsold album opens a destructive confirm that
+  // deletes it directly (soft-delete, operator-restorable from Trash).
   const [artistDeleteSoldOpen, setArtistDeleteSoldOpen] = useState(false);
   const [artistDeleteRequestOpen, setArtistDeleteRequestOpen] = useState(false);
-  const [artistDeleteRequested, setArtistDeleteRequested] = useState(false);
   // Task #1363 — when an album carries publishing data (mechanical-settlement
   // splits and/or a units-pressed figure), the delete-confirm dialog warns and
   // offers to move it onto another album first. `moveTargetId` is the picked
@@ -884,16 +882,22 @@ export function AdminAlbum({
     }
   }, [deleteConfirmOpen]);
 
-  // Task #1250 — Artist request-to-delete. Hits the same DELETE endpoint,
-  // which (for partner callers) writes a review-queue request instead of
-  // deleting. We DON'T navigate away — the album still exists until a
-  // super-admin approves — and flip the dialog into its success state.
+  // Artist self-delete for unsold albums — hits the same DELETE endpoint,
+  // which now soft-deletes an unsold album directly for the artist/label
+  // owner (no review queue). On success we drop the caches and navigate
+  // back to the portal catalog so the album vanishes without a reload.
   const requestDeleteAlbum = useMutation({
     mutationFn: async () => {
       await apiRequest("DELETE", `/api/admin/albums/${albumId}`);
     },
     onSuccess: () => {
-      setArtistDeleteRequested(true);
+      setArtistDeleteRequestOpen(false);
+      queryClient.removeQueries({ queryKey: ["/api/albums", albumId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-albums"] });
+      toast({ title: "Album deleted." });
+      navigate(backToAlbumsHref);
     },
     onError: (e: any) => {
       // A 403 with the sold reason means the album sold between render and
@@ -905,7 +909,7 @@ export function AdminAlbum({
         return;
       }
       toast({
-        title: "Couldn't send your request",
+        title: "Couldn't delete album",
         description: msg || "Try again in a moment.",
         variant: "destructive",
       });
@@ -1692,14 +1696,13 @@ export function AdminAlbum({
             </button>
           )}
           {partnerDelete ? (
-            // Task #1250 / #1267 — Artists and labels get a single
-            // album-delete affordance (no track multi-select / delete-all
-            // chrome). The click routes to the sold-blocked popup or the
-            // request-to-delete confirmation based on the album's sold state.
+            // Artists and labels get a single album-delete affordance (no
+            // track multi-select / delete-all chrome). The click routes to
+            // the sold-blocked popup or the delete confirmation based on
+            // the album's sold state.
             <button
               type="button"
               onClick={() => {
-                setArtistDeleteRequested(false);
                 if (album.firstSoldAt) {
                   setArtistDeleteSoldOpen(true);
                 } else {
@@ -2156,86 +2159,51 @@ export function AdminAlbum({
         </DialogContent>
       </Dialog>
 
-      {/* Task #1250 — Artist request-to-delete confirmation. Unsold albums
-          only. Confirming queues a review request (no immediate delete);
-          the dialog flips to a success state in place rather than
-          navigating away, because the album still exists until a
-          super-admin approves. */}
+      {/* Artist self-delete confirmation. Unsold albums only — confirming
+          deletes the album immediately (soft-delete; operators can restore
+          from Trash), then navigates back to the portal catalog. Sold
+          albums route to the blocked popup instead. */}
       <Dialog
         open={artistDeleteRequestOpen}
         onOpenChange={(v) => {
           if (requestDeleteAlbum.isPending) return;
           setArtistDeleteRequestOpen(v);
-          if (!v) setArtistDeleteRequested(false);
         }}
       >
         <DialogContent
           className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
           data-testid="dialog-request-delete-album"
         >
-          {artistDeleteRequested ? (
-            <>
-              <DialogHeader className="text-left space-y-1">
-                <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
-                  Request sent
-                </DialogTitle>
-                <DialogDescription className="text-[13px] font-normal text-slate-500">
-                  Your request was sent to GoodTunes for review. We’ll let you
-                  know once it’s been approved or declined — nothing has been
-                  removed yet.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    setArtistDeleteRequestOpen(false);
-                    setArtistDeleteRequested(false);
-                  }}
-                  className="bg-slate-900 text-white hover:bg-slate-800"
-                  data-testid="button-request-delete-done"
-                >
-                  Done
-                </Button>
-              </DialogFooter>
-            </>
-          ) : (
-            <>
-              <DialogHeader className="text-left space-y-1">
-                <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
-                  Request to delete{" "}
-                  <span className="italic">{album.title}</span>?
-                </DialogTitle>
-                <DialogDescription className="text-[13px] font-normal text-slate-500">
-                  This sends a deletion request to GoodTunes for review. The
-                  album stays live until it’s approved. We’ll notify you with
-                  the decision.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter className="gap-3 sm:gap-3">
-                <Button
-                  type="button"
-                  onClick={() => setArtistDeleteRequestOpen(false)}
-                  disabled={requestDeleteAlbum.isPending}
-                  className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
-                  data-testid="button-request-delete-cancel"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => requestDeleteAlbum.mutate()}
-                  disabled={requestDeleteAlbum.isPending}
-                  className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
-                  data-testid="button-request-delete-confirm"
-                >
-                  {requestDeleteAlbum.isPending
-                    ? "Sending…"
-                    : "Request to delete album"}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+              Delete <span className="italic">{album.title}</span>?
+            </DialogTitle>
+            <DialogDescription className="text-[13px] font-normal text-slate-500">
+              This permanently removes the album from your catalog, along
+              with its tracks and content. This can’t be undone from your
+              side — contact GoodTunes if you delete something by mistake.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-3 sm:gap-3">
+            <Button
+              type="button"
+              onClick={() => setArtistDeleteRequestOpen(false)}
+              disabled={requestDeleteAlbum.isPending}
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              data-testid="button-request-delete-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => requestDeleteAlbum.mutate()}
+              disabled={requestDeleteAlbum.isPending}
+              className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
+              data-testid="button-request-delete-confirm"
+            >
+              {requestDeleteAlbum.isPending ? "Deleting…" : "Delete album"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

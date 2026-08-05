@@ -1,20 +1,22 @@
-// Task #1266 — automated coverage for the artist request-to-delete flow
-// on DELETE /api/admin/albums/:id (built in Task #1250). The route has
-// three branches that are easy to regress silently:
+// Automated coverage for the album-delete branches on
+// DELETE /api/admin/albums/:id. The route has three branches that are
+// easy to regress silently:
 //
 //   1. super_admin / admin → DIRECT delete (soft-delete stamps
 //      albums.deleted_at). No review queue.
 //   2. An in-scope partner (artist/label) on a SOLD album → hard 403
-//      with `sold:true`, and NOTHING is queued — a sold album's record
-//      is frozen.
-//   3. An in-scope partner on an UNSOLD album → 202 + a pending_changes
-//      row whose patch is `{__op:"delete"}`, and the album is left
-//      present (deleted_at still NULL) until a super-admin approves it.
+//      with `sold:true`, and NOTHING is deleted — a sold album's record
+//      is frozen. "Sold" = first_sold_at stamped OR (belt-and-suspenders)
+//      any live paid order on the album.
+//   3. An in-scope partner on an UNSOLD album → DIRECT soft-delete
+//      (200, deleted_at stamped, no pending_changes divert) — artists
+//      self-delete their own unsold drafts; operators can restore from
+//      Trash.
 //
 // Plus two scope controls a code review would want: an out-of-scope partner is
 // rejected 403 before anything is written, and an in-scope OWNER — even with a
-// scope-wide edit_metadata=false — still gets owner-self-serve (202 + a queued
-// request), because the owner default overrides partner_permissions.
+// scope-wide edit_metadata=false — still gets owner-self-serve (direct
+// delete), because the owner default overrides partner_permissions.
 //
 // The branching lives inside the real Express handler (scope resolution +
 // the sold check + createPendingChange), so a faithful guard must drive
@@ -50,6 +52,8 @@ const created = {
   users: new Set<string>(),
   tokens: new Set<string>(),
   perms: new Set<string>(),
+  customers: new Set<string>(),
+  orders: new Set<string>(),
 };
 
 let baseUrl = "";
@@ -188,9 +192,9 @@ test("an in-scope artist CANNOT delete a SOLD album (403 sold:true, no pending c
   assert.equal((await pendingDeleteRows(albumId)).length, 0, "a sold-block must NOT queue a request");
 });
 
-// ─── 3. In-scope partner on an UNSOLD album → 202 + queued request ────
+// ─── 3. In-scope partner on an UNSOLD album → direct soft-delete ──────
 
-test("an in-scope artist's delete on an UNSOLD album queues a request (202), album stays present", async () => {
+test("an in-scope artist deletes an UNSOLD album directly (200, soft-deleted, nothing queued)", async () => {
   const person = await seedPerson();
   await seedPartnerPermission(person, true);
   const artist = await seedUser({ role: "artist", roleScopeId: person });
@@ -199,18 +203,40 @@ test("an in-scope artist's delete on an UNSOLD album queues a request (202), alb
 
   const res = await del(`/api/admin/albums/${albumId}`, token);
 
-  assert.equal(res.status, 202, "a partner delete request is accepted-for-review, not applied");
-  assert.ok(res.json?.pendingChange?.id, "the response returns the queued pending_changes row");
+  assert.equal(res.status, 200, "an unsold album is deleted directly, no review divert");
+  assert.equal(res.json?.message, "Deleted");
+  assert.notEqual(await albumDeletedAt(albumId), null, "album is soft-deleted (deleted_at stamped)");
+  assert.equal((await pendingDeleteRows(albumId)).length, 0, "no pending_changes row is queued");
+});
 
-  const pending = await pendingDeleteRows(albumId);
-  assert.equal(pending.length, 1, "exactly one delete request is queued");
-  assert.equal(pending[0].target_table, "albums");
-  assert.equal(pending[0].scope_kind, "artist");
-  assert.equal(pending[0].scope_id, person);
-  assert.equal(pending[0].status, "pending");
-  assert.equal((pending[0].patch as any)?.__op, "delete", "the patch is the delete discriminator");
+// Belt-and-suspenders: an album whose first_sold_at was never stamped but
+// that has a live paid order is still treated as SOLD (403, untouched).
+test("an unstamped album with a live paid order is still sold-blocked (403)", async () => {
+  const person = await seedPerson();
+  await seedPartnerPermission(person, true);
+  const artist = await seedUser({ role: "artist", roleScopeId: person });
+  const token = await tokenFor(artist);
+  const albumId = await seedAlbum({ primaryArtistId: person, sold: false });
 
-  assert.equal(await albumDeletedAt(albumId), null, "the album is NOT deleted — it waits for review");
+  const customerId = randomUUID();
+  const tag = customerId.slice(0, 8);
+  await exec(sql`
+    INSERT INTO customer_users (id, username, email, display_name)
+    VALUES (${customerId}, ${"t1266c_" + tag}, ${"t1266c_" + tag + "@example.test"}, ${"t1266 fan"})
+  `);
+  created.customers.add(customerId);
+  const orderId = randomUUID();
+  await exec(sql`
+    INSERT INTO orders (id, customer_id, album_id, total_cents, status)
+    VALUES (${orderId}, ${customerId}, ${albumId}, ${1999}, ${"paid"})
+  `);
+  created.orders.add(orderId);
+
+  const res = await del(`/api/admin/albums/${albumId}`, token);
+
+  assert.equal(res.status, 403, "a paid order sold-blocks even without first_sold_at");
+  assert.equal(res.json?.sold, true, "the block carries sold:true");
+  assert.equal(await albumDeletedAt(albumId), null, "album untouched");
 });
 
 // ─── Scope controls: out-of-scope 403, owner-self-serve 202 ───────────
@@ -235,12 +261,9 @@ test("an OUT-OF-SCOPE artist is rejected (403) and queues nothing", async () => 
 // subRole=null) implicitly holds the OWNER_SELF_SERVE_VERBS, including
 // edit_metadata, via resolveVerbAllowed — REGARDLESS of partner_permissions. So
 // a scope-wide edit_metadata=false does NOT lock an owner out of their own
-// release: the delete still diverts to the review queue (202 + a queued
-// request). partner_permissions only constrains invited teammates, who carry a
-// subRole. (An earlier version of this test asserted an owner without an
-// explicit grant got 403; that was stale — the owner-self-serve default landed
-// after the test was first written.)
-test("an in-scope OWNER without an explicit edit_metadata grant still gets owner-self-serve (202 + queued), not 403", async () => {
+// release: the unsold delete goes through directly. partner_permissions only
+// constrains invited teammates, who carry a subRole.
+test("an in-scope OWNER without an explicit edit_metadata grant still gets owner-self-serve (direct delete), not 403", async () => {
   const person = await seedPerson();
   await seedPartnerPermission(person, false); // scope-wide edit_metadata denied…
   const artist = await seedUser({ role: "artist", roleScopeId: person }); // …but this user OWNS the scope
@@ -249,20 +272,16 @@ test("an in-scope OWNER without an explicit edit_metadata grant still gets owner
 
   const res = await del(`/api/admin/albums/${albumId}`, token);
 
-  assert.equal(res.status, 202, "an owner's delete is accepted-for-review despite edit_metadata=false");
-  assert.ok(res.json?.pendingChange?.id, "the queued delete request is returned");
-
-  const pending = await pendingDeleteRows(albumId);
-  assert.equal(pending.length, 1, "exactly one delete request is queued");
-  assert.equal(pending[0].status, "pending");
-  assert.equal((pending[0].patch as any)?.__op, "delete", "the patch is the delete discriminator");
-
-  assert.equal(await albumDeletedAt(albumId), null, "the album is NOT deleted — it waits for review");
+  assert.equal(res.status, 200, "an owner's unsold delete succeeds despite edit_metadata=false");
+  assert.notEqual(await albumDeletedAt(albumId), null, "album is soft-deleted");
+  assert.equal((await pendingDeleteRows(albumId)).length, 0, "no pending_changes row is queued");
 });
 
 after(async () => {
   try {
     if (httpServer) await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
+    for (const id of created.orders) await exec(sql`DELETE FROM orders WHERE id = ${id}`);
+    for (const id of created.customers) await exec(sql`DELETE FROM customer_users WHERE id = ${id}`);
     for (const id of created.albums) {
       await exec(sql`DELETE FROM pending_changes WHERE target_id = ${id}`);
       await exec(sql`DELETE FROM albums WHERE id = ${id}`);
