@@ -7,3 +7,6 @@ description: Version-pin gotchas for inventorySetQuantities and how to run the s
   **How to apply:** any change to `SHOPIFY_GRAPHQL_API_VERSION` in `server/shopify.ts` must re-check every GraphQL mutation's input shape against that version's docs.
 - **Running the app-store-review skill:** repo Node is 20, but `shopify doc fetch` only exists in recent @shopify/cli versions which require Node 22+. Fix: prefix with a nix-store Node 22 (`PATH=/nix/store/*nodejs-22*/bin:$PATH npx -y @shopify/cli@latest doc fetch --url ... --output /tmp/reqs.md`). Older CLIs (3.78–3.83) lack the command — don't waste time downgrading.
 - **No live dev-store in task envs:** `listConnections('shopify-store')` is empty and dev `shopify_stores` rows are fake fixtures — GraphQL changes can only be verified via hermetic stubbed-fetch tests (pattern: `server/shopifyGraphqlPhase*.test.ts`) + the skill's code-templates reference; live verification needs a real connected store.
+
+## Shopify CLI version pin (Aug 2026)
+@shopify/cli is pinned exact 3.92.1: 3.93.0–4.2.0 bundle a vulnerable esbuild (audit noise), and 4.x requires Node >=22.12 while the project runs Node 20 (`enableCompileCache` import crash). Bump only after moving the repl to Node 22.
