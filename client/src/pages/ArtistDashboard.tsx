@@ -11,7 +11,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatUsd, formatUsdCents } from "@shared/money";
 import { Link, useSearch, useRoute, useLocation } from "wouter";
-import { SalesMap, type SalesGeoPayload } from "@/components/partner/SalesMap";
 // Task #2893 — the merged Dashboard reuses the shared partner activity list
 // for its Recent-activity rail (the rest of the old PartnerDashboard tab is
 // replaced by the tier-disciplined merged page below).
@@ -28,10 +27,9 @@ import {
 import {
   Heart, User as UserIcon, Users, UserPlus,
   // Apple-canon merged Dashboard (docs/design-reference/code/ArtistDashboard.tsx)
-  ArrowUpRight, Banknote, CheckCircle2, Info,
+  Banknote, CheckCircle2,
   TrendingUp, Receipt, Disc3, Award, Music2,
 } from "lucide-react";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -45,7 +43,6 @@ import { AdminReports } from "@/pages/AdminReports";
 // Task #2524 — an artist opening one of their albums stays INSIDE this portal
 // shell; AdminAlbum renders in `embedded` mode (no operator /admin chrome).
 import { AdminAlbum } from "@/pages/AdminAlbum";
-import { CertRunsSection } from "@/components/partner/cert-runs-section";
 import { BuyerReport } from "@/components/partner/BuyerReport";
 import { BRAND, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 import {
@@ -59,8 +56,8 @@ import { PartnerOrdersTable } from "@/components/partner/PartnerOrdersTable";
 // Task #2893 — merged Dashboard card builder + shared formatters live in a
 // pure module so the nine-card set is unit-testable without the page graph.
 import {
-  buildArtistDashboardCards, dailyGross, dailyPlays, dailyListeners,
-  dollars, dollarsCents, compact, pct, excludedNote, joinSub,
+  dailyGross, dailyPlays, dailyListeners,
+  dollars, dollarsCents, compact, pct, excludedNote, joinSub, fanPlaysSubline,
   type ArtistKpis, type ArtistSalesStack, type ArtistTimeseries,
 } from "@/pages/artistDashboardCards";
 
@@ -85,9 +82,6 @@ type Summary = {
   activity?: ActivityItem[];
 };
 type Timeseries = ArtistTimeseries;
-type GeoPayload = {
-  sales?: SalesGeoPayload;
-};
 type Tracks = { tracks: { songId: string; title: string; albumTitle: string; plays: number; completes: number; favorites: number; playlistAdds: number; shares: number; grantPlays?: number; staffPlays?: number; staffCompletes?: number }[] };
 type AlbumsPayload = { albums: { albumId: string; title: string; artist: string; artwork: string | null; revenueCents: number; artistShareCents: number; units: number; buyers: number; plays: number; listeners: number; grantPlays?: number; grantListeners?: number }[] };
 type Audience = {
@@ -143,12 +137,22 @@ function fmtRel(date: Date): string {
 // ./artistDashboardCards so the card builder and the page share one set.)
 
 const RANGE_PRESETS = [
+  { id: "today", label: "Today", days: 1 },
   { id: "7d", label: "Last 7 days", days: 7 },
   { id: "30d", label: "Last 30 days", days: 30 },
   { id: "90d", label: "Last 90 days", days: 90 },
   { id: "12mo", label: "Last 12 months", days: 365 },
+  // "All" is a 10-year window — wide enough to cover any catalog while the
+  // endpoints still get a concrete from/to pair.
+  { id: "all", label: "All time", days: 3650 },
 ] as const;
 type PresetId = (typeof RANGE_PRESETS)[number]["id"];
+
+// Short tile-label suffix for the selected window ("Sales · last 30d").
+const RANGE_SHORT: Record<PresetId, string> = {
+  today: "today", "7d": "last 7d", "30d": "last 30d",
+  "90d": "last 90d", "12mo": "last 12mo", all: "all time",
+};
 
 // Task #2486 — Dashboard-tab KPI tiles carry the picked window as
 // `?range=<preset>` using the shared PartnerDashboard preset vocab
@@ -156,7 +160,7 @@ type PresetId = (typeof RANGE_PRESETS)[number]["id"];
 // (today→7d nearest-narrow, all→12mo nearest-wide) so a drill-down
 // lands on the same window.
 const RANGE_FROM_DASHBOARD: Record<string, PresetId> = {
-  today: "7d", "7d": "7d", "30d": "30d", "90d": "90d", "12mo": "12mo", all: "12mo",
+  today: "today", "7d": "7d", "30d": "30d", "90d": "90d", "12mo": "12mo", all: "all",
 };
 function presetFromSearch(search: string): PresetId | null {
   const r = new URLSearchParams(search).get("range");
@@ -401,71 +405,127 @@ function Kpi({
 
 // (dailyGross/dailyPlays/dailyListeners moved to ./artistDashboardCards.)
 
-// Task #1334 — All-time "since launch" headline. Lives ABOVE the
-// range-windowed KPI grid and is visually distinct (mint accent, "All
-// time" eyebrow) so the lifetime figures are never confused with the
-// date-range numbers below. Reconciles with the buyer-roster totals at
-// /admin/people/:id/buyers.
-// Restyled to the Apple canon (reference KpiStrip tile language): white
-// cards, hairline border, 13px label / 32px value. The lifetime figures stay
-// visually separated from the date-range strip by the "All time" eyebrow.
-function LifetimeBanner({ data, loading }: { data?: Lifetime | null; loading?: boolean }) {
-  const tiles: { testId: string; label: string; value: string; sub?: string }[] = [
+function deltaPct(cur: number, prior: number): { text: string; positive: boolean } {
+  if (prior === 0) return { text: cur > 0 ? "+∞" : "—", positive: cur >= 0 };
+  const p = ((cur - prior) / prior) * 100;
+  const positive = p >= 0;
+  return { text: `${positive ? "+" : ""}${p.toFixed(1)}%`, positive };
+}
+
+// ─── Compact 5-tile KPI strip (reference KpiStrip, real data) ─────────
+// Sales/plays/listeners/buyers follow the picked window; the lifetime
+// sales tile never moves. Plays stay tier-disciplined: headline is the
+// purchaser tier only, other tiers spelled out in the note (Task #2893).
+function KpiStrip({
+  cur, prev, lifetime, preset, loading,
+}: {
+  cur?: Kpis; prev?: Kpis | null; lifetime?: Lifetime | null;
+  preset: PresetId; loading?: boolean;
+}) {
+  const short = RANGE_SHORT[preset];
+  type Tile = { id: string; label: string; value: string; cur?: number; prior?: number | null; note?: string };
+  const tiles: Tile[] = [
+    { id: "sales", label: `Sales · ${short}`, value: cur ? dollars(cur.grossCents) : "—", cur: cur?.grossCents, prior: prev?.grossCents },
     {
-      testId: "lifetime-gross", label: "Sales · lifetime",
-      value: data ? dollars(data.grossCents) : "—",
-      sub: data && data.refundedCents ? `${dollars(data.refundedCents)} refunded` : undefined,
+      id: "salesLifetime", label: "Sales · lifetime",
+      value: lifetime ? dollars(lifetime.grossCents) : "—",
+      note: lifetime?.refundedCents ? `${dollars(lifetime.refundedCents)} refunded` : undefined,
     },
     {
-      testId: "lifetime-orders", label: "Orders · lifetime",
-      value: data ? compact(data.orders) : "—",
-      sub: data ? `${compact(data.buyers)} unique fan${data.buyers === 1 ? "" : "s"}` : undefined,
+      id: "plays", label: `Fan plays · ${short}`, value: cur ? compact(cur.plays) : "—",
+      cur: cur?.plays, prior: prev?.plays,
+      note: cur ? fanPlaysSubline(cur) : undefined,
     },
-    { testId: "lifetime-units", label: "Units · lifetime", value: data ? compact(data.units) : "—" },
-    {
-      // Task #2893 — tier-disciplined headline: purchaser plays only, with
-      // the other tiers spelled out (never summed in).
-      testId: "lifetime-plays", label: "Fan plays · lifetime",
-      value: data ? compact(data.ownerPlays ?? data.plays) : "—",
-      sub: data ? `${compact(data.uniqueOwners ?? data.listeners)} listener${(data.uniqueOwners ?? data.listeners) === 1 ? "" : "s"} · ${compact(data.grantPlays ?? 0)} grant plays · ${compact(data.previewPlays ?? 0)} previews · internal excluded` : undefined,
-    },
+    { id: "listeners", label: "Listeners", value: cur ? compact(cur.listeners) : "—", cur: cur?.listeners, prior: prev?.listeners },
+    { id: "buyers", label: "Buyers", value: cur ? compact(cur.buyers) : "—", cur: cur?.buyers, prior: prev?.buyers },
   ];
   return (
-    <section data-testid="lifetime-banner">
-      <p className="text-[13px] font-medium mb-2" style={{ color: SUBINK }} data-testid="lifetime-label">
-        All time · since launch
-      </p>
-      <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
-        {loading ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="rounded-2xl bg-white p-5 animate-pulse" style={{ border: `1px solid ${HAIRLINE}` }} data-testid={`lifetime-skeleton-${i}`}>
+    <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }} data-testid="kpi-strip">
+      {loading
+        ? Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="rounded-2xl bg-white p-5 animate-pulse" style={{ border: `1px solid ${HAIRLINE}` }} data-testid={`kpi-skeleton-${i}`}>
               <div className="h-3 w-24 rounded bg-slate-100" />
               <div className="mt-4 h-8 w-20 rounded bg-slate-100" />
             </div>
           ))
-        ) : (
-          tiles.map((t) => (
-            <div key={t.testId} className="rounded-2xl bg-white p-5 flex flex-col" style={{ border: `1px solid ${HAIRLINE}` }} data-testid={t.testId}>
-              <div className="text-[13px] font-medium truncate" style={{ color: SUBINK }}>{t.label}</div>
-              <div className="mt-3 tabular-nums" style={{ fontSize: 32, lineHeight: 1, fontWeight: 600, letterSpacing: "-0.03em", color: INK }}>
-                {t.value}
+        : tiles.map((t) => {
+            const d = t.cur != null && t.prior != null ? deltaPct(t.cur, t.prior) : null;
+            return (
+              <div key={t.id} className="rounded-2xl bg-white p-5 flex flex-col" style={{ border: `1px solid ${HAIRLINE}` }} data-testid={`kpi-${t.id}`}>
+                <div className="text-[13px] font-medium truncate" style={{ color: SUBINK }}>{t.label}</div>
+                <div className="mt-3 tabular-nums truncate" style={{ fontSize: 32, lineHeight: 1, fontWeight: 600, letterSpacing: "-0.03em", color: INK }} title={t.value}>
+                  {t.value}
+                </div>
+                <div className="mt-3 flex items-center gap-1.5 text-[13px] min-w-0">
+                  {d && (
+                    <>
+                      <span className="font-semibold tabular-nums flex-shrink-0" style={{ color: d.positive ? "var(--apple-ready)" : "var(--apple-critical)" }}>{d.text}</span>
+                      <span className="flex-shrink-0" style={{ color: SUBINK }}>vs prior</span>
+                    </>
+                  )}
+                  {t.note && (
+                    <span className="text-[12px] truncate" style={{ color: SUBINK }} title={t.note}>
+                      {d ? `· ${t.note}` : t.note}
+                    </span>
+                  )}
+                </div>
               </div>
-              {t.sub && <div className="mt-3 text-[12px] truncate" style={{ color: SUBINK }} title={t.sub}>{t.sub}</div>}
-            </div>
-          ))
-        )}
+            );
+          })}
+    </div>
+  );
+}
+
+// ─── "Where sales come from." (reference SalesChannels card) ──────────
+// No per-channel sales aggregation exists yet, so the card keeps the
+// reference geometry with an honest empty state instead of invented rows.
+function SalesChannelsCard() {
+  return (
+    <div className="rounded-2xl bg-white p-6 flex flex-col h-full" style={{ border: `1px solid ${HAIRLINE}` }} data-testid="dashboard-sales-channels">
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+        <h3 className="text-[17px] font-semibold" style={{ color: INK, letterSpacing: "-0.01em" }}>
+          Where sales come from.
+        </h3>
+        <Link href="/artist?tab=acquisition" className="text-[13px] font-medium transition-opacity hover:opacity-70" style={{ color: BLUE }} data-testid="link-channels-view-all">
+          View all
+        </Link>
       </div>
-    </section>
+      <p className="flex-1 flex items-center text-[13px] leading-relaxed" style={{ color: SUBINK }}>
+        As orders come in, you'll see the split between your GoodTunes store,
+        Shopify, and campaign traffic here.
+      </p>
+    </div>
+  );
+}
+
+// ─── "Giving." (reference GivingCard) ─────────────────────────────────
+// Honest empty until a cause is attached — never a fabricated stat.
+function GivingCard() {
+  return (
+    <div className="rounded-2xl bg-white p-6" style={{ border: `1px solid ${HAIRLINE}` }} data-testid="dashboard-giving">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[17px] font-semibold" style={{ color: INK, letterSpacing: "-0.01em" }}>
+          Giving.
+        </h3>
+      </div>
+      <p className="text-[13px] leading-relaxed" style={{ color: SUBINK }}>
+        When a release supports a cause through GoodDeed®, the amount raised
+        from your sales shows up here.
+      </p>
+    </div>
   );
 }
 
 // ─── Canon range switcher (reference RangeSwitcher, real presets) ──────
 function RangeSwitcher({ value, onChange }: { value: PresetId; onChange: (v: PresetId) => void }) {
+  // Reference switcher options exactly: Today · 7d · 30d · 90d · All.
+  // (12mo stays available on the other tabs' RangePicker.)
   const opts: { v: PresetId; label: string }[] = [
+    { v: "today", label: "Today" },
     { v: "7d", label: "7d" },
     { v: "30d", label: "30d" },
     { v: "90d", label: "90d" },
-    { v: "12mo", label: "12mo" },
+    { v: "all", label: "All" },
   ];
   return (
     <div
@@ -523,71 +583,6 @@ function WorkQueueEmpty() {
 }
 
 // ─── Canon KPI tile — renders the nine tier-disciplined card models from
-// buildArtistDashboardCards in the reference tile language. Info + breakdown
-// stay available behind a quiet Info glyph so no functionality is lost. ──
-function deltaPct(cur: number, prior: number): { text: string; positive: boolean } {
-  if (prior === 0) return { text: cur > 0 ? "+∞" : "—", positive: cur >= 0 };
-  const p = ((cur - prior) / prior) * 100;
-  const positive = p >= 0;
-  return { text: `${positive ? "+" : ""}${p.toFixed(1)}%`, positive };
-}
-
-function CanonKpiTile({ model, testId }: { model: KpiCardModel; testId: string }) {
-  const hasDelta = !model.hideDelta && model.value != null && model.prior != null;
-  const d = hasDelta ? deltaPct(model.value!, model.prior!) : null;
-  return (
-    <div
-      className="rounded-2xl bg-white p-5 flex flex-col"
-      style={{ border: `1px solid ${HAIRLINE}` }}
-      data-testid={testId}
-    >
-      <div className="flex items-center gap-1 text-[13px] font-medium" style={{ color: SUBINK }}>
-        <span className="truncate">{model.label}</span>
-        {(model.info || model.breakdown) && (
-          <Popover>
-            <PopoverTrigger asChild>
-              <button type="button" aria-label={`About ${model.label}`} className="opacity-60 hover:opacity-100 transition-opacity" data-testid={`info-${testId}`}>
-                <Info className="w-3.5 h-3.5" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="start" sideOffset={6} className="w-72 p-3 text-[12.5px] leading-relaxed">
-              {model.info && <p style={{ color: SUBINK }}>{model.info}</p>}
-              {model.breakdown && (
-                <ul className={model.info ? "mt-2 space-y-1" : "space-y-1"}>
-                  {model.breakdown.map((b) => (
-                    <li key={b.label} className="flex items-center justify-between gap-3">
-                      <span style={{ color: SUBINK }}>{b.label}</span>
-                      <span className="tabular-nums font-medium" style={{ color: INK }}>
-                        {b.format === "currency" ? dollarsCents(b.value) : compact(b.value)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </PopoverContent>
-          </Popover>
-        )}
-      </div>
-      <div className="mt-3 tabular-nums truncate" style={{ fontSize: 32, lineHeight: 1.05, fontWeight: 600, letterSpacing: "-0.03em", color: INK }} title={model.valueText ?? undefined}>
-        {model.valueText ?? "—"}
-      </div>
-      <div className="mt-3 flex items-center gap-1.5 text-[13px] min-w-0">
-        {d ? (
-          <>
-            <span className="font-semibold tabular-nums flex-shrink-0" style={{ color: d.positive ? "var(--apple-ready)" : "var(--apple-critical)" }}>{d.text}</span>
-            <span className="flex-shrink-0" style={{ color: SUBINK }}>vs prior</span>
-          </>
-        ) : null}
-        {model.note && (
-          <span className="text-[12px] truncate" style={{ color: SUBINK }} title={model.note}>
-            {d ? `· ${model.note}` : model.note}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ─── Tabs ─────────────────────────────────────────────────────────────
 // Task #2893 — the merged, tier-disciplined Dashboard (old Dashboard tab +
 // Overview tab in one). Top to bottom: all-time banner (never affected by
@@ -604,18 +599,10 @@ function DashboardTab({
 }) {
   const summary = useQuery<Summary>({ queryKey: [`/api/artist/summary?${qs}`] });
   const series = useQuery<Timeseries>({ queryKey: [`/api/artist/timeseries?${qs}`] });
-  const geo = useQuery<GeoPayload & { range: Range }>({ queryKey: [`/api/artist/geo?${qs}`] });
   const albums = useQuery<AlbumsPayload & { range: Range }>({ queryKey: [`/api/artist/top-albums?${qs}`] });
   const cur = summary.data?.current;
   const prev = summary.data?.previous ?? null;
   const lifetime = summary.data?.lifetime ?? null;
-  const cards = buildArtistDashboardCards({
-    cur,
-    prev,
-    stack: summary.data?.stack ?? null,
-    stackPrevious: summary.data?.stackPrevious ?? null,
-    series: series.data,
-  });
   const firstName = artistName ? artistName.split(" ")[0] : null;
 
   return (
@@ -654,27 +641,8 @@ function DashboardTab({
       {/* HERO: the work queue (no artist queue feed yet — honest empty state) */}
       <WorkQueueEmpty />
 
-      {/* All-time strip (never affected by the range picker) */}
-      <LifetimeBanner data={lifetime} loading={summary.isLoading} />
-
-      {/* Range-windowed, tier-disciplined KPI strip */}
-      <section data-testid="kpi-grid">
-        <p className="text-[13px] font-medium mb-2" style={{ color: SUBINK }} data-testid="kpi-range-label">
-          Selected date range
-        </p>
-        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
-          {summary.isLoading ? (
-            Array.from({ length: 9 }).map((_, i) => (
-              <div key={i} className="rounded-2xl bg-white p-5 animate-pulse" style={{ border: `1px solid ${HAIRLINE}` }} data-testid={`kpi-skeleton-${i}`}>
-                <div className="h-3 w-24 rounded bg-slate-100" />
-                <div className="mt-4 h-8 w-20 rounded bg-slate-100" />
-              </div>
-            ))
-          ) : (
-            cards.map((c) => <CanonKpiTile key={c.testId} model={c.model} testId={c.testId} />)
-          )}
-        </div>
-      </section>
+      {/* Compact five-tile KPI strip (reference order; lifetime tile fixed) */}
+      <KpiStrip cur={cur} prev={prev} lifetime={lifetime} preset={preset} loading={summary.isLoading} />
 
       {/* Trend earns its size once; activity recedes into a narrow rail */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
@@ -686,23 +654,18 @@ function DashboardTab({
         </div>
       </div>
 
-      {/* Bottom row — top projects ranked list + the fan map */}
+      {/* Bottom row — top projects (2/3) + channels & giving stack (1/3).
+          The fan map and cert-run status moved off this tab to match the
+          reference; their data stays live on Audience/Orders. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
         <div className="lg:col-span-2 min-h-0 min-w-0">
-          <section className="rounded-2xl bg-white p-6 h-full" style={{ border: `1px solid ${HAIRLINE}` }} data-testid="chart-geo">
-            <SalesMap
-              data={geo.data?.sales}
-              loading={geo.isLoading}
-              emptyCopy="Once orders come in, you'll see where your fans are buying on this map."
-            />
-          </section>
+          <TopProjects rows={(albums.data?.albums ?? []).slice(0, 4)} loading={albums.isLoading} />
         </div>
-        <div className="min-h-0">
-          <TopProjects rows={albums.data?.albums ?? []} loading={albums.isLoading} />
+        <div className="min-h-0 flex flex-col gap-5">
+          <SalesChannelsCard />
+          <GivingCard />
         </div>
       </div>
-
-      <CertRunsSection kind="artist" qs={qs} />
     </div>
   );
 }
@@ -874,6 +837,8 @@ const TREND_EMPTY: Record<TrendMetricId, string> = {
 // The API has no prior-period series, so a single current line renders (the
 // dashed prior line lands with the data when the endpoint grows one).
 const TREND_TITLE: Record<PresetId, string> = {
+  today: "Today.",
+  all: "All time.",
   "7d": "The last 7 days.",
   "30d": "The last 30 days.",
   "90d": "The last 90 days.",
