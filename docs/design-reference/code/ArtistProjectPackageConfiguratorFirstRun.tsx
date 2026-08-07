@@ -57,6 +57,8 @@ import {
 import goodtunesLogo from '../assets/goodtunes-logo.png';
 import niinaPhoto from '../assets/niina-soleil.webp';
 import mrpLogo from '../assets/mrp-logo.png';
+// MRP's real logo mark (black, single-colour vector) for the record label.
+import mrpLabelLogo from '../assets/mrp-logo.svg';
 
 // ─── Brand tokens ────────────────────────────────────────────────────
 const BLUE = '#319ED8';
@@ -460,11 +462,39 @@ const MORE_PRESSINGS = PRESSINGS.filter((p) => !p.popular);
 // FIRST-RUN twist: `swatch` is nullable. When null (no color yet), the disc
 // renders in a neutral gray and the jacket shows a placeholder — no artwork.
 
-const DISC_TUCKED = 'translateX(-12%) rotate(-14deg)'; // rest: slim moon only
-const DISC_GREET = 'translateX(30%) rotate(16deg)'; // auto greet + hover/tap
+// The draw-out is split into TWO transforms on TWO nested layers so the shine
+// can ride the slide without rolling with the record:
+//   • POS  → translateX only, on the outer (translating) container
+//   • ROT  → rotate only, on the inner (rotating) disc body
+// The sheen lives between them (child of POS, sibling of ROT) → it slides but
+// never rotates, like a fixed light on a record that rolls out of its sleeve.
+const DISC_TUCKED_POS = 'translateX(-12%)'; // rest: slim moon only
+const DISC_GREET_POS = 'translateX(30%)'; // auto greet + hover/tap
+const DISC_TUCKED_ROT = 'rotate(-14deg)';
+const DISC_GREET_ROT = 'rotate(16deg)';
 const JACKET_REST = 'translateX(0)';
 const JACKET_PULLED = 'translateX(-9%)'; // eases left on draw-out
-const EASE = 'cubic-bezier(0.33, 0, 0.2, 1)';
+// ONE easing + ONE duration shared by every layer of the draw-out (disc
+// translate, disc rotate, jacket) so the whole gesture reads as a single
+// continuous glide with no competing timings.
+const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
+const DRAW_MS = 600;
+
+// ── Per-press label branding (see PressVinylColorSetup) ──────────────
+// Each press supplies a center-label logo (SVG preferred) + a label
+// background colour. Memphis Record Pressing's brand is a BLACK label with
+// their WHITE logo, always. The supplied asset is black, so we invert it.
+const PRESS_LABEL_LOGO = mrpLabelLogo;
+const PRESS_LABEL_BG = '#0a0a0a';
+const PRESS_LABEL_LOGO_FILTER = 'invert(1) brightness(1.7)';
+// The spindle is a HOLE — you see the stage behind it. This screen's stage is
+// the light gradient below, so the hole reads with its lower stop colour.
+const STAGE_HOLE_BG = '#F1F5F9';
+// Same specular sheen mask as the PressVinylColorSetup stage disc, so both
+// screens' vinyl look identical. It lives INSIDE the translating disc so it
+// slides out with the record (light rides translation; it only stays put under
+// pure rotation, which this greet is not).
+const VINYL_SHEEN = '/__mockup/vinyl-layers/vinyl-highlights.png';
 
 function ProductStage({ swatch }: { swatch: Swatch | null }) {
   const [greetKey, setGreetKey] = useState(0);
@@ -474,8 +504,10 @@ function ProductStage({ swatch }: { swatch: Swatch | null }) {
     setGreetKey((k) => k + 1);
   }, [swatch?.id]);
 
-  const animName = `cfgfr-disc-greet-${greetKey}`;
-  const discTransform = active ? DISC_GREET : DISC_TUCKED;
+  const animName = `cfgfr-disc-greet-${greetKey}`; // translateX track (outer)
+  const animNameRot = `cfgfr-disc-greet-rot-${greetKey}`; // rotate track (inner)
+  const discPosTransform = active ? DISC_GREET_POS : DISC_TUCKED_POS;
+  const discRotTransform = active ? DISC_GREET_ROT : DISC_TUCKED_ROT;
   const discColor = swatch?.color ?? PLACEHOLDER_DISC;
 
   return (
@@ -497,15 +529,21 @@ function ProductStage({ swatch }: { swatch: Swatch | null }) {
       >
         <style>{`
           @keyframes ${animName} {
-            0%   { transform: ${DISC_TUCKED}; }
-            8%   { transform: ${DISC_TUCKED}; }
-            48%  { transform: ${DISC_GREET}; }
-            62%  { transform: ${DISC_GREET}; }
-            100% { transform: ${DISC_TUCKED}; }
+            0%   { transform: ${DISC_TUCKED_POS} translateZ(0); }
+            20%  { transform: ${DISC_GREET_POS} translateZ(0); }
+            55%  { transform: ${DISC_GREET_POS} translateZ(0); }
+            100% { transform: ${DISC_TUCKED_POS} translateZ(0); }
+          }
+          @keyframes ${animNameRot} {
+            0%   { transform: ${DISC_TUCKED_ROT}; }
+            20%  { transform: ${DISC_GREET_ROT}; }
+            55%  { transform: ${DISC_GREET_ROT}; }
+            100% { transform: ${DISC_TUCKED_ROT}; }
           }
         `}</style>
 
-        {/* Vinyl disc — BEHIND the jacket. Neutral gray until a color is picked. */}
+        {/* Vinyl disc — BEHIND the jacket. Neutral gray until a color is picked.
+            OUTER layer: translation only (rides the sleeve-draw). */}
         <div
           key={greetKey}
           className="absolute rounded-full"
@@ -514,36 +552,130 @@ function ProductStage({ swatch }: { swatch: Swatch | null }) {
             right: '-16%',
             width: '84%',
             height: '84%',
-            background: `radial-gradient(circle at 50% 42%, ${discColor} 0%, ${discColor} 34%, rgba(0,0,0,0.30) 100%)`,
-            boxShadow: '0 16px 44px rgba(15,23,42,0.30)',
-            opacity: 0.97,
             transformOrigin: 'center center',
-            transform: discTransform,
-            animation: active ? 'none' : `${animName} 5000ms ${EASE} 350ms 1 forwards`,
-            transition: `transform 750ms ${EASE}, background 400ms ease`,
+            transform: `${discPosTransform} translateZ(0)`,
+            // ONE transform transition drives the whole slide (single easing +
+            // duration). On interaction the transition owns the motion;
+            // otherwise the keyed keyframe plays the greet then holds tucked.
+            animation: active ? 'none' : `${animName} 2600ms ${EASE} 350ms 1 forwards`,
+            transition: `transform ${DRAW_MS}ms ${EASE}`,
             willChange: 'transform',
+            backfaceVisibility: 'hidden',
           }}
         >
+          {/* ROTATING layer — the record body itself. Everything printed on the
+              record (grooves, marbling, label, spindle) rolls with this. */}
           <div
             className="absolute inset-0 rounded-full"
             style={{
-              background:
-                'repeating-radial-gradient(circle at 50% 42%, rgba(255,255,255,0.10) 0px, rgba(255,255,255,0) 2px, rgba(0,0,0,0.06) 4px)',
-            }}
-          />
-          <div
-            className="absolute rounded-full ring-2 ring-white/40 flex items-center justify-center"
-            style={{
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: '34%',
-              height: '34%',
-              backgroundColor: '#1F2937',
+              background: `radial-gradient(circle at 50% 42%, ${discColor} 0%, ${discColor} 34%, rgba(0,0,0,0.30) 100%)`,
+              boxShadow: '0 16px 44px rgba(15,23,42,0.30)',
+              opacity: 0.97,
+              transformOrigin: 'center center',
+              transform: discRotTransform,
+              // Rotate rides the slide on the SAME easing + duration as the
+              // translate above, so the two never desync — one continuous roll.
+              animation: active ? 'none' : `${animNameRot} 2600ms ${EASE} 350ms 1 forwards`,
+              transition: `transform ${DRAW_MS}ms ${EASE}, background 400ms ease`,
+              willChange: 'transform',
+              backfaceVisibility: 'hidden',
             }}
           >
-            <div className="w-2 h-2 rounded-full bg-white/70" />
+            {/* Concentric groove rings — printed on the record, roll with it */}
+            <div
+              className="absolute inset-0 rounded-full"
+              style={{
+                background:
+                  'repeating-radial-gradient(circle at 50% 42%, rgba(255,255,255,0.10) 0px, rgba(255,255,255,0) 2px, rgba(0,0,0,0.06) 4px)',
+              }}
+            />
+            {/* Groove texture — a faint angular (conic) irregularity so the disc
+                never reads as a perfectly uniform gradient. On the record. */}
+            <div
+              aria-hidden
+              className="absolute inset-0 rounded-full"
+              style={{
+                pointerEvents: 'none',
+                mixBlendMode: 'screen',
+                opacity: 0.06,
+                background:
+                  'conic-gradient(from 0deg at 50% 42%,' +
+                  'rgba(255,255,255,0) 0deg, rgba(255,255,255,0.9) 24deg, rgba(255,255,255,0) 70deg,' +
+                  'rgba(255,255,255,0) 150deg, rgba(255,255,255,0.7) 176deg, rgba(255,255,255,0) 220deg,' +
+                  'rgba(255,255,255,0) 300deg, rgba(255,255,255,0.6) 324deg, rgba(255,255,255,0) 360deg)',
+              }}
+            />
+            {/* Marbling — a barely-visible off-centre cloudiness so the finish
+                reads as never perfectly even. On the record. */}
+            <div
+              aria-hidden
+              className="absolute inset-0 rounded-full"
+              style={{
+                pointerEvents: 'none',
+                mixBlendMode: 'multiply',
+                opacity: 0.1,
+                background:
+                  'radial-gradient(38% 44% at 38% 30%, rgba(0,0,0,0.7), rgba(0,0,0,0) 62%),' +
+                  'radial-gradient(30% 34% at 66% 58%, rgba(0,0,0,0.55), rgba(0,0,0,0) 60%)',
+              }}
+            />
+
+            {/* Center label — MRP's brand: BLACK label + WHITE logo, always.
+                Printed on the record, so it rolls with the disc. */}
+            <div
+              className="absolute rounded-full flex items-center justify-center overflow-hidden"
+              style={{
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '34%',
+                height: '34%',
+                backgroundColor: PRESS_LABEL_BG,
+                boxShadow: '0 0 0 1.5px rgba(255,255,255,0.25)',
+              }}
+            >
+              <img
+                src={PRESS_LABEL_LOGO}
+                alt=""
+                aria-hidden
+                className="pointer-events-none select-none"
+                style={{ width: '88%', height: '88%', objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER }}
+              />
+              {/* Spindle hole — punched through the record, so it shows the stage
+                  behind it (this screen's background), not a printed dot. */}
+              <div
+                className="absolute rounded-full"
+                style={{
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: '10%',
+                  height: '10%',
+                  backgroundColor: STAGE_HOLE_BG,
+                  boxShadow: 'inset 0 0.5px 1px rgba(0,0,0,0.55)',
+                }}
+              />
+            </div>
           </div>
+
+          {/* Specular sheen — the SAME highlight mask as the press stage disc.
+              Sibling of the rotating body but child of the translating layer:
+              it SLIDES out with the record yet NEVER rotates, like a fixed
+              stage light glancing off vinyl that rolls out of the sleeve. */}
+          <div
+            aria-hidden
+            className="absolute inset-0 rounded-full pointer-events-none"
+            style={{
+              backgroundColor: '#ffffff',
+              opacity: 0.6,
+              maskImage: `url(${VINYL_SHEEN})`,
+              WebkitMaskImage: `url(${VINYL_SHEEN})`,
+              maskSize: '100% 100%',
+              WebkitMaskSize: '100% 100%',
+              maskRepeat: 'no-repeat',
+              WebkitMaskRepeat: 'no-repeat',
+            }}
+          />
         </div>
 
         {/* Placeholder jacket — light gray sleeve with the press partner's logo
@@ -556,7 +688,7 @@ function ProductStage({ swatch }: { swatch: Swatch | null }) {
             boxShadow: '0 28px 60px rgba(15,23,42,0.18)',
             zIndex: 1,
             transform: active ? JACKET_PULLED : JACKET_REST,
-            transition: `transform 750ms ${EASE}`,
+            transition: `transform ${DRAW_MS}ms ${EASE}`,
             willChange: 'transform',
           }}
         >

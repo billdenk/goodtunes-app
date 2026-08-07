@@ -24,7 +24,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch, useLocation, useRoute } from "wouter";
-import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Mail, FileCheck, Pencil, HeartHandshake, UserPlus, TrendingUp, Receipt } from "lucide-react";
+import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Circle, Mail, FileCheck, Pencil, HeartHandshake, UserPlus, TrendingUp, Receipt, Layers, Trophy } from "lucide-react";
+import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 import { albumStage, type AlbumStage } from "@shared/albumStage";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
@@ -1476,6 +1477,231 @@ function PdTopClientsCard({ onViewPeople }: { onViewPeople: () => void }) {
   );
 }
 
+// ─── First-run (docs/design-reference/code/PressFirstRun*.tsx) ───────
+// Day-one empty states for a press with no clients/projects/revenue yet.
+// Same tokens; the dashboard reads as READY, not as failure.
+
+const PD_FAINT = "var(--apple-faint)";
+const PD_READY = "var(--apple-ready)";
+const PD_DASH = "—";
+
+const PD_EMPTY_KPIS: Array<{ id: string; label: string; hint: string }> = [
+  { id: "sales30d", label: "Sales · last 30d", hint: "Your first order lands here" },
+  { id: "salesLifetime", label: "Sales · lifetime", hint: "Tracks every dollar you press" },
+  { id: "units30d", label: "Units · last 30d", hint: "Records pressed will tally here" },
+  { id: "customers", label: "Customers", hint: "Grows as clients come aboard" },
+  { id: "pipeline", label: "Projects in pipeline", hint: "Your first project shows here" },
+];
+
+function PdEmptyKpiStrip() {
+  return (
+    <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }} data-testid="kpi-strip">
+      {PD_EMPTY_KPIS.map((t) => (
+        <div key={t.id} data-testid={`kpi-${t.id}`} className="rounded-2xl bg-white p-5 flex flex-col" style={{ border: `1px solid ${PD_HAIRLINE}` }}>
+          <div className="text-[12.5px] font-medium truncate" style={{ color: PD_SUBINK }}>{t.label}</div>
+          <div className="mt-2.5 tabular-nums" style={{ fontSize: 30, lineHeight: 1, fontWeight: 600, letterSpacing: "-0.03em", color: PD_FAINT }}>
+            {PD_DASH}
+          </div>
+          <div className="mt-2.5 text-[11.5px] leading-snug" style={{ color: PD_FAINT }}>{t.hint}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type PdChecklistStep = { id: string; title: string; detail: string; done: boolean; cta?: string; go?: TabId };
+
+function PdGettingStarted({ steps, onNavigate }: { steps: PdChecklistStep[]; onNavigate: (t: TabId) => void }) {
+  const doneCount = steps.filter((s) => s.done).length;
+  return (
+    <div className="rounded-2xl bg-white p-6 h-full flex flex-col" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid="getting-started">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <PdSectionHeading lead="Getting started." rest="A few steps to get rolling." />
+        <span className="text-[11.5px] font-semibold tabular-nums rounded-full px-2.5 py-1" style={{ backgroundColor: PD_TRACK, color: PD_SUBINK }}>
+          {doneCount} of {steps.length}
+        </span>
+      </div>
+      <ul className="flex-1">
+        {steps.map((s, i) => (
+          <li key={s.id} className="flex items-start gap-3 py-4" style={i > 0 ? { borderTop: `1px solid ${PD_HAIRLINE}` } : undefined} data-testid={`step-${s.id}`}>
+            {s.done ? (
+              <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: PD_READY }} />
+            ) : (
+              <Circle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: PD_FAINT }} />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="text-[14px] font-semibold" style={{ color: s.done ? PD_SUBINK : PD_INK, letterSpacing: "-0.01em" }}>
+                {s.title}
+              </div>
+              <p className="text-[12.5px] mt-0.5" style={{ color: PD_SUBINK }}>{s.detail}</p>
+            </div>
+            {s.cta && s.go && (
+              <button
+                type="button"
+                onClick={() => onNavigate(s.go!)}
+                className="flex-shrink-0 inline-flex items-center h-9 px-4 rounded-full text-[13px] font-medium text-white transition-opacity hover:opacity-90"
+                style={{ backgroundColor: PD_BLUE }}
+                data-testid={`step-cta-${s.id}`}
+              >
+                {s.cta}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// Recent activity — real payload rows first (if any), then the standing
+// "joined GoodTunes" welcome event.
+function PdWelcomeActivity({ items, loading, pressName }: { items: ActivityItem[]; loading: boolean; pressName: string }) {
+  const rows = useMemo(
+    () => [...items].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()).slice(0, 8),
+    [items],
+  );
+  return (
+    <div className="rounded-2xl bg-white p-5 flex flex-col h-full" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid="dashboard-activity-feed">
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+        <PdSectionHeading lead="As it happens." rest="Recent activity." size={16} />
+      </div>
+      <ul className="space-y-0.5 flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
+        {loading && rows.length === 0 && (
+          <li className="py-1"><div className="h-9 rounded-xl bg-slate-100 animate-pulse" /></li>
+        )}
+        {rows.map((it, i) => {
+          const body = (
+            <div className="flex items-start gap-2.5 -mx-1.5 px-1.5 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+              <PdActivityIcon kind={it.kind} />
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] truncate" style={{ color: PD_INK }}>{it.title}</div>
+                {it.detail && <div className="text-[11.5px] truncate" style={{ color: PD_SUBINK }}>{it.detail}</div>}
+              </div>
+              <div className="text-[11px] tabular-nums flex-shrink-0 pt-0.5" style={{ color: PD_FAINT }}>
+                {pdFmtRel(new Date(it.ts))}
+              </div>
+            </div>
+          );
+          return (
+            <li key={i} data-testid={`activity-${it.kind}-${i}`}>
+              {it.href ? <Link href={it.href} className="block">{body}</Link> : body}
+            </li>
+          );
+        })}
+        <li data-testid="activity-welcome">
+          <div className="flex items-start gap-2.5 -mx-1.5 px-1.5 py-2 rounded-xl">
+            <span className="w-7 h-7 rounded-lg inline-flex items-center justify-center flex-shrink-0" style={{ backgroundColor: PD_TILE }}>
+              <Sparkles className="w-3.5 h-3.5" style={{ color: PD_SUBINK }} />
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px]" style={{ color: PD_INK }}>
+                {pressName} joined GoodTunes · Welcome!
+              </div>
+              <div className="text-[11.5px]" style={{ color: PD_SUBINK }}>Your shop is set up</div>
+            </div>
+          </div>
+        </li>
+      </ul>
+      <p className="text-[11.5px] mt-2 pt-3 leading-snug" style={{ color: PD_FAINT, borderTop: `1px solid ${PD_HAIRLINE}` }}>
+        Business events will land here as things happen.
+      </p>
+    </div>
+  );
+}
+
+function PdEmptyProductionSnapshot() {
+  return (
+    <div className="rounded-2xl bg-white p-5 flex flex-col h-full" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid="production-snapshot">
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+        <PdSectionHeading lead="On the floor." rest="Runs right now." size={16} />
+      </div>
+      <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center py-8">
+        <span className="w-12 h-12 rounded-full inline-flex items-center justify-center" style={{ backgroundColor: PD_TILE }}>
+          <Layers className="w-5 h-5" style={{ color: PD_FAINT }} />
+        </span>
+        <p className="mt-3.5 text-[13.5px] font-semibold" style={{ color: PD_INK }}>No runs on the floor yet</p>
+        <p className="mt-1 text-[12px] max-w-xs leading-snug" style={{ color: PD_SUBINK }}>
+          Once a client's order kicks off, your stages will fill in here.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PdEmptyTopClients() {
+  return (
+    <div className="rounded-2xl bg-white p-5 flex flex-col h-full" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid="top-clients">
+      <div className="flex items-center justify-between mb-2 flex-shrink-0">
+        <PdSectionHeading lead="Top clients." rest="By revenue this period." size={16} />
+      </div>
+      <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center py-8">
+        <span className="w-12 h-12 rounded-full inline-flex items-center justify-center" style={{ backgroundColor: PD_TILE }}>
+          <Trophy className="w-5 h-5" style={{ color: PD_FAINT }} />
+        </span>
+        <p className="mt-3.5 text-[13.5px] font-semibold" style={{ color: PD_INK }}>Your clients will rank here</p>
+        <p className="mt-1 text-[12px] max-w-xs leading-snug" style={{ color: PD_SUBINK }}>
+          Invite your first client to start tracking who drives the most work.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PdWelcomeModal({ firstName, onClose, onInvite }: { firstName: string | null; onClose: () => void; onInvite: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="press-welcome-title" data-testid="welcome-modal">
+      <button
+        type="button"
+        aria-label="Dismiss welcome"
+        onClick={onClose}
+        className="absolute inset-0"
+        style={{ backgroundColor: "rgba(15, 23, 42, 0.4)", backdropFilter: "blur(2px)", WebkitBackdropFilter: "blur(2px)" }}
+        data-testid="welcome-backdrop"
+      />
+      <div className="relative w-full max-w-md rounded-2xl bg-white p-8 text-center" style={{ border: `1px solid ${PD_HAIRLINE}`, boxShadow: "0 24px 64px rgba(0,0,0,0.18)" }}>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute right-4 top-4 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+          style={{ backgroundColor: PD_TILE, color: PD_FAINT }}
+          data-testid="button-welcome-close"
+        >
+          <XIcon className="w-4 h-4" />
+        </button>
+        <img src={gtLogo} alt="GoodTunes" className="w-auto mx-auto" style={{ height: 40, marginBottom: 24 }} />
+        <h2 id="press-welcome-title" style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.02em", color: PD_INK }}>
+          Welcome{firstName ? `, ${firstName}` : ""}!
+        </h2>
+        <p className="mt-3 text-[13.5px] leading-relaxed" style={{ color: PD_SUBINK }}>
+          This is your shop's home base. Your clients, their orders, and every
+          run on your floor all live in one place — right here.
+        </p>
+        <div className="flex flex-col gap-2" style={{ marginTop: 28 }}>
+          <button
+            type="button"
+            className="w-full h-10 rounded-full text-[13.5px] font-medium text-white transition-opacity hover:opacity-90"
+            style={{ backgroundColor: PD_BLUE }}
+            onClick={onInvite}
+            data-testid="button-welcome-primary"
+          >
+            Invite my first client
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full h-9 text-[13px] font-medium transition-opacity hover:opacity-70"
+            style={{ color: PD_SUBINK }}
+            data-testid="button-welcome-secondary"
+          >
+            I'll look around first
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PressDashboardTab({
   pressId,
   isSuperAdminView,
@@ -1505,8 +1731,105 @@ function PressDashboardTab({
   // Cached by the portal shell — no extra request; used for the greeting.
   const { data: me } = useQuery<PressMe>({ queryKey: [`/api/press/${pressId}/me`] });
 
+  // Signed-in user's own name for the first-run "Welcome, Brandon" greeting.
+  const { data: roleInfo } = useQuery<{ displayName?: string | null }>({ queryKey: ["/api/me/role"] });
+
   const [, navigate] = useLocation();
   const goTab = (t: TabId) => navigate(pressPortalHref(t));
+
+  // ── First-run gate: a press with zero clients, projects, and revenue
+  // gets the day-one layout (PressFirstRun reference) instead of the
+  // regular dashboard. Purely presentational — same data sources.
+  const firstRun = !!summary
+    && summary.customerCount === 0
+    && summary.pendingInvites === 0
+    && summary.totalAlbums === 0
+    && summary.revenueLifetimeCents === 0;
+
+  const [welcomeDismissed, setWelcomeDismissed] = useState<boolean>(() => {
+    try { return localStorage.getItem("gt-press-welcome") === "1"; } catch { return true; }
+  });
+  const dismissWelcome = () => {
+    try { localStorage.setItem("gt-press-welcome", "1"); } catch {}
+    setWelcomeDismissed(true);
+  };
+
+  const firstName = (roleInfo?.displayName ?? "").trim().split(/\s+/)[0] || null;
+
+  if (firstRun) {
+    const pressName = me?.name ?? "Your shop";
+    const steps: PdChecklistStep[] = [
+      {
+        id: "invite-client",
+        title: "Invite your first client",
+        detail: "Bring an artist or label aboard so their orders flow straight to you.",
+        done: false,
+        cta: "Invite a client",
+        go: "people",
+      },
+      {
+        id: "stages",
+        title: "Set up your production stages",
+        detail: "Map your pipeline — design, test pressing, in production, shipped — so every run has a home.",
+        done: false,
+      },
+      {
+        id: "team",
+        title: "Invite your team",
+        detail: "Add the people on your floor so approvals and hand-offs stay in one place.",
+        done: false,
+      },
+      {
+        id: "partnership",
+        title: "Your GoodTunes partnership is live",
+        detail: `${pressName} is set up and ready to take on work.`,
+        done: true,
+      },
+    ];
+    return (
+      <>
+        <div className="flex flex-col gap-5" data-testid="press-firstrun">
+          <div className="flex items-end justify-between gap-3 flex-wrap">
+            <div className="min-w-0">
+              <h1 style={{ fontSize: 30, fontWeight: 600, letterSpacing: "-0.03em", color: PD_INK }} data-testid="heading-press-firstrun">
+                Welcome{firstName ? `, ${firstName}` : ""}
+              </h1>
+              <p className="text-[13.5px] mt-1" style={{ color: PD_SUBINK }}>
+                Your shop is ready — here's how to bring in your first work.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <PdRangeSwitcher value={preset} onChange={setPreset} />
+            </div>
+          </div>
+
+          <PdEmptyKpiStrip />
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
+            <div className="lg:col-span-2 min-h-0">
+              <PdGettingStarted steps={steps} onNavigate={goTab} />
+            </div>
+            <div className="min-h-0 max-h-[420px]">
+              <PdWelcomeActivity items={dash?.activity ?? []} loading={dashLoading} pressName={pressName} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
+            <PdEmptyProductionSnapshot />
+            <PdEmptyTopClients />
+          </div>
+        </div>
+
+        {!welcomeDismissed && (
+          <PdWelcomeModal
+            firstName={firstName}
+            onClose={dismissWelcome}
+            onInvite={() => { dismissWelcome(); goTab("people"); }}
+          />
+        )}
+      </>
+    );
+  }
 
   // Two-tone trend heading follows the picked window.
   const trendLead =
