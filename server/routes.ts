@@ -26766,11 +26766,19 @@ export async function registerRoutes(
       ? ((req.session as any).devImpersonationHat ?? null) as { label: string } | null
       : null;
 
+    // Partner-portal greetings ("Welcome, Jeanne") need the signed-in
+    // user's own name, which no portal endpoint exposed before.
+    let displayName: string | null = null;
+    try {
+      displayName = (await storage.getUser(userId))?.displayName ?? null;
+    } catch {}
+
     res.json({
       role,
       roleScopeId,
       scopeName,
       welcomeNote,
+      displayName,
       canInvite: cap.canInvite,
       allowedInviteRoles: cap.allowedRoles,
       allowAdvancedInvite: cap.allowAdvanced,

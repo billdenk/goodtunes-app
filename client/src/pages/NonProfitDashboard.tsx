@@ -2,12 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { formatUsdCents } from "@shared/money";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
-import { Heart, Music as MusicIcon, Mail, Clock, UserPlus, Users, Trash2, Send, Copy, Check, ChevronDown } from "lucide-react";
+import { Heart, Music as MusicIcon, Mail, Clock, UserPlus, Users, Trash2, Send, Copy, Check, ChevronDown, CheckCircle2, Circle, Sparkles, HeartHandshake, X } from "lucide-react";
 import { ReferralLinkWidget } from "@/components/admin/ReferralLinkWidget";
 import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { DashboardPanel } from "@/components/partner/dashboard-controls";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
-import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
+import {
+  PartnerDashboard, RANGE_PRESETS, formatValue,
+  type PartnerRangePreset, type DashboardPayload, type ActivityItem,
+} from "@/components/partner/PartnerDashboard";
+import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 import { NpoAlbumLedger } from "@/components/NpoAlbumLedger";
 import { BuyerReport } from "@/components/partner/BuyerReport";
 import { OperatorShell } from "@/components/operator/OperatorShell";
@@ -91,6 +95,519 @@ const fmt = (c: number) => formatUsdCents(c);
 
 type NpoTabId = "dashboard" | "artists" | "acquisition" | "buyers" | "invites" | "ledger" | "tree";
 
+// ─── Apple-canon first-run dashboard (docs/design-reference/code/NpoFirstRun*.tsx) ──
+// Visual layer only: the data underneath is the real partner-dashboard payload
+// plus the legacy NPO roster endpoint. Tokens ride the --apple-* theme vars so
+// gt-admin-dark flips them with no per-screen overrides.
+
+const ND_BLUE = "#319ED8";
+const ND_INK = "var(--apple-ink)";
+const ND_SUBINK = "var(--apple-subink)";
+const ND_FAINT = "var(--apple-faint)";
+const ND_HAIRLINE = "var(--apple-hairline)";
+const ND_TRACK = "var(--apple-track)";
+const ND_PILL = "var(--apple-pill)";
+const ND_TILE = "var(--apple-tile)";
+const ND_READY = "var(--apple-ready)";
+const ND_PILL_SHADOW = "0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)";
+const ND_DASH = "—";
+
+function ndFmtRel(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${Math.max(s, 1)}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return date.toLocaleDateString();
+}
+
+function NdSectionHeading({ lead, rest, size = 20 }: { lead: string; rest?: string; size?: number }) {
+  return (
+    <h3 style={{ fontSize: size, letterSpacing: "-0.01em" }} className="min-w-0">
+      <span className="font-semibold" style={{ color: ND_INK }}>{lead}</span>
+      {rest ? <span className="font-medium" style={{ color: ND_SUBINK }}> {rest}</span> : null}
+    </h3>
+  );
+}
+
+function NdRangeSwitcher({ value, onChange }: { value: PartnerRangePreset; onChange: (v: PartnerRangePreset) => void }) {
+  return (
+    <div className="inline-flex items-center p-1 rounded-full" style={{ backgroundColor: ND_TRACK, gap: 2 }} data-testid="dashboard-range-switcher">
+      {RANGE_PRESETS.map((o) => {
+        const active = value === o.id;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onChange(o.id)}
+            aria-pressed={active}
+            data-testid={`button-range-${o.id}`}
+            className="px-3.5 h-8 text-[13px] rounded-full transition-all"
+            style={{
+              fontWeight: active ? 600 : 500,
+              color: active ? ND_INK : ND_SUBINK,
+              backgroundColor: active ? ND_PILL : undefined,
+              boxShadow: active ? ND_PILL_SHADOW : undefined,
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// KPI strip — real payload values; zero/empty values render as a quiet
+// em-dash with "your first X lands here" microcopy, never red zeros.
+function NdKpiStrip({ payload, loading, soloArtist }: { payload?: DashboardPayload; loading: boolean; soloArtist: string | null }) {
+  const hints: Record<string, string> = {
+    orders: "Your first order lands here",
+    newFans: soloArtist ? `Grows as ${soloArtist} finds fans` : "Grows as your artists find fans",
+    donated: soloArtist ? `${soloArtist}'s first sale starts this counter` : "Your first donation lands here",
+    pending: "Donations accrue here before payout",
+    paid: "Disbursements to your foundation",
+  };
+  const kpis = payload?.kpis ?? [];
+  return (
+    <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }} data-testid="kpi-strip">
+      {loading || kpis.length === 0
+        ? Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="rounded-2xl bg-white p-5 h-[124px] animate-pulse" style={{ border: `1px solid ${ND_HAIRLINE}` }} />
+          ))
+        : kpis.map((k) => {
+            const empty = k.value === null || k.value === undefined || k.value === 0;
+            return (
+              <div
+                key={k.id}
+                data-testid={`kpi-${k.id}`}
+                className="rounded-2xl bg-white p-5 flex flex-col"
+                style={{ border: `1px solid ${ND_HAIRLINE}` }}
+              >
+                <div className="text-[13px] font-medium truncate" style={{ color: ND_SUBINK }}>{k.label}</div>
+                <div
+                  className="mt-3 tabular-nums"
+                  style={{ fontSize: 32, lineHeight: 1, fontWeight: 600, letterSpacing: "-0.03em", color: empty ? ND_FAINT : ND_INK }}
+                >
+                  {empty ? ND_DASH : formatValue(k.value, k.format)}
+                </div>
+                <div className="mt-3 text-[12px] leading-snug" style={{ color: ND_FAINT }}>
+                  {hints[k.id] ?? ""}
+                </div>
+              </div>
+            );
+          })}
+    </div>
+  );
+}
+
+// Getting-started checklist — done items sink to the bottom; the first
+// active step carries the single blue CTA.
+type NdStep = { id: string; title: string; detail: string; done: boolean; cta?: string; go?: NpoTabId };
+
+function NdGettingStarted({ steps, onNavigate }: { steps: NdStep[]; onNavigate: (t: NpoTabId) => void }) {
+  const doneCount = steps.filter((s) => s.done).length;
+  return (
+    <div className="rounded-2xl bg-white p-6 h-full flex flex-col" style={{ border: `1px solid ${ND_HAIRLINE}` }} data-testid="getting-started">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <NdSectionHeading lead="Getting started." rest="A few quick steps." />
+          <p className="text-[13.5px] mt-0.5" style={{ color: ND_SUBINK }}>Complete these to start raising donations.</p>
+        </div>
+        <span className="text-[12px] font-semibold tabular-nums rounded-full px-3 py-1" style={{ backgroundColor: ND_TRACK, color: ND_SUBINK }}>
+          {doneCount} of {steps.length}
+        </span>
+      </div>
+      <ul className="flex-1">
+        {steps.map((s, i) => (
+          <li
+            key={s.id}
+            className="flex items-start gap-3 py-4"
+            style={{ borderTop: i > 0 ? `1px solid ${ND_HAIRLINE}` : undefined }}
+            data-testid={`step-${s.id}`}
+          >
+            {s.done ? (
+              <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: ND_READY }} />
+            ) : (
+              <Circle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: ND_FAINT }} />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="text-[14px] font-semibold" style={{ color: s.done ? ND_SUBINK : ND_INK }}>{s.title}</div>
+              <p className="text-[12.5px] mt-0.5" style={{ color: ND_SUBINK }}>{s.detail}</p>
+            </div>
+            {s.cta && s.go && (
+              <button
+                type="button"
+                onClick={() => onNavigate(s.go!)}
+                className="flex-shrink-0 inline-flex items-center text-[14px] font-medium rounded-full px-4 h-9 text-white transition-opacity hover:opacity-90"
+                style={{ backgroundColor: ND_BLUE }}
+                data-testid={`step-cta-${s.id}`}
+              >
+                {s.cta}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// Activity — real payload events first (with their drill-down links), then
+// the standing "joined GoodTunes" welcome row.
+function NdActivityIcon({ kind }: { kind: string }) {
+  const Icon =
+    /artist|roster|signup|joined/i.test(kind) ? UserPlus :
+    /credit|donat/i.test(kind) ? HeartHandshake :
+    /invite/i.test(kind) ? Mail :
+    Clock;
+  return (
+    <span className="w-9 h-9 rounded-xl inline-flex items-center justify-center flex-shrink-0" style={{ backgroundColor: ND_TILE }}>
+      <Icon className="w-4 h-4" style={{ color: ND_SUBINK }} />
+    </span>
+  );
+}
+
+function NdActivityFeed({ items, loading, orgName }: { items: ActivityItem[]; loading: boolean; orgName: string }) {
+  return (
+    <div className="rounded-2xl bg-white p-6 flex flex-col h-full" style={{ border: `1px solid ${ND_HAIRLINE}` }} data-testid="dashboard-activity-feed">
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+        <NdSectionHeading lead="As it happens." rest="Recent activity." />
+      </div>
+      <ul className="space-y-1 flex-1 min-h-0 overflow-y-auto">
+        {loading && items.length === 0 && (
+          <li className="py-2"><div className="h-9 rounded-xl animate-pulse" style={{ backgroundColor: ND_TILE }} /></li>
+        )}
+        {items.map((it, i) => {
+          const body = (
+            <div className="flex items-center gap-3 -mx-2 px-2 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+              <NdActivityIcon kind={it.kind} />
+              <div className="flex-1 min-w-0">
+                <div className="text-[13.5px] truncate" style={{ color: ND_INK }}>{it.title}</div>
+                {it.detail && <div className="text-[12px] truncate" style={{ color: ND_SUBINK }}>{it.detail}</div>}
+              </div>
+              <div className="text-[11.5px] tabular-nums flex-shrink-0" style={{ color: ND_FAINT }}>
+                {ndFmtRel(new Date(it.ts))}
+              </div>
+            </div>
+          );
+          return (
+            <li key={i} data-testid={`activity-${it.kind}-${i}`}>
+              {it.href ? <Link href={it.href} className="block">{body}</Link> : body}
+            </li>
+          );
+        })}
+        <li data-testid="activity-welcome">
+          <div className="flex items-center gap-3 -mx-2 px-2 py-2 rounded-xl">
+            <span className="w-9 h-9 rounded-xl inline-flex items-center justify-center flex-shrink-0" style={{ backgroundColor: ND_TILE }}>
+              <Sparkles className="w-4 h-4" style={{ color: ND_SUBINK }} />
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13.5px]" style={{ color: ND_INK }}>{orgName} joined GoodTunes · Welcome!</div>
+              <div className="text-[12px]" style={{ color: ND_SUBINK }}>Your foundation is set up</div>
+            </div>
+          </div>
+        </li>
+      </ul>
+      <p className="text-[12px] mt-2 pt-3 leading-snug" style={{ color: ND_FAINT, borderTop: `1px solid ${ND_HAIRLINE}` }}>
+        Business events will land here as things happen.
+      </p>
+    </div>
+  );
+}
+
+// Your artists — real roster rows (accepted + pending invites); empty state
+// when nobody's aboard yet.
+function NdArtistsCard({ artists, soloArtist }: { artists: Dashboard["artists"]; soloArtist: string | null }) {
+  const empty = artists.length === 0;
+  return (
+    <div className="rounded-2xl bg-white p-6 flex flex-col h-full" style={{ border: `1px solid ${ND_HAIRLINE}` }} data-testid="your-artists">
+      <div className="flex items-center justify-between mb-2 flex-shrink-0">
+        <div className="min-w-0">
+          <NdSectionHeading lead="Your artists." rest="Your roster." size={17} />
+          <p className="text-[12.5px]" style={{ color: ND_SUBINK }}>Artists referred by your foundation</p>
+        </div>
+        {!empty && (
+          <span className="text-[12px] font-semibold tabular-nums rounded-full px-3 py-1 flex-shrink-0" style={{ backgroundColor: ND_TRACK, color: ND_SUBINK }}>
+            {artists.length}
+          </span>
+        )}
+      </div>
+      {empty ? (
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center py-8">
+          <span className="w-14 h-14 rounded-full inline-flex items-center justify-center" style={{ backgroundColor: ND_TILE }}>
+            <Users className="w-6 h-6" style={{ color: ND_SUBINK }} />
+          </span>
+          <p className="mt-4 text-[15px] font-semibold" style={{ color: ND_INK }}>Artists you refer will show here</p>
+          <p className="mt-1.5 text-[13px] max-w-xs leading-relaxed" style={{ color: ND_SUBINK }}>
+            Invite your first artist to start earning donations from every paid unit.
+          </p>
+        </div>
+      ) : (
+        <>
+          <ul className="flex-1 min-h-0">
+            {artists.map((a) => {
+              const albums = a.albums.length;
+              const status =
+                a.status === "pending_invite" ? "Invite pending" :
+                albums === 0 ? "Setting up their store" :
+                `${albums} project${albums === 1 ? "" : "s"} live`;
+              return (
+                <li key={a.id} className="flex items-center gap-3 py-2.5 -mx-1 px-1 rounded-xl" data-testid={`artist-row-${a.id}`}>
+                  <span className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 inline-flex items-center justify-center" style={{ border: `1px solid ${ND_HAIRLINE}`, backgroundColor: ND_TILE }}>
+                    {a.photoUrl ? (
+                      <img src={a.photoUrl} alt={a.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-[14px] font-semibold" style={{ color: ND_SUBINK }}>{a.name.slice(0, 1)}</span>
+                    )}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[14px] font-semibold truncate" style={{ color: ND_INK }}>{a.name}</span>
+                    </div>
+                    <div className="text-[12px] mt-0.5" style={{ color: ND_SUBINK }}>{status}</div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-[16px] font-semibold tabular-nums leading-none" style={{ color: ND_FAINT }}>{ND_DASH}</div>
+                    <div className="text-[11px] mt-1" style={{ color: ND_FAINT }}>in donations</div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="text-[12px] mt-1 pt-3 leading-snug" style={{ color: ND_FAINT, borderTop: `1px solid ${ND_HAIRLINE}` }}>
+            Donations start posting once {soloArtist ?? "your artists"} make{soloArtist ? "s" : ""} the first sale.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function NdEmptyDonations({ soloArtist }: { soloArtist: string | null }) {
+  return (
+    <div className="rounded-2xl bg-white p-6 flex flex-col h-full" style={{ border: `1px solid ${ND_HAIRLINE}` }} data-testid="donations-ledger">
+      <div className="flex items-center justify-between mb-2 flex-shrink-0">
+        <div className="min-w-0">
+          <NdSectionHeading lead="Donations." rest="Every dollar raised." size={17} />
+          <p className="text-[12.5px]" style={{ color: ND_SUBINK }}>By project, line by line</p>
+        </div>
+      </div>
+      <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center py-8">
+        <span className="w-14 h-14 rounded-full inline-flex items-center justify-center" style={{ backgroundColor: ND_TILE }}>
+          <HeartHandshake className="w-6 h-6" style={{ color: ND_SUBINK }} />
+        </span>
+        <p className="mt-4 text-[15px] font-semibold" style={{ color: ND_INK }}>Your donation ledger is empty</p>
+        <p className="mt-1.5 text-[13px] max-w-xs leading-relaxed" style={{ color: ND_SUBINK }}>
+          As {soloArtist ?? "your artists"} sell{soloArtist ? "s" : ""}, each donation will post here — line by line.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Welcome modal — light Apple-Music dim-and-blur; backdrop inline styles.
+function NdWelcomeModal({ firstName, onClose, onInvite }: { firstName: string | null; onClose: () => void; onInvite: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="npo-welcome-title" data-testid="welcome-modal">
+      <button
+        type="button"
+        aria-label="Dismiss welcome"
+        onClick={onClose}
+        className="absolute inset-0"
+        style={{ backgroundColor: "rgba(15, 23, 42, 0.4)", backdropFilter: "blur(2px)", WebkitBackdropFilter: "blur(2px)" }}
+        data-testid="welcome-backdrop"
+      />
+      <div className="relative w-full max-w-md rounded-2xl bg-white p-8 text-center" style={{ border: `1px solid ${ND_HAIRLINE}`, boxShadow: "0 20px 60px rgba(0,0,0,0.18)" }}>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute right-4 top-4 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+          style={{ backgroundColor: ND_TILE, color: ND_FAINT }}
+          data-testid="button-welcome-close"
+        >
+          <X className="w-4 h-4" />
+        </button>
+        <img src={gtLogo} alt="GoodTunes" className="w-auto mx-auto" style={{ height: 40, marginBottom: 24 }} />
+        <h2 id="npo-welcome-title" className="text-[24px] font-semibold" style={{ color: ND_INK, letterSpacing: "-0.02em" }}>
+          Welcome{firstName ? `, ${firstName}` : ""}!
+        </h2>
+        <p className="mt-3 text-[14px] leading-relaxed" style={{ color: ND_SUBINK }}>
+          This is your foundation's home base. Every dollar raised by the artists you refer (or those who we send directly to you) shows up right here, all in one place.
+        </p>
+        <div className="flex flex-col gap-2" style={{ marginTop: 28 }}>
+          <button
+            type="button"
+            className="w-full h-10 rounded-lg text-white text-[14px] font-medium transition-opacity hover:opacity-90"
+            style={{ backgroundColor: ND_BLUE }}
+            onClick={onInvite}
+            data-testid="button-welcome-primary"
+          >
+            Invite my first artist
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full h-9 text-[13px] font-medium transition-opacity hover:opacity-70"
+            style={{ color: ND_SUBINK }}
+            data-testid="button-welcome-secondary"
+          >
+            I'll look around first
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Dashboard tab — first-run canon layout while the foundation has no
+// donation history; established NPOs keep the shared PartnerDashboard.
+function NdDashboardTab({ me, onNavigate }: { me: Me | null; onNavigate: (t: NpoTabId) => void }) {
+  const [preset, setPreset] = useState<PartnerRangePreset>("30d");
+  const legacy = useQuery<Dashboard>({ queryKey: ["/api/non-profit/dashboard"] });
+  const payload = useQuery<DashboardPayload>({ queryKey: [`/api/partner/npo/dashboard?range=${preset}`] });
+  const roleInfo = useQuery<{ displayName?: string | null }>({ queryKey: ["/api/me/role"] });
+  const [welcomeDismissed, setWelcomeDismissed] = useState<boolean>(() => {
+    try { return localStorage.getItem("gt-npo-welcome") === "1"; } catch { return true; }
+  });
+
+  const orgName = me?.name ?? "Your foundation";
+  const firstName = (roleInfo.data?.displayName ?? "").trim().split(/\s+/)[0] || null;
+
+  const paidUnits = (legacy.data?.artists ?? []).reduce(
+    (n, a) => n + a.albums.reduce((m, al) => m + al.paidUnits, 0), 0,
+  );
+  const firstRun = !!legacy.data
+    && legacy.data.pendingCents === 0
+    && legacy.data.paidCents === 0
+    && paidUnits === 0;
+
+  if (legacy.isLoading) {
+    return (
+      <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="rounded-2xl bg-white h-[124px] animate-pulse" style={{ border: `1px solid ${ND_HAIRLINE}` }} />
+        ))}
+      </div>
+    );
+  }
+
+  // Established foundation (or roster read failed) → the shared dashboard.
+  if (!firstRun) {
+    return (
+      <PartnerDashboard
+        scope="npo"
+        sectionTitle="Dashboard"
+        title={orgName}
+        subtitle="Donation activity from referred artists"
+      />
+    );
+  }
+
+  const artists = legacy.data?.artists ?? [];
+  const activeArtists = artists.filter((a) => a.status === "active");
+  const hasArtist = activeArtists.length > 0;
+  const soloArtist = activeArtists.length === 1 ? (activeArtists[0].name.trim().split(/\s+/)[0] || null) : null;
+
+  const steps: NdStep[] = [
+    ...(!hasArtist ? [{
+      id: "invite-artist",
+      title: "Invite your first artist",
+      detail: "Bring an artist aboard — every paid unit they sell earns your foundation a donation.",
+      done: false,
+      cta: "Invite an artist",
+      go: "invites" as NpoTabId,
+    }] : []),
+    {
+      id: "referral-link",
+      title: "Share your referral link",
+      detail: hasArtist
+        ? "Send one link and let more artists join your cause without individual invites."
+        : "Send one link and let artists join your cause without individual invites.",
+      done: false,
+      ...(hasArtist ? { cta: "Share link", go: "acquisition" as NpoTabId } : {}),
+    },
+    {
+      id: "team",
+      title: "Invite your team",
+      detail: "Add staff and ambassadors so everyone can help grow your roster.",
+      done: false,
+    },
+    ...(hasArtist ? [{
+      id: "first-artist",
+      title: "Your first artist is aboard",
+      detail: `${activeArtists[0].name} is on your roster.`,
+      done: true,
+    }] : []),
+    {
+      id: "live",
+      title: "Your foundation is live on GoodTunes",
+      detail: `${orgName} is set up and ready to receive donations.`,
+      done: true,
+    },
+  ];
+
+  const dismissWelcome = () => {
+    try { localStorage.setItem("gt-npo-welcome", "1"); } catch {}
+    setWelcomeDismissed(true);
+  };
+
+  return (
+    <>
+      <div className="flex flex-col gap-5" data-testid="npo-firstrun-dashboard">
+        <div className="flex items-end justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <h1
+              className="text-[30px] font-semibold"
+              style={{ color: ND_INK, letterSpacing: "-0.02em", lineHeight: 1.12 }}
+              data-testid="heading-npo-firstrun"
+            >
+              Welcome{firstName ? `, ${firstName}` : ""}
+            </h1>
+            <p className="text-[14px] mt-1" style={{ color: ND_SUBINK }}>
+              {hasArtist && soloArtist
+                ? `Your home base is ready — ${activeArtists[0].name} is aboard, and donations from the artists you refer will land here.`
+                : "Your home base is ready — donations from the artists you refer will land here."}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <NdRangeSwitcher value={preset} onChange={setPreset} />
+          </div>
+        </div>
+
+        <NdKpiStrip payload={payload.data} loading={payload.isLoading} soloArtist={soloArtist} />
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
+          <div className="lg:col-span-2 min-h-0">
+            <NdGettingStarted steps={steps} onNavigate={onNavigate} />
+          </div>
+          <div className="min-h-0 max-h-[420px]">
+            <NdActivityFeed items={payload.data?.activity ?? []} loading={payload.isLoading} orgName={orgName} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
+          <NdArtistsCard artists={artists} soloArtist={soloArtist} />
+          <NdEmptyDonations soloArtist={soloArtist} />
+        </div>
+      </div>
+
+      {!hasArtist && !welcomeDismissed && (
+        <NdWelcomeModal
+          firstName={firstName}
+          onClose={dismissWelcome}
+          onInvite={() => { dismissWelcome(); onNavigate("invites"); }}
+        />
+      )}
+    </>
+  );
+}
+
 
 export function NonProfitDashboard() {
   const me = useQuery<Me>({ queryKey: ["/api/non-profit/me"] });
@@ -169,11 +686,14 @@ export function NonProfitDashboard() {
       layout="leftnav"
     >
       {tab === "dashboard" && (
-        <PartnerDashboard
-          scope="npo"
-          sectionTitle="Dashboard"
-          title={me.data?.name ?? "Your dashboard"}
-          subtitle="Donation activity from referred artists"
+        <NdDashboardTab
+          me={me.data ?? null}
+          onNavigate={(t) => {
+            setTab(t);
+            const sp = new URLSearchParams(window.location.search);
+            sp.set("tab", t);
+            history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+          }}
         />
       )}
       {tab === "artists" && <ArtistsTab />}
