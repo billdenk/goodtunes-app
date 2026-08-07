@@ -1485,18 +1485,22 @@ const PD_FAINT = "var(--apple-faint)";
 const PD_READY = "var(--apple-ready)";
 const PD_DASH = "—";
 
-const PD_EMPTY_KPIS: Array<{ id: string; label: string; hint: string }> = [
-  { id: "sales30d", label: "Sales · last 30d", hint: "Your first order lands here" },
-  { id: "salesLifetime", label: "Sales · lifetime", hint: "Tracks every dollar you press" },
-  { id: "units30d", label: "Units · last 30d", hint: "Records pressed will tally here" },
-  { id: "customers", label: "Customers", hint: "Grows as clients come aboard" },
-  { id: "pipeline", label: "Projects in pipeline", hint: "Your first project shows here" },
-];
+// With a client aboard, a couple of hints reference them kindly
+// (PressFirstRunWithClient reference); otherwise generic microcopy.
+function pdEmptyKpis(clientFirst: string | null): Array<{ id: string; label: string; hint: string }> {
+  return [
+    { id: "sales30d", label: "Sales · last 30d", hint: clientFirst ? `${clientFirst}'s first order lands here` : "Your first order lands here" },
+    { id: "salesLifetime", label: "Sales · lifetime", hint: "Tracks every dollar you press" },
+    { id: "units30d", label: "Units · last 30d", hint: "Records pressed will tally here" },
+    { id: "customers", label: "Customers", hint: "Grows as clients come aboard" },
+    { id: "pipeline", label: "Projects in pipeline", hint: clientFirst ? `${clientFirst}'s first project shows here` : "Your first project shows here" },
+  ];
+}
 
-function PdEmptyKpiStrip() {
+function PdEmptyKpiStrip({ clientFirst }: { clientFirst: string | null }) {
   return (
     <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }} data-testid="kpi-strip">
-      {PD_EMPTY_KPIS.map((t) => (
+      {pdEmptyKpis(clientFirst).map((t) => (
         <div key={t.id} data-testid={`kpi-${t.id}`} className="rounded-2xl bg-white p-5 flex flex-col" style={{ border: `1px solid ${PD_HAIRLINE}` }}>
           <div className="text-[12.5px] font-medium truncate" style={{ color: PD_SUBINK }}>{t.label}</div>
           <div className="mt-2.5 tabular-nums" style={{ fontSize: 30, lineHeight: 1, fontWeight: 600, letterSpacing: "-0.03em", color: PD_FAINT }}>
@@ -1555,7 +1559,7 @@ function PdGettingStarted({ steps, onNavigate }: { steps: PdChecklistStep[]; onN
 
 // Recent activity — real payload rows first (if any), then the standing
 // "joined GoodTunes" welcome event.
-function PdWelcomeActivity({ items, loading, pressName }: { items: ActivityItem[]; loading: boolean; pressName: string }) {
+function PdWelcomeActivity({ items, loading, pressName, client }: { items: ActivityItem[]; loading: boolean; pressName: string; client?: PersonLite | null }) {
   const rows = useMemo(
     () => [...items].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()).slice(0, 8),
     [items],
@@ -1588,6 +1592,25 @@ function PdWelcomeActivity({ items, loading, pressName }: { items: ActivityItem[
             </li>
           );
         })}
+        {client && (
+          <li data-testid="activity-first-client">
+            <div className="flex items-start gap-2.5 -mx-1.5 px-1.5 py-2 rounded-xl">
+              <span className="w-7 h-7 rounded-full overflow-hidden inline-flex items-center justify-center flex-shrink-0" style={{ border: `1px solid ${PD_HAIRLINE}`, backgroundColor: PD_TILE }}>
+                {client.photoUrl ? (
+                  <img src={client.photoUrl} alt={client.name} className="w-full h-full object-cover" />
+                ) : (
+                  <Users className="w-3.5 h-3.5" style={{ color: PD_SUBINK }} />
+                )}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px]" style={{ color: PD_INK }}>
+                  {client.name} joined as your client
+                </div>
+                <div className="text-[11.5px]" style={{ color: PD_SUBINK }}>Preparing a first pressing</div>
+              </div>
+            </div>
+          </li>
+        )}
         <li data-testid="activity-welcome">
           <div className="flex items-start gap-2.5 -mx-1.5 px-1.5 py-2 rounded-xl">
             <span className="w-7 h-7 rounded-lg inline-flex items-center justify-center flex-shrink-0" style={{ backgroundColor: PD_TILE }}>
@@ -1609,7 +1632,7 @@ function PdWelcomeActivity({ items, loading, pressName }: { items: ActivityItem[
   );
 }
 
-function PdEmptyProductionSnapshot() {
+function PdEmptyProductionSnapshot({ clientFirst }: { clientFirst?: string | null }) {
   return (
     <div className="rounded-2xl bg-white p-5 flex flex-col h-full" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid="production-snapshot">
       <div className="flex items-center justify-between mb-3 flex-shrink-0">
@@ -1621,14 +1644,52 @@ function PdEmptyProductionSnapshot() {
         </span>
         <p className="mt-3.5 text-[13.5px] font-semibold" style={{ color: PD_INK }}>No runs on the floor yet</p>
         <p className="mt-1 text-[12px] max-w-xs leading-snug" style={{ color: PD_SUBINK }}>
-          Once a client's order kicks off, your stages will fill in here.
+          Once {clientFirst ? `${clientFirst}'s` : "a client's"} order kicks off, your stages will fill in here.
         </p>
       </div>
     </div>
   );
 }
 
-function PdEmptyTopClients() {
+function PdEmptyTopClients({ clients }: { clients: PersonLite[] }) {
+  if (clients.length > 0) {
+    // With-client variant — real roster rows, em-dash revenue (no orders yet).
+    const firstName = (n: string) => n.trim().split(/\s+/)[0];
+    return (
+      <div className="rounded-2xl bg-white p-5 flex flex-col h-full" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid="top-clients">
+        <div className="flex items-center justify-between mb-3 flex-shrink-0">
+          <PdSectionHeading lead="Top clients." rest="By revenue this period." size={16} />
+          <span className="text-[11.5px] font-semibold tabular-nums rounded-full px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: PD_TRACK, color: PD_SUBINK }}>
+            {clients.length}
+          </span>
+        </div>
+        <ul className="flex-1 min-h-0">
+          {clients.slice(0, 5).map((c) => (
+            <li key={c.id} className="flex items-center gap-3 py-2.5 -mx-1 px-1 rounded-xl" data-testid={`client-${c.id}`}>
+              <span className="w-10 h-10 rounded-full overflow-hidden inline-flex items-center justify-center flex-shrink-0" style={{ border: `1px solid ${PD_HAIRLINE}`, backgroundColor: PD_TILE }}>
+                {c.photoUrl ? (
+                  <img src={c.photoUrl} alt={c.name} className="w-full h-full object-cover" />
+                ) : (
+                  <Users className="w-4 h-4" style={{ color: PD_SUBINK }} />
+                )}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13.5px] font-semibold truncate" style={{ color: PD_INK }}>{c.name}</div>
+                <div className="text-[11.5px] mt-0.5" style={{ color: PD_SUBINK }}>Preparing a first pressing</div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className="text-[15px] font-semibold tabular-nums leading-none" style={{ color: PD_FAINT }}>{PD_DASH}</div>
+                <div className="text-[10.5px] mt-1" style={{ color: PD_FAINT }}>in revenue</div>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <p className="text-[11.5px] mt-1 pt-3 leading-snug" style={{ color: PD_FAINT, borderTop: `1px solid ${PD_HAIRLINE}` }}>
+          Revenue starts tracking once {firstName(clients[0].name)}'s first order kicks off.
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="rounded-2xl bg-white p-5 flex flex-col h-full" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid="top-clients">
       <div className="flex items-center justify-between mb-2 flex-shrink-0">
@@ -1737,14 +1798,21 @@ function PressDashboardTab({
   const [, navigate] = useLocation();
   const goTab = (t: TabId) => navigate(pressPortalHref(t));
 
-  // ── First-run gate: a press with zero clients, projects, and revenue
-  // gets the day-one layout (PressFirstRun reference) instead of the
-  // regular dashboard. Purely presentational — same data sources.
+  // ── First-run gate: a press with zero projects and revenue gets the
+  // day-one layout (PressFirstRun / PressFirstRunWithClient references)
+  // instead of the regular dashboard. Purely presentational — same data
+  // sources. A client aboard (assigned or invited) flips the variant.
   const firstRun = !!summary
-    && summary.customerCount === 0
-    && summary.pendingInvites === 0
     && summary.totalAlbums === 0
     && summary.revenueLifetimeCents === 0;
+
+  // Roster drives the with-client first-run variant. customerCount on the
+  // summary counts artists with pressing orders — a freshly assigned client
+  // has none yet, so the roster is the honest signal here.
+  const { data: firstRunClients = [] } = useQuery<PersonLite[]>({
+    queryKey: [`/api/press/${pressId}/people`],
+    enabled: firstRun,
+  });
 
   const [welcomeDismissed, setWelcomeDismissed] = useState<boolean>(() => {
     try { return localStorage.getItem("gt-press-welcome") === "1"; } catch { return true; }
@@ -1758,34 +1826,67 @@ function PressDashboardTab({
 
   if (firstRun) {
     const pressName = me?.name ?? "Your shop";
-    const steps: PdChecklistStep[] = [
-      {
-        id: "invite-client",
-        title: "Invite your first client",
-        detail: "Bring an artist or label aboard so their orders flow straight to you.",
-        done: false,
-        cta: "Invite a client",
-        go: "people",
-      },
-      {
-        id: "stages",
-        title: "Set up your production stages",
-        detail: "Map your pipeline — design, test pressing, in production, shipped — so every run has a home.",
-        done: false,
-      },
-      {
-        id: "team",
-        title: "Invite your team",
-        detail: "Add the people on your floor so approvals and hand-offs stay in one place.",
-        done: false,
-      },
-      {
-        id: "partnership",
-        title: "Your GoodTunes partnership is live",
-        detail: `${pressName} is set up and ready to take on work.`,
-        done: true,
-      },
-    ];
+    const firstClient = firstRunClients[0] ?? null;
+    const clientFirst = firstClient ? firstClient.name.trim().split(/\s+/)[0] : null;
+    const steps: PdChecklistStep[] = firstClient
+      ? [
+          // With a client aboard, the primary CTA shifts to stages; done
+          // items sink to the bottom (reference PressFirstRunWithClient).
+          {
+            id: "stages",
+            title: "Set up your production stages",
+            detail: "Map your pipeline — design, test pressing, in production, shipped — so every run has a home.",
+            done: false,
+            cta: "Set up stages",
+            go: "pipeline",
+          },
+          {
+            id: "team",
+            title: "Invite your team",
+            detail: "Add the people on your floor so approvals and hand-offs stay in one place.",
+            done: false,
+          },
+          {
+            id: "first-client",
+            title: "Your first client is aboard",
+            detail: `${firstClient.name} — on your roster.`,
+            done: true,
+          },
+          {
+            id: "partnership",
+            title: "Your GoodTunes partnership is live",
+            detail: `${pressName} is set up and ready to take on work.`,
+            done: true,
+          },
+        ]
+      : [
+          {
+            id: "invite-client",
+            title: "Invite your first client",
+            detail: "Bring an artist or label aboard so their orders flow straight to you.",
+            done: false,
+            cta: "Invite a client",
+            go: "people",
+          },
+          {
+            id: "stages",
+            title: "Set up your production stages",
+            detail: "Map your pipeline — design, test pressing, in production, shipped — so every run has a home.",
+            done: false,
+          },
+          {
+            id: "team",
+            title: "Invite your team",
+            detail: "Add the people on your floor so approvals and hand-offs stay in one place.",
+            done: false,
+          },
+          {
+            id: "partnership",
+            title: "Your GoodTunes partnership is live",
+            detail: `${pressName} is set up and ready to take on work.`,
+            done: true,
+          },
+        ];
     return (
       <>
         <div className="flex flex-col gap-5" data-testid="press-firstrun">
@@ -1795,7 +1896,9 @@ function PressDashboardTab({
                 Welcome{firstName ? `, ${firstName}` : ""}
               </h1>
               <p className="text-[13.5px] mt-1" style={{ color: PD_SUBINK }}>
-                Your shop is ready — here's how to bring in your first work.
+                {firstClient
+                  ? `Your shop is ready — ${firstClient.name} is aboard as your first client.`
+                  : "Your shop is ready — here's how to bring in your first work."}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -1803,24 +1906,26 @@ function PressDashboardTab({
             </div>
           </div>
 
-          <PdEmptyKpiStrip />
+          <PdEmptyKpiStrip clientFirst={clientFirst} />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
             <div className="lg:col-span-2 min-h-0">
               <PdGettingStarted steps={steps} onNavigate={goTab} />
             </div>
             <div className="min-h-0 max-h-[420px]">
-              <PdWelcomeActivity items={dash?.activity ?? []} loading={dashLoading} pressName={pressName} />
+              <PdWelcomeActivity items={dash?.activity ?? []} loading={dashLoading} pressName={pressName} client={firstClient} />
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
-            <PdEmptyProductionSnapshot />
-            <PdEmptyTopClients />
+            <PdEmptyProductionSnapshot clientFirst={clientFirst} />
+            <PdEmptyTopClients clients={firstRunClients} />
           </div>
         </div>
 
-        {!welcomeDismissed && (
+        {/* Welcome modal only in the fully-empty state — a press whose first
+            client was assigned lands on the with-client layout sans modal. */}
+        {!welcomeDismissed && !firstClient && (
           <PdWelcomeModal
             firstName={firstName}
             onClose={dismissWelcome}
