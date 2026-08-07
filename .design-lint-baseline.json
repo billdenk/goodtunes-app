@@ -22205,6 +22205,11 @@
     "snippet": "className=\"w-9 h-9 rounded-full flex items-center justify-center text-white\""
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "const PD_BLUE = \"#319ED8\";"
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
     "snippet": "className=\"w-48 bg-transparent text-[12.5px] text-slate-700 placeholder-slate-400 focus:outline-none\""
@@ -22247,17 +22252,77 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "className=\"flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-[12px]\""
+    "snippet": "className=\"px-3.5 h-8 text-[13px] rounded-full transition-all\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "<p className=\"text-[11px] text-slate-400\">Daily activity over the selected window</p>"
+    "snippet": "<div className=\"text-[13px] font-medium truncate\" style={{ color: PD_SUBINK }}>{t.label}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<p className=\"flex-1 flex items-center text-[13px] leading-relaxed\" style={{ color: PD_SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<div className=\"text-[13px] truncate\" style={{ color: PD_INK }}>{it.title}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "{it.detail && <div className=\"text-[11.5px] truncate\" style={{ color: PD_SUBINK }}>{it.detail}</div>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<div className=\"text-[11px] tabular-nums flex-shrink-0 pt-0.5\" style={{ color: PD_SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "className=\"text-[12px] font-medium transition-opacity hover:opacity-70 flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<span className=\"text-[20px] font-semibold tabular-nums leading-none\" style={{ color: PD_INK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<span className=\"text-[10.5px] leading-tight\" style={{ color: PD_SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<p className=\"text-[13.5px] mt-1\" style={{ color: PD_SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13px] font-medium text-white transition-opacity hover:opacity-90\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<h3 className=\"mt-4 text-[18px] font-semibold\" style={{ color: PD_INK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<p className=\"mt-1.5 text-[13.5px] max-w-sm leading-relaxed\" style={{ color: PD_SUBINK }}>"
   },
   {
     "rule": "naked-icon-button",
     "file": "client/src/pages/PressPortal.tsx",
     "snippet": "<button type=\"button\" onClick={closeSearch} className=\"text-slate-400 hover:text-slate-700\" data-testid=\"button-close-search-press-albums\" aria-label=\"Close search\" > <XIcon className=\"w-3.5 h-3.5\" />"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<span className=\"h-1 w-6 rounded-full\" style={{ backgroundColor: stage.id === busiest ? PD_BLUE : PD_HAIRLINE }} />"
   },
   {
     "rule": "hardcoded-font-size",

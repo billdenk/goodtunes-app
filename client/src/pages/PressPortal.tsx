@@ -24,7 +24,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch, useLocation, useRoute } from "wouter";
-import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Mail, FileCheck, Pencil } from "lucide-react";
+import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Mail, FileCheck, Pencil, HeartHandshake, UserPlus, TrendingUp, Receipt } from "lucide-react";
 import { albumStage, type AlbumStage } from "@shared/albumStage";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
@@ -34,17 +34,16 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { DashboardPanel, RangePicker } from "@/components/partner/dashboard-controls";
+import { DashboardPanel } from "@/components/partner/dashboard-controls";
 import {
   PartnerDashboard,
   type DashboardPayload,
-  type DashboardKpi,
   type PartnerRangePreset,
   RANGE_PRESETS,
   TrendChart,
-  ActivityList,
+  formatValue,
+  type ActivityItem,
 } from "@/components/partner/PartnerDashboard";
-import { KpiCard, sparkFromSeries } from "@/components/admin/KpiCard";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ReferralLinkWidget } from "@/components/admin/ReferralLinkWidget";
 import { AdminAlbum } from "@/pages/AdminAlbum";
@@ -1242,6 +1241,241 @@ interface PressSummary {
 
 const PRESS_STAGE_ORDER = ["design","sunrise_set","selling","masters_triggered","locked","in_production","shipped"] as const;
 
+// ─── Press dashboard (Apple-canon restyle, docs/design-reference/code/
+// PressDashboard.tsx). Tokens ride the --apple-* theme variables so the
+// charcoal dark theme applies automatically — never hardcode the ladder. ──
+const PD_BLUE = "#319ED8";
+const PD_INK = "var(--apple-ink)";
+const PD_SUBINK = "var(--apple-subink)";
+const PD_HAIRLINE = "var(--apple-hairline)";
+const PD_TRACK = "var(--apple-track)";
+const PD_PILL = "var(--apple-pill)";
+const PD_TILE = "var(--apple-tile)";
+const PD_PILL_SHADOW = "0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)";
+
+const pdGreeting = () => {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+};
+
+function pdFmtRel(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${Math.max(s, 1)}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return date.toLocaleDateString();
+}
+
+// Two-tone section heading — lead in ink, rest recedes to subink.
+function PdSectionHeading({ lead, rest, size = 20 }: { lead: string; rest?: string; size?: number }) {
+  return (
+    <h3 style={{ fontSize: size, letterSpacing: "-0.01em" }} className="min-w-0">
+      <span className="font-semibold" style={{ color: PD_INK }}>{lead}</span>
+      {rest ? <span className="font-medium" style={{ color: PD_SUBINK }}> {rest}</span> : null}
+    </h3>
+  );
+}
+
+// Reference RangeSwitcher — rounded-full track, white active pill.
+function PdRangeSwitcher({ value, onChange }: { value: PartnerRangePreset; onChange: (v: PartnerRangePreset) => void }) {
+  return (
+    <div className="inline-flex items-center p-1 rounded-full" style={{ backgroundColor: PD_TRACK, gap: 2 }} data-testid="range-picker-press">
+      {RANGE_PRESETS.map((o) => {
+        const active = value === o.id;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onChange(o.id)}
+            aria-pressed={active}
+            data-testid={`button-range-${o.id}`}
+            className="px-3.5 h-8 text-[13px] rounded-full transition-all"
+            style={{
+              fontWeight: active ? 600 : 500,
+              color: active ? PD_INK : PD_SUBINK,
+              backgroundColor: active ? PD_PILL : undefined,
+              boxShadow: active ? PD_PILL_SHADOW : undefined,
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Reference KpiStrip — five calm tiles off the real press summary. The
+// summary has no prior-window figures, so these read as clean headlines
+// (no invented deltas).
+function PdKpiStrip({ summary, loading }: { summary?: PressSummary; loading: boolean }) {
+  type Tile = { id: string; label: string; value: string };
+  const tiles: Tile[] = summary
+    ? [
+        { id: "revenue-30d", label: "Sales · last 30d", value: formatValue(summary.revenueLast30dCents, "currency") },
+        { id: "revenue-lifetime", label: "Sales · lifetime", value: formatValue(summary.revenueLifetimeCents, "currency") },
+        { id: "units-30d", label: "Units · last 30d", value: formatValue(summary.unitsLast30d, "number") },
+        { id: "customers", label: "Customers", value: formatValue(summary.customerCount, "number") },
+        { id: "pipeline", label: "Projects in pipeline", value: formatValue(summary.totalAlbums, "number") },
+      ]
+    : [];
+  return (
+    <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }} data-testid="kpi-grid-press">
+      {loading || !summary
+        ? Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="rounded-2xl bg-white p-5 animate-pulse" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid={`kpi-skeleton-${i}`}>
+              <div className="h-3 w-24 rounded bg-slate-100" />
+              <div className="mt-4 h-8 w-20 rounded bg-slate-100" />
+            </div>
+          ))
+        : tiles.map((t) => (
+            <div key={t.id} className="rounded-2xl bg-white p-5 flex flex-col" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid={`kpi-press-${t.id}`}>
+              <div className="text-[13px] font-medium truncate" style={{ color: PD_SUBINK }}>{t.label}</div>
+              <div className="mt-3 tabular-nums truncate" style={{ fontSize: 30, lineHeight: 1, fontWeight: 600, letterSpacing: "-0.03em", color: PD_INK }} title={t.value}>
+                {t.value}
+              </div>
+            </div>
+          ))}
+    </div>
+  );
+}
+
+// Reference ActivityFeed — kind icons, relative times, quiet hover rows.
+function PdActivityIcon({ kind }: { kind: string }) {
+  const Icon =
+    kind === "offer" ? HeartHandshake :
+    kind === "roster" ? UserPlus :
+    kind === "milestone" ? TrendingUp :
+    kind === "stage" ? Disc3 :
+    kind === "invoice" ? Receipt :
+    Clock3;
+  return (
+    <span className="w-7 h-7 rounded-lg inline-flex items-center justify-center flex-shrink-0" style={{ backgroundColor: PD_TILE }}>
+      <Icon className="w-3.5 h-3.5" style={{ color: PD_SUBINK }} />
+    </span>
+  );
+}
+
+function PdActivityFeed({ items, loading }: { items: ActivityItem[]; loading: boolean }) {
+  const rows = useMemo(
+    () => [...items].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()).slice(0, 12),
+    [items],
+  );
+  return (
+    <div className="rounded-2xl bg-white p-5 flex flex-col h-full" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid="activity-press">
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+        <PdSectionHeading lead="As it happens." rest="Recent activity." size={16} />
+      </div>
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-9 rounded-xl bg-slate-100 animate-pulse" />
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="flex-1 flex items-center text-[13px] leading-relaxed" style={{ color: PD_SUBINK }}>
+          Offers, roster changes, and production milestones will show up here
+          as they happen.
+        </p>
+      ) : (
+        <ul className="space-y-0.5 flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
+          {rows.map((it, i) => {
+            const body = (
+              <div className="flex items-start gap-2.5 -mx-1.5 px-1.5 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+                <PdActivityIcon kind={it.kind} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] truncate" style={{ color: PD_INK }}>{it.title}</div>
+                  {it.detail && <div className="text-[11.5px] truncate" style={{ color: PD_SUBINK }}>{it.detail}</div>}
+                </div>
+                <div className="text-[11px] tabular-nums flex-shrink-0 pt-0.5" style={{ color: PD_SUBINK }}>
+                  {pdFmtRel(new Date(it.ts))}
+                </div>
+              </div>
+            );
+            return (
+              <li key={i} data-testid={`activity-${it.kind}-${i}`}>
+                {it.href ? <Link href={it.href} className="block">{body}</Link> : body}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// Reference ProductionSnapshot, driven by the REAL stage counts from the
+// summary (byStage) instead of the mockup's four invented stages. The
+// busiest stage gets the brand-blue bar; the rest stay quiet.
+function PdProductionSnapshot({ summary, onViewPipeline }: { summary?: PressSummary; onViewPipeline: () => void }) {
+  const stages = PRESS_STAGE_ORDER.map((s) => ({ id: s, label: STAGE_LABEL[s], count: summary?.byStage?.[s] ?? 0 }));
+  const busiest = stages.reduce((a, b) => (b.count > a.count ? b : a)).id;
+  return (
+    <div className="rounded-2xl bg-white p-5 flex flex-col h-full" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid="production-snapshot">
+      <div className="flex items-center justify-between mb-3.5 flex-shrink-0">
+        <PdSectionHeading lead="On the floor." rest="Where projects sit." size={16} />
+        <button
+          type="button"
+          onClick={onViewPipeline}
+          className="text-[12px] font-medium transition-opacity hover:opacity-70 flex-shrink-0"
+          style={{ color: PD_BLUE }}
+          data-testid="link-view-pipeline"
+        >
+          View pipeline
+        </button>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {stages.map((stage) => (
+          <div
+            key={stage.id}
+            className="rounded-xl px-2.5 py-2.5 flex flex-col gap-1.5"
+            style={{ backgroundColor: PD_TILE, border: `1px solid ${PD_HAIRLINE}` }}
+            data-testid={`stage-count-${stage.id}`}
+          >
+            <span className="h-1 w-6 rounded-full" style={{ backgroundColor: stage.id === busiest ? PD_BLUE : PD_HAIRLINE }} />
+            <span className="text-[20px] font-semibold tabular-nums leading-none" style={{ color: PD_INK }}>
+              {stage.count}
+            </span>
+            <span className="text-[10.5px] leading-tight" style={{ color: PD_SUBINK }}>
+              {stage.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Reference TopClients geometry with an honest empty state — the dashboard
+// has no revenue-ranked client feed yet, so no invented roster.
+function PdTopClientsCard({ onViewPeople }: { onViewPeople: () => void }) {
+  return (
+    <div className="rounded-2xl bg-white p-5 flex flex-col h-full" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid="top-clients">
+      <div className="flex items-center justify-between mb-2.5 flex-shrink-0">
+        <PdSectionHeading lead="Top clients." rest="By revenue this period." size={16} />
+        <button
+          type="button"
+          onClick={onViewPeople}
+          className="text-[12px] font-medium transition-opacity hover:opacity-70 flex-shrink-0"
+          style={{ color: PD_BLUE }}
+          data-testid="link-view-clients"
+        >
+          View all
+        </button>
+      </div>
+      <p className="flex-1 flex items-center text-[13px] leading-relaxed" style={{ color: PD_SUBINK }}>
+        As sales come in, your clients rank here by revenue for the
+        selected window.
+      </p>
+    </div>
+  );
+}
+
 function PressDashboardTab({
   pressId,
   isSuperAdminView,
@@ -1268,95 +1502,92 @@ function PressDashboardTab({
     queryKey: [`/api/partner/vendor/dashboard?${qs}`],
   });
 
-  const isLoading = summaryLoading || dashLoading;
+  // Cached by the portal shell — no extra request; used for the greeting.
+  const { data: me } = useQuery<PressMe>({ queryKey: [`/api/press/${pressId}/me`] });
 
-  const pressKpis: DashboardKpi[] = summary
-    ? [
-        { id: "revenue-30d", label: "Sales · last 30d", value: summary.revenueLast30dCents, format: "currency" },
-        { id: "revenue-lifetime", label: "Sales · lifetime", value: summary.revenueLifetimeCents, format: "currency" },
-        { id: "units-30d", label: "Units · last 30d", value: summary.unitsLast30d, format: "number" },
-        { id: "customers", label: "Customers", value: summary.customerCount, format: "number" },
-        { id: "pipeline", label: "Albums in pipeline", value: summary.totalAlbums, format: "number" },
-      ]
-    : [];
+  const [, navigate] = useLocation();
+  const goTab = (t: TabId) => navigate(pressPortalHref(t));
 
-  const allKpis: DashboardKpi[] = [...pressKpis, ...(dash?.kpis ?? [])];
+  // Two-tone trend heading follows the picked window.
+  const trendLead =
+    preset === "today" ? "Today." :
+    preset === "7d" ? "The last 7 days." :
+    preset === "30d" ? "The last 30 days." :
+    preset === "90d" ? "The last 90 days." :
+    "All time.";
 
   return (
-    <div className="space-y-5" data-testid="press-dashboard">
-      <AdminPageHeader
-        title="Dashboard"
-        subtitle="Press at a glance and operational activity."
-        testId="heading-press-dashboard"
-        actions={
-          <RangePicker
-            presets={RANGE_PRESETS}
-            value={preset}
-            onChange={setPreset}
-            testId="range-picker-press"
-          />
-        }
-      />
+    <div className="flex flex-col gap-5" data-testid="press-dashboard">
+      {/* Header — greeting + status line + range switcher + primary action */}
+      <div className="flex items-end justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <h1 style={{ fontSize: 30, fontWeight: 600, letterSpacing: "-0.03em", color: PD_INK }} data-testid="heading-press-dashboard">
+            {pdGreeting()}{me?.name ? `, ${me.name}` : ""}
+          </h1>
+          <p className="text-[13.5px] mt-1" style={{ color: PD_SUBINK }}>
+            Nothing needs you right now — the shop is running clean.
+          </p>
+        </div>
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          <PdRangeSwitcher value={preset} onChange={setPreset} />
+          <button
+            type="button"
+            onClick={() => goTab("pipeline")}
+            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13px] font-medium text-white transition-opacity hover:opacity-90"
+            style={{ backgroundColor: PD_BLUE }}
+            data-testid="button-header-view-pipeline"
+          >
+            <GitBranch className="w-3.5 h-3.5" />
+            View pipeline
+          </button>
+        </div>
+      </div>
 
-      {/* Unified KPI row */}
+      {/* HERO: work queue. No live queue feed exists yet, so the honest
+          all-caught-up state holds the reference geometry. */}
       <section
-        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"
-        data-testid="kpi-grid-press"
+        className="rounded-2xl bg-white p-10 flex flex-col items-center text-center"
+        style={{ border: `1px solid ${PD_HAIRLINE}` }}
+        data-testid="work-queue-empty"
       >
-        {isLoading && allKpis.length === 0
-          ? Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="rounded-xl border border-slate-200 bg-white h-[120px] animate-pulse" />
-            ))
-          : allKpis.map((k) => (
-              <KpiCard
-                key={k.id}
-                model={k}
-                testId={`kpi-press-${k.id}`}
-                spark={sparkFromSeries(dash?.series ?? [], k.id)}
-              />
-            ))}
+        <span className="w-12 h-12 rounded-full inline-flex items-center justify-center" style={{ backgroundColor: "var(--apple-ready-wash)" }}>
+          <CheckCircle2 className="w-6 h-6" style={{ color: "var(--apple-ready)" }} />
+        </span>
+        <h3 className="mt-4 text-[18px] font-semibold" style={{ color: PD_INK }}>
+          You're all caught up
+        </h3>
+        <p className="mt-1.5 text-[13.5px] max-w-sm leading-relaxed" style={{ color: PD_SUBINK }}>
+          No offers to accept, approvals due, or orders to ship. New work will
+          appear here the moment it needs you.
+        </p>
       </section>
 
-      {/* Albums by stage — compact pill strip.
-          Hidden for now at Bill's request; logic kept so it can be restored. */}
-      {false && summary && (
-        <DashboardPanel padding="md" data-testid="dashboard-by-stage">
-          <h3 className="text-sm font-semibold text-slate-700 mb-3">Albums by stage</h3>
-          <div className="flex flex-wrap gap-2">
-            {PRESS_STAGE_ORDER.map((s) => (
-              <div
-                key={s}
-                className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-[12px]"
-                data-testid={`stage-count-${s}`}
-              >
-                <span className="font-bold text-slate-900">{summary.byStage[s] ?? 0}</span>
-                <span className="text-slate-500">{STAGE_LABEL[s]}</span>
-              </div>
-            ))}
-          </div>
-        </DashboardPanel>
-      )}
+      {/* Calm, compact KPI strip */}
+      <PdKpiStrip summary={summary} loading={summaryLoading} />
 
-      {/* Trend chart + Recent activity — side by side on wide screens */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <DashboardPanel data-testid="trend-press" className="lg:col-span-2">
-          <div className="flex items-baseline justify-between mb-3">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-700">Trend</h3>
-              <p className="text-[11px] text-slate-400">Daily activity over the selected window</p>
+      {/* Trend earns its size once; activity recedes into a narrow rail */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
+        <div className="lg:col-span-2 min-h-0">
+          <div className="rounded-2xl bg-white p-6 h-full flex flex-col" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid="trend-press">
+            <div className="flex items-start justify-between mb-5 flex-wrap gap-2">
+              <PdSectionHeading lead={trendLead} rest="Daily activity in this window." />
             </div>
+            <TrendChart
+              series={dash?.series ?? []}
+              metrics={dash?.chartMetrics ?? []}
+              loading={dashLoading}
+            />
           </div>
-          <TrendChart
-            series={dash?.series ?? []}
-            metrics={dash?.chartMetrics ?? []}
-            loading={dashLoading}
-          />
-        </DashboardPanel>
+        </div>
+        <div className="min-h-0 max-h-[420px]">
+          <PdActivityFeed items={dash?.activity ?? []} loading={dashLoading} />
+        </div>
+      </div>
 
-        <DashboardPanel data-testid="activity-press">
-          <h3 className="text-sm font-semibold text-slate-700 mb-3">Recent activity</h3>
-          <ActivityList items={dash?.activity ?? []} loading={dashLoading} />
-        </DashboardPanel>
+      {/* Bottom row — floor snapshot (real stage counts) + top clients */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
+        <PdProductionSnapshot summary={summary} onViewPipeline={() => goTab("pipeline")} />
+        <PdTopClientsCard onViewPeople={() => goTab("people")} />
       </div>
     </div>
   );

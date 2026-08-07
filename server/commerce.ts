@@ -1058,6 +1058,15 @@ export function registerCommerceRoutes(app: Express) {
     const u = await storage.getUser(a.userId);
     if (!u?.isAdmin) return res.status(403).json({ message: "Forbidden" });
     (req as any).adminUserId = a.userId;
+    // Backfill the session identity so downstream handlers that read
+    // req.session.userId directly (press portal /me, pressUserCanEdit,
+    // etc.) work for pure-Bearer callers too — same backfill routes.ts's
+    // requireAdmin performs. Without it a #token-hash login 500s the
+    // press portal (empty user_id in the memberships query).
+    if (req.session && !req.session.userId) {
+      req.session.userId = a.userId;
+      req.session.kind = "admin";
+    }
     next();
   };
 

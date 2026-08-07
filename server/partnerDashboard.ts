@@ -1265,7 +1265,25 @@ export async function registerPartnerDashboardRoutes(app: Express) {
       return res.status(400).json({ message: "Unknown scope" });
     }
     const kind = kindRaw as ScopeKind;
-    const userId = req.session?.userId;
+    // Session first; fall back to an admin Bearer token so #token-hash
+    // logins (which may carry no session cookie) still load the partner
+    // dashboards instead of 401ing the trend/activity panels.
+    let userId = req.session?.userId;
+    if (!userId) {
+      const auth = req.headers.authorization;
+      if (auth?.startsWith("Bearer ")) {
+        const a = await storage.getAuthBy(auth.slice(7));
+        if (a?.kind === "admin") {
+          userId = a.userId;
+          // resolveScope() below re-reads req.session.userId — backfill it
+          // so the whole request sees one identity.
+          if (req.session && !req.session.userId) {
+            req.session.userId = a.userId;
+            req.session.kind = "admin";
+          }
+        }
+      }
+    }
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const user = await storage.getUser(userId);
     if (!user?.isAdmin) return res.status(403).json({ message: "Admin only" });
