@@ -1244,7 +1244,10 @@ export function AdminFrame({
             ingests, large not-ingested backlog). Same passive +
             per-set-dismissible pattern as AutoSyncAlertBanner. */}
         <MuxStatusBanner />
-        <PlacesBannerSlot />
+        {/* PlacesBanner moved out of the global header strip (Apple-canon
+            round 2) — the setup hint now lives on System → Security. Address
+            fields already degrade silently to plain inputs when the key is
+            missing. */}
         <div
           className={[
             "mx-auto w-full px-6 sm:px-8 pt-6 pb-[120px]",

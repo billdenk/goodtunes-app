@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { PlacesBanner } from "@/components/admin/AddressAutocompleteField";
 
 type PasswordStatus = { hasPassword: boolean };
 
@@ -214,6 +215,11 @@ export default function AdminSecurity() {
     <AdminFrame active="none">
       <div className="space-y-5">
         {header}
+
+        {/* Quiet setup hint, relocated from the global admin header strip —
+            renders only while GOOGLE_PLACES_API_KEY is unconfigured and is
+            dismissible per-browser. */}
+        <PlacesBanner />
 
         <Card className="p-5 space-y-4">
           <div>

@@ -441,7 +441,7 @@ export function AdminDashboard() {
           which removes the sidebar entirely. */}
       <DashboardContentBoundary>
         <div
-          className="gt-dashboard-canon flex flex-col gap-8 min-h-full pb-12"
+          className="gt-dashboard-canon flex flex-col gap-8 min-h-full pt-4 pb-12"
         >
           <SectionBoundary section="page-header">
             <AdminPageHeader
@@ -519,9 +519,15 @@ function AttentionSection({ ops, pending }: { ops?: OpsData; pending?: ReferralP
     ops?.stuckPayoutCount ? { icon: "◷", title: `${ops.stuckPayoutCount} payouts stuck in transit`, detail: "Transfer created but not confirmed by Stripe. Retry or inspect.", action: "Review ›", href: "/admin/reports", tone: "warning", link: true } : null,
     pending?.payableCount ? { icon: "▣", title: `${fmtUsd(pending.totalCents)} in referral payouts ready to run`, detail: `${pending.payableCount} payees clear${pending.blockedCount ? `, ${pending.blockedCount} blocked on Stripe setup` : ""}.`, action: "Run payouts →", href: "#", tone: "ready", link: false } : null,
   ].filter(Boolean) as Array<any>;
+  // Zero items → the header subtitle already says "Nothing needs you
+  // before anything else." — the bar would just be noise. The section
+  // reappears (bar + collapsible cards) the moment anything qualifies.
   if (cards.length === 0) return null;
   return <section data-testid="ops-health-strip">
-    <button type="button" className="gt-attention-bar" onClick={() => setOpen(!open)}><b>Needs your attention</b><span>{cards.length} items　⌄</span></button>
+    <button type="button" className="gt-attention-bar" aria-expanded={open} onClick={() => setOpen(!open)} data-testid="button-attention-toggle">
+      <b>Needs your attention</b>
+      <span className="gt-attention-meta">{cards.length} item{cards.length === 1 ? "" : "s"}<span className={`gt-attention-chevron ${open ? "" : "closed"}`} aria-hidden>⌄</span></span>
+    </button>
     {open && <div className="gt-attention-grid">{cards.map((c, i) => <article className="gt-attention-card" key={i}>
       <div className="gt-attention-top"><span className={`gt-severity-chip ${c.tone}`}>{c.icon}</span><span className={`gt-status ${c.tone}`}>● {c.tone === "critical" ? "Needs action" : c.tone === "warning" ? "In transit" : "Ready to run"}</span></div>
       <h3>{c.title}</h3><p>{c.detail}</p>{c.href === "#"
@@ -736,7 +742,7 @@ function PrimaryChart({
   // Align prior series by day-offset so it can be drawn alongside the
   // current series in the same chart.
   const merged = useMemo(() => {
-    return series.map((s, i) => {
+    const rows = series.map((s, i) => {
       const p = priorSeries[i];
       const key = metric === "gmv" ? "gmvCents" : metric === "orders" ? "orders" : metric === "signups" ? "signups" : "plays";
       const currentVal = (s as any)?.[key];
@@ -747,6 +753,15 @@ function PrimaryChart({
         prior: typeof priorVal === "number" ? priorVal : null,
       };
     });
+    // "All" anchors the window at Jan 2024, which pads the front of the
+    // series with months of flat zeros and crushes the real data into a
+    // sliver at the right edge. Trim leading all-zero days (keeping one
+    // day of runway) so the plot starts where activity starts. Bounded
+    // ranges (7/30/90 days) are left intact — a quiet week should still
+    // look like a quiet week.
+    const first = rows.findIndex((r) => r.current !== 0 || (r.prior ?? 0) !== 0);
+    if (first > 1 && rows.length - first >= 2) return rows.slice(first - 1);
+    return rows;
   }, [series, priorSeries, metric]);
 
   const isCurrency = metric === "gmv";
@@ -758,7 +773,7 @@ function PrimaryChart({
   ];
 
   return (
-      <div className="rounded-xl border border-slate-200 bg-white p-5 h-full flex flex-col" data-testid="dashboard-primary-chart">
+      <div className="rounded-xl border border-slate-200 bg-white p-5" data-testid="dashboard-primary-chart">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 className="text-sm font-semibold text-slate-700">Trend</h3>
         <div className="inline-flex items-center bg-slate-100 rounded-md p-0.5">
@@ -782,13 +797,17 @@ function PrimaryChart({
           })}
         </div>
       </div>
-      <div className="flex-1 min-h-[180px] flex flex-col">
+      {/* Fixed-height chart box (matches the reference screenshot) — the
+          chart fills this box; it must NEVER size itself off the page, or
+          ResponsiveContainer's height:100% feedback loop grows it without
+          bound now that the dashboard scrolls naturally. */}
+      <div className="h-[300px] flex flex-col">
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
           Loading…
         </div>
       ) : merged.length === 0 ? (
-        <div className="flex-1 relative min-h-[180px]" data-testid="dashboard-chart-empty">
+        <div className="flex-1 relative" data-testid="dashboard-chart-empty">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={[]} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="#e6e6ea" strokeDasharray="3 3" />
@@ -1013,12 +1032,17 @@ function ActivityFeed({ orders, customers, className = "" }: { orders: OrderRow[
       });
     }
     out.sort((a, b) => b.ts.getTime() - a.ts.getTime());
-    return out.slice(0, 20);
+    // ~8 most recent — the card is a glance, not a log. "View all" below
+    // links into the full orders list.
+    return out.slice(0, 8);
   }, [orders, customers]);
 
   return (
     <div className={`rounded-xl border border-slate-200 bg-white p-5 flex flex-col ${className}`} data-testid="dashboard-activity-feed">
-      <h3 className="text-sm font-semibold text-slate-700 mb-3 flex-shrink-0">Recent activity</h3>
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+        <h3 className="text-sm font-semibold text-slate-700">Recent activity</h3>
+        <Link href="/admin/orders" className="gt-quiet-link hover:underline underline-offset-2 transition-colors" data-testid="link-activity-view-all">View all ›</Link>
+      </div>
       {items.length === 0 ? (
         <p className="text-sm text-slate-400 py-10 text-center">Nothing yet.</p>
       ) : (

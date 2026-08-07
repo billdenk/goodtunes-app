@@ -589,6 +589,9 @@ body.gt-admin {
 .gt-section-heading strong{color:var(--apple-ink);font-weight:650}
 .gt-attention-bar{width:100%;display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border:1px solid var(--apple-hairline);background:var(--apple-card);border-radius:16px;font-size:12px;text-align:left}
 .gt-attention-bar b{color:var(--apple-ink)} .gt-attention-bar span{color:var(--apple-subink)}
+.gt-attention-meta{display:inline-flex;align-items:center;gap:8px}
+.gt-attention-chevron{display:inline-block;transition:transform .18s ease;line-height:1}
+.gt-attention-chevron.closed{transform:rotate(-90deg)}
 .gt-attention-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}
 .gt-attention-card{background:var(--apple-card);border:1px solid var(--apple-hairline);border-radius:16px;padding:18px 16px;min-height:155px}
 .gt-attention-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
