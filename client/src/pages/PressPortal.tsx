@@ -24,7 +24,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch, useLocation, useRoute } from "wouter";
-import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Circle, Mail, FileCheck, Pencil, HeartHandshake, UserPlus, TrendingUp, Receipt, Layers, Trophy } from "lucide-react";
+import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap, Search as SearchIcon, ChevronLeft, Disc3, Clock3, CheckCircle2, Circle, Mail, FileCheck, Pencil, HeartHandshake, UserPlus, TrendingUp, Receipt, Layers, Trophy, ShieldQuestion, UserCheck } from "lucide-react";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 import { albumStage, type AlbumStage } from "@shared/albumStage";
 import { useAuth } from "@/hooks/useAuth";
@@ -1513,14 +1513,14 @@ function PdEmptyKpiStrip({ clientFirst }: { clientFirst: string | null }) {
   );
 }
 
-type PdChecklistStep = { id: string; title: string; detail: string; done: boolean; cta?: string; go?: TabId };
+type PdChecklistStep = { id: string; title: string; detail: string; done: boolean; cta?: string; go?: TabId; note?: string };
 
-function PdGettingStarted({ steps, onNavigate }: { steps: PdChecklistStep[]; onNavigate: (t: TabId) => void }) {
+function PdGettingStarted({ steps, onNavigate, rest = "A few steps to get rolling." }: { steps: PdChecklistStep[]; onNavigate: (t: TabId) => void; rest?: string }) {
   const doneCount = steps.filter((s) => s.done).length;
   return (
     <div className="rounded-2xl bg-white p-6 h-full flex flex-col" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid="getting-started">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <PdSectionHeading lead="Getting started." rest="A few steps to get rolling." />
+        <PdSectionHeading lead="Getting started." rest={rest} />
         <span className="text-[11.5px] font-semibold tabular-nums rounded-full px-2.5 py-1" style={{ backgroundColor: PD_TRACK, color: PD_SUBINK }}>
           {doneCount} of {steps.length}
         </span>
@@ -1538,6 +1538,12 @@ function PdGettingStarted({ steps, onNavigate }: { steps: PdChecklistStep[]; onN
                 {s.title}
               </div>
               <p className="text-[12.5px] mt-0.5" style={{ color: PD_SUBINK }}>{s.detail}</p>
+              {s.note && (
+                <span className="mt-1.5 inline-flex items-center gap-1 text-[10.5px] font-medium rounded-full px-2 py-0.5" style={{ backgroundColor: PD_TRACK, color: PD_SUBINK }}>
+                  <ShieldQuestion className="w-3 h-3" style={{ color: PD_FAINT }} />
+                  {s.note}
+                </span>
+              )}
             </div>
             {s.cta && s.go && (
               <button
@@ -1559,7 +1565,7 @@ function PdGettingStarted({ steps, onNavigate }: { steps: PdChecklistStep[]; onN
 
 // Recent activity — real payload rows first (if any), then the standing
 // "joined GoodTunes" welcome event.
-function PdWelcomeActivity({ items, loading, pressName, client }: { items: ActivityItem[]; loading: boolean; pressName: string; client?: PersonLite | null }) {
+function PdWelcomeActivity({ items, loading, pressName, client, teammate }: { items: ActivityItem[]; loading: boolean; pressName: string; client?: PersonLite | null; teammate?: { name: string; inviter: string | null } | null }) {
   const rows = useMemo(
     () => [...items].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()).slice(0, 8),
     [items],
@@ -1592,6 +1598,22 @@ function PdWelcomeActivity({ items, loading, pressName, client }: { items: Activ
             </li>
           );
         })}
+        {teammate && (
+          <li data-testid="activity-teammate-joined">
+            <div className="flex items-start gap-2.5 -mx-1.5 px-1.5 py-2 rounded-xl">
+              <span className="w-7 h-7 rounded-lg inline-flex items-center justify-center flex-shrink-0" style={{ backgroundColor: PD_TILE }}>
+                <UserCheck className="w-3.5 h-3.5" style={{ color: PD_SUBINK }} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px]" style={{ color: PD_INK }}>
+                  {teammate.name} joined the team{teammate.inviter ? ` · invited by ${teammate.inviter}` : ""}
+                </div>
+                <div className="text-[11.5px]" style={{ color: PD_SUBINK }}>Welcome to the shop</div>
+              </div>
+              <div className="text-[11px] tabular-nums flex-shrink-0 pt-0.5" style={{ color: PD_FAINT }}>now</div>
+            </div>
+          </li>
+        )}
         {client && (
           <li data-testid="activity-first-client">
             <div className="flex items-start gap-2.5 -mx-1.5 px-1.5 py-2 rounded-xl">
@@ -1708,7 +1730,7 @@ function PdEmptyTopClients({ clients }: { clients: PersonLite[] }) {
   );
 }
 
-function PdWelcomeModal({ firstName, onClose, onInvite }: { firstName: string | null; onClose: () => void; onInvite: () => void }) {
+function PdWelcomeModal({ firstName, onClose, onInvite, body, primaryLabel }: { firstName: string | null; onClose: () => void; onInvite: () => void; body?: string; primaryLabel?: string }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="press-welcome-title" data-testid="welcome-modal">
       <button
@@ -1735,8 +1757,7 @@ function PdWelcomeModal({ firstName, onClose, onInvite }: { firstName: string | 
           Welcome{firstName ? `, ${firstName}` : ""}!
         </h2>
         <p className="mt-3 text-[13.5px] leading-relaxed" style={{ color: PD_SUBINK }}>
-          This is your shop's home base. Your clients, their orders, and every
-          run on your floor all live in one place — right here.
+          {body ?? "This is your shop's home base. Your clients, their orders, and every run on your floor all live in one place — right here."}
         </p>
         <div className="flex flex-col gap-2" style={{ marginTop: 28 }}>
           <button
@@ -1746,7 +1767,7 @@ function PdWelcomeModal({ firstName, onClose, onInvite }: { firstName: string | 
             onClick={onInvite}
             data-testid="button-welcome-primary"
           >
-            Invite my first client
+            {primaryLabel ?? "Invite my first client"}
           </button>
           <button
             type="button"
@@ -1793,7 +1814,7 @@ function PressDashboardTab({
   const { data: me } = useQuery<PressMe>({ queryKey: [`/api/press/${pressId}/me`] });
 
   // Signed-in user's own name for the first-run "Welcome, Brandon" greeting.
-  const { data: roleInfo } = useQuery<{ displayName?: string | null }>({ queryKey: ["/api/me/role"] });
+  const { data: roleInfo } = useQuery<{ displayName?: string | null; subRole?: string | null; inviterName?: string | null; canInvite?: boolean }>({ queryKey: ["/api/me/role"] });
 
   const [, navigate] = useLocation();
   const goTab = (t: TabId) => navigate(pressPortalHref(t));
@@ -1815,7 +1836,11 @@ function PressDashboardTab({
   });
 
   const [welcomeDismissed, setWelcomeDismissed] = useState<boolean>(() => {
-    try { return localStorage.getItem("gt-press-welcome") === "1"; } catch { return true; }
+    try {
+      // ?gtnowelcome=1 suppresses the modal (screenshots / demos).
+      if (new URLSearchParams(window.location.search).get("gtnowelcome") === "1") return true;
+      return localStorage.getItem("gt-press-welcome") === "1";
+    } catch { return true; }
   });
   const dismissWelcome = () => {
     try { localStorage.setItem("gt-press-welcome", "1"); } catch {}
@@ -1828,7 +1853,43 @@ function PressDashboardTab({
     const pressName = me?.name ?? "Your shop";
     const firstClient = firstRunClients[0] ?? null;
     const clientFirst = firstClient ? firstClient.name.trim().split(/\s+/)[0] : null;
-    const steps: PdChecklistStep[] = firstClient
+    // A secondary teammate (invited into an already-set-up shop) gets a
+    // personal checklist instead of the owner's setup list — the reference
+    // PressTeammateFirstRun. Detection: memberships sub_role ≠ null.
+    const isTeammate = !!roleInfo?.subRole;
+    const inviter = roleInfo?.inviterName ?? null;
+    const teammateSteps: PdChecklistStep[] = [
+      {
+        id: "profile",
+        title: "Complete your profile",
+        detail: "Add your name, photo, and role so the rest of the shop knows who you are.",
+        done: false,
+        cta: "Complete profile",
+        go: "settings",
+      },
+      ...(roleInfo?.canInvite
+        ? [{
+            id: "invite-client",
+            title: "Invite a client",
+            detail: "Bring an artist or label aboard so their orders flow straight to the shop.",
+            done: false,
+            note: "You have client-invite permission",
+          } satisfies PdChecklistStep]
+        : []),
+      {
+        id: "joined",
+        title: `You joined the team${inviter ? ` · invited by ${inviter.trim().split(/\s+/)[0]}` : ""}`,
+        detail: `You now have access to ${pressName} on GoodTunes.`,
+        done: true,
+      },
+      {
+        id: "shop-live",
+        title: `${pressName} is set up`,
+        detail: "The shop is live and ready to take on work — you can jump right in.",
+        done: true,
+      },
+    ];
+    const ownerSteps: PdChecklistStep[] = firstClient
       ? [
           // With a client aboard, the primary CTA shifts to stages; done
           // items sink to the bottom (reference PressFirstRunWithClient).
@@ -1887,6 +1948,7 @@ function PressDashboardTab({
             done: true,
           },
         ];
+    const steps = isTeammate ? teammateSteps : ownerSteps;
     return (
       <>
         <div className="flex flex-col gap-5" data-testid="press-firstrun">
@@ -1896,9 +1958,13 @@ function PressDashboardTab({
                 Welcome{firstName ? `, ${firstName}` : ""}
               </h1>
               <p className="text-[13.5px] mt-1" style={{ color: PD_SUBINK }}>
-                {firstClient
-                  ? `Your shop is ready — ${firstClient.name} is aboard as your first client.`
-                  : "Your shop is ready — here's how to bring in your first work."}
+                {isTeammate
+                  ? (inviter
+                      ? `${inviter.trim().split(/\s+/)[0]} added you to the ${pressName} team.`
+                      : `You've been added to the ${pressName} team.`)
+                  : firstClient
+                    ? `Your shop is ready — ${firstClient.name} is aboard as your first client.`
+                    : "Your shop is ready — here's how to bring in your first work."}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -1910,10 +1976,16 @@ function PressDashboardTab({
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
             <div className="lg:col-span-2 min-h-0">
-              <PdGettingStarted steps={steps} onNavigate={goTab} />
+              <PdGettingStarted steps={steps} onNavigate={goTab} rest={isTeammate ? "Settle into the shop." : undefined} />
             </div>
             <div className="min-h-0 max-h-[420px]">
-              <PdWelcomeActivity items={dash?.activity ?? []} loading={dashLoading} pressName={pressName} client={firstClient} />
+              <PdWelcomeActivity
+                items={dash?.activity ?? []}
+                loading={dashLoading}
+                pressName={pressName}
+                client={firstClient}
+                teammate={isTeammate && roleInfo?.displayName ? { name: roleInfo.displayName, inviter: inviter ? inviter.trim().split(/\s+/)[0] : null } : null}
+              />
             </div>
           </div>
 
@@ -1923,13 +1995,21 @@ function PressDashboardTab({
           </div>
         </div>
 
-        {/* Welcome modal only in the fully-empty state — a press whose first
-            client was assigned lands on the with-client layout sans modal. */}
-        {!welcomeDismissed && !firstClient && (
+        {/* Welcome modal: owners only in the fully-empty state (a press whose
+            first client was assigned lands on the with-client layout sans
+            modal); a new teammate always gets a one-line orientation. */}
+        {!welcomeDismissed && (isTeammate || !firstClient) && (
           <PdWelcomeModal
             firstName={firstName}
             onClose={dismissWelcome}
-            onInvite={() => { dismissWelcome(); goTab("people"); }}
+            onInvite={() => {
+              dismissWelcome();
+              goTab(isTeammate ? "settings" : "people");
+            }}
+            body={isTeammate
+              ? `${inviter ? `${inviter.trim().split(/\s+/)[0]} added you` : "You've been added"} to the ${pressName} team. The shop's already up and running — take a minute to set up your profile and you're good to go.`
+              : undefined}
+            primaryLabel={isTeammate ? "Complete my profile" : undefined}
           />
         )}
       </>

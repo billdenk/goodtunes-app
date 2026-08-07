@@ -26702,6 +26702,13 @@ export async function registerRoutes(
     const info = await getUserRole(userId);
     const role = info?.role ?? "super_admin";
     const roleScopeId = info?.roleScopeId ?? null;
+    // getUserRole drops subRole; read it off the effective membership set
+    // (teammate first-run surfaces need to know "secondary teammate").
+    let subRole: string | null = null;
+    try {
+      const ms = await getUserMemberships(userId);
+      subRole = pickPrimaryMembership(ms)?.subRole ?? null;
+    } catch {}
 
     let scopeName: string | null = null;
     if (roleScopeId) {
@@ -26739,6 +26746,21 @@ export async function registerRoutes(
         LIMIT 1
       `);
       welcomeNote = ((r as any).rows ?? [])[0]?.welcome_note ?? null;
+    } catch {}
+
+    // Teammate first-run greetings ("Brandon added you to the team") need
+    // who sent the accepted invite. Best-effort — null when the account
+    // wasn't minted via an invite (e.g. operator-created).
+    let inviterName: string | null = null;
+    try {
+      const r = await db.execute<{ display_name: string | null }>(sql`
+        SELECT u.display_name FROM admin_invites ai
+        JOIN users u ON u.id = ai.created_by_user_id
+        WHERE ai.accepted_user_id = ${userId}
+        ORDER BY ai.used_at DESC NULLS LAST
+        LIMIT 1
+      `);
+      inviterName = ((r as any).rows ?? [])[0]?.display_name ?? null;
     } catch {}
 
     // Task #1791 — surface what the caller may invite so AdminInvites
@@ -26779,6 +26801,8 @@ export async function registerRoutes(
       scopeName,
       welcomeNote,
       displayName,
+      subRole: subRole,
+      inviterName,
       canInvite: cap.canInvite,
       allowedInviteRoles: cap.allowedRoles,
       allowAdvancedInvite: cap.allowAdvanced,
