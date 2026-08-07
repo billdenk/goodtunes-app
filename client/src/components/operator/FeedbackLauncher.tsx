@@ -182,7 +182,10 @@ export function FeedbackLauncher({ className }: { className?: string }) {
         type="button"
         size="sm"
         className={cn(
-          "gap-1.5 bg-[var(--brand-blue)] text-white hover:bg-[var(--brand-blue-hover)] border-0 shadow-sm",
+          // Apple-canon header utility action: ghost pill — subink text +
+          // icon, transparent, light-gray hover, NEVER filled blue (the
+          // filled slot belongs to the screen's one primary CTA).
+          "gap-1.5 rounded-full bg-transparent text-[var(--apple-subink)] hover:bg-slate-100 hover:text-[var(--apple-ink)] border-0 shadow-none",
           className
         )}
         onClick={() => {

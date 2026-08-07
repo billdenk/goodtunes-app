@@ -188,8 +188,9 @@ function ArtistShell({ children }: { children: ReactNode }) {
         <div className="flex items-center gap-3 flex-shrink-0">
           <Button
             size="sm"
-            className="text-white hover:opacity-90 rounded-full"
-            style={{ backgroundColor: BLUE, borderColor: BLUE }}
+            variant="ghost"
+            className="rounded-full"
+            style={{ color: '#6e6e73', paddingLeft: 12, paddingRight: 12 }}
             data-testid="button-feedback"
           >
             <MessageSquarePlus className="w-3.5 h-3.5" />

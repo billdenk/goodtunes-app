@@ -531,8 +531,8 @@ function PressShell({ children }: { children: ReactNode }) {
         <div className="flex items-center gap-3 flex-shrink-0">
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13px] font-medium text-white transition-opacity hover:opacity-90"
-            style={{ backgroundColor: BLUE }}
+            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13px] font-medium transition-colors hover:bg-slate-100"
+            style={{ color: SUBINK }}
             data-testid="button-feedback"
           >
             <MessageSquarePlus className="w-3.5 h-3.5" />
