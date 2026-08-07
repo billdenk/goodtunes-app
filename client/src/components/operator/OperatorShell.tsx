@@ -268,14 +268,17 @@ export function OperatorShell<TabId extends string>({
       <div className="flex flex-col" style={{ height: "100dvh" }} data-testid={testId ?? "operator-shell"}>
         <ViewAsBanner />
         <div
-          className="flex-1 min-h-0 overflow-hidden flex bg-slate-50 text-slate-900"
+          className="flex-1 min-h-0 overflow-hidden flex bg-[var(--apple-canvas)] text-[var(--apple-ink)]"
         >
         {/* Left rail — 220px white column (AdminFrame parity). Partner logo
             + name in the top
             header band (replacing the GoodTunes logo). Vertical nav in the
             middle. "Powered by GoodTunes" pinned to the foot.
             Hidden on phones, which fall back to the horizontal tab bar. */}
-        <aside className="w-[220px] flex-shrink-0 bg-white hidden md:flex md:flex-col">
+        {/* Apple-canon rail — w-64 gray rail with hairline right border,
+            byte-identical to AdminFrame's sidebar so partner portals and the
+            super admin read as the same product. */}
+        <aside className="w-64 flex-shrink-0 bg-[var(--apple-rail)] hidden md:flex md:flex-col">
           {/* Partner logo + name — top-left rail header (h-14 band). When a
               full-size navLogoUrl is set (press whitelabel), render it
               height-constrained so the band never grows; otherwise fall back to
@@ -283,7 +286,7 @@ export function OperatorShell<TabId extends string>({
               rail is w-[220px] — byte-identical to AdminFrame's sidebar — so
               partner portals and the super admin read as the same product;
               long press names like "Memphis Record Pressing" truncate. */}
-          <div className="h-14 flex-shrink-0 flex items-center gap-2.5 px-3 border-b border-slate-200 overflow-hidden">
+          <div className="h-14 flex-shrink-0 flex items-center gap-2.5 px-3 border-b border-r border-[var(--apple-hairline)] overflow-hidden">
             {navLogoUrl ? (
               <img
                 src={navLogoUrl}
@@ -322,7 +325,7 @@ export function OperatorShell<TabId extends string>({
               operator routes that partners can't see.
               registerShortcut is NOT suppressed — partner portals don't
               co-mount AdminFrame so ⌘K is safe here. */}
-          <div className="px-2 pt-2 border-r border-slate-200 flex-shrink-0">
+          <div className="px-3 py-3 border-r border-[var(--apple-hairline)] flex-shrink-0">
             <AdminSearchBar
               searchEndpoint="/api/admin/search/scoped"
               placeholder="Search portal…"
@@ -347,7 +350,7 @@ export function OperatorShell<TabId extends string>({
               source (registry.ts), never per-page maps that can drift.
               Keep these in lock-step with SidebarLink / Section. */}
           <nav
-            className="flex-1 px-2 pt-2 pb-3 space-y-0.5 overflow-y-auto border-r border-slate-200"
+            className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 overflow-y-auto border-r border-[var(--apple-hairline)]"
             data-testid="operator-shell-nav"
           >
             {(() => {
@@ -404,12 +407,12 @@ export function OperatorShell<TabId extends string>({
 
             {navExtras && navExtras.length > 0 && (
               <>
-                <div className="my-2 border-t border-slate-100" />
+                <div className="my-2 border-t border-[var(--apple-hairline)]" />
                 {navExtras.map((x) => {
                   const Icon = x.icon ?? Circle;
                   return (
-                    <Link key={x.id} href={x.href} data-testid={`nav-${x.id}`} className="gt-nav w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-medium text-slate-700 hover:bg-slate-100 transition-colors">
-                      <Icon className="w-4 h-4 flex-shrink-0 text-slate-400" />
+                    <Link key={x.id} href={x.href} data-testid={`nav-${x.id}`} className="gt-nav w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] font-medium text-[var(--apple-subink)] hover:bg-slate-200 transition-colors">
+                      <Icon className="w-4 h-4 flex-shrink-0 text-[var(--apple-faint)]" />
                       <span className="flex-1 text-left truncate">{x.label}</span>
                     </Link>
                   );
@@ -420,11 +423,11 @@ export function OperatorShell<TabId extends string>({
 
           {/* "Powered by GoodTunes" — bottom of rail. GoodTunes logo moves
               here so the partner's own logo claims the top-left position. */}
-          <div className="flex-shrink-0 border-t border-r border-slate-200 px-4 py-3">
-            <p className="text-[7px] text-slate-400 font-medium uppercase tracking-wider mb-1.5">
+          <div className="flex-shrink-0 border-t border-r border-[var(--apple-hairline)] px-4 py-3 flex items-center gap-2">
+            <span className="text-[9px] uppercase tracking-wider font-bold flex-shrink-0 text-[var(--apple-faint)]">
               Powered by
-            </p>
-            <img src={gtLogo} alt="GoodTunes" className="h-[27px] w-auto" />
+            </span>
+            <img src={gtLogo} alt="GoodTunes" className="h-5 w-auto" />
           </div>
         </aside>
 
@@ -434,7 +437,8 @@ export function OperatorShell<TabId extends string>({
           {/* Top header strip — h-14, matches AdminFrame's sticky top bar.
               Profile menu pinned top-right (desktop + mobile). */}
           <div
-            className="h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center gap-3 px-4 sm:px-6"
+            className="h-14 flex-shrink-0 border-b border-[var(--apple-hairline)] flex items-center gap-3 px-4 sm:px-6"
+            style={{ background: "rgba(255,255,255,0.72)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
             data-testid="operator-shell-topbar"
           >
             {/* Mobile: show the entity name since the rail is hidden. */}
@@ -596,17 +600,19 @@ function NavButton({
       aria-current={active ? "page" : undefined}
       data-testid={testId}
       className={cn(
-        "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors",
-        active ? "font-bold" : "font-medium",
+        "w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] transition-colors",
+        active ? "font-semibold" : "font-medium",
+        // Apple-canon: quiet raised white pill for the active row —
+        // mirrors AdminFrame's SidebarLink exactly.
         active
-          ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
-          : "text-slate-700 hover:bg-slate-100",
+          ? "bg-white text-[var(--apple-ink)] shadow-[0_1px_2px_rgba(0,0,0,0.08),0_0_0_0.5px_rgba(0,0,0,0.04)]"
+          : "text-[var(--apple-subink)] hover:bg-slate-200",
       )}
     >
       <Glyph
         className={cn(
           "w-4 h-4 flex-shrink-0",
-          active ? "text-[var(--brand-blue)]" : "text-slate-400",
+          active ? "text-[var(--apple-ink)]" : "text-[var(--apple-faint)]",
         )}
       />
       <span className="flex-1 text-left truncate">{label}</span>
@@ -657,11 +663,12 @@ function NavSection({
         data-testid={testId}
         data-active={highlightParent ? "true" : "false"}
         className={cn(
-          "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors",
-          highlightParent ? "font-bold" : "font-medium",
+          "w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] transition-colors",
+          highlightParent ? "font-semibold" : "font-medium",
+          // Apple-canon: same quiet raised white pill as AdminFrame's Section.
           highlightParent
-            ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
-            : "text-slate-700 hover:bg-slate-100",
+            ? "bg-white text-[var(--apple-ink)] shadow-[0_1px_2px_rgba(0,0,0,0.08),0_0_0_0.5px_rgba(0,0,0,0.04)]"
+            : "text-[var(--apple-subink)] hover:bg-slate-200",
         )}
       >
         <motion.span
@@ -676,7 +683,7 @@ function NavSection({
           <ChevronRight
             className={cn(
               "w-4 h-4",
-              highlightParent ? "text-[var(--brand-blue)]" : "text-slate-400",
+              highlightParent ? "text-[var(--apple-subink)]" : "text-[var(--apple-faint)]",
             )}
           />
         </motion.span>
