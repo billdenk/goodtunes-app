@@ -10,6 +10,7 @@ import {
   albumEarnings,
   topContent,
   opsHealth,
+  dashboardWinning,
   payoutReconciliation,
   rawEvents,
   posthogEmbeds,
@@ -76,6 +77,12 @@ export function registerAdminReportRoutes(app: Express) {
       data.series.map((r) => ({ date: r.date, gmv: dollarsFromCents(r.gmvCents), orders: r.orders, signups: r.signups, plays: r.plays })),
       ["date", "gmv", "orders", "signups", "plays"],
     ));
+  }));
+
+  // ─── Dashboard "Who's winning" (top projects + sales by press) ────
+  app.get("/api/admin/reports/winning", adminGuard, wrap(async (req, res) => {
+    const data = await dashboardWinning(ctxFromReq(req));
+    res.json(data);
   }));
 
   // ─── Revenue breakdown ───────────────────────────────────────────

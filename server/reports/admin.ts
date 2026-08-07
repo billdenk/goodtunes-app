@@ -17,6 +17,8 @@ import {
   analyticsEvents,
   songs,
   payoutAccounts,
+  albumSkus,
+  manufacturers,
 } from "@shared/schema";
 import { isFullAccessEmail } from "@shared/fullAccess";
 import { pgArray } from "../lib/pgArray";
@@ -576,6 +578,132 @@ export async function topContent(ctx: AdminReportContext) {
   })).sort((a, b) => b.plays - a.plays).slice(0, 25);
 
   return { songs: songOut, albums: albumOut, artists: artistOut, labels: labelOut };
+}
+
+// ─── Dashboard "Who's winning" ─────────────────────────────────────────
+// Apple-canon dashboard bottom section: top projects by revenue and
+// sales by press, each with a revenue delta vs the immediately-prior
+// window of the same length. Press attribution: an order belongs to the
+// press whose catalog the album's vinyl SKU was priced from
+// (album_skus.press_id — first non-null row by position). Albums with
+// no catalog-pinned SKU simply don't contribute to the press cut.
+export async function dashboardWinning(ctx: AdminReportContext) {
+  const windowMs = ctx.to.getTime() - ctx.from.getTime();
+  const priorTo = new Date(ctx.from.getTime() - 1);
+  const priorFrom = new Date(priorTo.getTime() - windowMs);
+
+  async function paidOrders(from: Date, to: Date) {
+    return db
+      .select({
+        id: orders.id,
+        totalCents: orders.totalCents,
+        albumId: orders.albumId,
+      })
+      .from(orders)
+      .where(and(
+        eq(orders.status, "paid"),
+        ne(orders.origin, "qa:test"),
+        gte(orders.createdAt, from),
+        lte(orders.createdAt, to),
+      ));
+  }
+
+  const [cur, prior] = await Promise.all([
+    paidOrders(ctx.from, ctx.to),
+    paidOrders(priorFrom, priorTo),
+  ]);
+
+  const albumIds = Array.from(new Set([...cur, ...prior].map((o) => o.albumId)));
+  if (albumIds.length === 0) return { topAlbums: [], byPress: [] };
+
+  const albumRows = await db
+    .select({ id: albums.id, title: albums.title, artist: albums.artist, coverUrl: albums.artwork })
+    .from(albums)
+    .where(inArray(albums.id, albumIds));
+  const albumById = new Map(albumRows.map((a) => [a.id, a]));
+
+  // album → press (first catalog-pinned SKU by position).
+  const skuRows = await db
+    .select({ albumId: albumSkus.albumId, pressId: albumSkus.pressId, position: albumSkus.position })
+    .from(albumSkus)
+    .where(and(inArray(albumSkus.albumId, albumIds), isNotNull(albumSkus.pressId)));
+  skuRows.sort((a, b) => a.position - b.position);
+  const pressByAlbum = new Map<string, string>();
+  for (const s of skuRows) {
+    if (!pressByAlbum.has(s.albumId)) pressByAlbum.set(s.albumId, s.pressId!);
+  }
+
+  const pressIds = Array.from(new Set(Array.from(pressByAlbum.values())));
+  const pressRows = pressIds.length
+    ? await db
+        .select({ id: manufacturers.id, name: manufacturers.name, location: manufacturers.location, logoUrl: manufacturers.logoUrl, squareLogoUrl: manufacturers.squareLogoUrl, lightSquareLogoUrl: manufacturers.lightSquareLogoUrl })
+        .from(manufacturers)
+        .where(and(inArray(manufacturers.id, pressIds), isNull(manufacturers.deletedAt)))
+    : [];
+  const pressById = new Map(pressRows.map((p) => [p.id, p]));
+  // Soft-deleted presses drop out of the ranking entirely — without this,
+  // a trashed manufacturer would still rank as "Unknown press".
+  for (const [albumId, pressId] of Array.from(pressByAlbum.entries())) {
+    if (!pressById.has(pressId)) pressByAlbum.delete(albumId);
+  }
+
+  type Slot = { cents: number; units: number };
+  function bucket(rows: { totalCents: number; albumId: string }[], key: (albumId: string) => string | null) {
+    const m = new Map<string, Slot>();
+    for (const o of rows) {
+      const k = key(o.albumId);
+      if (!k) continue;
+      const s = m.get(k) ?? { cents: 0, units: 0 };
+      s.cents += o.totalCents;
+      s.units += 1;
+      m.set(k, s);
+    }
+    return m;
+  }
+
+  const albumCur = bucket(cur, (id) => id);
+  const albumPrior = bucket(prior, (id) => id);
+  const pressCur = bucket(cur, (id) => pressByAlbum.get(id) ?? null);
+  const pressPrior = bucket(prior, (id) => pressByAlbum.get(id) ?? null);
+
+  function deltaPct(nowCents: number, priorCents: number): number | null {
+    if (priorCents <= 0) return null;
+    return Math.round(((nowCents - priorCents) / priorCents) * 1000) / 10;
+  }
+
+  const topAlbums = Array.from(albumCur.entries())
+    .sort((a, b) => b[1].cents - a[1].cents)
+    .slice(0, 5)
+    .map(([id, v]) => {
+      const a = albumById.get(id);
+      return {
+        id,
+        title: a?.title ?? "Unknown release",
+        artist: a?.artist ?? "",
+        coverUrl: a?.coverUrl ?? null,
+        cents: v.cents,
+        units: v.units,
+        deltaPct: deltaPct(v.cents, albumPrior.get(id)?.cents ?? 0),
+      };
+    });
+
+  const byPress = Array.from(pressCur.entries())
+    .sort((a, b) => b[1].cents - a[1].cents)
+    .slice(0, 5)
+    .map(([id, v]) => {
+      const p = pressById.get(id);
+      return {
+        id,
+        name: p?.name ?? "Unknown press",
+        location: p?.location ?? null,
+        logoUrl: p?.lightSquareLogoUrl ?? p?.squareLogoUrl ?? p?.logoUrl ?? null,
+        cents: v.cents,
+        units: v.units,
+        deltaPct: deltaPct(v.cents, pressPrior.get(id)?.cents ?? 0),
+      };
+    });
+
+  return { topAlbums, byPress };
 }
 
 // ─── Ops health ────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
-import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type ErrorInfo } from "react";
+import { Component, useEffect, useMemo, useState, type ReactNode, type ErrorInfo } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, authHeaders, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -185,9 +185,6 @@ class DashboardContentBoundary extends Component<
 }
 
 const BLUE = "#319ED8";
-const MINT = "#4AFFCA";
-const PURPLE = "#7F10A7";
-const PINK = "#FF5470";
 
 type RangeKey = "today" | "7d" | "30d" | "90d" | "all";
 const RANGE_LS_KEY = "admin-dashboard:range";
@@ -229,7 +226,10 @@ const DASH = "—";
 // `undefined.toLocaleString`. We now throw on non-ok so React Query
 // surfaces the page-level error boundary instead.
 async function fetchAdminJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { credentials: "include" });
+  // Session cookie AND bearer token — mirrors the default queryFn, so the
+  // parameterised report fetches authenticate in every context the rest of
+  // the dashboard does (token-hash logins have no usable session cookie).
+  const res = await fetch(url, { credentials: "include", headers: authHeaders() });
   if (!res.ok) {
     const text = (await res.text().catch(() => "")) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
@@ -283,6 +283,11 @@ interface OpsData {
   failedCheckouts: { last24hCount: number; last7dCount: number };
   stuckPayoutCount: number;
 }
+interface ReferralPendingSummary { payableCount: number; blockedCount: number; totalCents: number; batches: Array<any> }
+interface WinningData {
+  topAlbums: Array<{ id: string; title: string; artist: string; coverUrl?: string | null; cents: number; units: number; deltaPct: number | null }>;
+  byPress: Array<{ id: string; name: string; location: string; logoUrl?: string | null; cents: number; units: number; deltaPct: number | null }>;
+}
 
 interface OrderRow {
   id: string;
@@ -323,67 +328,10 @@ interface CustomersResp {
 // own top and the bottom of the viewport and constrains itself to that.
 // A negative bottom margin cancels the wrapper's bottom padding so the
 // content can reach the bottom of the screen instead of leaving a
-// ~120px dead band. Disabled below the desktop breakpoint or when the
-// window is too short to fit everything legibly — there it falls back
-// to the natural vertical scroll.
-const FIT_MIN_WIDTH = 1024; // Tailwind lg — below this we stack + scroll.
-const FIT_MIN_HEIGHT = 520; // Below this the panels would be crushed.
-const FIT_BOTTOM_GAP = 24; // Breathing room above the viewport bottom.
-
-function useFitToViewport(enabled: boolean) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState<{ height: number; marginBottom: number } | null>(null);
-
-  useLayoutEffect(() => {
-    if (!enabled) {
-      setFit((prev) => (prev === null ? prev : null));
-      return;
-    }
-    const el = ref.current;
-    if (!el) return;
-
-    const compute = () => {
-      if (window.innerWidth < FIT_MIN_WIDTH) {
-        setFit((prev) => (prev === null ? prev : null));
-        return;
-      }
-      const top = el.getBoundingClientRect().top;
-      const parent = el.parentElement;
-      const padBottom = parent
-        ? parseFloat(getComputedStyle(parent).paddingBottom) || 0
-        : 0;
-      const available = window.innerHeight - top - FIT_BOTTOM_GAP;
-      if (available < FIT_MIN_HEIGHT) {
-        setFit((prev) => (prev === null ? prev : null));
-        return;
-      }
-      const next = { height: available, marginBottom: -padBottom };
-      setFit((prev) =>
-        prev && prev.height === next.height && prev.marginBottom === next.marginBottom
-          ? prev
-          : next,
-      );
-    };
-
-    compute();
-    window.addEventListener("resize", compute);
-    // Banners (auto-sync / Mux health) mount/unmount above us inside the
-    // <main> scroll container, which shifts our top — recompute when the
-    // main column's direct children change so we stay exactly one screen.
-    const main = el.closest("main");
-    let mo: MutationObserver | undefined;
-    if (main) {
-      mo = new MutationObserver(compute);
-      mo.observe(main, { childList: true });
-    }
-    return () => {
-      window.removeEventListener("resize", compute);
-      mo?.disconnect();
-    };
-  }, [enabled]);
-
-  return { ref, fit };
-}
+// ~120px dead band. RETIRED in the Apple-canon Round 2 restyle — the
+// canon dashboard is a naturally scrolling page (attention cards, KPI
+// row, story chart, activity, and the Who's-winning lists stack past
+// the fold, matching docs/design-reference/AdminDashboardApple.jpg).
 
 export function AdminDashboard() {
   const { user } = useAuth();
@@ -463,14 +411,23 @@ export function AdminDashboard() {
   const { data: recentCustomers } = useQuery<CustomersResp>({
     queryKey: ["/api/admin/customers"],
   });
+  // Referral payouts are a super_admin-only verb — don't fetch (or surface
+  // the attention card / header pill) for ordinary admins.
+  const { data: pendingPayouts } = useQuery<ReferralPendingSummary>({
+    queryKey: ["/api/admin/referral-payouts/pending"],
+    enabled: role?.role === "super_admin",
+  });
+  const { data: winning } = useQuery<WinningData>({
+    queryKey: ["/api/admin/reports/winning", qs],
+    queryFn: () => fetchAdminJson<WinningData>(`/api/admin/reports/winning?${qs}`),
+    enabled: !!role && !isArtistEarly,
+  });
 
   const isSuperAdmin = role?.role === "super_admin";
   const isArtist = isArtistEarly;
 
   // Task #1498 — the operator dashboard fits one screen; the artist
   // variant has no Trend chart and keeps its natural scroll.
-  const { ref: fitRef, fit } = useFitToViewport(!isArtist);
-
   return (
     <AdminFrame active="dashboard">
       {/* Task #1217 — DashboardContentBoundary wraps the entire content
@@ -484,23 +441,21 @@ export function AdminDashboard() {
           which removes the sidebar entirely. */}
       <DashboardContentBoundary>
         <div
-          ref={fitRef}
-          className={`gt-dashboard-canon flex flex-col gap-5 ${fit ? "overflow-hidden" : "min-h-full"}`}
-          style={fit ? { height: fit.height, marginBottom: fit.marginBottom } : undefined}
+          className="gt-dashboard-canon flex flex-col gap-8 min-h-full pb-12"
         >
           <SectionBoundary section="page-header">
             <AdminPageHeader
-              title={<><span>Good morning, {firstName}.</span> <span className="font-medium text-slate-500">The numbers, at a glance.</span></>}
-              subtitle={isArtist ? "Your releases and recent fan activity." : "GoodTunes® operator overview."}
+              title={<span>Good morning, {firstName}.</span>}
+              subtitle={isArtist ? "Your releases and recent fan activity." : (attentionCount(ops, pendingPayouts) > 0 ? `${attentionCount(ops, pendingPayouts)} thing${attentionCount(ops, pendingPayouts) === 1 ? "" : "s"} need${attentionCount(ops, pendingPayouts) === 1 ? "s" : ""} you before anything else.` : "Nothing needs you before anything else.")}
               testId="heading-admin-dashboard"
-              actions={<RangeSwitcher value={range} onChange={setRange} />}
+              actions={<div className="flex items-center gap-3"><RangeSwitcher value={range} onChange={setRange} />{isSuperAdmin && <button type="button" className="gt-primary-pill" onClick={() => window.dispatchEvent(new Event("gt:run-payouts"))} data-testid="button-run-payouts-header">Run payouts</button>}</div>}
             />
           </SectionBoundary>
 
           {!isArtist && (
             <>
               <SectionBoundary section="ops-health">
-                {ops && <OpsHealthStrip ops={ops} />}
+                <AttentionSection ops={ops} pending={pendingPayouts} />
               </SectionBoundary>
 
               <SectionBoundary section="referral-payouts">
@@ -508,13 +463,13 @@ export function AdminDashboard() {
               </SectionBoundary>
 
               <SectionBoundary section="kpi-grid">
-                <KpiGrid kpis={kpis} loading={kpisLoading} qs={qs} />
+                <section><CanonHeading lead="The numbers." rest="At a glance."/><KpiGrid kpis={kpis} loading={kpisLoading} qs={qs} /></section>
               </SectionBoundary>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:flex-1 lg:min-h-0 lg:auto-rows-fr">
                 <div className="lg:col-span-2 flex flex-col min-h-0">
                   <SectionBoundary section="primary-chart">
-                    <PrimaryChart kpis={kpis} prior={priorKpis} loading={kpisLoading} />
+                    <section><CanonHeading lead="The story." rest={`How the last ${range === "30d" ? "month" : "period"} moved.`}/><PrimaryChart kpis={kpis} prior={priorKpis} loading={kpisLoading} /></section>
                   </SectionBoundary>
                 </div>
                 <div className="flex flex-col min-h-0">
@@ -523,6 +478,7 @@ export function AdminDashboard() {
                   </SectionBoundary>
                 </div>
               </div>
+              <SectionBoundary section="winning"><WinningSection data={winning} /></SectionBoundary>
             </>
           )}
 
@@ -546,14 +502,59 @@ export function AdminDashboard() {
   );
 }
 
+function attentionCount(ops?: OpsData, pending?: ReferralPendingSummary) {
+  return (ops?.stuckFulfillments.count ? 1 : 0) + (ops?.failedCheckouts.last24hCount ? 1 : 0) +
+    (ops?.stuckPayoutCount ? 1 : 0) + (pending?.payableCount ? 1 : 0);
+}
+
+function CanonHeading({ lead, rest }: { lead: string; rest: string }) {
+  return <h2 className="gt-section-heading"><strong>{lead}</strong> <span>{rest}</span></h2>;
+}
+
+function AttentionSection({ ops, pending }: { ops?: OpsData; pending?: ReferralPendingSummary }) {
+  const [open, setOpen] = useState(true);
+  const cards = [
+    ops?.stuckFulfillments.count ? { icon: "▣", title: `${ops.stuckFulfillments.count} orders failed to reach fulfillment`, detail: "Paid, but never pushed to the press. Fans are waiting.", action: "Push to fulfillment →", href: "/admin/orders?needsPush=1", tone: "critical", link: false } : null,
+    ops?.failedCheckouts.last24hCount ? { icon: "▤", title: `${ops.failedCheckouts.last24hCount} checkouts failed in the last 24h`, detail: `${ops.failedCheckouts.last7dCount} in the last 7 days. Lost revenue if unresolved.`, action: "Investigate ›", href: "/admin/reports", tone: "critical", link: true } : null,
+    ops?.stuckPayoutCount ? { icon: "◷", title: `${ops.stuckPayoutCount} payouts stuck in transit`, detail: "Transfer created but not confirmed by Stripe. Retry or inspect.", action: "Review ›", href: "/admin/reports", tone: "warning", link: true } : null,
+    pending?.payableCount ? { icon: "▣", title: `${fmtUsd(pending.totalCents)} in referral payouts ready to run`, detail: `${pending.payableCount} payees clear${pending.blockedCount ? `, ${pending.blockedCount} blocked on Stripe setup` : ""}.`, action: "Run payouts →", href: "#", tone: "ready", link: false } : null,
+  ].filter(Boolean) as Array<any>;
+  if (cards.length === 0) return null;
+  return <section data-testid="ops-health-strip">
+    <button type="button" className="gt-attention-bar" onClick={() => setOpen(!open)}><b>Needs your attention</b><span>{cards.length} items　⌄</span></button>
+    {open && <div className="gt-attention-grid">{cards.map((c, i) => <article className="gt-attention-card" key={i}>
+      <div className="gt-attention-top"><span className={`gt-severity-chip ${c.tone}`}>{c.icon}</span><span className={`gt-status ${c.tone}`}>● {c.tone === "critical" ? "Needs action" : c.tone === "warning" ? "In transit" : "Ready to run"}</span></div>
+      <h3>{c.title}</h3><p>{c.detail}</p>{c.href === "#"
+        ? <span className="flex items-center gap-3">
+            <button type="button" className="gt-primary-mini" onClick={() => window.dispatchEvent(new Event("gt:run-payouts"))} data-testid="button-attention-run-payouts">{c.action}</button>
+            <button type="button" className="gt-quiet-link" onClick={() => window.dispatchEvent(new Event("gt:preview-payouts"))} data-testid="button-referral-payouts-preview">Preview ›</button>
+          </span>
+        : <Link href={c.href} className={c.link ? "gt-quiet-link hover:underline underline-offset-2" : "gt-primary-mini hover:underline underline-offset-2"}>{c.action}</Link>}
+    </article>)}</div>}
+  </section>;
+}
+
+function WinningSection({ data }: { data?: WinningData }) {
+  const maxAlbum = data?.topAlbums?.[0]?.cents || 1;
+  const maxPress = data?.byPress?.[0]?.cents || 1;
+  const list = (rows: any[], press = false) => rows?.length ? rows.slice(0, 5).map((r, i) => <div className="gt-rank-row" key={r.id}>
+    <span className="gt-rank">{i + 1}</span><span className={`gt-rank-thumb ${press ? "press" : ""}`}>{(press ? r.logoUrl : r.coverUrl) ? <img src={press ? r.logoUrl : r.coverUrl} alt="" /> : null}</span>
+    <div className="gt-rank-main"><b>{r.title || r.name}</b><small>{r.artist || r.location}</small><span className="gt-progress"><i style={{ width: `${Math.round((r.cents / (press ? maxPress : maxAlbum)) * 100)}%` }} /></span><em>{fmtNum(r.units)} units {r.deltaPct != null && <strong className={r.deltaPct < 0 ? "negative" : ""}>{r.deltaPct >= 0 ? "+" : ""}{r.deltaPct.toFixed(1)}%</strong>}</em></div><b className="gt-rank-value">{fmtUsd(r.cents)}</b>
+  </div>) : <p className="gt-empty">No data for this period yet.</p>;
+  return <section><CanonHeading lead="Who's winning." rest="The catalog and the presses behind it."/><div className="gt-winning-grid">
+    <div className="gt-list-card"><header><h3>Top projects. <span>By revenue.</span></h3><Link href="/admin/reports?tab=revenue" className="hover:underline underline-offset-2 transition-colors">View all</Link></header>{list(data?.topAlbums || [])}</div>
+    <div className="gt-list-card"><header><h3>Sales by press. <span>Your partners.</span></h3><Link href="/admin/vendors" className="hover:underline underline-offset-2 transition-colors">View all</Link></header>{list(data?.byPress || [], true)}</div>
+  </div></section>;
+}
+
 // ─── Range switcher ────────────────────────────────────────────────────
 
 function RangeSwitcher({ value, onChange }: { value: RangeKey; onChange: (v: RangeKey) => void }) {
   const opts: Array<{ v: RangeKey; label: string }> = [
     { v: "today", label: "Today" },
-    { v: "7d", label: "7d" },
-    { v: "30d", label: "30d" },
-    { v: "90d", label: "90d" },
+    { v: "7d", label: "7 days" },
+    { v: "30d", label: "30 days" },
+    { v: "90d", label: "90 days" },
     { v: "all", label: "All" },
   ];
   return (
@@ -618,7 +619,7 @@ function KpiGrid({ kpis, loading, qs }: { kpis?: KpisData; loading: boolean; qs:
         testId="tile-net"
         href={`/admin/reports?tab=revenue&${qs}`}
         spark={null}
-        color={MINT}
+        color={BLUE}
       />
       <KpiCard
         model={{
@@ -631,7 +632,7 @@ function KpiGrid({ kpis, loading, qs }: { kpis?: KpisData; loading: boolean; qs:
         testId="tile-orders"
         href={`/admin/orders?${qs}`}
         spark={series.map((s) => s?.orders ?? 0)}
-        color={PURPLE}
+        color={BLUE}
       />
       <KpiCard
         model={{
@@ -644,7 +645,7 @@ function KpiGrid({ kpis, loading, qs }: { kpis?: KpisData; loading: boolean; qs:
         testId="tile-signups"
         href={`/admin/customers?${qs}`}
         spark={series.map((s) => s?.signups ?? 0)}
-        color={PINK}
+        color={BLUE}
       />
       <KpiCard
         model={{
@@ -1112,6 +1113,16 @@ function ReferralPayoutsCard() {
   const { toast } = useToast();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  useEffect(() => {
+    const open = () => setConfirmOpen(true);
+    const openPreview = () => setPreviewOpen(true);
+    window.addEventListener("gt:run-payouts", open);
+    window.addEventListener("gt:preview-payouts", openPreview);
+    return () => {
+      window.removeEventListener("gt:run-payouts", open);
+      window.removeEventListener("gt:preview-payouts", openPreview);
+    };
+  }, []);
 
   const { data, isLoading } = useQuery<ReferralPayoutsPending>({
     queryKey: ["/api/admin/referral-payouts/pending"],
@@ -1146,47 +1157,11 @@ function ReferralPayoutsCard() {
 
   return (
     <>
-      <section
-        className="rounded-lg border border-slate-200 bg-white p-4 flex flex-wrap items-center gap-x-4 gap-y-3"
-        data-testid="card-referral-payouts"
-      >
-        <span
-          className="w-8 h-8 rounded-md inline-flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: "rgba(74,255,202,0.2)" }}
-        >
-          <Banknote className="w-4 h-4 text-emerald-600" />
-        </span>
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-slate-900" data-testid="text-referral-payouts-summary">
-            Referral payouts ready: {fmtUsd(totalCents)} across {payable} payee{payable === 1 ? "" : "s"}
-            {blocked > 0 ? `, ${blocked} blocked` : ""}
-          </div>
-          <div className="text-xs text-slate-500 mt-0.5">
-            Stripe Transfers to artists, ambassadors, and non-profits with connected payouts.
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setPreviewOpen(true)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-            data-testid="button-referral-payouts-preview"
-          >
-            Preview
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmOpen(true)}
-            disabled={payable === 0 || run.isPending}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-white text-xs font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-            style={{ backgroundColor: "var(--brand-blue)" }}
-            data-testid="button-referral-payouts-run"
-          >
-            {run.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-            Run payouts
-          </button>
-        </div>
-      </section>
+      {/* Apple-canon dashboard: the visible referral-payouts banner became
+          an attention card (AttentionSection). This component now hosts
+          only the preview/confirm dialogs, opened via the gt:run-payouts /
+          gt:preview-payouts window events fired by the header pill and the
+          attention card. */}
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-2xl" data-testid="dialog-referral-payouts-preview">
