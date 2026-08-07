@@ -4408,6 +4408,14 @@ export const manufacturers = pgTable("manufacturers", {
   // brand logo) so swapping the preview art doesn't touch the press's
   // profile logo and vice-versa.
   vinylPlaceholderUrl: text("vinyl_placeholder_url"),
+  // Center-label branding for the press portal's vinyl color setup disc
+  // preview. Each press supplies a label logo (SVG preferred — it must read
+  // at tiny sizes) plus a label background color; e.g. Memphis presses a
+  // BLACK label with their WHITE logo regardless of vinyl color. When
+  // labelLogoUrl is null the disc renders a plain generic label using
+  // labelBgColor (or a neutral default when that's null too).
+  labelLogoUrl: text("label_logo_url"),
+  labelBgColor: text("label_bg_color"),
   bio: text("bio"),
   location: text("location"),
   // Task #489 — structured snapshot of the Places-picked Location.

@@ -54,6 +54,7 @@ import { AdminReports } from "@/pages/AdminReports";
 import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { AdminGoodDeedPricing } from "@/pages/AdminGoodDeedPricing";
 import { PressCatalogPanel } from "@/pages/AdminManufacturer";
+import { PressVinylColors } from "@/pages/PressVinylColors";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
@@ -109,6 +110,9 @@ interface PressMe {
   doesFulfillment?: boolean;
   // Jacket placeholder image for the catalog's VinylPreview.
   vinylPlaceholderUrl?: string | null;
+  // Center-label branding for the vinyl color setup disc preview.
+  labelLogoUrl?: string | null;
+  labelBgColor?: string | null;
 }
 
 // ─── Scoped person types (press portal only) ──────────────────────────
@@ -205,6 +209,9 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   // person detail view inside the portal (People tab content area), avoiding
   // the /admin/people/:id deny-wall redirect. Cleared when changing tabs.
   const personFromUrl = params.get("person");
+  // Screen 4 — `?tab=catalog&view=colors` opens the Apple-canon "Add your
+  // vinyl" color setup sub-view instead of the full catalog panel.
+  const catalogView = params.get("view");
 
   // `/vendor/albums/:id` opens that album's admin page embedded in this portal
   // shell (Physical tab), mirroring the artist portal. When matched we force
@@ -267,7 +274,19 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
     const sp = new URLSearchParams(window.location.search);
     sp.set("tab", newTab);
     sp.delete("person");
+    sp.delete("view");
     history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+  };
+
+  // Enter/leave the catalog "Add your vinyl" colors sub-view (`?view=colors`),
+  // keeping the URL deep-linkable (portal tab-in-URL rule). Wouter's location
+  // doesn't track query strings, so navigate() re-renders with the new search.
+  const setCatalogViewParam = (view: string | null) => {
+    const sp = new URLSearchParams(window.location.search);
+    sp.set("tab", "catalog");
+    if (view) sp.set("view", view);
+    else sp.delete("view");
+    navigate(`${window.location.pathname}?${sp}`, { replace: true });
   };
 
   // Task #2363 — open a person detail inside the portal (People tab area).
@@ -345,12 +364,31 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
         <PressPeopleTab pressId={pressId} onOpenPerson={openPerson} />
       )}
       {tab === "albums" && <PressAlbumsTab pressId={pressId} />}
-      {tab === "catalog" && (
+      {tab === "catalog" && (catalogView === "colors" ? (
+        <PressVinylColors
+          pressId={pressId}
+          pressName={me?.name ?? "your press"}
+          labelLogoUrl={me?.labelLogoUrl ?? null}
+          labelBgColor={me?.labelBgColor ?? null}
+          onBack={() => setCatalogViewParam(null)}
+        />
+      ) : (
         <div className="space-y-4" data-testid="press-catalog-tab">
           <AdminPageHeader
             title="Catalog"
             subtitle="Edit your formats, color tiers, and per-quantity ladders — including the masters-prep cost per tier. Artists you invite see the resulting picker on their album's Sell panel."
             testId="heading-press-catalog"
+            actions={
+              <button
+                type="button"
+                onClick={() => setCatalogViewParam("colors")}
+                className="inline-flex items-center h-9 px-4 rounded-full text-[13px] font-medium bg-white transition-colors hover:bg-slate-50"
+                style={{ color: PD_INK, border: `1px solid ${PD_HAIRLINE}` }}
+                data-testid="button-open-vinyl-colors"
+              >
+                Add your vinyl
+              </button>
+            }
           />
           <PressCatalogPanel
             pressId={pressId}
@@ -359,7 +397,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
             hideHeading
           />
         </div>
-      )}
+      ))}
       {tab === "pipeline" && <PipelineTab pressId={pressId} />}
       {tab === "reports" && <AdminReports embedded />}
       {tab === "pricing" && <AdminGoodDeedPricing embedded />}

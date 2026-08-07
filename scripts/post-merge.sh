@@ -11281,3 +11281,35 @@ SQL
 }
 repair_task_2928_owner_memberships dev  "${DATABASE_URL:-}"
 repair_task_2928_owner_memberships prod "${PROD_DATABASE_URL:-}"
+
+# ── Press label branding columns (vinyl color setup disc preview) ──────────
+# Idempotent: adds manufacturers.label_logo_url + label_bg_color, then stamps
+# Memphis's known label branding (black label + white MRP logo) ONLY where the
+# fields are still NULL so operator edits always win. Safe on every run.
+apply_press_label_branding() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then echo "post-merge: label-branding skip ($label; no URL)"; return 0; fi
+  local out rc
+  out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+BEGIN;
+ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS label_logo_url text;
+ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS label_bg_color text;
+UPDATE manufacturers
+   SET label_logo_url = '/logo-mrp-white.svg',
+       label_bg_color = '#0a0a0a'
+ WHERE (domain ILIKE '%memphisrecordpressing%' OR name ILIKE 'Memphis Record Pressing%')
+   AND label_logo_url IS NULL AND label_bg_color IS NULL;
+COMMIT;
+SQL
+  )
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    echo "post-merge: press label-branding ok on $label"
+  else
+    echo "post-merge: ERROR — press label-branding FAILED on $label"
+    echo "$out" | tail -5
+    return 1
+  fi
+}
+apply_press_label_branding dev  "${DATABASE_URL:-}"
+apply_press_label_branding prod "${PROD_DATABASE_URL:-}"

@@ -687,6 +687,10 @@ export function registerPressPortalRoutes(
       // into PressCatalogPanel so the VinylPreview and editor reflect the
       // saved image without a separate fetch.
       vinylPlaceholderUrl: (press as any).vinylPlaceholderUrl ?? null,
+      // Center-label branding for the vinyl color setup disc preview.
+      // Null logo = plain generic label (labelBgColor still honored).
+      labelLogoUrl: (press as any).labelLogoUrl ?? null,
+      labelBgColor: (press as any).labelBgColor ?? null,
     });
   });
 
