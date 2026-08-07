@@ -532,13 +532,16 @@ export function AdminFrame({
       {/* Apple-canon shell — ONE white top bar across the entire window:
           logo left, bell + avatar right, single hairline beneath. It sits
           above the sidebar/main/preview row so nothing can break it. */}
-      <header className="h-14 flex-shrink-0 bg-white border-b border-slate-200 flex items-center gap-3 px-4 sm:px-6">
+      <header
+        className="h-16 flex-shrink-0 border-b border-[var(--apple-hairline)] flex items-center gap-3 pl-4 pr-4 sm:pr-8"
+        style={{ background: "rgba(255,255,255,0.72)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
+      >
         <Link
           href={isArtist ? "/admin/dashboard" : isTrimmedPartner ? partnerHome : "/admin/dashboard"}
           className="flex items-center flex-shrink-0"
           data-testid="link-admin-home"
         >
-          <img src={gtLogo} alt="GoodTunes" className="h-8 w-auto" />
+          <img src={gtLogo} alt="GoodTunes" className="h-7 w-auto" />
         </Link>
         {/* Task #336 — On mobile the sidebar (and its search bar) is
             hidden, so render a second copy of the search input in the
@@ -572,16 +575,16 @@ export function AdminFrame({
       </header>
 
       <div className="flex flex-1 min-h-0 w-full">
-      <aside className="w-[220px] flex-shrink-0 bg-[var(--apple-canvas)] hidden md:flex md:flex-col">
+      <aside className="w-64 flex-shrink-0 bg-[var(--apple-rail)] hidden md:flex md:flex-col">
         {/* Task #336 — Global admin search. Sits above Dashboard so it
             anchors the top of the sidebar; ⌘K opens/focuses from
             anywhere in the admin shell. */}
         {!isTrimmedPartner && (
-          <div className="px-2 pt-2 border-r border-slate-200">
+          <div className="px-3 py-3 border-r border-[var(--apple-hairline)]">
             <AdminSearchBar />
           </div>
         )}
-        <nav className="flex-1 px-2 pt-2 pb-3 space-y-0.5 border-r border-slate-200 overflow-y-auto" data-testid="nav-admin-entities">
+        <nav className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 border-r border-[var(--apple-hairline)] overflow-y-auto" data-testid="nav-admin-entities">
             {isArtist ? (
               <>
                 {/* Dashboard — artist's at-a-glance home. */}
@@ -1421,13 +1424,13 @@ function Section({
         data-testid={`nav-section-${id}`}
         data-active={highlightParent ? "true" : "false"}
         className={[
-          "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors border",
+          "w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] transition-colors",
           highlightParent ? "font-semibold" : "font-medium",
-          // Apple-canon: the active row is a quiet white card with a
-          // hairline border and ink text — no blue wash, no bold shout.
+          // Apple-canon: the active row is a quiet raised white pill —
+          // no border, soft shadow, ink text.
           highlightParent
-            ? "bg-white border-slate-200 text-slate-900 shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
-            : "border-transparent text-slate-700 hover:bg-slate-100",
+            ? "bg-white text-[var(--apple-ink)] shadow-[0_1px_2px_rgba(0,0,0,0.08),0_0_0_0.5px_rgba(0,0,0,0.04)]"
+            : "text-[var(--apple-subink)] hover:bg-slate-200",
         ].join(" ")}
       >
         <motion.span
@@ -1442,7 +1445,7 @@ function Section({
           <ChevronRight
             className={[
               "w-4 h-4",
-              highlightParent ? "text-slate-500" : "text-slate-400",
+              highlightParent ? "text-[var(--apple-subink)]" : "text-[var(--apple-faint)]",
             ].join(" ")}
           />
         </motion.span>
@@ -1487,18 +1490,18 @@ function SidebarLink({
       onClick={onClick}
       data-testid={testId}
       className={[
-        "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors border",
+        "w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] transition-colors",
         active ? "font-semibold" : "font-medium",
-        // Apple-canon: quiet white card + hairline for the active row.
+        // Apple-canon: quiet raised white pill for the active row.
         active
-          ? "bg-white border-slate-200 text-slate-900 shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
-          : "border-transparent text-slate-700 hover:bg-slate-100",
+          ? "bg-white text-[var(--apple-ink)] shadow-[0_1px_2px_rgba(0,0,0,0.08),0_0_0_0.5px_rgba(0,0,0,0.04)]"
+          : "text-[var(--apple-subink)] hover:bg-slate-200",
       ].join(" ")}
     >
       <Icon
         className={[
           "w-4 h-4 flex-shrink-0",
-          active ? "text-slate-600" : "text-slate-400",
+          active ? "text-[var(--apple-ink)]" : "text-[var(--apple-faint)]",
         ].join(" ")}
       />
       <span className="flex-1 text-left">{label}</span>

@@ -456,8 +456,9 @@ body.gt-admin::before {
 /* ── Apple Canon: operator surfaces ─────────────────────────────────────
    Scoped to gt-admin so the fan shell keeps its navy tokens and rhythm. */
 :root {
-  --apple-canvas: #f5f5f7;
+  --apple-canvas: #fbfbfd;
   --apple-rail: #f5f5f7;
+  --apple-tile: #f2f2f5;
   --apple-card: #ffffff;
   --apple-ink: #1d1d1f;
   --apple-subink: #6e6e73;
@@ -484,6 +485,7 @@ body.gt-admin::before {
   --apple-chip: #3a3a3e;
   --apple-blue: #319ed8;
   --apple-rail: #1c1c1e;
+  --apple-tile: #26262a;
   --apple-critical-wash: rgba(224,36,94,.14);
   --apple-warning-wash: rgba(201,138,0,.14);
   --apple-ready-wash: rgba(28,138,91,.14);
@@ -529,88 +531,22 @@ body.gt-admin {
 .gt-admin .gt-dashboard-canon .text-slate-500 { color: var(--apple-subink); }
 .gt-admin .gt-dashboard-canon .text-slate-400,
 .gt-admin .gt-dashboard-canon .text-slate-300 { color: var(--apple-faint); }
-/* Compact segmented control (reference: light gray rounded-rect track,
-   active segment is a small WHITE ROUNDED-RECT — not a pill/circle). */
-.gt-admin .gt-dashboard-canon [data-testid="dashboard-range-switcher"],
-.gt-admin .gt-dashboard-canon .inline-flex.items-center.bg-slate-100 {
-  background: var(--apple-track);
-  border-radius: 9px;
-  padding: 2px;
-}
-.gt-admin .gt-dashboard-canon [data-testid="dashboard-range-switcher"] button,
-.gt-admin .gt-dashboard-canon .inline-flex.items-center.bg-slate-100 button {
-  border-radius: 7px !important;
-  min-height: 0;
-  height: 26px;
-  padding-left: 11px;
-  padding-right: 11px;
-  font-size: 12px;
-  font-weight: 500;
-}
-.gt-admin .gt-dashboard-canon [data-testid="dashboard-range-switcher"] button.bg-white,
-.gt-admin .gt-dashboard-canon .inline-flex.items-center.bg-slate-100 button.bg-white {
-  background: #fff;
-  color: var(--apple-ink);
-  font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0,0,0,.08);
-}
-.gt-admin .gt-dashboard-canon button {
-  border-radius: 999px;
-}
-.gt-admin .gt-dashboard-canon button:not([data-testid="button-run-payouts-header"]):not(.gt-primary-pill):not(.gt-primary-mini) {
-  background-color: transparent;
-  color: var(--apple-subink);
-  border-color: transparent;
-}
-.gt-admin .gt-dashboard-canon button:not([data-testid="button-run-payouts-header"]):not(.gt-primary-pill):not(.gt-primary-mini):hover {
-  background-color: #f0f0f2;
-  color: var(--apple-ink);
-}
-.gt-admin .gt-dashboard-canon [data-testid="button-run-payouts-header"] {
-  background: var(--apple-blue);
-  color: white;
-  border-radius: 999px;
-}
 .gt-admin .gt-dashboard-canon [data-testid="dashboard-activity-feed"] a:hover {
   background: #f0f0f2;
-}
-.gt-admin .gt-dashboard-canon [data-testid="ops-health-strip"] a.gt-quiet-link { color: var(--apple-blue); }
-.gt-admin .gt-dashboard-canon .gt-primary-mini,
-.gt-admin .gt-dashboard-canon button.gt-primary-mini { background: var(--apple-blue); color: #fff; }
-.gt-admin .gt-dashboard-canon button.gt-primary-mini:hover { background: var(--apple-blue); color: #fff; opacity: .9; }
-/* KPI cards: sentence-case quiet labels per apple-canon (shared KpiCard
-   stays uppercase on every other dashboard). */
-.gt-admin .gt-dashboard-canon [data-testid="dashboard-kpi-grid"] .uppercase {
-  text-transform: none;
-  letter-spacing: -.01em;
-  font-weight: 500;
-  font-size: 12.5px;
-}
-.gt-admin .gt-dashboard-canon [data-testid="dashboard-primary-chart"] {
-  min-height: 300px;
 }
 .gt-admin .gt-dashboard-canon .animate-pulse {
   background: #e8e8ed;
 }
-.gt-dashboard-canon .gt-primary-pill,.gt-dashboard-canon .gt-primary-mini{background:var(--apple-blue);color:#fff;border:0;border-radius:999px;font-weight:600}
-.gt-dashboard-canon .gt-primary-pill{padding:9px 16px;font-size:12px}
-.gt-dashboard-canon .gt-primary-mini{display:inline-flex;padding:7px 12px;font-size:12px}
-.gt-section-heading{font-size:22px;line-height:1.2;margin:8px 0 16px;letter-spacing:-.03em;color:var(--apple-subink);font-weight:400}
-.gt-section-heading strong{color:var(--apple-ink);font-weight:650}
-.gt-attention-bar{width:100%;display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border:1px solid var(--apple-hairline);background:var(--apple-card);border-radius:16px;font-size:12px;text-align:left}
-.gt-attention-bar b{color:var(--apple-ink)} .gt-attention-bar span{color:var(--apple-subink)}
-.gt-attention-meta{display:inline-flex;align-items:center;gap:8px}
-.gt-attention-chevron{display:inline-block;transition:transform .18s ease;line-height:1}
-.gt-attention-chevron.closed{transform:rotate(-90deg)}
-.gt-attention-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}
-.gt-attention-card{background:var(--apple-card);border:1px solid var(--apple-hairline);border-radius:16px;padding:18px 16px;min-height:155px}
-.gt-attention-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-.gt-severity-chip{width:28px;height:28px;display:grid;place-items:center;border-radius:9px;font-size:13px}.gt-severity-chip.critical{background:var(--apple-critical-wash);color:var(--apple-critical)}.gt-severity-chip.warning{background:var(--apple-warning-wash);color:var(--apple-warning)}.gt-severity-chip.ready{background:var(--apple-ready-wash);color:var(--apple-ready)}
-.gt-status{font-size:11px;font-weight:600}.gt-status.critical{color:var(--apple-critical)}.gt-status.warning{color:var(--apple-warning)}.gt-status.ready{color:var(--apple-ready)}
-.gt-attention-card h3{font-size:13px;margin:0 0 5px;font-weight:650}.gt-attention-card p{color:var(--apple-subink);font-size:12px;line-height:1.45;margin:0 0 12px}.gt-quiet-link{font-size:12px;color:var(--apple-blue);font-weight:600}
-.gt-winning-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:16px}.gt-list-card{background:var(--apple-card);border:1px solid var(--apple-hairline);border-radius:16px;padding:18px}.gt-list-card header{display:flex;justify-content:space-between;margin-bottom:14px}.gt-list-card h3{font-size:15px;margin:0}.gt-list-card h3 span{font-weight:400;color:var(--apple-subink)}.gt-list-card header a{font-size:11px;color:var(--apple-blue);font-weight:600}
-.gt-rank-row{display:flex;align-items:center;gap:10px;padding:8px 0}.gt-rank{font-size:11px;color:var(--apple-faint);width:12px}.gt-rank-thumb{width:32px;height:32px;border-radius:8px;background:var(--apple-chip);overflow:hidden;flex-shrink:0}.gt-rank-thumb.press{border-radius:50%;background:#fff;border:1px solid var(--apple-hairline);padding:4px}.gt-rank-thumb img{width:100%;height:100%;object-fit:cover}.gt-rank-thumb.press img{object-fit:contain}.gt-rank-main{min-width:0;flex:1}.gt-rank-main b{font-size:12px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gt-rank-main small{display:block;color:var(--apple-subink);font-size:10px}.gt-progress{height:4px;background:var(--apple-track);display:block;margin:7px 0 3px;border-radius:3px}.gt-progress i{height:100%;display:block;background:var(--apple-blue);border-radius:3px}.gt-rank-main em{font-size:10px;color:var(--apple-faint);font-style:normal}.gt-rank-main em strong{color:var(--apple-ready);margin-left:8px}.gt-rank-main em strong.negative{color:var(--apple-critical)}.gt-rank-value{font-size:12px;white-space:nowrap}.gt-empty{font-size:12px;color:var(--apple-subink)}
-@media(max-width:900px){.gt-attention-grid,.gt-winning-grid{grid-template-columns:1fr}.gt-attention-grid{gap:10px}}
+/* Reference primary actions — blue rounded-full pills. Pill (header
+   "Run payouts"): px-5 h-10 text-[14px]; mini (card action): px-4 h-9. */
+.gt-dashboard-canon .gt-primary-pill,.gt-dashboard-canon .gt-primary-mini{display:inline-flex;align-items:center;gap:8px;background:var(--apple-blue);color:#fff;border:0;border-radius:999px;font-weight:600}
+.gt-dashboard-canon .gt-primary-pill{height:40px;padding:0 20px;font-size:14px}
+.gt-dashboard-canon .gt-primary-mini{height:36px;padding:0 16px;font-size:13.5px}
+.gt-dashboard-canon .gt-primary-pill:hover,.gt-dashboard-canon .gt-primary-mini:hover{opacity:.9}
+/* Two-tone section heading — 30px, ink lead + subink rest. */
+.gt-section-heading{font-size:30px;line-height:1.12;margin:0 0 20px;letter-spacing:-.02em;color:var(--apple-subink);font-weight:500}
+.gt-section-heading strong{color:var(--apple-ink);font-weight:600}
+.gt-quiet-link{display:inline-flex;align-items:center;gap:2px;font-size:14px;color:var(--apple-blue);font-weight:500}
 
 /* Shared shell: translucent top bar, quiet rail, raised active item. */
 .gt-admin > div > aside,

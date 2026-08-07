@@ -21,10 +21,9 @@ import {
 } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   ResponsiveContainer,
-  CartesianGrid,
   XAxis,
   YAxis,
   Tooltip,
@@ -33,9 +32,13 @@ import {
   ShoppingBag,
   UserPlus,
   Banknote,
-  AlertTriangle,
-  ArrowUpRight,
   Heart,
+  Truck,
+  CreditCard,
+  Clock3,
+  ChevronDown,
+  ChevronRight,
+  ArrowRight,
 } from "lucide-react";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -441,14 +444,14 @@ export function AdminDashboard() {
           which removes the sidebar entirely. */}
       <DashboardContentBoundary>
         <div
-          className="gt-dashboard-canon flex flex-col gap-8 min-h-full pt-4 pb-12"
+          className="gt-dashboard-canon flex flex-col gap-14 lg:gap-20 min-h-full pt-6 pb-20 max-w-[1240px] mx-auto w-full"
         >
           <SectionBoundary section="page-header">
             <AdminPageHeader
               title={<span>Good morning, {firstName}.</span>}
               subtitle={isArtist ? "Your releases and recent fan activity." : (attentionCount(ops, pendingPayouts) > 0 ? `${attentionCount(ops, pendingPayouts)} thing${attentionCount(ops, pendingPayouts) === 1 ? "" : "s"} need${attentionCount(ops, pendingPayouts) === 1 ? "s" : ""} you before anything else.` : "Nothing needs you before anything else.")}
               testId="heading-admin-dashboard"
-              actions={<div className="flex items-center gap-3"><RangeSwitcher value={range} onChange={setRange} />{isSuperAdmin && <button type="button" className="gt-primary-pill" onClick={() => window.dispatchEvent(new Event("gt:run-payouts"))} data-testid="button-run-payouts-header">Run payouts</button>}</div>}
+              actions={<div className="flex items-center gap-3"><RangeSwitcher value={range} onChange={setRange} />{isSuperAdmin && <button type="button" className="gt-primary-pill" onClick={() => window.dispatchEvent(new Event("gt:run-payouts"))} data-testid="button-run-payouts-header"><Banknote className="w-4 h-4" />Run payouts</button>}</div>}
             />
           </SectionBoundary>
 
@@ -466,21 +469,23 @@ export function AdminDashboard() {
                 <section><CanonHeading lead="The numbers." rest="At a glance."/><KpiGrid kpis={kpis} loading={kpisLoading} qs={qs} /></section>
               </SectionBoundary>
 
-              {/* Heading spans the full row so the Trend card and the
-                  Recent activity card share the same top edge; the fixed
-                  lg row height makes their bottoms align too (reference:
-                  the two cards are equal height). */}
+              {/* Heading spans the full row; the Trend card sets the row
+                  height (reference: items-stretch 2fr/1fr grid) and the
+                  activity feed absolutely fills its cell so both cards
+                  share top and bottom edges on lg. */}
               <section>
                 <CanonHeading lead="The story." rest={`How the last ${range === "30d" ? "month" : "period"} moved.`}/>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:h-[440px]">
-                  <div className="lg:col-span-2 flex flex-col min-h-0">
+                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-6 items-stretch">
+                  <div className="flex flex-col min-h-0">
                     <SectionBoundary section="primary-chart">
-                      <PrimaryChart kpis={kpis} prior={priorKpis} loading={kpisLoading} />
+                      <PrimaryChart kpis={kpis} prior={priorKpis} loading={kpisLoading} range={range} />
                     </SectionBoundary>
                   </div>
-                  <div className="flex flex-col min-h-0">
+                  <div className="relative min-h-0">
                     <SectionBoundary section="activity-feed">
-                      <ActivityFeed orders={recentOrders ?? []} customers={recentCustomers?.rows ?? []} className="h-full lg:overflow-hidden" />
+                      <div className="lg:absolute lg:inset-0">
+                        <ActivityFeed orders={recentOrders ?? []} customers={recentCustomers?.rows ?? []} className="h-full lg:overflow-hidden" />
+                      </div>
                     </SectionBoundary>
                   </div>
                 </div>
@@ -518,45 +523,152 @@ function CanonHeading({ lead, rest }: { lead: string; rest: string }) {
   return <h2 className="gt-section-heading"><strong>{lead}</strong> <span>{rest}</span></h2>;
 }
 
+// Severity tokens — exact values from the design reference
+// (docs/design-reference/code/AdminDashboardApple.tsx WorkQueueCard).
+const SEVERITY: Record<string, { color: string; wash: string; label: string }> = {
+  critical: { color: "var(--apple-critical)", wash: "var(--apple-critical-wash)", label: "Needs action" },
+  warning: { color: "var(--apple-warning)", wash: "var(--apple-warning-wash)", label: "In transit" },
+  ready: { color: "var(--apple-ready)", wash: "var(--apple-ready-wash)", label: "Ready to run" },
+};
+
 function AttentionSection({ ops, pending }: { ops?: OpsData; pending?: ReferralPendingSummary }) {
   const [open, setOpen] = useState(true);
   const cards = [
-    ops?.stuckFulfillments.count ? { icon: "▣", title: `${ops.stuckFulfillments.count} orders failed to reach fulfillment`, detail: "Paid, but never pushed to the press. Fans are waiting.", action: "Push to fulfillment →", href: "/admin/orders?needsPush=1", tone: "critical", link: false } : null,
-    ops?.failedCheckouts.last24hCount ? { icon: "▤", title: `${ops.failedCheckouts.last24hCount} checkouts failed in the last 24h`, detail: `${ops.failedCheckouts.last7dCount} in the last 7 days. Lost revenue if unresolved.`, action: "Investigate ›", href: "/admin/reports", tone: "critical", link: true } : null,
-    ops?.stuckPayoutCount ? { icon: "◷", title: `${ops.stuckPayoutCount} payouts stuck in transit`, detail: "Transfer created but not confirmed by Stripe. Retry or inspect.", action: "Review ›", href: "/admin/reports", tone: "warning", link: true } : null,
-    pending?.payableCount ? { icon: "▣", title: `${fmtUsd(pending.totalCents)} in referral payouts ready to run`, detail: `${pending.payableCount} payees clear${pending.blockedCount ? `, ${pending.blockedCount} blocked on Stripe setup` : ""}.`, action: "Run payouts →", href: "#", tone: "ready", link: false } : null,
+    ops?.stuckFulfillments.count ? { Icon: Truck, title: `${ops.stuckFulfillments.count} orders failed to reach fulfillment`, detail: "Paid, but never pushed to the press. Fans are waiting.", action: "Push to fulfillment", href: "/admin/orders?needsPush=1", tone: "critical", link: false } : null,
+    ops?.failedCheckouts.last24hCount ? { Icon: CreditCard, title: `${ops.failedCheckouts.last24hCount} checkouts failed in the last 24h`, detail: `${ops.failedCheckouts.last7dCount} in the last 7 days. Lost revenue if unresolved.`, action: "Investigate", href: "/admin/reports", tone: "critical", link: true } : null,
+    ops?.stuckPayoutCount ? { Icon: Clock3, title: `${ops.stuckPayoutCount} payouts stuck in transit`, detail: "Transfer created but not confirmed by Stripe. Retry or inspect.", action: "Review", href: "/admin/reports", tone: "warning", link: true } : null,
+    pending?.payableCount ? { Icon: Banknote, title: `${fmtUsd(pending.totalCents)} in referral payouts ready to run`, detail: `${pending.payableCount} payees clear${pending.blockedCount ? `, ${pending.blockedCount} blocked on Stripe setup` : ""}.`, action: "Run payouts", href: "#", tone: "ready", link: false } : null,
   ].filter(Boolean) as Array<any>;
   // Zero items → the header subtitle already says "Nothing needs you
   // before anything else." — the bar would just be noise. The section
   // reappears (bar + collapsible cards) the moment anything qualifies.
   if (cards.length === 0) return null;
   return <section data-testid="ops-health-strip">
-    <button type="button" className="gt-attention-bar" aria-expanded={open} onClick={() => setOpen(!open)} data-testid="button-attention-toggle">
-      <b>Needs your attention</b>
-      <span className="gt-attention-meta">{cards.length} item{cards.length === 1 ? "" : "s"}<span className={`gt-attention-chevron ${open ? "" : "closed"}`} aria-hidden>⌄</span></span>
+    <button
+      type="button"
+      aria-expanded={open}
+      onClick={() => setOpen(!open)}
+      data-testid="button-attention-toggle"
+      className="w-full flex items-center justify-between rounded-2xl bg-white border border-[var(--apple-hairline)] px-5 py-3.5 text-left"
+    >
+      <span className="text-[13px] font-semibold text-[var(--apple-ink)]">Needs your attention</span>
+      <span className="flex items-center gap-2 text-[12.5px] text-[var(--apple-subink)]">
+        {cards.length} item{cards.length === 1 ? "" : "s"}
+        <ChevronDown
+          className="w-4 h-4 text-[var(--apple-faint)] transition-transform duration-300"
+          style={{ transform: open ? "rotate(0deg)" : "rotate(-180deg)" }}
+          aria-hidden
+        />
+      </span>
     </button>
-    {open && <div className="gt-attention-grid">{cards.map((c, i) => <article className="gt-attention-card" key={i}>
-      <div className="gt-attention-top"><span className={`gt-severity-chip ${c.tone}`}>{c.icon}</span><span className={`gt-status ${c.tone}`}>● {c.tone === "critical" ? "Needs action" : c.tone === "warning" ? "In transit" : "Ready to run"}</span></div>
-      <h3>{c.title}</h3><p>{c.detail}</p>{c.href === "#"
-        ? <span className="flex items-center gap-3">
-            <button type="button" className="gt-primary-mini" onClick={() => window.dispatchEvent(new Event("gt:run-payouts"))} data-testid="button-attention-run-payouts">{c.action}</button>
-            <button type="button" className="gt-quiet-link" onClick={() => window.dispatchEvent(new Event("gt:preview-payouts"))} data-testid="button-referral-payouts-preview">Preview ›</button>
-          </span>
-        : <Link href={c.href} className={c.link ? "gt-quiet-link hover:underline underline-offset-2" : "gt-primary-mini hover:underline underline-offset-2"}>{c.action}</Link>}
-    </article>)}</div>}
+    {/* Reference collapse: grid-template-rows 1fr/0fr over 300ms. */}
+    <div
+      className="grid transition-[grid-template-rows] duration-300 ease-out"
+      style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
+    >
+      <div className="overflow-hidden min-h-0">
+        <div className="grid gap-4 pt-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
+          {cards.map((c, i) => {
+            const sev = SEVERITY[c.tone];
+            const CardIcon = c.Icon;
+            return (
+              <article key={i} className="rounded-2xl bg-white border border-[var(--apple-hairline)] p-6 flex flex-col">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: sev.wash }}>
+                    <CardIcon className="w-[18px] h-[18px]" style={{ color: sev.color }} />
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: sev.color }}>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: sev.color }} aria-hidden />
+                    {sev.label}
+                  </span>
+                </div>
+                <h3 className="text-[17px] font-semibold text-[var(--apple-ink)] leading-snug mb-1.5">{c.title}</h3>
+                <p className="text-[13.5px] text-[var(--apple-subink)] leading-relaxed flex-1 mb-5">{c.detail}</p>
+                {c.href === "#" ? (
+                  <span className="flex items-center gap-4">
+                    <button type="button" className="gt-primary-mini" onClick={() => window.dispatchEvent(new Event("gt:run-payouts"))} data-testid="button-attention-run-payouts">{c.action}<ArrowRight className="w-3.5 h-3.5" /></button>
+                    <button type="button" className="gt-quiet-link" onClick={() => window.dispatchEvent(new Event("gt:preview-payouts"))} data-testid="button-referral-payouts-preview">Preview<ChevronRight className="w-3.5 h-3.5" /></button>
+                  </span>
+                ) : c.link ? (
+                  <Link href={c.href} className="gt-quiet-link">{c.action}<ChevronRight className="w-3.5 h-3.5" /></Link>
+                ) : (
+                  <Link href={c.href} className="gt-primary-mini self-start">{c.action}<ArrowRight className="w-3.5 h-3.5" /></Link>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   </section>;
 }
 
 function WinningSection({ data }: { data?: WinningData }) {
   const maxAlbum = data?.topAlbums?.[0]?.cents || 1;
   const maxPress = data?.byPress?.[0]?.cents || 1;
-  const list = (rows: any[], press = false) => rows?.length ? rows.slice(0, 5).map((r, i) => <div className="gt-rank-row" key={r.id}>
-    <span className="gt-rank">{i + 1}</span><span className={`gt-rank-thumb ${press ? "press" : ""}`}>{(press ? r.logoUrl : r.coverUrl) ? <img src={press ? r.logoUrl : r.coverUrl} alt="" /> : null}</span>
-    <div className="gt-rank-main"><b>{r.title || r.name}</b><small>{r.artist || r.location}</small><span className="gt-progress"><i style={{ width: `${Math.round((r.cents / (press ? maxPress : maxAlbum)) * 100)}%` }} /></span><em>{fmtNum(r.units)} units {r.deltaPct != null && <strong className={r.deltaPct < 0 ? "negative" : ""}>{r.deltaPct >= 0 ? "+" : ""}{r.deltaPct.toFixed(1)}%</strong>}</em></div><b className="gt-rank-value">{fmtUsd(r.cents)}</b>
-  </div>) : <p className="gt-empty">No data for this period yet.</p>;
-  return <section><CanonHeading lead="Who's winning." rest="The catalog and the presses behind it."/><div className="gt-winning-grid">
-    <div className="gt-list-card"><header><h3>Top projects. <span>By revenue.</span></h3><Link href="/admin/reports?tab=revenue" className="hover:underline underline-offset-2 transition-colors">View all</Link></header>{list(data?.topAlbums || [])}</div>
-    <div className="gt-list-card"><header><h3>Sales by press. <span>Your partners.</span></h3><Link href="/admin/vendors" className="hover:underline underline-offset-2 transition-colors">View all</Link></header>{list(data?.byPress || [], true)}</div>
+  // Reference RankedListPanel rows: rank (13px #c7c7cc, w-4 right) ·
+  // w-11 thumb (rounded-xl art / white circle press logo) · 15px title +
+  // 12.5px subtitle · 15px semibold revenue; progress line beneath,
+  // aligned under the title.
+  const list = (rows: any[], press = false) =>
+    rows?.length ? (
+      rows.slice(0, 5).map((r, i) => (
+        <div className="flex items-start gap-3.5 py-3" key={r.id}>
+          <span className="w-4 text-right text-[13px] leading-[44px] flex-shrink-0" style={{ color: "#c7c7cc" }}>{i + 1}</span>
+          <span
+            className={[
+              "w-11 h-11 flex-shrink-0 overflow-hidden",
+              press
+                ? "rounded-full bg-white border border-[var(--apple-hairline)] p-1"
+                : "rounded-xl bg-[var(--apple-tile)]",
+            ].join(" ")}
+          >
+            {(press ? r.logoUrl : r.coverUrl) ? (
+              <img src={press ? r.logoUrl : r.coverUrl} alt="" className={`w-full h-full ${press ? "object-contain" : "object-cover"}`} />
+            ) : null}
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[15px] font-medium text-[var(--apple-ink)] truncate">{r.title || r.name}</span>
+              <span className="text-[15px] font-semibold text-[var(--apple-ink)] tabular-nums flex-shrink-0">{fmtUsd(r.cents)}</span>
+            </div>
+            <div className="text-[12.5px] text-[var(--apple-subink)] truncate">{r.artist || r.location}</div>
+            <div className="flex items-center gap-2 mt-2.5">
+              <span className="flex-1 h-1.5 rounded-full bg-[var(--apple-track)] overflow-hidden">
+                <i className="block h-full rounded-full bg-[var(--apple-blue)]" style={{ width: `${Math.round((r.cents / (press ? maxPress : maxAlbum)) * 100)}%` }} />
+              </span>
+              <span className="w-16 text-[12px] text-[var(--apple-faint)] whitespace-nowrap">{fmtNum(r.units)} units</span>
+              {r.deltaPct != null && (
+                <span
+                  className="w-14 text-right text-[12px] font-semibold tabular-nums"
+                  style={{ color: r.deltaPct < 0 ? "var(--apple-critical)" : "var(--apple-ready)" }}
+                >
+                  {r.deltaPct >= 0 ? "+" : ""}
+                  {r.deltaPct.toFixed(1)}%
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      ))
+    ) : (
+      <p className="text-[13px] text-[var(--apple-subink)]">No data for this period yet.</p>
+    );
+  const panel = (heading: string, sub: string, href: string, body: ReactNode) => (
+    <div className="rounded-2xl bg-white border border-[var(--apple-hairline)] p-6 h-full">
+      <header className="flex items-baseline justify-between mb-2">
+        <h3 className="text-[20px] tracking-[-0.02em]">
+          <span className="font-semibold text-[var(--apple-ink)]">{heading}</span>{" "}
+          <span className="font-medium text-[var(--apple-subink)]">{sub}</span>
+        </h3>
+        <Link href={href} className="text-[13.5px] font-medium text-[var(--apple-blue)] hover:underline underline-offset-2 transition-colors">View all</Link>
+      </header>
+      {body}
+    </div>
+  );
+  return <section><CanonHeading lead="Who's winning." rest="The catalog and the presses behind it."/><div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-6 items-stretch">
+    {panel("Top projects.", "By revenue.", "/admin/reports?tab=revenue", list(data?.topAlbums || []))}
+    {panel("Sales by press.", "Your partners.", "/admin/vendors", list(data?.byPress || [], true))}
   </div></section>;
 }
 
@@ -570,9 +682,11 @@ function RangeSwitcher({ value, onChange }: { value: RangeKey; onChange: (v: Ran
     { v: "90d", label: "90 days" },
     { v: "all", label: "All" },
   ];
+  // Reference: rounded-full track (#f0f0f2) p-1 gap-2; buttons px-3.5 h-8
+  // text-[13px] rounded-full; active = white pill, 600, soft shadow.
   return (
     <div
-      className="inline-flex items-center bg-slate-100 rounded-md p-0.5"
+      className="inline-flex items-center rounded-full p-1 gap-2 bg-[var(--apple-track)]"
       data-testid="dashboard-range-switcher"
     >
       {opts.map((o) => {
@@ -585,8 +699,10 @@ function RangeSwitcher({ value, onChange }: { value: RangeKey; onChange: (v: Ran
             aria-pressed={active}
             data-testid={`button-range-${o.v}`}
             className={[
-              "px-3 h-8 text-[12.5px] font-semibold rounded transition-colors",
-              active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900",
+              "px-3.5 h-8 text-[13px] rounded-full transition-all",
+              active
+                ? "bg-white text-[var(--apple-ink)] font-semibold shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
+                : "text-[var(--apple-subink)] font-medium hover:text-[var(--apple-ink)]",
             ].join(" ")}
           >
             {o.label}
@@ -599,132 +715,76 @@ function RangeSwitcher({ value, onChange }: { value: RangeKey; onChange: (v: Ran
 
 // ─── KPI tiles ─────────────────────────────────────────────────────────
 
+// Reference KpiBoard tile — rounded-2xl p-6 card, 13px label, 38px
+// value, 13px delta vs prior. No sparklines (reference has none).
+function KpiTile({
+  label,
+  value,
+  prior,
+  currency,
+  testId,
+  href,
+  loading,
+}: {
+  label: string;
+  value: number | null | undefined;
+  prior: number | null | undefined;
+  currency?: boolean;
+  testId: string;
+  href: string;
+  loading: boolean;
+}) {
+  const delta =
+    value != null && prior != null && prior !== 0
+      ? ((value - prior) / prior) * 100
+      : null;
+  return (
+    <Link
+      href={href}
+      data-testid={testId}
+      className="block rounded-2xl bg-white border border-[var(--apple-hairline)] p-6 transition-shadow hover:shadow-sm"
+    >
+      <div className="text-[13px] text-[var(--apple-subink)]">{label}</div>
+      <div
+        className="mt-3 text-[38px] leading-none font-semibold tracking-[-0.03em] text-[var(--apple-ink)] tabular-nums"
+        data-testid={`${testId}-value`}
+      >
+        {loading || value == null ? "—" : currency ? fmtUsd(value) : fmtNum(value)}
+      </div>
+      <div className="mt-2 text-[13px]">
+        {delta == null ? (
+          <span className="text-[var(--apple-faint)]">—</span>
+        ) : (
+          <>
+            <span className="font-semibold" style={{ color: delta >= 0 ? "var(--apple-ready)" : "var(--apple-critical)" }}>
+              {delta >= 0 ? "+" : ""}
+              {delta.toFixed(1)}%
+            </span>{" "}
+            <span className="text-[var(--apple-faint)]">vs prior</span>
+          </>
+        )}
+      </div>
+    </Link>
+  );
+}
+
 function KpiGrid({ kpis, loading, qs }: { kpis?: KpisData; loading: boolean; qs: string }) {
   const prior = kpis?.prior ?? {};
-  const series = kpis?.series ?? [];
   // Task #145 — each tile drills into the matching detailed report
   // with the dashboard's selected date range carried through in the
   // query string. `/admin/reports` reads `?tab=` to pick the right
   // pane and `?from=…&to=…` for the date filter.
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4" data-testid="dashboard-kpi-grid">
-      <KpiCard
-        model={{
-          id: "gross",
-          label: "Gross sales",
-          value: kpis?.gmvCents ?? null,
-          prior: prior.gmvCents ?? null,
-          format: "currency",
-        }}
-        testId="tile-gmv"
-        href={`/admin/reports?tab=revenue&${qs}`}
-        spark={series.map((s) => s?.gmvCents ?? 0)}
-        color={BLUE}
-      />
-      <KpiCard
-        model={{
-          id: "net",
-          label: "Net revenue",
-          value: kpis?.netCents ?? null,
-          prior: prior.netCents ?? null,
-          format: "currency",
-        }}
-        testId="tile-net"
-        href={`/admin/reports?tab=revenue&${qs}`}
-        spark={null}
-        color={BLUE}
-      />
-      <KpiCard
-        model={{
-          id: "orders",
-          label: "Orders",
-          value: kpis?.orderCount ?? null,
-          prior: prior.orderCount ?? null,
-          format: "number",
-        }}
-        testId="tile-orders"
-        href={`/admin/orders?${qs}`}
-        spark={series.map((s) => s?.orders ?? 0)}
-        color={BLUE}
-      />
-      <KpiCard
-        model={{
-          id: "newFans",
-          label: "New fans",
-          value: kpis?.newSignups ?? null,
-          prior: prior.newSignups ?? null,
-          format: "number",
-        }}
-        testId="tile-signups"
-        href={`/admin/customers?${qs}`}
-        spark={series.map((s) => s?.signups ?? 0)}
-        color={BLUE}
-      />
-      <KpiCard
-        model={{
-          id: "plays",
-          label: "Plays",
-          value: kpis?.plays ?? null,
-          prior: prior.plays ?? null,
-          format: "number",
-        }}
-        testId="tile-plays"
-        href={`/admin/reports?tab=plays&${qs}`}
-        spark={series.map((s) => s?.plays ?? 0)}
-        color={BLUE}
-      />
-    </div>
-  );
-}
-
-// ─── Ops health strip ──────────────────────────────────────────────────
-
-function OpsHealthStrip({ ops }: { ops: OpsData }) {
-  const items: Array<{ label: string; count: number; href: string; testId: string }> = [];
-  if (ops.stuckFulfillments.count > 0) {
-    items.push({
-      label: `${ops.stuckFulfillments.count} order${ops.stuckFulfillments.count === 1 ? "" : "s"} failed to reach fulfillment`,
-      count: ops.stuckFulfillments.count,
-      href: "/admin/orders?needsPush=1",
-      testId: "ops-chip-stuck-fulfillments",
-    });
-  }
-  const failed = ops.failedCheckouts.last24hCount ?? 0;
-  if (failed > 0) {
-    items.push({
-      label: `${failed} failed checkout${failed === 1 ? "" : "s"} · 24h`,
-      count: failed,
-      href: "/admin/reports",
-      testId: "ops-chip-failed-checkouts",
-    });
-  }
-  if (ops.stuckPayoutCount > 0) {
-    items.push({
-      label: `${ops.stuckPayoutCount} stuck payout${ops.stuckPayoutCount === 1 ? "" : "s"}`,
-      count: ops.stuckPayoutCount,
-      href: "/admin/reports",
-      testId: "ops-chip-stuck-payouts",
-    });
-  }
-  if (items.length === 0) return null;
-  return (
     <div
-      className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"
-      data-testid="ops-health-strip"
+      className="grid gap-4"
+      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}
+      data-testid="dashboard-kpi-grid"
     >
-      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
-      <span className="text-[12px] font-semibold text-amber-900 mr-1">Needs attention</span>
-      {items.map((it) => (
-        <Link
-          key={it.testId}
-          href={it.href}
-          data-testid={it.testId}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white border border-amber-300 text-[12px] font-medium text-amber-900 hover:bg-amber-100 transition-colors"
-        >
-          {it.label}
-          <ArrowUpRight className="w-3 h-3" />
-        </Link>
-      ))}
+      <KpiTile label="Gross sales" value={kpis?.gmvCents} prior={prior.gmvCents} currency testId="tile-gmv" href={`/admin/reports?tab=revenue&${qs}`} loading={loading} />
+      <KpiTile label="Net revenue" value={kpis?.netCents} prior={prior.netCents} currency testId="tile-net" href={`/admin/reports?tab=revenue&${qs}`} loading={loading} />
+      <KpiTile label="Orders" value={kpis?.orderCount} prior={prior.orderCount} testId="tile-orders" href={`/admin/orders?${qs}`} loading={loading} />
+      <KpiTile label="New fans" value={kpis?.newSignups} prior={prior.newSignups} testId="tile-signups" href={`/admin/customers?${qs}`} loading={loading} />
+      <KpiTile label="Plays" value={kpis?.plays} prior={prior.plays} testId="tile-plays" href={`/admin/reports?tab=plays&${qs}`} loading={loading} />
     </div>
   );
 }
@@ -733,14 +793,25 @@ function OpsHealthStrip({ ops }: { ops: OpsData }) {
 
 type ChartMetric = "gmv" | "orders" | "signups" | "plays";
 
+// Reference TrendChart header title, keyed to the selected range.
+const RANGE_CHART_TITLE: Record<RangeKey, string> = {
+  today: "Today.",
+  "7d": "The last 7 days.",
+  "30d": "The last 30 days.",
+  "90d": "The last 90 days.",
+  all: "All time.",
+};
+
 function PrimaryChart({
   kpis,
   prior,
   loading,
+  range,
 }: {
   kpis?: KpisData;
   prior?: KpisData;
   loading: boolean;
+  range: RangeKey;
 }) {
   const [metric, setMetric] = useState<ChartMetric>("gmv");
   const series = kpis?.series ?? [];
@@ -780,10 +851,13 @@ function PrimaryChart({
   ];
 
   return (
-      <div className="rounded-xl border border-slate-200 bg-white p-5 h-full flex flex-col" data-testid="dashboard-primary-chart">
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <h3 className="text-sm font-semibold text-slate-700">Trend</h3>
-        <div className="inline-flex items-center bg-slate-100 rounded-md p-0.5">
+      <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-7 h-full flex flex-col" data-testid="dashboard-primary-chart">
+      <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
+        <div>
+          <h3 className="text-[20px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]">{RANGE_CHART_TITLE[range]}</h3>
+          <p className="text-[13.5px] text-[var(--apple-subink)] mt-0.5">This period, measured against the one before.</p>
+        </div>
+        <div className="inline-flex items-center rounded-full p-1 gap-1 bg-[var(--apple-track)]">
           {opts.map((o) => {
             const active = metric === o.v;
             return (
@@ -794,8 +868,10 @@ function PrimaryChart({
                 aria-pressed={active}
                 data-testid={`button-chart-metric-${o.v}`}
                 className={[
-                  "px-2.5 h-7 text-[12px] font-semibold rounded transition-colors",
-                  active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900",
+                  "px-3 h-7 text-[12.5px] rounded-full transition-all",
+                  active
+                    ? "bg-white text-[var(--apple-ink)] font-semibold shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
+                    : "text-[var(--apple-subink)] font-medium hover:text-[var(--apple-ink)]",
                 ].join(" ")}
               >
                 {o.label}
@@ -808,9 +884,11 @@ function PrimaryChart({
           chart fills this box; it must NEVER size itself off the page, or
           ResponsiveContainer's height:100% feedback loop grows it without
           bound now that the dashboard scrolls naturally. */}
-      {/* Mobile: fixed 300px box. lg: the parent grid row is a fixed
-          440px, so flex-1 is bounded there — the loop can't happen. */}
-      <div className="h-[300px] lg:h-auto lg:flex-1 lg:min-h-0 flex flex-col">
+      {/* Mobile: fixed 300px box so ResponsiveContainer's height:100%
+          feedback loop can't grow it without bound while the page
+          scrolls naturally. lg: flex-1 with the reference's min-height
+          (the card's natural height sets the story-grid row). */}
+      <div className="h-[300px] lg:h-auto lg:flex-1 lg:min-h-[280px] flex flex-col">
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
           Loading…
@@ -818,16 +896,17 @@ function PrimaryChart({
       ) : merged.length === 0 ? (
         <div className="flex-1 relative" data-testid="dashboard-chart-empty">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={[]} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="#e6e6ea" strokeDasharray="3 3" />
-              <XAxis dataKey="date" stroke="#a1a1a6" fontSize={11} />
+            <AreaChart data={[]} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
+              <XAxis dataKey="date" tick={{ fill: "#c7c7cc", fontSize: 11 }} tickLine={false} axisLine={false} />
               <YAxis
-                stroke="#a1a1a6"
-                fontSize={11}
+                tick={{ fill: "#c7c7cc", fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                width={48}
                 domain={[0, 1]}
                 tickFormatter={(v: number) => (isCurrency ? `$${(v / 100).toFixed(0)}` : `${v}`)}
               />
-            </LineChart>
+            </AreaChart>
           </ResponsiveContainer>
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <span className="text-slate-400 text-sm">No activity in this range yet.</span>
@@ -835,37 +914,58 @@ function PrimaryChart({
         </div>
       ) : (
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={merged} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke="#e6e6ea" strokeDasharray="3 3" />
-            <XAxis dataKey="date" stroke="#a1a1a6" fontSize={11} />
+          <AreaChart data={merged} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="gtTrendFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={BLUE} stopOpacity={0.18} />
+                <stop offset="100%" stopColor={BLUE} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis
+              dataKey="date"
+              tick={{ fill: "#c7c7cc", fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+              minTickGap={40}
+              tickFormatter={(d: string) => (typeof d === "string" ? d.slice(5) : d)}
+            />
             <YAxis
-              stroke="#a1a1a6"
-              fontSize={11}
+              tick={{ fill: "#c7c7cc", fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+              width={48}
               tickFormatter={(v: number) => (isCurrency ? `$${(v / 100).toFixed(0)}` : `${v}`)}
             />
             <Tooltip
               formatter={(v: number) => (isCurrency ? fmtUsd(v) : fmtNum(v))}
-              labelStyle={{ color: "#0f172a" }}
+              labelStyle={{ color: "#1d1d1f" }}
+              contentStyle={{
+                borderRadius: 12,
+                border: "1px solid #e6e6ea",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+              }}
             />
-            <Line
+            <Area
               type="monotone"
               dataKey="prior"
-              stroke="#94a3b8"
+              stroke="#c7c7cc"
               strokeWidth={1.5}
-              strokeDasharray="4 3"
+              strokeDasharray="4 4"
+              fill="none"
               dot={false}
               name="Prior period"
               connectNulls
             />
-            <Line
+            <Area
               type="monotone"
               dataKey="current"
               stroke={BLUE}
-              strokeWidth={2}
+              strokeWidth={2.5}
+              fill="url(#gtTrendFill)"
               dot={false}
               name="This period"
             />
-          </LineChart>
+          </AreaChart>
         </ResponsiveContainer>
       )}
       </div>
@@ -1041,41 +1141,72 @@ function ActivityFeed({ orders, customers, className = "" }: { orders: OrderRow[
       });
     }
     out.sort((a, b) => b.ts.getTime() - a.ts.getTime());
-    // ~8 most recent — the card is a glance, not a log. "View all" below
-    // links into the full orders list.
-    return out.slice(0, 8);
+    // 14 most recent (reference feed length) — the card is a glance,
+    // not a log; the panel scrolls for the rest.
+    return out.slice(0, 14);
   }, [orders, customers]);
 
+  // Reference chips: All / Sales / Added / Ops.
+  const [filter, setFilter] = useState<"all" | "sales" | "added" | "ops">("all");
+  const KIND_CATEGORY: Record<FeedItem["kind"], "sales" | "added" | "ops"> = {
+    order: "sales",
+    signup: "added",
+    payout: "ops",
+  };
+  const visible = filter === "all" ? items : items.filter((it) => KIND_CATEGORY[it.kind] === filter);
+  const chips: Array<{ v: typeof filter; label: string }> = [
+    { v: "all", label: "All" },
+    { v: "sales", label: "Sales" },
+    { v: "added", label: "Added" },
+    { v: "ops", label: "Ops" },
+  ];
+
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white p-5 flex flex-col ${className}`} data-testid="dashboard-activity-feed">
-      <div className="flex items-center justify-between mb-3 flex-shrink-0">
-        <h3 className="text-sm font-semibold text-slate-700">Recent activity</h3>
-        <Link href="/admin/orders" className="gt-quiet-link hover:underline underline-offset-2 transition-colors" data-testid="link-activity-view-all">View all ›</Link>
+    <div className={`rounded-2xl border border-[var(--apple-hairline)] bg-white p-6 flex flex-col ${className}`} data-testid="dashboard-activity-feed">
+      <div className="flex items-center justify-between mb-4 flex-shrink-0 flex-wrap gap-2">
+        <h3 className="text-[20px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]">As it happens.</h3>
+        <div className="flex items-center gap-1.5">
+          {chips.map((c) => {
+            const active = filter === c.v;
+            return (
+              <button
+                key={c.v}
+                type="button"
+                onClick={() => setFilter(c.v)}
+                aria-pressed={active}
+                data-testid={`activity-chip-${c.v}`}
+                className={[
+                  "px-3 h-7 rounded-full text-[12.5px] font-medium transition-colors",
+                  active
+                    ? "bg-[var(--apple-ink)] text-white"
+                    : "bg-[var(--apple-tile)] text-[var(--apple-subink)] hover:text-[var(--apple-ink)]",
+                ].join(" ")}
+              >
+                {c.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
-      {items.length === 0 ? (
+      {visible.length === 0 ? (
         <p className="text-sm text-slate-400 py-10 text-center">Nothing yet.</p>
       ) : (
-        // Task #1498 — when the dashboard is height-constrained to fit one
-        // screen, the feed scrolls inside its own panel (flex-1 min-h-0 +
-        // overflow-y-auto) rather than stretching the whole page. The
-        // negative margin lets rows reach the panel edges while keeping the
-        // scrollbar tucked against the card padding.
-        // lg: the card is a fixed height (equal to the Trend card) and
-        // shows only the rows that fit — no inner scrollbar; "View all"
-        // is the way into the rest. Mobile keeps the capped list.
-        <ul className="space-y-2.5 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden -mx-1 px-1">
-          {items.map((it, i) => (
+        // Task #1498 — the feed scrolls inside its own panel (flex-1
+        // min-h-0 + overflow-y-auto) rather than stretching the page; on
+        // lg the card matches the Trend card's height and scrolls within.
+        <ul className="space-y-1 flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
+          {visible.map((it, i) => (
             <li key={i} data-testid={`activity-${it.kind}-${i}`}>
               <Link
                 href={it.href}
-                className="flex items-start gap-2.5 -mx-2 px-2 py-1.5 rounded-md hover:bg-slate-50 transition-colors"
+                className="flex items-center gap-3 -mx-2 px-2 py-2 rounded-xl hover:bg-slate-50 transition-colors"
               >
                 <ActivityIcon kind={it.kind} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] text-slate-900 font-medium truncate">{it.title}</div>
-                  <div className="text-[11.5px] text-slate-500 truncate">{it.detail}</div>
+                  <div className="text-[13.5px] text-[var(--apple-ink)] font-medium truncate">{it.title}</div>
+                  <div className="text-[12px] text-[var(--apple-subink)] truncate">{it.detail}</div>
                 </div>
-                <div className="text-[11px] text-slate-400 tabular-nums flex-shrink-0 pt-0.5">
+                <div className="text-[11.5px] text-[var(--apple-faint)] tabular-nums flex-shrink-0">
                   {fmtRel(it.ts)}
                 </div>
               </Link>
@@ -1088,15 +1219,17 @@ function ActivityFeed({ orders, customers, className = "" }: { orders: OrderRow[
 }
 
 function ActivityIcon({ kind }: { kind: FeedItem["kind"] }) {
+  // Reference rows: quiet gray icon tile (w-9 rounded-xl #f2f2f5);
+  // sales rows carry the blue accent, everything else stays monochrome.
   const map = {
-    order: { Icon: ShoppingBag, bg: "bg-[#319ED8]/10", color: "text-[#319ED8]" },
-    signup: { Icon: UserPlus, bg: "bg-[#FF5470]/10", color: "text-[#FF5470]" },
-    payout: { Icon: Banknote, bg: "bg-[#4AFFCA]/20", color: "text-emerald-600" },
+    order: { Icon: ShoppingBag, color: "text-[var(--apple-blue)]" },
+    signup: { Icon: UserPlus, color: "text-[var(--apple-subink)]" },
+    payout: { Icon: Banknote, color: "text-[var(--apple-subink)]" },
   }[kind];
   const Icon = map.Icon;
   return (
-    <span className={`w-7 h-7 rounded-md inline-flex items-center justify-center flex-shrink-0 ${map.bg}`}>
-      <Icon className={`w-3.5 h-3.5 ${map.color}`} />
+    <span className="w-9 h-9 rounded-xl bg-[var(--apple-tile)] inline-flex items-center justify-center flex-shrink-0">
+      <Icon className={`w-4 h-4 ${map.color}`} />
     </span>
   );
 }
