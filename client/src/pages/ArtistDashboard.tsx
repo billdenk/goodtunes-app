@@ -15,20 +15,23 @@ import { SalesMap, type SalesGeoPayload } from "@/components/partner/SalesMap";
 // Task #2893 — the merged Dashboard reuses the shared partner activity list
 // for its Recent-activity rail (the rest of the old PartnerDashboard tab is
 // replaced by the tier-disciplined merged page below).
-import { ActivityList } from "@/components/partner/PartnerDashboard";
 import { BreakEvenBar } from "@/components/BreakEvenBar";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis,
+  AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis,
   Tooltip, CartesianGrid, ResponsiveContainer,
 } from "recharts";
 // Heart for song-favorite metrics — keeps the artist dashboard's
 // favourites column visually paired with the player's heart action.
 import {
   Heart, User as UserIcon, Users, UserPlus,
+  // Apple-canon merged Dashboard (docs/design-reference/code/ArtistDashboard.tsx)
+  ArrowUpRight, Banknote, CheckCircle2, Info,
+  TrendingUp, Receipt, Disc3, Award, Music2,
 } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -46,7 +49,7 @@ import { CertRunsSection } from "@/components/partner/cert-runs-section";
 import { BuyerReport } from "@/components/partner/BuyerReport";
 import { BRAND, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 import {
-  KpiCard, KpiCardSkeleton, kpiInfoKeyFromTestId, type KpiCardModel,
+  KpiCard, kpiInfoKeyFromTestId, type KpiCardModel,
 } from "@/components/admin/KpiCard";
 // Task #2495 — reuse the shared super-admin "Add a person" search control
 // (internal catalog search → Spotify → create-from-name) for the artist
@@ -57,7 +60,7 @@ import { PartnerOrdersTable } from "@/components/partner/PartnerOrdersTable";
 // pure module so the nine-card set is unit-testable without the page graph.
 import {
   buildArtistDashboardCards, dailyGross, dailyPlays, dailyListeners,
-  dollars, compact, pct, excludedNote, joinSub,
+  dollars, dollarsCents, compact, pct, excludedNote, joinSub,
   type ArtistKpis, type ArtistSalesStack, type ArtistTimeseries,
 } from "@/pages/artistDashboardCards";
 
@@ -101,6 +104,34 @@ type Audience = {
 // module so this dashboard reads from the same source as the CSS vars
 // (see client/src/lib/brand-tokens.ts and client/src/index.css).
 const C = BRAND;
+
+// ─── Apple-canon tokens (docs/apple-canon.md; mirrors the reference
+// ArtistDashboard exactly — same values as the AdminDashboard restyle) ──
+const BLUE = "#319ED8";
+const INK = "#1d1d1f";
+const SUBINK = "#6e6e73";
+const HAIRLINE = "#e6e6ea";
+const PILL_TRACK = "#f0f0f2";
+const PILL_SHADOW = "0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)";
+
+// Time-of-day greeting — matches the reference header.
+const timeGreeting = () => {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+};
+
+function fmtRel(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${Math.max(s, 1)}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return date.toLocaleDateString();
+}
 
 // (dollars/compact/pct/excludedNote/joinSub now come from
 // ./artistDashboardCards so the card builder and the page share one set.)
@@ -252,10 +283,13 @@ export function ArtistDashboard() {
       // to avoid a duplicate title + duplicate range control. The merged
       // Dashboard (Task #2893) uses THIS header's range picker + compare
       // toggle like every other section — no second picker variant.
-      pageTitle={albumViewId || tab === "reports" ? undefined : currentTabLabel}
-      hideHeaderIdentity={!!albumViewId || tab === "reports"}
+      // The merged Dashboard renders its OWN Apple-canon header in-content
+      // (time-of-day greeting + range pills + View payouts) per the design
+      // reference, so the shell page header is suppressed there too.
+      pageTitle={albumViewId || tab === "reports" || tab === "dashboard" ? undefined : currentTabLabel}
+      hideHeaderIdentity={!!albumViewId || tab === "reports" || tab === "dashboard"}
       headerActions={
-        albumViewId || tab === "reports" || tab === "shopify" ? undefined : (
+        albumViewId || tab === "reports" || tab === "shopify" || tab === "dashboard" ? undefined : (
           <>
             <RangePicker presets={RANGE_PRESETS} value={preset} onChange={applyPreset} />
             <CompareToggle active={compare} onToggle={setCompare} />
@@ -292,7 +326,14 @@ export function ArtistDashboard() {
         <>
       {/* Task #2893 — single merged, tier-disciplined Dashboard (the old
           shared PartnerDashboard tab + Overview tab are one page now). */}
-      {tab === "dashboard" && <DashboardTab qs={qs} />}
+      {tab === "dashboard" && (
+        <DashboardTab
+          qs={qs}
+          artistName={me.data?.name ?? null}
+          preset={preset}
+          onPresetChange={applyPreset}
+        />
+      )}
       {tab === "audience" && <AudienceTab qs={qs} />}
       {tab === "acquisition" && (
         <AcquisitionTab
@@ -359,40 +400,185 @@ function Kpi({
 // time" eyebrow) so the lifetime figures are never confused with the
 // date-range numbers below. Reconciles with the buyer-roster totals at
 // /admin/people/:id/buyers.
+// Restyled to the Apple canon (reference KpiStrip tile language): white
+// cards, hairline border, 13px label / 32px value. The lifetime figures stay
+// visually separated from the date-range strip by the "All time" eyebrow.
 function LifetimeBanner({ data, loading }: { data?: Lifetime | null; loading?: boolean }) {
+  const tiles: { testId: string; label: string; value: string; sub?: string }[] = [
+    {
+      testId: "lifetime-gross", label: "Sales · lifetime",
+      value: data ? dollars(data.grossCents) : "—",
+      sub: data && data.refundedCents ? `${dollars(data.refundedCents)} refunded` : undefined,
+    },
+    {
+      testId: "lifetime-orders", label: "Orders · lifetime",
+      value: data ? compact(data.orders) : "—",
+      sub: data ? `${compact(data.buyers)} unique fan${data.buyers === 1 ? "" : "s"}` : undefined,
+    },
+    { testId: "lifetime-units", label: "Units · lifetime", value: data ? compact(data.units) : "—" },
+    {
+      // Task #2893 — tier-disciplined headline: purchaser plays only, with
+      // the other tiers spelled out (never summed in).
+      testId: "lifetime-plays", label: "Fan plays · lifetime",
+      value: data ? compact(data.ownerPlays ?? data.plays) : "—",
+      sub: data ? `${compact(data.uniqueOwners ?? data.listeners)} listener${(data.uniqueOwners ?? data.listeners) === 1 ? "" : "s"} · ${compact(data.grantPlays ?? 0)} grant plays · ${compact(data.previewPlays ?? 0)} previews · internal excluded` : undefined,
+    },
+  ];
   return (
-    <section
-      className="rounded-2xl bg-emerald-50 ring-1 ring-emerald-200 p-4 sm:p-5"
-      data-testid="lifetime-banner"
-    >
-      <p className="text-xs uppercase tracking-wider font-semibold text-emerald-700 mb-3" data-testid="lifetime-label">
+    <section data-testid="lifetime-banner">
+      <p className="text-[13px] font-medium mb-2" style={{ color: SUBINK }} data-testid="lifetime-label">
         All time · since launch
       </p>
-      <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
         {loading ? (
-          <>
-            <KpiCardSkeleton testId="lifetime-gross-skeleton" />
-            <KpiCardSkeleton testId="lifetime-orders-skeleton" />
-            <KpiCardSkeleton testId="lifetime-units-skeleton" />
-            <KpiCardSkeleton testId="lifetime-plays-skeleton" />
-          </>
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-2xl bg-white p-5 animate-pulse" style={{ border: `1px solid ${HAIRLINE}` }} data-testid={`lifetime-skeleton-${i}`}>
+              <div className="h-3 w-24 rounded bg-slate-100" />
+              <div className="mt-4 h-8 w-20 rounded bg-slate-100" />
+            </div>
+          ))
         ) : (
-          <>
-            <Kpi label="Gross revenue" value={data ? dollars(data.grossCents) : "—"} sub={data && data.refundedCents ? `${dollars(data.refundedCents)} refunded` : undefined} testId="lifetime-gross" />
-            <Kpi label="Orders" value={data ? compact(data.orders) : "—"} sub={data ? `${compact(data.buyers)} unique fan${data.buyers === 1 ? "" : "s"}` : undefined} testId="lifetime-orders" />
-            <Kpi label="Units sold" value={data ? compact(data.units) : "—"} testId="lifetime-units" />
-            {/* Task #2893 — tier-disciplined headline: purchaser plays only,
-                with the other tiers spelled out (never summed in). */}
-            <Kpi
-              label="Fan plays"
-              value={data ? compact(data.ownerPlays ?? data.plays) : "—"}
-              sub={data ? `${compact(data.uniqueOwners ?? data.listeners)} listener${(data.uniqueOwners ?? data.listeners) === 1 ? "" : "s"} · ${compact(data.grantPlays ?? 0)} grant plays · ${compact(data.previewPlays ?? 0)} previews · internal excluded` : undefined}
-              testId="lifetime-plays"
-            />
-          </>
+          tiles.map((t) => (
+            <div key={t.testId} className="rounded-2xl bg-white p-5 flex flex-col" style={{ border: `1px solid ${HAIRLINE}` }} data-testid={t.testId}>
+              <div className="text-[13px] font-medium truncate" style={{ color: SUBINK }}>{t.label}</div>
+              <div className="mt-3 tabular-nums" style={{ fontSize: 32, lineHeight: 1, fontWeight: 600, letterSpacing: "-0.03em", color: INK }}>
+                {t.value}
+              </div>
+              {t.sub && <div className="mt-3 text-[12px] truncate" style={{ color: SUBINK }} title={t.sub}>{t.sub}</div>}
+            </div>
+          ))
         )}
-      </section>
+      </div>
     </section>
+  );
+}
+
+// ─── Canon range switcher (reference RangeSwitcher, real presets) ──────
+function RangeSwitcher({ value, onChange }: { value: PresetId; onChange: (v: PresetId) => void }) {
+  const opts: { v: PresetId; label: string }[] = [
+    { v: "7d", label: "7d" },
+    { v: "30d", label: "30d" },
+    { v: "90d", label: "90d" },
+    { v: "12mo", label: "12mo" },
+  ];
+  return (
+    <div
+      className="inline-flex items-center p-1 rounded-full"
+      style={{ backgroundColor: PILL_TRACK, gap: 2 }}
+      data-testid="dashboard-range-switcher"
+    >
+      {opts.map((o) => {
+        const active = value === o.v;
+        return (
+          <button
+            key={o.v}
+            type="button"
+            onClick={() => onChange(o.v)}
+            aria-pressed={active}
+            data-testid={`button-range-${o.v}`}
+            className="px-3.5 h-8 text-[13px] rounded-full transition-all"
+            style={{
+              fontWeight: active ? 600 : 500,
+              color: active ? INK : SUBINK,
+              backgroundColor: active ? "#ffffff" : undefined,
+              boxShadow: active ? PILL_SHADOW : undefined,
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Work queue (reference hero). No artist work-queue data source exists
+// yet, so this renders the honest empty state — the component is wired so a
+// future feed can drop straight in. ─────────────────────────────────────
+function WorkQueueEmpty() {
+  return (
+    <section
+      className="rounded-2xl bg-white p-12 flex flex-col items-center text-center"
+      style={{ border: `1px solid ${HAIRLINE}` }}
+      data-testid="work-queue-empty"
+    >
+      <span className="w-14 h-14 rounded-full inline-flex items-center justify-center" style={{ backgroundColor: "#eaf7f0" }}>
+        <CheckCircle2 className="w-7 h-7" style={{ color: "#1c8a5b" }} />
+      </span>
+      <h3 className="mt-4 text-[22px] font-semibold" style={{ color: INK }}>
+        You're all caught up.
+      </h3>
+      <p className="mt-2 text-[15px] max-w-md leading-relaxed" style={{ color: SUBINK }}>
+        No approvals due, offers to review, or payouts to collect. New work
+        will appear here the moment it needs you.
+      </p>
+    </section>
+  );
+}
+
+// ─── Canon KPI tile — renders the nine tier-disciplined card models from
+// buildArtistDashboardCards in the reference tile language. Info + breakdown
+// stay available behind a quiet Info glyph so no functionality is lost. ──
+function deltaPct(cur: number, prior: number): { text: string; positive: boolean } {
+  if (prior === 0) return { text: cur > 0 ? "+∞" : "—", positive: cur >= 0 };
+  const p = ((cur - prior) / prior) * 100;
+  const positive = p >= 0;
+  return { text: `${positive ? "+" : ""}${p.toFixed(1)}%`, positive };
+}
+
+function CanonKpiTile({ model, testId }: { model: KpiCardModel; testId: string }) {
+  const hasDelta = !model.hideDelta && model.value != null && model.prior != null;
+  const d = hasDelta ? deltaPct(model.value!, model.prior!) : null;
+  return (
+    <div
+      className="rounded-2xl bg-white p-5 flex flex-col"
+      style={{ border: `1px solid ${HAIRLINE}` }}
+      data-testid={testId}
+    >
+      <div className="flex items-center gap-1 text-[13px] font-medium" style={{ color: SUBINK }}>
+        <span className="truncate">{model.label}</span>
+        {(model.info || model.breakdown) && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label={`About ${model.label}`} className="opacity-60 hover:opacity-100 transition-opacity" data-testid={`info-${testId}`}>
+                <Info className="w-3.5 h-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" sideOffset={6} className="w-72 p-3 text-[12.5px] leading-relaxed">
+              {model.info && <p style={{ color: SUBINK }}>{model.info}</p>}
+              {model.breakdown && (
+                <ul className={model.info ? "mt-2 space-y-1" : "space-y-1"}>
+                  {model.breakdown.map((b) => (
+                    <li key={b.label} className="flex items-center justify-between gap-3">
+                      <span style={{ color: SUBINK }}>{b.label}</span>
+                      <span className="tabular-nums font-medium" style={{ color: INK }}>
+                        {b.format === "currency" ? dollarsCents(b.value) : compact(b.value)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </PopoverContent>
+          </Popover>
+        )}
+      </div>
+      <div className="mt-3 tabular-nums truncate" style={{ fontSize: 32, lineHeight: 1.05, fontWeight: 600, letterSpacing: "-0.03em", color: INK }} title={model.valueText ?? undefined}>
+        {model.valueText ?? "—"}
+      </div>
+      <div className="mt-3 flex items-center gap-1.5 text-[13px] min-w-0">
+        {d ? (
+          <>
+            <span className="font-semibold tabular-nums flex-shrink-0" style={{ color: d.positive ? "#1c8a5b" : "#e0245e" }}>{d.text}</span>
+            <span className="flex-shrink-0" style={{ color: SUBINK }}>vs prior</span>
+          </>
+        ) : null}
+        {model.note && (
+          <span className="text-[12px] truncate" style={{ color: SUBINK }} title={model.note}>
+            {d ? `· ${model.note}` : model.note}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -402,10 +588,18 @@ function LifetimeBanner({ data, loading }: { data?: Lifetime | null; loading?: b
 // the date-range picker) → nine date-range cards → trend chart with a
 // Plays/Revenue/Orders toggle stacked over the fan map, with Recent
 // activity on the right rail (below on narrow) → cert-run status.
-function DashboardTab({ qs }: { qs: string }) {
+function DashboardTab({
+  qs, artistName, preset, onPresetChange,
+}: {
+  qs: string;
+  artistName: string | null;
+  preset: PresetId;
+  onPresetChange: (p: PresetId) => void;
+}) {
   const summary = useQuery<Summary>({ queryKey: [`/api/artist/summary?${qs}`] });
   const series = useQuery<Timeseries>({ queryKey: [`/api/artist/timeseries?${qs}`] });
   const geo = useQuery<GeoPayload & { range: Range }>({ queryKey: [`/api/artist/geo?${qs}`] });
+  const albums = useQuery<AlbumsPayload & { range: Range }>({ queryKey: [`/api/artist/top-albums?${qs}`] });
   const cur = summary.data?.current;
   const prev = summary.data?.previous ?? null;
   const lifetime = summary.data?.lifetime ?? null;
@@ -416,32 +610,80 @@ function DashboardTab({ qs }: { qs: string }) {
     stackPrevious: summary.data?.stackPrevious ?? null,
     series: series.data,
   });
+  const firstName = artistName ? artistName.split(" ")[0] : null;
 
   return (
-    <>
+    <div className="flex flex-col gap-5">
+      {/* Header — greeting + status line + range pills + the one primary action */}
+      <div className="flex items-end justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <h1
+            className="text-[30px] font-semibold"
+            style={{ color: INK, letterSpacing: "-0.02em", lineHeight: 1.12 }}
+            data-testid="heading-artist-dashboard"
+          >
+            {timeGreeting()}{firstName ? `, ${firstName}` : ""}
+          </h1>
+          <p className="text-[14px] mt-1" style={{ color: SUBINK }}>
+            Nothing needs you right now — your catalog is running clean.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <RangeSwitcher value={preset} onChange={onPresetChange} />
+          {/* The reference's "View payouts" CTA is renamed until a real
+              payouts surface exists — Orders is the closest real destination
+              (it reconciles to Stripe payouts) but isn't a payouts page. */}
+          <Link
+            href="/artist?tab=orders"
+            className="inline-flex items-center gap-2 text-[14px] font-medium rounded-full px-4 h-9 text-white transition-opacity hover:opacity-90"
+            style={{ backgroundColor: BLUE }}
+            data-testid="button-header-view-orders"
+          >
+            <Banknote className="w-4 h-4" />
+            View orders
+          </Link>
+        </div>
+      </div>
+
+      {/* HERO: the work queue (no artist queue feed yet — honest empty state) */}
+      <WorkQueueEmpty />
+
+      {/* All-time strip (never affected by the range picker) */}
       <LifetimeBanner data={lifetime} loading={summary.isLoading} />
 
-      <div className="flex items-baseline justify-between">
-        <p className="text-xs uppercase tracking-wider font-semibold text-slate-400" data-testid="kpi-range-label">
+      {/* Range-windowed, tier-disciplined KPI strip */}
+      <section data-testid="kpi-grid">
+        <p className="text-[13px] font-medium mb-2" style={{ color: SUBINK }} data-testid="kpi-range-label">
           Selected date range
         </p>
-      </div>
-      <section className="grid grid-cols-2 sm:grid-cols-3 gap-3" data-testid="kpi-grid">
-        {summary.isLoading ? (
-          Array.from({ length: 9 }).map((_, i) => (
-            <KpiCardSkeleton key={i} testId={`kpi-skeleton-${i}`} />
-          ))
-        ) : (
-          cards.map((c) => (
-            <KpiCard key={c.testId} model={c.model} testId={c.testId} spark={c.spark ?? null} />
-          ))
-        )}
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+          {summary.isLoading ? (
+            Array.from({ length: 9 }).map((_, i) => (
+              <div key={i} className="rounded-2xl bg-white p-5 animate-pulse" style={{ border: `1px solid ${HAIRLINE}` }} data-testid={`kpi-skeleton-${i}`}>
+                <div className="h-3 w-24 rounded bg-slate-100" />
+                <div className="mt-4 h-8 w-20 rounded bg-slate-100" />
+              </div>
+            ))
+          ) : (
+            cards.map((c) => <CanonKpiTile key={c.testId} model={c.model} testId={c.testId} />)
+          )}
+        </div>
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-        <div className="lg:col-span-2 space-y-4 min-w-0">
-          <TrendPanel series={series.data} loading={series.isLoading} />
-          <section className="rounded-2xl bg-white ring-1 ring-slate-200 p-4" data-testid="chart-geo">
+      {/* Trend earns its size once; activity recedes into a narrow rail */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
+        <div className="lg:col-span-2 min-h-0 min-w-0">
+          <TrendPanel series={series.data} loading={series.isLoading} preset={preset} />
+        </div>
+        <div className="min-h-0 max-h-[420px]">
+          <ActivityFeed items={summary.data?.activity ?? []} loading={summary.isLoading} />
+        </div>
+      </div>
+
+      {/* Bottom row — top projects ranked list + the fan map */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
+        <div className="lg:col-span-2 min-h-0 min-w-0">
+          <section className="rounded-2xl bg-white p-6 h-full" style={{ border: `1px solid ${HAIRLINE}` }} data-testid="chart-geo">
             <SalesMap
               data={geo.data?.sales}
               loading={geo.isLoading}
@@ -449,13 +691,160 @@ function DashboardTab({ qs }: { qs: string }) {
             />
           </section>
         </div>
-        <Card title="Recent activity" subtitle="Orders & releases in this range" testId="panel-activity">
-          <ActivityList items={summary.data?.activity ?? []} loading={summary.isLoading} />
-        </Card>
-      </section>
+        <div className="min-h-0">
+          <TopProjects rows={albums.data?.albums ?? []} loading={albums.isLoading} />
+        </div>
+      </div>
 
       <CertRunsSection kind="artist" qs={qs} />
-    </>
+    </div>
+  );
+}
+
+// ─── "As it happens." feed (reference ActivityFeed, real activity rows) ──
+const ACTIVITY_ICONS: Record<string, typeof TrendingUp> = {
+  milestone: TrendingUp,
+  invoice: Receipt, payout: Receipt, order: Receipt,
+  stage: Disc3, release: Disc3, album: Disc3,
+  roster: UserPlus, referral: UserPlus, invite: UserPlus,
+  certificate: Award, cert: Award,
+};
+
+function ActivityFeed({ items, loading }: { items: ActivityItem[]; loading: boolean }) {
+  const rows = useMemo(
+    () => [...items].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()).slice(0, 12),
+    [items],
+  );
+  return (
+    <div
+      className="rounded-2xl bg-white p-6 flex flex-col h-full"
+      style={{ border: `1px solid ${HAIRLINE}` }}
+      data-testid="panel-activity"
+    >
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+        <h3 className="text-[20px] font-semibold" style={{ color: INK, letterSpacing: "-0.01em" }}>
+          As it happens.
+        </h3>
+        <Link
+          href="/artist?tab=orders"
+          className="text-[13px] font-medium transition-opacity hover:opacity-70"
+          style={{ color: BLUE }}
+          data-testid="link-activity-view-all"
+        >
+          View all
+        </Link>
+      </div>
+      {loading ? (
+        <div className="space-y-2 animate-pulse">
+          {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-9 rounded-xl bg-slate-100" />)}
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="py-8 text-center text-[13px]" style={{ color: SUBINK }} data-testid="activity-empty">
+          Orders and releases in this range will show up here.
+        </p>
+      ) : (
+        <ul className="space-y-0.5 flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
+          {rows.map((it, i) => {
+            const Icon = ACTIVITY_ICONS[it.kind] ?? TrendingUp;
+            const body = (
+              <>
+                <span className="w-9 h-9 rounded-xl inline-flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#f2f2f5" }}>
+                  <Icon className="w-4 h-4" style={{ color: SUBINK }} />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13.5px] truncate" style={{ color: INK }}>{it.title}</div>
+                  {it.detail && <div className="text-[12px] truncate" style={{ color: SUBINK }}>{it.detail}</div>}
+                </div>
+                <div className="text-[11.5px] tabular-nums flex-shrink-0" style={{ color: "#a1a1a6" }}>
+                  {fmtRel(new Date(it.ts))}
+                </div>
+              </>
+            );
+            const rowClass = "flex items-center gap-3 -mx-2 px-2 py-2 rounded-xl hover:bg-slate-50 transition-colors";
+            return (
+              <li key={i} data-testid={`activity-${it.kind}-${i}`}>
+                {it.href ? (
+                  <Link href={it.href} className={rowClass}>{body}</Link>
+                ) : (
+                  <div className={rowClass}>{body}</div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ─── Top projects (reference ranked list, real /api/artist/top-albums) ──
+function TopProjects({ rows, loading }: { rows: AlbumsPayload["albums"]; loading: boolean }) {
+  const top = rows.slice(0, 5);
+  return (
+    <div
+      className="rounded-2xl bg-white p-6 flex flex-col h-full"
+      style={{ border: `1px solid ${HAIRLINE}` }}
+      data-testid="dashboard-top-projects"
+    >
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+        <h3 className="text-[20px] font-semibold" style={{ color: INK, letterSpacing: "-0.01em" }}>
+          Top projects.
+        </h3>
+        <Link
+          href="/artist?tab=catalog"
+          className="text-[13px] font-medium transition-opacity hover:opacity-70"
+          style={{ color: BLUE }}
+          data-testid="link-top-projects-view-all"
+        >
+          View all
+        </Link>
+      </div>
+      {loading ? (
+        <div className="space-y-2 animate-pulse">
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-10 rounded-xl bg-slate-100" />)}
+        </div>
+      ) : top.length === 0 ? (
+        <p className="py-8 text-center text-[13px]" style={{ color: SUBINK }} data-testid="top-projects-empty">
+          No sales in this window yet.
+        </p>
+      ) : (
+        <ul className="flex-1">
+          {top.map((a, i) => (
+            <li key={a.albumId} data-testid={`project-${a.albumId}`} style={{ borderTop: i > 0 ? `1px solid ${HAIRLINE}` : undefined }}>
+              <Link
+                href={`/artist/albums/${a.albumId}`}
+                className="flex items-center gap-3 -mx-2 px-2 py-2.5 rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                <span className="text-[12px] font-semibold tabular-nums w-4 flex-shrink-0 text-center" style={{ color: "#a1a1a6" }}>
+                  {i + 1}
+                </span>
+                {a.artwork ? (
+                  <span className="h-10 w-10 rounded-xl overflow-hidden flex-shrink-0" style={{ border: `1px solid ${HAIRLINE}` }}>
+                    <img src={a.artwork} alt={a.title} className="h-full w-full object-cover" />
+                  </span>
+                ) : (
+                  <span className="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#f2f2f5" }}>
+                    <Music2 className="w-4 h-4" style={{ color: SUBINK }} />
+                  </span>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13.5px] font-semibold truncate" style={{ color: INK }}>{a.title}</div>
+                  <div className="text-[12px] truncate" style={{ color: SUBINK }}>{a.artist}</div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div className="text-[13.5px] font-semibold tabular-nums" style={{ color: INK }}>
+                    {dollars(a.revenueCents)}
+                  </div>
+                  <div className="text-[11px] tabular-nums" style={{ color: SUBINK }}>
+                    {a.units} unit{a.units === 1 ? "" : "s"}
+                  </div>
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -474,7 +863,18 @@ const TREND_EMPTY: Record<TrendMetricId, string> = {
   orders: "No orders in this window yet.",
 };
 
-function TrendPanel({ series, loading }: { series?: Timeseries; loading: boolean }) {
+// Restyled to the reference TrendChart: white rounded-2xl p-6 card, 20px
+// two-tone header, canon metric pills, LineChart with the quiet dashed grid.
+// The API has no prior-period series, so a single current line renders (the
+// dashed prior line lands with the data when the endpoint grows one).
+const TREND_TITLE: Record<PresetId, string> = {
+  "7d": "The last 7 days.",
+  "30d": "The last 30 days.",
+  "90d": "The last 90 days.",
+  "12mo": "The last 12 months.",
+};
+
+function TrendPanel({ series, loading, preset }: { series?: Timeseries; loading: boolean; preset: PresetId }) {
   const [metric, setMetric] = useState<TrendMetricId>("plays");
   const rows = useMemo(() => {
     if (!series) return [] as { day: string; value: number }[];
@@ -496,16 +896,22 @@ function TrendPanel({ series, loading }: { series?: Timeseries; loading: boolean
   }, [series, metric]);
 
   const subtitle =
-    metric === "plays" ? "Daily fan plays" : metric === "revenue" ? "Daily gross revenue" : "Daily orders";
+    metric === "plays" ? "Daily fan plays." : metric === "revenue" ? "Daily gross revenue." : "Daily orders.";
 
   return (
-    <Card
-      title="Trends"
-      subtitle={subtitle}
-      testId="chart-trend"
-      action={
+    <div
+      className="rounded-2xl bg-white p-6 h-full flex flex-col"
+      style={{ border: `1px solid ${HAIRLINE}` }}
+      data-testid="chart-trend"
+    >
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <h3 className="text-[20px] font-semibold" style={{ color: INK, letterSpacing: "-0.01em" }}>
+          <span style={{ color: INK }}>{TREND_TITLE[preset]} </span>
+          <span style={{ color: SUBINK, fontWeight: 500 }}>{subtitle}</span>
+        </h3>
         <div
-          className="inline-flex items-center bg-slate-100 rounded-md p-0.5"
+          className="inline-flex items-center p-1 rounded-full"
+          style={{ backgroundColor: PILL_TRACK, gap: 2 }}
           role="group"
           aria-label="Trend metric"
           data-testid="trend-toggle"
@@ -518,7 +924,13 @@ function TrendPanel({ series, loading }: { series?: Timeseries; loading: boolean
                 type="button"
                 onClick={() => setMetric(m.id)}
                 aria-pressed={active}
-                className={`h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors ${active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+                className="px-3 h-7 text-[12.5px] rounded-full transition-all"
+                style={{
+                  fontWeight: active ? 600 : 500,
+                  color: active ? INK : SUBINK,
+                  backgroundColor: active ? "#ffffff" : undefined,
+                  boxShadow: active ? PILL_SHADOW : undefined,
+                }}
                 data-testid={`button-trend-${m.id}`}
               >
                 {m.label}
@@ -526,29 +938,22 @@ function TrendPanel({ series, loading }: { series?: Timeseries; loading: boolean
             );
           })}
         </div>
-      }
-    >
+      </div>
       {loading ? (
         <SkeletonBlock />
       ) : rows.length === 0 ? (
-        <p className="py-10 text-center text-slate-400 text-sm" data-testid="trend-empty">
+        <p className="py-10 text-center text-sm" style={{ color: SUBINK }} data-testid="trend-empty">
           {TREND_EMPTY[metric]}
         </p>
       ) : (
-        <div style={{ width: "100%", height: 260 }}>
-          <ResponsiveContainer>
-            <AreaChart data={rows}>
-              <defs>
-                <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={C.blue} stopOpacity={0.7} />
-                  <stop offset="100%" stopColor={C.blue} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
-              <XAxis dataKey="day" stroke="#64748b" tick={{ fontSize: 11 }} />
+        <div className="flex-1 min-h-[260px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={rows} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="#eeeef0" strokeDasharray="3 3" />
+              <XAxis dataKey="day" stroke="#c7c7cc" fontSize={11} />
               <YAxis
-                stroke="#64748b"
-                tick={{ fontSize: 11 }}
+                stroke="#c7c7cc"
+                fontSize={11}
                 tickFormatter={(v) => (metric === "revenue" ? `$${v}` : compact(Number(v)))}
                 allowDecimals={false}
               />
@@ -560,12 +965,12 @@ function TrendPanel({ series, loading }: { series?: Timeseries; loading: boolean
                     : [Number(v).toLocaleString(), metric === "plays" ? "Plays" : "Orders"]
                 }
               />
-              <Area type="monotone" dataKey="value" stroke={C.blue} strokeWidth={2} fill="url(#trendFill)" />
-            </AreaChart>
+              <Line type="monotone" dataKey="value" stroke={BLUE} strokeWidth={2} dot={false} />
+            </LineChart>
           </ResponsiveContainer>
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 

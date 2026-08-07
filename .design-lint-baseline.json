@@ -19995,6 +19995,146 @@
     "snippet": "<span className=\"text-fan-secondary uppercase tracking-[0.1em] text-[10px]\">DEV</span>"
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "const BLUE = \"#319ED8\";"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<p className=\"text-[13px] font-medium mb-2\" style={{ color: SUBINK }} data-testid=\"lifetime-label\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<div className=\"text-[13px] font-medium truncate\" style={{ color: SUBINK }}>{t.label}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "{t.sub && <div className=\"mt-3 text-[12px] truncate\" style={{ color: SUBINK }} title={t.sub}>{t.sub}</div>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "className=\"px-3.5 h-8 text-[13px] rounded-full transition-all\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<h3 className=\"mt-4 text-[22px] font-semibold\" style={{ color: INK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<p className=\"mt-2 text-[15px] max-w-md leading-relaxed\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<div className=\"flex items-center gap-1 text-[13px] font-medium\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<PopoverContent align=\"start\" sideOffset={6} className=\"w-72 p-3 text-[12.5px] leading-relaxed\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<div className=\"mt-3 flex items-center gap-1.5 text-[13px] min-w-0\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<span className=\"text-[12px] truncate\" style={{ color: SUBINK }} title={model.note}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "className=\"text-[30px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<p className=\"text-[14px] mt-1\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "className=\"inline-flex items-center gap-2 text-[14px] font-medium rounded-full px-4 h-9 text-white transition-opacity hover:opacity-90\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<p className=\"text-[13px] font-medium mb-2\" style={{ color: SUBINK }} data-testid=\"kpi-range-label\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<h3 className=\"text-[20px] font-semibold\" style={{ color: INK, letterSpacing: \"-0.01em\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "className=\"text-[13px] font-medium transition-opacity hover:opacity-70\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<p className=\"py-8 text-center text-[13px]\" style={{ color: SUBINK }} data-testid=\"activity-empty\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<div className=\"text-[13.5px] truncate\" style={{ color: INK }}>{it.title}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "{it.detail && <div className=\"text-[12px] truncate\" style={{ color: SUBINK }}>{it.detail}</div>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<div className=\"text-[11.5px] tabular-nums flex-shrink-0\" style={{ color: \"#a1a1a6\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<p className=\"py-8 text-center text-[13px]\" style={{ color: SUBINK }} data-testid=\"top-projects-empty\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<span className=\"text-[12px] font-semibold tabular-nums w-4 flex-shrink-0 text-center\" style={{ color: \"#a1a1a6\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-semibold truncate\" style={{ color: INK }}>{a.title}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<div className=\"text-[12px] truncate\" style={{ color: SUBINK }}>{a.artist}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-semibold tabular-nums\" style={{ color: INK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<div className=\"text-[11px] tabular-nums\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "className=\"px-3 h-7 text-[12.5px] rounded-full transition-all\""
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
     "snippet": "<table className=\"w-full text-[13px]\">"
@@ -20038,6 +20178,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
     "snippet": "<span className=\"text-[11px] text-slate-500 uppercase tracking-wider\">Non-profit</span>"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<button type=\"button\" aria-label={`About ${model.label}`} className=\"opacity-60 hover:opacity-100 transition-opacity\" data-testid={`info-${testId}`}> <Info className=\"w-3.5 h-3.5\" /> </button>"
   },
   {
     "rule": "brand-hex-literal",
