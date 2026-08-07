@@ -438,7 +438,7 @@ export function OperatorShell<TabId extends string>({
               Profile menu pinned top-right (desktop + mobile). */}
           <div
             className="h-14 flex-shrink-0 border-b border-[var(--apple-hairline)] flex items-center gap-3 px-4 sm:px-6"
-            style={{ background: "rgba(255,255,255,0.72)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
+            style={{ background: "var(--apple-glass)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
             data-testid="operator-shell-topbar"
           >
             {/* Mobile: show the entity name since the rail is hidden. */}

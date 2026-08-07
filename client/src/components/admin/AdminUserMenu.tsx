@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { LogOut, ShieldCheck, UserPlus, Check, UserPen, FlaskConical, X } from "lucide-react";
+import { LogOut, ShieldCheck, UserPlus, Check, UserPen, FlaskConical, X, Sun, Moon, Monitor } from "lucide-react";
+import {
+  getAdminAppearance,
+  setAdminAppearance,
+  type AdminAppearance,
+} from "@/lib/adminAppearance";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -58,6 +63,7 @@ export function AdminUserMenu() {
   // current admin page (left nav + shell stay visible) instead of
   // navigating to the fan player's dark-chrome editor at /account/edit.
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [appearance, setAppearance] = useState<AdminAppearance>(() => getAdminAppearance());
 
   // Task #1038 — Unified identity P3. List every hat this account holds so a
   // multi-membership operator can switch the active one. Single-membership
@@ -245,6 +251,51 @@ export function AdminUserMenu() {
             Security
           </DropdownMenuItem>
         )}
+        <DropdownMenuSeparator className="bg-slate-200" />
+        {/* Appearance — Light / Dark / System. Toggles the Apple-canon
+            charcoal theme (`gt-admin-dark`) across every admin + partner
+            surface; persisted, "System" tracks the OS live. */}
+        <div className="px-2 py-1.5 flex items-center justify-between gap-3">
+          <span className="text-[13px] text-slate-700">Appearance</span>
+          <div
+            className="inline-flex items-center rounded-full p-0.5 bg-slate-100"
+            role="group"
+            aria-label="Appearance"
+            data-testid="appearance-toggle"
+          >
+            {(
+              [
+                { v: "light", icon: Sun, label: "Light" },
+                { v: "dark", icon: Moon, label: "Dark" },
+                { v: "system", icon: Monitor, label: "System" },
+              ] as const
+            ).map(({ v, icon: Icon, label }) => {
+              const active = appearance === v;
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  title={label}
+                  aria-label={`${label} appearance`}
+                  aria-pressed={active}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setAdminAppearance(v as AdminAppearance);
+                    setAppearance(v as AdminAppearance);
+                  }}
+                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                    active
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-400 hover:text-slate-700"
+                  }`}
+                  data-testid={`appearance-${v}`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <DropdownMenuSeparator className="bg-slate-200" />
         <DropdownMenuItem
           onClick={handleSignOut}

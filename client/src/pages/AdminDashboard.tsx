@@ -614,7 +614,7 @@ function WinningSection({ data }: { data?: WinningData }) {
     rows?.length ? (
       rows.slice(0, 5).map((r, i) => (
         <div className="flex items-start gap-3.5 py-3" key={r.id}>
-          <span className="w-4 text-right text-[13px] leading-[44px] flex-shrink-0" style={{ color: "#c7c7cc" }}>{i + 1}</span>
+          <span className="w-4 text-right text-[13px] leading-[44px] flex-shrink-0" style={{ color: "var(--apple-axis)" }}>{i + 1}</span>
           <span
             className={[
               "w-11 h-11 flex-shrink-0 overflow-hidden",
@@ -938,10 +938,11 @@ function PrimaryChart({
             />
             <Tooltip
               formatter={(v: number) => (isCurrency ? fmtUsd(v) : fmtNum(v))}
-              labelStyle={{ color: "#1d1d1f" }}
+              labelStyle={{ color: "var(--apple-ink)" }}
               contentStyle={{
                 borderRadius: 12,
-                border: "1px solid #e6e6ea",
+                background: "var(--apple-card)",
+                border: "1px solid var(--apple-hairline)",
                 boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
               }}
             />

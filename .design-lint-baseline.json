@@ -9980,6 +9980,11 @@
     "snippet": "className=\"text-[13px] cursor-pointer text-slate-700 focus:bg-slate-100 focus:text-slate-900\""
   },
   {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminUserMenu.tsx",
+    "snippet": "<span className=\"text-[13px] text-slate-700\">Appearance</span>"
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/components/admin/AnalyticsDebugOverlay.tsx",
     "snippet": "className=\"fixed bottom-4 right-4 z-[200] h-10 px-3 rounded-full bg-[#319ED8] text-white text-xs font-semibold shadow-lg active:opacity-80\""
@@ -16422,7 +16427,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminDashboard.tsx",
-    "snippet": "<span className=\"w-4 text-right text-[13px] leading-[44px] flex-shrink-0\" style={{ color: \"#c7c7cc\" }}>{i + 1}</span>"
+    "snippet": "<span className=\"w-4 text-right text-[13px] leading-[44px] flex-shrink-0\" style={{ color: \"var(--apple-axis)\" }}>{i + 1}</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -20097,7 +20102,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<div className=\"text-[11.5px] tabular-nums flex-shrink-0\" style={{ color: \"#a1a1a6\" }}>"
+    "snippet": "<div className=\"text-[11.5px] tabular-nums flex-shrink-0\" style={{ color: FAINT }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -20107,7 +20112,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<span className=\"text-[12px] font-semibold tabular-nums w-4 flex-shrink-0 text-center\" style={{ color: \"#a1a1a6\" }}>"
+    "snippet": "<span className=\"text-[12px] font-semibold tabular-nums w-4 flex-shrink-0 text-center\" style={{ color: FAINT }}>"
   },
   {
     "rule": "hardcoded-font-size",

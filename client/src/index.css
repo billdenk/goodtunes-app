@@ -473,13 +473,19 @@ body.gt-admin::before {
   --apple-warning-wash: #fdf6e8;
   --apple-ready: #1c8a5b;
   --apple-ready-wash: #eaf7f0;
+  /* Raised active pill (segmented controls / rail active row) + glass
+     top bar + chart strokes — themed so components never hardcode them. */
+  --apple-pill: #ffffff;
+  --apple-glass: rgba(255, 255, 255, 0.72);
+  --apple-grid: #eeeef0;
+  --apple-axis: #c7c7cc;
 }
 .gt-admin-dark {
   --apple-canvas: #161617;
   --apple-card: #1e1e20;
   --apple-ink: #f5f5f7;
   --apple-subink: #98989d;
-  --apple-faint: #6e6e73;
+  --apple-faint: #8e8e93; /* AA on #161617/#1e1e20 (was #6e6e73, ~3.3:1) */
   --apple-hairline: rgba(255,255,255,.10);
   --apple-track: #26262a;
   --apple-chip: #3a3a3e;
@@ -489,7 +495,91 @@ body.gt-admin::before {
   --apple-critical-wash: rgba(224,36,94,.14);
   --apple-warning-wash: rgba(201,138,0,.14);
   --apple-ready-wash: rgba(28,138,91,.14);
+  --apple-pill: #3a3a3e;
+  --apple-glass: rgba(22, 22, 23, 0.72);
+  --apple-grid: #26262a;
+  --apple-axis: #6e6e73;
+  /* Brighten severity/accent inks for contrast on charcoal. */
+  --apple-critical: #ff5c8a;
+  --apple-warning: #e6a817;
+  --apple-ready: #34c184;
 }
+
+/* ── Apple Canon dark — theme layer ────────────────────────────────────
+   The charcoal ladder applies through variables; this block remaps the
+   ubiquitous light utility classes (white cards, slate text/borders) so
+   EVERY admin + partner screen — current and future — inherits dark
+   automatically without per-page edits. Scoped to body.gt-admin so fan
+   surfaces (navy) are never touched. */
+body.gt-admin.gt-admin-dark {
+  color-scheme: dark;
+  /* shadcn semantic tokens → charcoal, so Dialog/Input/Select/Popover/
+     Table primitives go dark with zero component changes. */
+  --background: 240 2% 9%;              /* #161617 */
+  --foreground: 240 8% 96%;             /* #f5f5f7 */
+  --card: 240 3% 12%;                   /* #1e1e20 */
+  --card-foreground: 240 8% 96%;
+  --popover: 240 3% 12%;
+  --popover-foreground: 240 8% 96%;
+  --secondary: 240 5% 16%;              /* #26262a */
+  --secondary-foreground: 240 8% 96%;
+  --muted: 240 5% 16%;
+  --muted-foreground: 240 2% 61%;       /* #98989d */
+  --accent: 240 5% 16%;
+  --accent-foreground: 240 8% 96%;
+  --border: 240 5% 26%;                 /* ~#3a3a3e hairline */
+  --input: 240 5% 26%;
+  --brand-blue: #319ed8;
+  --brand-blue-hover: #4fb2e6;
+  --brand-blue-soft: rgba(49, 158, 216, 0.16);
+}
+
+/* Surfaces: white → card ladder. */
+body.gt-admin.gt-admin-dark .bg-white { background-color: var(--apple-card); }
+body.gt-admin.gt-admin-dark .bg-slate-50 { background-color: var(--apple-canvas); }
+body.gt-admin.gt-admin-dark .bg-slate-100 { background-color: var(--apple-track); }
+body.gt-admin.gt-admin-dark .bg-slate-200 { background-color: var(--apple-chip); }
+body.gt-admin.gt-admin-dark .hover\:bg-slate-50:hover,
+body.gt-admin.gt-admin-dark .hover\:bg-slate-100:hover { background-color: rgba(255, 255, 255, 0.06); }
+body.gt-admin.gt-admin-dark .hover\:bg-slate-200:hover { background-color: rgba(255, 255, 255, 0.09); }
+body.gt-admin.gt-admin-dark .hover\:bg-white:hover { background-color: var(--apple-chip); }
+
+/* Ink ladder. */
+body.gt-admin.gt-admin-dark .text-slate-900,
+body.gt-admin.gt-admin-dark .text-slate-800 { color: var(--apple-ink); }
+body.gt-admin.gt-admin-dark .text-slate-700,
+body.gt-admin.gt-admin-dark .text-slate-600,
+body.gt-admin.gt-admin-dark .text-slate-500 { color: var(--apple-subink); }
+body.gt-admin.gt-admin-dark .text-slate-400,
+body.gt-admin.gt-admin-dark .text-slate-300 { color: var(--apple-faint); }
+body.gt-admin.gt-admin-dark .hover\:text-slate-900:hover,
+body.gt-admin.gt-admin-dark .hover\:text-slate-700:hover { color: var(--apple-ink); }
+
+/* Hairlines. */
+body.gt-admin.gt-admin-dark .border-slate-100,
+body.gt-admin.gt-admin-dark .border-slate-200,
+body.gt-admin.gt-admin-dark .border-slate-300 { border-color: var(--apple-hairline); }
+body.gt-admin.gt-admin-dark .divide-slate-100 > *,
+body.gt-admin.gt-admin-dark .divide-slate-200 > * { border-color: var(--apple-hairline); }
+body.gt-admin.gt-admin-dark .ring-slate-200,
+body.gt-admin.gt-admin-dark .ring-1 { --tw-ring-color: var(--apple-hairline); }
+
+/* Skeletons / pulse washes. */
+body.gt-admin.gt-admin-dark .animate-pulse .bg-slate-100,
+body.gt-admin.gt-admin-dark .animate-pulse.bg-slate-100,
+body.gt-admin.gt-admin-dark .animate-pulse .bg-slate-200 { background-color: var(--apple-track); }
+
+/* The GoodTunes logo asset is dark-on-transparent → render white via CSS
+   invert (docs/apple-canon.md). Partner/press logos are NEVER inverted —
+   scope strictly to the GoodTunes alt text. */
+body.gt-admin.gt-admin-dark img[alt="GoodTunes"] { filter: invert(1) brightness(2); }
+
+/* Recharts paints grid/axis colors as SVG presentation attributes, which
+   CSS out-ranks — one blanket override themes every admin chart. */
+body.gt-admin.gt-admin-dark .recharts-cartesian-grid line { stroke: var(--apple-grid); }
+body.gt-admin.gt-admin-dark .recharts-cartesian-axis-line,
+body.gt-admin.gt-admin-dark .recharts-cartesian-axis-tick-line { stroke: var(--apple-axis); }
+body.gt-admin.gt-admin-dark .recharts-text { fill: var(--apple-axis); }
 
 body.gt-admin {
   background: var(--apple-canvas);

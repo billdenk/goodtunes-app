@@ -5,6 +5,7 @@ import { installGlobalErrorReporter } from "@/components/GlobalErrorBoundary";
 import { armBootWatchdog } from "@/lib/bootHeal";
 import { setAuthToken } from "@/lib/queryClient";
 import { setPreviewPass } from "@/lib/previewPass";
+import { applyAdminAppearance, setAdminAppearance } from "@/lib/adminAppearance";
 
 // Task #1631 — Cross-host purchase handoff pickup. After a sale on the buy
 // funnel (get./store.goodtunes.music), the fan is redirected to
@@ -98,7 +99,25 @@ try {
     p === "/invite" || p.indexOf("/invite/") === 0;
   const isAdmin =
     h === "admin.goodtunes.music" || p.indexOf("/admin") === 0 || lightPortal;
-  if (isAdmin) document.body.classList.add("gt-admin");
+  if (isAdmin) {
+    document.body.classList.add("gt-admin");
+    // Optional ?gtappearance=light|dark|system deep-link (persists the
+    // choice) — same effect as the Account-menu Appearance control.
+    // Consumed once, then scrubbed from the URL so a copied link doesn't
+    // keep overriding a later menu selection on every reload.
+    const search = new URLSearchParams(window.location.search);
+    const forced = search.get("gtappearance");
+    if (forced === "light" || forced === "dark" || forced === "system") {
+      setAdminAppearance(forced);
+      search.delete("gtappearance");
+      const url = new URL(window.location.href);
+      url.search = search.toString();
+      window.history.replaceState({}, "", url.toString());
+    }
+    // Apply the saved Light/Dark/System appearance in the same synchronous
+    // pass so a dark-mode admin never flashes light on first paint.
+    applyAdminAppearance();
+  }
 } catch {}
 
 installGlobalErrorReporter();

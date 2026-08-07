@@ -534,7 +534,7 @@ export function AdminFrame({
           above the sidebar/main/preview row so nothing can break it. */}
       <header
         className="h-16 flex-shrink-0 border-b border-[var(--apple-hairline)] flex items-center gap-3 pl-4 pr-4 sm:pr-8"
-        style={{ background: "rgba(255,255,255,0.72)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
+        style={{ background: "var(--apple-glass)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
       >
         <Link
           href={isArtist ? "/admin/dashboard" : isTrimmedPartner ? partnerHome : "/admin/dashboard"}

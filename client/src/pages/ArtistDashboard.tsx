@@ -107,11 +107,17 @@ const C = BRAND;
 
 // ─── Apple-canon tokens (docs/apple-canon.md; mirrors the reference
 // ArtistDashboard exactly — same values as the AdminDashboard restyle) ──
+// Themed via the --apple-* variables (index.css) so the charcoal dark
+// theme applies automatically — never hardcode these ladder colors.
 const BLUE = "#319ED8";
-const INK = "#1d1d1f";
-const SUBINK = "#6e6e73";
-const HAIRLINE = "#e6e6ea";
-const PILL_TRACK = "#f0f0f2";
+const INK = "var(--apple-ink)";
+const SUBINK = "var(--apple-subink)";
+const FAINT = "var(--apple-faint)";
+const HAIRLINE = "var(--apple-hairline)";
+const PILL_TRACK = "var(--apple-track)";
+const PILL_ACTIVE = "var(--apple-pill)";
+const TILE = "var(--apple-tile)";
+const CARD = "var(--apple-card)";
 const PILL_SHADOW = "0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)";
 
 // Time-of-day greeting — matches the reference header.
@@ -480,7 +486,7 @@ function RangeSwitcher({ value, onChange }: { value: PresetId; onChange: (v: Pre
             style={{
               fontWeight: active ? 600 : 500,
               color: active ? INK : SUBINK,
-              backgroundColor: active ? "#ffffff" : undefined,
+              backgroundColor: active ? PILL_ACTIVE : undefined,
               boxShadow: active ? PILL_SHADOW : undefined,
             }}
           >
@@ -502,8 +508,8 @@ function WorkQueueEmpty() {
       style={{ border: `1px solid ${HAIRLINE}` }}
       data-testid="work-queue-empty"
     >
-      <span className="w-14 h-14 rounded-full inline-flex items-center justify-center" style={{ backgroundColor: "#eaf7f0" }}>
-        <CheckCircle2 className="w-7 h-7" style={{ color: "#1c8a5b" }} />
+      <span className="w-14 h-14 rounded-full inline-flex items-center justify-center" style={{ backgroundColor: "var(--apple-ready-wash)" }}>
+        <CheckCircle2 className="w-7 h-7" style={{ color: "var(--apple-ready)" }} />
       </span>
       <h3 className="mt-4 text-[22px] font-semibold" style={{ color: INK }}>
         You're all caught up.
@@ -568,7 +574,7 @@ function CanonKpiTile({ model, testId }: { model: KpiCardModel; testId: string }
       <div className="mt-3 flex items-center gap-1.5 text-[13px] min-w-0">
         {d ? (
           <>
-            <span className="font-semibold tabular-nums flex-shrink-0" style={{ color: d.positive ? "#1c8a5b" : "#e0245e" }}>{d.text}</span>
+            <span className="font-semibold tabular-nums flex-shrink-0" style={{ color: d.positive ? "var(--apple-ready)" : "var(--apple-critical)" }}>{d.text}</span>
             <span className="flex-shrink-0" style={{ color: SUBINK }}>vs prior</span>
           </>
         ) : null}
@@ -748,14 +754,14 @@ function ActivityFeed({ items, loading }: { items: ActivityItem[]; loading: bool
             const Icon = ACTIVITY_ICONS[it.kind] ?? TrendingUp;
             const body = (
               <>
-                <span className="w-9 h-9 rounded-xl inline-flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#f2f2f5" }}>
+                <span className="w-9 h-9 rounded-xl inline-flex items-center justify-center flex-shrink-0" style={{ backgroundColor: TILE }}>
                   <Icon className="w-4 h-4" style={{ color: SUBINK }} />
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="text-[13.5px] truncate" style={{ color: INK }}>{it.title}</div>
                   {it.detail && <div className="text-[12px] truncate" style={{ color: SUBINK }}>{it.detail}</div>}
                 </div>
-                <div className="text-[11.5px] tabular-nums flex-shrink-0" style={{ color: "#a1a1a6" }}>
+                <div className="text-[11.5px] tabular-nums flex-shrink-0" style={{ color: FAINT }}>
                   {fmtRel(new Date(it.ts))}
                 </div>
               </>
@@ -815,7 +821,7 @@ function TopProjects({ rows, loading }: { rows: AlbumsPayload["albums"]; loading
                 href={`/artist/albums/${a.albumId}`}
                 className="flex items-center gap-3 -mx-2 px-2 py-2.5 rounded-xl hover:bg-slate-50 transition-colors"
               >
-                <span className="text-[12px] font-semibold tabular-nums w-4 flex-shrink-0 text-center" style={{ color: "#a1a1a6" }}>
+                <span className="text-[12px] font-semibold tabular-nums w-4 flex-shrink-0 text-center" style={{ color: FAINT }}>
                   {i + 1}
                 </span>
                 {a.artwork ? (
@@ -823,7 +829,7 @@ function TopProjects({ rows, loading }: { rows: AlbumsPayload["albums"]; loading
                     <img src={a.artwork} alt={a.title} className="h-full w-full object-cover" />
                   </span>
                 ) : (
-                  <span className="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#f2f2f5" }}>
+                  <span className="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: TILE }}>
                     <Music2 className="w-4 h-4" style={{ color: SUBINK }} />
                   </span>
                 )}
@@ -928,7 +934,7 @@ function TrendPanel({ series, loading, preset }: { series?: Timeseries; loading:
                 style={{
                   fontWeight: active ? 600 : 500,
                   color: active ? INK : SUBINK,
-                  backgroundColor: active ? "#ffffff" : undefined,
+                  backgroundColor: active ? PILL_ACTIVE : undefined,
                   boxShadow: active ? PILL_SHADOW : undefined,
                 }}
                 data-testid={`button-trend-${m.id}`}
