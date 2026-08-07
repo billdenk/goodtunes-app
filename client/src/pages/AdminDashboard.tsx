@@ -1179,7 +1179,10 @@ function ActivityFeed({ orders, customers, className = "" }: { orders: OrderRow[
                 className={[
                   "px-3 h-7 rounded-full text-[12.5px] font-medium transition-colors",
                   active
-                    ? "bg-[var(--apple-ink)] text-white"
+                    // Inverse chip: ink pill with canvas-tone text so it
+                    // stays readable in BOTH themes (text-white goes
+                    // white-on-white once dark flips --apple-ink light).
+                    ? "bg-[var(--apple-ink)] text-[var(--apple-canvas)]"
                     : "bg-[var(--apple-tile)] text-[var(--apple-subink)] hover:text-[var(--apple-ink)]",
                 ].join(" ")}
               >
