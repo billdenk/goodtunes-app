@@ -44,6 +44,10 @@ accents on ~14%-alpha translucent washes — see tokens).
   **quiet borderless text buttons** (blue for the main verb, subink for the
   rest) with a soft hover tint (`#f0f7fc` for blue, light gray otherwise).
   Rows of equal-weight labeled pills are NOT Apple.
+- **Header utility actions (e.g. the Feedback button) are ghost pills** —
+  rounded-full, subink text + icon, transparent with a light-gray hover tint,
+  never filled blue. A filled Feedback pill would steal the screen's one
+  primary slot. (Ratified 2026-08-07; all mockups updated.)
 - Overflow actions on artwork/tiles: a single small frosted `···` circle
   (`rgba(255,255,255,0.88)` + backdrop-blur) revealed on hover, opening a
   small white rounded-xl menu. Never multiple labeled pills over artwork.
