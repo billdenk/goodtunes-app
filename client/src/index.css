@@ -452,3 +452,154 @@ body.gt-admin::before {
   animation: gt-progress-indeterminate 1.4s ease-in-out infinite;
   will-change: transform;
 }
+
+/* ── Apple Canon: operator surfaces ─────────────────────────────────────
+   Scoped to gt-admin so the fan shell keeps its navy tokens and rhythm. */
+:root {
+  --apple-canvas: #f5f5f7;
+  --apple-rail: #f5f5f7;
+  --apple-card: #ffffff;
+  --apple-ink: #1d1d1f;
+  --apple-subink: #6e6e73;
+  --apple-faint: #a1a1a6;
+  --apple-hairline: #e6e6ea;
+  --apple-track: #f0f0f2;
+  --apple-chip: #e8e8ed;
+  --apple-blue: #319ed8;
+  --apple-critical: #e0245e;
+  --apple-critical-wash: #fdeef2;
+  --apple-warning: #c98a00;
+  --apple-warning-wash: #fdf6e8;
+  --apple-ready: #1c8a5b;
+  --apple-ready-wash: #eaf7f0;
+}
+.gt-admin-dark {
+  --apple-canvas: #161617;
+  --apple-card: #1e1e20;
+  --apple-ink: #f5f5f7;
+  --apple-subink: #98989d;
+  --apple-faint: #6e6e73;
+  --apple-hairline: rgba(255,255,255,.10);
+  --apple-track: #26262a;
+  --apple-chip: #3a3a3e;
+  --apple-blue: #319ed8;
+  --apple-rail: #1c1c1e;
+  --apple-critical-wash: rgba(224,36,94,.14);
+  --apple-warning-wash: rgba(201,138,0,.14);
+  --apple-ready-wash: rgba(28,138,91,.14);
+}
+
+body.gt-admin {
+  background: var(--apple-canvas);
+  color: var(--apple-ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
+}
+.gt-admin .gt-dashboard-canon {
+  color: var(--apple-ink);
+  letter-spacing: -0.01em;
+}
+.gt-admin .gt-dashboard-canon h1 {
+  font-size: 30px;
+  line-height: 1.12;
+  letter-spacing: -.03em;
+}
+.gt-admin .gt-dashboard-canon h3 {
+  color: var(--apple-ink);
+  letter-spacing: -.02em;
+}
+.gt-admin .gt-dashboard-canon [data-testid$="-value"] {
+  font-size: 38px;
+  line-height: 1;
+  letter-spacing: -.04em;
+  color: var(--apple-ink);
+  font-variant-numeric: tabular-nums;
+}
+.gt-admin .gt-dashboard-canon .rounded-xl,
+.gt-admin .gt-dashboard-canon .rounded-lg {
+  border-radius: 16px;
+  border-color: var(--apple-hairline);
+  box-shadow: none;
+}
+.gt-admin .gt-dashboard-canon .bg-white {
+  background: var(--apple-card);
+}
+.gt-admin .gt-dashboard-canon .text-slate-900 { color: var(--apple-ink); }
+.gt-admin .gt-dashboard-canon .text-slate-700,
+.gt-admin .gt-dashboard-canon .text-slate-600,
+.gt-admin .gt-dashboard-canon .text-slate-500 { color: var(--apple-subink); }
+.gt-admin .gt-dashboard-canon .text-slate-400,
+.gt-admin .gt-dashboard-canon .text-slate-300 { color: var(--apple-faint); }
+.gt-admin .gt-dashboard-canon [data-testid="dashboard-range-switcher"],
+.gt-admin .gt-dashboard-canon .inline-flex.items-center.bg-slate-100 {
+  background: var(--apple-track);
+  border-radius: 999px;
+  padding: 3px;
+}
+.gt-admin .gt-dashboard-canon [data-testid="dashboard-range-switcher"] button,
+.gt-admin .gt-dashboard-canon .inline-flex.items-center.bg-slate-100 button {
+  border-radius: 999px;
+  min-height: 30px;
+}
+.gt-admin .gt-dashboard-canon [data-testid="dashboard-range-switcher"] button.bg-white,
+.gt-admin .gt-dashboard-canon .inline-flex.items-center.bg-slate-100 button.bg-white {
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+.gt-admin .gt-dashboard-canon button {
+  border-radius: 999px;
+}
+.gt-admin .gt-dashboard-canon button:not([data-testid="button-referral-payouts-run"]) {
+  background-color: transparent;
+  color: var(--apple-subink);
+  border-color: transparent;
+}
+.gt-admin .gt-dashboard-canon button:not([data-testid="button-referral-payouts-run"]):hover {
+  background-color: #f0f0f2;
+  color: var(--apple-ink);
+}
+.gt-admin .gt-dashboard-canon [data-testid="button-referral-payouts-run"] {
+  background: var(--apple-blue);
+  color: white;
+  border-radius: 999px;
+}
+.gt-admin .gt-dashboard-canon [data-testid="dashboard-activity-feed"] a:hover {
+  background: #f0f0f2;
+}
+.gt-admin .gt-dashboard-canon [data-testid="ops-health-strip"] {
+  background: var(--apple-warning-wash);
+  border-color: transparent;
+}
+.gt-admin .gt-dashboard-canon [data-testid="ops-health-strip"] a {
+  background: transparent;
+  border: 0;
+  color: var(--apple-warning);
+}
+.gt-admin .gt-dashboard-canon [data-testid="dashboard-primary-chart"] {
+  min-height: 300px;
+}
+.gt-admin .gt-dashboard-canon .animate-pulse {
+  background: #e8e8ed;
+}
+
+/* Shared shell: translucent top bar, quiet rail, raised active item. */
+.gt-admin > div > aside,
+.gt-admin aside {
+  background: var(--apple-rail);
+  border-color: var(--apple-hairline);
+}
+.gt-admin main > .sticky {
+  background: rgba(255,255,255,.72);
+  backdrop-filter: blur(18px);
+  border-color: var(--apple-hairline);
+}
+.gt-admin-dark main > .sticky { background: rgba(22,22,23,.72); }
+.gt-admin aside nav button,
+.gt-admin aside nav > div > button {
+  border-radius: 9px;
+  color: var(--apple-subink);
+}
+.gt-admin aside nav button:hover { background: rgba(255,255,255,.65); color: var(--apple-ink); }
+.gt-admin aside nav button[class*="bg-[var(--brand-blue)]"] {
+  background: var(--apple-card);
+  color: var(--apple-ink);
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}

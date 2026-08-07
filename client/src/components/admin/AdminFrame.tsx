@@ -526,8 +526,8 @@ export function AdminFrame({
   const isSectionOpen = (id: SidebarSectionId) => openSection === id;
 
   return (
-    <div className="h-screen w-full overflow-x-hidden bg-slate-50 font-sans antialiased flex">
-      <aside className="w-[220px] flex-shrink-0 bg-white hidden md:flex md:flex-col">
+    <div className="h-[100dvh] w-full overflow-x-hidden bg-[var(--apple-canvas)] font-sans antialiased flex">
+      <aside className="w-[220px] flex-shrink-0 bg-[var(--apple-canvas)] hidden md:flex md:flex-col">
         {/* Logo sits at the top of the sidebar column so the right
             preview pane + its vertical divider can reach the very top
             of the viewport. The border-b extends the top-of-page
@@ -1217,7 +1217,7 @@ export function AdminFrame({
         {roleInfo?.devImpersonating && (
           <div className="flex items-center justify-between gap-3 bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-[12.5px]">
             <div className="flex items-center gap-2 text-amber-700">
-              <span className="text-amber-500">🔬</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" aria-hidden="true" />
               <span className="font-semibold">Dev Preview</span>
               <span className="text-amber-600">·</span>
               <span>{roleInfo.devPersonaLabel ?? "Partner"}</span>

@@ -284,17 +284,23 @@ export function PlacesBanner() {
   if (dismissed) return null;
   return (
     <div
-      className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs text-amber-900 flex items-start gap-3"
+      className="rounded-2xl border border-[var(--apple-hairline,#e6e6ea)] bg-white px-4 py-2.5 text-xs flex items-start gap-3"
       data-testid="banner-places-unconfigured"
     >
-      <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
+      <span
+        className="mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0"
+        style={{ background: "var(--apple-warning, #c98a00)" }}
+        aria-hidden
+      />
       <div className="flex-1 min-w-0">
-        <div className="font-semibold">Address autocomplete is off</div>
-        <div className="text-amber-800/90">
+        <span className="font-semibold text-[var(--apple-ink,#1d1d1f)]">
+          Address autocomplete is off.
+        </span>{" "}
+        <span className="text-[var(--apple-subink,#6e6e73)]">
           Set <code className="font-mono text-xs">GOOGLE_PLACES_API_KEY</code>{" "}
           in Secrets (Google Cloud project, Places API enabled, billing on) to
           turn on Places suggestions in every admin address field.
-        </div>
+        </span>
       </div>
       <button
         type="button"
@@ -302,7 +308,7 @@ export function PlacesBanner() {
           window.localStorage.setItem(DISMISS_KEY, "1");
           setDismissed(true);
         }}
-        className="text-xs font-semibold text-amber-900/80 hover:text-amber-900 underline"
+        className="text-xs font-medium rounded-full px-2.5 py-1 text-[var(--apple-subink,#6e6e73)] hover:bg-[#f0f0f2] transition-colors"
         data-testid="button-dismiss-places-banner"
       >
         Dismiss

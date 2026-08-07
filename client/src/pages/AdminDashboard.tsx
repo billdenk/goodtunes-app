@@ -40,6 +40,7 @@ import {
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { KpiCard, type KpiCardModel } from "@/components/admin/KpiCard";
+import { useAuth } from "@/hooks/useAuth";
 
 /**
  * Task #140 — Stripe-style admin dashboard. Lives at /admin and
@@ -385,6 +386,8 @@ function useFitToViewport(enabled: boolean) {
 }
 
 export function AdminDashboard() {
+  const { user } = useAuth();
+  const firstName = user?.displayName?.split(/\s+/)[0] || "there";
   const [range, setRange] = useState<RangeKey>(() => {
     if (typeof window === "undefined") return "30d";
     try {
@@ -482,13 +485,13 @@ export function AdminDashboard() {
       <DashboardContentBoundary>
         <div
           ref={fitRef}
-          className={`flex flex-col gap-5 ${fit ? "overflow-hidden" : "min-h-full"}`}
+          className={`gt-dashboard-canon flex flex-col gap-5 ${fit ? "overflow-hidden" : "min-h-full"}`}
           style={fit ? { height: fit.height, marginBottom: fit.marginBottom } : undefined}
         >
           <SectionBoundary section="page-header">
             <AdminPageHeader
-              title="Dashboard"
-              subtitle={isArtist ? "Your releases and recent fan activity." : "How GoodTunes is doing right now."}
+              title={<><span>Good morning, {firstName}.</span> <span className="font-medium text-slate-500">The numbers, at a glance.</span></>}
+              subtitle={isArtist ? "Your releases and recent fan activity." : "GoodTunes® operator overview."}
               testId="heading-admin-dashboard"
               actions={<RangeSwitcher value={range} onChange={setRange} />}
             />
@@ -754,7 +757,7 @@ function PrimaryChart({
   ];
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 h-full flex flex-col" data-testid="dashboard-primary-chart">
+      <div className="rounded-xl border border-slate-200 bg-white p-5 h-full flex flex-col" data-testid="dashboard-primary-chart">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 className="text-sm font-semibold text-slate-700">Trend</h3>
         <div className="inline-flex items-center bg-slate-100 rounded-md p-0.5">
@@ -787,10 +790,10 @@ function PrimaryChart({
         <div className="flex-1 relative min-h-[180px]" data-testid="dashboard-chart-empty">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={[]} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-              <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} />
+              <CartesianGrid stroke="#e6e6ea" strokeDasharray="3 3" />
+              <XAxis dataKey="date" stroke="#a1a1a6" fontSize={11} />
               <YAxis
-                stroke="#94a3b8"
+                stroke="#a1a1a6"
                 fontSize={11}
                 domain={[0, 1]}
                 tickFormatter={(v: number) => (isCurrency ? `$${(v / 100).toFixed(0)}` : `${v}`)}
@@ -804,10 +807,10 @@ function PrimaryChart({
       ) : (
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={merged} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-            <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} />
+            <CartesianGrid stroke="#e6e6ea" strokeDasharray="3 3" />
+            <XAxis dataKey="date" stroke="#a1a1a6" fontSize={11} />
             <YAxis
-              stroke="#94a3b8"
+              stroke="#a1a1a6"
               fontSize={11}
               tickFormatter={(v: number) => (isCurrency ? `$${(v / 100).toFixed(0)}` : `${v}`)}
             />
