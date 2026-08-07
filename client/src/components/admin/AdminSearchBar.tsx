@@ -423,7 +423,7 @@ export function AdminSearchBar({
           aria-expanded={open}
           aria-controls="admin-search-results"
           data-testid="input-admin-search"
-          className="w-full h-8 pl-8 pr-12 rounded-md bg-slate-100 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:bg-white focus:border focus:border-slate-200 transition-colors"
+          className="w-full h-8 pl-8 pr-12 rounded-full bg-white border border-slate-200 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-[var(--brand-blue)] transition-colors"
         />
         <kbd className="hidden lg:flex absolute right-2 top-1/2 -translate-y-1/2 items-center h-5 px-1.5 rounded text-xs font-medium text-slate-400 bg-white border border-slate-200 pointer-events-none">
           {isMac ? "⌘K" : "Ctrl K"}

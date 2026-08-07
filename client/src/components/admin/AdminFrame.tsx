@@ -70,7 +70,8 @@ type SidebarSectionId =
 
 const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   albums: "catalog",
-  people: "catalog",
+  // "people" is intentionally absent — People is a top-level rail item
+  // (Apple-canon shell), not a Catalog child.
   gear: "catalog",
   "custom-addons": "catalog",
   labels: "partners",
@@ -533,7 +534,10 @@ export function AdminFrame({
             of the viewport. The border-b extends the top-of-page
             hairline across this column so the divider runs unbroken
             from sidebar → main → preview pane. */}
-        <div className="h-14 flex-shrink-0 flex items-center px-4 border-b border-slate-200">
+        {/* Apple-canon shell — the logo row is WHITE like the main top
+            strip so the top bar reads as one clean band across the whole
+            window, with one unbroken hairline beneath it. */}
+        <div className="h-14 flex-shrink-0 flex items-center px-4 border-b border-slate-200 bg-white">
           <Link
             href={isArtist ? "/admin/dashboard" : isTrimmedPartner ? partnerHome : "/admin/dashboard"}
             className="flex items-center"
@@ -785,7 +789,7 @@ export function AdminFrame({
                 />
                 <SidebarLink
                   icon={Receipt}
-                  label="GoodDeed pricing"
+                  label="GoodDeed®"
                   count={-1}
                   active={active === "gooddeed-pricing"}
                   onClick={() => navigate("/admin/gooddeed-pricing")}
@@ -806,6 +810,18 @@ export function AdminFrame({
               testId="nav-dashboard"
             />
 
+            {/* Apple-canon shell — People is a top-level rail item with its
+                count, directly under Dashboard (matches
+                docs/design-reference/AdminDashboardApple.jpg). */}
+            <SidebarLink
+              icon={User}
+              label="People"
+              count={people.length}
+              active={active === "people"}
+              onClick={() => navigate("/admin/people")}
+              testId="nav-people"
+            />
+
             {/* Task #230 — Sidebar is grouped into labelled sections so
                 the relationship between catalog nouns, supply-chain
                 vendors, and action queues is obvious.
@@ -821,17 +837,11 @@ export function AdminFrame({
               expanded={isSectionOpen("catalog")}
               onToggle={() => toggleSection("catalog")}
             >
-              <SidebarLink
-                icon={User}
-                label="People"
-                count={people.length}
-                active={active === "people"}
-                onClick={() => navigate("/admin/people")}
-                testId="nav-people"
-              />
+              {/* "Projects" is the canon UI label; routes/testids stay
+                  albums-based (identifier rename is out of scope). */}
               <SidebarLink
                 icon={Disc3}
-                label="Albums"
+                label="Projects"
                 count={albumCount}
                 active={active === "albums"}
                 onClick={() => navigate("/admin/albums")}
@@ -1090,7 +1100,7 @@ export function AdminFrame({
                 inside System. No count because it's a reference tool. */}
             <SidebarLink
               icon={Receipt}
-              label="GoodDeed pricing"
+              label="GoodDeed®"
               count={-1}
               active={active === "gooddeed-pricing"}
               onClick={() => navigate("/admin/gooddeed-pricing")}
@@ -1403,11 +1413,13 @@ function Section({
         data-testid={`nav-section-${id}`}
         data-active={highlightParent ? "true" : "false"}
         className={[
-          "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors",
-          highlightParent ? "font-bold" : "font-medium",
+          "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors border",
+          highlightParent ? "font-semibold" : "font-medium",
+          // Apple-canon: the active row is a quiet white card with a
+          // hairline border and ink text — no blue wash, no bold shout.
           highlightParent
-            ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
-            : "text-slate-700 hover:bg-slate-100",
+            ? "bg-white border-slate-200 text-slate-900 shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
+            : "border-transparent text-slate-700 hover:bg-slate-100",
         ].join(" ")}
       >
         <motion.span
@@ -1422,7 +1434,7 @@ function Section({
           <ChevronRight
             className={[
               "w-4 h-4",
-              highlightParent ? "text-[var(--brand-blue)]" : "text-slate-400",
+              highlightParent ? "text-slate-500" : "text-slate-400",
             ].join(" ")}
           />
         </motion.span>
@@ -1467,25 +1479,26 @@ function SidebarLink({
       onClick={onClick}
       data-testid={testId}
       className={[
-        "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors",
-        active ? "font-bold" : "font-medium",
+        "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors border",
+        active ? "font-semibold" : "font-medium",
+        // Apple-canon: quiet white card + hairline for the active row.
         active
-          ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
-          : "text-slate-700 hover:bg-slate-100",
+          ? "bg-white border-slate-200 text-slate-900 shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
+          : "border-transparent text-slate-700 hover:bg-slate-100",
       ].join(" ")}
     >
       <Icon
         className={[
           "w-4 h-4 flex-shrink-0",
-          active ? "text-[var(--brand-blue)]" : "text-slate-400",
+          active ? "text-slate-600" : "text-slate-400",
         ].join(" ")}
       />
       <span className="flex-1 text-left">{label}</span>
       {count != null && count >= 0 && (
         <span
           className={[
-            "tabular-nums text-[11.5px] font-bold",
-            active ? "text-[var(--brand-blue)]" : "text-slate-400",
+            "tabular-nums text-[11.5px]",
+            active ? "font-semibold text-slate-500" : "font-medium text-slate-400",
           ].join(" ")}
         >
           {count}

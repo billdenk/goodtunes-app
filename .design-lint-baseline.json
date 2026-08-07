@@ -9927,12 +9927,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/AdminFrame.tsx",
-    "snippet": "\"w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors\","
+    "snippet": "\"w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors border\","
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/AdminFrame.tsx",
-    "snippet": "\"tabular-nums text-[11.5px] font-bold\","
+    "snippet": "\"tabular-nums text-[11.5px]\","
   },
   {
     "rule": "hardcoded-font-size",
@@ -14832,17 +14832,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<span className=\"text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"text-[12px] font-medium text-slate-500 hover:text-slate-800 px-1.5 py-1\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "\"px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 transition-colors \" +"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<span className=\"text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16378,21 +16378,6 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AdminDashboard.tsx",
     "snippet": "const BLUE = \"#319ED8\";"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminDashboard.tsx",
-    "snippet": "const MINT = \"#4AFFCA\";"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminDashboard.tsx",
-    "snippet": "const PURPLE = \"#7F10A7\";"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminDashboard.tsx",
-    "snippet": "const PINK = \"#FF5470\";"
   },
   {
     "rule": "brand-hex-literal",
