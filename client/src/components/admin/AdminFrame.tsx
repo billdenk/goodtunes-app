@@ -32,6 +32,7 @@ import {
   ShoppingBag,
   PanelRightClose,
   PanelRightOpen,
+  Bell,
   Receipt,
   ScrollText,
   Smartphone,
@@ -527,25 +528,51 @@ export function AdminFrame({
   const isSectionOpen = (id: SidebarSectionId) => openSection === id;
 
   return (
-    <div className="h-[100dvh] w-full overflow-x-hidden bg-[var(--apple-canvas)] font-sans antialiased flex">
-      <aside className="w-[220px] flex-shrink-0 bg-[var(--apple-canvas)] hidden md:flex md:flex-col">
-        {/* Logo sits at the top of the sidebar column so the right
-            preview pane + its vertical divider can reach the very top
-            of the viewport. The border-b extends the top-of-page
-            hairline across this column so the divider runs unbroken
-            from sidebar → main → preview pane. */}
-        {/* Apple-canon shell — the logo row is WHITE like the main top
-            strip so the top bar reads as one clean band across the whole
-            window, with one unbroken hairline beneath it. */}
-        <div className="h-14 flex-shrink-0 flex items-center px-4 border-b border-slate-200 bg-white">
-          <Link
-            href={isArtist ? "/admin/dashboard" : isTrimmedPartner ? partnerHome : "/admin/dashboard"}
-            className="flex items-center"
-            data-testid="link-admin-home"
-          >
-            <img src={gtLogo} alt="GoodTunes" className="h-8 w-auto" />
-          </Link>
+    <div className="h-[100dvh] w-full overflow-x-hidden bg-[var(--apple-canvas)] font-sans antialiased flex flex-col">
+      {/* Apple-canon shell — ONE white top bar across the entire window:
+          logo left, bell + avatar right, single hairline beneath. It sits
+          above the sidebar/main/preview row so nothing can break it. */}
+      <header className="h-14 flex-shrink-0 bg-white border-b border-slate-200 flex items-center gap-3 px-4 sm:px-6">
+        <Link
+          href={isArtist ? "/admin/dashboard" : isTrimmedPartner ? partnerHome : "/admin/dashboard"}
+          className="flex items-center flex-shrink-0"
+          data-testid="link-admin-home"
+        >
+          <img src={gtLogo} alt="GoodTunes" className="h-8 w-auto" />
+        </Link>
+        {/* Task #336 — On mobile the sidebar (and its search bar) is
+            hidden, so render a second copy of the search input in the
+            top bar so admins on phones still have a way in.
+            registerShortcut=false — only the desktop sidebar copy owns
+            the ⌘K window listener. */}
+        {!isTrimmedPartner && (
+          <div className="flex-1 max-w-xs md:hidden">
+            <AdminSearchBar registerShortcut={false} />
+          </div>
+        )}
+        {/* Task #1794 — right group owns its anchor via ml-auto. */}
+        <div className="ml-auto flex items-center gap-2">
+          {feedbackIsOperator && (
+            <button
+              type="button"
+              onClick={() => navigate("/admin/feedback")}
+              className="relative w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+              title="Feedback & notifications"
+              aria-label="Feedback & notifications"
+              data-testid="button-topbar-bell"
+            >
+              <Bell className="w-[18px] h-[18px]" />
+              {feedbackNewCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--brand-blue)]" aria-hidden="true" />
+              )}
+            </button>
+          )}
+          <AdminUserMenu />
         </div>
+      </header>
+
+      <div className="flex flex-1 min-h-0 w-full">
+      <aside className="w-[220px] flex-shrink-0 bg-[var(--apple-canvas)] hidden md:flex md:flex-col">
         {/* Task #336 — Global admin search. Sits above Dashboard so it
             anchors the top of the sidebar; ⌘K opens/focuses from
             anywhere in the admin shell. */}
@@ -1195,29 +1222,9 @@ export function AdminFrame({
         </aside>
 
       <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto relative flex flex-col">
-        {/* Top header strip — matches the sidebar logo header height
-            (h-14) so the bottom hairline runs unbroken across all
-            three columns. The Admin chip lives here on the right;
-            pages can use AdminPageHeader inside the body to render
-            their own breadcrumb/title beneath this strip. */}
-        <div className="sticky top-0 z-30 h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center gap-3 px-4 sm:px-6">
-          {/* Task #336 — On mobile the sidebar (and its search bar) is
-              hidden, so render a second copy of the search input in the
-              top strip so admins on phones still have a way in. */}
-          <div className="flex-1 max-w-xs md:hidden">
-            {/* registerShortcut=false — only the desktop sidebar copy
-                owns the ⌘K window listener so the two mounted instances
-                don't race for focus/open state. */}
-            <AdminSearchBar registerShortcut={false} />
-          </div>
-          {/* Task #1794 — Hard-pin the avatar group to the right with
-              ml-auto. justify-between collapsed a lone avatar to the left
-              whenever its left-side siblings rendered nothing (mobile
-              search is md:hidden), so the right group must own its anchor. */}
-          <div className="ml-auto flex items-center gap-3">
-            <AdminUserMenu />
-          </div>
-        </div>
+        {/* The per-column top strip is gone — the single full-width
+            <header> above the sidebar/main row owns the logo, bell and
+            avatar (Apple-canon shell). */}
         {/* Task #138 — Passive STT-creep alert banner. Lives outside
             the page-content max-width wrapper so it spans uniformly
             across every admin page without each page having to opt in. */}
@@ -1360,6 +1367,7 @@ export function AdminFrame({
             )}
           </aside>
         )}
+      </div>
     </div>
   );
 }

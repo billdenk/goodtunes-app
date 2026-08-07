@@ -466,18 +466,25 @@ export function AdminDashboard() {
                 <section><CanonHeading lead="The numbers." rest="At a glance."/><KpiGrid kpis={kpis} loading={kpisLoading} qs={qs} /></section>
               </SectionBoundary>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:flex-1 lg:min-h-0 lg:auto-rows-fr">
-                <div className="lg:col-span-2 flex flex-col min-h-0">
-                  <SectionBoundary section="primary-chart">
-                    <section><CanonHeading lead="The story." rest={`How the last ${range === "30d" ? "month" : "period"} moved.`}/><PrimaryChart kpis={kpis} prior={priorKpis} loading={kpisLoading} /></section>
-                  </SectionBoundary>
+              {/* Heading spans the full row so the Trend card and the
+                  Recent activity card share the same top edge; the fixed
+                  lg row height makes their bottoms align too (reference:
+                  the two cards are equal height). */}
+              <section>
+                <CanonHeading lead="The story." rest={`How the last ${range === "30d" ? "month" : "period"} moved.`}/>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:h-[440px]">
+                  <div className="lg:col-span-2 flex flex-col min-h-0">
+                    <SectionBoundary section="primary-chart">
+                      <PrimaryChart kpis={kpis} prior={priorKpis} loading={kpisLoading} />
+                    </SectionBoundary>
+                  </div>
+                  <div className="flex flex-col min-h-0">
+                    <SectionBoundary section="activity-feed">
+                      <ActivityFeed orders={recentOrders ?? []} customers={recentCustomers?.rows ?? []} className="h-full lg:overflow-hidden" />
+                    </SectionBoundary>
+                  </div>
                 </div>
-                <div className="flex flex-col min-h-0">
-                  <SectionBoundary section="activity-feed">
-                    <ActivityFeed orders={recentOrders ?? []} customers={recentCustomers?.rows ?? []} className="h-full" />
-                  </SectionBoundary>
-                </div>
-              </div>
+              </section>
               <SectionBoundary section="winning"><WinningSection data={winning} /></SectionBoundary>
             </>
           )}
@@ -773,7 +780,7 @@ function PrimaryChart({
   ];
 
   return (
-      <div className="rounded-xl border border-slate-200 bg-white p-5" data-testid="dashboard-primary-chart">
+      <div className="rounded-xl border border-slate-200 bg-white p-5 h-full flex flex-col" data-testid="dashboard-primary-chart">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 className="text-sm font-semibold text-slate-700">Trend</h3>
         <div className="inline-flex items-center bg-slate-100 rounded-md p-0.5">
@@ -801,7 +808,9 @@ function PrimaryChart({
           chart fills this box; it must NEVER size itself off the page, or
           ResponsiveContainer's height:100% feedback loop grows it without
           bound now that the dashboard scrolls naturally. */}
-      <div className="h-[300px] flex flex-col">
+      {/* Mobile: fixed 300px box. lg: the parent grid row is a fixed
+          440px, so flex-1 is bounded there — the loop can't happen. */}
+      <div className="h-[300px] lg:h-auto lg:flex-1 lg:min-h-0 flex flex-col">
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
           Loading…
@@ -1051,7 +1060,10 @@ function ActivityFeed({ orders, customers, className = "" }: { orders: OrderRow[
         // overflow-y-auto) rather than stretching the whole page. The
         // negative margin lets rows reach the panel edges while keeping the
         // scrollbar tucked against the card padding.
-        <ul className="space-y-2.5 flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
+        // lg: the card is a fixed height (equal to the Trend card) and
+        // shows only the rows that fit — no inner scrollbar; "View all"
+        // is the way into the rest. Mobile keeps the capped list.
+        <ul className="space-y-2.5 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden -mx-1 px-1">
           {items.map((it, i) => (
             <li key={i} data-testid={`activity-${it.kind}-${i}`}>
               <Link

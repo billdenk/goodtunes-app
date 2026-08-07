@@ -529,19 +529,29 @@ body.gt-admin {
 .gt-admin .gt-dashboard-canon .text-slate-500 { color: var(--apple-subink); }
 .gt-admin .gt-dashboard-canon .text-slate-400,
 .gt-admin .gt-dashboard-canon .text-slate-300 { color: var(--apple-faint); }
+/* Compact segmented control (reference: light gray rounded-rect track,
+   active segment is a small WHITE ROUNDED-RECT — not a pill/circle). */
 .gt-admin .gt-dashboard-canon [data-testid="dashboard-range-switcher"],
 .gt-admin .gt-dashboard-canon .inline-flex.items-center.bg-slate-100 {
   background: var(--apple-track);
-  border-radius: 999px;
-  padding: 3px;
+  border-radius: 9px;
+  padding: 2px;
 }
 .gt-admin .gt-dashboard-canon [data-testid="dashboard-range-switcher"] button,
 .gt-admin .gt-dashboard-canon .inline-flex.items-center.bg-slate-100 button {
-  border-radius: 999px;
-  min-height: 30px;
+  border-radius: 7px !important;
+  min-height: 0;
+  height: 26px;
+  padding-left: 11px;
+  padding-right: 11px;
+  font-size: 12px;
+  font-weight: 500;
 }
 .gt-admin .gt-dashboard-canon [data-testid="dashboard-range-switcher"] button.bg-white,
 .gt-admin .gt-dashboard-canon .inline-flex.items-center.bg-slate-100 button.bg-white {
+  background: #fff;
+  color: var(--apple-ink);
+  font-weight: 600;
   box-shadow: 0 1px 3px rgba(0,0,0,.08);
 }
 .gt-admin .gt-dashboard-canon button {
