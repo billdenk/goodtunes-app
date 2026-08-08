@@ -2207,16 +2207,11 @@ export function PressPackagePricingTableRuns() {
                   {selectedColor?.name ?? activeGroup.swatch.name}
                 </span>
               </div>
-              <div className="text-[12.5px] text-center" style={{ marginTop: 10, color: SUBINK, lineHeight: 1.4 }}>
+              <div className="text-[12px] text-center" style={{ marginTop: 8, marginBottom: 16, color: '#a1a1a6', lineHeight: 1.4 }}>
                 {product.inches < 12 ? (
-                  <>
-                    Each comes with a <span className="font-semibold" style={{ color: INK }}>printed jacket</span>.
-                  </>
+                  <>Printed jacket included.</>
                 ) : (
-                  <>
-                    Each comes with a <span className="font-semibold" style={{ color: INK }}>printed jacket</span> and{' '}
-                    <span className="font-semibold" style={{ color: INK }}>printed inner sleeve</span>.
-                  </>
+                  <>Printed jacket and inner sleeve included.</>
                 )}
               </div>
             </div>
