@@ -1037,6 +1037,8 @@ function GoodDeedCard({
   onMode,
   cap,
   onCap,
+  take,
+  onTake,
   mfg,
   fee,
   cost,
@@ -1054,6 +1056,8 @@ function GoodDeedCard({
   onMode: (m: 'nolimit' | 'cap') => void;
   cap: number;
   onCap: (v: number) => void;
+  take: number;
+  onTake: (v: number) => void;
   mfg: number;
   fee: number;
   cost: number;
@@ -1118,7 +1122,7 @@ function GoodDeedCard({
       {on && (
         <>
           <div
-            className="flex flex-wrap items-end gap-x-10 gap-y-5"
+            className="flex flex-col gap-5"
             style={{ padding: '16px 18px', borderTop: `1px solid ${HAIRLINE}`, background: 'rgba(255,255,255,0.6)' }}
           >
             <div>
@@ -1127,7 +1131,7 @@ function GoodDeedCard({
               </div>
               <RetailControl value={retail} onChange={onRetail} />
             </div>
-            <div className="flex-1" style={{ minWidth: 320 }}>
+            <div style={{ maxWidth: 460 }}>
               <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#a1a1a6', marginBottom: 8 }}>
                 How many
               </div>
@@ -1156,8 +1160,49 @@ function GoodDeedCard({
                   );
                 })}
               </div>
+              {mode === 'nolimit' && (
+                <div className="grid grid-cols-2 gap-2.5" style={{ marginTop: 14 }}>
+                <div style={{ gridColumn: 1 }}>
+                  <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#a1a1a6', marginBottom: 6 }}>
+                    Expected take rate
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="inline-flex items-center rounded-xl bg-white overflow-hidden" style={{ border: `1px solid ${HAIRLINE}` }}>
+                      <button
+                        type="button"
+                        onClick={() => onTake(Math.max(5, take - 5))}
+                        data-testid="deed-take-minus"
+                        className="flex items-center justify-center transition-colors hover:bg-slate-50"
+                        style={{ width: 36, height: 38, color: SUBINK, fontSize: 16 }}
+                      >
+                        −
+                      </button>
+                      <div className="tabular-nums text-[14px] font-semibold text-center" style={{ color: INK, minWidth: 64, borderLeft: `1px solid ${HAIRLINE}`, borderRight: `1px solid ${HAIRLINE}`, padding: '8px 10px' }}>
+                        {take} <span className="font-normal" style={{ color: SUBINK }}>%</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onTake(Math.min(100, take + 5))}
+                        data-testid="deed-take-plus"
+                        className="flex items-center justify-center transition-colors hover:bg-slate-50"
+                        style={{ width: 36, height: 38, color: SUBINK, fontSize: 16 }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 6 }}>
+                    of vinyl buyers — an example of what typically sells
+                  </div>
+                </div>
+                </div>
+              )}
               {mode === 'cap' && (
-                <div className="flex items-center gap-3" style={{ marginTop: 10 }}>
+                <div className="grid grid-cols-2 gap-2.5" style={{ marginTop: 14 }}>
+                <div style={{ gridColumn: 2 }}>
+                  <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#a1a1a6', marginBottom: 6 }}>
+                    Cap
+                  </div>
                   <div className="inline-flex items-center rounded-xl bg-white overflow-hidden" style={{ border: `1px solid ${HAIRLINE}` }}>
                     <button
                       type="button"
@@ -1181,7 +1226,8 @@ function GoodDeedCard({
                       +
                     </button>
                   </div>
-                  <span className="text-[11.5px]" style={{ color: '#a1a1a6' }}>Never more than one per vinyl sold.</span>
+                  <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 6 }}>Never more than one per vinyl sold.</div>
+                </div>
                 </div>
               )}
             </div>
@@ -1242,6 +1288,9 @@ function GoodDeedCard({
               Adds <span className="font-semibold tabular-nums" style={{ color: INK }}>{money(perUnit)}</span> per certified unit
               {' · '}
               <span className="tabular-nums">{deedUnits.toLocaleString('en-US')}</span> certificates
+              <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 2 }}>
+                This is an estimate — you're billed on actual sales.
+              </div>
             </div>
             <div className="text-[15px] font-semibold tabular-nums" style={{ color: READY }}>
               + {money(total)}
@@ -1262,6 +1311,57 @@ function middleTruncate(s: string, max = 26): string {
   return `${s.slice(0, max - 1 - keep)}…${s.slice(-keep)}`;
 }
 
+// Blueprint icons — line drawings of the actual piece, drawn like a die-line.
+// Solid strokes are edges; dashed strokes are folds, holes, and hidden parts.
+function BlueprintIcon({ kind }: { kind: string }) {
+  const s: React.SVGProps<SVGSVGElement> = {
+    width: 44,
+    height: 44,
+    viewBox: '0 0 26 26',
+    fill: 'none',
+    stroke: BLUE,
+    strokeWidth: 0.9,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+  };
+  switch (kind) {
+    case 'jacket': // square jacket, dashed spine fold, record peeking out the right
+      return (
+        <svg {...s}>
+          <circle cx="17.5" cy="13" r="6.5" strokeDasharray="2 2.2" opacity={0.7} />
+          <circle cx="17.5" cy="13" r="1.4" strokeDasharray="1.2 1.6" opacity={0.7} />
+          <rect x="3" y="4" width="18" height="18" rx="1.2" fill="#fff" />
+        </svg>
+      );
+    case 'labels': // center label — dashed record as context, solid label as the piece
+      return (
+        <svg {...s}>
+          <circle cx="13" cy="13" r="11" strokeDasharray="2 2.2" opacity={0.7} />
+          <circle cx="13" cy="13" r="6.5" fill="#fff" />
+          <circle cx="13" cy="13" r="1.3" />
+          <path d="M9.6 10.4a4.6 4.6 0 0 1 6.8 0" opacity={0.6} />
+        </svg>
+      );
+    case 'inner': // inner sleeve — square sleeve half-hidden behind the dashed jacket
+      return (
+        <svg {...s}>
+          <rect x="9" y="5.5" width="15" height="15" rx="1" fill="#fff" />
+          <rect x="2" y="5" width="16" height="16" rx="1.2" strokeDasharray="2 2.2" opacity={0.7} fill="#fff" />
+        </svg>
+      );
+    case 'booklet': // folded booklet — dashed center fold, text lines
+      return (
+        <svg {...s}>
+          <rect x="4" y="4.5" width="18" height="17" rx="1.2" fill="#fff" />
+          <path d="M13 4.5v17" strokeDasharray="2 2.2" opacity={0.7} />
+          <path d="M7 9.5h3.5M7 12.5h3.5M7 15.5h2.5M15.5 9.5h3.5M15.5 12.5h3.5" opacity={0.7} />
+        </svg>
+      );
+    default:
+      return <FileText className="w-4 h-4" style={{ color: BLUE }} />;
+  }
+}
+
 function TemplateTile({ tf }: { tf: TemplateFile }) {
   return (
     <div
@@ -1269,9 +1369,7 @@ function TemplateTile({ tf }: { tf: TemplateFile }) {
       style={{ border: `1px solid ${HAIRLINE}`, padding: '18px 12px' }}
       data-testid={`template-${tf.key}`}
     >
-      <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: CANVAS }}>
-        <FileText className="w-4 h-4" style={{ color: BLUE }} />
-      </span>
+      <BlueprintIcon kind={tf.key} />
       <div className="text-[13px] font-semibold" style={{ color: INK, marginTop: 8 }}>
         {tf.label}
       </div>
@@ -1298,7 +1396,9 @@ const TEMPLATES: TemplateFile[] = [
 ];
 
 // ─── Segmented control for run quantity (canon segmented control) ────
-const RUN_OPTIONS = [500, 1000, 2000, 3000] as const;
+// In the real app these come from the press's priced runs in their catalog —
+// only run sizes the press actually offers appear. MRP prices six.
+const RUN_OPTIONS = [100, 300, 500, 1000, 2000, 3000] as const;
 
 function RunControl({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
@@ -1314,7 +1414,7 @@ function RunControl({ value, onChange }: { value: number; onChange: (v: number) 
             data-testid={`run-${q}`}
             className="rounded-full transition-all focus:outline-none tabular-nums"
             style={{
-              padding: '7px 16px',
+              padding: '7px 13px',
               fontSize: 13,
               fontWeight: 600,
               color: active ? INK : SUBINK,
@@ -1394,7 +1494,8 @@ export function PressAlbumPackageBuilder() {
     const byType: Record<SwatchKind, number> = { black: 11.9, opaque: 13.1, translucent: 14.3, splatter: 16.6 };
     const sizeMult = product.id === 'single7' ? 0.72 : product.id === 'double12' ? 1.48 : 1;
     // Volume discount steps the cost down with the run.
-    const volMult = runQty >= 3000 ? 0.9 : runQty >= 2000 ? 0.95 : runQty >= 1000 ? 1 : 1.08;
+    const volMult =
+      runQty >= 3000 ? 0.9 : runQty >= 2000 ? 0.95 : runQty >= 1000 ? 1 : runQty >= 500 ? 1.08 : runQty >= 300 ? 1.28 : 1.6;
     return byType[activeType.id] * sizeMult * volMult;
   }, [activeType.id, product.id, runQty]);
 
@@ -1421,9 +1522,9 @@ export function PressAlbumPackageBuilder() {
   const [deedRetail, setDeedRetail] = useState(20);
   const [deedMode, setDeedMode] = useState<'nolimit' | 'cap'>('nolimit');
   const [deedCap, setDeedCap] = useState(200);
-  // No limit → estimate on a typical take rate; capped → the cap, never more than the run.
-  const DEED_TAKE_RATE = 0.25;
-  const deedUnits = deedMode === 'cap' ? Math.min(deedCap, runQty) : Math.round(runQty * DEED_TAKE_RATE);
+  // No limit → estimate on the artist's expected take rate; capped → the cap, never more than the run.
+  const [deedTake, setDeedTake] = useState(25); // % of vinyl buyers
+  const deedUnits = deedMode === 'cap' ? Math.min(deedCap, runQty) : Math.round((runQty * deedTake) / 100);
   // The certificate's own honest math — same shape as the record's.
   const deedMfg = 12; // manufacturing & shipping, printed + sealed + fulfilled
   const deedFee = deedRetail * 0.029 + 0.3; // payment processing
@@ -1437,7 +1538,7 @@ export function PressAlbumPackageBuilder() {
   useEffect(() => {
     markDirty();
     setShared(false);
-  }, [albumTitle, artistName, trackCount, sizeId, typeId, colorSel, retail, runQty, gooddeedOn, deedRetail, deedMode, deedCap]);
+  }, [albumTitle, artistName, trackCount, sizeId, typeId, colorSel, retail, runQty, gooddeedOn, deedRetail, deedMode, deedCap, deedTake]);
 
   const handleSave = () => setDirty(false);
   const handleShare = () => {
@@ -1706,6 +1807,8 @@ export function PressAlbumPackageBuilder() {
                 onMode={setDeedMode}
                 cap={deedCap}
                 onCap={setDeedCap}
+                take={deedTake}
+                onTake={setDeedTake}
                 mfg={deedMfg}
                 fee={deedFee}
                 cost={deedCost}
