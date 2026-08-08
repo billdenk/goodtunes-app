@@ -469,7 +469,7 @@ export function PersonCard({
       data-testid={`card-person-${person.id}`}
     >
       <div className="relative w-full aspect-square">
-        <div className="w-full h-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-slate-200 shadow-sm group-hover:shadow-md group-hover:ring-[var(--brand-blue)]/30 transition-all">
+        <div className="gt-avatar-initials w-full h-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-slate-200 shadow-sm group-hover:shadow-md group-hover:ring-[var(--brand-blue)]/30 transition-all">
           {person.photoUrl ? (
             <img
               src={person.photoUrl}
@@ -495,11 +495,9 @@ export function PersonCard({
       <div className="w-full text-center text-slate-400 text-[11.5px] truncate px-1">
         {labelName || "Independent"}
       </div>
-      <CreditBadges
-        credits={creditTags(person)}
-        personId={person.id}
-        align="center"
-      />
+      {/* Credit pills intentionally omitted in grid view (canon: rows of
+          equal-weight pills under every tile read as noise — Bill, 2026-08-08).
+          Roles remain visible in list view and on the person sheet. */}
     </button>
   );
 }
@@ -521,7 +519,7 @@ export function PersonRow({
       data-testid={`row-person-${person.id}`}
     >
       <div className="relative w-10 h-10 flex-shrink-0">
-        <div className="w-full h-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-slate-200">
+        <div className="gt-avatar-initials w-full h-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-slate-200">
           {person.photoUrl ? (
             <img
               src={person.photoUrl}

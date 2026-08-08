@@ -88,6 +88,22 @@ accents on ~14%-alpha translucent washes — see tokens).
   `filter: invert(1) brightness(2)`.
 - Partner/press logos: never recolored, never inverted, always on white.
 
+## Dark-mode amendment — initials avatars (ratified 2026-08-08)
+
+- **Initials-avatar circles (people with no photo) must NOT be brand blue in
+  dark mode.** A wall of blue circles overwhelms the charcoal canvas (seen on
+  admin People). Dark mode: fill with the track gray (`--apple-track`,
+  #26262a) and set the initials in subink (`--apple-subink`) so they recede.
+  Light mode keeps brand blue with white initials.
+- This does not change the accent rule elsewhere — the one-blue-pill-per-screen
+  primary CTA stays blue in both modes. Photo avatars are untouched.
+- GoodTunes applies this via a `.gt-avatar-initials` hook + a
+  `body.gt-admin.gt-admin-dark` override in `client/src/index.css`; any sweep
+  should carry the same rule to every initials-avatar surface.
+- Related (same ratification): **no credit/role pill rows under tiles in grid
+  views** — rows of equal-weight labeled pills under every tile read as noise
+  (per the button weight rule). Roles stay in list rows and detail sheets.
+
 ## Non-negotiables
 
 - No emojis anywhere. Use the real `®` character (GoodTunes®, GoodDeed®,

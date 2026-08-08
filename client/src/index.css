@@ -539,6 +539,11 @@ body.gt-admin.gt-admin-dark .bg-white { background-color: var(--apple-card); }
 body.gt-admin.gt-admin-dark .bg-slate-50 { background-color: var(--apple-canvas); }
 body.gt-admin.gt-admin-dark .bg-slate-100 { background-color: var(--apple-track); }
 body.gt-admin.gt-admin-dark .bg-slate-200 { background-color: var(--apple-chip); }
+/* Initials-avatar fills: brand blue in light mode, quiet chip gray in dark
+   (a wall of blue circles overwhelms the charcoal canvas — Bill, 2026-08-08).
+   Photo avatars are untouched (the img covers the fill). */
+body.gt-admin.gt-admin-dark .gt-avatar-initials { background-color: var(--apple-track); }
+body.gt-admin.gt-admin-dark .gt-avatar-initials .text-white { color: var(--apple-subink); }
 body.gt-admin.gt-admin-dark .hover\:bg-slate-50:hover,
 body.gt-admin.gt-admin-dark .hover\:bg-slate-100:hover { background-color: rgba(255, 255, 255, 0.06); }
 body.gt-admin.gt-admin-dark .hover\:bg-slate-200:hover { background-color: rgba(255, 255, 255, 0.09); }

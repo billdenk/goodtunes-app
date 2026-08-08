@@ -307,3 +307,5 @@ local project main (HEAD):
 **Why exit-0-on-behind, not fail:** a mark_task_complete validation that failed whenever the
 mirror was behind would block EVERY task (task HEAD is always ahead of the mirror pre-merge).
 Diverged is the only genuinely-actionable-and-never-false state, so it's the only hard fail.
+
+**Main-agent env lacks the deploy key (observed 2026-08-08):** `GITHUB_MIRROR_DEPLOY_KEY` is NOT exposed in the main-agent shell (empty env var → "error in libcrypto" with a zero-byte key file). The FF-push recipe above only works where the secret is present (post-merge/task env). From the main agent, land doc/canon notes on project main and let the next merge mirror them; a push to a non-main mirror branch needs a task agent.
