@@ -61,3 +61,10 @@ Restyle, don't reset. Before removing any old page, verify field-for-field parit
 - Both pages match these files section-for-section at 1440px and hold at narrower widths.
 - Old pages removed only after the parity check passes against production data.
 - Dark mode audited (charcoal), covers verified square-cropped, GoodDeed mini renders from live art.
+
+    ## Placeholder cover art
+
+    - `assets/pmp-icon.png` is the press's icon (white, transparent, square) — the concentric-groove PMP mark.
+    - Use it ONLY as the placeholder album cover when a project has no uploaded art yet: white icon centered at ~45% width on an INK (`#1d1d1f`) square jacket, exactly like the MRP placeholder pattern in the handoff files.
+    - The moment real album art exists (e.g. Niina's CALIFORNIALAND cover), the placeholder must never appear — jacket, GoodDeed mini, and banner thumbnail all use the real art.
+    
