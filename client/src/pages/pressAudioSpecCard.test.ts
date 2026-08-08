@@ -278,15 +278,15 @@ test("a press scoped to THIS plant sees the editable audio spec card in the cata
   const { q, teardown } = await mount(PRESS_ID);
   try {
     assert.ok(q("panel-press-catalog"), "the catalog panel renders for the scoped press");
-    const bitDepth = q("input-audio-bit-depth") as HTMLInputElement | null;
+    const bitDepth = q("input-audio-bit") as HTMLInputElement | null;
     assert.ok(
       bitDepth,
-      "PressAudioSpecCard is wired into the vinyl catalog editor render chain",
+      "the handoff audio spec card is wired into the vinyl catalog editor render chain",
     );
     assert.equal(
-      bitDepth!.disabled,
+      bitDepth!.readOnly,
       false,
-      "the audio spec field is editable (not disabled) for a scoped press",
+      "the audio spec field is editable (not read-only) for a scoped press",
     );
   } finally {
     await teardown();
@@ -305,7 +305,7 @@ test("a press scoped to a DIFFERENT plant gets no panel and no audio card", asyn
       "the catalog panel is hidden when the caller can't edit this press",
     );
     assert.equal(
-      q("input-audio-bit-depth"),
+      q("input-audio-bit"),
       null,
       "the audio spec card is hidden right alongside the rest of the editor",
     );
@@ -324,13 +324,13 @@ function type(el: HTMLElement, value: string) {
   el.dispatchEvent(new (window as any).Event("input", { bubbles: true }));
 }
 
-// ── Save fires the PUT with the typed values ─────────────────────────
-test("typing a bit depth + a side length and clicking Save fires the PUT with those values", async () => {
+// ── Blur fires the PUT with the typed values ─────────────────────────
+test("typing a bit depth + a side length and blurring fires the PUT with those values", async () => {
   const { q, settle, teardown } = await mount(PRESS_ID);
   try {
-    const bitDepth = q("input-audio-bit-depth") as HTMLInputElement | null;
+    const bitDepth = q("input-audio-bit") as HTMLInputElement | null;
     // 12" side at 33 RPM — testid drops the non-digits from the size label.
-    const side = q("input-audio-side-12-33") as HTMLInputElement | null;
+    const side = q("input-audio-12-33") as HTMLInputElement | null;
     assert.ok(bitDepth && side, "the editable bit-depth + side-length cells render");
 
     await act(async () => {
@@ -339,17 +339,17 @@ test("typing a bit depth + a side length and clicking Save fires the PUT with th
     });
 
     fetchCalls.length = 0;
-    const saveBtn = q("button-save-audio-spec");
-    assert.ok(saveBtn, "the Save action renders");
+    // The handoff card saves on blur — no explicit Save button.
     await act(async () => {
-      saveBtn!.click();
+      // React delegates onBlur through the bubbling focusout event.
+      side!.dispatchEvent(new (window as any).FocusEvent("focusout", { bubbles: true }));
     });
     await settle();
 
     const put = fetchCalls.find((c) => c.method === "PUT");
     assert.ok(
       put,
-      "clicking Save fires a PUT (the button is actually wired to the save mutation)",
+      "blurring an edited field fires a PUT (blur-save is actually wired to the save mutation)",
     );
     assert.equal(
       put!.url,

@@ -26,7 +26,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ALBUM_FORMAT_LABEL, type AlbumFormat } from "@shared/schema";
-import { Loader2, MoreHorizontal, Pencil, Plus, Trash2, X } from "lucide-react";
+import { FileText, Loader2, MoreHorizontal, Pencil, Plus, Trash2, UploadCloud, X } from "lucide-react";
+import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Catalog,
@@ -37,13 +38,9 @@ import {
   CatalogCsvButtons,
   DEFAULT_QTY_COLUMNS,
   FormatDropdown,
-  FormatTurnaroundEditor,
   GoodDeedPrintingEditor,
   HellbenderImportButton,
   HellbenderPricingSyncButton,
-  PressAudioSpecCard,
-  PressTemplateSpecsCard,
-  ManageColorsPanel,
   VINYL_FORMATS,
   formatDollars,
   parseDollars,
@@ -115,18 +112,24 @@ const VINYL_SIZE_BLURB: Record<string, string> = {
 // slides the disc further out and spins the disc body (highlight stays
 // fixed — VinylDisc already keeps its sheen static). Double LP shows a
 // second, dimmer disc behind the first.
-function JacketStage({
+export function JacketStage({
   format,
   jacketUrl,
   color,
   labelLogoUrl,
   labelBgColor,
+  placeholderIconUrl,
 }: {
   format: AlbumFormat;
   jacketUrl: string | null;
   color: CatalogColor | null;
   labelLogoUrl: string | null;
   labelBgColor: string | null;
+  // Bill's rule 2 (handoff v2) — when the album has no uploaded art AND the
+  // press has no default jacket, the jacket face is the white product-mark
+  // icon at ~45% width on a `#1d1d1f` ink jacket. Passed only by the artist
+  // package builder; the press catalog keeps its label-logo fallback.
+  placeholderIconUrl?: string | null;
 }) {
   const isDouble = format === "12_double";
   const DISC = 264;
@@ -165,6 +168,14 @@ function JacketStage({
         >
           {jacketUrl ? (
             <img src={jacketUrl} alt="" aria-hidden className="h-full w-full object-cover" />
+          ) : placeholderIconUrl ? (
+            <div
+              className="flex h-full w-full items-center justify-center"
+              style={{ backgroundColor: "#1d1d1f" }}
+              data-testid="jacket-placeholder-icon"
+            >
+              <img src={placeholderIconUrl} alt="" aria-hidden style={{ width: "45%", opacity: 0.95 }} />
+            </div>
           ) : (
             <div
               className="flex h-full w-full items-center justify-center"
@@ -192,8 +203,8 @@ function JacketStage({
           {color ? <span style={{ color: SUBINK, fontWeight: 500 }}> · {color.name}</span> : null}
         </span>
       </div>
-      <p className="mt-1 text-[12px]" style={{ color: SUBINK }}>
-        Each comes with a printed jacket{format.startsWith("12") ? " and inner sleeve" : ""}.
+      <p className="mt-1 text-[12px]" style={{ color: FAINT, marginBottom: 16 }}>
+        Printed jacket{format.startsWith("12") ? " and inner sleeve" : ""} included.
       </p>
     </div>
   );
@@ -773,7 +784,6 @@ export function PressPackagePricingCatalog({
   });
   const [addColorOpen, setAddColorOpen] = useState(false);
   const [editColorId, setEditColorId] = useState<string | null>(null);
-  const [manageColorsOpen, setManageColorsOpen] = useState(false);
   const addColor = useMutation({
     mutationFn: async (v: { name: string; swatchHex: string | null; swatchImageUrl: string | null }) => {
       if (!selectedTier) throw new Error("Pick a type first.");
@@ -821,6 +831,30 @@ export function PressPackagePricingCatalog({
     },
     onError: (e: any) =>
       toast({ title: "Couldn't remove color", description: e?.message, variant: "destructive" }),
+  });
+  // Handoff v2.1 — drag a tile onto another to reorder (replaces the
+  // ManageColorsPanel modal). Order updates live in a local override while
+  // dragging; the drop persists through the SAME /colors/reorder endpoint
+  // the modal used, so artists see the saved order on their package picker.
+  const [dragColorId, setDragColorId] = useState<string | null>(null);
+  const [colorOrderDraft, setColorOrderDraft] = useState<string[] | null>(null);
+  const reorderColors = useMutation({
+    mutationFn: async (colorIds: string[]) => {
+      if (!selectedTier) throw new Error("Pick a type first.");
+      await apiRequest(
+        "POST",
+        `/api/admin/manufacturers/${pressId}/catalog/tiers/${selectedTier.id}/colors/reorder`,
+        { colorIds },
+      );
+    },
+    onSuccess: () => {
+      setColorOrderDraft(null);
+      invalidate();
+    },
+    onError: (e: any) => {
+      setColorOrderDraft(null);
+      toast({ title: "Couldn't reorder colors", description: e?.message, variant: "destructive" });
+    },
   });
 
   // ── Pricing drafts — semantics copied from the legacy CatalogEditor.
@@ -1258,11 +1292,58 @@ export function PressPackagePricingCatalog({
               {isVinyl && selectedTier && (
                 <section id="section-pick-color" data-testid="section-pick-color">
                   <TwoTone lead="Pick a color." rest={`${selectedTier.name}.`} />
+                  {canEdit && colors.length > 1 && (
+                    <p className="mt-1.5 text-[12.5px]" style={{ color: FAINT }} data-testid="hint-color-reorder">
+                      {colors.length} colors · drag to reorder — artists see this order
+                    </p>
+                  )}
                   <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4 xl:grid-cols-5">
-                    {colors.map((c) => {
+                    {(colorOrderDraft
+                      ? colorOrderDraft
+                          .map((id) => colors.find((c) => c.id === id))
+                          .filter((c): c is (typeof colors)[number] => !!c)
+                      : colors
+                    ).map((c) => {
                       const on = c.id === selectedColorId;
                       return (
-                        <div key={c.id} className="group/color relative">
+                        <div
+                          key={c.id}
+                          className="group/color relative"
+                          draggable={canEdit}
+                          onDragStart={(e) => {
+                            if (!canEdit) return;
+                            setDragColorId(c.id);
+                            setColorOrderDraft(colors.map((x) => x.id));
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
+                          onDragOver={(e) => {
+                            if (!canEdit || !dragColorId || dragColorId === c.id) return;
+                            e.preventDefault();
+                            setColorOrderDraft((prev) => {
+                              const arr = [...(prev ?? colors.map((x) => x.id))];
+                              const f = arr.indexOf(dragColorId);
+                              const t = arr.indexOf(c.id);
+                              if (f < 0 || t < 0 || f === t) return prev;
+                              arr.splice(t, 0, ...arr.splice(f, 1));
+                              return arr;
+                            });
+                          }}
+                          onDragEnd={() => {
+                            setDragColorId(null);
+                            setColorOrderDraft((draft) => {
+                              const orig = colors.map((x) => x.id).join(",");
+                              if (draft && draft.join(",") !== orig && draft.length > 1) {
+                                reorderColors.mutate(draft);
+                                return draft; // keep the visual order until the refetch lands
+                              }
+                              return null;
+                            });
+                          }}
+                          style={{
+                            opacity: dragColorId === c.id ? 0.45 : 1,
+                            cursor: dragColorId ? "grabbing" : undefined,
+                          }}
+                        >
                           <button
                             type="button"
                             onClick={() => setSelectedColorId(c.id)}
@@ -1341,29 +1422,6 @@ export function PressPackagePricingCatalog({
                       />
                     )}
                   </div>
-                  {canEdit && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setManageColorsOpen(true)}
-                        data-testid="button-manage-colors"
-                        className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold hover:underline underline-offset-2"
-                        style={{ color: BLUE }}
-                      >
-                        <Pencil className="h-3 w-3" />
-                        Manage colors — rename, reorder, remove
-                      </button>
-                      {manageColorsOpen && (
-                        <ManageColorsPanel
-                          open={manageColorsOpen}
-                          pressId={pressId}
-                          tier={selectedTier}
-                          onChanged={invalidate}
-                          onClose={() => setManageColorsOpen(false)}
-                        />
-                      )}
-                    </>
-                  )}
                 </section>
               )}
 
@@ -1446,34 +1504,29 @@ export function PressPackagePricingCatalog({
                 </section>
               )}
 
-              {/* Turnaround */}
+              {/* Turnaround — handoff row: heading left, min–max inputs right */}
               <section id="section-turnaround" data-testid="section-turnaround">
-                <TwoTone lead="Turnaround." rest="From masters to shipped." />
-                <Card className="mt-4 overflow-hidden">
-                  <FormatTurnaroundEditor
-                    pressId={pressId}
-                    format={fmt}
-                    initialMin={fmtRow?.turnaroundWeeksMin ?? null}
-                    initialMax={fmtRow?.turnaroundWeeksMax ?? null}
-                    onChanged={invalidate}
-                  />
-                </Card>
+                <TurnaroundRow
+                  key={fmt}
+                  pressId={pressId}
+                  format={fmt}
+                  initialMin={fmtRow?.turnaroundWeeksMin ?? null}
+                  initialMax={fmtRow?.turnaroundWeeksMax ?? null}
+                  canEdit={canEdit}
+                  onChanged={invalidate}
+                />
               </section>
 
-              {/* Print templates + audio spec (vinyl only, mirrors legacy) */}
+              {/* Print templates + audio spec (vinyl only, handoff markup) */}
               {isVinyl && (
                 <>
                   <section id="section-templates" data-testid="section-templates">
                     <TwoTone lead="Print templates." rest="What artists design against." />
-                    <Card className="mt-4 overflow-hidden">
-                      <PressTemplateSpecsCard pressId={pressId} fmt={fmt} />
-                    </Card>
+                    <TemplateTilesGrid pressId={pressId} fmt={fmt} canEdit={canEdit} />
                   </section>
                   <section id="section-audio" data-testid="section-audio">
                     <TwoTone lead="Audio spec." rest="What your lathe needs." />
-                    <Card className="mt-4 overflow-hidden">
-                      <PressAudioSpecCard pressId={pressId} />
-                    </Card>
+                    <AudioSpecEditorCard pressId={pressId} canEdit={canEdit} />
                   </section>
                 </>
               )}
@@ -1481,6 +1534,794 @@ export function PressPackagePricingCatalog({
           </div>
         </fieldset>
       )}
+    </div>
+  );
+}
+
+// ─── Turnaround (handoff TurnaroundCard, wired to the per-format override) ───
+// Heading left, min–max week inputs right. Blank inherits the press default
+// per-field (placeholders show it); saves on blur via the same PUT the legacy
+// editor used. "Use press default" clears the override.
+function TurnaroundRow({
+  pressId,
+  format,
+  initialMin,
+  initialMax,
+  canEdit,
+  onChanged,
+}: {
+  pressId: string;
+  format: AlbumFormat;
+  initialMin: number | null;
+  initialMax: number | null;
+  canEdit: boolean;
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const { data: press } = useQuery<{ turnaroundWeeksMin?: number | null; turnaroundWeeksMax?: number | null }>({
+    queryKey: ["/api/manufacturers", pressId],
+  });
+  const [min, setMin] = useState(initialMin != null ? String(initialMin) : "");
+  const [max, setMax] = useState(initialMax != null ? String(initialMax) : "");
+  useEffect(() => {
+    setMin(initialMin != null ? String(initialMin) : "");
+    setMax(initialMax != null ? String(initialMax) : "");
+  }, [format, initialMin, initialMax]);
+
+  const pressMin = press?.turnaroundWeeksMin ?? null;
+  const pressMax = press?.turnaroundWeeksMax ?? null;
+  const parse = (s: string): number | null => {
+    const t = s.trim();
+    if (t === "") return null;
+    const n = Number(t);
+    return Number.isInteger(n) && n > 0 && n <= 520 ? n : null;
+  };
+  const parsedMin = parse(min);
+  const parsedMax = parse(max);
+  const minBad = min.trim() !== "" && parsedMin === null;
+  const maxBad = max.trim() !== "" && parsedMax === null;
+  const rangeBad = parsedMin != null && parsedMax != null && parsedMin > parsedMax;
+  const dirty = parsedMin !== (initialMin ?? null) || parsedMax !== (initialMax ?? null);
+  const hasOverride = initialMin != null || initialMax != null;
+
+  const rangeLabel = (lo: number | null, hi: number | null): string | null => {
+    if (lo != null && hi != null) return `${lo}–${hi} weeks`;
+    if (lo != null) return `${lo}+ weeks`;
+    if (hi != null) return `up to ${hi} weeks`;
+    return null;
+  };
+  const resolvedLabel = rangeLabel(initialMin ?? pressMin, initialMax ?? pressMax);
+  const pressLabel = rangeLabel(pressMin, pressMax);
+
+  const save = useMutation({
+    mutationFn: async (payload: { turnaroundWeeksMin: number | null; turnaroundWeeksMax: number | null }) => {
+      const r = await apiRequest("PUT", `/api/admin/manufacturers/${pressId}/catalog/formats/${format}`, payload);
+      return r.json();
+    },
+    onSuccess: () => {
+      onChanged();
+      toast({ title: "Turnaround saved" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't save turnaround", description: e?.message ?? "", variant: "destructive" }),
+  });
+  const commit = () => {
+    if (!minBad && !maxBad && !rangeBad && dirty) {
+      save.mutate({ turnaroundWeeksMin: parsedMin, turnaroundWeeksMax: parsedMax });
+    }
+  };
+  const numInput: React.CSSProperties = {
+    width: 56,
+    height: 40,
+    border: `1px solid ${HAIRLINE}`,
+    borderRadius: 10,
+    color: INK,
+    background: "#fff",
+    fontWeight: 600,
+  };
+
+  return (
+    <div data-testid="turnaround-row">
+      <div className="flex items-center justify-between gap-6">
+        <div>
+          <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
+            <span style={{ color: INK }}>Turnaround. </span>
+            <span style={{ color: FAINT }}>Order to ship.</span>
+          </h2>
+          <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
+            Weeks from confirmed order to finished records on the truck.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <input
+            value={min}
+            onChange={(e) => setMin(e.target.value.replace(/[^0-9]/g, ""))}
+            onBlur={commit}
+            inputMode="numeric"
+            readOnly={!canEdit}
+            placeholder={pressMin != null ? String(pressMin) : "min"}
+            aria-label="Minimum weeks"
+            data-testid="input-turnaround-min"
+            className="text-[14px] text-center tabular-nums focus:outline-none focus:border-slate-400 transition-colors"
+            style={numInput}
+          />
+          <span className="text-[13px]" style={{ color: FAINT }}>
+            –
+          </span>
+          <input
+            value={max}
+            onChange={(e) => setMax(e.target.value.replace(/[^0-9]/g, ""))}
+            onBlur={commit}
+            inputMode="numeric"
+            readOnly={!canEdit}
+            placeholder={pressMax != null ? String(pressMax) : "max"}
+            aria-label="Maximum weeks"
+            data-testid="input-turnaround-max"
+            className="text-[14px] text-center tabular-nums focus:outline-none focus:border-slate-400 transition-colors"
+            style={numInput}
+          />
+          <span className="text-[13px] font-medium" style={{ color: SUBINK }}>
+            weeks
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center gap-3" style={{ marginTop: 8 }}>
+        {rangeBad && (
+          <span className="text-[12px]" style={{ color: CRITICAL }}>
+            Min weeks can't be more than max weeks.
+          </span>
+        )}
+        <span className="text-[12px]" style={{ color: SUBINK }} data-testid={`text-format-turnaround-resolved-${format}`}>
+          {hasOverride
+            ? `This product: ${resolvedLabel ?? "—"}`
+            : pressLabel
+            ? `Using press default: ${pressLabel}`
+            : "No turnaround set yet — blank inherits the press default."}
+        </span>
+        {hasOverride && canEdit && (
+          <button
+            type="button"
+            onClick={() => save.mutate({ turnaroundWeeksMin: null, turnaroundWeeksMax: null })}
+            disabled={save.isPending}
+            className="text-[12px] font-semibold hover:underline underline-offset-2"
+            style={{ color: BLUE }}
+            data-testid={`button-clear-format-turnaround-${format}`}
+          >
+            Use press default
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Print templates (handoff tile grid, wired to press_template_specs) ─────
+// Four slots — Jacket / Inner sleeve / Center labels / Booklet — stored in the
+// generic catalog slot (variantKey="" discCount=0). Empty slots are dashed
+// invitations; filled slots show the file with Replace-on-hover. The frosted
+// popover carries the full legacy capability set: upload a file, paste a URL,
+// the optional finished-file check dims, and Remove.
+type PressTemplateSpecRow = {
+  id: string;
+  format: AlbumFormat;
+  componentKey: "jacket" | "labels" | "inner_sleeve" | "booklet";
+  variantKey: string;
+  discCount: number;
+  artboardWInches: number | null;
+  artboardHInches: number | null;
+  expectedPages: number | null;
+  minPpi: number | null;
+  color: "process-4c" | "cmyk-or-pms" | null;
+  fontsRule: string | null;
+  templateFileUrl: string | null;
+};
+const TEMPLATE_TILES: { key: string; componentKey: PressTemplateSpecRow["componentKey"]; label: string; sub: string }[] = [
+  { key: "jacket", componentKey: "jacket", label: "Jacket", sub: "Outer sleeve print template" },
+  { key: "inner", componentKey: "inner_sleeve", label: "Inner sleeve", sub: "Printed liner template" },
+  { key: "labels", componentKey: "labels", label: "Center labels", sub: "A-side & B-side label template" },
+  { key: "booklet", componentKey: "booklet", label: "Booklet", sub: "Lyric & photo booklet template" },
+];
+
+function middleTruncate(s: string, max = 26): string {
+  if (s.length <= max) return s;
+  const keep = Math.floor((max - 1) / 2);
+  return `${s.slice(0, max - 1 - keep)}…${s.slice(-keep)}`;
+}
+
+function TemplateTilesGrid({ pressId, fmt, canEdit }: { pressId: string; fmt: AlbumFormat; canEdit: boolean }) {
+  const { toast } = useToast();
+  const qk = ["/api/admin/manufacturers", pressId, "template-specs"];
+  const { data } = useQuery<{ specs: PressTemplateSpecRow[] }>({ queryKey: qk });
+  const specsForFmt = (data?.specs ?? []).filter((s) => s.format === fmt && s.variantKey === "" && s.discCount === 0);
+  const byComponent = (key: PressTemplateSpecRow["componentKey"]) =>
+    specsForFmt.find((s) => s.componentKey === key) ?? null;
+
+  const save = useMutation({
+    mutationFn: async (body: Partial<PressTemplateSpecRow> & { componentKey: string }) => {
+      // Full-row upsert: always re-send existing fields so a file attach never
+      // wipes saved check dims (and vice-versa).
+      const existing = specsForFmt.find((s) => s.componentKey === body.componentKey) ?? null;
+      const res = await apiRequest("PUT", `/api/admin/manufacturers/${pressId}/template-specs`, {
+        format: fmt,
+        variantKey: "",
+        discCount: 0,
+        templateFileUrl: existing?.templateFileUrl ?? null,
+        artboardWInches: existing?.artboardWInches ?? null,
+        artboardHInches: existing?.artboardHInches ?? null,
+        expectedPages: existing?.expectedPages ?? null,
+        minPpi: existing?.minPpi ?? null,
+        color: existing?.color ?? null,
+        fontsRule: existing?.fontsRule ?? null,
+        ...body,
+      });
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk }),
+    onError: (e: any) => toast({ title: e?.message || "Couldn't save template", variant: "destructive" }),
+  });
+  const remove = useMutation({
+    mutationFn: async (specId: string) => {
+      await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/template-specs/${specId}`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk }),
+    onError: (e: any) => toast({ title: e?.message || "Couldn't remove template", variant: "destructive" }),
+  });
+
+  return (
+    <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+      {TEMPLATE_TILES.map((tile) => (
+        <TemplateTile
+          key={tile.key}
+          tile={tile}
+          spec={byComponent(tile.componentKey)}
+          canEdit={canEdit}
+          busy={save.isPending || remove.isPending}
+          onSave={(body) => save.mutate({ componentKey: tile.componentKey, ...body })}
+          onRemove={(specId) => remove.mutate(specId)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function TemplateTile({
+  tile,
+  spec,
+  canEdit,
+  busy,
+  onSave,
+  onRemove,
+}: {
+  tile: (typeof TEMPLATE_TILES)[number];
+  spec: PressTemplateSpecRow | null;
+  canEdit: boolean;
+  busy: boolean;
+  onSave: (body: Partial<PressTemplateSpecRow>) => void;
+  onRemove: (specId: string) => void;
+}) {
+  const { toast } = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [urlDraft, setUrlDraft] = useState("");
+  const numOrEmpty = (n: number | null | undefined) => (n == null ? "" : String(n));
+  const [wDraft, setWDraft] = useState(numOrEmpty(spec?.artboardWInches));
+  const [hDraft, setHDraft] = useState(numOrEmpty(spec?.artboardHInches));
+  const [pagesDraft, setPagesDraft] = useState(numOrEmpty(spec?.expectedPages));
+  const [ppiDraft, setPpiDraft] = useState(numOrEmpty(spec?.minPpi));
+  useEffect(() => {
+    setWDraft(numOrEmpty(spec?.artboardWInches));
+    setHDraft(numOrEmpty(spec?.artboardHInches));
+    setPagesDraft(numOrEmpty(spec?.expectedPages));
+    setPpiDraft(numOrEmpty(spec?.minPpi));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec?.artboardWInches, spec?.artboardHInches, spec?.expectedPages, spec?.minPpi]);
+
+  const fileUrl = spec?.templateFileUrl ?? null;
+  const fileName = fileUrl ? fileUrl.split("/").pop() ?? "template" : null;
+
+  const handleUpload = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await uploadAdminDoc(file);
+      onSave({ templateFileUrl: url });
+      setOpen(false);
+    } catch (e: any) {
+      toast({ title: e?.message || "Upload failed", variant: "destructive" });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+  const commitUrl = () => {
+    const url = urlDraft.trim();
+    if (!url) return;
+    onSave({ templateFileUrl: url });
+    setUrlDraft("");
+    setOpen(false);
+  };
+  const saveDims = () => {
+    const num = (s: string) => (s.trim() === "" ? null : Number(s));
+    const w = num(wDraft);
+    const h = num(hDraft);
+    const pages = num(pagesDraft);
+    const ppi = num(ppiDraft);
+    if ([w, h, pages, ppi].some((v) => v != null && !Number.isFinite(v))) {
+      toast({ title: "Enter valid numbers for the check dimensions.", variant: "destructive" });
+      return;
+    }
+    if (ppi != null && (ppi < 72 || ppi > 2400)) {
+      toast({ title: "Minimum resolution must be between 72 and 2400 PPI.", variant: "destructive" });
+      return;
+    }
+    onSave({
+      artboardWInches: w,
+      artboardHInches: h,
+      expectedPages: pages,
+      minPpi: ppi != null ? Math.round(ppi) : null,
+    });
+    setOpen(false);
+  };
+
+  const dimInput: React.CSSProperties = {
+    height: 34,
+    border: `1px solid ${HAIRLINE}`,
+    borderRadius: 9,
+    padding: "0 8px",
+    color: INK,
+    background: "#fff",
+  };
+  const editor = (
+    <PopoverContent align="center" sideOffset={8} className="w-72 rounded-2xl p-4" style={{ border: `1px solid ${HAIRLINE}` }} data-testid={`template-editor-${tile.key}`}>
+      <input
+        ref={fileRef}
+        type="file"
+        accept={DOC_UPLOAD_ACCEPT}
+        className="hidden"
+        onChange={(e) => handleUpload(e.target.files?.[0])}
+      />
+      <button
+        type="button"
+        disabled={busy || uploading}
+        onClick={() => fileRef.current?.click()}
+        className="w-full inline-flex h-9 items-center justify-center gap-2 rounded-full text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+        style={{ backgroundColor: BLUE }}
+        data-testid={`template-upload-file-${tile.key}`}
+      >
+        {uploading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        {fileUrl ? "Replace file" : "Upload a file"}
+      </button>
+      <div className="mt-2 flex items-center gap-2">
+        <input
+          value={urlDraft}
+          onChange={(e) => setUrlDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitUrl();
+          }}
+          placeholder="…or paste a link"
+          className="min-w-0 flex-1 text-[13px] focus:outline-none focus:border-slate-400"
+          style={{ ...dimInput, height: 36 }}
+          data-testid={`input-template-url-${tile.key}`}
+        />
+        {urlDraft.trim() && (
+          <button type="button" onClick={commitUrl} className="text-[12.5px] font-semibold" style={{ color: BLUE }}>
+            Save
+          </button>
+        )}
+      </div>
+      <div className="mt-4">
+        <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: SUBINK }}>
+          Finished-file check
+        </div>
+        <p className="text-[11.5px]" style={{ color: SUBINK, marginTop: 3, lineHeight: 1.35 }}>
+          Optional — refines the artboard check on finished print files.
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <label className="flex items-center gap-1.5">
+            <input value={wDraft} onChange={(e) => setWDraft(e.target.value)} inputMode="decimal" placeholder="W" className="w-full text-[13px] tabular-nums focus:outline-none" style={dimInput} data-testid={`input-template-w-${tile.key}`} />
+            <span className="text-[11px]" style={{ color: SUBINK }}>in</span>
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input value={hDraft} onChange={(e) => setHDraft(e.target.value)} inputMode="decimal" placeholder="H" className="w-full text-[13px] tabular-nums focus:outline-none" style={dimInput} data-testid={`input-template-h-${tile.key}`} />
+            <span className="text-[11px]" style={{ color: SUBINK }}>in</span>
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input value={pagesDraft} onChange={(e) => setPagesDraft(e.target.value)} inputMode="numeric" placeholder="Pages" className="w-full text-[13px] tabular-nums focus:outline-none" style={dimInput} data-testid={`input-template-pages-${tile.key}`} />
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input value={ppiDraft} onChange={(e) => setPpiDraft(e.target.value)} inputMode="numeric" placeholder="Min PPI" className="w-full text-[13px] tabular-nums focus:outline-none" style={dimInput} data-testid={`input-template-ppi-${tile.key}`} />
+          </label>
+        </div>
+        <div className="mt-2 flex justify-end">
+          <button type="button" onClick={saveDims} disabled={busy} className="text-[12.5px] font-semibold hover:underline underline-offset-2 disabled:opacity-40" style={{ color: BLUE }} data-testid={`button-save-template-dims-${tile.key}`}>
+            Save check
+          </button>
+        </div>
+      </div>
+      {fileUrl && spec && (
+        <div className="mt-3 flex items-center justify-between" style={{ borderTop: `1px solid ${HAIRLINE}`, paddingTop: 10 }}>
+          <a href={fileUrl} target="_blank" rel="noopener noreferrer" download className="text-[12.5px] font-semibold hover:underline underline-offset-2" style={{ color: BLUE }} data-testid={`link-template-download-${tile.key}`}>
+            Download
+          </a>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              onRemove(spec.id);
+              setOpen(false);
+            }}
+            className="text-[12.5px] font-semibold hover:underline underline-offset-2 disabled:opacity-40"
+            style={{ color: CRITICAL }}
+            data-testid={`template-remove-${tile.key}`}
+          >
+            Remove
+          </button>
+        </div>
+      )}
+    </PopoverContent>
+  );
+
+  // Empty slot — the visible invitation. Dashed, one clear action.
+  if (!fileUrl) {
+    return (
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            disabled={!canEdit}
+            data-testid={`template-upload-${tile.key}`}
+            className="flex flex-col items-center justify-center rounded-xl transition-colors hover:bg-white focus:outline-none disabled:cursor-default"
+            style={{ border: `1.5px dashed ${FAINT}`, padding: "18px 12px", cursor: canEdit ? "pointer" : "default", background: "transparent" }}
+          >
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white" style={{ border: `1px solid ${HAIRLINE}` }}>
+              <UploadCloud className="h-4 w-4" style={{ color: BLUE }} />
+            </span>
+            <div className="text-[13px] font-semibold" style={{ color: INK, marginTop: 8 }}>
+              {tile.label}
+            </div>
+            {canEdit ? (
+              <div className="text-[11.5px] font-semibold" style={{ color: BLUE, marginTop: 3 }}>
+                Upload or paste a link
+              </div>
+            ) : (
+              <div className="text-[11.5px]" style={{ color: SUBINK, marginTop: 3 }}>
+                {tile.sub}
+              </div>
+            )}
+          </button>
+        </PopoverTrigger>
+        {canEdit && editor}
+      </Popover>
+    );
+  }
+
+  // Filled slot — calm and complete. Replace appears only on hover.
+  return (
+    <div
+      className="group relative flex flex-col items-center justify-center rounded-xl bg-white text-center"
+      style={{ border: `1px solid ${HAIRLINE}`, padding: "18px 12px" }}
+      data-testid={`template-${tile.key}`}
+    >
+      <span className="flex h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: "var(--apple-canvas, #f5f5f7)" }}>
+        <FileText className="h-4 w-4" style={{ color: BLUE }} />
+      </span>
+      <div className="text-[13px] font-semibold" style={{ color: INK, marginTop: 8 }}>
+        {tile.label}
+      </div>
+      <a
+        href={fileUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        download
+        className="text-[11.5px] tabular-nums hover:underline underline-offset-2"
+        style={{ color: SUBINK, marginTop: 3 }}
+        title={fileName ?? undefined}
+        data-testid={`text-template-filename-${tile.key}`}
+      >
+        {middleTruncate(fileName ?? "template")}
+      </a>
+      {canEdit && (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="absolute right-2 top-2 h-7 rounded-full px-2.5 text-[11.5px] font-semibold opacity-0 transition-opacity hover:bg-slate-100 group-hover:opacity-100"
+              style={{ color: SUBINK }}
+              data-testid={`button-template-replace-${tile.key}`}
+            >
+              Replace
+            </button>
+          </PopoverTrigger>
+          {editor}
+        </Popover>
+      )}
+    </div>
+  );
+}
+
+// ─── Audio spec (handoff AudioSpecCard, wired to the press audio override) ──
+// One card of rows: bit depth, sample rate, longest side per size (33⅓ / 45),
+// and Notes. Values are shown in minutes / kHz; a BLANK field inherits the
+// plant's measured baseline (shown as the placeholder). Saves on blur.
+const AUDIO_SIZES = ['7"', '10"', '12"'] as const;
+const AUDIO_RPMS = ["33", "45"] as const;
+type PressAudioSpecRow = {
+  id: string;
+  requiredBitDepth: number | null;
+  requiredSampleRateHz: number | null;
+  maxSideSeconds: Record<string, Record<string, number>> | null;
+  notes: string | null;
+};
+type AudioBaselineRow = {
+  requiredBitDepth: number | null;
+  requiredSampleRateHz: number | null;
+  maxSideSeconds: Record<string, Record<string, number>> | null;
+};
+
+function AudioSpecField({
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  suffix,
+  wch = 4,
+  readOnly,
+  testId,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onBlur: () => void;
+  placeholder: string;
+  suffix: string;
+  wch?: number;
+  readOnly: boolean;
+  testId: string;
+}) {
+  return (
+    <label
+      className="flex h-9 items-center justify-center rounded-lg transition-shadow focus-within:ring-1 focus-within:ring-slate-300"
+      style={{ border: `1px solid ${HAIRLINE}`, background: "#fff", cursor: "text", padding: "0 10px" }}
+    >
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value.replace(/[^0-9.]/g, ""))}
+        onBlur={onBlur}
+        inputMode="decimal"
+        readOnly={readOnly}
+        placeholder={placeholder}
+        data-testid={testId}
+        className="text-center text-[14px] font-semibold tabular-nums focus:outline-none"
+        style={{ color: INK, background: "transparent", border: "none", width: `${wch}ch`, padding: 0 }}
+      />
+      <span className="text-[11px] font-semibold" style={{ color: FAINT, marginLeft: 5 }}>
+        {suffix}
+      </span>
+    </label>
+  );
+}
+
+function AudioSpecEditorCard({ pressId, canEdit }: { pressId: string; canEdit: boolean }) {
+  const { toast } = useToast();
+  const qk = ["/api/admin/manufacturers", pressId, "audio-spec"];
+  const { data } = useQuery<{ spec: PressAudioSpecRow | null; baseline: AudioBaselineRow | null }>({
+    queryKey: qk,
+  });
+  const spec = data?.spec ?? null;
+  const baseline = data?.baseline ?? null;
+
+  const [bitDepth, setBitDepth] = useState("");
+  const [sampleKhz, setSampleKhz] = useState("");
+  const [grid, setGrid] = useState<Record<string, Record<string, string>>>({});
+  const [notes, setNotes] = useState("");
+
+  // Rehydrate the draft from the saved row whenever it (re)loads. Seconds are
+  // surfaced as minutes (one decimal); Hz as kHz.
+  useEffect(() => {
+    setBitDepth(spec?.requiredBitDepth != null ? String(spec.requiredBitDepth) : "");
+    setSampleKhz(spec?.requiredSampleRateHz != null ? String(spec.requiredSampleRateHz / 1000) : "");
+    const g: Record<string, Record<string, string>> = {};
+    for (const size of AUDIO_SIZES) {
+      for (const rpm of AUDIO_RPMS) {
+        const secs = spec?.maxSideSeconds?.[size]?.[rpm];
+        if (typeof secs === "number") {
+          (g[size] ??= {})[rpm] = String(Math.round((secs / 60) * 10) / 10);
+        }
+      }
+    }
+    setGrid(g);
+    setNotes(spec?.notes ?? "");
+  }, [spec]);
+
+  const buildBody = () => {
+    const maxSideSeconds: Record<string, Record<string, number>> = {};
+    for (const size of AUDIO_SIZES) {
+      for (const rpm of AUDIO_RPMS) {
+        const raw = grid[size]?.[rpm];
+        const mins = raw != null && raw.trim() !== "" ? Number(raw) : NaN;
+        if (Number.isFinite(mins) && mins > 0) {
+          (maxSideSeconds[size] ??= {})[rpm] = Math.round(mins * 60);
+        }
+      }
+    }
+    const bd = bitDepth.trim() !== "" ? Number(bitDepth) : NaN;
+    const khz = sampleKhz.trim() !== "" ? Number(sampleKhz) : NaN;
+    return {
+      requiredBitDepth: Number.isFinite(bd) ? Math.round(bd) : null,
+      requiredSampleRateHz: Number.isFinite(khz) ? Math.round(khz * 1000) : null,
+      maxSideSeconds: Object.keys(maxSideSeconds).length > 0 ? maxSideSeconds : null,
+      notes: notes.trim() !== "" ? notes.trim() : null,
+    };
+  };
+  const savedBodyKey = JSON.stringify({
+    requiredBitDepth: spec?.requiredBitDepth ?? null,
+    requiredSampleRateHz: spec?.requiredSampleRateHz ?? null,
+    maxSideSeconds: spec?.maxSideSeconds ?? null,
+    notes: spec?.notes ?? null,
+  });
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", `/api/admin/manufacturers/${pressId}/audio-spec`, buildBody());
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk });
+      toast({ title: "Audio spec saved" });
+    },
+    onError: (e: any) => toast({ title: e?.message || "Couldn't save audio spec", variant: "destructive" }),
+  });
+  const remove = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/audio-spec`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk });
+      toast({ title: "Audio override cleared — inheriting baseline" });
+    },
+    onError: (e: any) => toast({ title: e?.message || "Couldn't clear audio spec", variant: "destructive" }),
+  });
+  const commit = () => {
+    if (!canEdit || save.isPending) return;
+    const body = buildBody();
+    const isEmpty =
+      body.requiredBitDepth == null && body.requiredSampleRateHz == null && body.maxSideSeconds == null && body.notes == null;
+    if (JSON.stringify(body) === savedBodyKey) return;
+    if (isEmpty && !spec) return;
+    if (isEmpty && spec) {
+      remove.mutate();
+      return;
+    }
+    save.mutate();
+  };
+
+  const setCell = (size: string, rpm: string, v: string) =>
+    setGrid((g) => ({ ...g, [size]: { ...(g[size] ?? {}), [rpm]: v } }));
+  const sideDefault = (size: string, rpm: string): string => {
+    const secs = baseline?.maxSideSeconds?.[size]?.[rpm];
+    return typeof secs === "number" ? String(Math.round((secs / 60) * 10) / 10) : "—";
+  };
+  const bitDefault = baseline?.requiredBitDepth != null ? `Default: ${baseline.requiredBitDepth}-bit` : "Default: no minimum";
+  const rateDefault =
+    baseline?.requiredSampleRateHz != null ? `Default: ${baseline.requiredSampleRateHz / 1000} kHz` : "Default: no minimum";
+
+  const rows: { label: string; sub?: string; controls: React.ReactNode }[] = [
+    {
+      label: "Minimum bit depth",
+      sub: bitDefault,
+      controls: (
+        <AudioSpecField
+          value={bitDepth}
+          onChange={setBitDepth}
+          onBlur={commit}
+          placeholder={baseline?.requiredBitDepth != null ? String(baseline.requiredBitDepth) : "—"}
+          suffix="bit"
+          readOnly={!canEdit}
+          testId="input-audio-bit"
+        />
+      ),
+    },
+    {
+      label: "Minimum sample rate",
+      sub: rateDefault,
+      controls: (
+        <AudioSpecField
+          value={sampleKhz}
+          onChange={setSampleKhz}
+          onBlur={commit}
+          placeholder={baseline?.requiredSampleRateHz != null ? String(baseline.requiredSampleRateHz / 1000) : "—"}
+          suffix="kHz"
+          wch={5}
+          readOnly={!canEdit}
+          testId="input-audio-rate"
+        />
+      ),
+    },
+    ...AUDIO_SIZES.map((size) => ({
+      label: `Longest side — ${size}`,
+      controls: (
+        <div className="flex items-center gap-2">
+          <AudioSpecField
+            value={grid[size]?.["33"] ?? ""}
+            onChange={(v) => setCell(size, "33", v)}
+            onBlur={commit}
+            placeholder={sideDefault(size, "33")}
+            suffix="min at 33⅓"
+            wch={3}
+            readOnly={!canEdit}
+            testId={`input-audio-${size.replace(/\D/g, "")}-33`}
+          />
+          <AudioSpecField
+            value={grid[size]?.["45"] ?? ""}
+            onChange={(v) => setCell(size, "45", v)}
+            onBlur={commit}
+            placeholder={sideDefault(size, "45")}
+            suffix="min at 45"
+            wch={3}
+            readOnly={!canEdit}
+            testId={`input-audio-${size.replace(/\D/g, "")}-45`}
+          />
+        </div>
+      ),
+    })),
+  ];
+
+  return (
+    <div>
+      <Card className="mt-3 overflow-hidden" testId="audio-spec-card">
+        {rows.map((r, i) => (
+          <div
+            key={r.label}
+            className="flex items-center justify-between gap-4"
+            style={{ padding: "12px 18px", borderTop: i > 0 ? `1px solid ${HAIRLINE}` : undefined }}
+          >
+            <div>
+              <div className="text-[13.5px] font-semibold" style={{ color: INK }}>
+                {r.label}
+              </div>
+              {r.sub && (
+                <div className="text-[11.5px]" style={{ color: FAINT, marginTop: 2 }}>
+                  {r.sub}
+                </div>
+              )}
+            </div>
+            {r.controls}
+          </div>
+        ))}
+        <div style={{ padding: "12px 18px", borderTop: `1px solid ${HAIRLINE}` }}>
+          <div className="text-[13.5px] font-semibold" style={{ color: INK }}>
+            Notes
+          </div>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={commit}
+            readOnly={!canEdit}
+            placeholder="Optional context for operators — e.g. where these numbers come from."
+            data-testid="input-audio-notes"
+            rows={2}
+            className="w-full resize-none text-[13px] focus:outline-none"
+            style={{ color: INK, background: "transparent", border: "none", marginTop: 4, padding: 0, lineHeight: 1.45 }}
+          />
+        </div>
+      </Card>
+      <div className="flex items-center justify-between" style={{ marginTop: 8 }}>
+        <span className="text-[11.5px]" style={{ color: SUBINK }}>
+          Blank fields inherit the plant's measured baseline — nothing here is assumed.
+        </span>
+        {spec && canEdit && (
+          <button
+            type="button"
+            onClick={() => remove.mutate()}
+            disabled={remove.isPending}
+            className="text-[11.5px] font-semibold hover:underline underline-offset-2 disabled:opacity-40"
+            style={{ color: BLUE }}
+            data-testid="button-clear-audio-spec"
+          >
+            Clear override
+          </button>
+        )}
+      </div>
     </div>
   );
 }

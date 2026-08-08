@@ -68,3 +68,9 @@ Restyle, don't reset. Before removing any old page, verify field-for-field parit
     - Use it ONLY as the placeholder album cover when a project has no uploaded art yet: white icon centered at ~45% width on an INK (`#1d1d1f`) square jacket, exactly like the MRP placeholder pattern in the handoff files.
     - The moment real album art exists (e.g. Niina's CALIFORNIALAND cover), the placeholder must never appear — jacket, GoodDeed mini, and banner thumbnail all use the real art.
     
+    ## Color reordering
+
+    - Reordering is direct manipulation: the press drags the color tiles themselves in the "Pick a color" grid (HTML5 drag — tile dims while dragging, order updates live, marks the catalog dirty). Hint copy: "drag to reorder — artists see this order."
+    - Rename/remove live in each tile's overflow menu. The old "Manage colors" modal goes away; do not keep it alongside the grid.
+    - Persist the saved order — it is the order artists see on their album's package picker.
+    

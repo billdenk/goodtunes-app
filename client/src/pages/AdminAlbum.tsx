@@ -122,6 +122,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { Switch } from "@/components/ui/switch";
 import { PlayerDock } from "@/components/ui/PlayerDock";
 import { SellPanel } from "@/components/admin/SellPanel";
+import { PressAlbumPackageBuilder } from "@/pages/PressAlbumPackageBuilder";
 import { PressPanel } from "@/components/admin/PressPanel";
 import { ShopifyPanel } from "@/components/admin/ShopifyPanel";
 import { ShopifyPlusPanel } from "@/components/admin/ShopifyPlusPanel";
@@ -1917,7 +1918,19 @@ export function AdminAlbum({
                   }
                 />
               )}
-              {safeTab === "sell" && allowed.has("sell") && (
+              {/* Handoff v2 — artist viewers get the "Design your package"
+                  builder on the Package tab; operators/press keep the full
+                  SellPanel untouched (Bill's split decision). */}
+              {safeTab === "sell" && allowed.has("sell") && isArtist && (
+                <PressAlbumPackageBuilder
+                  albumId={album.id}
+                  albumTitle={album.title}
+                  artistName={album.artist}
+                  artworkUrl={album.artwork}
+                  trackCount={album.songs.length}
+                />
+              )}
+              {safeTab === "sell" && allowed.has("sell") && !isArtist && (
                 <SellPanel
                   albumId={album.id}
                   albumTitle={album.title}
