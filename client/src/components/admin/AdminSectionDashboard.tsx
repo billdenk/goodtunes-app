@@ -91,7 +91,7 @@ function lsKey(section: SectionKind) {
 const SECTION_TITLES: Record<SectionKind, { title: string; subtitle: string }> = {
   labels: {
     title: "Labels Dashboard",
-    subtitle: "All non-deleted labels combined.",
+    subtitle: "Every label on the platform, combined.",
   },
   npos: {
     title: "NPO Dashboard",
@@ -150,13 +150,15 @@ export function AdminSectionDashboard({ section }: { section: SectionKind }) {
     <div className="space-y-5" data-testid={`section-dashboard-${section}`}>
       <section className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
+          {/* Apple canon: match AdminPageHeader's h1 treatment so section
+              dashboards read at the same weight as every index page. */}
           <h2
-            className="text-lg sm:text-xl font-semibold text-slate-900 truncate"
+            className="text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] leading-tight truncate"
             data-testid={`heading-section-dashboard-${section}`}
           >
             {meta.title}
           </h2>
-          <p className="text-slate-500 text-xs mt-0.5">{meta.subtitle}</p>
+          <p className="text-[var(--apple-subink)] text-[13px] font-medium mt-0.5">{meta.subtitle}</p>
         </div>
         <RangePicker value={preset} onChange={setPreset} section={section} />
       </section>
@@ -218,7 +220,9 @@ function RangePicker({
 }) {
   return (
     <div
-      className="inline-flex items-center bg-slate-100 rounded-md p-0.5"
+      // Apple canon segmented pill — same treatment as the main
+      // /admin dashboard's range picker (track bg, white active pill).
+      className="inline-flex items-center rounded-full p-1 gap-2 bg-[var(--apple-track)]"
       role="group"
       aria-label="Date range"
       data-testid={`section-range-picker-${section}`}
@@ -232,10 +236,10 @@ function RangePicker({
             onClick={() => onChange(p.id)}
             aria-pressed={active}
             className={cn(
-              "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+              "px-3.5 h-8 text-[13px] rounded-full transition-all",
               active
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-900",
+                ? "bg-white text-[var(--apple-ink)] font-semibold shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
+                : "text-[var(--apple-subink)] font-medium hover:text-[var(--apple-ink)]",
             )}
             data-testid={`button-section-range-${section}-${p.id}`}
           >
