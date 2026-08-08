@@ -11313,3 +11313,33 @@ SQL
 }
 apply_press_label_branding dev  "${DATABASE_URL:-}"
 apply_press_label_branding prod "${PROD_DATABASE_URL:-}"
+
+# Idempotent: signed_cert_reservations keeps ONE ROW PER SIGNED COPY, so the
+# same Stripe session id legitimately lands on several rows. The original
+# single-column UNIQUE 500'd every multi-cert checkout (prod ops alert
+# 2026-08-07). Drop it; keep a plain index for the webhook's
+# delete-by-session lookup. Safe on every run.
+fix_cert_reservation_session_unique() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then echo "post-merge: cert-reservation-unique skip ($label; no URL)"; return 0; fi
+  local out rc
+  out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+BEGIN;
+ALTER TABLE signed_cert_reservations
+  DROP CONSTRAINT IF EXISTS signed_cert_reservations_stripe_checkout_session_id_unique;
+CREATE INDEX IF NOT EXISTS signed_cert_reservations_session_idx
+  ON signed_cert_reservations (stripe_checkout_session_id);
+COMMIT;
+SQL
+  )
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    echo "post-merge: cert-reservation-unique ok on $label"
+  else
+    echo "post-merge: ERROR — cert-reservation-unique FAILED on $label"
+    echo "$out" | tail -5
+    return 1
+  fi
+}
+fix_cert_reservation_session_unique dev  "${DATABASE_URL:-}"
+fix_cert_reservation_session_unique prod "${PROD_DATABASE_URL:-}"

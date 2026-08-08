@@ -2876,10 +2876,16 @@ export const signedCertReservations = pgTable(
   {
     id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
     albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
-    stripeCheckoutSessionId: text("stripe_checkout_session_id").unique(),
+    // NOT unique: Task #549 keeps one reservation row PER SIGNED COPY, so a
+    // multi-copy checkout stamps the same session id onto several rows. A
+    // single-column unique here 500'd every multi-cert checkout (prod ops
+    // alert 2026-08-07). Plain index below serves the webhook's
+    // delete-by-session lookup.
+    stripeCheckoutSessionId: text("stripe_checkout_session_id"),
     expiresAt: timestamp("expires_at").notNull(),
     createdAt: timestamp("created_at").defaultNow(),
   },
+  (t) => [index("signed_cert_reservations_session_idx").on(t.stripeCheckoutSessionId)],
 );
 
 // Orders. One row per Stripe Checkout Session that completed payment.
