@@ -543,6 +543,18 @@ body.gt-admin.gt-admin-dark .bg-slate-200 { background-color: var(--apple-chip);
    (a wall of blue circles overwhelms the charcoal canvas — Bill, 2026-08-08).
    Photo avatars are untouched (the img covers the fill). */
 body.gt-admin.gt-admin-dark .gt-avatar-initials { background-color: var(--apple-track); }
+/* Dark mode: the filled blue primary pill is too loud on charcoal — rest as a
+   quiet chip, go blue on hover/focus (Bill, 2026-08-08). Light mode unchanged. */
+body.gt-admin.gt-admin-dark .bg-\[var\(--apple-blue\)\] {
+  background-color: var(--apple-chip);
+  color: var(--apple-ink);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+body.gt-admin.gt-admin-dark .bg-\[var\(--apple-blue\)\]:hover,
+body.gt-admin.gt-admin-dark .bg-\[var\(--apple-blue\)\]:focus-visible {
+  background-color: var(--apple-blue);
+  color: #fff;
+}
 body.gt-admin.gt-admin-dark .gt-avatar-initials .text-white { color: var(--apple-subink); }
 body.gt-admin.gt-admin-dark .hover\:bg-slate-50:hover,
 body.gt-admin.gt-admin-dark .hover\:bg-slate-100:hover { background-color: rgba(255, 255, 255, 0.06); }

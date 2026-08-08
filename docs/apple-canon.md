@@ -103,6 +103,12 @@ accents on ~14%-alpha translucent washes — see tokens).
 - Related (same ratification): **no credit/role pill rows under tiles in grid
   views** — rows of equal-weight labeled pills under every tile read as noise
   (per the button weight rule). Roles stay in list rows and detail sheets.
+- **Dark mode: the one primary pill rests quiet, hovers blue.** On the
+  charcoal canvas a filled blue pill shouts, so in dark mode the screen's one
+  primary CTA rests as a chip-gray pill (`--apple-chip`, ink text) and fills
+  brand blue on hover/focus. Light mode keeps the filled blue pill at rest.
+  (GoodTunes: blanket `body.gt-admin.gt-admin-dark` remap of
+  `bg-[var(--apple-blue)]` in `client/src/index.css`.)
 
 ## Non-negotiables
 
