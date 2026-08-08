@@ -752,6 +752,41 @@ const COLOR_GROUPS: ColorGroup[] = [
       { id: 'sp-5', name: 'Sunburst', kind: 'splatter', base: '#E8C84A', s1: '#D97038', s2: '#B3262E', s3: '#F5F5DC' },
     ],
   },
+  {
+    id: 'mixswirl',
+    name: 'Mix/Swirl',
+    blurb: 'Two colors, hand-poured',
+    swatch: { id: 'g-mix', name: 'Storm Swirl', kind: 'splatter', base: '#3B4A66', s1: '#EDEDF0', s2: '#9A9AA0', s3: '#EDEDF0' },
+    colors: [
+      { id: 'mx-1', name: 'Storm Swirl', kind: 'splatter', base: '#3B4A66', s1: '#EDEDF0', s2: '#9A9AA0', s3: '#EDEDF0' },
+      { id: 'mx-2', name: 'Creamsicle', kind: 'splatter', base: '#D97038', s1: '#F2E7C9', s2: '#EFEBE2', s3: '#F2E7C9' },
+      { id: 'mx-3', name: 'Lagoon', kind: 'splatter', base: '#1E3E9E', s1: '#9CC5B0', s2: '#CFE8DF', s3: '#9CC5B0' },
+    ],
+  },
+  {
+    id: 'splatter2',
+    name: 'Splatter — 2 Colors',
+    blurb: 'Two-color spray',
+    swatch: { id: 'g-sp2', name: 'Cherry Bomb', kind: 'splatter', base: '#EDEDF0', s1: '#B3262E', s2: '#1d1d1f', s3: '#B3262E' },
+    colors: [
+      { id: 's2-1', name: 'Cherry Bomb', kind: 'splatter', base: '#EDEDF0', s1: '#B3262E', s2: '#1d1d1f', s3: '#B3262E' },
+      { id: 's2-2', name: 'Blueberry Milk', kind: 'splatter', base: '#EFEBE2', s1: '#2563EB', s2: '#8FB8DF', s3: '#2563EB' },
+      { id: 's2-3', name: 'Wasabi', kind: 'splatter', base: '#C6CE4A', s1: '#2E8B5F', s2: '#4A5D4E', s3: '#2E8B5F' },
+      { id: 's2-4', name: 'Bruise', kind: 'splatter', base: '#6B4FA1', s1: '#E5B8D0', s2: '#2A1E45', s3: '#E5B8D0' },
+    ],
+  },
+  {
+    id: 'blacksplatter2',
+    name: 'Black Splatter — 2 Colors',
+    blurb: 'Black base, two-color spray',
+    swatch: { id: 'g-bsp2', name: 'Ember', kind: 'splatter', base: '#111114', s1: '#B3262E', s2: '#E8A13C', s3: '#B3262E' },
+    colors: [
+      { id: 'bs-1', name: 'Ember', kind: 'splatter', base: '#111114', s1: '#B3262E', s2: '#E8A13C', s3: '#B3262E' },
+      { id: 'bs-2', name: 'Glacier', kind: 'splatter', base: '#111114', s1: '#8FB8DF', s2: '#EDEDF0', s3: '#8FB8DF' },
+      { id: 'bs-3', name: 'Toxic', kind: 'splatter', base: '#111114', s1: '#C6CE4A', s2: '#2E8B5F', s3: '#C6CE4A' },
+      { id: 'bs-4', name: 'Confetti', kind: 'splatter', base: '#111114', s1: '#E5B8D0', s2: '#E8C84A', s3: '#E5B8D0' },
+    ],
+  },
 ];
 
 // ─── Run quantities + the price book model ───────────────────────────
@@ -772,6 +807,9 @@ function seedBook(): PriceBook {
     opaque: [19.0, 14.5, 11.75, 9.75, 8.5, 7.75, 7.1, 6.5],
     translucent: [20.0, 15.25, 12.5, 10.25, 9.0, 8.25, 7.6, 6.95],
     splatter: [24.0, 18.5, 15.0, 12.75, 11.25, 10.5, 9.75, 9.0],
+    mixswirl: [26.0, 20.0, 16.25, 13.75, 12.0, 11.25, 10.5, 9.75],
+    splatter2: [25.0, 19.25, 15.5, 13.25, 11.75, 11.0, 10.25, 9.5],
+    blacksplatter2: [23.0, 17.75, 14.5, 12.25, 10.75, 10.0, 9.4, 8.75],
   };
   const book: PriceBook = {};
   for (const g of COLOR_GROUPS) {
@@ -1917,8 +1955,11 @@ function AudioSpecCard({ onEdit }: { onEdit: () => void }) {
   const [rate, setRate] = useState('44.1');
   const [s7a, setS7a] = useState('');
   const [s7b, setS7b] = useState('');
+  const [s10a, setS10a] = useState('');
+  const [s10b, setS10b] = useState('');
   const [s12a, setS12a] = useState('22');
   const [s12b, setS12b] = useState('');
+  const [notes, setNotes] = useState('');
   const edit = (set: (v: string) => void) => (v: string) => {
     set(v);
     onEdit();
@@ -1940,6 +1981,15 @@ function AudioSpecCard({ onEdit }: { onEdit: () => void }) {
         <div className="flex items-center gap-2">
           <AudioField value={s7a} onChange={edit(setS7a)} placeholder="8" suffix="min at 33⅓" wch={3} testId="input-audio-7-33" />
           <AudioField value={s7b} onChange={edit(setS7b)} placeholder="6" suffix="min at 45" wch={3} testId="input-audio-7-45" />
+        </div>
+      ),
+    },
+    {
+      label: 'Longest side — 10"',
+      controls: (
+        <div className="flex items-center gap-2">
+          <AudioField value={s10a} onChange={edit(setS10a)} placeholder="15" suffix="min at 33⅓" wch={3} testId="input-audio-10-33" />
+          <AudioField value={s10b} onChange={edit(setS10b)} placeholder="12" suffix="min at 45" wch={3} testId="input-audio-10-45" />
         </div>
       ),
     },
@@ -1974,6 +2024,19 @@ function AudioSpecCard({ onEdit }: { onEdit: () => void }) {
           {r.controls}
         </div>
       ))}
+      {/* Notes — quiet context for operators */}
+      <div style={{ padding: '12px 18px', borderTop: `1px solid ${HAIRLINE}` }}>
+        <div className="text-[13.5px] font-semibold" style={{ color: INK }}>Notes</div>
+        <textarea
+          value={notes}
+          onChange={(e) => { setNotes(e.target.value); onEdit(); }}
+          placeholder="Optional context for operators — e.g. where these numbers come from."
+          data-testid="input-audio-notes"
+          rows={2}
+          className="w-full text-[13px] focus:outline-none resize-none"
+          style={{ color: INK, background: 'transparent', border: 'none', marginTop: 4, padding: 0, lineHeight: 1.45 }}
+        />
+      </div>
     </div>
   );
 }
@@ -1991,6 +2054,7 @@ export function PressPackagePricingTableRuns() {
     { key: 'jacket', label: 'Jacket', sub: 'Outer sleeve print template', file: 'MRP-12in-jacket-template.pdf' },
     { key: 'inner', label: 'Inner sleeve', sub: 'Printed liner template' },
     { key: 'labels', label: 'Center labels', sub: 'A-side & B-side label template', file: 'MRP-label-3.94in.pdf' },
+    { key: 'booklet', label: 'Booklet', sub: 'Lyric & photo booklet template' },
   ]);
 
   const product = useMemo(() => PRODUCT_TYPES.find((p) => p.id === productTypeId) ?? PRODUCT_TYPES[1], [productTypeId]);
