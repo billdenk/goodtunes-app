@@ -107,7 +107,17 @@ export async function activeMembershipContext(
   let viewAsHat: DevImpersonationHat | null = null;
   const viewAsTokenStr = req.headers["x-view-as-token"] as string | undefined;
   if (viewAsTokenStr) {
-    const callerId = (req.session as any)?.userId as string | undefined;
+    // Resolve the minting super-admin through the canonical request-auth
+    // resolver (session first, Bearer fallback, host/kind boundary
+    // enforced). Admin logins frequently run bearer-only (the #token-hash
+    // login path stores the token in localStorage; over plain-http dev
+    // there is no session cookie at all), so a session-only check silently
+    // dropped the hat and the view-as tab rendered the operator's own god
+    // view. Only an admin-kind identity may activate a view-as hat —
+    // getAuthFromRequest already rejects admin tokens on customer hosts.
+    const { getAuthFromRequest } = await import("./host");
+    const caller = await getAuthFromRequest(req);
+    const callerId = caller?.kind === "admin" ? caller.userId : undefined;
     if (callerId) {
       const payload = await verifyViewAsToken(viewAsTokenStr, callerId);
       if (payload) {
