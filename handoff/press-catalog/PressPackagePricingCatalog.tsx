@@ -2102,6 +2102,24 @@ export function PressPackagePricingTableRuns() {
   };
   const removeColor = (groupId: string, colorId: string) => {
     setGroups((gs) => gs.map((g) => (g.id === groupId ? { ...g, colors: g.colors.filter((c) => c.id !== colorId) } : g)));
+  };
+  // Drag a tile onto another to reorder — artists see this order on their Sell panel.
+  const [dragColorId, setDragColorId] = useState<string | null>(null);
+  const reorderColor = (groupId: string, fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    setGroups((gs) =>
+      gs.map((g) => {
+        if (g.id !== groupId) return g;
+        const arr = [...g.colors];
+        const f = arr.findIndex((c) => c.id === fromId);
+        const t = arr.findIndex((c) => c.id === toId);
+        if (f < 0 || t < 0) return g;
+        const [moved] = arr.splice(f, 1);
+        arr.splice(t, 0, moved);
+        return { ...g, colors: arr };
+      }),
+    );
+    setDirty(true);
     setDirty(true);
   };
   const row = book[activeGroupId] ?? {};
@@ -2280,7 +2298,7 @@ export function PressPackagePricingTableRuns() {
             </h2>
             <p className="text-[12.5px]" style={{ marginTop: 6 }}>
               <span className="font-semibold" style={{ color: INK }}>{activeGroup.name}</span>
-              <span style={{ color: '#a1a1a6' }}> · {activeGroup.colors.length} colors</span>
+              <span style={{ color: '#a1a1a6' }}> · {activeGroup.colors.length} colors · drag to reorder — artists see this order</span>
             </p>
             <div className="grid grid-cols-4 gap-3" style={{ marginTop: 12 }}>
               {activeGroup.colors.map((c) => {
@@ -2299,8 +2317,23 @@ export function PressPackagePricingTableRuns() {
                     }}
                     aria-pressed={on}
                     data-testid={`color-${c.id}`}
+                    draggable
+                    onDragStart={(e) => {
+                      setDragColorId(c.id);
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (dragColorId && dragColorId !== c.id) reorderColor(activeGroup.id, dragColorId, c.id);
+                    }}
+                    onDragEnd={() => setDragColorId(null)}
                     className="group relative rounded-2xl bg-white text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
-                    style={{ padding: '16px 10px 12px', border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
+                    style={{
+                      padding: '16px 10px 12px',
+                      border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
+                      opacity: dragColorId === c.id ? 0.45 : 1,
+                      cursor: dragColorId ? 'grabbing' : undefined,
+                    }}
                   >
                     <div
                       className="absolute opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
