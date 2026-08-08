@@ -53,7 +53,7 @@ import { modulesForRole } from "@/components/operator/registry";
 import { AdminReports } from "@/pages/AdminReports";
 import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { AdminGoodDeedPricing } from "@/pages/AdminGoodDeedPricing";
-import { PressCatalogPanel } from "@/pages/AdminManufacturer";
+import { PressPackagePricingCatalog } from "@/pages/PressPackagePricingCatalog";
 import { PressVinylColors } from "@/pages/PressVinylColors";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
@@ -390,7 +390,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
               </button>
             }
           />
-          <PressCatalogPanel
+          <PressPackagePricingCatalog
             pressId={pressId}
             pressDomain={pressDomain}
             placeholderUrl={me?.vinylPlaceholderUrl ?? null}

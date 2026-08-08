@@ -17702,16 +17702,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Catalog</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "<p className=\"text-[13px] text-slate-500 mt-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManufacturer.tsx",
     "snippet": "<span className=\"block text-slate-500 text-[11px] font-semibold uppercase tracking-wider mb-1\">"
   },
   {
@@ -22363,6 +22353,216 @@
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/Playlists.tsx",
     "snippet": "className=\"w-9 h-9 rounded-full flex items-center justify-center text-white\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-[0.14em]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[12px] font-semibold uppercase tracking-widest\" style={{ color: \"rgba(255,255,255,0.4)\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[13px] font-semibold\" style={{ color: INK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<p className=\"mt-1 text-[12px]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: active ? BLUE : INK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"mt-0.5 text-[12px]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"w-full rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-slate-100\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"block text-[11.5px] font-normal\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"w-full rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-rose-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ color: INK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"mt-1.5 text-[12.5px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"mt-2.5 max-w-full truncate px-3 text-[13px] font-semibold\" style={{ color: active ? BLUE : INK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[11.5px]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<label className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"mt-1.5 w-full bg-white text-[13.5px] focus:outline-none focus:border-slate-400\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"mt-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors hover:bg-slate-100\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors hover:bg-slate-100 disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[13px] font-semibold\" style={{ color: BLUE }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"w-full bg-white text-[13.5px] tabular-nums focus:outline-none focus:border-slate-400\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<p className=\"mt-1.5 text-[13px]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[12.5px]\" style={{ color: anyDirty ? SUBINK : FAINT }} data-testid=\"text-save-status\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"inline-flex h-9 items-center gap-2 rounded-full px-5 text-[13.5px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"mt-4 rounded-xl px-4 py-2.5 text-[13px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"py-10 text-[13.5px]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"flex items-center gap-1.5 text-[14px] font-semibold\" style={{ color: BLUE }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"mt-0.5 block text-[12px]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<p className=\"mt-3 text-[13px]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"mt-2 max-w-full truncate px-2 text-[12px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"mt-1.5 text-[12px] font-semibold\" style={{ color: BLUE }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"mt-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold hover:underline underline-offset-2\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"w-20 flex-shrink-0 text-[14px] font-semibold tabular-nums\" style={{ color: mode === \"off\" ? SUBINK : INK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[11.5px] font-semibold\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[13px]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"w-24 bg-white text-right text-[14px] font-semibold tabular-nums focus:outline-none focus:border-slate-400\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"inline-flex h-[34px] w-full items-center justify-end rounded-[9px] px-2.5 text-[12.5px] font-medium\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[14px]\" style={{ color: FAINT }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<button type=\"button\" aria-label={`Options for ${ALBUM_FORMAT_LABEL[format]}`} data-testid={`button-size-menu-${format}`} className={cn( \"absolute right-2 top-2 inline-flex h-6 w-6 items-center justif"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<button type=\"button\" aria-label={`Edit ${tier.name}`} data-testid={`button-type-menu-${tier.id}`} className={cn( \"absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full b"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<button type=\"button\" aria-label={`Edit ${c.name}`} data-testid={`button-color-menu-${c.id}`} className={cn( \"absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg"
   },
   {
     "rule": "brand-hex-literal",

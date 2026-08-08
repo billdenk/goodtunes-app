@@ -174,7 +174,7 @@ const RDC: any = await import("react-dom/client");
 const createRoot = RDC.createRoot ?? RDC.default.createRoot;
 const RQ: any = await import("@tanstack/react-query");
 const { QueryClient, QueryClientProvider } = RQ;
-const { PressCatalogPanel } = await import("./AdminManufacturer");
+const { PressPackagePricingCatalog } = await import("./PressPackagePricingCatalog");
 
 const h = React.createElement;
 
@@ -249,7 +249,7 @@ async function mount(roleScopeId: string | null, audioSpec: any = null) {
       h(
         QueryClientProvider,
         { client: makeClient(roleScopeId, audioSpec) },
-        h(PressCatalogPanel, { pressId: PRESS_ID, pressDomain: null }),
+        h(PressPackagePricingCatalog, { pressId: PRESS_ID, pressDomain: null }),
       ),
     );
   });
@@ -295,8 +295,8 @@ test("a press scoped to THIS plant sees the editable audio spec card in the cata
 
 // ── canEdit false: the whole panel (and the audio card) is hidden ────
 test("a press scoped to a DIFFERENT plant gets no panel and no audio card", async () => {
-  // roleScopeId !== PRESS_ID → canEdit false → PressCatalogPanel returns null,
-  // mirroring the print-template card: both live behind the same gate.
+  // roleScopeId !== PRESS_ID → canView false → the catalog page returns null,
+  // mirroring the legacy PressCatalogPanel gate it replaced.
   const { q, teardown } = await mount(OTHER_PRESS_ID);
   try {
     assert.equal(

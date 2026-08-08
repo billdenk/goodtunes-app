@@ -48,7 +48,7 @@ function cn(...parts: Array<string | false | null | undefined>): string {
 }
 
 // ─── Catalog payload (subset of GET .../catalog we render) ───────────
-interface CatalogColor {
+export interface CatalogColor {
   id: string;
   name: string;
   swatchHex: string | null;
@@ -137,7 +137,7 @@ function PressDiscLabel({
   );
 }
 
-function VinylDisc({
+export function VinylDisc({
   size,
   color,
   labelLogoUrl,
@@ -217,7 +217,7 @@ function VinylDisc({
   );
 }
 
-const DISC_SPIN_CSS = `
+export const DISC_SPIN_CSS = `
 @keyframes gt-vinyl-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .gt-vinyl { transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1); }
 .gt-vinyl .gt-vinyl-body { animation: gt-vinyl-spin 8s linear infinite; animation-play-state: paused; }
@@ -263,7 +263,7 @@ function DiscStage({
 }
 
 // Glossy round color ball — photo swatches show the photo, hex a gradient ball.
-function ColorBall({ color, size = 40 }: { color: CatalogColor; size?: number }) {
+export function ColorBall({ color, size = 40 }: { color: CatalogColor; size?: number }) {
   const photo = color.swatchThumbUrl || color.swatchImageUrl;
   return (
     <span
@@ -286,7 +286,7 @@ function ColorBall({ color, size = 40 }: { color: CatalogColor; size?: number })
 }
 
 // ─── Two-tone headings ───────────────────────────────────────────────
-function PageHeading({ lead, rest }: { lead: string; rest: string }) {
+export function PageHeading({ lead, rest }: { lead: string; rest: string }) {
   return (
     <h1 className="tracking-tight" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.05, marginTop: 10 }}>
       <span style={{ color: INK }}>{lead} </span>
@@ -294,7 +294,7 @@ function PageHeading({ lead, rest }: { lead: string; rest: string }) {
     </h1>
   );
 }
-function StepHeading({ lead, rest }: { lead: string; rest: string }) {
+export function StepHeading({ lead, rest }: { lead: string; rest: string }) {
   return (
     <h2 className="tracking-tight" style={{ fontSize: 24, lineHeight: 1.15, fontWeight: 600 }}>
       <span style={{ color: INK }}>{lead} </span>
@@ -354,7 +354,7 @@ function ColorField({
 }
 
 // ─── Frosted color editor (add + edit) ───────────────────────────────
-function SwatchEditorPopover({
+export function SwatchEditorPopover({
   open,
   onOpenChange,
   trigger,
@@ -590,7 +590,7 @@ function SwatchEditorPopover({
 }
 
 // ─── "+ More types" popover — add a color group ──────────────────────
-function MoreTypesPopover({ onAdd, adding }: { onAdd: (name: string) => void; adding: boolean }) {
+export function MoreTypesPopover({ onAdd, adding }: { onAdd: (name: string) => void; adding: boolean }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const submit = () => {
