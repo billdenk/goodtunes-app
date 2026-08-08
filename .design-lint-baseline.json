@@ -9867,7 +9867,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/AddEntityButton.tsx",
-    "snippet": "className=\"px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:o"
+    "snippet": "className=\"h-9 px-4 rounded-full text-[13px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 bg-[var(--apple-blue)] text-white hover:brightness-105 active:brightness-95 trans"
   },
   {
     "rule": "hardcoded-font-size",
@@ -9882,7 +9882,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/AdminFilterPanel.tsx",
-    "snippet": "\"h-7 px-2.5 text-[12px] font-semibold rounded-md transition-colors inline-flex items-center\","
+    "snippet": "\"h-7 px-2.5 text-[12px] font-semibold rounded-full transition-colors inline-flex items-center\","
   },
   {
     "rule": "hardcoded-font-size",
@@ -9947,12 +9947,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/AdminPageHeader.tsx",
-    "snippet": "className=\"text-slate-900 text-[26px] font-bold tracking-tight\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] leading-tight\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/AdminPageHeader.tsx",
-    "snippet": "<p className=\"text-slate-500 text-[12.5px]\">{subtitle}</p>"
+    "snippet": "<p className=\"text-[var(--apple-subink)] text-[13px] font-medium mt-0.5\">{subtitle}</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14817,7 +14817,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"text-slate-900 text-[26px] font-bold tracking-tight mt-0.5 truncate\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] mt-0.5 truncate\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -16657,7 +16657,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstrument.tsx",
-    "snippet": "className=\"text-slate-900 text-[26px] font-bold tracking-tight mt-0.5\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] mt-0.5\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17187,7 +17187,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabel.tsx",
-    "snippet": "className=\"text-slate-900 text-[26px] font-bold tracking-tight mt-0.5\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] mt-0.5\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17477,7 +17477,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManager.tsx",
-    "snippet": "className=\"text-slate-900 text-[26px] font-bold tracking-tight mt-0.5\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] mt-0.5\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17677,7 +17677,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "className=\"text-slate-900 text-[26px] font-bold tracking-tight truncate\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] truncate\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17962,7 +17962,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "className=\"text-slate-900 text-[26px] font-bold tracking-tight mt-0.5 truncate\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] mt-0.5 truncate\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -19112,7 +19112,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendor.tsx",
-    "snippet": "className=\"text-slate-900 text-[26px] font-bold tracking-tight\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em]\""
   },
   {
     "rule": "hardcoded-font-size",

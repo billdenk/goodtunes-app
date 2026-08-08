@@ -1456,7 +1456,7 @@ export function AdminAlbum({
                   record whose songs are all clean. */}
             </div>
             <h1
-              className="text-slate-900 text-[26px] font-bold tracking-tight mt-0.5 truncate"
+              className="text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] mt-0.5 truncate"
               data-testid="heading-album-title"
             >
               {album.title}

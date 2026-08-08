@@ -450,7 +450,7 @@ export function AdminVendor() {
           />
           <div className="flex-1 min-w-0">
             <h1
-              className="text-slate-900 text-[26px] font-bold tracking-tight"
+              className="text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em]"
               data-testid="heading-vendor-name"
             >
               {vendor.name}

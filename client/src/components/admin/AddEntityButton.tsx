@@ -15,10 +15,13 @@ export function AddEntityButton({ label, onClick, disabled, testId, icon: Icon =
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+      // Apple canon: the ONE filled blue primary pill per index screen
+      // (docs/apple-canon.md button weight rule). Everything else in the
+      // toolbar stays a quiet ghost control.
+      className="h-9 px-4 rounded-full text-[13px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 bg-[var(--apple-blue)] text-white hover:brightness-105 active:brightness-95 transition-[filter] disabled:opacity-50 disabled:cursor-not-allowed"
       data-testid={testId}
     >
-      <Icon className="w-3 h-3" />
+      <Icon className="w-3.5 h-3.5" />
       {label}
     </button>
   );

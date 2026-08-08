@@ -185,7 +185,7 @@ export function AdminNonProfits() {
     <AdminFrame active="nonprofits">
       <div className="space-y-5" data-testid="page-admin-nonprofits">
         <div
-          className="inline-flex items-center bg-slate-100 rounded-md p-0.5"
+          className="inline-flex items-center bg-slate-100 rounded-full p-0.5"
           role="tablist"
           data-testid="tabs-section-nonprofits"
         >
@@ -194,7 +194,7 @@ export function AdminNonProfits() {
             onClick={() => setPageTab("dashboard")}
             aria-pressed={pageTab === "dashboard"}
             className={[
-              "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+              "h-8 px-3 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
               pageTab === "dashboard"
                 ? "bg-white text-slate-900 shadow-sm"
                 : "text-slate-500 hover:text-slate-900",
@@ -208,7 +208,7 @@ export function AdminNonProfits() {
             onClick={() => setPageTab("list")}
             aria-pressed={pageTab === "list"}
             className={[
-              "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+              "h-8 px-3 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
               pageTab === "list"
                 ? "bg-white text-slate-900 shadow-sm"
                 : "text-slate-500 hover:text-slate-900",
@@ -228,7 +228,7 @@ export function AdminNonProfits() {
           actions={
             <>
               {searchOpen ? (
-                <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
+                <div className="flex items-center gap-1.5 bg-white border border-[var(--apple-hairline)] rounded-full px-3 h-9">
                   <Search className="w-4 h-4 text-slate-400" />
                   <input
                     ref={searchInputRef}
@@ -255,7 +255,7 @@ export function AdminNonProfits() {
                 <button
                   type="button"
                   onClick={() => setSearchOpen(true)}
-                  className="h-9 w-9 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+                  className="h-9 w-9 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
                   aria-label="Search"
                   data-testid="button-open-search"
                 >
@@ -320,7 +320,7 @@ export function AdminNonProfits() {
           </div>
         ) : (
           <div
-            className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+            className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-slate-100"
             data-testid="list-nonprofits"
           >
             {filtered.map((npo) => (

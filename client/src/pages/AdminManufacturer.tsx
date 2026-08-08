@@ -454,7 +454,7 @@ export function AdminManufacturer() {
           />
           <div className="flex-1 min-w-0">
             <h1
-              className="text-slate-900 text-[26px] font-bold tracking-tight truncate"
+              className="text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] truncate"
               data-testid="heading-manufacturer-name"
             >
               {m.name}

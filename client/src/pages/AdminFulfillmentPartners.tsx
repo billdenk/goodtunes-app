@@ -254,7 +254,7 @@ export function AdminFulfillmentPartners() {
     <AdminFrame active="fulfillment">
       <div className="space-y-5">
         <div
-          className="inline-flex items-center bg-slate-100 rounded-md p-0.5"
+          className="inline-flex items-center bg-slate-100 rounded-full p-0.5"
           role="tablist"
           data-testid="tabs-section-fulfillment"
         >
@@ -297,7 +297,7 @@ export function AdminFulfillmentPartners() {
           actions={
             <>
               {searchOpen ? (
-                <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
+                <div className="flex items-center gap-1.5 bg-white border border-[var(--apple-hairline)] rounded-full px-3 h-9">
                   <Search className="w-4 h-4 text-slate-400" />
                   <input
                     ref={searchInputRef}
@@ -324,7 +324,7 @@ export function AdminFulfillmentPartners() {
                 <button
                   type="button"
                   onClick={() => setSearchOpen(true)}
-                  className="h-9 w-9 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+                  className="h-9 w-9 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
                   aria-label="Search"
                   data-testid="button-open-search"
                 >

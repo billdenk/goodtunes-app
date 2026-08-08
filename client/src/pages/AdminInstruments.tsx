@@ -532,7 +532,7 @@ export function AdminInstruments() {
         subtitle={<>Gear + per-gear vendor links — the SuperCredits™ Micro-Sponsorship surface.{" "}<Link href="/admin/makers" className="hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors">Looking for Makers?</Link></>}
         actions={(<>
           {searchOpen ? (
-            <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
+            <div className="flex items-center gap-1.5 bg-white border border-[var(--apple-hairline)] rounded-full px-3 h-9">
               <Search className="w-4 h-4 text-slate-400" />
               <input
                 ref={searchInputRef}
@@ -559,7 +559,7 @@ export function AdminInstruments() {
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="h-9 w-9 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+              className="h-9 w-9 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
               aria-label="Search"
               data-testid="button-open-search"
             >
@@ -656,7 +656,7 @@ export function AdminInstruments() {
         </div>
       ) : (
         <div
-          className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+          className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-slate-100"
           data-testid="list-instruments"
         >
           {filtered.map((i) => (

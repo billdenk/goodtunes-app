@@ -310,7 +310,7 @@ export function AdminInstrument() {
               {instrument.shortCategory || instrument.category}
             </div>
             <h1
-              className="text-slate-900 text-[26px] font-bold tracking-tight mt-0.5"
+              className="text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] mt-0.5"
               data-testid="heading-instrument-name"
             >
               {instrument.name}

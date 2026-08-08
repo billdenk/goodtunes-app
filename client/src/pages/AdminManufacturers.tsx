@@ -227,7 +227,7 @@ export function AdminManufacturers() {
     <AdminFrame active="manufacturers">
       <div className="space-y-5">
         <div
-          className="inline-flex items-center bg-slate-100 rounded-md p-0.5"
+          className="inline-flex items-center bg-slate-100 rounded-full p-0.5"
           role="tablist"
           data-testid="tabs-section-manufacturers"
         >
@@ -301,7 +301,7 @@ export function AdminManufacturers() {
                 <button
                   type="button"
                   onClick={() => setSearchOpen(true)}
-                  className="h-9 w-9 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+                  className="h-9 w-9 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
                   aria-label="Search"
                   data-testid="button-open-search"
                 >

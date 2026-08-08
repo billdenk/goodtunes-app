@@ -41,14 +41,17 @@ export function AdminPageHeader({
     <div>
       <div className="flex items-end justify-between gap-3 pb-1">
         <div className="min-w-0">
+          {/* Apple canon (docs/apple-canon.md): page h1 ~30px semibold ink,
+              letter-spacing -0.02em; subtitle is the quiet clause in subink.
+              Tokens flip automatically under .gt-admin-dark. */}
           <h1
-            className="text-slate-900 text-[26px] font-bold tracking-tight"
+            className="text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] leading-tight"
             data-testid={testId}
           >
             {title}
           </h1>
           {subtitle && (
-            <p className="text-slate-500 text-[12.5px]">{subtitle}</p>
+            <p className="text-[var(--apple-subink)] text-[13px] font-medium mt-0.5">{subtitle}</p>
           )}
         </div>
         {actions && (
@@ -60,7 +63,7 @@ export function AdminPageHeader({
       {belowHeader ? (
         belowHeader
       ) : (
-        <div className="border-b border-slate-200 mt-4" aria-hidden="true" />
+        <div className="border-b border-[var(--apple-hairline)] mt-4" aria-hidden="true" />
       )}
     </div>
   );

@@ -152,7 +152,7 @@ export function AdminCustomAddons() {
           subtitle="Non-profit-owned products offered as an optional checkbox in the Buy sheet of attached artists (e.g. the Nightbirde Foundation’s Gift of Hope)."
           actions={
             <>
-              <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
+              <div className="flex items-center gap-1.5 bg-white border border-[var(--apple-hairline)] rounded-full px-3 h-9">
                 <Search className="w-4 h-4 text-slate-400" />
                 <input
                   type="text"
@@ -204,7 +204,7 @@ export function AdminCustomAddons() {
           </div>
         ) : (
           <div
-            className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+            className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-slate-100"
             data-testid="list-custom-addons"
           >
             {filtered.map((a) => (
@@ -1183,7 +1183,7 @@ function AddonArtists({ addon }: { addon: CustomAddon }) {
 
       {adding && (
         <div className="space-y-1">
-          <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
+          <div className="flex items-center gap-1.5 bg-white border border-[var(--apple-hairline)] rounded-full px-3 h-9">
             <Search className="w-4 h-4 text-slate-400" />
             <input
               autoFocus
