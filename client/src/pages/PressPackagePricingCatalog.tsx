@@ -26,7 +26,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ALBUM_FORMAT_LABEL, type AlbumFormat } from "@shared/schema";
-import { Check, ChevronDown, DollarSign, FileText, HelpCircle, Loader2, MinusCircle, MoreHorizontal, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, DollarSign, FileText, HelpCircle, Loader2, MinusCircle, MoreHorizontal, Plus, RotateCcw, Search, X } from "lucide-react";
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -63,6 +63,279 @@ const CRITICAL = "#e0245e";
 
 function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
+}
+
+// ─── Frosted editor popovers (same feel as Add Your Vinyl / handoff ref) ──
+const FROSTED_PANEL: React.CSSProperties = {
+  border: `1px solid ${HAIRLINE}`,
+  backgroundColor: "rgba(255,255,255,0.82)",
+  backdropFilter: "blur(24px)",
+  WebkitBackdropFilter: "blur(24px)",
+  boxShadow: "0 20px 48px rgba(0,0,0,0.16)",
+};
+
+const FIELD_INPUT: React.CSSProperties = {
+  height: 40,
+  border: `1px solid ${HAIRLINE}`,
+  borderRadius: 10,
+  padding: "0 12px",
+  color: INK,
+  background: "#fff",
+};
+
+// Size labels shown in the type editor's "Pressed in these sizes" chips.
+const SIZES = ['7"', '10"', '12"'] as const;
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: SUBINK }}>
+      {children}
+    </label>
+  );
+}
+
+/** Frosted ··· trigger button, revealed on hover / focus by the parent `.group`. */
+function DotsTrigger({ label, testId }: { label: string; testId: string }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => e.stopPropagation()}
+      aria-label={label}
+      data-testid={testId}
+      className="inline-flex items-center justify-center rounded-full transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+      style={{
+        width: 26,
+        height: 26,
+        backgroundColor: "rgba(255,255,255,0.88)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        border: `1px solid ${HAIRLINE}`,
+        boxShadow: "0 1px 3px rgba(0,0,0,0.10)",
+        color: SUBINK,
+      }}
+    >
+      <MoreHorizontal className="w-4 h-4" />
+    </button>
+  );
+}
+
+function SizeChip({ size, active, onToggle }: { size: string; active: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={active}
+      data-testid={`size-${size.replace('"', "in")}`}
+      className="rounded-full transition-colors focus:outline-none tabular-nums"
+      style={{
+        padding: "8px 18px",
+        fontSize: 13.5,
+        fontWeight: 600,
+        color: active ? "#ffffff" : INK,
+        backgroundColor: active ? BLUE : "#fff",
+        border: active ? `1px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
+      }}
+    >
+      {size}
+    </button>
+  );
+}
+
+// ─── Reorder mode controls — explicit enter/commit/cancel, Apple-quiet ─
+// Reordering is opt-in so a stray drag can never shuffle the catalog.
+function ReorderControls({
+  on,
+  onBegin,
+  onCommit,
+  onCancel,
+  testId,
+}: {
+  on: boolean;
+  onBegin: () => void;
+  onCommit: () => void;
+  onCancel: () => void;
+  testId: string;
+}) {
+  if (!on) {
+    return (
+      <button
+        type="button"
+        onClick={onBegin}
+        data-testid={`button-reorder-${testId}`}
+        className="text-[12px] font-semibold rounded-full transition-colors hover:bg-slate-100 focus:outline-none"
+        style={{ padding: "5px 12px", color: SUBINK, border: `1px solid ${HAIRLINE}`, background: "#fff" }}
+      >
+        Reorder
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={onCancel}
+        data-testid={`button-reorder-cancel-${testId}`}
+        className="flex items-center gap-1 text-[12px] font-semibold rounded-full transition-colors hover:bg-slate-100 focus:outline-none"
+        style={{ padding: "5px 12px", color: SUBINK, border: `1px solid ${HAIRLINE}`, background: "#fff" }}
+      >
+        <RotateCcw className="w-3 h-3" />
+        Cancel
+      </button>
+      <button
+        type="button"
+        onClick={onCommit}
+        data-testid={`button-reorder-done-${testId}`}
+        className="text-[12px] font-semibold rounded-full text-white transition-opacity hover:opacity-90 focus:outline-none"
+        style={{ padding: "5px 14px", backgroundColor: BLUE }}
+      >
+        Done
+      </button>
+    </div>
+  );
+}
+
+// ─── Catalog search — magnifier reveals a frosted find-a-color popover ─
+type CatalogEntry = { color: CatalogColor; tierId: string; tierName: string };
+
+function CatalogSearchPopover({
+  entries,
+  totalCount,
+  selectedId,
+  onPick,
+  labelLogoUrl,
+  labelBgColor,
+}: {
+  entries: CatalogEntry[];
+  totalCount: number;
+  selectedId: string;
+  onPick: (tierId: string, colorId: string) => void;
+  labelLogoUrl: string | null;
+  labelBgColor: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return entries;
+    return entries.filter(
+      ({ color, tierName }) =>
+        color.name.toLowerCase().includes(q) || tierName.toLowerCase().includes(q),
+    );
+  }, [entries, query]);
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) setQuery("");
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Search catalog colors"
+          data-testid="button-catalog-search"
+          className="inline-flex items-center justify-center rounded-full flex-shrink-0 transition-colors hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+          style={{ width: 34, height: 34, color: SUBINK, border: `1px solid ${HAIRLINE}`, background: "#fff" }}
+        >
+          <Search className="w-4 h-4" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        side="bottom"
+        sideOffset={10}
+        avoidCollisions
+        collisionPadding={16}
+        className="w-[480px] max-w-[calc(100vw-32px)] p-0 rounded-2xl overflow-hidden flex flex-col"
+        style={{
+          ...FROSTED_PANEL,
+          maxHeight: "min(560px, calc(100vh - 32px), var(--radix-popover-content-available-height))",
+        }}
+        data-testid="popover-catalog-search"
+      >
+        {/* Pinned header — small-caps title + count, then the search pill */}
+        <div className="flex-shrink-0" style={{ padding: "14px 18px", borderBottom: `1px solid ${HAIRLINE}` }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+            <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: SUBINK }}>
+              Colors in your catalog
+            </span>
+            <span className="text-[12px] tabular-nums" style={{ color: "#a1a1a6" }}>
+              {totalCount}
+            </span>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: "#a1a1a6" }} />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full h-8 pl-9 pr-8 rounded-full text-[12.5px] placeholder:text-slate-400 focus:outline-none focus:border-slate-400 transition-colors"
+              style={{ border: `1px solid ${HAIRLINE}`, color: INK, background: "#fff" }}
+              placeholder="Find a color…"
+              data-testid="input-catalog-search"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                data-testid="button-catalog-clear"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-full transition-colors hover:bg-slate-100"
+                style={{ width: 18, height: 18, color: SUBINK }}
+              >
+                <X className="w-3 h-3" strokeWidth={2.5} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Scrollable divided list — mini disc render + name + type */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div style={{ padding: "18px" }}>
+              <p className="text-[12.5px]" style={{ color: "#a1a1a6" }}>
+                No colors match.
+              </p>
+            </div>
+          ) : (
+            <ul>
+              {filtered.map(({ color, tierId, tierName }) => {
+                const on = color.id === selectedId;
+                return (
+                  <li key={`${tierId}-${color.id}`}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onPick(tierId, color.id);
+                        setQuery("");
+                        setOpen(false);
+                      }}
+                      data-testid={`catalog-item-${color.id}`}
+                      className="w-full flex items-center gap-3 text-left transition-colors hover:bg-slate-50 focus:outline-none"
+                      style={{ padding: "11px 18px", borderBottom: `1px solid ${HAIRLINE}`, backgroundColor: on ? "#f0f7fc" : undefined }}
+                    >
+                      <VinylDisc size={40} color={color} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13px] font-semibold truncate" style={{ color: on ? BLUE : INK }}>
+                          {color.name}
+                        </div>
+                        <div className="text-[11.5px]" style={{ color: SUBINK }}>
+                          {tierName}
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function SectionLabel({ children }: { children: string }) {
@@ -353,27 +626,39 @@ function SizeCard({
 function GroupCard({
   tier,
   active,
+  offeredSizes,
+  canRemove,
   onPick,
-  onRename,
-  onDelete,
+  onSave,
+  onArchive,
   canEdit,
   labelLogoUrl,
   labelBgColor,
-  busy,
 }: {
   tier: CatalogTier;
   active: boolean;
+  /** Sizes this type is currently pressed in (derived from sibling formats). */
+  offeredSizes: string[];
+  canRemove: boolean;
   onPick: () => void;
-  onRename: (name: string) => void;
-  onDelete: () => void;
+  onSave: (name: string, sizes: string[]) => void;
+  onArchive: () => void;
   canEdit: boolean;
   labelLogoUrl: string | null;
   labelBgColor: string | null;
-  busy: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [name, setName] = useState(tier.name);
-  const [confirming, setConfirming] = useState(false);
+  const [sizes, setSizes] = useState<string[]>(offeredSizes);
+  useEffect(() => {
+    if (menuOpen) {
+      setName(tier.name);
+      setSizes(offeredSizes);
+    }
+  }, [menuOpen, tier.name, offeredSizes]);
+  const canSave = name.trim().length > 0 && sizes.length > 0;
+  const toggleSize = (s: string) =>
+    setSizes((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   const preview = tier.colors[0] ?? null;
   return (
     <div
@@ -401,16 +686,7 @@ function GroupCard({
         {tier.colors.length} {tier.colors.length === 1 ? "color" : "colors"}
       </div>
       {canEdit && (
-        <Popover
-          open={menuOpen}
-          onOpenChange={(v) => {
-            setMenuOpen(v);
-            if (v) {
-              setName(tier.name);
-              setConfirming(false);
-            }
-          }}
-        >
+        <Popover open={menuOpen} onOpenChange={setMenuOpen}>
           <PopoverTrigger asChild>
             <button
               type="button"
@@ -440,89 +716,88 @@ function GroupCard({
           </PopoverTrigger>
           <PopoverContent
             align="end"
-            sideOffset={6}
-            className="w-72 rounded-2xl p-0"
-            style={{
-              border: `1px solid ${HAIRLINE}`,
-              backgroundColor: "var(--apple-frost, rgba(255,255,255,0.85))",
-              backdropFilter: "blur(24px)",
-              WebkitBackdropFilter: "blur(24px)",
-              boxShadow: "0 20px 48px rgba(0,0,0,0.16)",
-            }}
-            data-testid={`popover-type-editor-${tier.id}`}
+            sideOffset={8}
+            className="w-80 p-0 rounded-2xl overflow-hidden"
+            style={FROSTED_PANEL}
+            data-testid={`popover-edit-group-${tier.id}`}
           >
-            <div style={{ padding: 16 }}>
-              <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: SUBINK }}>
-                Type name
-              </label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && name.trim() && name.trim() !== tier.name) {
-                    onRename(name.trim());
-                    setMenuOpen(false);
-                  }
-                }}
-                className="mt-1.5 w-full bg-white text-[13.5px] focus:outline-none focus:border-slate-400"
-                style={{ height: 38, border: `1px solid ${HAIRLINE}`, borderRadius: 10, padding: "0 12px", color: INK }}
-                data-testid={`input-type-rename-${tier.id}`}
-              />
-              {!confirming ? (
-                <button
-                  type="button"
-                  onClick={() => setConfirming(true)}
-                  className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold"
-                  style={{ color: CRITICAL }}
-                  data-testid={`button-type-delete-${tier.id}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Delete type
-                </button>
-              ) : (
-                <div className="mt-3 rounded-lg px-3 py-2" style={{ backgroundColor: "rgba(224,36,94,0.06)" }}>
-                  <p className="text-[12px]" style={{ color: INK }}>
-                    Deletes {tier.name}, its {tier.colors.length}{" "}
-                    {tier.colors.length === 1 ? "color" : "colors"} and pricing. This can&rsquo;t be
-                    undone.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onDelete();
-                      setMenuOpen(false);
-                    }}
-                    className="mt-1.5 text-[12.5px] font-semibold"
-                    style={{ color: CRITICAL }}
-                    data-testid={`button-type-delete-confirm-${tier.id}`}
-                  >
-                    Delete {tier.name}
-                  </button>
+            <div style={{ padding: 18 }}>
+              <div className="text-[15px] font-semibold tracking-tight" style={{ color: INK }}>
+                Edit type. <span style={{ color: "#a1a1a6", fontWeight: 600 }}>{tier.name}.</span>
+              </div>
+              <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 2, lineHeight: 1.4 }}>
+                Sizes here gate the whole type &mdash; every color in it.
+              </p>
+              <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <FieldLabel>Type name</FieldLabel>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="text-[13.5px] focus:outline-none focus:border-slate-400 transition-colors"
+                    style={FIELD_INPUT}
+                    data-testid={`input-group-name-${tier.id}`}
+                  />
                 </div>
-              )}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <FieldLabel>Pressed in these sizes</FieldLabel>
+                  {/* Size gating has no persistence route yet (tiers are
+                      per-format server-side), so the chips are DISPLAY-ONLY —
+                      they show the type's real offered sizes but can't be
+                      toggled. Interactive toggling silently discarding the
+                      change would be worse than read-only. Re-enable when a
+                      size-gating endpoint ships. */}
+                  <div className="flex items-center gap-2" style={{ pointerEvents: "none" }}>
+                    {SIZES.map((s) => (
+                      <SizeChip key={s} size={s} active={sizes.includes(s)} onToggle={() => toggleSize(s)} />
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center justify-end gap-1" style={{ padding: "10px 16px", borderTop: `1px solid ${HAIRLINE}` }}>
+            <div className="flex items-center justify-end gap-3" style={{ padding: "12px 18px", borderTop: `1px solid ${HAIRLINE}` }}>
               <button
                 type="button"
                 onClick={() => setMenuOpen(false)}
-                className="rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors hover:bg-slate-100"
+                className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-slate-100"
                 style={{ color: SUBINK }}
+                data-testid={`button-cancel-group-${tier.id}`}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                disabled={busy || !name.trim() || name.trim() === tier.name}
+                disabled={!canSave}
                 onClick={() => {
-                  onRename(name.trim());
+                  onSave(name.trim(), sizes);
                   setMenuOpen(false);
                 }}
-                className="rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors hover:bg-slate-100 disabled:opacity-40"
-                style={{ color: BLUE }}
-                data-testid={`button-type-rename-save-${tier.id}`}
+                className="text-[13px] font-semibold rounded-full px-4 py-1.5 text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                style={{ backgroundColor: BLUE }}
+                data-testid={`button-save-group-${tier.id}`}
               >
                 Save
               </button>
             </div>
+            {/* Archive — Apple convention: destructive-adjacent action gets its own
+                hairline-separated full-width row at the very bottom. Archive (not
+                delete): pressed records keep their history; the type just retires. */}
+            <button
+              type="button"
+              disabled={!canRemove}
+              onClick={() => {
+                onArchive();
+                setMenuOpen(false);
+              }}
+              className="w-full text-[13px] font-semibold transition-colors disabled:opacity-40"
+              style={{ padding: "12px 18px", borderTop: `1px solid ${HAIRLINE}`, color: CRITICAL, textAlign: "center", background: "transparent" }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#fdeef2")}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+              data-testid={`button-archive-group-${tier.id}`}
+            >
+              Archive type
+            </button>
           </PopoverContent>
         </Popover>
       )}
@@ -860,6 +1135,36 @@ export function PressPackagePricingCatalog({
       toast({ title: "Couldn't reorder colors", description: e?.message, variant: "destructive" });
     },
   });
+  // Type reorder persistence — no batch tiers/reorder route exists, so commit
+  // the new order by PATCHing each tier's `position` (an existing field on the
+  // PATCH tiers route). Artists see this order on their package picker.
+  const reorderTiers = useMutation({
+    mutationFn: async (tierIds: string[]) => {
+      // Sequential (not Promise.all) so a mid-flight failure leaves a
+      // prefix-consistent order instead of an arbitrary partial shuffle.
+      for (let i = 0; i < tierIds.length; i++) {
+        await apiRequest("PATCH", `/api/admin/manufacturers/${pressId}/catalog/tiers/${tierIds[i]}`, {
+          position: i,
+        });
+      }
+    },
+    onSuccess: invalidate,
+    onError: (e: any) => {
+      // Some PATCHes may have landed — refetch server truth so the grid
+      // never shows an order the server doesn't have.
+      invalidate();
+      toast({ title: "Couldn't reorder types", description: e?.message, variant: "destructive" });
+    },
+  });
+
+  // ── Reorder is an explicit MODE (handoff item 21) — tiles are never
+  // draggable at rest, so a stray cursor can't shuffle the catalog. Enter,
+  // drag, then Done commits (through the existing reorder endpoints) or
+  // Cancel restores the order captured when the mode was entered.
+  const [reorderTypesOn, setReorderTypesOn] = useState(false);
+  const [reorderColorsOn, setReorderColorsOn] = useState(false);
+  const [tierOrderDraft, setTierOrderDraft] = useState<string[] | null>(null);
+  const [dragTierId, setDragTierId] = useState<string | null>(null);
 
   // ── Pricing drafts — semantics copied from the legacy CatalogEditor.
   // Key = `${format}:${tierId}`. A qty is OFFERED when a saved rung exists
@@ -881,6 +1186,64 @@ export function PressPackagePricingCatalog({
   };
   const savedLadder = ladderForTier(selectedTier, fmtRow);
   const comboKey = fmt && selectedTier ? `${fmt}:${selectedTier.id}` : null;
+
+  // ── Which sizes a type is pressed in (handoff item 20). Real data has no
+  // per-tier size field — a tier lives inside one format, and the server
+  // mirrors same-named tiers across sibling formats. So a type's offered
+  // sizes = the size labels of every format that carries a same-named tier.
+  const FORMAT_TO_SIZE: Record<string, string> = { "7_inch": '7"', "12_lp": '12"', "12_double": '12"' };
+  const offeredSizesForTier = (tierName: string): string[] => {
+    const set = new Set<string>();
+    for (const f of catalog?.formats ?? []) {
+      if (f.tiers.some((t) => t.name.trim().toLowerCase() === tierName.trim().toLowerCase())) {
+        const s = FORMAT_TO_SIZE[f.format];
+        if (s) set.add(s);
+      }
+    }
+    return SIZES.filter((s) => set.has(s));
+  };
+
+  // Flat list of every color across all types (current format) — feeds the
+  // find-a-color catalog search popover (handoff item 21b).
+  const catalogList: CatalogEntry[] = useMemo(
+    () =>
+      tiers.flatMap((t) =>
+        t.colors.map((c) => ({ color: c, tierId: t.id, tierName: t.name })),
+      ),
+    [tiers],
+  );
+  const selectFromCatalog = (tierId: string, colorId: string) => {
+    setSelectedTierId(tierId);
+    setSelectedColorId(colorId);
+  };
+
+  // Reorder mode begin/commit/cancel — snapshot captured on entry so Cancel
+  // restores exactly. Done commits through the existing reorder endpoints.
+  const beginReorderTypes = () => {
+    setTierOrderDraft(tiers.map((t) => t.id));
+    setReorderTypesOn(true);
+  };
+  const endReorderTypes = (commit: boolean) => {
+    if (commit && tierOrderDraft && tierOrderDraft.join(",") !== tiers.map((t) => t.id).join(",")) {
+      reorderTiers.mutate(tierOrderDraft);
+    }
+    setTierOrderDraft(null);
+    setDragTierId(null);
+    setReorderTypesOn(false);
+  };
+  const beginReorderColors = () => {
+    setColorOrderDraft(colors.map((c) => c.id));
+    setReorderColorsOn(true);
+  };
+  const endReorderColors = (commit: boolean) => {
+    if (commit && colorOrderDraft && colorOrderDraft.join(",") !== colors.map((c) => c.id).join(",") && colorOrderDraft.length > 1) {
+      reorderColors.mutate(colorOrderDraft);
+    } else {
+      setColorOrderDraft(null);
+    }
+    setDragColorId(null);
+    setReorderColorsOn(false);
+  };
 
   const columns = useMemo(() => {
     const set = new Set<number>(DEFAULT_QTY_COLUMNS);
@@ -1234,28 +1597,101 @@ export function PressPackagePricingCatalog({
 
               {/* Pick a type */}
               <section id="section-pick-type" data-testid="section-pick-type">
-                <div className="flex flex-wrap items-end justify-between gap-3">
+                <div className="flex items-start justify-between gap-3">
                   <TwoTone lead="Pick a type." rest="Each keeps its own package prices." />
+                  <div className="flex items-center gap-2.5 flex-shrink-0">
+                    <span className="text-[12px] tabular-nums" style={{ color: "#a1a1a6" }}>
+                      {catalogList.length} colors
+                    </span>
+                    <CatalogSearchPopover
+                      entries={catalogList}
+                      totalCount={catalogList.length}
+                      selectedId={selectedColor?.id ?? ""}
+                      onPick={selectFromCatalog}
+                      labelLogoUrl={labelLogoUrl}
+                      labelBgColor={labelBgColor}
+                    />
+                    {canEdit && tiers.length > 1 && (
+                      <ReorderControls
+                        on={reorderTypesOn}
+                        onBegin={beginReorderTypes}
+                        onCommit={() => endReorderTypes(true)}
+                        onCancel={() => endReorderTypes(false)}
+                        testId="types"
+                      />
+                    )}
+                  </div>
                 </div>
+                {reorderTypesOn && (
+                  <p className="text-[12.5px]" style={{ marginTop: 6, color: BLUE }}>
+                    Drag a type onto another to move it — artists see this order. Done keeps it, Cancel puts everything back.
+                  </p>
+                )}
                 {tiers.length === 0 ? (
                   <p className="mt-3 text-[13px]" style={{ color: SUBINK }}>
                     No pressing types yet — add one to start your {ALBUM_FORMAT_LABEL[fmt]} catalog.
                   </p>
                 ) : (
                   <div className="grid grid-cols-4 gap-3" style={{ marginTop: 12 }}>
-                    {tiers.map((t) => (
-                      <GroupCard
+                    {(tierOrderDraft
+                      ? tierOrderDraft
+                          .map((id) => tiers.find((t) => t.id === id))
+                          .filter((t): t is CatalogTier => !!t)
+                      : tiers
+                    ).map((t) => (
+                      <div
                         key={t.id}
-                        tier={t}
-                        active={t.id === selectedTierId}
-                        onPick={() => setSelectedTierId(t.id)}
-                        onRename={(name) => renameTier.mutate({ id: t.id, name })}
-                        onDelete={() => deleteTier.mutate(t.id)}
-                        canEdit={canEdit}
-                        labelLogoUrl={labelLogoUrl}
-                        labelBgColor={labelBgColor}
-                        busy={renameTier.isPending || deleteTier.isPending}
-                      />
+                        draggable={reorderTypesOn}
+                        onDragStart={(e) => {
+                          if (!reorderTypesOn) return;
+                          setDragTierId(t.id);
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragOver={(e) => {
+                          if (!reorderTypesOn || !dragTierId || dragTierId === t.id) return;
+                          e.preventDefault();
+                          setTierOrderDraft((prev) => {
+                            const arr = [...(prev ?? tiers.map((x) => x.id))];
+                            const f = arr.indexOf(dragTierId);
+                            const to = arr.indexOf(t.id);
+                            if (f < 0 || to < 0 || f === to) return prev;
+                            arr.splice(to, 0, ...arr.splice(f, 1));
+                            return arr;
+                          });
+                        }}
+                        onDragEnd={() => setDragTierId(null)}
+                        style={{
+                          opacity: dragTierId === t.id ? 0.45 : 1,
+                          cursor: reorderTypesOn ? (dragTierId ? "grabbing" : "grab") : undefined,
+                        }}
+                      >
+                        <GroupCard
+                          tier={t}
+                          active={t.id === selectedTierId}
+                          offeredSizes={offeredSizesForTier(t.name)}
+                          // No soft-retire (archive) route exists yet, so the
+                          // Archive row stays disabled — deleting would destroy
+                          // pressed-record history, which archive must not do.
+                          canRemove={false}
+                          onPick={() => setSelectedTierId(t.id)}
+                          onSave={(name, _sizes) => {
+                            // Name persists via the real rename route. Sizes gate
+                            // the type across formats, but no server route accepts
+                            // per-tier size gating yet — wired to real offered sizes
+                            // for display; persistence lands with that endpoint.
+                            if (name && name !== t.name) renameTier.mutate({ id: t.id, name });
+                          }}
+                          onArchive={() => {
+                            // Archive = retire (keep pressed-record history), NOT delete.
+                            // No soft-retire route exists server-side; deleting would
+                            // destroy history, so leave archive inert until the retire
+                            // endpoint ships. (Do not wire to DELETE — that's not archive.)
+                          }}
+                          canEdit={canEdit}
+                          labelLogoUrl={labelLogoUrl}
+                          labelBgColor={labelBgColor}
+                        />
+                      </div>
                     ))}
                   </div>
                 )}
@@ -1265,10 +1701,26 @@ export function PressPackagePricingCatalog({
               {/* Pick a color (vinyl only — CD/cassette skip swatches) */}
               {isVinyl && selectedTier && (
                 <section id="section-pick-color" data-testid="section-pick-color">
-                  <TwoTone lead="Pick a color." rest="Or add a new one." />
+                  <div className="flex items-start justify-between gap-3">
+                    <TwoTone lead="Pick a color." rest="Or add a new one." />
+                    {canEdit && colors.length > 1 && (
+                      <ReorderControls
+                        on={reorderColorsOn}
+                        onBegin={beginReorderColors}
+                        onCommit={() => endReorderColors(true)}
+                        onCancel={() => endReorderColors(false)}
+                        testId="colors"
+                      />
+                    )}
+                  </div>
                   <p className="text-[12.5px]" style={{ marginTop: 6 }} data-testid="hint-color-reorder">
                     <span className="font-semibold" style={{ color: INK }}>{selectedTier.name}</span>
-                    <span style={{ color: "#a1a1a6" }}> · {colors.length} {colors.length === 1 ? "color" : "colors"}{canEdit && colors.length > 1 ? " · drag to reorder — artists see this order" : ""}</span>
+                    <span style={{ color: reorderColorsOn ? BLUE : "#a1a1a6" }}>
+                      {" "}· {colors.length} {colors.length === 1 ? "color" : "colors"} ·{" "}
+                      {reorderColorsOn
+                        ? "drag a color onto another to move it — Done keeps it, Cancel puts everything back"
+                        : "artists see this order"}
+                    </span>
                   </p>
                   <div className="grid grid-cols-4 gap-3" style={{ marginTop: 12 }}>
                     {(colorOrderDraft
@@ -1281,16 +1733,15 @@ export function PressPackagePricingCatalog({
                       return (
                         <div
                           key={c.id}
-                          className="group/color relative"
-                          draggable={canEdit}
+                          className="group relative rounded-2xl bg-white text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
+                          draggable={reorderColorsOn}
                           onDragStart={(e) => {
-                            if (!canEdit) return;
+                            if (!reorderColorsOn) return;
                             setDragColorId(c.id);
-                            setColorOrderDraft(colors.map((x) => x.id));
                             e.dataTransfer.effectAllowed = "move";
                           }}
                           onDragOver={(e) => {
-                            if (!canEdit || !dragColorId || dragColorId === c.id) return;
+                            if (!reorderColorsOn || !dragColorId || dragColorId === c.id) return;
                             e.preventDefault();
                             setColorOrderDraft((prev) => {
                               const arr = [...(prev ?? colors.map((x) => x.id))];
@@ -1301,17 +1752,7 @@ export function PressPackagePricingCatalog({
                               return arr;
                             });
                           }}
-                          onDragEnd={() => {
-                            setDragColorId(null);
-                            setColorOrderDraft((draft) => {
-                              const orig = colors.map((x) => x.id).join(",");
-                              if (draft && draft.join(",") !== orig && draft.length > 1) {
-                                reorderColors.mutate(draft);
-                                return draft; // keep the visual order until the refetch lands
-                              }
-                              return null;
-                            });
-                          }}
+                          onDragEnd={() => setDragColorId(null)}
                           role="button"
                           tabIndex={0}
                           onClick={() => setSelectedColorId(c.id)}
@@ -1327,9 +1768,28 @@ export function PressPackagePricingCatalog({
                             padding: "16px 10px 12px",
                             border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
                             opacity: dragColorId === c.id ? 0.45 : 1,
-                            cursor: dragColorId ? "grabbing" : undefined,
+                            cursor: reorderColorsOn ? (dragColorId ? "grabbing" : "grab") : undefined,
                           }}
                         >
+                          {canEdit && (
+                            <div
+                              className="absolute opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+                              style={{ top: 6, right: 6, zIndex: 2 }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <SwatchEditorPopover
+                                open={editColorId === c.id}
+                                onOpenChange={(v) => setEditColorId(v ? c.id : null)}
+                                edit={c}
+                                saving={patchColor.isPending}
+                                onSave={(v) => patchColor.mutate({ id: c.id, body: v })}
+                                onRemove={() => deleteColor.mutate(c.id)}
+                                labelLogoUrl={labelLogoUrl}
+                                labelBgColor={labelBgColor}
+                                trigger={<DotsTrigger label={`Edit ${c.name}`} testId={`color-menu-${c.id}`} />}
+                              />
+                            </div>
+                          )}
                           <div className="relative flex justify-center" style={{ marginBottom: 8 }}>
                             <ColorBall color={c} size={48} />
                             {on && (
@@ -1344,36 +1804,6 @@ export function PressPackagePricingCatalog({
                           <div className="text-[12.5px] font-semibold leading-tight" style={{ color: on ? BLUE : INK }}>
                             {c.name}
                           </div>
-                          {canEdit && (
-                            <SwatchEditorPopover
-                              open={editColorId === c.id}
-                              onOpenChange={(v) => setEditColorId(v ? c.id : null)}
-                              edit={c}
-                              saving={patchColor.isPending}
-                              onSave={(v) => patchColor.mutate({ id: c.id, body: v })}
-                              onRemove={() => deleteColor.mutate(c.id)}
-                              labelLogoUrl={labelLogoUrl}
-                              labelBgColor={labelBgColor}
-                              trigger={
-                                <button
-                                  type="button"
-                                  onClick={(e) => e.stopPropagation()}
-                                  onKeyDown={(e) => e.stopPropagation()}
-                                  aria-label={`Edit ${c.name}`}
-                                  data-testid={`button-color-menu-${c.id}`}
-                                  className={cn(
-                                    "absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white transition-opacity hover:bg-slate-100",
-                                    editColorId === c.id
-                                      ? "opacity-100"
-                                      : "opacity-0 group-hover/color:opacity-100",
-                                  )}
-                                  style={{ color: SUBINK, border: `1px solid ${HAIRLINE}` }}
-                                >
-                                  <MoreHorizontal className="h-3.5 w-3.5" />
-                                </button>
-                              }
-                            />
-                          )}
                         </div>
                       );
                     })}

@@ -104,5 +104,26 @@ e) Preview caption: reference caption under the jacket is: globe glyph · size (
 
 Reminder: per #14 none of these should require individual fixes — replacing the presentational layer verbatim with the reference file resolves a–e automatically. If any of a–e is still visible, the verbatim copy was not actually done.
 
+## 20. Type editor upgraded in the reference — pull the new file
+The reference's type "···" popover was rename/delete only; that has been upgraded (reference file updated on this branch, same commit as this note). The type editor is now the canon one from the color-setup page:
+- Title "Edit type. {Name}." with subcopy "Sizes here gate the whole type — every color in it."
+- TYPE NAME field.
+- PRESSED IN THESE SIZES — 7" / 10" / 12" toggle chips; saving requires a name and at least one size. These sizes gate the entire type (all its colors) for artists.
+- Footer: Cancel / blue Save pill.
+- Bottom hairline-separated full-width row: "Archive type" in red — ARCHIVE, not delete: pressed records keep their history, the type just retires.
+Re-copy handoff/press-catalog/PressPackagePricingTableRuns.tsx verbatim to pick this up, and wire the sizes to real type data. Note the split of responsibilities: hex, artwork/thumbnail, and per-color details are edited on the COLOR (color editor / color setup page), never on the type — the type carries only its name and its size gating.
+
+## 21. Reorder is now an explicit mode + catalog color search added — pull the new reference
+Reference file updated again on this branch. Two behavior additions:
+a) REORDER MODE (types AND colors). Tiles are never draggable at rest — a stray cursor can't shuffle the catalog. A quiet "Reorder" pill sits at the right of the "Pick a type." and "Pick a color." headings. Clicking it enters reorder mode: tiles become draggable (grab cursor), helper copy appears, and the pill becomes Cancel / Done. Done commits the new order (joins the global save bar's dirty state); Cancel restores the exact order from when the mode was entered. Implement for both the type grid and the color rail.
+b) CATALOG SEARCH. The "Pick a type." heading row's right side now has: total color count ("N colors"), a round magnifier button, then the Reorder pill. The magnifier opens the frosted "Colors in your catalog" popover (search pill "Find a color…", divided list of mini disc + color name + type name). Picking a result selects that type AND that color. Same popover canon as the color-setup page.
+Re-copy handoff/press-catalog/PressPackagePricingTableRuns.tsx verbatim; wire order persistence to real data (artists see this order).
+
+## 22. Search pill: "⌘K" is right-aligned, not part of the placeholder
+The sidebar search pill's shortcut hint was sitting next to "Search…" on the left. Correct canon: input placeholder is just "Search…" (input gets pr-10), and a separate absolutely-positioned span pins "⌘K" to the pill's right edge (right-3, centered vertically, color #a1a1a6, 12px, pointer-events none). Reference file updated on this branch — re-copy verbatim.
+
+## 23. Dashboard: "You're all caught up" is a slim row, not a hero card (DASHBOARD, not Catalog)
+Live dashboard shows the empty work queue as a large centered card. Wrong hierarchy: good news should take LESS room than problems. Canon: when the queue is empty, render the SAME slim shell as the collapsed "Needs your attention" row — one line: small 24px green-tinted circle (#eaf7f0) with a 14px check (#1c8a5b), "You're all caught up" (13px semibold ink), then subink text "— no offers to accept, approvals due, or orders to ship. New work appears here the moment it needs you." Nothing to expand; no big card. Reference: handoff/press-dashboard/PressDashboard.tsx on this branch (self-contained, MOCK_ data at top) — copy the WorkQueue empty branch verbatim.
+
 ## Acceptance for this pass
     FULL-PAGE diff, not above-the-fold. Render the reference component (handoff/press-catalog/PressPackagePricingTableRuns.tsx) and the live page at 1440px, scroll both to the bottom, and compare EVERY section top to bottom: top bar, sidebar, header block, size cards, type tiles, color rail, jacket/vinyl preview + caption, package card, price rows, print-template tiles (filled + empty states, die-line icons), floating save bar, GoodDeeds section, and the page footer (which must be empty of parked buttons). Diff the rendered page against the reference side by side at 1440px. Any card width, copy string, or preview geometry that differs from the reference is a failure. Do not report complete until a screenshot of the live page is visually indistinguishable from the reference (data values aside).

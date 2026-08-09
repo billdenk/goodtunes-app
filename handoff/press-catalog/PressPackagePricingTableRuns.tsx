@@ -58,6 +58,7 @@ import {
   ChevronDown,
   MoreHorizontal,
   Trash2,
+  X,
 } from 'lucide-react';
 import { Button } from '@workspace/goodtunes-design-system/components/ui/button';
 import {
@@ -689,6 +690,8 @@ type ColorGroup = {
   swatch: Swatch;
   /** Every color the press offers in this group — they ALL share the group's package prices. */
   colors: Swatch[];
+  /** Sizes this type is pressed in — gates the whole type, every color in it. */
+  sizes: string[];
 };
 
 const COLOR_GROUPS: ColorGroup[] = [
@@ -696,6 +699,7 @@ const COLOR_GROUPS: ColorGroup[] = [
     id: 'black',
     name: 'Black',
     blurb: 'Standard weight',
+    sizes: ['7"', '10"', '12"'],
     swatch: { id: 'g-black', name: 'Classic Black', kind: 'black', base: '#111114' },
     colors: [
       { id: 'blk-1', name: 'Classic Black', kind: 'black', base: '#111114' },
@@ -707,6 +711,7 @@ const COLOR_GROUPS: ColorGroup[] = [
     id: 'opaque',
     name: 'Opaque',
     blurb: 'Solid color',
+    sizes: ['7"', '10"', '12"'],
     swatch: { id: 'g-opaque', name: 'Oxblood', kind: 'opaque', base: '#5A1620' },
     colors: [
       { id: 'op-1', name: 'Oxblood', kind: 'opaque', base: '#5A1620' },
@@ -723,6 +728,7 @@ const COLOR_GROUPS: ColorGroup[] = [
     id: 'translucent',
     name: 'Translucent',
     blurb: 'See-through tint',
+    sizes: ['7"', '10"', '12"'],
     swatch: { id: 'g-trans', name: 'Cobalt', kind: 'translucent', base: '#2563EB' },
     colors: [
       { id: 'tr-1', name: 'Ruby', kind: 'translucent', base: '#C4373F' },
@@ -743,6 +749,7 @@ const COLOR_GROUPS: ColorGroup[] = [
     id: 'splatter',
     name: 'Splatter',
     blurb: 'Multi-color spray',
+    sizes: ['7"', '10"', '12"'],
     swatch: { id: 'g-splat', name: 'Cosmic', kind: 'splatter', base: '#1B3A6B', s1: '#F5F5DC', s2: '#E8C84A', s3: '#E0E0E0' },
     colors: [
       { id: 'sp-1', name: 'Cosmic', kind: 'splatter', base: '#1B3A6B', s1: '#F5F5DC', s2: '#E8C84A', s3: '#E0E0E0' },
@@ -756,6 +763,7 @@ const COLOR_GROUPS: ColorGroup[] = [
     id: 'mixswirl',
     name: 'Mix/Swirl',
     blurb: 'Two colors, hand-poured',
+    sizes: ['7"', '10"', '12"'],
     swatch: { id: 'g-mix', name: 'Storm Swirl', kind: 'splatter', base: '#3B4A66', s1: '#EDEDF0', s2: '#9A9AA0', s3: '#EDEDF0' },
     colors: [
       { id: 'mx-1', name: 'Storm Swirl', kind: 'splatter', base: '#3B4A66', s1: '#EDEDF0', s2: '#9A9AA0', s3: '#EDEDF0' },
@@ -767,6 +775,7 @@ const COLOR_GROUPS: ColorGroup[] = [
     id: 'splatter2',
     name: 'Splatter — 2 Colors',
     blurb: 'Two-color spray',
+    sizes: ['7"', '10"', '12"'],
     swatch: { id: 'g-sp2', name: 'Cherry Bomb', kind: 'splatter', base: '#EDEDF0', s1: '#B3262E', s2: '#1d1d1f', s3: '#B3262E' },
     colors: [
       { id: 's2-1', name: 'Cherry Bomb', kind: 'splatter', base: '#EDEDF0', s1: '#B3262E', s2: '#1d1d1f', s3: '#B3262E' },
@@ -779,6 +788,7 @@ const COLOR_GROUPS: ColorGroup[] = [
     id: 'blacksplatter2',
     name: 'Black Splatter — 2 Colors',
     blurb: 'Black base, two-color spray',
+    sizes: ['7"', '10"', '12"'],
     swatch: { id: 'g-bsp2', name: 'Ember', kind: 'splatter', base: '#111114', s1: '#B3262E', s2: '#E8A13C', s3: '#B3262E' },
     colors: [
       { id: 'bs-1', name: 'Ember', kind: 'splatter', base: '#111114', s1: '#B3262E', s2: '#E8A13C', s3: '#B3262E' },
@@ -957,11 +967,17 @@ function PressShell({ children }: { children: ReactNode }) {
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: '#a1a1a6' }} />
               <input
-                className="w-full h-9 pl-8 pr-2 rounded-full bg-white text-[12.5px] placeholder:text-slate-400 focus:outline-none"
+                className="w-full h-9 pl-8 pr-10 rounded-full bg-white text-[12.5px] placeholder:text-slate-400 focus:outline-none"
                 style={{ border: `1px solid ${HAIRLINE}`, color: INK }}
-                placeholder="Search…  ⌘K"
+                placeholder="Search…"
                 readOnly
               />
+              <span
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] pointer-events-none"
+                style={{ color: '#a1a1a6' }}
+              >
+                ⌘K
+              </span>
             </div>
           </div>
           <nav className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 overflow-y-auto">
@@ -1104,7 +1120,7 @@ function ColorGroupCard({
   count: number;
   canRemove: boolean;
   onSelect: () => void;
-  onRename: (name: string) => void;
+  onRename: (name: string, sizes: string[]) => void;
   onRemove: () => void;
 }) {
   return (
@@ -1200,7 +1216,7 @@ function DotsTrigger({ label, testId }: { label: string; testId: string }) {
   );
 }
 
-/** Rename / delete a color type (group). */
+/** Edit a color type (group): rename + which sizes it's pressed in. Archive retires it. */
 function GroupEditorPopover({
   group,
   canRemove,
@@ -1210,63 +1226,289 @@ function GroupEditorPopover({
 }: {
   group: ColorGroup;
   canRemove: boolean;
-  onSave: (name: string) => void;
+  onSave: (name: string, sizes: string[]) => void;
   onRemove: () => void;
   trigger: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(group.name);
+  const [sizes, setSizes] = useState<string[]>(group.sizes);
   useEffect(() => {
-    if (open) setName(group.name);
-  }, [open, group.name]);
+    if (open) {
+      setName(group.name);
+      setSizes(group.sizes);
+    }
+  }, [open, group.name, group.sizes]);
+  const canSave = name.trim().length > 0 && sizes.length > 0;
+  const toggleSize = (s: string) =>
+    setSizes((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent align="start" sideOffset={8} className="w-72 p-0 rounded-2xl overflow-hidden" style={FROSTED_PANEL} data-testid={`popover-edit-group-${group.id}`}>
+      <PopoverContent align="start" sideOffset={8} className="w-80 p-0 rounded-2xl overflow-hidden" style={FROSTED_PANEL} data-testid={`popover-edit-group-${group.id}`}>
         <div style={{ padding: 18 }}>
-          <div className="text-[15px] font-semibold" style={{ color: INK }}>
-            Edit type
+          <div className="text-[15px] font-semibold tracking-tight" style={{ color: INK }}>
+            Edit type. <span style={{ color: '#a1a1a6', fontWeight: 600 }}>{group.name}.</span>
           </div>
-          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <FieldLabel>Type name</FieldLabel>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="text-[13.5px] focus:outline-none focus:border-slate-400 transition-colors"
-              style={FIELD_INPUT}
-              data-testid={`input-group-name-${group.id}`}
-            />
+          <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 2, lineHeight: 1.4 }}>
+            Sizes here gate the whole type &mdash; every color in it.
+          </p>
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <FieldLabel>Type name</FieldLabel>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="text-[13.5px] focus:outline-none focus:border-slate-400 transition-colors"
+                style={FIELD_INPUT}
+                data-testid={`input-group-name-${group.id}`}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <FieldLabel>Pressed in these sizes</FieldLabel>
+              <div className="flex items-center gap-2">
+                {SIZES.map((s) => (
+                  <SizeChip key={s} size={s} active={sizes.includes(s)} onToggle={() => toggleSize(s)} />
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-1" style={{ padding: '12px 18px', borderTop: `1px solid ${HAIRLINE}` }}>
+        <div className="flex items-center justify-end gap-3" style={{ padding: '12px 18px', borderTop: `1px solid ${HAIRLINE}` }}>
           <button
             type="button"
-            disabled={!canRemove}
-            onClick={() => {
-              onRemove();
-              setOpen(false);
-            }}
-            className="flex items-center gap-1.5 text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-red-50 disabled:opacity-40"
-            style={{ color: '#d02c2c' }}
-            data-testid={`button-delete-group-${group.id}`}
+            onClick={() => setOpen(false)}
+            className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-slate-100"
+            style={{ color: SUBINK }}
+            data-testid={`button-cancel-group-${group.id}`}
           >
-            <Trash2 className="w-3.5 h-3.5" />
-            Delete type
+            Cancel
           </button>
           <button
             type="button"
-            disabled={!name.trim()}
+            disabled={!canSave}
             onClick={() => {
-              onSave(name.trim());
+              onSave(name.trim(), sizes);
               setOpen(false);
             }}
-            className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-slate-100 disabled:opacity-40"
-            style={{ color: BLUE }}
+            className="text-[13px] font-semibold rounded-full px-4 py-1.5 text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+            style={{ backgroundColor: BLUE }}
             data-testid={`button-save-group-${group.id}`}
           >
             Save
           </button>
+        </div>
+        {/* Archive — Apple convention: destructive-adjacent action gets its own
+            hairline-separated full-width row at the very bottom. Archive (not
+            delete): pressed records keep their history; the type just retires. */}
+        <button
+          type="button"
+          disabled={!canRemove}
+          onClick={() => {
+            onRemove();
+            setOpen(false);
+          }}
+          className="w-full text-[13px] font-semibold transition-colors disabled:opacity-40"
+          style={{ padding: '12px 18px', borderTop: `1px solid ${HAIRLINE}`, color: CRITICAL, textAlign: 'center', background: 'transparent' }}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#fdeef2')}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          data-testid={`button-archive-group-${group.id}`}
+        >
+          Archive type
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ─── Reorder mode controls — explicit enter/commit/cancel, Apple-quiet ─
+// Reordering is opt-in so a stray drag can never shuffle the catalog.
+function ReorderControls({
+  on,
+  onBegin,
+  onCommit,
+  onCancel,
+  testId,
+}: {
+  on: boolean;
+  onBegin: () => void;
+  onCommit: () => void;
+  onCancel: () => void;
+  testId: string;
+}) {
+  if (!on) {
+    return (
+      <button
+        type="button"
+        onClick={onBegin}
+        data-testid={`button-reorder-${testId}`}
+        className="text-[12px] font-semibold rounded-full transition-colors hover:bg-slate-100 focus:outline-none"
+        style={{ padding: '5px 12px', color: SUBINK, border: `1px solid ${HAIRLINE}`, background: '#fff' }}
+      >
+        Reorder
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={onCancel}
+        data-testid={`button-reorder-cancel-${testId}`}
+        className="flex items-center gap-1 text-[12px] font-semibold rounded-full transition-colors hover:bg-slate-100 focus:outline-none"
+        style={{ padding: '5px 12px', color: SUBINK, border: `1px solid ${HAIRLINE}`, background: '#fff' }}
+      >
+        <RotateCcw className="w-3 h-3" />
+        Cancel
+      </button>
+      <button
+        type="button"
+        onClick={onCommit}
+        data-testid={`button-reorder-done-${testId}`}
+        className="text-[12px] font-semibold rounded-full text-white transition-opacity hover:opacity-90 focus:outline-none"
+        style={{ padding: '5px 14px', backgroundColor: BLUE }}
+      >
+        Done
+      </button>
+    </div>
+  );
+}
+
+// ─── Catalog search — magnifier reveals a frosted find-a-color popover ─
+type CatalogEntry = { swatch: Swatch; groupId: string; groupName: string };
+
+function CatalogSearchPopover({
+  entries,
+  selectedId,
+  onPick,
+}: {
+  entries: CatalogEntry[];
+  selectedId: string;
+  onPick: (groupId: string, colorId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return entries;
+    return entries.filter(
+      ({ swatch, groupName }) =>
+        swatch.name.toLowerCase().includes(q) || groupName.toLowerCase().includes(q),
+    );
+  }, [entries, query]);
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) setQuery('');
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Search catalog colors"
+          data-testid="button-catalog-search"
+          className="inline-flex items-center justify-center rounded-full flex-shrink-0 transition-colors hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+          style={{ width: 34, height: 34, color: SUBINK, border: `1px solid ${HAIRLINE}`, background: '#fff' }}
+        >
+          <Search className="w-4 h-4" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        side="bottom"
+        sideOffset={10}
+        avoidCollisions
+        collisionPadding={16}
+        className="w-[480px] max-w-[calc(100vw-32px)] p-0 rounded-2xl overflow-hidden flex flex-col"
+        style={{
+          ...FROSTED_PANEL,
+          // Never escape the viewport: bound by both an absolute cap and the
+          // space Radix measures between the trigger and the collision edge.
+          maxHeight: 'min(560px, calc(100vh - 32px), var(--radix-popover-content-available-height))',
+        }}
+        data-testid="popover-catalog-search"
+      >
+        {/* Pinned header — small-caps title + count, then the search pill */}
+        <div className="flex-shrink-0" style={{ padding: '14px 18px', borderBottom: `1px solid ${HAIRLINE}` }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+            <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: SUBINK }}>
+              Colors in your catalog
+            </span>
+            <span className="text-[12px] tabular-nums" style={{ color: '#a1a1a6' }}>
+              {entries.length}
+            </span>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: '#a1a1a6' }} />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full h-8 pl-9 pr-8 rounded-full text-[12.5px] placeholder:text-slate-400 focus:outline-none focus:border-slate-400 transition-colors"
+              style={{ border: `1px solid ${HAIRLINE}`, color: INK, background: '#fff' }}
+              placeholder="Find a color…"
+              data-testid="input-catalog-search"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                aria-label="Clear search"
+                data-testid="button-catalog-clear"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-full transition-colors hover:bg-slate-100"
+                style={{ width: 18, height: 18, color: SUBINK }}
+              >
+                <X className="w-3 h-3" strokeWidth={2.5} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Scrollable divided list — mini disc render + name + type */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div style={{ padding: '18px' }}>
+              <p className="text-[12.5px]" style={{ color: '#a1a1a6' }}>
+                No colors match.
+              </p>
+            </div>
+          ) : (
+            <ul>
+              {filtered.map(({ swatch, groupId, groupName }) => {
+                const on = swatch.id === selectedId;
+                return (
+                  <li key={`${groupId}-${swatch.id}`}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onPick(groupId, swatch.id);
+                        setQuery('');
+                        setOpen(false);
+                      }}
+                      data-testid={`catalog-item-${swatch.id}`}
+                      className="w-full flex items-center gap-3 text-left transition-colors hover:bg-slate-50 focus:outline-none"
+                      style={{ padding: '11px 18px', borderBottom: `1px solid ${HAIRLINE}`, backgroundColor: on ? '#f0f7fc' : undefined }}
+                    >
+                      <VinylDisc size={40} swatch={swatch} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13px] font-semibold truncate" style={{ color: on ? BLUE : INK }}>
+                          {swatch.name}
+                        </div>
+                        <div className="text-[11.5px]" style={{ color: SUBINK }}>
+                          {groupName}
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       </PopoverContent>
     </Popover>
@@ -2115,8 +2357,8 @@ export function PressPackagePricingTableRuns() {
   const selectedColor = activeGroup.colors.find((c) => c.id === colorSel[activeGroup.id]) ?? activeGroup.colors[0];
   const previewSwatch = selectedColor ?? activeGroup.swatch;
 
-  const renameGroup = (id: string, name: string) => {
-    setGroups((gs) => gs.map((g) => (g.id === id ? { ...g, name } : g)));
+  const renameGroup = (id: string, name: string, sizes: string[]) => {
+    setGroups((gs) => gs.map((g) => (g.id === id ? { ...g, name, sizes } : g)));
     setDirty(true);
   };
   const removeGroup = (id: string) => {
@@ -2130,7 +2372,7 @@ export function PressPackagePricingTableRuns() {
   const addGroup = (name: string) => {
     const id = `grp-${Date.now()}`;
     const swatch: Swatch = { id: `${id}-preview`, name, kind: 'opaque', base: '#9a9aa0' };
-    setGroups((gs) => [...gs, { id, name, blurb: '', swatch, colors: [] }]);
+    setGroups((gs) => [...gs, { id, name, blurb: '', swatch, colors: [], sizes: ['7"', '10"', '12"'] }]);
     setBook((prev) => ({
       ...prev,
       [id]: Object.fromEntries(RUN_QTYS.map((q) => [q, { mode: 'off', price: '' } as RunCell])) as Record<number, RunCell>,
@@ -2153,8 +2395,29 @@ export function PressPackagePricingTableRuns() {
   const removeColor = (groupId: string, colorId: string) => {
     setGroups((gs) => gs.map((g) => (g.id === groupId ? { ...g, colors: g.colors.filter((c) => c.id !== colorId) } : g)));
   };
-  // Drag a tile onto another to reorder — artists see this order on their Sell panel.
+  // Reordering is an explicit MODE — tiles are never draggable at rest, so a
+  // stray cursor can't shuffle the catalog. Enter the mode, drag, then Done
+  // commits or Cancel restores the order you started with.
   const [dragColorId, setDragColorId] = useState<string | null>(null);
+  const [reorderColorsOn, setReorderColorsOn] = useState(false);
+  const [reorderTypesOn, setReorderTypesOn] = useState(false);
+  const [dragGroupId, setDragGroupId] = useState<string | null>(null);
+  // Snapshot taken when a reorder mode is entered; Cancel restores it.
+  const orderSnapshot = useRef<ColorGroup[] | null>(null);
+  const beginReorder = (which: 'colors' | 'types') => {
+    orderSnapshot.current = groups;
+    if (which === 'colors') setReorderColorsOn(true);
+    else setReorderTypesOn(true);
+  };
+  const endReorder = (which: 'colors' | 'types', commit: boolean) => {
+    if (!commit && orderSnapshot.current) setGroups(orderSnapshot.current);
+    orderSnapshot.current = null;
+    setDragColorId(null);
+    setDragGroupId(null);
+    if (which === 'colors') setReorderColorsOn(false);
+    else setReorderTypesOn(false);
+    if (commit) setDirty(true);
+  };
   const reorderColor = (groupId: string, fromId: string, toId: string) => {
     if (fromId === toId) return;
     setGroups((gs) =>
@@ -2169,8 +2432,27 @@ export function PressPackagePricingTableRuns() {
         return { ...g, colors: arr };
       }),
     );
-    setDirty(true);
-    setDirty(true);
+  };
+  const reorderGroup = (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    setGroups((gs) => {
+      const arr = [...gs];
+      const f = arr.findIndex((g) => g.id === fromId);
+      const t = arr.findIndex((g) => g.id === toId);
+      if (f < 0 || t < 0) return gs;
+      const [moved] = arr.splice(f, 1);
+      arr.splice(t, 0, moved);
+      return arr;
+    });
+  };
+  // Flat list of every color across all types — feeds the find-a-color search.
+  const catalogList = useMemo(
+    () => groups.flatMap((g) => g.colors.map((c) => ({ swatch: c, groupId: g.id, groupName: g.name }))),
+    [groups],
+  );
+  const selectFromCatalog = (groupId: string, colorId: string) => {
+    setActiveGroupId(groupId);
+    setColorSel((prev) => ({ ...prev, [groupId]: colorId }));
   };
   const row = book[activeGroupId] ?? {};
 
@@ -2356,22 +2638,65 @@ export function PressPackagePricingTableRuns() {
             <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />
 
             {/* Pick a type */}
-            <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
-              <span style={{ color: INK }}>Pick a type. </span>
-              <span style={{ color: '#a1a1a6' }}>Each keeps its own package prices.</span>
-            </h2>
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
+                <span style={{ color: INK }}>Pick a type. </span>
+                <span style={{ color: '#a1a1a6' }}>Each keeps its own package prices.</span>
+              </h2>
+              <div className="flex items-center gap-2.5 flex-shrink-0">
+                <span className="text-[12px] tabular-nums" style={{ color: '#a1a1a6' }}>
+                  {catalogList.length} colors
+                </span>
+                <CatalogSearchPopover
+                  entries={catalogList}
+                  selectedId={selectedColor?.id ?? ''}
+                  onPick={selectFromCatalog}
+                />
+                <ReorderControls
+                  on={reorderTypesOn}
+                  onBegin={() => beginReorder('types')}
+                  onCommit={() => endReorder('types', true)}
+                  onCancel={() => endReorder('types', false)}
+                  testId="types"
+                />
+              </div>
+            </div>
+            {reorderTypesOn && (
+              <p className="text-[12.5px]" style={{ marginTop: 6, color: BLUE }}>
+                Drag a type onto another to move it — artists see this order. Done keeps it, Cancel puts everything back.
+              </p>
+            )}
             <div className="grid grid-cols-4 gap-3" style={{ marginTop: 12 }}>
               {groups.map((g) => (
-                <ColorGroupCard
+                <div
                   key={g.id}
-                  group={g}
-                  active={g.id === activeGroupId}
-                  count={pricedCount(book, g.id)}
-                  canRemove={groups.length > 1}
-                  onSelect={() => setActiveGroupId(g.id)}
-                  onRename={(name) => renameGroup(g.id, name)}
-                  onRemove={() => removeGroup(g.id)}
-                />
+                  draggable={reorderTypesOn}
+                  onDragStart={(e) => {
+                    if (!reorderTypesOn) return;
+                    setDragGroupId(g.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragOver={(e) => {
+                    if (!reorderTypesOn) return;
+                    e.preventDefault();
+                    if (dragGroupId && dragGroupId !== g.id) reorderGroup(dragGroupId, g.id);
+                  }}
+                  onDragEnd={() => setDragGroupId(null)}
+                  style={{
+                    opacity: dragGroupId === g.id ? 0.45 : 1,
+                    cursor: reorderTypesOn ? (dragGroupId ? 'grabbing' : 'grab') : undefined,
+                  }}
+                >
+                  <ColorGroupCard
+                    group={g}
+                    active={g.id === activeGroupId}
+                    count={pricedCount(book, g.id)}
+                    canRemove={groups.length > 1}
+                    onSelect={() => setActiveGroupId(g.id)}
+                    onRename={(name, sizes) => renameGroup(g.id, name, sizes)}
+                    onRemove={() => removeGroup(g.id)}
+                  />
+                </div>
               ))}
             </div>
             <AddGroupPopover
@@ -2394,13 +2719,27 @@ export function PressPackagePricingTableRuns() {
             <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />
 
             {/* Pick a color */}
-            <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
-              <span style={{ color: INK }}>Pick a color. </span>
-              <span style={{ color: '#a1a1a6' }}>Or add a new one.</span>
-            </h2>
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
+                <span style={{ color: INK }}>Pick a color. </span>
+                <span style={{ color: '#a1a1a6' }}>Or add a new one.</span>
+              </h2>
+              <ReorderControls
+                on={reorderColorsOn}
+                onBegin={() => beginReorder('colors')}
+                onCommit={() => endReorder('colors', true)}
+                onCancel={() => endReorder('colors', false)}
+                testId="colors"
+              />
+            </div>
             <p className="text-[12.5px]" style={{ marginTop: 6 }}>
               <span className="font-semibold" style={{ color: INK }}>{activeGroup.name}</span>
-              <span style={{ color: '#a1a1a6' }}> · {activeGroup.colors.length} colors · drag to reorder — artists see this order</span>
+              <span style={{ color: reorderColorsOn ? BLUE : '#a1a1a6' }}>
+                {' '}· {activeGroup.colors.length} colors ·{' '}
+                {reorderColorsOn
+                  ? 'drag a color onto another to move it — Done keeps it, Cancel puts everything back'
+                  : 'artists see this order'}
+              </span>
             </p>
             <div className="grid grid-cols-4 gap-3" style={{ marginTop: 12 }}>
               {activeGroup.colors.map((c) => {
@@ -2419,12 +2758,14 @@ export function PressPackagePricingTableRuns() {
                     }}
                     aria-pressed={on}
                     data-testid={`color-${c.id}`}
-                    draggable
+                    draggable={reorderColorsOn}
                     onDragStart={(e) => {
+                      if (!reorderColorsOn) return;
                       setDragColorId(c.id);
                       e.dataTransfer.effectAllowed = 'move';
                     }}
                     onDragOver={(e) => {
+                      if (!reorderColorsOn) return;
                       e.preventDefault();
                       if (dragColorId && dragColorId !== c.id) reorderColor(activeGroup.id, dragColorId, c.id);
                     }}
@@ -2434,7 +2775,7 @@ export function PressPackagePricingTableRuns() {
                       padding: '16px 10px 12px',
                       border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
                       opacity: dragColorId === c.id ? 0.45 : 1,
-                      cursor: dragColorId ? 'grabbing' : undefined,
+                      cursor: reorderColorsOn ? (dragColorId ? 'grabbing' : 'grab') : undefined,
                     }}
                   >
                     <div

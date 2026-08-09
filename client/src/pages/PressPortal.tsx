@@ -2073,22 +2073,25 @@ function PressDashboardTab({
         </div>
       </div>
 
-      {/* HERO: work queue. No live queue feed exists yet, so the honest
-          all-caught-up state holds the reference geometry. */}
+      {/* Work queue, empty state (handoff item 23) — same slim shell as the
+          collapsed "Needs your attention" row. Good news takes LESS room than
+          problems, not a hero card. One quiet line, nothing to open. */}
       <section
-        className="rounded-2xl bg-white p-10 flex flex-col items-center text-center"
+        className="rounded-2xl bg-white flex items-center gap-2.5 px-5 py-3.5"
         style={{ border: `1px solid ${PD_HAIRLINE}` }}
         data-testid="work-queue-empty"
       >
-        <span className="w-12 h-12 rounded-full inline-flex items-center justify-center" style={{ backgroundColor: "var(--apple-ready-wash)" }}>
-          <CheckCircle2 className="w-6 h-6" style={{ color: "var(--apple-ready)" }} />
+        <span
+          className="w-6 h-6 rounded-full inline-flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: '#eaf7f0' }}
+        >
+          <CheckCircle2 className="w-3.5 h-3.5" style={{ color: '#1c8a5b' }} />
         </span>
-        <h3 className="mt-4 text-[18px] font-semibold" style={{ color: PD_INK }}>
+        <h2 className="text-[13px] font-semibold" style={{ color: PD_INK, letterSpacing: '-0.01em' }}>
           You're all caught up
-        </h3>
-        <p className="mt-1.5 text-[13.5px] max-w-sm leading-relaxed" style={{ color: PD_SUBINK }}>
-          No offers to accept, approvals due, or orders to ship. New work will
-          appear here the moment it needs you.
+        </h2>
+        <p className="text-[13px] truncate" style={{ color: PD_SUBINK }}>
+          &mdash; no offers to accept, approvals due, or orders to ship. New work appears here the moment it needs you.
         </p>
       </section>
 

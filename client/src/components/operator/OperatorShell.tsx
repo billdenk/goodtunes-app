@@ -267,6 +267,31 @@ export function OperatorShell<TabId extends string>({
       // disturb the fixed-height layout (the shell shrinks to fill the rest).
       <div className="flex flex-col" style={{ height: "100dvh" }} data-testid={testId ?? "operator-shell"}>
         <ViewAsBanner />
+        {/* Top header strip — FULL-WIDTH, above the rail (press mock canon,
+            Bill Aug 2026): the partner brand bar starts at the far left edge
+            of the window, never to the right of the sidebar, so the logo +
+            name can't sit over the rail's search pill. h-14 matches
+            AdminFrame's sticky top bar. Profile menu pinned top-right. */}
+        <div
+          className="h-14 flex-shrink-0 border-b border-[var(--apple-hairline)] flex items-center gap-3 pl-3 pr-4 sm:pr-6"
+          style={{ background: "var(--apple-glass)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
+          data-testid="operator-shell-topbar"
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            {navLogoUrl ? <img src={navLogoUrl} alt={name} className="max-h-8 w-auto object-contain" /> : (
+              <span className="h-9 w-9 rounded-full bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0 overflow-hidden p-1">
+                {logoUrl ? <img src={logoUrl} alt="" className="w-full h-full object-contain" /> : <FallbackIcon className="h-4 w-4 text-slate-400" />}
+              </span>
+            )}
+            <span className="text-[15px] font-semibold text-slate-800 truncate" data-testid="text-operator-topbar-name">{name}</span>
+          </div>
+          {superAdminBadge}
+          <div className="ml-auto flex items-center gap-3" data-testid="operator-shell-account">
+            <ViewAsRestoreButton />
+            <FeedbackLauncher />
+            <AdminUserMenu />
+          </div>
+        </div>
         <div
           className="flex-1 min-h-0 overflow-hidden flex bg-[var(--apple-canvas)] text-[var(--apple-ink)]"
         >
@@ -404,29 +429,6 @@ export function OperatorShell<TabId extends string>({
         {/* Main column — flex-col + overflow-hidden so only the inner
             content div scrolls (the sticky top strip stays visible). */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-          {/* Top header strip — h-14, matches AdminFrame's sticky top bar.
-              Profile menu pinned top-right (desktop + mobile). */}
-          <div
-            className="h-14 flex-shrink-0 border-b border-[var(--apple-hairline)] flex items-center gap-3 px-4 sm:px-6"
-            style={{ background: "var(--apple-glass)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
-            data-testid="operator-shell-topbar"
-          >
-            <div className="flex min-w-0 items-center gap-2.5">
-              {navLogoUrl ? <img src={navLogoUrl} alt={name} className="max-h-8 w-auto object-contain" /> : (
-                <div className={cn("h-8 w-8 flex-shrink-0 overflow-hidden flex items-center justify-center bg-slate-100 ring-1 ring-slate-200", radius)}>
-                  {logoUrl ? <img src={logoUrl} alt="" className="h-full w-full object-cover" /> : <FallbackIcon className="h-4 w-4 text-slate-400" />}
-                </div>
-              )}
-              <span className="text-sm font-semibold text-slate-800 truncate" data-testid="text-operator-topbar-name">{name}</span>
-            </div>
-            {superAdminBadge}
-            <div className="ml-auto flex items-center gap-3" data-testid="operator-shell-account">
-              <ViewAsRestoreButton />
-              <FeedbackLauncher />
-              <AdminUserMenu />
-            </div>
-          </div>
-
           {/* Phone fallback navigation — the rail is hidden < md. */}
           <div className="md:hidden">
             <DashboardTabs tabs={tabs} value={activeTab} onChange={onTabChange} />

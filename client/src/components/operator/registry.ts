@@ -42,7 +42,8 @@ import {
   UserPlus,
   ScrollText,
   Wrench,
-  BookOpen,
+  Library,
+  Gift,
   Receipt,
   Cog,
   Printer,
@@ -177,13 +178,15 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // alongside GoodDeed pricing + Settings. GoodDeed pricing renders
   // INLINE (Task #2075).
   { id: "dashboard",   label: "Dashboard",        icon: LayoutDashboard,  roles: ["press"] },
-  { id: "people",     label: "Clients",          icon: User,             roles: ["press"] },
+  // Icons follow the press playground mock canon (Bill, Aug 2026):
+  // Clients=Users, Acquisition=UserPlus, Catalog=Library, Referrals=Gift.
+  { id: "people",     label: "Clients",          icon: Users,            roles: ["press"] },
   { id: "albums",     label: "Projects",         icon: Disc3,            roles: ["press"] },
-  { id: "acquisition", label: "Acquisition",    icon: Megaphone,        roles: ["press"] },
-  { id: "catalog",    label: "Catalog",          icon: BookOpen,         roles: ["press"] },
+  { id: "acquisition", label: "Acquisition",    icon: UserPlus,         roles: ["press"] },
+  { id: "catalog",    label: "Catalog",          icon: Library,          roles: ["press"] },
   { id: "pricing",    label: "GoodDeed pricing", icon: Receipt,          roles: ["press"] },
   { id: "settings",   label: "Settings",         icon: Cog,              roles: ["press"] },
-  { id: "referrals",  label: "Referrals",        icon: UserPlus,         roles: ["press"] },
+  { id: "referrals",  label: "Referrals",        icon: Gift,             roles: ["press"] },
 
   // GoodDeed Quickprinter shell — `/vendor` routed via VendorScopeRouter
   // for is_quickprinter vendors (PrinterPortal.tsx). Print Queue stays the
