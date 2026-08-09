@@ -601,15 +601,9 @@ function DiscStage({ swatch, product }: { swatch: Swatch; product: ProductType }
 // Hovering slides the vinyl further out of the sleeve.
 function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType }) {
   const [hover, setHover] = useState(false);
-  // Rotate only the disc body (grooves + label) so the specular highlight —
-  // which lives outside the body in VinylDisc — stays fixed like a real light source.
-  const bodyRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const el = bodyRef.current;
-    if (!el) return;
-    el.style.transition = 'transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)';
-    el.style.transform = hover ? 'rotate(32deg)' : 'rotate(0deg)';
-  }, [hover]);
+  // Continuous slow spin (360°/8s) while hovering — same physics as the color
+  // setup page. Leaves freeze the disc in place; the rewind button returns it.
+  const { bodyRef, onPointerEnter: spinEnter, onPointerLeave: spinLeave, showRewind, rewind } = useVinylSpin();
   // Second record (Double LP) spins too — a little slower and not as far.
   const bodyRef2 = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -626,8 +620,14 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
 
   return (
     <div
-      onPointerEnter={() => setHover(true)}
-      onPointerLeave={() => setHover(false)}
+      onPointerEnter={() => {
+        setHover(true);
+        spinEnter();
+      }}
+      onPointerLeave={() => {
+        setHover(false);
+        spinLeave();
+      }}
       style={{ position: 'relative', width: jacketPx + jacketPx * 0.5, height: jacketPx + 24, cursor: 'pointer' }}
       aria-label={`${swatch.name} record inside its printed jacket`}
     >
@@ -710,6 +710,11 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
           willChange: 'transform',
         }}
       />
+
+      {/* rewind — appears after the record has spun, returns it to start */}
+      <div style={{ position: 'absolute', right: 0, bottom: 0, zIndex: 3 }}>
+        <RewindButton show={showRewind} onClick={rewind} size={28} />
+      </div>
     </div>
   );
 }
