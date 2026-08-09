@@ -560,6 +560,11 @@ body.gt-admin.gt-admin-dark .hover\:bg-slate-50:hover,
 body.gt-admin.gt-admin-dark .hover\:bg-slate-100:hover { background-color: rgba(255, 255, 255, 0.06); }
 body.gt-admin.gt-admin-dark .hover\:bg-slate-200:hover { background-color: rgba(255, 255, 255, 0.09); }
 body.gt-admin.gt-admin-dark .hover\:bg-white:hover { background-color: var(--apple-chip); }
+/* Inline light hover hexes on admin surfaces (Shopify browser/panel rows,
+   address pills) — remap alongside the slate utilities so hover stays a
+   subtle lighter-dark tint, never a light card. */
+body.gt-admin.gt-admin-dark .hover\:bg-\[\#f8fafc\]:hover,
+body.gt-admin.gt-admin-dark .hover\:bg-\[\#f0f0f2\]:hover { background-color: rgba(255, 255, 255, 0.06); }
 
 /* Ink ladder. */
 body.gt-admin.gt-admin-dark .text-slate-900,
@@ -648,6 +653,15 @@ body.gt-admin {
 .gt-admin .gt-dashboard-canon .animate-pulse {
   background: #e8e8ed;
 }
+/* Dark: the canon rules above outrank the blanket utility remap, so they
+   need explicit dark-scoped counterparts (both body classes, per convention)
+   — hover is a faint lighter-dark tint, never a light card. */
+body.gt-admin.gt-admin-dark .gt-dashboard-canon [data-testid="dashboard-activity-feed"] a:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+body.gt-admin.gt-admin-dark .gt-dashboard-canon .animate-pulse {
+  background: var(--apple-track);
+}
 /* Reference primary actions — blue rounded-full pills. Pill (header
    "Run payouts"): px-5 h-10 text-[14px]; mini (card action): px-4 h-9. */
 .gt-dashboard-canon .gt-primary-pill,.gt-dashboard-canon .gt-primary-mini{display:inline-flex;align-items:center;gap:8px;background:var(--apple-blue);color:#fff;border:0;border-radius:999px;font-weight:600}
@@ -677,6 +691,8 @@ body.gt-admin {
   color: var(--apple-subink);
 }
 .gt-admin aside nav button:hover { background: rgba(255,255,255,.65); color: var(--apple-ink); }
+/* Dark: a .65 white wash is a near-white flash on the charcoal rail. */
+body.gt-admin.gt-admin-dark aside nav button:hover { background: rgba(255,255,255,.07); }
 .gt-admin aside nav button[class*="bg-[var(--brand-blue)]"] {
   background: var(--apple-card);
   color: var(--apple-ink);
