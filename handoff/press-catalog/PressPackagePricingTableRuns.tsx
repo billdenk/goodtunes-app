@@ -588,7 +588,7 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
             top: (jacketPx - discPx) / 2,
             left: jacketPx - discPx + jacketPx * 0.27,
             transition: 'transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1) 0.1s',
-            transform: hover ? `translateX(${jacketPx * 0.3}px)` : 'translateX(0)',
+            transform: hover ? `translateX(${jacketPx * 0.58}px)` : 'translateX(0)',
             willChange: 'transform',
             zIndex: 0,
             filter: 'brightness(0.88)',
@@ -605,7 +605,7 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
           top: (jacketPx - discPx) / 2,
           left: jacketPx - discPx + jacketPx * 0.22,
           transition: 'transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)',
-          transform: hover ? `translateX(${jacketPx * 0.24}px)` : 'translateX(0)',
+          transform: hover ? `translateX(${jacketPx * 0.5}px)` : 'translateX(0)',
           willChange: 'transform',
           zIndex: 1,
         }}
