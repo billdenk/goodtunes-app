@@ -40,3 +40,36 @@
     ## Acceptance
     Screenshot the rebuilt page at 7" and 12" for MRP with real data and compare against the reference component pixel-flow-for-pixel-flow. Also verify a narrow (~1024px) viewport: preview stacked above, never missing. If any section's structure or copy differs from the reference, it is not done.
     
+
+    ---
+
+    # SECOND PASS — 2026-08-09 (still not done)
+
+    Structure and copy largely landed. These remain broken:
+
+    ## 8. Jacket/record preview geometry is wrong
+    The album cover is slopped over the vinyl. Reproduce the reference `JacketStage` math EXACTLY — do not re-derive it:
+    - Square jacket sits IN FRONT on the left; the record is a full circle peeking out FROM BEHIND on the right, vertically centered on the jacket.
+    - The disc never rises above or drops below the jacket's edges; no oversized detached drop shadow.
+    - The preview keeps reference scale — it is the hero of the left column, not a thumbnail. Caption sits centered under the jacket.
+    Copy the reference component's stage/geometry code verbatim, including the size math per product (7"/12").
+
+    ## 9. Price rows leak the editing control
+    Rows 500/1,000/2,000 render "Priced · Quote on request · Not offered" as static text side by side. A row shows ONE state at a time:
+    - Priced → the $ input.
+    - On request → the dashed "On request" chip.
+    - Off → the em-dash.
+    The three modes are a single dropdown/menu (see reference row markup), never three labels printed in the row.
+
+    ## 10. Black still has 0 colors
+    "Black · 0 colors" and an empty "Pick a color" persist while other types show colors. MRP's Black colors exist in the old data — find and re-wire them. If genuinely absent upstream, seed Classic Black at minimum and flag it, but do not ship a default type with an empty color rail.
+
+    ## 11. Template filenames still raw storage keys
+    "12-JKTSG-100....7w0umpu&dl=0" is a storage key with query params. Store/display the original filename, middle-truncated.
+
+    ## 12. "Add your vinyl" + "CSV Options" moved to the footer — remove them
+    They were removed from the header and re-parked at the bottom right. Remove them from this page entirely. (If CSV import/export must survive, it moves to a separate surface — not this page.)
+
+    ## 13. GoodDeeds section styling
+    Its placement at the page bottom is acceptable for now, but it still uses old markup: eye-off toggle icons, its own inline Save button, old table styling. Restyle to canon: hairline rows, canon toggles, and it participates in the page's single floating save bar — no per-section Save buttons.
+    
