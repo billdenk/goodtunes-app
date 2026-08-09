@@ -180,7 +180,7 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "people",     label: "Clients",          icon: User,             roles: ["press"] },
   { id: "albums",     label: "Projects",         icon: Disc3,            roles: ["press"] },
   { id: "acquisition", label: "Acquisition",    icon: Megaphone,        roles: ["press"] },
-  { id: "catalog",    label: "Vinyl catalog",    icon: BookOpen,         roles: ["press"] },
+  { id: "catalog",    label: "Catalog",          icon: BookOpen,         roles: ["press"] },
   { id: "pricing",    label: "GoodDeed pricing", icon: Receipt,          roles: ["press"] },
   { id: "settings",   label: "Settings",         icon: Cog,              roles: ["press"] },
   { id: "referrals",  label: "Referrals",        icon: UserPlus,         roles: ["press"] },

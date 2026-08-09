@@ -11343,3 +11343,48 @@ SQL
 }
 fix_cert_reservation_session_unique dev  "${DATABASE_URL:-}"
 fix_cert_reservation_session_unique prod "${PROD_DATABASE_URL:-}"
+
+# ── Press logo seed from PR #5 handoff (2026-08-09) ─────────────────────────
+# Seeds manufacturers.logo_url for MRP / Hellbender / Viryl / PMP from the
+# design-handoff logo assets, already uploaded ONCE to the shared object
+# storage bucket (dev+prod serve the same /objects/uploads URLs). Applied via
+# the normal logo mechanism in dev; this keeps prod in lockstep. Idempotent —
+# UPDATE only when logo_url differs, and operator changes made AFTER this seed
+# are preserved by the marker guard.
+seed_press_logos_20260809() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then echo "post-merge: press-logo-seed skip ($label; no URL)"; return 0; fi
+  local out rc
+  out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS one_shot_markers (name text PRIMARY KEY, created_at timestamptz DEFAULT now());
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM one_shot_markers WHERE name = 'press-logo-seed-20260809') THEN
+    RAISE NOTICE 'press-logo-seed already applied';
+  ELSE
+    UPDATE manufacturers SET logo_url = '/objects/uploads/2d9b064b-3d57-40a9-b857-9e9f27bf65c9.png'
+      WHERE name ILIKE 'Memphis Record Pressing%';
+    UPDATE manufacturers SET logo_url = '/objects/uploads/1d466d5f-4fc9-4eb5-a6bd-52838c769bf1.png'
+      WHERE name ILIKE 'Hellbender%';
+    UPDATE manufacturers SET logo_url = '/objects/uploads/a61cd94d-0b3c-4087-8f85-17ea8f606f9e.png'
+      WHERE name ILIKE 'Viryl%';
+    UPDATE manufacturers SET logo_url = '/objects/uploads/a994e240-89c1-4b6e-beef-06aca2ca8b1d.png'
+      WHERE name ILIKE 'Physical Music Products%';
+    INSERT INTO one_shot_markers (name) VALUES ('press-logo-seed-20260809');
+  END IF;
+END $$;
+COMMIT;
+SQL
+  )
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    echo "post-merge: press-logo-seed ok on $label"
+  else
+    echo "post-merge: ERROR — press-logo-seed FAILED on $label"
+    echo "$out" | tail -5
+    return 1
+  fi
+}
+seed_press_logos_20260809 dev  "${DATABASE_URL:-}"
+seed_press_logos_20260809 prod "${PROD_DATABASE_URL:-}"

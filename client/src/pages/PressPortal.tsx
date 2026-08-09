@@ -374,27 +374,11 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
         />
       ) : (
         <div className="space-y-4" data-testid="press-catalog-tab">
-          <AdminPageHeader
-            title="Catalog"
-            subtitle="Edit your formats, color tiers, and per-quantity ladders — including the masters-prep cost per tier. Artists you invite see the resulting picker on their album's Sell panel."
-            testId="heading-press-catalog"
-            actions={
-              <button
-                type="button"
-                onClick={() => setCatalogViewParam("colors")}
-                className="inline-flex items-center h-9 px-4 rounded-full text-[13px] font-medium bg-white transition-colors hover:bg-slate-50"
-                style={{ color: PD_INK, border: `1px solid ${PD_HAIRLINE}` }}
-                data-testid="button-open-vinyl-colors"
-              >
-                Add your vinyl
-              </button>
-            }
-          />
           <PressPackagePricingCatalog
             pressId={pressId}
             pressDomain={pressDomain}
             placeholderUrl={me?.vinylPlaceholderUrl ?? null}
-            hideHeading
+            onOpenColors={() => setCatalogViewParam("colors")}
           />
         </div>
       ))}

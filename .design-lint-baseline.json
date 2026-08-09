@@ -22752,17 +22752,32 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"rounded-full px-4 py-1.5 text-[12.5px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className={`rounded-full px-4 py-1.5 text-[12.5px] font-semibold ${enabled ? \"\" : \"opacity-40 cursor-not-allowed\"}`}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "<p className=\"mt-1.5 text-[13px]\" style={{ color: SUBINK }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[12.5px]\" style={{ color: anyDirty ? SUBINK : FAINT }} data-testid=\"text-save-status\">"
+    "snippet": "className=\"inline-flex items-center h-9 px-4 rounded-full text-[13px] font-medium bg-white transition-colors hover:bg-slate-50\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"inline-flex h-9 items-center gap-2 rounded-full px-5 text-[13.5px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40\""
+    "snippet": "<span className=\"text-[13px] font-medium\">Edited</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"rounded-full px-4 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50\" style={{ backgroundColor: BLUE }} data-testid=\"button-save-catalog\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -22777,17 +22792,42 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"flex items-center gap-1.5 text-[14px] font-semibold\" style={{ color: BLUE }}>"
+    "snippet": "<span className=\"text-[13px] font-semibold\" style={{ color: INK }}>{ALBUM_FORMAT_LABEL[fmt]}</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"mt-0.5 block text-[12px]\" style={{ color: SUBINK }}>"
+    "snippet": "className=\"rounded-full px-3 py-1 text-[12.5px] font-medium\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"text-[15px] font-semibold tracking-tight\" style={{ color: INK }}>One package. <span style={{ color: FAINT }}>Everything included.</span></div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"mt-4 space-y-2.5 text-[12.5px]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"mt-1 text-[12px]\" style={{ color: SUBINK }}>12&quot; · 33 1/3 RPM</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<button key={f} type=\"button\" onClick={() => setActiveTab(f)} className=\"whitespace-nowrap rounded-full px-4 py-2 text-[12.5px] font-semibold\" style={activeTab === f ? { color: BLUE, backgroundColor: "
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "<p className=\"mt-3 text-[13px]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"flex min-h-[150px] items-center justify-center rounded-2xl text-[13px] font-semibold\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -23013,11 +23053,6 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/PressPortal.tsx",
     "snippet": "const PD_BLUE = \"#319ED8\";"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "className=\"inline-flex items-center h-9 px-4 rounded-full text-[13px] font-medium bg-white transition-colors hover:bg-slate-50\""
   },
   {
     "rule": "hardcoded-font-size",

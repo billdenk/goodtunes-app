@@ -1,3 +1,6 @@
+// PressPackagePricingTable — variation of the split layout where the left
+// preview is the album jacket with the vinyl peeking out to the right;
+// hovering slides the record further out of the sleeve.
 // PressPackagePricing — a PRESS-facing "Vinyl catalog" pricing editor,
 // reimagined around ONE principle: a press quotes a single cost per FINISHED
 // PACKAGE per run quantity — never per-component. A package = pressed record +
@@ -486,7 +489,7 @@ const PRODUCT_TYPES: ProductType[] = [
   { id: 'double12', name: '12" Double LP', format: '2 × 12" · 33 ⅓ RPM', inches: 12, labelInches: 3.94, discs: 2 },
 ];
 
-const STAGE_PX_PER_INCH = 300 / 12;
+const STAGE_PX_PER_INCH = 420 / 12;
 
 function DiscStage({ swatch, product }: { swatch: Swatch; product: ProductType }) {
   const { bodyRef, onPointerEnter, onPointerLeave, showRewind, rewind } = useVinylSpin();
@@ -497,7 +500,7 @@ function DiscStage({ swatch, product }: { swatch: Swatch; product: ProductType }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <div style={{ position: 'relative', height: 320, display: 'flex', alignItems: 'flex-end' }}>
+      <div style={{ position: 'relative', height: 440, display: 'flex', alignItems: 'flex-end' }}>
         {/* Second disc peeking behind for the Double LP */}
         {isDouble && (
           <div
@@ -542,17 +545,126 @@ function DiscStage({ swatch, product }: { swatch: Swatch; product: ProductType }
   );
 }
 
+// ─── Jacket stage — album cover with the record peeking out to the right.
+// Hovering slides the vinyl further out of the sleeve.
+function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType }) {
+  const [hover, setHover] = useState(false);
+  // Rotate only the disc body (grooves + label) so the specular highlight —
+  // which lives outside the body in VinylDisc — stays fixed like a real light source.
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    el.style.transition = 'transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)';
+    el.style.transform = hover ? 'rotate(32deg)' : 'rotate(0deg)';
+  }, [hover]);
+  // Second record (Double LP) spins too — a little slower and not as far.
+  const bodyRef2 = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = bodyRef2.current;
+    if (!el) return;
+    el.style.transition = 'transform 0.75s cubic-bezier(0.32, 0.72, 0.28, 1) 0.1s';
+    el.style.transform = hover ? 'rotate(18deg)' : 'rotate(0deg)';
+  }, [hover]);
+  // Jacket scales with the product — a 7" single gets a small sleeve, not a 12" cover.
+  const jacketPx = Math.round(300 * (product.inches / 12));
+  const discPx = Math.round(jacketPx * 0.96);
+  const labelRatio = product.labelInches / product.inches;
+  const holeRatio = 0.3 / product.inches;
+
+  return (
+    <div
+      onPointerEnter={() => setHover(true)}
+      onPointerLeave={() => setHover(false)}
+      style={{ position: 'relative', width: jacketPx + jacketPx * 0.5, height: jacketPx + 24, cursor: 'pointer' }}
+      aria-label={`${swatch.name} record inside its printed jacket`}
+    >
+      {/* second record (Double LP) — peeks a touch further, on a slight delay */}
+      {product.discs > 1 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: (jacketPx - discPx) / 2,
+            left: jacketPx - discPx + jacketPx * 0.27,
+            transition: 'transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1) 0.1s',
+            transform: hover ? `translateX(${jacketPx * 0.3}px)` : 'translateX(0)',
+            willChange: 'transform',
+            zIndex: 0,
+            filter: 'brightness(0.88)',
+          }}
+        >
+          <VinylDisc size={discPx} swatch={swatch} bodyRef={bodyRef2} labelRatio={labelRatio} holeRatio={holeRatio} />
+        </div>
+      )}
+
+      {/* record — behind the jacket, slides right on hover (transform only, no layout repaints) */}
+      <div
+        style={{
+          position: 'absolute',
+          top: (jacketPx - discPx) / 2,
+          left: jacketPx - discPx + jacketPx * 0.22,
+          transition: 'transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)',
+          transform: hover ? `translateX(${jacketPx * 0.24}px)` : 'translateX(0)',
+          willChange: 'transform',
+          zIndex: 1,
+        }}
+      >
+        <VinylDisc size={discPx} swatch={swatch} bodyRef={bodyRef} labelRatio={labelRatio} holeRatio={holeRatio} />
+      </div>
+
+      {/* jacket — in front, artist-supplied artwork placeholder */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: jacketPx,
+          height: jacketPx,
+          borderRadius: 3,
+          backgroundColor: '#141416',
+          backgroundImage: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 45%)',
+          boxShadow: '0 18px 40px rgba(0,0,0,0.25), inset -1px 0 0 rgba(255,255,255,0.06)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2,
+        }}
+      >
+        <img src={PRESS_LABEL_LOGO} alt="" style={{ width: jacketPx * 0.42, height: jacketPx * 0.42, filter: 'invert(1)', opacity: 0.92 }} />
+        {/* spine hint */}
+        <span aria-hidden style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 7, background: 'linear-gradient(90deg, rgba(0,0,0,0.5), transparent)' }} />
+      </div>
+
+      {/* floor shadow — fixed size, stretched with a transform so it never repaints mid-hover */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          bottom: -6,
+          left: jacketPx * 0.1,
+          width: jacketPx * 0.9 + jacketPx * 0.22 * 0.6,
+          height: 14,
+          borderRadius: '50%',
+          background: 'rgba(0,0,0,0.28)',
+          filter: 'blur(9px)',
+          pointerEvents: 'none',
+          transform: hover ? 'scaleX(1.18)' : 'scaleX(1)',
+          transformOrigin: '30% center',
+          transition: 'transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)',
+          willChange: 'transform',
+        }}
+      />
+    </div>
+  );
+}
+
 // Glossy round color ball
 function ColorBall({ swatch, size = 34 }: { swatch: Swatch; size?: number }) {
   const isSplatter = swatch.kind === 'splatter';
   if (isSplatter) {
     return (
       <span className="relative block rounded-full overflow-hidden" style={{ width: size, height: size, boxShadow: '0 0 0 1px rgba(15,23,42,0.10)' }}>
-        <span className="absolute inset-0 rounded-full" style={{ backgroundColor: swatch.base }} />
-        <span className="absolute rounded-full" style={{ width: size * 0.28, height: size * 0.28, top: '18%', left: '20%', backgroundColor: swatch.s1 }} />
-        <span className="absolute rounded-full" style={{ width: size * 0.22, height: size * 0.22, top: '52%', left: '54%', backgroundColor: swatch.s2 }} />
-        <span className="absolute rounded-full" style={{ width: size * 0.18, height: size * 0.18, top: '30%', left: '60%', backgroundColor: swatch.s3 }} />
-        <span className="absolute inset-0 rounded-full" style={{ background: 'radial-gradient(circle at 34% 28%, rgba(255,255,255,0.45), transparent 55%)' }} />
+        <VinylDisc size={size} swatch={swatch} />
       </span>
     );
   }
@@ -640,10 +752,45 @@ const COLOR_GROUPS: ColorGroup[] = [
       { id: 'sp-5', name: 'Sunburst', kind: 'splatter', base: '#E8C84A', s1: '#D97038', s2: '#B3262E', s3: '#F5F5DC' },
     ],
   },
+  {
+    id: 'mixswirl',
+    name: 'Mix/Swirl',
+    blurb: 'Two colors, hand-poured',
+    swatch: { id: 'g-mix', name: 'Storm Swirl', kind: 'splatter', base: '#3B4A66', s1: '#EDEDF0', s2: '#9A9AA0', s3: '#EDEDF0' },
+    colors: [
+      { id: 'mx-1', name: 'Storm Swirl', kind: 'splatter', base: '#3B4A66', s1: '#EDEDF0', s2: '#9A9AA0', s3: '#EDEDF0' },
+      { id: 'mx-2', name: 'Creamsicle', kind: 'splatter', base: '#D97038', s1: '#F2E7C9', s2: '#EFEBE2', s3: '#F2E7C9' },
+      { id: 'mx-3', name: 'Lagoon', kind: 'splatter', base: '#1E3E9E', s1: '#9CC5B0', s2: '#CFE8DF', s3: '#9CC5B0' },
+    ],
+  },
+  {
+    id: 'splatter2',
+    name: 'Splatter — 2 Colors',
+    blurb: 'Two-color spray',
+    swatch: { id: 'g-sp2', name: 'Cherry Bomb', kind: 'splatter', base: '#EDEDF0', s1: '#B3262E', s2: '#1d1d1f', s3: '#B3262E' },
+    colors: [
+      { id: 's2-1', name: 'Cherry Bomb', kind: 'splatter', base: '#EDEDF0', s1: '#B3262E', s2: '#1d1d1f', s3: '#B3262E' },
+      { id: 's2-2', name: 'Blueberry Milk', kind: 'splatter', base: '#EFEBE2', s1: '#2563EB', s2: '#8FB8DF', s3: '#2563EB' },
+      { id: 's2-3', name: 'Wasabi', kind: 'splatter', base: '#C6CE4A', s1: '#2E8B5F', s2: '#4A5D4E', s3: '#2E8B5F' },
+      { id: 's2-4', name: 'Bruise', kind: 'splatter', base: '#6B4FA1', s1: '#E5B8D0', s2: '#2A1E45', s3: '#E5B8D0' },
+    ],
+  },
+  {
+    id: 'blacksplatter2',
+    name: 'Black Splatter — 2 Colors',
+    blurb: 'Black base, two-color spray',
+    swatch: { id: 'g-bsp2', name: 'Ember', kind: 'splatter', base: '#111114', s1: '#B3262E', s2: '#E8A13C', s3: '#B3262E' },
+    colors: [
+      { id: 'bs-1', name: 'Ember', kind: 'splatter', base: '#111114', s1: '#B3262E', s2: '#E8A13C', s3: '#B3262E' },
+      { id: 'bs-2', name: 'Glacier', kind: 'splatter', base: '#111114', s1: '#8FB8DF', s2: '#EDEDF0', s3: '#8FB8DF' },
+      { id: 'bs-3', name: 'Toxic', kind: 'splatter', base: '#111114', s1: '#C6CE4A', s2: '#2E8B5F', s3: '#C6CE4A' },
+      { id: 'bs-4', name: 'Confetti', kind: 'splatter', base: '#111114', s1: '#E5B8D0', s2: '#E8C84A', s3: '#E5B8D0' },
+    ],
+  },
 ];
 
 // ─── Run quantities + the price book model ───────────────────────────
-const RUN_QTYS = [100, 300, 500, 1000, 2000, 3000] as const;
+const RUN_QTYS = [100, 300, 500, 1000, 2000, 3000, 5000, 10000] as const;
 type RunQty = (typeof RUN_QTYS)[number];
 
 type PriceMode = 'priced' | 'quote' | 'off';
@@ -656,10 +803,13 @@ type PriceBook = Record<string, Record<number, RunCell>>;
 function seedBook(): PriceBook {
   const rows: Record<string, number[]> = {
     // per-unit finished-package cost at each run qty
-    black: [16.0, 12.5, 10.0, 8.25, 7.25, 6.5],
-    opaque: [19.0, 14.5, 11.75, 9.75, 8.5, 7.75],
-    translucent: [20.0, 15.25, 12.5, 10.25, 9.0, 8.25],
-    splatter: [24.0, 18.5, 15.0, 12.75, 11.25, 10.5],
+    black: [16.0, 12.5, 10.0, 8.25, 7.25, 6.5, 5.95, 5.4],
+    opaque: [19.0, 14.5, 11.75, 9.75, 8.5, 7.75, 7.1, 6.5],
+    translucent: [20.0, 15.25, 12.5, 10.25, 9.0, 8.25, 7.6, 6.95],
+    splatter: [24.0, 18.5, 15.0, 12.75, 11.25, 10.5, 9.75, 9.0],
+    mixswirl: [26.0, 20.0, 16.25, 13.75, 12.0, 11.25, 10.5, 9.75],
+    splatter2: [25.0, 19.25, 15.5, 13.25, 11.75, 11.0, 10.25, 9.5],
+    blacksplatter2: [23.0, 17.75, 14.5, 12.25, 10.75, 10.0, 9.4, 8.75],
   };
   const book: PriceBook = {};
   for (const g of COLOR_GROUPS) {
@@ -685,7 +835,7 @@ const PRESS_NAV: PressNavItem[] = [
   { label: 'Clients', icon: Users },
   { label: 'Projects', icon: Disc3 },
   { label: 'Acquisition', icon: UserPlus },
-  { label: 'Vinyl catalog', icon: Library, active: true },
+  { label: 'Catalog', icon: Library, active: true },
   { label: 'Settings', icon: Cog },
   { label: 'Referrals', icon: Gift },
 ];
@@ -883,51 +1033,6 @@ function ProductTypeControl({ value, onChange }: { value: ProductTypeId; onChang
   );
 }
 
-// ─── "What's in a package" contents card ─────────────────────────────
-const PACKAGE_ITEMS: Array<{ icon: typeof Disc; label: string; sub: string }> = [
-  { icon: Disc, label: 'Pressed record', sub: 'Grooved & sleeved' },
-  { icon: Square, label: 'Printed jacket', sub: 'Full-color outer' },
-  { icon: FileText, label: 'Inner sleeve', sub: 'Printed liner' },
-  { icon: Tag, label: 'Center labels', sub: 'A-side & B-side' },
-];
-
-function PackageContentsCard({ product }: { product: ProductType }) {
-  const items = product.discs > 1 ? [{ icon: Disc, label: `${product.discs} pressed records`, sub: 'Grooved & sleeved' }, ...PACKAGE_ITEMS.slice(1)] : PACKAGE_ITEMS;
-  return (
-    <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${HAIRLINE}` }}>
-      <div className="flex items-center gap-2">
-        <Package className="w-4 h-4" style={{ color: BLUE }} />
-        <span className="text-[13.5px] font-semibold" style={{ color: INK }}>
-          One package. Everything included.
-        </span>
-      </div>
-      <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 4, lineHeight: 1.45 }}>
-        Your price covers the finished, shrink-wrapped unit — no per-piece math.
-      </p>
-      <div className="grid grid-cols-2 gap-2.5" style={{ marginTop: 14 }}>
-        {items.map((it) => {
-          const Icon = it.icon;
-          return (
-            <div key={it.label} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5" style={{ backgroundColor: CANVAS }}>
-              <span className="w-8 h-8 rounded-lg bg-white flex items-center justify-center flex-shrink-0" style={{ border: `1px solid ${HAIRLINE}` }}>
-                <Icon className="w-4 h-4" style={{ color: SUBINK }} />
-              </span>
-              <div className="min-w-0">
-                <div className="text-[12.5px] font-semibold truncate" style={{ color: INK }}>
-                  {it.label}
-                </div>
-                <div className="text-[11px] truncate" style={{ color: '#a1a1a6' }}>
-                  {it.sub}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ─── Turnaround field ────────────────────────────────────────────────
 function TurnaroundCard({
   min,
@@ -941,12 +1046,17 @@ function TurnaroundCard({
   onMax: (v: string) => void;
 }) {
   return (
-    <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${HAIRLINE}` }}>
-      <SectionLabel>Turnaround</SectionLabel>
-      <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 4, lineHeight: 1.4 }}>
-        Weeks from approved test pressing to ship.
-      </p>
-      <div className="flex items-center gap-2" style={{ marginTop: 12 }}>
+    <div className="flex items-center justify-between" data-testid="turnaround-row">
+      <div>
+        <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
+          <span style={{ color: INK }}>Turnaround. </span>
+          <span style={{ color: '#a1a1a6' }}>Order to ship.</span>
+        </h2>
+        <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
+          Weeks from confirmed order to finished records on the truck.
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
         <input
           value={min}
           onChange={(e) => onMin(e.target.value.replace(/[^0-9]/g, ''))}
@@ -1034,9 +1144,6 @@ function ColorGroupCard({
       </div>
       <div className="text-[11.5px]" style={{ marginTop: 2, color: '#a1a1a6' }}>
         {group.colors.length} {group.colors.length === 1 ? 'color' : 'colors'}
-      </div>
-      <div className="text-[11.5px]" style={{ marginTop: 1, color: count === 0 ? '#c2410c' : '#a1a1a6' }}>
-        {count === 0 ? 'No prices yet' : `${count} of ${RUN_QTYS.length} runs priced`}
       </div>
     </div>
   );
@@ -1578,72 +1685,164 @@ function formatQty(q: RunQty): string {
   return q.toLocaleString('en-US');
 }
 
-function RunCard({
-  qty,
-  cell,
+/** Compact three-way state control for one strip column — same menu as the
+ *  big cards, but the trigger is a small icon + short label so six fit in a row. */
+const MODE_SHORT: Record<PriceMode, string> = { priced: 'Priced', quote: 'Quote', off: 'Off' };
+
+function CompactModePicker({ mode, onChange }: { mode: PriceMode; onChange: (m: PriceMode) => void }) {
+  const [open, setOpen] = useState(false);
+  const meta = MODE_META[mode];
+  const MetaIcon = meta.icon;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-testid="button-strip-mode"
+          className="inline-flex items-center gap-1 rounded-full px-2 h-6 text-[11px] font-semibold transition-colors hover:bg-slate-50"
+          style={{ color: meta.color }}
+        >
+          <MetaIcon className="w-3 h-3" />
+          <span>{MODE_SHORT[mode]}</span>
+          <ChevronDown className="w-2.5 h-2.5" style={{ color: '#a1a1a6' }} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="center" sideOffset={6} className="w-64 p-1.5 rounded-2xl" style={{ border: `1px solid ${HAIRLINE}` }} data-testid="menu-strip-mode">
+        {(Object.keys(MODE_META) as PriceMode[]).map((m) => {
+          const mm = MODE_META[m];
+          const Icon = mm.icon;
+          const on = m === mode;
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => {
+                onChange(m);
+                setOpen(false);
+              }}
+              className="w-full flex items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-slate-50"
+              data-testid={`strip-mode-${m}`}
+            >
+              <span className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: on ? '#f0f7fc' : CANVAS }}>
+                <Icon className="w-3.5 h-3.5" style={{ color: mm.color }} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-[13px] font-semibold" style={{ color: INK }}>
+                    {mm.label}
+                  </span>
+                  {on && <Check className="w-3.5 h-3.5" style={{ color: BLUE }} />}
+                </span>
+                <span className="block text-[11.5px]" style={{ color: SUBINK, lineHeight: 1.35 }}>
+                  {mm.hint}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** The price book as ONE calm strip — six run sizes side by side, each with a
+ *  real dollar input. Reads like the classic pricing table but stays editable. */
+function PriceStrip({
+  row,
   onMode,
   onPrice,
 }: {
-  qty: RunQty;
-  cell: RunCell;
-  onMode: (m: PriceMode) => void;
-  onPrice: (v: string) => void;
+  row: Record<number, RunCell>;
+  onMode: (qty: RunQty, m: PriceMode) => void;
+  onPrice: (qty: RunQty, v: string) => void;
 }) {
-  const meta = MODE_META[cell.mode];
-  const isPriced = cell.mode === 'priced';
-  const isOff = cell.mode === 'off';
   return (
-    <div
-      className="rounded-2xl p-4 transition-colors"
-      style={{
-        border: isPriced ? `1px solid ${HAIRLINE}` : `1px dashed ${HAIRLINE}`,
-        backgroundColor: isOff ? CANVAS : '#fff',
-        opacity: isOff ? 0.78 : 1,
-      }}
-      data-testid={`run-card-${qty}`}
-    >
-      <div className="flex items-baseline justify-between">
-        <div>
-          <div className="text-[19px] font-bold tabular-nums tracking-tight" style={{ color: INK }}>
-            {formatQty(qty)}
-          </div>
-          <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6' }}>
-            units per run
-          </div>
-        </div>
-        <span className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ backgroundColor: CANVAS }}>
-          <meta.icon className="w-3.5 h-3.5" style={{ color: meta.color }} />
+    <div style={{ marginTop: 18 }} data-testid="price-strip">
+      {/* quiet add affordance — top right, outside the box */}
+      <div className="flex justify-end" style={{ marginBottom: 8 }}>
+        <button
+          type="button"
+          data-testid="button-add-run-size"
+          className="flex items-center gap-1.5 rounded-full px-2.5 h-7 text-[12px] font-semibold transition-colors hover:bg-slate-100"
+          style={{ color: SUBINK }}
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add run size
+        </button>
+      </div>
+      {/* When the runs outgrow a row, Apple goes vertical — one run per line,
+          like iCloud storage plans. Quantity left, price right. */}
+      <div className="rounded-2xl bg-white overflow-hidden" style={{ border: `1px solid ${HAIRLINE}` }}>
+        {RUN_QTYS.map((q, i) => {
+          const cell = row[q] ?? { mode: 'off', price: '' };
+          const isPriced = cell.mode === 'priced';
+          const isOff = cell.mode === 'off';
+          return (
+            <div
+              key={q}
+              className="group flex items-center justify-between"
+              style={{
+                padding: '12px 18px',
+                borderTop: i > 0 ? `1px solid ${HAIRLINE}` : undefined,
+                backgroundColor: isOff ? CANVAS : '#fff',
+                opacity: isOff ? 0.75 : 1,
+                transition: 'background-color 0.2s ease, opacity 0.2s ease',
+              }}
+              data-testid={`strip-row-${q}`}
+            >
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[15px] font-bold tabular-nums tracking-tight" style={{ color: INK }}>
+                  {formatQty(q)}
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6' }}>
+                  units
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Priced is the normal state — control stays quiet until hover.
+                    Quote / Off are the exceptions, so those stay visible. */}
+                <div className={isPriced ? 'opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity' : undefined}>
+                  <CompactModePicker mode={cell.mode} onChange={(m) => onMode(q, m)} />
+                </div>
+                {isPriced ? (
+                  <label
+                    className="flex items-center justify-center h-9 rounded-lg transition-shadow focus-within:ring-1 focus-within:ring-slate-300"
+                    style={{ border: `1px solid ${HAIRLINE}`, background: '#fff', cursor: 'text', padding: '0 12px', minWidth: 92 }}
+                    data-testid={`price-field-${q}`}
+                  >
+                    <span className="text-[13px] font-semibold" style={{ color: '#a1a1a6', marginRight: 1 }}>
+                      $
+                    </span>
+                    <input
+                      value={cell.price}
+                      onChange={(e) => onPrice(q, e.target.value.replace(/[^0-9.]/g, ''))}
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      size={Math.max(cell.price.length, 4)}
+                      data-testid={`input-price-${q}`}
+                      className="text-[14px] font-semibold tabular-nums focus:outline-none"
+                      style={{ color: INK, background: 'transparent', border: 'none', width: `${Math.max(cell.price.length, 4)}ch`, padding: 0 }}
+                    />
+                  </label>
+                ) : (
+                  <div
+                    className="h-9 rounded-lg flex items-center justify-center text-[12px]"
+                    style={{ border: `1px dashed ${HAIRLINE}`, color: '#a1a1a6', backgroundColor: isOff ? '#fff' : CANVAS, padding: '0 12px', minWidth: 92 }}
+                  >
+                    {cell.mode === 'quote' ? 'On request' : '—'}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {/* caption floats under the box — no rule, just quiet text */}
+      <div className="flex items-center justify-center" style={{ marginTop: 10 }}>
+        <span className="text-[11.5px]" style={{ color: '#a1a1a6' }}>
+          Prices are per unit, per finished package.
         </span>
-      </div>
-
-      <div style={{ marginTop: 14, minHeight: 44 }}>
-        {isPriced ? (
-          <label className="relative flex items-center" data-testid={`price-field-${qty}`}>
-            <span className="absolute left-3 text-[15px] font-semibold" style={{ color: '#a1a1a6' }}>
-              $
-            </span>
-            <input
-              value={cell.price}
-              onChange={(e) => onPrice(e.target.value.replace(/[^0-9.]/g, ''))}
-              inputMode="decimal"
-              placeholder="0.00"
-              data-testid={`input-price-${qty}`}
-              className="w-full h-11 pl-7 pr-14 rounded-xl text-[17px] font-semibold tabular-nums focus:outline-none focus:border-slate-400 transition-colors"
-              style={{ border: `1px solid ${HAIRLINE}`, color: INK, background: '#fff' }}
-            />
-            <span className="absolute right-3 text-[11px] font-medium" style={{ color: '#a1a1a6' }}>
-              / unit
-            </span>
-          </label>
-        ) : (
-          <div className="h-11 rounded-xl flex items-center px-3 text-[13px]" style={{ border: `1px dashed ${HAIRLINE}`, color: SUBINK, backgroundColor: isOff ? '#fff' : CANVAS }}>
-            {cell.mode === 'quote' ? 'Priced on request' : 'Hidden from artists'}
-          </div>
-        )}
-      </div>
-
-      <div style={{ marginTop: 12 }}>
-        <RunModePicker mode={cell.mode} onChange={onMode} />
       </div>
     </div>
   );
@@ -1652,69 +1851,248 @@ function RunCard({
 // ─── Print template file row ─────────────────────────────────────────
 type TemplateFile = { key: string; label: string; sub: string; file?: string };
 
+// Middle-truncate so the meaningful end of a filename ("…-template.pdf") survives.
+function middleTruncate(s: string, max = 26): string {
+  if (s.length <= max) return s;
+  const keep = Math.floor((max - 1) / 2);
+  return `${s.slice(0, max - 1 - keep)}…${s.slice(-keep)}`;
+}
+
+// Blueprint icons — line drawings of the actual piece, drawn like a die-line.
+// Solid strokes are edges; dashed strokes are folds, holes, and hidden parts.
+// (Same canon as the artist package builder — one icon language on both sides.)
+function BlueprintIcon({ kind }: { kind: string }) {
+  const s: React.SVGProps<SVGSVGElement> = {
+    width: 44,
+    height: 44,
+    viewBox: '0 0 26 26',
+    fill: 'none',
+    stroke: BLUE,
+    strokeWidth: 0.9,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+  };
+  switch (kind) {
+    case 'jacket': // square jacket, record peeking out the right
+      return (
+        <svg {...s}>
+          <circle cx="17.5" cy="13" r="6.5" strokeDasharray="2 2.2" opacity={0.7} />
+          <circle cx="17.5" cy="13" r="1.4" strokeDasharray="1.2 1.6" opacity={0.7} />
+          <rect x="3" y="4" width="18" height="18" rx="1.2" fill="#fff" />
+        </svg>
+      );
+    case 'labels': // center label — dashed record as context, solid label as the piece
+      return (
+        <svg {...s}>
+          <circle cx="13" cy="13" r="11" strokeDasharray="2 2.2" opacity={0.7} />
+          <circle cx="13" cy="13" r="6.5" fill="#fff" />
+          <circle cx="13" cy="13" r="1.3" />
+          <path d="M9.6 10.4a4.6 4.6 0 0 1 6.8 0" opacity={0.6} />
+        </svg>
+      );
+    case 'inner': // inner sleeve — square sleeve half-hidden behind the dashed jacket
+      return (
+        <svg {...s}>
+          <rect x="9" y="5.5" width="15" height="15" rx="1" fill="#fff" />
+          <rect x="2" y="5" width="16" height="16" rx="1.2" strokeDasharray="2 2.2" opacity={0.7} fill="#fff" />
+        </svg>
+      );
+    case 'booklet': // folded booklet — dashed center fold, text lines
+      return (
+        <svg {...s}>
+          <rect x="4" y="4.5" width="18" height="17" rx="1.2" fill="#fff" />
+          <path d="M13 4.5v17" strokeDasharray="2 2.2" opacity={0.7} />
+          <path d="M7 9.5h3.5M7 12.5h3.5M7 15.5h2.5M15.5 9.5h3.5M15.5 12.5h3.5" opacity={0.7} />
+        </svg>
+      );
+    default:
+      return <FileText className="w-4 h-4" style={{ color: BLUE }} />;
+  }
+}
+
 function TemplateRow({ tf, onAttach, onRemove }: { tf: TemplateFile; onAttach: () => void; onRemove: () => void }) {
   const has = !!tf.file;
-  return (
-    <div className="flex items-center gap-3 rounded-xl px-3.5 py-3 bg-white" style={{ border: `1px solid ${HAIRLINE}` }} data-testid={`template-${tf.key}`}>
-      <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: CANVAS }}>
-        <FileText className="w-4 h-4" style={{ color: has ? BLUE : '#a1a1a6' }} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="text-[13px] font-semibold" style={{ color: INK }}>
+
+  // Empty slot — the visible invitation. Dashed, one clear action.
+  if (!has) {
+    return (
+      <button
+        type="button"
+        onClick={onAttach}
+        data-testid={`template-upload-${tf.key}`}
+        className="flex flex-col items-center justify-center rounded-xl transition-colors hover:bg-white focus:outline-none"
+        style={{ border: '1.5px dashed #d1d1d6', padding: '18px 12px', cursor: 'pointer', background: 'transparent' }}
+      >
+        <span style={{ opacity: 0.55 }}>
+          <BlueprintIcon kind={tf.key} />
+        </span>
+        <div className="text-[13px] font-semibold" style={{ color: INK, marginTop: 8 }}>
           {tf.label}
         </div>
-        {has ? (
-          <div className="text-[11.5px] truncate tabular-nums" style={{ color: SUBINK }}>
-            {tf.file}
-          </div>
-        ) : (
-          <div className="text-[11.5px]" style={{ color: '#a1a1a6' }}>
-            {tf.sub}
-          </div>
-        )}
-      </div>
-      {has ? (
-        <button
-          type="button"
-          onClick={onRemove}
-          data-testid={`template-remove-${tf.key}`}
-          className="text-[12.5px] font-semibold rounded-full px-3 h-8 transition-colors hover:bg-slate-100"
-          style={{ color: SUBINK }}
-        >
-          Replace
-        </button>
-      ) : (
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onAttach}
-            data-testid={`template-upload-${tf.key}`}
-            className="flex items-center gap-1.5 text-[12.5px] font-semibold rounded-full px-3 h-8 transition-colors"
-            style={{ color: BLUE }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f0f7fc')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-          >
-            <UploadCloud className="w-3.5 h-3.5" />
-            Upload
-          </button>
-          <button
-            type="button"
-            onClick={onAttach}
-            data-testid={`template-link-${tf.key}`}
-            className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-slate-100"
-            style={{ color: SUBINK }}
-            aria-label="Paste a link"
-          >
-            <Link2 className="w-3.5 h-3.5" />
-          </button>
+        <div className="text-[11.5px] font-semibold" style={{ color: BLUE, marginTop: 3 }}>
+          Upload or paste a link
         </div>
-      )}
+      </button>
+    );
+  }
+
+  // Filled slot — calm and complete. Replace appears only on hover.
+  return (
+    <div
+      className="group relative flex flex-col items-center justify-center rounded-xl bg-white text-center"
+      style={{ border: `1px solid ${HAIRLINE}`, padding: '18px 12px' }}
+      data-testid={`template-${tf.key}`}
+    >
+      <BlueprintIcon kind={tf.key} />
+      <div className="text-[13px] font-semibold" style={{ color: INK, marginTop: 8 }}>
+        {tf.label}
+      </div>
+      <div className="text-[11.5px] tabular-nums" style={{ color: SUBINK, marginTop: 3 }} title={tf.file}>
+        {middleTruncate(tf.file!)}
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        data-testid={`template-remove-${tf.key}`}
+        className="absolute top-2 right-2 text-[11.5px] font-semibold rounded-full px-2.5 h-7 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-slate-100"
+        style={{ color: SUBINK }}
+      >
+        Replace
+      </button>
+    </div>
+  );
+}
+
+// ─── Audio spec — the plant's cutting requirements ───────────────────
+function AudioField({
+  value,
+  onChange,
+  placeholder,
+  suffix,
+  wch = 4,
+  testId,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  suffix: string;
+  wch?: number;
+  testId: string;
+}) {
+  return (
+    <label
+      className="flex items-center justify-center h-9 rounded-lg transition-shadow focus-within:ring-1 focus-within:ring-slate-300"
+      style={{ border: `1px solid ${HAIRLINE}`, background: '#fff', cursor: 'text', padding: '0 10px' }}
+    >
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value.replace(/[^0-9.]/g, ''))}
+        inputMode="decimal"
+        placeholder={placeholder}
+        data-testid={testId}
+        className="text-[14px] font-semibold tabular-nums text-center focus:outline-none"
+        style={{ color: INK, background: 'transparent', border: 'none', width: `${wch}ch`, padding: 0 }}
+      />
+      <span className="text-[11px] font-semibold" style={{ color: '#a1a1a6', marginLeft: 5 }}>
+        {suffix}
+      </span>
+    </label>
+  );
+}
+
+function AudioSpecCard({ onEdit }: { onEdit: () => void }) {
+  const [bit, setBit] = useState('24');
+  const [rate, setRate] = useState('44.1');
+  const [s7a, setS7a] = useState('');
+  const [s7b, setS7b] = useState('');
+  const [s10a, setS10a] = useState('');
+  const [s10b, setS10b] = useState('');
+  const [s12a, setS12a] = useState('22');
+  const [s12b, setS12b] = useState('');
+  const [notes, setNotes] = useState('');
+  const edit = (set: (v: string) => void) => (v: string) => {
+    set(v);
+    onEdit();
+  };
+  const rows: { label: string; sub?: string; controls: React.ReactNode }[] = [
+    {
+      label: 'Minimum bit depth',
+      sub: 'Default: 24-bit',
+      controls: <AudioField value={bit} onChange={edit(setBit)} placeholder="24" suffix="bit" testId="input-audio-bit" />,
+    },
+    {
+      label: 'Minimum sample rate',
+      sub: 'Default: no minimum',
+      controls: <AudioField value={rate} onChange={edit(setRate)} placeholder="—" suffix="kHz" wch={5} testId="input-audio-rate" />,
+    },
+    {
+      label: 'Longest side — 7"',
+      controls: (
+        <div className="flex items-center gap-2">
+          <AudioField value={s7a} onChange={edit(setS7a)} placeholder="8" suffix="min at 33⅓" wch={3} testId="input-audio-7-33" />
+          <AudioField value={s7b} onChange={edit(setS7b)} placeholder="6" suffix="min at 45" wch={3} testId="input-audio-7-45" />
+        </div>
+      ),
+    },
+    {
+      label: 'Longest side — 10"',
+      controls: (
+        <div className="flex items-center gap-2">
+          <AudioField value={s10a} onChange={edit(setS10a)} placeholder="15" suffix="min at 33⅓" wch={3} testId="input-audio-10-33" />
+          <AudioField value={s10b} onChange={edit(setS10b)} placeholder="12" suffix="min at 45" wch={3} testId="input-audio-10-45" />
+        </div>
+      ),
+    },
+    {
+      label: 'Longest side — 12"',
+      controls: (
+        <div className="flex items-center gap-2">
+          <AudioField value={s12a} onChange={edit(setS12a)} placeholder="22" suffix="min at 33⅓" wch={3} testId="input-audio-12-33" />
+          <AudioField value={s12b} onChange={edit(setS12b)} placeholder="16" suffix="min at 45" wch={3} testId="input-audio-12-45" />
+        </div>
+      ),
+    },
+  ];
+  return (
+    <div className="rounded-2xl bg-white overflow-hidden" style={{ border: `1px solid ${HAIRLINE}`, marginTop: 12 }} data-testid="audio-spec-card">
+      {rows.map((r, i) => (
+        <div
+          key={r.label}
+          className="flex items-center justify-between"
+          style={{ padding: '12px 18px', borderTop: i > 0 ? `1px solid ${HAIRLINE}` : undefined }}
+        >
+          <div>
+            <div className="text-[13.5px] font-semibold" style={{ color: INK }}>
+              {r.label}
+            </div>
+            {r.sub && (
+              <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 2 }}>
+                {r.sub}
+              </div>
+            )}
+          </div>
+          {r.controls}
+        </div>
+      ))}
+      {/* Notes — quiet context for operators */}
+      <div style={{ padding: '12px 18px', borderTop: `1px solid ${HAIRLINE}` }}>
+        <div className="text-[13.5px] font-semibold" style={{ color: INK }}>Notes</div>
+        <textarea
+          value={notes}
+          onChange={(e) => { setNotes(e.target.value); onEdit(); }}
+          placeholder="Optional context for operators — e.g. where these numbers come from."
+          data-testid="input-audio-notes"
+          rows={2}
+          className="w-full text-[13px] focus:outline-none resize-none"
+          style={{ color: INK, background: 'transparent', border: 'none', marginTop: 4, padding: 0, lineHeight: 1.45 }}
+        />
+      </div>
     </div>
   );
 }
 
 // ─── Main page ───────────────────────────────────────────────────────
-export function PressPackagePricing() {
+export function PressPackagePricingTableRuns() {
   const [productTypeId, setProductTypeId] = useState<ProductTypeId>('lp12');
   const [activeGroupId, setActiveGroupId] = useState<string>('black');
   const [book, setBook] = useState<PriceBook>(() => seedBook());
@@ -1726,6 +2104,7 @@ export function PressPackagePricing() {
     { key: 'jacket', label: 'Jacket', sub: 'Outer sleeve print template', file: 'MRP-12in-jacket-template.pdf' },
     { key: 'inner', label: 'Inner sleeve', sub: 'Printed liner template' },
     { key: 'labels', label: 'Center labels', sub: 'A-side & B-side label template', file: 'MRP-label-3.94in.pdf' },
+    { key: 'booklet', label: 'Booklet', sub: 'Lyric & photo booklet template' },
   ]);
 
   const product = useMemo(() => PRODUCT_TYPES.find((p) => p.id === productTypeId) ?? PRODUCT_TYPES[1], [productTypeId]);
@@ -1773,6 +2152,24 @@ export function PressPackagePricing() {
   };
   const removeColor = (groupId: string, colorId: string) => {
     setGroups((gs) => gs.map((g) => (g.id === groupId ? { ...g, colors: g.colors.filter((c) => c.id !== colorId) } : g)));
+  };
+  // Drag a tile onto another to reorder — artists see this order on their Sell panel.
+  const [dragColorId, setDragColorId] = useState<string | null>(null);
+  const reorderColor = (groupId: string, fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    setGroups((gs) =>
+      gs.map((g) => {
+        if (g.id !== groupId) return g;
+        const arr = [...g.colors];
+        const f = arr.findIndex((c) => c.id === fromId);
+        const t = arr.findIndex((c) => c.id === toId);
+        if (f < 0 || t < 0) return g;
+        const [moved] = arr.splice(f, 1);
+        arr.splice(t, 0, moved);
+        return { ...g, colors: arr };
+      }),
+    );
+    setDirty(true);
     setDirty(true);
   };
   const row = book[activeGroupId] ?? {};
@@ -1813,22 +2210,79 @@ export function PressPackagePricing() {
         {/* Page header + save */}
         <div className="flex items-start justify-between gap-6">
           <div className="min-w-0">
-            <SectionLabel>Vinyl catalog · Package pricing</SectionLabel>
-            <PageHeading lead="One price." rest="The whole record." />
+            <h1 className="tracking-tight" style={{ color: INK, fontSize: 32, lineHeight: 1.1, fontWeight: 700 }}>
+              Catalog
+            </h1>
+            {/* Format switcher — vinyl live, CD & cassette coming. Apple: present the future, quietly. */}
+            <div
+              className="inline-flex items-center rounded-full"
+              style={{ marginTop: 16, padding: 3, backgroundColor: '#ececf0' }}
+              role="tablist"
+              aria-label="Catalog format"
+            >
+              {[
+                { label: 'Vinyl', enabled: true },
+                { label: 'CD', enabled: false },
+                { label: 'Cassette', enabled: false },
+              ].map((f) => (
+                <button
+                  key={f.label}
+                  type="button"
+                  role="tab"
+                  aria-selected={f.enabled}
+                  aria-disabled={!f.enabled}
+                  title={f.enabled ? undefined : 'Coming'}
+                  data-testid={`format-${f.label.toLowerCase()}`}
+                  className="rounded-full transition-colors"
+                  style={{
+                    padding: '6px 18px',
+                    fontSize: 13.5,
+                    fontWeight: f.enabled ? 600 : 500,
+                    color: f.enabled ? INK : '#b6b6bb',
+                    backgroundColor: f.enabled ? '#ffffff' : 'transparent',
+                    boxShadow: f.enabled ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
+                    cursor: f.enabled ? 'pointer' : 'default',
+                  }}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <div style={{ marginTop: 24 }}>
+              <SectionLabel>Vinyl · Package pricing</SectionLabel>
+              <PageHeading lead="Build your vinyl catalog." rest="From scratch." />
+            </div>
             <p className="text-[15px]" style={{ color: SUBINK, marginTop: 12, maxWidth: 560, lineHeight: 1.5 }}>
               Quote the way you already do — a single cost per finished package, per run size. Record, jacket,
               inner sleeve, and labels are all in it. No per-piece math.
             </p>
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0" style={{ marginTop: 24 }}>
-            <div className="flex items-center gap-1.5 text-[12.5px] font-medium" style={{ color: dirty ? WARN : READY }}>
-              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: dirty ? WARN : READY }} />
-              {dirty ? 'Unsaved changes' : 'All changes saved'}
-            </div>
+        </div>
+
+        {/* Save bar — appears only when there's something to save. Apple shows the action
+            when it matters, not a parked button in the header. */}
+        {dirty && (
+          <div
+            className="fixed left-1/2 flex items-center gap-4 rounded-full"
+            style={{
+              bottom: 28,
+              transform: 'translateX(-50%)',
+              zIndex: 40,
+              padding: '10px 12px 10px 22px',
+              backgroundColor: 'rgba(255,255,255,0.92)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              border: `1px solid ${HAIRLINE}`,
+              boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+            }}
+            data-testid="save-bar"
+          >
+            <span className="text-[13px]" style={{ color: SUBINK }}>
+              Edited
+            </span>
             <Button
-              disabled={!dirty}
               onClick={handleSave}
-              className="text-white hover:opacity-90 rounded-full disabled:opacity-40"
+              className="text-white hover:opacity-90 rounded-full"
               style={{ backgroundColor: BLUE, borderColor: BLUE, paddingLeft: 22, paddingRight: 22 }}
               data-testid="button-save-catalog"
             >
@@ -1836,45 +2290,71 @@ export function PressPackagePricing() {
               Save catalog
             </Button>
           </div>
-        </div>
-
-        {/* Product type control */}
-        <div style={{ marginTop: 28 }}>
-          <SectionLabel>Product type</SectionLabel>
-          <div className="flex items-center gap-4" style={{ marginTop: 10 }}>
-            <ProductTypeControl value={productTypeId} onChange={setProductTypeId} />
-            <span className="text-[12.5px]" style={{ color: '#a1a1a6' }}>
-              {product.format}
-            </span>
-          </div>
-        </div>
+        )}
 
         <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />
 
-        {/* Two-column body */}
-        <div className="grid gap-8" style={{ gridTemplateColumns: '360px 1fr' }}>
-          {/* LEFT — disc preview + package contents + turnaround */}
-          <div className="flex flex-col gap-5" style={{ position: 'sticky', top: 24, alignSelf: 'start' }}>
-            <div className="rounded-2xl bg-white overflow-hidden" style={{ border: `1px solid ${HAIRLINE}` }}>
-              <div className="flex items-center justify-center px-6 pt-8 pb-6" style={{ background: 'linear-gradient(180deg, #fbfbfd 0%, #ffffff 100%)' }}>
-                <DiscStage swatch={previewSwatch} product={product} />
+        {/* Two-column body — big open-air disc left, thin working column right */}
+        <div className="grid gap-16" style={{ gridTemplateColumns: 'minmax(0, 1fr) 620px' }}>
+          {/* LEFT — the record itself, no card around it */}
+          <div
+            className="flex flex-col items-center justify-center"
+            style={{ position: 'sticky', top: 24, alignSelf: 'start', minHeight: 560, paddingTop: 24 }}
+          >
+            <JacketStage swatch={previewSwatch} product={product} />
+            {/* Captions — shifted left so they center under the jacket, not the whole stage */}
+            <div className="flex flex-col items-center" style={{ transform: `translateX(-${Math.round(300 * (product.inches / 12) * 0.25)}px)` }}>
+              <div className="flex items-center gap-2.5 text-[13px]" style={{ marginTop: 28, color: SUBINK }}>
+                <ColorBall swatch={previewSwatch} size={18} />
+                <span>{product.inches}"</span>
+                <span style={{ color: '#d1d1d6' }}>·</span>
+                <span>{activeGroup.name}</span>
+                <span style={{ color: '#d1d1d6' }}>·</span>
+                <span className="font-semibold" style={{ color: INK }}>
+                  {selectedColor?.name ?? activeGroup.swatch.name}
+                </span>
               </div>
-              <div className="px-5 py-4 flex items-center gap-3" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
-                <ColorBall swatch={previewSwatch} size={30} />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13.5px] font-semibold truncate" style={{ color: INK }}>
-                    {selectedColor.name} · {activeGroup.name} · {product.name}
-                  </div>
-                </div>
+              <div className="text-[12px] text-center" style={{ marginTop: 8, marginBottom: 16, color: '#a1a1a6', lineHeight: 1.4 }}>
+                {product.inches < 12 ? (
+                  <>Printed jacket included.</>
+                ) : (
+                  <>Printed jacket and inner sleeve included.</>
+                )}
               </div>
             </div>
-
-            <PackageContentsCard product={product} />
-            <TurnaroundCard min={turnMin} max={turnMax} onMin={(v) => { setTurnMin(v); setDirty(true); }} onMax={(v) => { setTurnMax(v); setDirty(true); }} />
           </div>
 
-          {/* RIGHT — color groups + price book + templates */}
-          <div className="min-w-0">
+          {/* RIGHT — color groups + price book + templates.
+              Sits above the jacket stage so the sliding record never paints over it. */}
+          <div className="min-w-0" style={{ position: 'relative', zIndex: 2, backgroundColor: CANVAS }}>
+            {/* Pick a size — first step, same cards as the color setup screen */}
+            <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
+              <span style={{ color: INK }}>Pick a size. </span>
+              <span style={{ color: '#a1a1a6' }}>Prices follow the record.</span>
+            </h2>
+            <div style={{ marginTop: 14, display: 'flex', gap: 12 }}>
+              {PRODUCT_TYPES.map((p) => {
+                const active = p.id === productTypeId;
+                const [big, ...rest] = p.name.split(' ');
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setProductTypeId(p.id)}
+                    aria-pressed={active}
+                    data-testid={`product-type-${p.id}`}
+                    className="rounded-2xl bg-white transition-all hover:-translate-y-px focus:outline-none"
+                    style={{ flex: 1, padding: '16px 12px', border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, textAlign: 'center', cursor: 'pointer' }}
+                  >
+                    <div className="text-[17px] font-semibold" style={{ color: active ? BLUE : INK }}>{big}</div>
+                    <div className="text-[11px]" style={{ marginTop: 3, color: '#a1a1a6' }}>{rest.join(' ')}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />
+
             {/* Pick a type */}
             <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
               <span style={{ color: INK }}>Pick a type. </span>
@@ -1920,7 +2400,7 @@ export function PressPackagePricing() {
             </h2>
             <p className="text-[12.5px]" style={{ marginTop: 6 }}>
               <span className="font-semibold" style={{ color: INK }}>{activeGroup.name}</span>
-              <span style={{ color: '#a1a1a6' }}> · {activeGroup.colors.length} colors</span>
+              <span style={{ color: '#a1a1a6' }}> · {activeGroup.colors.length} colors · drag to reorder — artists see this order</span>
             </p>
             <div className="grid grid-cols-4 gap-3" style={{ marginTop: 12 }}>
               {activeGroup.colors.map((c) => {
@@ -1939,8 +2419,23 @@ export function PressPackagePricing() {
                     }}
                     aria-pressed={on}
                     data-testid={`color-${c.id}`}
+                    draggable
+                    onDragStart={(e) => {
+                      setDragColorId(c.id);
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (dragColorId && dragColorId !== c.id) reorderColor(activeGroup.id, dragColorId, c.id);
+                    }}
+                    onDragEnd={() => setDragColorId(null)}
                     className="group relative rounded-2xl bg-white text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
-                    style={{ padding: '16px 10px 12px', border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
+                    style={{
+                      padding: '16px 10px 12px',
+                      border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
+                      opacity: dragColorId === c.id ? 0.45 : 1,
+                      cursor: dragColorId ? 'grabbing' : undefined,
+                    }}
                   >
                     <div
                       className="absolute opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
@@ -2010,24 +2505,42 @@ export function PressPackagePricing() {
               </span>
             </p>
 
-            <div className="grid grid-cols-3 gap-3" style={{ marginTop: 18 }}>
-              {RUN_QTYS.map((q) => (
-                <RunCard key={q} qty={q} cell={row[q] ?? { mode: 'off', price: '' }} onMode={(m) => handleMode(q, m)} onPrice={(v) => handlePrice(q, v)} />
-              ))}
+            <PriceStrip row={row} onMode={handleMode} onPrice={handlePrice} />
+
+            <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />
+
+            {/* Turnaround */}
+            <div>
+              <TurnaroundCard min={turnMin} max={turnMax} onMin={(v) => { setTurnMin(v); setDirty(true); }} onMax={(v) => { setTurnMax(v); setDirty(true); }} />
             </div>
 
             <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />
 
             {/* Print templates (secondary) */}
-            <SectionLabel>Print templates</SectionLabel>
-            <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 4, lineHeight: 1.4 }}>
-              Your artwork specs for artists — attach a file or paste a link. Optional and quiet.
+            <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
+              <span style={{ color: INK }}>Print templates. </span>
+              <span style={{ color: '#a1a1a6' }}>Artwork specs for artists.</span>
+            </h2>
+            <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
+              Attach a file or paste a link. Optional and quiet.
             </p>
-            <div className="flex flex-col gap-2.5" style={{ marginTop: 12 }}>
+            <div className="grid grid-cols-3 gap-3" style={{ marginTop: 12 }}>
               {templates.map((tf) => (
                 <TemplateRow key={tf.key} tf={tf} onAttach={() => doAttach(tf.key)} onRemove={() => removeTemplate(tf.key)} />
               ))}
             </div>
+
+            <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />
+
+            {/* Audio spec */}
+            <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
+              <span style={{ color: INK }}>Audio spec. </span>
+              <span style={{ color: '#a1a1a6' }}>What the lathe can cut.</span>
+            </h2>
+            <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
+              Leave a field blank to inherit the press default — the gray numbers. These drive each album's audio preflight.
+            </p>
+            <AudioSpecCard onEdit={() => setDirty(true)} />
           </div>
         </div>
       </div>
@@ -2035,4 +2548,4 @@ export function PressPackagePricing() {
   );
 }
 
-export default PressPackagePricing;
+export default PressPackagePricingTableRuns;

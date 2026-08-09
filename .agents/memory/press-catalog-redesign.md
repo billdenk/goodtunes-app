@@ -20,4 +20,10 @@ The press Catalog (portal Vinyl catalog tab + god-view `?tab=catalog`) is `clien
 - Jacket fill chain: real art (treat `/album-placeholder.svg` as none) → press `vinylPlaceholderUrl` → `/pmp-icon.png` at 45% on `#1d1d1f` via JacketStage's `placeholderIconUrl` prop (exported from PressPackagePricingCatalog).
 - The invited press resolves from `people.invited_by_press_id` (or label), NOT `press_invited_albums` — dev verification fixture = stamp that column on the artist person (Memphis has real ladders in dev; appreview sampler artist works).
 
+**Handoff v3 (2026-08 addendum) gotchas:**
+- The design's header Vinyl/CD/Cassette pill must be FUNCTIONAL, not decorative: disabled "Coming" pills hide real offered CD/cassette tiers + the GoodDeeds editor (architect flagged as data-loss). The pill switches activeTab, enables an unoffered format on click (canEdit), and a GoodDeeds pill reaches GoodDeedPrintingEditor; non-vinyl active formats get a quiet hide/remove control row.
+- A "replace presentation wholesale" delegation to a design subagent tends to retrofit shallowly AND drop legacy affordances (tiers.slice hiding real tiers, FormatDropdown removed). Review the diff specifically for data made unreachable, not just data deleted.
+- The portal duplicate catalog header (AdminPageHeader + "Add your vinyl" button in PressPortal) was removed; the colors sub-view stays reachable via an `onOpenColors` prop rendered as a quiet button in the page's action cluster.
+- Press logos are seeded via the NORMAL mechanism (PNG upload → /api/admin/upload → PUT manufacturers logoUrl), never hardcoded paths; prod parity by marker-guarded UPDATE in post-merge.sh (shared object-storage bucket = same /objects URLs in both DBs); SVG/webp are rejected by the upload MIME allowlist — convert to PNG first.
+
 **Why:** Bill required zero data loss + exact interaction parity verified on live data (Riverside empty catalog, Memphis real ladders) before the legacy page was removed.
