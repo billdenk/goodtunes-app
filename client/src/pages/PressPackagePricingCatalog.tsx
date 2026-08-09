@@ -26,7 +26,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ALBUM_FORMAT_LABEL, type AlbumFormat } from "@shared/schema";
-import { Check, FileText, Loader2, MoreHorizontal, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, DollarSign, FileText, HelpCircle, Loader2, MinusCircle, MoreHorizontal, Plus, Trash2, X } from "lucide-react";
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -538,45 +538,24 @@ function ModePicker({
   qty: number;
   visible: boolean;
 }) {
-  const opts: { m: PriceMode; label: string }[] = [
-    { m: "priced", label: "Priced" },
-    { m: "quote", label: "Quote on request" },
-    { m: "off", label: "Not offered" },
-  ];
+  const meta = {
+    priced: { label: "Priced", hint: "A clear package price", icon: DollarSign, color: "#248a3d" },
+    quote: { label: "Quote", hint: "Ask for a custom quote", icon: HelpCircle, color: "#c98a00" },
+    off: { label: "Off", hint: "Not available at this size", icon: MinusCircle, color: "#a1a1a6" },
+  }[mode];
+  const [open, setOpen] = useState(false);
+  const opts: PriceMode[] = ["priced", "quote", "off"];
   return (
-    <div
-      className={cn(
-        "flex items-center gap-1 transition-opacity",
-        visible ? "opacity-100" : "opacity-0 group-hover/run:opacity-100 focus-within:opacity-100",
-      )}
-      role="radiogroup"
-      aria-label={`Availability at ${qty}`}
-    >
-      {opts.map(({ m, label }) => {
-        const on = mode === m;
-        return (
-          <button
-            key={m}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            onClick={(e) => {
-              onChange(m);
-              e.currentTarget.blur(); // release focus-within so the pills fade back out
-            }}
-            data-testid={`mode-${m}-${qty}`}
-            className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-colors"
-            style={
-              on
-                ? { backgroundColor: "rgba(49,158,216,0.12)", color: BLUE }
-                : { color: SUBINK }
-            }
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild><button type="button" className="inline-flex items-center gap-1 rounded-full px-2 h-6 text-[11px] font-semibold transition-colors hover:bg-slate-50" style={{ color: meta.color }}><meta.icon className="w-3 h-3" /><span>{meta.label}</span><ChevronDown className="w-2.5 h-2.5" /></button></PopoverTrigger>
+      <PopoverContent align="end" sideOffset={6} className="w-64 p-1.5 rounded-2xl" style={{ border: `1px solid ${HAIRLINE}` }}>
+        {opts.map((m) => {
+          const mm = { priced: { label: "Priced", hint: "A clear package price", icon: DollarSign, color: "#248a3d" }, quote: { label: "Quote", hint: "Ask for a custom quote", icon: HelpCircle, color: "#c98a00" }, off: { label: "Off", hint: "Not available at this size", icon: MinusCircle, color: "#a1a1a6" } }[m];
+          const Icon = mm.icon;
+          return <button key={m} type="button" onClick={() => { onChange(m); setOpen(false); }} className="w-full flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-slate-50"><span className="flex h-6 w-6 items-center justify-center rounded-lg" style={{ background: m === mode ? "#f0f7fc" : "#f5f5f7", color: mm.color }}><Icon className="w-3.5 h-3.5" /></span><span className="flex-1"><span className="block text-[13px] font-semibold" style={{ color: INK }}>{mm.label}</span><span className="block text-[11.5px]" style={{ color: SUBINK }}>{mm.hint}</span></span>{m === mode && <Check className="w-3.5 h-3.5" style={{ color: BLUE }} />}</button>;
+        })}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -594,16 +573,14 @@ function AddRunSizePopover({ onAdd, existing }: { onAdd: (qty: number) => void; 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" className="flex items-center gap-2 focus:outline-none" data-testid="button-add-run-size">
-          <span
-            className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border"
-            style={{ borderColor: BLUE, color: BLUE }}
-          >
-            <Plus className="h-3 w-3" strokeWidth={2.5} />
-          </span>
-          <span className="text-[13px] font-semibold" style={{ color: BLUE }}>
-            Add run size
-          </span>
+        <button
+          type="button"
+          data-testid="button-add-run-size"
+          className="flex items-center gap-1.5 rounded-full px-2.5 h-7 text-[12px] font-semibold transition-colors hover:bg-slate-100"
+          style={{ color: SUBINK }}
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add run size
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -1422,79 +1399,58 @@ export function PressPackagePricingCatalog({
               {/* Name your price */}
               {selectedTier && (
                 <section id="section-price" data-testid="section-price">
-                  <TwoTone lead="Name your price." rest={`${selectedTier.name} · ${ALBUM_FORMAT_LABEL[fmt]}.`} />
-                  <Card className="mt-4 overflow-hidden" testId="price-strip">
+                  <TwoTone lead="Name your price." rest="Per package, per run." />
+                  <p className="text-[12.5px]" style={{ marginTop: 6 }}>
+                    <span className="font-semibold" style={{ color: INK }}>{selectedTier.name}</span>
+                    <span style={{ color: FAINT }}>{colors.length > 0 ? ` · one price covers all ${colors.length} colors` : " · add colors in the step above"}</span>
+                  </p>
+                  {canEdit && <div className="flex justify-end" style={{ marginBottom: 8 }}>
+                    <AddRunSizePopover onAdd={(q) => setExtraQuantities((prev) => [...prev, q])} existing={columns} />
+                  </div>}
+                  <div className="rounded-2xl bg-white overflow-hidden" style={{ border: `1px solid ${HAIRLINE}` }} data-testid="price-strip">
                     {columns.map((q, i) => {
                       const mode = modeFor(q);
                       return (
                         <div
                           key={q}
-                          className="group/run flex items-center gap-4 px-5"
+                          className="group flex items-center justify-between"
                           style={{
                             borderTop: i === 0 ? undefined : `1px solid ${HAIRLINE}`,
-                            backgroundColor: mode === "off" ? "var(--apple-canvas, #f5f5f7)" : undefined,
+                            backgroundColor: mode === "off" ? "var(--apple-canvas, #f5f5f7)" : "#fff",
                             opacity: mode === "off" ? 0.75 : 1,
-                            paddingTop: 10,
-                            paddingBottom: 10,
+                            padding: "12px 18px",
+                            transition: "background-color 0.2s ease, opacity 0.2s ease",
                           }}
                           data-testid={`row-run-${q}`}
                         >
-                          <div className="w-20 flex-shrink-0 text-[14px] font-semibold tabular-nums" style={{ color: mode === "off" ? SUBINK : INK }}>
-                            {q.toLocaleString()}
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-[15px] font-bold tabular-nums tracking-tight" style={{ color: INK }}>{q.toLocaleString()}</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "#a1a1a6" }}>units</span>
                           </div>
-                          <div className="flex-1">
-                            {canEdit ? (
-                              <ModePicker mode={mode} onChange={(m) => setMode(q, m)} qty={q} visible={mode !== "priced"} />
-                            ) : (
-                              <span className="text-[11.5px] font-semibold" style={{ color: SUBINK }}>
-                                {mode === "priced" ? "" : mode === "quote" ? "Quote on request" : "Not offered"}
-                              </span>
-                            )}
-                          </div>
-                          <div className="w-36 flex-shrink-0 text-right">
+                          <div className="flex items-center gap-3">
+                            {canEdit && <div className={mode === "priced" ? "opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity" : undefined}><ModePicker mode={mode} onChange={(m) => setMode(q, m)} qty={q} visible /></div>}
                             {mode === "priced" ? (
-                              <div className="inline-flex items-center gap-1">
-                                <span className="text-[13px]" style={{ color: SUBINK }}>
-                                  $
-                                </span>
+                              <label className="flex items-center justify-center h-9 rounded-lg transition-shadow focus-within:ring-1 focus-within:ring-slate-300" style={{ border: `1px solid ${HAIRLINE}`, background: "#fff", cursor: "text", padding: "0 12px", minWidth: 92 }}>
+                                <span className="text-[13px] font-semibold" style={{ color: "#a1a1a6", marginRight: 1 }}>$</span>
                                 <input
-                                  inputMode="decimal"
-                                  value={cellValue(q)}
-                                  onChange={(e) => setCellValue(q, e.target.value)}
-                                  readOnly={!canEdit}
-                                  aria-label={`Per-unit price at ${q}`}
-                                  className="w-24 bg-white text-right text-[14px] font-semibold tabular-nums focus:outline-none focus:border-slate-400"
-                                  style={{ height: 34, border: `1px solid ${HAIRLINE}`, borderRadius: 9, padding: "0 10px", color: INK }}
+                                  inputMode="decimal" value={cellValue(q)} onChange={(e) => setCellValue(q, e.target.value)} readOnly={!canEdit}
+                                  className="border-0 bg-transparent p-0 text-[14px] font-semibold tabular-nums focus:outline-none" style={{ width: `${Math.max(cellValue(q).length, 4)}ch`, color: INK }}
                                   data-testid={`input-price-${q}`}
                                 />
-                              </div>
-                            ) : mode === "quote" ? (
-                              <span
-                                className="inline-flex h-[34px] w-full items-center justify-end rounded-[9px] px-2.5 text-[12.5px] font-medium"
-                                style={{ border: `1px dashed ${FAINT}`, color: SUBINK }}
-                              >
-                                On request
-                              </span>
+                              </label>
                             ) : (
-                              <span className="text-[14px]" style={{ color: FAINT }}>
-                                —
+                              <span className="h-9 rounded-lg flex items-center justify-center text-[12px]" style={{ border: `1px dashed ${HAIRLINE}`, color: "#a1a1a6", background: mode === "off" ? "#fff" : "var(--apple-canvas, #f5f5f7)", padding: "0 12px", minWidth: 92 }}>
+                                {mode === "quote" ? "On request" : "—"}
                               </span>
                             )}
                           </div>
                         </div>
                       );
                     })}
-                    <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
-                      {canEdit ? (
-                        <AddRunSizePopover onAdd={(q) => setExtraQuantities((prev) => [...prev, q])} existing={columns} />
-                      ) : (
-                        <span />
-                      )}
-                      <span className="text-[12px]" style={{ color: SUBINK }}>
-                        Prices are per unit, per finished package.
-                      </span>
-                    </div>
-                  </Card>
+                  </div>
+                  <div className="flex items-center justify-center" style={{ marginTop: 10 }}>
+                    <span className="text-[11.5px]" style={{ color: "#a1a1a6" }}>Prices are per unit, per finished package.</span>
+                  </div>
                 </section>
               )}
 
@@ -1516,15 +1472,18 @@ export function PressPackagePricingCatalog({
                 <>
                   <section id="section-templates" data-testid="section-templates">
                     <TwoTone lead="Print templates." rest="Artwork specs for artists." />
-                    <p className="mt-1 text-[12.5px]" style={{ color: SUBINK }}>Attach a file or paste a link. Optional and quiet.</p>
+                  <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>Attach a file or paste a link. Optional and quiet.</p>
                     <TemplateTilesGrid pressId={pressId} fmt={fmt} canEdit={canEdit} />
                   </section>
-                  <section id="section-audio" data-testid="section-audio">
+                    <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: "28px 0" }} />
+                    <section id="section-audio" data-testid="section-audio">
                     <TwoTone lead="Audio spec." rest="What the lathe can cut." />
+                      <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>Leave a field blank to inherit the press default — the gray numbers. These drive each album's audio preflight.</p>
                     <AudioSpecEditorCard pressId={pressId} canEdit={canEdit} />
                   </section>
                 </>
               )}
+              <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: "28px 0" }} />
               <section className="pt-2" data-testid="section-gooddeeds">
                 <TwoTone lead="GoodDeeds." rest="Printing options." />
                 <p className="mt-1 text-[12.5px]" style={{ color: SUBINK }}>Keep the signed GoodDeed® printing ladder separate from vinyl package pricing.</p>

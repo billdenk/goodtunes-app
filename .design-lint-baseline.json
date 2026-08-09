@@ -23077,7 +23077,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-colors\""
+    "snippet": "<PopoverTrigger asChild><button type=\"button\" className=\"inline-flex items-center gap-1 rounded-full px-2 h-6 text-[11px] font-semibold transition-colors hover:bg-slate-50\" style={{ color: meta.color "
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "return <button key={m} type=\"button\" onClick={() => { onChange(m); setOpen(false); }} className=\"w-full flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-slate-50\"><span className=\"f"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23162,42 +23167,47 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<div className=\"w-20 flex-shrink-0 text-[14px] font-semibold tabular-nums\" style={{ color: mode === \"off\" ? SUBINK : INK }}>"
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 6 }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[11.5px] font-semibold\" style={{ color: SUBINK }}>"
+    "snippet": "<span className=\"text-[15px] font-bold tabular-nums tracking-tight\" style={{ color: INK }}>{q.toLocaleString()}</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[13px]\" style={{ color: SUBINK }}>"
+    "snippet": "<span className=\"text-[10px] font-semibold uppercase tracking-wider\" style={{ color: \"#a1a1a6\" }}>units</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"w-24 bg-white text-right text-[14px] font-semibold tabular-nums focus:outline-none focus:border-slate-400\""
+    "snippet": "<span className=\"text-[13px] font-semibold\" style={{ color: \"#a1a1a6\", marginRight: 1 }}>$</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"inline-flex h-[34px] w-full items-center justify-end rounded-[9px] px-2.5 text-[12.5px] font-medium\""
+    "snippet": "className=\"border-0 bg-transparent p-0 text-[14px] font-semibold tabular-nums focus:outline-none\" style={{ width: `${Math.max(cellValue(q).length, 4)}ch`, color: INK }}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[14px]\" style={{ color: FAINT }}>"
+    "snippet": "<span className=\"h-9 rounded-lg flex items-center justify-center text-[12px]\" style={{ border: `1px dashed ${HAIRLINE}`, color: \"#a1a1a6\", background: mode === \"off\" ? \"#fff\" : \"var(--apple-canvas, #f"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[12px]\" style={{ color: SUBINK }}>"
+    "snippet": "<span className=\"text-[11.5px]\" style={{ color: \"#a1a1a6\" }}>Prices are per unit, per finished package.</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<p className=\"mt-1 text-[12.5px]\" style={{ color: SUBINK }}>Attach a file or paste a link. Optional and quiet.</p>"
+    "snippet": "<p className=\"text-[12.5px]\" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>Attach a file or paste a link. Optional and quiet.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>Leave a field blank to inherit the press default — the gray numbers. These drive each album's audio preflight.</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23373,11 +23383,6 @@
     "rule": "naked-icon-button",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "<button type=\"button\" aria-label={`Options for ${ALBUM_FORMAT_LABEL[format]}`} data-testid={`button-size-menu-${format}`} className={cn( \"absolute right-2 top-2 inline-flex h-6 w-6 items-center justif"
-  },
-  {
-    "rule": "naked-icon-button",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<button type=\"button\" aria-label={`Edit ${c.name}`} data-testid={`button-color-menu-${c.id}`} className={cn( \"absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg"
   },
   {
     "rule": "brand-hex-literal",
