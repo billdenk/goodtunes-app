@@ -105,13 +105,10 @@ function PressDiscLabel({
   logoUrl: string | null;
   bgColor: string | null;
 }) {
-  // Blessed reference (CORRECTIONS item 27): a plain BLACK label carrying the
-  // press's logo in white. Assets arrive in any ink (MRP's is already white,
-  // others near-black), so the mark is forced to a white silhouette with
-  // `brightness(0) invert(1)` — deterministic for every source color. bgColor
-  // is still threaded (kept in the signature so call sites compile) but the
-  // fill is UNCONDITIONALLY the reference's PRESS_LABEL_BG, never overridden.
-  void bgColor;
+  // Item 27 baseline is a BLACK label carrying the press's logo as a white
+  // silhouette (`brightness(0) invert(1)` — deterministic for any source
+  // ink). A press with a stored brand label color (e.g. Hellbender red
+  // #e40a13, Viryl green #5eb86e) overrides the black fill via bgColor.
   return (
     <div
       style={{
@@ -122,11 +119,11 @@ function PressDiscLabel({
         width: size,
         height: size,
         borderRadius: "50%",
-        backgroundColor: "#0a0a0a",
+        backgroundColor: bgColor || "#0a0a0a",
         overflow: "hidden",
       }}
     >
-      {logoUrl && size >= 70 && (
+      {logoUrl && size >= 18 && (
         <img
           src={logoUrl}
           alt=""
