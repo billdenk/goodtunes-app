@@ -1512,6 +1512,7 @@ function AddRunSizePopover({ onAdd, existing }: { onAdd: (qty: number) => void; 
 }
 
 // ─── Main page ───────────────────────────────────────────────────────
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 export function PressPackagePricingCatalog({
   pressId,
   pressDomain,
@@ -2306,7 +2307,15 @@ export function PressPackagePricingCatalog({
             className={cn(
               "grid gap-10 grid-cols-1",
               isVinyl &&
-                "min-[900px]:grid-cols-[minmax(340px,460px)_minmax(0,1fr)] min-[1440px]:gap-16 min-[1440px]:grid-cols-[minmax(0,1fr)_620px]",
+                // Two columns only when the RIGHT column keeps a workable
+                // width beside the admin rail. The left stage track's max is
+                // a PERCENTAGE (not 460px) so it can't gobble the leftover
+                // space before the 1fr right column — a fixed-max minmax
+                // track grows to its max before fr tracks get anything,
+                // which at 1024–1300px squeezed the sections column to
+                // ~124px and pushed its content past the viewport edge
+                // (Task #2981).
+                "min-[1200px]:grid-cols-[minmax(340px,36%)_minmax(0,1fr)] min-[1440px]:gap-16 min-[1440px]:grid-cols-[minmax(0,1fr)_620px]",
             )}
           >
             {/* ── LEFT: sticky stage (vinyl only) ──
@@ -2319,7 +2328,7 @@ export function PressPackagePricingCatalog({
                 guarantees ≥48px of gutter between the rail and the art
                 edge (page padding + this). */}
             {isVinyl && (
-              <div className="flex flex-col items-center pt-6 min-[900px]:pt-0 min-[900px]:pl-6 min-[900px]:sticky min-[900px]:top-[72px] min-[900px]:self-start">
+              <div className="flex flex-col items-center pt-6 min-[1200px]:pt-0 min-[1200px]:pl-6 min-[1200px]:sticky min-[1200px]:top-[72px] min-[1200px]:self-start">
                 <div>
                   <JacketStage
                     format={fmt}
@@ -2451,7 +2460,7 @@ export function PressPackagePricingCatalog({
                     No pressing types yet — add one to start your {ALBUM_FORMAT_LABEL[fmt]} catalog.
                   </p>
                 ) : (
-                  <div className="grid grid-cols-4 gap-3" style={{ marginTop: 12 }}>
+                  <div className="grid grid-cols-3 min-[1440px]:grid-cols-4 gap-3" style={{ marginTop: 12 }}>
                     {(tierOrderDraft
                       ? tierOrderDraft
                           .map((id) => tiers.find((t) => t.id === id))
@@ -2543,7 +2552,7 @@ export function PressPackagePricingCatalog({
                         : "artists see this order"}
                     </span>
                   </p>
-                  <div className="grid grid-cols-4 gap-3" style={{ marginTop: 12 }}>
+                  <div className="grid grid-cols-3 min-[1440px]:grid-cols-4 gap-3" style={{ marginTop: 12 }}>
                     {(colorOrderDraft
                       ? colorOrderDraft
                           .map((id) => colors.find((c) => c.id === id))

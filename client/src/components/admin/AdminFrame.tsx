@@ -277,7 +277,10 @@ export function AdminFrame({
   // 44px rail so the toggle stays reachable. The user's manual choice
   // (previewDevice / previewOpen) is preserved in localStorage and
   // re-applied as the viewport grows.
-  const SIDEBAR_W = 220;
+  // Task #2981 — the rail is w-64 (256px); the old 220 assumption made
+  // the fit checks optimistic by 36px, letting the preview pane open at
+  // widths where it actually clipped the main column.
+  const SIDEBAR_W = 256;
   const MAIN_MIN = 520;
   const TABLET_W = 760;
   const PHONE_W = 440;
@@ -582,7 +585,11 @@ export function AdminFrame({
         </div>
       </header>
 
-      <div className="flex flex-1 min-h-0 w-full">
+      {/* Task #2981 — overflow-x-clip: an overflowing descendant must never
+          widen this row and slide the rail/topbar icons off-screen. `clip`
+          (not `hidden`) so the row doesn't become a scroll container —
+          sticky headers and the raise-on-save bar keep their behavior. */}
+      <div className="flex flex-1 min-h-0 w-full min-w-0 overflow-x-clip">
       <aside className="w-64 flex-shrink-0 bg-[var(--apple-rail)] hidden md:flex md:flex-col">
         {/* Task #336 — Global admin search. Sits above Dashboard so it
             anchors the top of the sidebar; ⌘K opens/focuses from
