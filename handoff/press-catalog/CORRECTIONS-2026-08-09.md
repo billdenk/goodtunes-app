@@ -104,5 +104,14 @@ e) Preview caption: reference caption under the jacket is: globe glyph · size (
 
 Reminder: per #14 none of these should require individual fixes — replacing the presentational layer verbatim with the reference file resolves a–e automatically. If any of a–e is still visible, the verbatim copy was not actually done.
 
+## 20. Type editor upgraded in the reference — pull the new file
+The reference's type "···" popover was rename/delete only; that has been upgraded (reference file updated on this branch, same commit as this note). The type editor is now the canon one from the color-setup page:
+- Title "Edit type. {Name}." with subcopy "Sizes here gate the whole type — every color in it."
+- TYPE NAME field.
+- PRESSED IN THESE SIZES — 7" / 10" / 12" toggle chips; saving requires a name and at least one size. These sizes gate the entire type (all its colors) for artists.
+- Footer: Cancel / blue Save pill.
+- Bottom hairline-separated full-width row: "Archive type" in red — ARCHIVE, not delete: pressed records keep their history, the type just retires.
+Re-copy handoff/press-catalog/PressPackagePricingTableRuns.tsx verbatim to pick this up, and wire the sizes to real type data. Note the split of responsibilities: hex, artwork/thumbnail, and per-color details are edited on the COLOR (color editor / color setup page), never on the type — the type carries only its name and its size gating.
+
 ## Acceptance for this pass
     FULL-PAGE diff, not above-the-fold. Render the reference component (handoff/press-catalog/PressPackagePricingTableRuns.tsx) and the live page at 1440px, scroll both to the bottom, and compare EVERY section top to bottom: top bar, sidebar, header block, size cards, type tiles, color rail, jacket/vinyl preview + caption, package card, price rows, print-template tiles (filled + empty states, die-line icons), floating save bar, GoodDeeds section, and the page footer (which must be empty of parked buttons). Diff the rendered page against the reference side by side at 1440px. Any card width, copy string, or preview geometry that differs from the reference is a failure. Do not report complete until a screenshot of the live page is visually indistinguishable from the reference (data values aside).
