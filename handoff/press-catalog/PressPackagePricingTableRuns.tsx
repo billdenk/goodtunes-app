@@ -689,6 +689,8 @@ type ColorGroup = {
   swatch: Swatch;
   /** Every color the press offers in this group — they ALL share the group's package prices. */
   colors: Swatch[];
+  /** Sizes this type is pressed in — gates the whole type, every color in it. */
+  sizes: string[];
 };
 
 const COLOR_GROUPS: ColorGroup[] = [
@@ -696,6 +698,7 @@ const COLOR_GROUPS: ColorGroup[] = [
     id: 'black',
     name: 'Black',
     blurb: 'Standard weight',
+    sizes: ['7"', '10"', '12"'],
     swatch: { id: 'g-black', name: 'Classic Black', kind: 'black', base: '#111114' },
     colors: [
       { id: 'blk-1', name: 'Classic Black', kind: 'black', base: '#111114' },
@@ -707,6 +710,7 @@ const COLOR_GROUPS: ColorGroup[] = [
     id: 'opaque',
     name: 'Opaque',
     blurb: 'Solid color',
+    sizes: ['7"', '10"', '12"'],
     swatch: { id: 'g-opaque', name: 'Oxblood', kind: 'opaque', base: '#5A1620' },
     colors: [
       { id: 'op-1', name: 'Oxblood', kind: 'opaque', base: '#5A1620' },
@@ -723,6 +727,7 @@ const COLOR_GROUPS: ColorGroup[] = [
     id: 'translucent',
     name: 'Translucent',
     blurb: 'See-through tint',
+    sizes: ['7"', '10"', '12"'],
     swatch: { id: 'g-trans', name: 'Cobalt', kind: 'translucent', base: '#2563EB' },
     colors: [
       { id: 'tr-1', name: 'Ruby', kind: 'translucent', base: '#C4373F' },
@@ -743,6 +748,7 @@ const COLOR_GROUPS: ColorGroup[] = [
     id: 'splatter',
     name: 'Splatter',
     blurb: 'Multi-color spray',
+    sizes: ['7"', '10"', '12"'],
     swatch: { id: 'g-splat', name: 'Cosmic', kind: 'splatter', base: '#1B3A6B', s1: '#F5F5DC', s2: '#E8C84A', s3: '#E0E0E0' },
     colors: [
       { id: 'sp-1', name: 'Cosmic', kind: 'splatter', base: '#1B3A6B', s1: '#F5F5DC', s2: '#E8C84A', s3: '#E0E0E0' },
@@ -756,6 +762,7 @@ const COLOR_GROUPS: ColorGroup[] = [
     id: 'mixswirl',
     name: 'Mix/Swirl',
     blurb: 'Two colors, hand-poured',
+    sizes: ['7"', '10"', '12"'],
     swatch: { id: 'g-mix', name: 'Storm Swirl', kind: 'splatter', base: '#3B4A66', s1: '#EDEDF0', s2: '#9A9AA0', s3: '#EDEDF0' },
     colors: [
       { id: 'mx-1', name: 'Storm Swirl', kind: 'splatter', base: '#3B4A66', s1: '#EDEDF0', s2: '#9A9AA0', s3: '#EDEDF0' },
@@ -767,6 +774,7 @@ const COLOR_GROUPS: ColorGroup[] = [
     id: 'splatter2',
     name: 'Splatter — 2 Colors',
     blurb: 'Two-color spray',
+    sizes: ['7"', '10"', '12"'],
     swatch: { id: 'g-sp2', name: 'Cherry Bomb', kind: 'splatter', base: '#EDEDF0', s1: '#B3262E', s2: '#1d1d1f', s3: '#B3262E' },
     colors: [
       { id: 's2-1', name: 'Cherry Bomb', kind: 'splatter', base: '#EDEDF0', s1: '#B3262E', s2: '#1d1d1f', s3: '#B3262E' },
@@ -779,6 +787,7 @@ const COLOR_GROUPS: ColorGroup[] = [
     id: 'blacksplatter2',
     name: 'Black Splatter — 2 Colors',
     blurb: 'Black base, two-color spray',
+    sizes: ['7"', '10"', '12"'],
     swatch: { id: 'g-bsp2', name: 'Ember', kind: 'splatter', base: '#111114', s1: '#B3262E', s2: '#E8A13C', s3: '#B3262E' },
     colors: [
       { id: 'bs-1', name: 'Ember', kind: 'splatter', base: '#111114', s1: '#B3262E', s2: '#E8A13C', s3: '#B3262E' },
@@ -1104,7 +1113,7 @@ function ColorGroupCard({
   count: number;
   canRemove: boolean;
   onSelect: () => void;
-  onRename: (name: string) => void;
+  onRename: (name: string, sizes: string[]) => void;
   onRemove: () => void;
 }) {
   return (
@@ -1200,7 +1209,7 @@ function DotsTrigger({ label, testId }: { label: string; testId: string }) {
   );
 }
 
-/** Rename / delete a color type (group). */
+/** Edit a color type (group): rename + which sizes it's pressed in. Archive retires it. */
 function GroupEditorPopover({
   group,
   canRemove,
@@ -1210,64 +1219,97 @@ function GroupEditorPopover({
 }: {
   group: ColorGroup;
   canRemove: boolean;
-  onSave: (name: string) => void;
+  onSave: (name: string, sizes: string[]) => void;
   onRemove: () => void;
   trigger: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(group.name);
+  const [sizes, setSizes] = useState<string[]>(group.sizes);
   useEffect(() => {
-    if (open) setName(group.name);
-  }, [open, group.name]);
+    if (open) {
+      setName(group.name);
+      setSizes(group.sizes);
+    }
+  }, [open, group.name, group.sizes]);
+  const canSave = name.trim().length > 0 && sizes.length > 0;
+  const toggleSize = (s: string) =>
+    setSizes((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent align="start" sideOffset={8} className="w-72 p-0 rounded-2xl overflow-hidden" style={FROSTED_PANEL} data-testid={`popover-edit-group-${group.id}`}>
+      <PopoverContent align="start" sideOffset={8} className="w-80 p-0 rounded-2xl overflow-hidden" style={FROSTED_PANEL} data-testid={`popover-edit-group-${group.id}`}>
         <div style={{ padding: 18 }}>
-          <div className="text-[15px] font-semibold" style={{ color: INK }}>
-            Edit type
+          <div className="text-[15px] font-semibold tracking-tight" style={{ color: INK }}>
+            Edit type. <span style={{ color: '#a1a1a6', fontWeight: 600 }}>{group.name}.</span>
           </div>
-          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <FieldLabel>Type name</FieldLabel>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="text-[13.5px] focus:outline-none focus:border-slate-400 transition-colors"
-              style={FIELD_INPUT}
-              data-testid={`input-group-name-${group.id}`}
-            />
+          <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 2, lineHeight: 1.4 }}>
+            Sizes here gate the whole type &mdash; every color in it.
+          </p>
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <FieldLabel>Type name</FieldLabel>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="text-[13.5px] focus:outline-none focus:border-slate-400 transition-colors"
+                style={FIELD_INPUT}
+                data-testid={`input-group-name-${group.id}`}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <FieldLabel>Pressed in these sizes</FieldLabel>
+              <div className="flex items-center gap-2">
+                {SIZES.map((s) => (
+                  <SizeChip key={s} size={s} active={sizes.includes(s)} onToggle={() => toggleSize(s)} />
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-1" style={{ padding: '12px 18px', borderTop: `1px solid ${HAIRLINE}` }}>
+        <div className="flex items-center justify-end gap-3" style={{ padding: '12px 18px', borderTop: `1px solid ${HAIRLINE}` }}>
           <button
             type="button"
-            disabled={!canRemove}
-            onClick={() => {
-              onRemove();
-              setOpen(false);
-            }}
-            className="flex items-center gap-1.5 text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-red-50 disabled:opacity-40"
-            style={{ color: '#d02c2c' }}
-            data-testid={`button-delete-group-${group.id}`}
+            onClick={() => setOpen(false)}
+            className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-slate-100"
+            style={{ color: SUBINK }}
+            data-testid={`button-cancel-group-${group.id}`}
           >
-            <Trash2 className="w-3.5 h-3.5" />
-            Delete type
+            Cancel
           </button>
           <button
             type="button"
-            disabled={!name.trim()}
+            disabled={!canSave}
             onClick={() => {
-              onSave(name.trim());
+              onSave(name.trim(), sizes);
               setOpen(false);
             }}
-            className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-slate-100 disabled:opacity-40"
-            style={{ color: BLUE }}
+            className="text-[13px] font-semibold rounded-full px-4 py-1.5 text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+            style={{ backgroundColor: BLUE }}
             data-testid={`button-save-group-${group.id}`}
           >
             Save
           </button>
         </div>
+        {/* Archive — Apple convention: destructive-adjacent action gets its own
+            hairline-separated full-width row at the very bottom. Archive (not
+            delete): pressed records keep their history; the type just retires. */}
+        <button
+          type="button"
+          disabled={!canRemove}
+          onClick={() => {
+            onRemove();
+            setOpen(false);
+          }}
+          className="w-full text-[13px] font-semibold transition-colors disabled:opacity-40"
+          style={{ padding: '12px 18px', borderTop: `1px solid ${HAIRLINE}`, color: CRITICAL, textAlign: 'center', background: 'transparent' }}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#fdeef2')}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          data-testid={`button-archive-group-${group.id}`}
+        >
+          Archive type
+        </button>
       </PopoverContent>
     </Popover>
   );
@@ -2115,8 +2157,8 @@ export function PressPackagePricingTableRuns() {
   const selectedColor = activeGroup.colors.find((c) => c.id === colorSel[activeGroup.id]) ?? activeGroup.colors[0];
   const previewSwatch = selectedColor ?? activeGroup.swatch;
 
-  const renameGroup = (id: string, name: string) => {
-    setGroups((gs) => gs.map((g) => (g.id === id ? { ...g, name } : g)));
+  const renameGroup = (id: string, name: string, sizes: string[]) => {
+    setGroups((gs) => gs.map((g) => (g.id === id ? { ...g, name, sizes } : g)));
     setDirty(true);
   };
   const removeGroup = (id: string) => {
@@ -2130,7 +2172,7 @@ export function PressPackagePricingTableRuns() {
   const addGroup = (name: string) => {
     const id = `grp-${Date.now()}`;
     const swatch: Swatch = { id: `${id}-preview`, name, kind: 'opaque', base: '#9a9aa0' };
-    setGroups((gs) => [...gs, { id, name, blurb: '', swatch, colors: [] }]);
+    setGroups((gs) => [...gs, { id, name, blurb: '', swatch, colors: [], sizes: ['7"', '10"', '12"'] }]);
     setBook((prev) => ({
       ...prev,
       [id]: Object.fromEntries(RUN_QTYS.map((q) => [q, { mode: 'off', price: '' } as RunCell])) as Record<number, RunCell>,
@@ -2369,7 +2411,7 @@ export function PressPackagePricingTableRuns() {
                   count={pricedCount(book, g.id)}
                   canRemove={groups.length > 1}
                   onSelect={() => setActiveGroupId(g.id)}
-                  onRename={(name) => renameGroup(g.id, name)}
+                  onRename={(name, sizes) => renameGroup(g.id, name, sizes)}
                   onRemove={() => removeGroup(g.id)}
                 />
               ))}
