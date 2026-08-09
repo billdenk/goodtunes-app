@@ -366,6 +366,38 @@ async function albumReadIncludeHidden(req: Request, albumId: string): Promise<bo
   // returned unless it's in scope) and run the shared per-role scope filter.
   const stub = await storage.getAlbumById(albumId, { includeHidden: true });
   if (!stub) return false;
+  // Press (manufacturer) partners: their scope is press ASSIGNMENT, not
+  // artist/label ownership — the shared catalog filter fails closed on the
+  // manufacturer role, which 404'd a press opening its own "Awaiting
+  // pressing order" (prepping/hidden) album from the Projects tab. Mirror
+  // the exact scope /api/press/:id/albums uses: a non-cancelled pressing
+  // order stamped with this press, OR an album_skus.press_id stamp.
+  if (info.role === "manufacturer") {
+    const pressId = info.roleScopeId;
+    if (!pressId) return false;
+    const assigned = await db.execute<{ ok: number }>(sql`
+      SELECT 1 AS ok
+       WHERE EXISTS (
+               SELECT 1 FROM pressing_order_requests por
+                WHERE por.album_id = ${stub.id}
+                  AND por.status <> 'cancelled'
+                  AND por.package_snapshot ->> 'pressId' = ${pressId}
+             )
+          OR EXISTS (
+               -- SKU-stamp branch mirrors the portal list's extra eligibility:
+               -- GoodTunes releases only, SPIN Promos (digital-only legacy)
+               -- excluded — so detail never admits an album the Projects tab
+               -- wouldn't show.
+               SELECT 1 FROM album_skus sku
+                JOIN albums a ON a.id = sku.album_id
+                WHERE sku.album_id = ${stub.id}
+                  AND sku.press_id = ${pressId}
+                  AND a.is_goodtunes_release = true
+                  AND a.is_spin_promo = false
+             )
+    `);
+    return (((assigned as any).rows || []) as any[]).length > 0;
+  }
   // Manager scoping needs an async roster lookup before the pure filter — same
   // query the list route uses.
   let managerRoster: Set<string> | undefined;
