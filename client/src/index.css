@@ -698,3 +698,40 @@ body.gt-admin.gt-admin-dark aside nav button:hover { background: rgba(255,255,25
   color: var(--apple-ink);
   box-shadow: 0 1px 3px rgba(0,0,0,.08);
 }
+
+/* ── Apple canon: shared dialog / popover / toast primitives ────────────
+   The `.gt-canon-*` hooks live on the shadcn primitives (dialog.tsx,
+   popover.tsx, dropdown-menu.tsx, context-menu.tsx, select.tsx,
+   tooltip.tsx, toast.tsx). Light-mode geometry ships inline on the
+   components via [body.gt-admin_&] variants; these rules add the DARK
+   treatments the canon calls for (docs/apple-canon.md → "Popovers: dark
+   frosted glass … deeper shadows"). Both body classes per the admin
+   dark-theme convention. Fan surfaces never carry gt-admin, so they are
+   untouched. */
+body.gt-admin.gt-admin-dark .gt-canon-dialog {
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+body.gt-admin.gt-admin-dark .gt-canon-pop {
+  background: rgba(30, 30, 32, 0.88);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.55);
+}
+/* Toasts are the same notification card in dark — charcoal surface,
+   ink text, hairline border, deep soft shadow. The destructive variant
+   swaps the light rose card for the dark critical wash. */
+body.gt-admin.gt-admin-dark .gt-canon-toast {
+  background: var(--apple-card);
+  color: var(--apple-ink);
+  border-color: var(--apple-hairline);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.55);
+}
+body.gt-admin.gt-admin-dark .gt-canon-toast.destructive {
+  background: var(--apple-critical-wash);
+  color: var(--apple-critical);
+}
+/* Toast close glyph: hover tints the surface (white-alpha on dark),
+   the glyph color never changes — the shared hover convention. */
+body.gt-admin.gt-admin-dark .gt-canon-toast [toast-close]:hover {
+  background: rgba(255, 255, 255, 0.08);
+}

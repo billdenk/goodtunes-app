@@ -26,7 +26,7 @@ export function SaveLink({
       onClick={onClick}
       disabled={!dirty || !!busy}
       className={
-        "h-8 px-3 rounded-md text-xs font-semibold transition-colors " +
+        "h-8 px-3.5 rounded-full text-xs font-semibold transition-colors " +
         (dirty
           ? "bg-[color:var(--brand-blue)] text-white hover:opacity-90"
           : "bg-slate-100 text-slate-300 cursor-default")
@@ -59,10 +59,12 @@ export function EditPencil({
       aria-label={label}
       aria-pressed={active}
       className={
-        "h-8 w-8 inline-flex items-center justify-center rounded-md transition-colors " +
+        "h-8 w-8 inline-flex items-center justify-center rounded-full transition-colors " +
         (active
           ? "text-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)]"
-          : "text-slate-400 hover:text-slate-700 hover:bg-slate-50")
+          : // Hover convention: tint the surface only — the glyph color
+            // never changes on hover.
+            "text-slate-400 hover:bg-slate-100")
       }
       data-testid={testId}
     >

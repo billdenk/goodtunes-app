@@ -34,7 +34,9 @@ const AlertDialogContent = React.forwardRef<
     <AlertDialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        // Apple canon: admin alert dialogs match Dialog — rounded-2xl card,
+        // hairline border, deep soft shadow (tokens flip in dark mode).
+        "gt-canon-dialog fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg [body.gt-admin_&]:rounded-2xl [body.gt-admin_&]:sm:rounded-2xl [body.gt-admin_&]:border-[var(--apple-hairline)] [body.gt-admin_&]:shadow-[0_24px_64px_rgba(0,0,0,0.18)]",
         className
       )}
       {...props}
@@ -77,7 +79,10 @@ const AlertDialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Title
     ref={ref}
-    className={cn("text-lg font-semibold", className)}
+    className={cn(
+      "text-lg font-semibold [body.gt-admin_&]:text-[20px] [body.gt-admin_&]:tracking-[-0.02em] [body.gt-admin_&]:text-[var(--apple-ink)]",
+      className
+    )}
     {...props}
   />
 ))
@@ -89,7 +94,10 @@ const AlertDialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Description
     ref={ref}
-    className={cn("text-sm text-muted-foreground", className)}
+    className={cn(
+      "text-sm text-muted-foreground [body.gt-admin_&]:text-[13px] [body.gt-admin_&]:text-[var(--apple-subink)]",
+      className
+    )}
     {...props}
   />
 ))
@@ -102,7 +110,8 @@ const AlertDialogAction = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Action
     ref={ref}
-    className={cn(buttonVariants(), className)}
+    // Admin canon: capsule (rounded-full) action button — buttons are pills.
+    className={cn(buttonVariants(), "[body.gt-admin_&]:rounded-full", className)}
     {...props}
   />
 ))
@@ -116,7 +125,7 @@ const AlertDialogCancel = React.forwardRef<
     ref={ref}
     className={cn(
       buttonVariants({ variant: "outline" }),
-      "mt-2 sm:mt-0",
+      "mt-2 sm:mt-0 [body.gt-admin_&]:rounded-full [body.gt-admin_&]:border-[var(--apple-hairline)]",
       className
     )}
     {...props}

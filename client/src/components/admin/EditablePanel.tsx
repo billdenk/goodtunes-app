@@ -449,7 +449,7 @@ export function EditablePanel({
             type="button"
             onClick={handleCancel}
             disabled={mut.isPending}
-            className="h-8 px-3 rounded-md bg-white border border-slate-200 text-slate-700 text-[12px] font-semibold hover:bg-slate-50 inline-flex items-center gap-1.5"
+            className="h-8 px-3.5 rounded-full bg-white border border-slate-200 text-slate-700 text-[12px] font-semibold hover:bg-slate-50 inline-flex items-center gap-1.5"
             data-testid={`button-cancel-${slug}`}
           >
             <X className="w-3.5 h-3.5" />
@@ -458,7 +458,7 @@ export function EditablePanel({
           <button
             type="submit"
             disabled={mut.isPending}
-            className="h-8 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5 disabled:opacity-60"
+            className="h-8 px-3.5 rounded-full bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[var(--brand-blue-hover)] inline-flex items-center gap-1.5 disabled:opacity-60"
             data-testid={`button-save-${slug}`}
           >
             {mut.isPending ? (
@@ -499,7 +499,7 @@ export function EditablePanel({
               aria-label={`Edit ${title}`}
               title={`Edit ${title}`}
               data-testid={`button-edit-${slug}`}
-              className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+              className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
             >
               <Pencil className="w-3.5 h-3.5" />
             </button>

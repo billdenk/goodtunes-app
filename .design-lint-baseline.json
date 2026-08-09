@@ -10206,6 +10206,11 @@
   },
   {
     "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminEmptyState.tsx",
+    "snippet": "<p className=\"text-[13px] font-medium text-[var(--apple-faint)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/AdminFilterPanel.tsx",
     "snippet": "className=\"w-full text-[13px] bg-transparent outline-none placeholder:text-slate-400\""
   },
@@ -10552,12 +10557,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/EditablePanel.tsx",
-    "snippet": "className=\"h-8 px-3 rounded-md bg-white border border-slate-200 text-slate-700 text-[12px] font-semibold hover:bg-slate-50 inline-flex items-center gap-1.5\""
+    "snippet": "className=\"h-8 px-3.5 rounded-full bg-white border border-slate-200 text-slate-700 text-[12px] font-semibold hover:bg-slate-50 inline-flex items-center gap-1.5\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/EditablePanel.tsx",
-    "snippet": "className=\"h-8 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5 disabled:opacity-60\""
+    "snippet": "className=\"h-8 px-3.5 rounded-full bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[var(--brand-blue-hover)] inline-flex items-center gap-1.5 disabled:opacity-60\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -12823,6 +12828,11 @@
     "rule": "naked-icon-button",
     "file": "client/src/components/admin/SplitsPanels.tsx",
     "snippet": "<button onClick={onDelete} disabled={busy} aria-label=\"Delete split\" className=\"h-7 w-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/StatusDot.tsx",
+    "snippet": "className={`inline-flex items-center gap-1.5 text-[12.5px] font-medium text-[var(--apple-subink)] ${className}`}"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23043,11 +23053,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-[0.14em]\" style={{ color: SUBINK }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[12px] font-semibold uppercase tracking-widest\" style={{ color: \"rgba(255,255,255,0.4)\" }}>"
   },
   {
     "rule": "hardcoded-font-size",

@@ -406,7 +406,7 @@ export function OperatorShell<TabId extends string>({
                 {navExtras.map((x) => {
                   const Icon = x.icon ?? Circle;
                   return (
-                    <Link key={x.id} href={x.href} data-testid={`nav-${x.id}`} className="gt-nav w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] font-medium text-[var(--apple-subink)] hover:bg-slate-200 transition-colors">
+                    <Link key={x.id} href={x.href} data-testid={`nav-${x.id}`} className="gt-nav w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] font-medium text-[var(--apple-subink)] hover:bg-slate-100 transition-colors">
                       <Icon className="w-4 h-4 flex-shrink-0 text-[var(--apple-faint)]" />
                       <span className="flex-1 text-left truncate">{x.label}</span>
                     </Link>

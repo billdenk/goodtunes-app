@@ -97,7 +97,7 @@ export function AdminFilterPanel({
       aria-label="Filter"
       title="Filter"
       data-testid="button-filter"
-      className="relative w-9 h-9 inline-flex items-center justify-center rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 data-[state=open]:bg-slate-100 data-[state=open]:text-slate-900 data-[state=open]:ring-1 data-[state=open]:ring-slate-200 transition-colors"
+      className="relative w-9 h-9 inline-flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 data-[state=open]:bg-slate-100 data-[state=open]:text-slate-900 data-[state=open]:ring-1 data-[state=open]:ring-slate-200 transition-colors"
     >
       <Filter className="w-4 h-4" />
       {isActive && (
@@ -159,7 +159,7 @@ export function AdminFilterPanel({
                           "h-7 px-2.5 text-[12px] font-semibold rounded-full transition-colors inline-flex items-center",
                           active
                             ? "bg-[var(--brand-blue)]/12 text-[#1f7ab4] ring-1 ring-inset ring-[var(--brand-blue)]/40"
-                            : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900",
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200",
                         ].join(" ")}
                       >
                         {o.label}

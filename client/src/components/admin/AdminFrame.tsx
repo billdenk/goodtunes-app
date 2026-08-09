@@ -559,7 +559,7 @@ export function AdminFrame({
             <button
               type="button"
               onClick={() => navigate("/admin/feedback")}
-              className="relative w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+              className="relative w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"
               title="Feedback & notifications"
               aria-label="Feedback & notifications"
               data-testid="button-topbar-bell"
@@ -1299,7 +1299,7 @@ export function AdminFrame({
               <button
                 type="button"
                 onClick={() => setPreviewOpen((v) => !v)}
-                className="w-8 h-8 rounded-md flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                className="w-8 h-8 rounded-md flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"
                 title={previewDisplayOpen ? "Hide preview" : "Show preview"}
                 aria-label={previewDisplayOpen ? "Hide preview" : "Show preview"}
                 aria-pressed={previewDisplayOpen}

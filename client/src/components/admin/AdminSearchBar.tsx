@@ -435,7 +435,7 @@ export function AdminSearchBar({
           id="admin-search-results"
           role="listbox"
           aria-label="Search results"
-          className="absolute left-0 right-0 top-full mt-1 z-50 max-h-[60vh] overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"
+          className="absolute left-0 right-0 top-full mt-1 z-50 max-h-[60vh] overflow-y-auto rounded-xl border border-[var(--apple-hairline)] bg-white shadow-[0_12px_32px_rgba(0,0,0,0.10)]"
           data-testid="admin-search-dropdown"
         >
           {groups.length === 0 ? (
