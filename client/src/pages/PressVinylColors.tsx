@@ -54,6 +54,7 @@ export interface CatalogColor {
   swatchHex: string | null;
   swatchImageUrl: string | null;
   swatchThumbUrl: string | null;
+  thumbnailUrl?: string | null;
   position: number;
 }
 interface CatalogTier {
@@ -151,7 +152,7 @@ export function VinylDisc({
   spin?: boolean;
 }) {
   const LABEL_RATIO = 368 / 1104;
-  const photo = color?.swatchImageUrl || color?.swatchThumbUrl || null;
+  const photo = color?.swatchImageUrl || color?.swatchThumbUrl || color?.thumbnailUrl || null;
   const hex = color?.swatchHex || "#111114";
   return (
     <div

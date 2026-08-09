@@ -425,8 +425,8 @@ export function AdminSearchBar({
           data-testid="input-admin-search"
           className="w-full h-9 pl-9 pr-12 rounded-full bg-white border border-[var(--apple-hairline)] text-[13px] text-[var(--apple-ink)] placeholder-slate-400 outline-none focus:ring-2 focus:ring-[var(--brand-blue)] transition-colors"
         />
-        <kbd className="hidden lg:flex absolute right-2 top-1/2 -translate-y-1/2 items-center h-5 px-1.5 rounded text-xs font-medium text-slate-400 bg-white border border-slate-200 pointer-events-none">
-          {isMac ? "⌘K" : "Ctrl K"}
+        <kbd className="flex absolute right-2 top-1/2 -translate-y-1/2 items-center h-5 px-1.5 rounded-md text-[10px] font-medium text-slate-400 bg-slate-50 border border-slate-200 pointer-events-none">
+          ⌘K
         </kbd>
       </div>
 

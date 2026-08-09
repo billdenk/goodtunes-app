@@ -286,36 +286,6 @@ export function OperatorShell<TabId extends string>({
               rail is w-[220px] — byte-identical to AdminFrame's sidebar — so
               partner portals and the super admin read as the same product;
               long press names like "Memphis Record Pressing" truncate. */}
-          <div className="h-14 flex-shrink-0 flex items-center gap-2.5 px-3 border-b border-r border-[var(--apple-hairline)] overflow-hidden">
-            {navLogoUrl ? (
-              <img
-                src={navLogoUrl}
-                alt={name}
-                className="max-h-8 w-auto object-contain"
-                data-testid="operator-shell-rail-nav-logo"
-              />
-            ) : (
-              <>
-                <div
-                  className={cn(
-                    "w-7 h-7 flex-shrink-0 overflow-hidden flex items-center justify-center bg-slate-100 ring-1 ring-slate-200",
-                    radius,
-                  )}
-                  data-testid="operator-shell-rail-logo"
-                >
-                  {logoUrl ? (
-                    <img src={logoUrl} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <FallbackIcon className="w-3.5 h-3.5 text-slate-400" />
-                  )}
-                </div>
-                <span className="text-sm font-semibold text-slate-800 truncate min-w-0" data-testid="text-operator-rail-name">
-                  {name}
-                </span>
-              </>
-            )}
-          </div>
-
           {/* Task #2600 — Scoped search bar. Sits between the rail header
               and the nav items, matching AdminFrame's px-2 pt-2 position.
               Results are scoped to the caller's partner role via the
@@ -328,7 +298,7 @@ export function OperatorShell<TabId extends string>({
           <div className="px-3 py-3 border-r border-[var(--apple-hairline)] flex-shrink-0">
             <AdminSearchBar
               searchEndpoint="/api/admin/search/scoped"
-              placeholder="Search portal…"
+              placeholder="Search…"
               recentScopeKey={recentScopeKey}
               allowedNavIds={tabs.map((t) => t.id)}
               navPages={tabs.map((t) => ({
@@ -441,10 +411,14 @@ export function OperatorShell<TabId extends string>({
             style={{ background: "var(--apple-glass)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
             data-testid="operator-shell-topbar"
           >
-            {/* Mobile: show the entity name since the rail is hidden. */}
-            <span className="md:hidden text-sm font-semibold text-slate-800 truncate min-w-0" aria-hidden="true">
-              {name}
-            </span>
+            <div className="flex min-w-0 items-center gap-2.5">
+              {navLogoUrl ? <img src={navLogoUrl} alt={name} className="max-h-8 w-auto object-contain" /> : (
+                <div className={cn("h-8 w-8 flex-shrink-0 overflow-hidden flex items-center justify-center bg-slate-100 ring-1 ring-slate-200", radius)}>
+                  {logoUrl ? <img src={logoUrl} alt="" className="h-full w-full object-cover" /> : <FallbackIcon className="h-4 w-4 text-slate-400" />}
+                </div>
+              )}
+              <span className="text-sm font-semibold text-slate-800 truncate" data-testid="text-operator-topbar-name">{name}</span>
+            </div>
             {superAdminBadge}
             <div className="ml-auto flex items-center gap-3" data-testid="operator-shell-account">
               <ViewAsRestoreButton />
@@ -545,7 +519,7 @@ export function OperatorShell<TabId extends string>({
           <div className="mt-3">
             <AdminSearchBar
               searchEndpoint="/api/admin/search/scoped"
-              placeholder="Search portal…"
+              placeholder="Search…"
               recentScopeKey={recentScopeKey}
               allowedNavIds={tabs.map((t) => t.id)}
               navPages={tabs.map((t) => ({

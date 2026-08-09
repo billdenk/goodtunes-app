@@ -40,3 +40,69 @@
     ## Acceptance
     Screenshot the rebuilt page at 7" and 12" for MRP with real data and compare against the reference component pixel-flow-for-pixel-flow. Also verify a narrow (~1024px) viewport: preview stacked above, never missing. If any section's structure or copy differs from the reference, it is not done.
     
+
+    ---
+
+    # SECOND PASS — 2026-08-09 (still not done)
+
+    Structure and copy largely landed. These remain broken:
+
+    ## 8. Jacket/record preview geometry is wrong
+    The album cover is slopped over the vinyl. Reproduce the reference `JacketStage` math EXACTLY — do not re-derive it:
+    - Square jacket sits IN FRONT on the left; the record is a full circle peeking out FROM BEHIND on the right, vertically centered on the jacket.
+    - The disc never rises above or drops below the jacket's edges; no oversized detached drop shadow.
+    - The preview keeps reference scale — it is the hero of the left column, not a thumbnail. Caption sits centered under the jacket.
+    Copy the reference component's stage/geometry code verbatim, including the size math per product (7"/12").
+
+    ## 9. Price rows leak the editing control
+    Rows 500/1,000/2,000 render "Priced · Quote on request · Not offered" as static text side by side. A row shows ONE state at a time:
+    - Priced → the $ input.
+    - On request → the dashed "On request" chip.
+    - Off → the em-dash.
+    The three modes are a single dropdown/menu (see reference row markup), never three labels printed in the row.
+
+    ## 10. Black still has 0 colors
+    "Black · 0 colors" and an empty "Pick a color" persist while other types show colors. MRP's Black colors exist in the old data — find and re-wire them. If genuinely absent upstream, seed Classic Black at minimum and flag it, but do not ship a default type with an empty color rail.
+
+    ## 11. Template filenames still raw storage keys
+    "12-JKTSG-100....7w0umpu&dl=0" is a storage key with query params. Store/display the original filename, middle-truncated.
+
+    ## 12. "Add your vinyl" + "CSV Options" moved to the footer — remove them
+    They were removed from the header and re-parked at the bottom right. Remove them from this page entirely. (If CSV import/export must survive, it moves to a separate surface — not this page.)
+
+    ## 13. GoodDeeds section styling
+    Its placement at the page bottom is acceptable for now, but it still uses old markup: eye-off toggle icons, its own inline Save button, old table styling. Restyle to canon: hairline rows, canon toggles, and it participates in the page's single floating save bar — no per-section Save buttons.
+    
+
+---
+
+# THIRD PASS — 2026-08-09 (evening) — REJECTED AGAIN. New approach required.
+
+Two implementation passes have now re-derived the layout instead of copying it, and each pass re-introduces drift. Stop re-deriving.
+
+## 14. MANDATE: copy the reference presentational code VERBATIM
+Replace the Catalog page's presentational layer wholesale with the JSX/CSS from `handoff/press-catalog/PressPackagePricingTableRuns.tsx`. Your only job is wiring real data (presses, types, colors, run prices, templates) into that markup via props/state. Do not restyle, do not "adapt", do not merge with the old page's markup. If a piece of the old page has no counterpart in the reference, it does not ship on this page.
+
+## 15. Size cards are the wrong width and carry copy that isn't in the reference
+Live cards read "7\" Single / Two songs. One single." etc. and stretch wide. The reference cards are compact fixed-width tiles with exactly two lines: big size ("7\"", "12\"", "12\"") over a small gray subline ("Single", "LP", "Double LP"). No taglines, no sentences. Copy the reference card markup exactly (this is a direct consequence of #14).
+
+## 16. Type tiles carry metadata lines that aren't in the reference
+Live tiles read "Black / 0 colors · 3 of 6 runs priced" etc. The reference tile is: swatch disc, type name, "N colors" — nothing else. Remove the "· X of 6 runs priced" line. Also the "+ More types · 14" ghost tile + a second "More types" link is duplicated; the reference has ONE "+ More types" link under the grid.
+
+## 17. Vinyl preview: still wrong, and new art direction
+Item 8 stands: copy the reference JacketStage geometry verbatim — jacket front-left, disc peeking out to the RIGHT from behind, never past the jacket's top/bottom edges, hero scale. New direction on the disc art itself: use each press's REAL disc/label art (MRP, PMP, Viryl, Hellbender) as the base image, with the SAME gloss/highlight overlay layer from the reference rendered on top of all of them. The highlight is a separate absolutely-positioned layer above the artwork — identical for every press — so real art + canonical sheen.
+
+## 18. Format switcher placement + header typography wrong
+Live renders the Vinyl / CD / Cassette pill BESIDE the "Catalog" H1, inline on the same row. The reference places it on its own row UNDER the H1: "Catalog" first, then the segmented pill below it, then the VINYL · PACKAGE PRICING eyebrow and the two-tone heading. Font sizes and colors in this header block have also drifted (H1 weight/size, pill text size, eyebrow letter-spacing, gray tones). Do not eyeball it — copy the reference header block markup and styles verbatim per #14.
+
+## 19. Full-audit deltas (caught in side-by-side review — fix ALL of these)
+a) Top bar: reference has a full-width white top bar with the press logo + name on the left and Feedback / bell / avatar on the right. Live moved the press name into the sidebar and lost the top bar structure. Restore the reference top bar.
+b) Sidebar search: reference is "Search…" with a ⌘K hint chip. Live reads "Search portal…" with no shortcut chip. Copy the reference.
+c) "Pick a type" subtitle: reference is "Each keeps its own package prices." Live invented "How the vinyl is made." Revert — copy strings are not editable.
+d) Selected type tile: live renders a "···" overflow menu on the tile. The reference tile has no overflow menu. Remove it.
+e) Preview caption: reference caption under the jacket is: globe glyph · size ("12\"") · type ("Black") · color name ("Classic Black"), then "Printed jacket and inner sleeve included." on the second line. Live shows only "12\" LP" + the included line. Copy the reference caption block, and the "One package. Everything included." card belongs where the reference puts it — not stacked in the left column under the preview.
+
+Reminder: per #14 none of these should require individual fixes — replacing the presentational layer verbatim with the reference file resolves a–e automatically. If any of a–e is still visible, the verbatim copy was not actually done.
+
+## Acceptance for this pass
+    FULL-PAGE diff, not above-the-fold. Render the reference component (handoff/press-catalog/PressPackagePricingTableRuns.tsx) and the live page at 1440px, scroll both to the bottom, and compare EVERY section top to bottom: top bar, sidebar, header block, size cards, type tiles, color rail, jacket/vinyl preview + caption, package card, price rows, print-template tiles (filled + empty states, die-line icons), floating save bar, GoodDeeds section, and the page footer (which must be empty of parked buttons). Diff the rendered page against the reference side by side at 1440px. Any card width, copy string, or preview geometry that differs from the reference is a failure. Do not report complete until a screenshot of the live page is visually indistinguishable from the reference (data values aside).

@@ -1253,6 +1253,8 @@ export type CatalogColor = {
   importSourceUrl: string | null;
   // Task #2872 — cross-format color group id. Null on pre-existing rows.
   colorGroupId: string | null;
+  /** Optional API alias used by pressing color payloads. */
+  thumbnailUrl?: string | null;
 };
 export type CatalogTier = {
   id: string;

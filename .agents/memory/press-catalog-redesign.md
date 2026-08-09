@@ -30,3 +30,10 @@ The press Catalog (portal Vinyl catalog tab + god-view `?tab=catalog`) is `clien
 - Press logos are seeded via the NORMAL mechanism (PNG upload → /api/admin/upload → PUT manufacturers logoUrl), never hardcoded paths; prod parity by marker-guarded UPDATE in post-merge.sh (shared object-storage bucket = same /objects URLs in both DBs); SVG/webp are rejected by the upload MIME allowlist — convert to PNG first.
 
 **Why:** Bill required zero data loss + exact interaction parity verified on live data (Riverside empty catalog, Memphis real ladders) before the legacy page was removed.
+
+## Third pass (2026-08-09 evening) — verbatim mandate
+- Bill's standing rule for this page: the presentational layer is copied VERBATIM from handoff/press-catalog/PressPackagePricingTableRuns.tsx; only real-data wiring may differ. Any future change to this page must start from that reference, never re-derive/adapt. Copy strings are not editable.
+- 19a/19b landed shell-wide in OperatorShell: partner identity lives in the TOP BAR (logo+name left, Feedback/bell/avatar right), not the sidebar; search is "Search…" with a ⌘K chip. All partner portals share this.
+- Disc preview: real per-color art (swatchImageUrl/thumbnailUrl) as base + the reference's gloss overlay layer on top; synthetic swatch only when no art.
+- Verification trick: render the reference file in the mockup sandbox (copy to artifacts/mockup-sandbox/src/components/mockups/<dir>/, swap @workspace design-system imports to ../../ui/*, stub asset imports as data-URIs) and screenshot via externalUrl on $REPLIT_DEV_DOMAIN/__mockup/preview/... — appPreview path hits the main app, not the sandbox.
+- Screenshot tool has no viewport param (1280×720); shoot reference + live with the same tool for a fair diff.

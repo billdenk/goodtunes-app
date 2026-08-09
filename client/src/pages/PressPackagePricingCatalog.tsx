@@ -101,9 +101,9 @@ function Card({
 }
 
 const VINYL_SIZE_BLURB: Record<string, string> = {
-  "7_inch": "Two songs. One single.",
-  "12_lp": "The classic full-length.",
-  "12_double": "Two discs. One gatefold.",
+  "7_inch": "Single",
+  "12_lp": "LP",
+  "12_double": "Double LP",
 };
 
 // ─── Left column: jacket + disc stage ────────────────────────────────
@@ -118,6 +118,7 @@ export function JacketStage({
   labelLogoUrl,
   labelBgColor,
   placeholderIconUrl,
+  typeName,
 }: {
   format: AlbumFormat;
   jacketUrl: string | null;
@@ -129,6 +130,7 @@ export function JacketStage({
   // icon at ~45% width on a `#1d1d1f` ink jacket. Passed only by the artist
   // package builder; the press catalog keeps its label-logo fallback.
   placeholderIconUrl?: string | null;
+  typeName?: string | null;
 }) {
   const isDouble = format === "12_double";
   const DISC = 264;
@@ -194,12 +196,14 @@ export function JacketStage({
           )}
         </div>
       </div>
-      {/* Caption */}
-      <div className="mt-6 flex items-center gap-2.5" data-testid="stage-caption">
+      {/* Caption — centered under the jacket, not the full stage. */}
+      <div className="mt-6 flex -translate-x-[33px] items-center gap-2.5" data-testid="stage-caption">
         {color && <ColorBall color={color} size={22} />}
-        <span className="text-[13px] font-semibold" style={{ color: INK }}>
-          {ALBUM_FORMAT_LABEL[format] ?? format}
-          {color ? <span style={{ color: SUBINK, fontWeight: 500 }}> · {color.name}</span> : null}
+        <span className="text-[13px]" style={{ color: SUBINK }}>
+          <span>{format === "7_inch" ? '7"' : '12"'}</span>
+          <span style={{ color: "#d1d1d6" }}> · </span>
+          <span>{typeName ?? ALBUM_FORMAT_LABEL[format] ?? format}</span>
+          {color ? <><span style={{ color: "#d1d1d6" }}> · </span><span className="font-semibold" style={{ color: INK }}>{color.name}</span></> : null}
         </span>
       </div>
       <p className="mt-1 text-[12px]" style={{ color: FAINT, marginBottom: 16 }}>
@@ -243,11 +247,11 @@ function SizeCard({
           opacity: hidden ? 0.6 : 1,
         }}
       >
-        <div className="text-[14px] font-semibold" style={{ color: active ? BLUE : INK }}>
-          {ALBUM_FORMAT_LABEL[format] ?? format}
+        <div className="text-[17px] font-semibold" style={{ color: active ? BLUE : INK }}>
+          {format === "7_inch" ? '7"' : format === "12_lp" ? '12"' : '12"'}
         </div>
         <div className="mt-0.5 text-[12px]" style={{ color: SUBINK }}>
-          {hidden ? "Hidden from artists" : VINYL_SIZE_BLURB[format] ?? "\u00A0"}
+          {VINYL_SIZE_BLURB[format] ?? "\u00A0"}
         </div>
       </button>
       {canEdit && (
@@ -381,13 +385,10 @@ function GroupCard({
           {tier.name}
         </span>
         <span className="text-[11.5px]" style={{ color: SUBINK }}>
-          {tier.colors.length} {tier.colors.length === 1 ? "color" : "colors"} · {new Set([
-            ...(tier.priceLadder ?? []),
-            ...Object.values(tier.laddersByJacket ?? {}).flat(),
-          ].filter((r) => r.confirmed !== false).map((r) => r.qty)).size} of 6 runs priced
+          {tier.colors.length} {tier.colors.length === 1 ? "color" : "colors"}
         </span>
       </button>
-      {canEdit && (
+      {canEdit && !active && (
         <Popover
           open={menuOpen}
           onOpenChange={(v) => {
@@ -700,7 +701,6 @@ export function PressPackagePricingCatalog({
 
   // ── Tier (type) selection
   const [selectedTierId, setSelectedTierId] = useState<string | null>(null);
-  const [showMoreTypes, setShowMoreTypes] = useState(false);
   const pendingTierIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (tiers.length === 0) {
@@ -1090,7 +1090,7 @@ export function PressPackagePricingCatalog({
       {/* ── Catalog header ── */}
       <div className="flex flex-wrap items-start justify-between gap-5">
         <div>
-          <div className="flex flex-wrap items-center gap-4">
+          <div>
             <h1 className="tracking-tight" style={{ fontSize: 30, fontWeight: 700, lineHeight: 1.08, color: INK }}>
               Catalog
             </h1>
@@ -1181,17 +1181,8 @@ export function PressPackagePricingCatalog({
                     color={selectedColor}
                     labelLogoUrl={labelLogoUrl}
                     labelBgColor={labelBgColor}
+                      typeName={selectedTier?.name}
                   />
-                  <div className="mt-8 rounded-2xl bg-white p-5" style={{ border: `1px solid ${HAIRLINE}` }} data-testid="package-contents-card">
-                    <div className="text-[15px] font-semibold tracking-tight" style={{ color: INK }}>One package. <span style={{ color: FAINT }}>Everything included.</span></div>
-                    <div className="mt-4 space-y-2.5 text-[12.5px]" style={{ color: SUBINK }}>
-                      {["Pressed vinyl record", "Printed jacket", "Center labels", ...(fmt.startsWith("12") ? ["Inner sleeve"] : [])].map((item) => (
-                        <div key={item} className="flex items-center justify-between" style={{ borderBottom: `1px solid ${HAIRLINE}`, paddingBottom: 8 }}>
-                          <span>{item}</span><span style={{ color: BLUE }}>Included</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               </div>
             )}
@@ -1203,15 +1194,19 @@ export function PressPackagePricingCatalog({
                 <section id="section-pick-size" data-testid="section-pick-size">
                   <div>
                     <TwoTone lead="Pick a size." rest="Prices follow the record." />
-                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div style={{ marginTop: 14, display: "flex", gap: 12 }}>
                       {VINYL_FORMATS.map((f) => {
                         const available = offered.has(f);
+                        const active = activeTab === f;
+                        const big = f === "7_inch" ? '7"' : '12"';
                         return (
                           <button key={f} type="button" disabled={!available} onClick={() => available && setActiveTab(f)}
-                            className="rounded-2xl bg-white p-4 text-left transition-colors disabled:opacity-40"
-                            style={{ border: `2px solid ${activeTab === f ? BLUE : HAIRLINE}` }} data-testid={`card-size-${f}`}>
-                            <div className="text-[14px] font-semibold" style={{ color: activeTab === f ? BLUE : INK }}>{ALBUM_FORMAT_LABEL[f]}</div>
-                            <div className="mt-1 text-[12px]" style={{ color: SUBINK }}>{VINYL_SIZE_BLURB[f]}</div>
+                            aria-pressed={active}
+                            className="rounded-2xl bg-white transition-all hover:-translate-y-px focus:outline-none disabled:opacity-40"
+                            style={{ flex: 1, padding: "16px 12px", border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, textAlign: "center", cursor: available ? "pointer" : "default" }}
+                            data-testid={`card-size-${f}`}>
+                            <div className="text-[17px] font-semibold" style={{ color: active ? BLUE : INK }}>{big}</div>
+                            <div className="text-[11px]" style={{ marginTop: 3, color: "#a1a1a6" }}>{VINYL_SIZE_BLURB[f]}</div>
                           </button>
                         );
                       })}
@@ -1223,8 +1218,7 @@ export function PressPackagePricingCatalog({
               {/* Pick a type */}
               <section id="section-pick-type" data-testid="section-pick-type">
                 <div className="flex flex-wrap items-end justify-between gap-3">
-                  <TwoTone lead="Pick a type." rest="How the vinyl is made." />
-                  {canEdit && <MoreTypesPopover onAdd={(name) => addTier.mutate(name)} adding={addTier.isPending} />}
+                  <TwoTone lead="Pick a type." rest="Each keeps its own package prices." />
                 </div>
                 {tiers.length === 0 ? (
                   <p className="mt-3 text-[13px]" style={{ color: SUBINK }}>
@@ -1232,7 +1226,7 @@ export function PressPackagePricingCatalog({
                   </p>
                 ) : (
                   <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-                    {tiers.slice(0, showMoreTypes ? undefined : 4).map((t) => (
+                    {tiers.map((t) => (
                       <GroupCard
                         key={t.id}
                         tier={t}
@@ -1246,16 +1240,9 @@ export function PressPackagePricingCatalog({
                         busy={renameTier.isPending || deleteTier.isPending}
                       />
                     ))}
-                    {tiers.length > 4 && (
-                      <button type="button" onClick={() => setShowMoreTypes((v) => !v)}
-                        className="flex min-h-[150px] items-center justify-center rounded-2xl text-[13px] font-semibold"
-                        style={{ border: `1px dashed ${FAINT}`, color: BLUE }} data-testid="button-more-existing-types">
-                        {showMoreTypes ? "Show fewer types" : `+ More types · ${tiers.length - 4}`}
-                      </button>
-                    )}
-                    {canEdit && <MoreTypesPopover onAdd={(name) => addTier.mutate(name)} adding={addTier.isPending} />}
                   </div>
                 )}
+                {canEdit && <MoreTypesPopover onAdd={(name) => addTier.mutate(name)} adding={addTier.isPending} />}
               </section>
 
               {/* Pick a color (vinyl only — CD/cassette skip swatches) */}
