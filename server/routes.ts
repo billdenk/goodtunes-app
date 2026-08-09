@@ -690,8 +690,8 @@ export async function batchEnrichWithPressPlaceholders<
   T extends { id: string; primaryArtistId?: string | null; labelId?: string | null },
 >(
   albums: T[],
-): Promise<Array<T & { pressLogoUrl: string | null; pressJacketUrl: string | null; pressDomain: string | null }>> {
-  if (!albums.length) return albums.map((a) => ({ ...a, pressLogoUrl: null, pressJacketUrl: null, pressDomain: null }));
+): Promise<Array<T & { pressLogoUrl: string | null; pressJacketUrl: string | null; pressDomain: string | null; pressLabelLogoUrl: string | null; pressLabelBgColor: string | null }>> {
+  if (!albums.length) return albums.map((a) => ({ ...a, pressLogoUrl: null, pressJacketUrl: null, pressDomain: null, pressLabelLogoUrl: null, pressLabelBgColor: null }));
   try {
     // --- Steps 1-2: artist/label invited + default press (one query each) ---
     // Task #2371 — resolve the SAME press the album DETAIL credits so the list
@@ -764,15 +764,43 @@ export async function batchEnrichWithPressPlaceholders<
       ...labelPressMap.values(),
       ...skuPressMap.values(),
     ])];
-    const pressInfoMap = new Map<string, { logoUrl: string | null; vinylPlaceholderUrl: string | null; domain: string | null }>();
+    const pressInfoMap = new Map<string, { logoUrl: string | null; vinylPlaceholderUrl: string | null; domain: string | null; labelLogoUrl: string | null; labelBgColor: string | null }>();
     if (allPressIds.length) {
-      const rows = await db.execute<{ id: string; logo_url: string | null; vinyl_placeholder_url: string | null; domain: string | null }>(sql`
-        SELECT id, logo_url, vinyl_placeholder_url, domain FROM manufacturers
+      const rows = await db.execute<{ id: string; logo_url: string | null; vinyl_placeholder_url: string | null; domain: string | null; label_logo_url: string | null; label_bg_color: string | null }>(sql`
+        SELECT id, logo_url, vinyl_placeholder_url, domain, label_logo_url, label_bg_color FROM manufacturers
         WHERE id = ANY(${pgArray(allPressIds)}::text[])
       `);
       for (const r of ((rows as any).rows ?? [])) {
-        pressInfoMap.set(r.id, { logoUrl: r.logo_url, vinylPlaceholderUrl: r.vinyl_placeholder_url, domain: r.domain });
+        pressInfoMap.set(r.id, { logoUrl: r.logo_url, vinylPlaceholderUrl: r.vinyl_placeholder_url, domain: r.domain, labelLogoUrl: r.label_logo_url, labelBgColor: r.label_bg_color });
       }
+    }
+
+    // Bill's rule 3 (Aug 09 2026): an album with NO resolvable press (no
+    // referral/invited press, no default press, no unambiguous SKU press) is
+    // a direct-to-GoodTunes build, and those default to Memphis Record
+    // Pressing — so its logo/branding displays instead of the GoodTunes brand
+    // tile. DISPLAY-ONLY: no press_id is stamped anywhere, so portal scoping,
+    // pricing, and routing are untouched. (Referral-link press branding and a
+    // press switcher are planned separately.)
+    let defaultPressInfo: { logoUrl: string | null; vinylPlaceholderUrl: string | null; domain: string | null; labelLogoUrl: string | null; labelBgColor: string | null } | null = null;
+    const anyUnresolved = albums.some((a) => {
+      const pressId = resolvePressIdFromCandidates({
+        artistInvitedPressId: a.primaryArtistId ? artistInvitedMap.get(a.primaryArtistId) : null,
+        labelInvitedPressId: a.labelId ? labelInvitedMap.get(a.labelId) : null,
+        artistDefaultPressId: a.primaryArtistId ? artistPressMap.get(a.primaryArtistId) : null,
+        labelDefaultPressId: a.labelId ? labelPressMap.get(a.labelId) : null,
+        distinctSkuPressIds: skuPressMap.has(a.id) ? [skuPressMap.get(a.id)!] : [],
+      });
+      return !pressId || !pressInfoMap.has(pressId);
+    });
+    if (anyUnresolved) {
+      const rows = await db.execute<{ logo_url: string | null; vinyl_placeholder_url: string | null; domain: string | null; label_logo_url: string | null; label_bg_color: string | null }>(sql`
+        SELECT logo_url, vinyl_placeholder_url, domain, label_logo_url, label_bg_color FROM manufacturers
+        WHERE LOWER(REGEXP_REPLACE(COALESCE(domain, ''), '^www\.', '')) = 'memphisrecordpressing.com' AND deleted_at IS NULL
+        ORDER BY created_at ASC NULLS LAST LIMIT 1
+      `);
+      const r = ((rows as any).rows ?? [])[0];
+      if (r) defaultPressInfo = { logoUrl: r.logo_url, vinylPlaceholderUrl: r.vinyl_placeholder_url, domain: r.domain, labelLogoUrl: r.label_logo_url, labelBgColor: r.label_bg_color };
     }
 
     return albums.map((a) => {
@@ -783,17 +811,19 @@ export async function batchEnrichWithPressPlaceholders<
         labelDefaultPressId: a.labelId ? labelPressMap.get(a.labelId) : null,
         distinctSkuPressIds: skuPressMap.has(a.id) ? [skuPressMap.get(a.id)!] : [],
       });
-      const info = pressId ? (pressInfoMap.get(pressId) ?? null) : null;
+      const info = (pressId ? (pressInfoMap.get(pressId) ?? null) : null) ?? defaultPressInfo;
       return {
         ...a,
         pressLogoUrl: info?.logoUrl ?? null,
         pressJacketUrl: info?.vinylPlaceholderUrl ?? null,
         pressDomain: info?.domain ?? null,
+        pressLabelLogoUrl: info?.labelLogoUrl ?? null,
+        pressLabelBgColor: info?.labelBgColor ?? null,
       };
     });
   } catch {
     // Best-effort: don't let press-resolution failures break the album list.
-    return albums.map((a) => ({ ...a, pressLogoUrl: null, pressJacketUrl: null, pressDomain: null }));
+    return albums.map((a) => ({ ...a, pressLogoUrl: null, pressJacketUrl: null, pressDomain: null, pressLabelLogoUrl: null, pressLabelBgColor: null }));
   }
 }
 

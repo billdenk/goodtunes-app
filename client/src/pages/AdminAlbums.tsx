@@ -94,9 +94,11 @@ interface AlbumLite {
   // enrichment pass; undefined on cached results from before this shipped.
   pressLogoUrl?: string | null;
   pressJacketUrl?: string | null;
-  // Task #2388 — press domain drives the bundled per-domain jacket art lookup
-  // in AlbumCover, mirroring the press Catalog editor's fallback chain.
   pressDomain?: string | null;
+  // Press label-branding pair (label_logo_url/label_bg_color) — drives the
+  // catalog-jacket placeholder tile in AlbumCover.
+  pressLabelLogoUrl?: string | null;
+  pressLabelBgColor?: string | null;
 }
 
 // Task #1967 — "attention" is the cross-stage incomplete-albums audit. It's
@@ -130,6 +132,8 @@ interface IncompleteAlbumRow {
   pressLogoUrl?: string | null;
   pressJacketUrl?: string | null;
   pressDomain?: string | null;
+  pressLabelLogoUrl?: string | null;
+  pressLabelBgColor?: string | null;
 }
 
 // Task #1007 / #1008 — build the link into an album, carrying the entire
@@ -1308,6 +1312,8 @@ function NeedsAttentionTable({
                         pressJacketUrl={r.pressJacketUrl ?? null}
                         pressDomain={r.pressDomain ?? null}
                         pressLogoUrl={r.pressLogoUrl ?? null}
+                        pressLabelLogoUrl={r.pressLabelLogoUrl ?? null}
+                        pressLabelBgColor={r.pressLabelBgColor ?? null}
                         brandFallback
                       />
                     </div>
@@ -1383,6 +1389,8 @@ function AlbumTile({ album, href }: { album: AlbumLite; href: string }) {
           pressJacketUrl={album.pressJacketUrl ?? null}
           pressDomain={album.pressDomain ?? null}
           pressLogoUrl={album.pressLogoUrl ?? null}
+                        pressLabelLogoUrl={album.pressLabelLogoUrl ?? null}
+                        pressLabelBgColor={album.pressLabelBgColor ?? null}
           brandFallback
         />
         {album.isHidden && (
@@ -1470,6 +1478,8 @@ function AlbumRow({
           pressJacketUrl={album.pressJacketUrl ?? null}
           pressDomain={album.pressDomain ?? null}
           pressLogoUrl={album.pressLogoUrl ?? null}
+                        pressLabelLogoUrl={album.pressLabelLogoUrl ?? null}
+                        pressLabelBgColor={album.pressLabelBgColor ?? null}
           brandFallback
         />
       </div>

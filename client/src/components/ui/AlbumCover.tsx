@@ -17,8 +17,13 @@
 // goes exactly where the old `<img>` lived. Callers keep their own sized,
 // rounded, overflow-hidden wrapper plus any overlays (play button, badges).
 import { useEffect, useState } from "react";
-import { resolvePressPlaceholderArt } from "@/lib/pressPlaceholderArt";
-import { useAdminDark, useDarkMarkLogo } from "@/lib/adminAppearance";
+// Bill (Aug 09 2026): the press-logo and brand-fallback tiles must render
+// EXACTLY like the press Catalog editor's placeholder jacket — the white mark
+// at ~42% width on the `#1d1d1f` ink jacket (JacketStage's label-logo fill).
+// Same look in light AND dark admin themes (the catalog jacket is theme-
+// independent), which also kills the muddy gray GoodTunes tile in dark mode.
+const INK_JACKET_BG = "#1d1d1f";
+const FORCE_WHITE_MARK = "brightness(0) invert(1)";
 
 export interface AlbumCoverProps {
   /** The album's chosen artwork URL. Empty/null/dead → placeholder. */
@@ -53,20 +58,27 @@ export interface AlbumCoverProps {
    */
   pressJacketUrl?: string | null;
   /**
-   * Task #2369 — admin-only: the album's effective press's domain
-   * (manufacturers.domain). Used to resolve a bundled per-domain jacket art
-   * asset as a fallback between pressJacketUrl and pressLogoUrl, matching the
-   * treatment in the press Catalog editor. Must never be passed on fan-facing surfaces.
+   * Admin-only: the album's effective press's domain (manufacturers.domain).
+   * Accepted for call-site compatibility but no longer rendered — the bundled
+   * per-domain art tiles (white/gray) were replaced by the catalog jacket
+   * treatment (Bill, Aug 09 2026). Must never be passed on fan-facing surfaces.
    */
   pressDomain?: string | null;
   /**
-   * Task #2369 — admin-only: the album's effective press's light logo
-   * (manufacturers.logo_url). When present and there is no real art, press jacket,
-   * or domain-bundled art, renders the logo centred on a white tile with reduced
-   * opacity — matching the press Catalog editor's JacketArtFill treatment.
+   * Admin-only: the album's effective press's light logo
+   * (manufacturers.logo_url) — fallback mark when the press has no label
+   * branding. Rendered white-forced at ~42% on the label-bg/ink jacket,
+   * matching the press Catalog editor's JacketStage placeholder exactly.
    * Must never be passed on fan-facing surfaces.
    */
   pressLogoUrl?: string | null;
+  /**
+   * Admin-only: the press's label-branding mark + jacket color
+   * (manufacturers.label_logo_url / label_bg_color) — the SAME pair the press
+   * Catalog editor's placeholder jacket renders. Wins over pressLogoUrl.
+   */
+  pressLabelLogoUrl?: string | null;
+  pressLabelBgColor?: string | null;
   /**
    * Task #2371 — admin-only opt-in. When there is no real art AND no press
    * placeholder resolves, render a grayscale GoodTunes mark on a white tile
@@ -103,8 +115,10 @@ export function AlbumCover({
   loading = "lazy",
   imgStyle,
   pressJacketUrl,
-  pressDomain,
+  pressDomain: _pressDomain,
   pressLogoUrl,
+  pressLabelLogoUrl,
+  pressLabelBgColor,
   brandFallback = false,
 }: AlbumCoverProps) {
   // Track load failures so a dead artwork/photo URL falls through to the next
@@ -112,30 +126,14 @@ export function AlbumCover({
   // adding real art (or a new photo) re-attempts the image immediately.
   const [artFailed, setArtFailed] = useState(false);
   const [pressJacketFailed, setPressJacketFailed] = useState(false);
-  const [pressDomainArtFailed, setPressDomainArtFailed] = useState(false);
+  const [pressLabelLogoFailed, setPressLabelLogoFailed] = useState(false);
   const [pressLogoFailed, setPressLogoFailed] = useState(false);
   const [photoFailed, setPhotoFailed] = useState(false);
   useEffect(() => setArtFailed(false), [artwork]);
   useEffect(() => setPressJacketFailed(false), [pressJacketUrl]);
-  useEffect(() => setPressDomainArtFailed(false), [pressDomain]);
+  useEffect(() => setPressLabelLogoFailed(false), [pressLabelLogoUrl]);
   useEffect(() => setPressLogoFailed(false), [pressLogoUrl]);
   useEffect(() => setPhotoFailed(false), [artistPhoto]);
-
-  // Dark-mode treatment for the two admin-only WHITE placeholder tiles
-  // (press logo + GoodTunes brand fallback). Under the dark admin theme the
-  // white tile flips to the charcoal track tone, and a near-black mark is
-  // inverted to read white — same mechanism as the Presses list/detail. On
-  // fan surfaces these tiers never render (props unset), and useAdminDark is
-  // false, so nothing changes there.
-  const adminDark = useAdminDark();
-  const pressLogoIsDarkMark = useDarkMarkLogo(pressLogoUrl);
-  const tileBg = adminDark ? "var(--apple-track)" : "#ffffff";
-
-  // Resolve the bundled per-domain jacket art (same lookup the press Catalog
-  // editor uses). This fills the gap between a stored vinyl_placeholder_url
-  // and the press profile logo, so album covers don't drop to the small logo
-  // whenever the catalog would show a proper jacket.
-  const domainArtUrl = resolvePressPlaceholderArt(pressDomain);
 
   const hasArt = !!artwork && !artFailed;
   if (hasArt) {
@@ -173,53 +171,34 @@ export function AlbumCover({
     );
   }
 
-  // Task #2388 — bundled per-domain jacket art (full-bleed). Mirrors the
-  // press Catalog editor's fallback chain: stored vinyl_placeholder_url wins,
-  // then the hard-coded per-domain asset, then the press profile logo.
-  const hasDomainArt = !!domainArtUrl && !pressDomainArtFailed;
-  if (hasDomainArt) {
-    return (
-      <img
-        src={domainArtUrl as string}
-        alt={decorative ? "" : title}
-        aria-hidden={decorative || undefined}
-        crossOrigin="anonymous"
-        loading={loading}
-        decoding="async"
-        onError={() => setPressDomainArtFailed(true)}
-        className={`w-full h-full object-cover ${className}`}
-        data-testid="album-cover-press-domain-art"
-      />
-    );
-  }
-
-  // Task #2388 — press logo on a white tile, light/faded, with no album title
-  // text overlaid. Matches the press Catalog editor's JacketArtFill treatment
-  // (bg-white, centered, opacity-80). Previously used a dark navy tile with
-  // the album name overlaid — that's replaced entirely.
-  const hasPressLogo = !!pressLogoUrl && !pressLogoFailed;
+  // Press tile — the catalog placeholder jacket: the press's label-branding
+  // mark (fallback: profile logo) white-forced at ~42% width on the press's
+  // label-bg (fallback: ink) jacket, matching JacketStage exactly.
+  // Failure-aware: a dead label logo falls back to the profile logo before
+  // the tier gives up entirely (each mark tracks its own load failure).
+  const labelMarkUsable = !!pressLabelLogoUrl && !pressLabelLogoFailed;
+  const profileMarkUsable = !!pressLogoUrl && !pressLogoFailed;
+  const pressMarkUrl = labelMarkUsable ? pressLabelLogoUrl : profileMarkUsable ? pressLogoUrl : null;
+  const hasPressLogo = !!pressMarkUrl;
   if (hasPressLogo) {
     return (
       <div
         className={`relative w-full h-full overflow-hidden ${className}`}
-        style={{ background: tileBg }}
+        style={{ background: pressLabelBgColor || INK_JACKET_BG }}
         data-testid="album-cover-press-logo"
       >
-        <div className="absolute inset-0 flex items-center justify-center p-[16%]">
+        <div className="absolute inset-0 flex items-center justify-center">
           <img
-            src={pressLogoUrl as string}
+            src={pressMarkUrl as string}
             alt=""
             aria-hidden
             crossOrigin="anonymous"
             loading={loading}
             decoding="async"
-            onError={() => setPressLogoFailed(true)}
-            className="max-w-full max-h-full object-contain grayscale opacity-80"
-            style={
-              adminDark && pressLogoIsDarkMark
-                ? { filter: "grayscale(1) invert(1) brightness(1.7)" }
-                : undefined
+            onError={() =>
+              labelMarkUsable ? setPressLabelLogoFailed(true) : setPressLogoFailed(true)
             }
+            style={{ width: "42%", height: "42%", objectFit: "contain", filter: FORCE_WHITE_MARK, opacity: 0.92 }}
           />
         </div>
       </div>
@@ -235,22 +214,17 @@ export function AlbumCover({
     return (
       <div
         className={`relative w-full h-full overflow-hidden ${className}`}
-        style={{ background: tileBg }}
+        style={{ background: INK_JACKET_BG }}
         data-testid="album-cover-brand-fallback"
       >
-        <div className="absolute inset-0 flex items-center justify-center p-[16%]">
+        <div className="absolute inset-0 flex items-center justify-center">
           <img
             src={GOODTUNES_FALLBACK_LOGO}
             alt=""
             aria-hidden
             loading={loading}
             decoding="async"
-            className="max-w-full max-h-full object-contain grayscale opacity-80"
-            style={
-              // The GoodTunes mark is navy — grayscale leaves it near-black,
-              // so in dark mode invert it to read as a light ghost mark.
-              adminDark ? { filter: "grayscale(1) invert(1) brightness(1.6)" } : undefined
-            }
+            style={{ width: "42%", height: "42%", objectFit: "contain", filter: FORCE_WHITE_MARK, opacity: 0.92 }}
           />
         </div>
       </div>
