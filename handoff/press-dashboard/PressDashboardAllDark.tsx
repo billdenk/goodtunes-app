@@ -54,7 +54,7 @@ import {
 import goodtunesLogo from '../assets/goodtunes-logo.png';
 import mrpLogo from '../assets/mrp-logo.png';
 import hellbenderIcon from '../assets/hellbender-icon.svg';
-import pmpLogo from '../assets/press-pmp.jpg';
+import pmpLogo from '../assets/pmp-icon.svg';
 import virylIcon from '../assets/viryl-icon.svg';
 
 // ─── Charcoal night palette (canon) ──────────────────────────────────
