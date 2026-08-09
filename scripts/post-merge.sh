@@ -879,6 +879,33 @@ SQL
 migrate_press_formats_turnaround dev  "${DATABASE_URL:-}"
 migrate_press_formats_turnaround prod "${PROD_DATABASE_URL:-}"
 
+# Item 28 (press Catalog page) — 180 g heavyweight price book on
+# press_tier_jacket_ladders + per-format hidden template slots on
+# press_formats (NULL = default ['booklet']). Declared in shared/schema.ts;
+# additive + idempotent on BOTH DBs for the schema-drift guard.
+migrate_press_catalog_item28() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press catalog item28 migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE IF EXISTS press_tier_jacket_ladders
+  ADD COLUMN IF NOT EXISTS price_ladder_180 jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE IF EXISTS press_formats
+  ADD COLUMN IF NOT EXISTS hidden_templates jsonb;
+ALTER TABLE IF EXISTS press_template_specs
+  ADD COLUMN IF NOT EXISTS template_file_name text;
+SQL
+  then
+    echo "post-merge: press catalog item28 migration ok on $label"
+  else
+    echo "post-merge: WARNING — press catalog item28 migration failed on $label (continuing)"
+  fi
+}
+migrate_press_catalog_item28 dev  "${DATABASE_URL:-}"
+migrate_press_catalog_item28 prod "${PROD_DATABASE_URL:-}"
+
 # Digital GoodDeed cert paper size — orders.cert_paper_size lets a digital
 # (synthetic-cert) owner flip US Letter ↔ A4 from the cert viewer. NULL =
 # country-derived default. Declared in shared/schema.ts; hand-apply the

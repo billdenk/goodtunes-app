@@ -2509,6 +2509,11 @@ export const pressFormats = pgTable(
     // which still drives the catalog summary header.
     turnaroundWeeksMin: integer("turnaround_weeks_min"),
     turnaroundWeeksMax: integer("turnaround_weeks_max"),
+    // Item 28 — template slots the press tucked away on the catalog page
+    // (componentKeys: jacket / inner_sleeve / labels / booklet). NULL means
+    // "never touched" and defaults to ['booklet'] (Booklet starts hidden for
+    // all presses); an explicit [] means the press showed everything.
+    hiddenTemplates: jsonb("hidden_templates").$type<string[]>(),
   },
   (t) => ({
     pressFormatUniq: unique("press_formats_press_format_uniq").on(t.pressId, t.format),
@@ -2612,6 +2617,13 @@ export const pressTierJacketLadders = pgTable(
       .$type<{ qty: number; unitCents: number }[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
+    // Item 28 — 180 g heavyweight price book. Shares run sizes with the
+    // 140 g ladder (priceLadder above) but keeps its own numbers. Empty =
+    // the press hasn't priced heavyweight for this combo.
+    priceLadder180: jsonb("price_ladder_180")
+      .$type<{ qty: number; unitCents: number }[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
   },
   (t) => ({
     pressTierJacketLadderUniq: unique("press_tier_jacket_ladder_uniq").on(t.tierId, t.jacketId),
@@ -2645,6 +2657,10 @@ export const pressTemplateSpecs = pgTable(
     color: text("color"),
     fontsRule: text("fonts_rule"),
     templateFileUrl: text("template_file_url"),
+    // Item 28 — original display filename captured at upload / paste time.
+    // Upload URLs are opaque `/objects/uploads/<id>` paths, so the tile
+    // caption renders this field (middle-truncated), never the URL tail.
+    templateFileName: text("template_file_name"),
     // Task #2705 — minimum placed-image resolution (PPI) the press requires
     // for this component; null = no check (never fabricated).
     minPpi: integer("min_ppi"),

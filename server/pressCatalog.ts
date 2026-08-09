@@ -115,6 +115,8 @@ export type CatalogTier = {
   priceLadder: CatalogLadderRung[];
   // jacketId → ladder for every (tier, jacket) combo that has one.
   laddersByJacket: Record<string, CatalogLadderRung[]>;
+  // Item 28 — 180 g heavyweight price book (shares run sizes with 140 g).
+  laddersByJacket180: Record<string, CatalogLadderRung[]>;
   colors: CatalogColor[];
 };
 export type CatalogFormat = {
@@ -131,6 +133,9 @@ export type CatalogFormat = {
   // press-level default (manufacturers.turnaround_weeks_*).
   turnaroundWeeksMin: number | null;
   turnaroundWeeksMax: number | null;
+  // Item 28 — template slots the press tucked away (componentKeys). NULL in
+  // the DB defaults to ['booklet'] (Booklet starts hidden for all presses).
+  hiddenTemplates: string[];
 };
 export type CatalogJacket = {
   id: string;
@@ -236,10 +241,17 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
     colorsByTier.set(c.tierId, arr);
   }
   const laddersByTier = new Map<string, Record<string, { qty: number; unitCents: number }[]>>();
+  const ladders180ByTier = new Map<string, Record<string, { qty: number; unitCents: number }[]>>();
   for (const l of lRows) {
     const map = laddersByTier.get(l.tierId) ?? {};
     map[l.jacketId] = (l.priceLadder ?? []) as { qty: number; unitCents: number }[];
     laddersByTier.set(l.tierId, map);
+    const heavy = ((l as any).priceLadder180 ?? []) as { qty: number; unitCents: number }[];
+    if (heavy.length > 0) {
+      const map180 = ladders180ByTier.get(l.tierId) ?? {};
+      map180[l.jacketId] = heavy;
+      ladders180ByTier.set(l.tierId, map180);
+    }
   }
   const tiersByFormat = new Map<string, CatalogTier[]>();
   for (const t of tRows) {
@@ -259,6 +271,7 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
       position: t.position,
       priceLadder: defaultLadder,
       laddersByJacket: ladders,
+      laddersByJacket180: ladders180ByTier.get(t.id) ?? {},
       colors: colorsByTier.get(t.id) ?? [],
     });
     tiersByFormat.set(t.format, arr);
@@ -272,6 +285,8 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
       hidden: f.hiddenAt !== null,
       turnaroundWeeksMin: f.turnaroundWeeksMin ?? null,
       turnaroundWeeksMax: f.turnaroundWeeksMax ?? null,
+      // NULL = never touched → Booklet starts hidden (Item 28 default).
+      hiddenTemplates: ((f as any).hiddenTemplates as string[] | null) ?? ["booklet"],
     })),
     jackets: jRows.map((j) => ({
       id: j.id,
@@ -288,7 +303,7 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
 // Returns the matched rung + `requiresQuote=true` when the typed
 // quantity exceeds the top rung. Returns null when the ladder is empty.
 export function snapToCatalogQuantityTier(
-  ladder: { qty: number; unitCents: number; confirmed?: boolean }[],
+  ladder: { qty: number; unitCents: number; confirmed?: boolean; offered?: boolean }[],
   input: number | null | undefined,
 ): { qty: number; unitCents: number; requiresQuote: boolean } | null {
   if (!Array.isArray(ladder) || ladder.length === 0) return null;
@@ -297,7 +312,7 @@ export function snapToCatalogQuantityTier(
   // lookup; the caller bubbles `requiresQuote=true` whenever the
   // remaining (confirmed) ladder can't price the typed quantity.
   const sorted = [...ladder]
-    .filter((r) => r.confirmed !== false)
+    .filter((r) => r.confirmed !== false && r.offered !== false)
     .sort((a, b) => a.qty - b.qty);
   if (sorted.length === 0) return null;
   const n = typeof input === "number" && Number.isFinite(input) ? Math.max(1, Math.floor(input)) : 1;
@@ -406,6 +421,9 @@ export async function lookupCatalogUnitCents(args: {
     // Legacy fallback for presses not yet rehomed onto the new shape.
     ladder = (tier.priceLadder ?? []) as { qty: number; unitCents: number }[];
   }
+  // Item 28 — "Not offered" rungs stay persisted (shared run sizes across
+  // the 140/180 books) but are invisible to artist-facing price resolution.
+  ladder = ladder.filter((r) => (r as { offered?: boolean }).offered !== false);
   const snap = snapToCatalogQuantityTier(ladder, args.quantity);
   if (!snap) return null;
   let colorName: string | null = null;
@@ -2187,6 +2205,10 @@ const ladderBodySchema = z.object({
     z.object({
       qty: z.number().int().min(1),
       unitCents: z.number().int().min(0),
+      // Item 28 — false = "Not offered": the run size stays in the shared
+      // book (both weights carry it) but is hidden from artists. Absent /
+      // true = offered.
+      offered: z.boolean().optional(),
       // Task #624 — optional per-rung "this is a real quote" flag.
       // Defaults to true on save so any rung the admin actually keys
       // is treated as confirmed. Pass `false` explicitly to keep a
@@ -2194,6 +2216,9 @@ const ladderBodySchema = z.object({
       confirmed: z.boolean().optional(),
     }),
   ),
+  // Item 28 — which price book this write targets. Omitted = '140'
+  // (back-compat: every existing caller writes the standard-weight book).
+  weight: z.enum(["140", "180"]).optional(),
 });
 
 export function registerPressCatalogRoutes(
@@ -2285,6 +2310,23 @@ export function registerPressCatalogRoutes(
       await db
         .update(pressFormats)
         .set({ hiddenAt: body.hidden ? new Date() : null })
+        .where(and(eq(pressFormats.pressId, pressId), eq(pressFormats.format, format)));
+      return res.json(await getPressCatalog(pressId));
+    }
+
+    // Item 28 — template slots hidden on the catalog page. Full-array write;
+    // an explicit [] means "show everything" (distinct from NULL = default).
+    if (Array.isArray(body.hiddenTemplates)) {
+      const parsedHidden = z
+        .array(z.enum(["jacket", "inner_sleeve", "labels", "booklet"]))
+        .safeParse(body.hiddenTemplates);
+      if (!parsedHidden.success) {
+        return res.status(400).json({ message: "Unknown template key" });
+      }
+      const keys: string[] = Array.from(new Set(parsedHidden.data));
+      await db
+        .update(pressFormats)
+        .set({ hiddenTemplates: keys })
         .where(and(eq(pressFormats.pressId, pressId), eq(pressFormats.format, format)));
       return res.json(await getPressCatalog(pressId));
     }
@@ -3013,22 +3055,77 @@ export function registerPressCatalogRoutes(
     const parsed = ladderBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid ladder" });
     const ladder = [...parsed.data.priceLadder].sort((a, b) => a.qty - b.qty);
-    const [existing] = await db
-      .select()
-      .from(pressTierJacketLadders)
-      .where(and(eq(pressTierJacketLadders.tierId, tierId), eq(pressTierJacketLadders.jacketId, jacketId)));
-    if (existing) {
-      const [row] = await db
-        .update(pressTierJacketLadders)
-        .set({ priceLadder: ladder })
-        .where(eq(pressTierJacketLadders.id, existing.id))
+    const heavy = parsed.data.weight === "180";
+    // Item 28 — the 140 g and 180 g books SHARE run sizes: after every save
+    // BOTH books carry exactly the submitted qty set. Adding a run size adds
+    // it to the other book as an unconfirmed "on request" rung; removing one
+    // removes it from both. Rungs the other book already had for shared qtys
+    // keep their own price / quote / offered state ("each weight keeps its
+    // own numbers"). Both writes land in one transaction so the books can't
+    // drift. Per-book "Not offered" rides on the persisted `offered:false`
+    // flag, so an off rung still occupies its shared run size.
+    type Rung = { qty: number; unitCents: number; confirmed?: boolean; offered?: boolean };
+    const unionInto = (other: Rung[]): Rung[] => {
+      const byQty = new Map(other.map((r) => [r.qty, r]));
+      return ladder.map(
+        (r) => byQty.get(r.qty) ?? { qty: r.qty, unitCents: 0, confirmed: false },
+      );
+    };
+    const row = await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(pressTierJacketLadders)
+        .where(and(eq(pressTierJacketLadders.tierId, tierId), eq(pressTierJacketLadders.jacketId, jacketId)));
+      if (existing) {
+        const other = ((heavy ? existing.priceLadder : existing.priceLadder180) ?? []) as Rung[];
+        const synced = unionInto(other);
+        const [updated] = await tx
+          .update(pressTierJacketLadders)
+          .set(heavy ? { priceLadder180: ladder, priceLadder: synced } : { priceLadder: ladder, priceLadder180: synced })
+          .where(eq(pressTierJacketLadders.id, existing.id))
+          .returning();
+        return updated;
+      }
+      const synced = unionInto([]);
+      const [inserted] = await tx
+        .insert(pressTierJacketLadders)
+        .values(heavy ? { tierId, jacketId, priceLadder180: ladder, priceLadder: synced } : { tierId, jacketId, priceLadder: ladder, priceLadder180: synced })
         .returning();
-      return res.json(row);
-    }
-    const [row] = await db
-      .insert(pressTierJacketLadders)
-      .values({ tierId, jacketId, priceLadder: ladder })
-      .returning();
+      return inserted;
+    });
     res.json(row);
+  });
+
+  // ─── Item 28 — "Make it yours" press branding (color + SVG logo) ────
+  // Scoped so a press Owner/Admin can restyle their own jacket + center
+  // label; the general PUT /api/admin/manufacturers/:id stays operator-only.
+  app.put("/api/admin/manufacturers/:id/catalog/branding", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+    const body = req.body ?? {};
+    const patch: { labelBgColor?: string | null; labelLogoUrl?: string | null } = {};
+    if ("labelBgColor" in body) {
+      const v = body.labelBgColor;
+      if (v !== null && (typeof v !== "string" || !/^#[0-9a-fA-F]{6}$/.test(v))) {
+        return res.status(400).json({ message: "Brand color must be a #rrggbb hex value." });
+      }
+      patch.labelBgColor = v;
+    }
+    if ("labelLogoUrl" in body) {
+      const v = body.labelLogoUrl;
+      if (v !== null && (typeof v !== "string" || !v.startsWith("/objects/"))) {
+        return res.status(400).json({ message: "Logo must be an uploaded /objects/ URL." });
+      }
+      patch.labelLogoUrl = v;
+    }
+    if (Object.keys(patch).length === 0) {
+      return res.status(400).json({ message: "Nothing to update." });
+    }
+    const updated = await storage.updateManufacturer(pressId, patch as any);
+    res.json({
+      labelBgColor: (updated as any)?.labelBgColor ?? null,
+      labelLogoUrl: (updated as any)?.labelLogoUrl ?? null,
+    });
   });
 }

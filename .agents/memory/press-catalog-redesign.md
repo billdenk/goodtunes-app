@@ -1,5 +1,5 @@
 ---
-name: Press catalog redesigned page
+name: Press catalog redesigned page (incl. Item 28)
 description: The press Catalog surface is PressPackagePricingCatalog.tsx (handoff design); legacy PressCatalogPanel/CatalogEditor deleted; ladder-draft semantics and reuse rules.
 ---
 
@@ -61,3 +61,8 @@ The press Catalog (portal Vinyl catalog tab + god-view `?tab=catalog`) is `clien
 - Center label is UNCONDITIONALLY black #0a0a0a with press logo white via invert(1) brightness(1.7); label art renders only at size >= 70 (small 40/44px previews = plain black label). labelBgColor prop still threaded but unused for fill.
 - Jacket placeholder: press logo (labelLogoUrl ?? logoUrl fallback) at 42% invert(1) opacity .92; NO "Printed jacket" text on the cover ever (caption below the stage keeps the phrase).
 - SECURITY: GET /api/manufacturers/:id now returns only a branding/public subset (id, name, logo variants, labelLogoUrl/Bg, coverUrl, vinylPlaceholderUrl, websiteUrl) to non-operator, non-own-press partners (artist package builder needs it); full row only for operators + the press's own users.
+
+## Item 28 durable decisions (2026-08-09)
+- 140 g and 180 g price books SHARE run sizes by design: any save to one book appends missing qtys to the other as unconfirmed "on request" rungs (never deletes) — keep this union invariant if the ladder write path changes.
+- Hidden template tiles: NULL means "default set" (Booklet hidden) — an explicit empty array means "show everything"; don't collapse the two.
+- The catalog page footer must stay EMPTY of parked buttons (Add-your-vinyl / CSV / Hellbender sync were removed per Bill's correction 12); CSV import/export belongs on a separate operator surface if revived.

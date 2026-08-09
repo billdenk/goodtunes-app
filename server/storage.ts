@@ -5425,6 +5425,7 @@ export class DbStorage implements IStorage {
           color: values.color ?? null,
           fontsRule: values.fontsRule ?? null,
           templateFileUrl: values.templateFileUrl ?? null,
+          templateFileName: values.templateFileName ?? null,
           updatedByUserId,
           updatedAt: new Date(),
         },

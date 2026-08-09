@@ -88,11 +88,11 @@ type EditAccess = { canEdit: boolean; missingPermissions: string[] };
 // Mirrors `snapToCatalogQuantityTier` server-side (copied from SellPanel —
 // unconfirmed TBD rungs must never resolve as $0 manufacturing).
 function snapCatalogLadder(
-  ladder: { qty: number; unitCents: number; confirmed?: boolean }[],
+  ladder: { qty: number; unitCents: number; confirmed?: boolean; offered?: boolean }[],
   n: number,
 ): { qty: number; unitCents: number; requiresQuote: boolean } | null {
   if (!Array.isArray(ladder) || ladder.length === 0) return null;
-  const sorted = [...ladder].filter((r) => r.confirmed !== false).sort((a, b) => a.qty - b.qty);
+  const sorted = [...ladder].filter((r) => r.confirmed !== false && r.offered !== false).sort((a, b) => a.qty - b.qty);
   if (sorted.length === 0) return null;
   const q = Math.max(1, Math.floor(n));
   for (const r of sorted) if (q <= r.qty) return { qty: r.qty, unitCents: r.unitCents, requiresQuote: false };

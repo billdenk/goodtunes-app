@@ -39,7 +39,7 @@
 
     ## Acceptance
     Screenshot the rebuilt page at 7" and 12" for MRP with real data and compare against the reference component pixel-flow-for-pixel-flow. Also verify a narrow (~1024px) viewport: preview stacked above, never missing. If any section's structure or copy differs from the reference, it is not done.
-    
+
 
     ---
 
@@ -72,7 +72,7 @@
 
     ## 13. GoodDeeds section styling
     Its placement at the page bottom is acceptable for now, but it still uses old markup: eye-off toggle icons, its own inline Save button, old table styling. Restyle to canon: hairline rows, canon toggles, and it participates in the page's single floating save bar — no per-section Save buttons.
-    
+
 
 ---
 
@@ -166,7 +166,7 @@ Rule of thumb for acceptance: on the dark Catalog page, NO white or light-gray r
 
     Acceptance: on the dark Catalog, the jacket shows the press logo white-on-black, no text
     on the artwork, and the caption below reads exactly as in the reference.
-    
+
     ## 27. Vinyl disc animation & center label — copy VinylDisc/JacketStage verbatim
 
     Screenshot evidence (PMP + Viryl instances): the record that peeks out of the jacket has
@@ -195,7 +195,7 @@ Rule of thumb for acceptance: on the dark Catalog page, NO white or light-gray r
     Acceptance: hovering the jacket on any press instance slides the record out with a 32°
     spin, the highlight stays fixed while grooves/label turn, the center label shows that
     press's logo, and everything glides back straight on mouse-out.
-    
+
     ### 27a. Shine asset + slide distance (addendum)
 
     - The specular shine is driven by a mask PNG, now provided at
@@ -205,6 +205,32 @@ Rule of thumb for acceptance: on the dark Catalog page, NO white or light-gray r
     - Hover slide distance: keep the reference values — main disc `translateX(jacketPx * 0.24)`,
     Double LP second disc `translateX(jacketPx * 0.3)` on its 0.1s delay. Do NOT slide
     further; the label peeking partially is intentional.
-    
+
+    ## Item 28 — Hover spin is now continuous, with a rewind control (supersedes the spin part of Item 27)
+
+    Item 27 said "slide-out + 32° spin on hover … no rewind control needed". That is superseded. The new behavior, already live in the reference files:
+
+    - On hover, the record still slides out of the jacket at the reference distances (0.24 / 0.3 of the jacket width — unchanged), and the disc body now spins **continuously** at 360° per 8 seconds, driven by requestAnimationFrame. Not a one-shot turn.
+    - On mouse-out, the slide glides back but the disc **freezes at its current angle**. If it has accumulated meaningful rotation, a small circular rewind button (RotateCcw icon, frosted dark pill) fades in at the bottom-right of the jacket stage.
+    - Clicking rewind eases the disc back to its start angle along the shortest path, then the button fades out.
+    - Honors prefers-reduced-motion: no spin, no rewind button.
+    - Copy `useVinylSpin`, `RewindButton`, and the updated `JacketStage` verbatim from the re-exported reference files in handoff/press-catalog/ (dark and light). Do not re-derive the physics.
+    - Applies to EVERY press instance (MRP, PMP, Viryl, Hellbender).
+
+## Item 28 — Aug 9 pass: spin/rewind final, weight books, template dialog, hide controls, copy set (supersedes Item 27's "no rewind button")
+
+Pull the latest `handoff/press-catalog/PressPackagePricingTableRunsDark.tsx` (and the light file) — they are the canonical reference. Item 27 said "no rewind button"; that is now superseded. Apply to EVERY press instance (MRP, PMP, Viryl, Hellbender):
+
+- **Rewind button (new canon):** after hover-spin leaves the disc rotated, a small frosted rewind control appears centered below the record (aligned with the caption center, `left: calc(50% - jacket*0.25)`, `translateX(-50%)`, bottom −14). Clicking it slides the record out (~1.2 s "peek") while it turns back to 0°, then tucks it back in. Pointer handlers live on an inner wrapper around jacket/discs/shadow only — the rewind button must NOT trigger spin/slide.
+- **140 g / 180 g price books:** segmented capsule chip ("140 g | 180 g") sits top-left above the price list, opposite "+ Add run size". Two independent price books share the same run sizes (adding a run size adds it to both weights); the caption reads "Prices are per unit, per finished package · {weight} g vinyl."
+- **Print-prep template dialog:** clicking any tile (empty or filled) — or ⋯ → "Add file…"/"Replace…" — opens a centered modal styled like the album "Completed Art" dialog: title "{Template}: {size}" (live with selected size), CURRENT FILE panel left (with Remove file), UPLOAD FILE drag zone + "OR PASTE A URL" field with capsule "Use URL" button right. The old hover "Replace" swap on filled tiles is REMOVED (it was jarring).
+- **Hide controls:** every size card and every template tile has a hover ⋯ menu. Sizes: "Don't offer this size" grays the card ("Not offered"), reversible. Templates: "Hide for now" removes the tile; hidden ones list under the grid as "Hidden: … · Show". Booklet starts hidden by default for all presses; any template can be hidden (e.g. Viryl also hides Inner sleeve — plain sleeves only).
+- **Copy set (final, Bill-approved):** page headline "Build your GoodTunes® packages. For the record." with the ® rendered small/superscript/light (PageHeading splits on ®). Sections: "Pick a size. Start your build." / "Pick a type. Grow your offering." / "Build colors. The world needs more color." / "Set your price. They'll show you the money." / "Turnaround time. From order, to out the door." (note the comma) / "Print prep. The template for your templates." / "Set your audio specs. Help them turn it up to 11." Audio subtitle is one line: "Blank fields inherit the press default — the gray numbers."
+- **Turnaround layout:** the week inputs now stack BELOW the heading (not beside it).
+- **"Make it yours" branding dialog:** ⋯ button (28 px frosted circle, fades in on jacket hover) opens a centered modal over a dimmed blurred scrim: brand color (swatch chip IS the picker, always matches the hex field), current-logo preview beside an SVG-only drag-and-drop replace zone ("SVG only — we recolor it for any surface"), "Reset to default". Color + logo flow to the cover and center label live.
+
+Copy the reference components verbatim — do not restyle. Diff the rendered page against the reference at 1440px as with prior items.
+
+
 ## Acceptance for this pass
     FULL-PAGE diff, not above-the-fold. Render the reference component (handoff/press-catalog/PressPackagePricingTableRuns.tsx) and the live page at 1440px, scroll both to the bottom, and compare EVERY section top to bottom: top bar, sidebar, header block, size cards, type tiles, color rail, jacket/vinyl preview + caption, package card, price rows, print-template tiles (filled + empty states, die-line icons), floating save bar, GoodDeeds section, and the page footer (which must be empty of parked buttons). Diff the rendered page against the reference side by side at 1440px. Any card width, copy string, or preview geometry that differs from the reference is a failure. Do not report complete until a screenshot of the live page is visually indistinguishable from the reference (data values aside).

@@ -33809,6 +33809,9 @@ export async function registerRoutes(
       })
       .nullable()
       .optional(),
+    // Item 28 — display filename for the attached template (captured from
+    // the uploaded file / pasted URL); rendered on the tile, never the URL.
+    templateFileName: z.string().trim().max(300).nullable().optional(),
   });
 
   app.get("/api/admin/manufacturers/:id/template-specs", requireAdminBearer, async (req, res) => {
@@ -33842,6 +33845,7 @@ export async function registerRoutes(
         color: body.data.color ?? null,
         fontsRule: body.data.fontsRule ?? null,
         templateFileUrl: body.data.templateFileUrl ?? null,
+        templateFileName: body.data.templateFileName ?? null,
         minPpi: body.data.minPpi ?? null,
       },
       req.session.userId ?? null,

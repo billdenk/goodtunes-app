@@ -45,7 +45,8 @@
 // inline mock data — no imports from other mockups, no external UI libs beyond
 // the design-system Button/Popover already used by the donor.
 
-import { useMemo, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback, createContext, useContext, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
   UserPlus,
   Search,
@@ -95,6 +96,25 @@ import brandonPhoto from '../assets/brandon-seavers.png';
 const PRESS_LABEL_LOGO = mrpLabelLogo;
 const PRESS_LABEL_BG = '#0a0a0a';
 const PRESS_LABEL_LOGO_FILTER = 'invert(1) brightness(1.7)';
+const PRESS_BRAND_DEFAULT = '#141416';
+
+// ─── Press brand context — lets the ⋯ menu on the jacket re-brand the mock
+// live (cover + label color, logo swap) the way onboarding a new press would.
+type PressBrand = {
+  color: string;
+  logo: string;
+  setColor: (c: string) => void;
+  setLogo: (l: string) => void;
+  reset: () => void;
+};
+const BrandCtx = createContext<PressBrand>({
+  color: PRESS_BRAND_DEFAULT,
+  logo: PRESS_LABEL_LOGO,
+  setColor: () => {},
+  setLogo: () => {},
+  reset: () => {},
+});
+const useBrand = () => useContext(BrandCtx);
 
 // ─── Brand tokens (DARK — charcoal night palette, matches AdminDashboardAppleDark) ──
 const BLUE = '#319ED8';
@@ -185,10 +205,11 @@ function MaskLayer({
 
 function DiscLabelArt({ size }: { size: number }) {
   const showArcText = size >= 70;
+  const { logo: brandLogo } = useBrand();
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' }}>
       <img
-        src={PRESS_LABEL_LOGO}
+        src={brandLogo}
         alt=""
         aria-hidden
         style={{
@@ -224,13 +245,16 @@ function VinylDisc({
   bodyRef,
   labelRatio,
   holeRatio = 0.018,
+  glossOpacity = 0.6,
 }: {
   size: number;
   swatch: Swatch;
   bodyRef?: React.RefObject<HTMLDivElement | null>;
   labelRatio?: number;
   holeRatio?: number;
+  glossOpacity?: number;
 }) {
+  const brand = useBrand();
   const LABEL_RATIO = labelRatio ?? 368 / 1104;
   const INNER_RATIO = 129 / 1104;
   const translucent = swatch.kind === 'translucent';
@@ -313,7 +337,7 @@ function VinylDisc({
             width: size * LABEL_RATIO,
             height: size * LABEL_RATIO,
             borderRadius: '50%',
-            backgroundColor: PRESS_LABEL_BG,
+            backgroundColor: brand.color,
             overflow: 'hidden',
           }}
         >
@@ -345,7 +369,7 @@ function VinylDisc({
           position: 'absolute',
           inset: 0,
           backgroundColor: '#ffffff',
-          opacity: 0.6,
+          opacity: glossOpacity,
           mixBlendMode: 'normal',
           maskImage: `url(${LAYERS.highlights})`,
           WebkitMaskImage: `url(${LAYERS.highlights})`,
@@ -457,7 +481,7 @@ function useVinylSpin() {
     if (reduced) return;
     stopRaf();
     const settled = ((angleRef.current % 360) + 360) % 360;
-    if (settled > 0.5) setShowRewind(true);
+    if (settled > 30) setShowRewind(true);
   }, [reduced, stopRaf]);
 
   const rewind = useCallback(() => {
@@ -601,15 +625,27 @@ function DiscStage({ swatch, product }: { swatch: Swatch; product: ProductType }
 // Hovering slides the vinyl further out of the sleeve.
 function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType }) {
   const [hover, setHover] = useState(false);
-  // Rotate only the disc body (grooves + label) so the specular highlight —
-  // which lives outside the body in VinylDisc — stays fixed like a real light source.
-  const bodyRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const el = bodyRef.current;
-    if (!el) return;
-    el.style.transition = 'transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)';
-    el.style.transform = hover ? 'rotate(32deg)' : 'rotate(0deg)';
-  }, [hover]);
+  const brand = useBrand();
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Continuous slow spin (360°/8s) while hovering — same physics as the color
+  // setup page. Leaves freeze the disc in place; the rewind button returns it.
+  const { bodyRef, onPointerEnter: spinEnter, onPointerLeave: spinLeave, showRewind, rewind } = useVinylSpin();
+  // Rewind feedback — slide the record out while it turns back, so the
+  // rewind is visible, then tuck it back in.
+  const [peek, setPeek] = useState(false);
+  const peekTimer = useRef<number | null>(null);
+  const rewindWithPeek = useCallback(() => {
+    setPeek(true);
+    rewind();
+    if (peekTimer.current) window.clearTimeout(peekTimer.current);
+    peekTimer.current = window.setTimeout(() => setPeek(false), 1200);
+  }, [rewind]);
+  useEffect(
+    () => () => {
+      if (peekTimer.current) window.clearTimeout(peekTimer.current);
+    },
+    [],
+  );
   // Second record (Double LP) spins too — a little slower and not as far.
   const bodyRef2 = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -626,11 +662,22 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
 
   return (
     <div
-      onPointerEnter={() => setHover(true)}
-      onPointerLeave={() => setHover(false)}
-      style={{ position: 'relative', width: jacketPx + jacketPx * 0.5, height: jacketPx + 24, cursor: 'pointer' }}
+      style={{ position: 'relative', width: jacketPx + jacketPx * 0.5, height: jacketPx + 24 }}
       aria-label={`${swatch.name} record inside its printed jacket`}
     >
+      {/* hover zone — covers the jacket + record only, NOT the rewind button
+          below, so hovering rewind never restarts the spin. */}
+      <div
+        onPointerEnter={() => {
+          setHover(true);
+          spinEnter();
+        }}
+        onPointerLeave={() => {
+          setHover(false);
+          spinLeave();
+        }}
+        style={{ position: 'absolute', inset: 0, cursor: 'pointer' }}
+      >
       {/* second record (Double LP) — peeks a touch further, on a slight delay */}
       {product.discs > 1 && (
         <div
@@ -639,7 +686,7 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
             top: (jacketPx - discPx) / 2,
             left: jacketPx - discPx + jacketPx * 0.27,
             transition: 'transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1) 0.1s',
-            transform: hover ? `translateX(${jacketPx * 0.3}px)` : 'translateX(0)',
+            transform: hover || peek ? `translateX(${jacketPx * 0.3}px)` : 'translateX(0)',
             willChange: 'transform',
             zIndex: 0,
             filter: 'brightness(0.88)',
@@ -656,7 +703,7 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
           top: (jacketPx - discPx) / 2,
           left: jacketPx - discPx + jacketPx * 0.22,
           transition: 'transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)',
-          transform: hover ? `translateX(${jacketPx * 0.24}px)` : 'translateX(0)',
+          transform: hover || peek ? `translateX(${jacketPx * 0.24}px)` : 'translateX(0)',
           willChange: 'transform',
           zIndex: 1,
         }}
@@ -673,7 +720,7 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
           width: jacketPx,
           height: jacketPx,
           borderRadius: 3,
-          backgroundColor: '#141416',
+          backgroundColor: brand.color,
           backgroundImage: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, transparent 45%)',
           // Dark-on-dark separation: keep the artwork truly black, but trace a
           // whisper-quiet light hairline around the sleeve and deepen the lift
@@ -686,9 +733,215 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
           zIndex: 2,
         }}
       >
-        <img src={PRESS_LABEL_LOGO} alt="" style={{ width: jacketPx * 0.42, height: jacketPx * 0.42, filter: 'invert(1)', opacity: 0.92 }} />
+        <img src={brand.logo} alt="" style={{ width: jacketPx * 0.42, height: jacketPx * 0.42, filter: 'brightness(0) invert(1)', opacity: 0.92 }} />
         {/* spine hint */}
         <span aria-hidden style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 7, background: 'linear-gradient(90deg, rgba(0,0,0,0.5), transparent)' }} />
+
+        {/* ⋯ brand menu — hover affordance for press-level customization */}
+        <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 5 }}>
+          <button
+            type="button"
+            aria-label="Customize press branding"
+            data-testid="button-brand-menu"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((v) => !v);
+            }}
+            className="rounded-full flex items-center justify-center"
+            style={{
+              width: 28,
+              height: 28,
+              opacity: hover || menuOpen ? 1 : 0,
+              pointerEvents: hover || menuOpen ? 'auto' : 'none',
+              transform: hover || menuOpen ? 'scale(1)' : 'scale(0.92)',
+              transition: 'opacity 0.25s ease, transform 0.25s ease, background 0.15s ease',
+              background: menuOpen ? 'rgba(0,0,0,0.44)' : 'rgba(0,0,0,0.26)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: 'none',
+              color: 'rgba(255,255,255,0.92)',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(0,0,0,0.44)';
+            }}
+            onMouseLeave={(e) => {
+              if (!menuOpen) e.currentTarget.style.background = 'rgba(0,0,0,0.26)';
+            }}
+          >
+            <MoreHorizontal style={{ width: 15, height: 15 }} strokeWidth={2.2} />
+          </button>
+          {menuOpen &&
+            createPortal(
+            <div
+              onClick={() => setMenuOpen(false)}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 1000,
+                background: 'rgba(0,0,0,0.5)',
+                backdropFilter: 'blur(3px)',
+                WebkitBackdropFilter: 'blur(3px)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="rounded-2xl"
+              style={{
+                width: 420,
+                padding: 20,
+                background: 'rgba(28,28,30,0.97)',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
+                textAlign: 'left',
+                cursor: 'default',
+              }}
+            >
+              <div className="flex items-start justify-between" style={{ marginBottom: 16 }}>
+                <span className="text-[17px] font-semibold tracking-tight" style={{ lineHeight: 1.25, paddingRight: 8 }}>
+                  <span style={{ color: '#f5f5f7' }}>Make it yours. </span>
+                  <span style={{ color: 'rgba(245,245,247,0.45)' }}>Color and logo flow to the cover and center label.</span>
+                </span>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  data-testid="button-brand-close"
+                  onClick={() => setMenuOpen(false)}
+                  className="rounded-full flex items-center justify-center transition-colors"
+                  style={{ width: 24, height: 24, background: 'none', border: 'none', color: 'rgba(245,245,247,0.5)', cursor: 'pointer' }}
+                >
+                  <X style={{ width: 14, height: 14 }} />
+                </button>
+              </div>
+
+              {/* Brand color — swatch chip IS the picker, so it always matches */}
+              <div className="text-[11px] font-semibold uppercase" style={{ color: 'rgba(245,245,247,0.45)', letterSpacing: 0.8, marginBottom: 8 }}>
+                Brand color
+              </div>
+              <div className="flex items-center" style={{ gap: 8, marginBottom: 18 }}>
+                <label
+                  className="rounded-[10px] flex-shrink-0"
+                  data-testid="chip-brand-color"
+                  style={{
+                    width: 46,
+                    height: 34,
+                    backgroundColor: brand.color,
+                    border: '1px solid rgba(255,255,255,0.22)',
+                    boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.12)',
+                    cursor: 'pointer',
+                    display: 'block',
+                  }}
+                >
+                  <input
+                    type="color"
+                    value={/^#[0-9a-fA-F]{6}$/.test(brand.color) ? brand.color : '#000000'}
+                    onChange={(e) => brand.setColor(e.target.value)}
+                    data-testid="input-brand-color-picker"
+                    style={{ opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }}
+                  />
+                </label>
+                <input
+                  type="text"
+                  value={brand.color}
+                  onChange={(e) => brand.setColor(e.target.value)}
+                  spellCheck={false}
+                  data-testid="input-brand-color-hex"
+                  className="rounded-lg text-[13px]"
+                  style={{ flex: 1, minWidth: 0, padding: '7px 11px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.14)', color: '#f5f5f7', fontVariantNumeric: 'tabular-nums' }}
+                />
+              </div>
+
+              {/* Logo — current + replace, same layout as the admin Logo dialog */}
+              <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 14 }}>
+                <div>
+                  <div className="text-[11px] font-semibold uppercase" style={{ color: 'rgba(245,245,247,0.45)', letterSpacing: 0.8, marginBottom: 8 }}>
+                    Current logo
+                  </div>
+                  <div
+                    className="rounded-xl flex items-center justify-center"
+                    style={{ width: 150, height: 150, background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)' }}
+                  >
+                    <img src={brand.logo} alt="" style={{ width: 104, height: 104, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.94 }} />
+                  </div>
+                </div>
+                <div className="flex flex-col">
+                  <div className="text-[11px] font-semibold uppercase" style={{ color: 'rgba(245,245,247,0.45)', letterSpacing: 0.8, marginBottom: 8 }}>
+                    Replace logo
+                  </div>
+                  <label
+                    className="rounded-xl flex flex-col items-center justify-center text-center transition-colors"
+                    data-testid="dropzone-brand-logo"
+                    style={{
+                      flex: 1,
+                      minHeight: 0,
+                      padding: '14px 10px',
+                      border: '1px dashed rgba(255,255,255,0.22)',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.55)';
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                    }}
+                    onDragLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.22)';
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.22)';
+                      e.currentTarget.style.background = 'transparent';
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) brand.setLogo(URL.createObjectURL(file));
+                    }}
+                  >
+                    <UploadCloud className="w-4 h-4" style={{ color: 'rgba(245,245,247,0.4)' }} />
+                    <span className="text-[12px] font-medium" style={{ color: '#f5f5f7', marginTop: 7 }}>
+                      Drag an image here, or click to pick
+                    </span>
+                    <span className="text-[11px]" style={{ color: 'rgba(245,245,247,0.45)', marginTop: 3 }}>
+                      SVG only — we recolor it for any surface
+                    </span>
+                    <input
+                      type="file"
+                      accept=".svg,image/svg+xml"
+                      data-testid="input-brand-logo"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) brand.setLogo(URL.createObjectURL(file));
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between" style={{ marginTop: 16 }}>
+                <span className="text-[11.5px]" style={{ color: 'rgba(245,245,247,0.4)' }}>
+                  Square works best — shown on the cover and center label.
+                </span>
+                <button
+                  type="button"
+                  onClick={brand.reset}
+                  data-testid="button-brand-reset"
+                  className="text-[12px] font-medium transition-colors flex-shrink-0"
+                  style={{ color: 'rgba(245,245,247,0.6)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginLeft: 12 }}
+                >
+                  Reset to default
+                </button>
+              </div>
+            </div>
+            </div>,
+            document.body,
+          )}
+        </div>
       </div>
 
       {/* floor shadow — fixed size, stretched with a transform so it never repaints mid-hover */}
@@ -704,12 +957,19 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
           background: 'rgba(0,0,0,0.28)',
           filter: 'blur(9px)',
           pointerEvents: 'none',
-          transform: hover ? 'scaleX(1.18)' : 'scaleX(1)',
+          transform: hover || peek ? 'scaleX(1.18)' : 'scaleX(1)',
           transformOrigin: '30% center',
           transition: 'transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)',
           willChange: 'transform',
         }}
       />
+
+      </div>
+
+      {/* rewind — appears after the record has spun, returns it to start */}
+      <div style={{ position: 'absolute', left: `calc(50% - ${Math.round(jacketPx * 0.25)}px)`, transform: 'translateX(-50%)', bottom: -14, zIndex: 3 }}>
+        <RewindButton show={showRewind} onClick={rewindWithPeek} size={28} />
+      </div>
     </div>
   );
 }
@@ -865,7 +1125,7 @@ type RunCell = { mode: PriceMode; price: string };
 // package prices that step down with volume; colored vinyl carries a premium.
 type PriceBook = Record<string, Record<number, RunCell>>;
 
-function seedBook(): PriceBook {
+function seedBook(mult = 1): PriceBook {
   const rows: Record<string, number[]> = {
     // per-unit finished-package cost at each run qty
     black: [16.0, 12.5, 10.0, 8.25, 7.25, 6.5, 5.95, 5.4],
@@ -881,7 +1141,7 @@ function seedBook(): PriceBook {
     book[g.id] = {};
     const vals = rows[g.id] ?? [];
     RUN_QTYS.forEach((q, i) => {
-      const price = vals[i];
+      const price = vals[i] != null ? Math.round(vals[i] * mult * 20) / 20 : undefined;
       book[g.id][q] = { mode: price != null ? 'priced' : 'off', price: price != null ? price.toFixed(2) : '' };
     });
   }
@@ -1056,9 +1316,22 @@ function PressShell({ children }: { children: ReactNode }) {
 
 // ─── Two-tone headings ───────────────────────────────────────────────
 function PageHeading({ lead, rest }: { lead: string; rest: string }) {
+  // Render a registered mark small and light, Apple-style, never bold.
+  const parts = lead.split('®');
   return (
     <h1 className="tracking-tight" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.05, marginTop: 10 }}>
-      <span style={{ color: INK }}>{lead} </span>
+      <span style={{ color: INK }}>
+        {parts.map((chunk, i) => (
+          <span key={i}>
+            {i > 0 && (
+              <span style={{ fontSize: '0.38em', fontWeight: 400, verticalAlign: 'super', position: 'relative', top: '-0.15em' }}>
+                {'®'}
+              </span>
+            )}
+            {chunk}
+          </span>
+        ))}{' '}
+      </span>
       <span style={{ color: FAINT, fontWeight: 600 }}>{rest}</span>
     </h1>
   );
@@ -1117,17 +1390,17 @@ function TurnaroundCard({
   onMax: (v: string) => void;
 }) {
   return (
-    <div className="flex items-center justify-between" data-testid="turnaround-row">
+    <div data-testid="turnaround-row">
       <div>
         <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
-          <span style={{ color: INK }}>Turnaround. </span>
-          <span style={{ color: FAINT }}>Order to ship.</span>
+          <span style={{ color: INK }}>Turnaround time. </span>
+          <span style={{ color: FAINT }}>From order, to out the door.</span>
         </h2>
         <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
           Weeks from confirmed order to finished records on the truck.
         </p>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2" style={{ marginTop: 12 }}>
         <input
           value={min}
           onChange={(e) => onMin(e.target.value.replace(/[^0-9]/g, ''))}
@@ -2051,15 +2324,45 @@ function PriceStrip({
   row,
   onMode,
   onPrice,
+  weight,
+  onWeight,
 }: {
   row: Record<number, RunCell>;
   onMode: (qty: RunQty, m: PriceMode) => void;
   onPrice: (qty: RunQty, v: string) => void;
+  weight: '140' | '180';
+  onWeight: (w: '140' | '180') => void;
 }) {
   return (
     <div style={{ marginTop: 18 }} data-testid="price-strip">
-      {/* quiet add affordance — top right, outside the box */}
-      <div className="flex justify-end" style={{ marginBottom: 8 }}>
+      {/* weight left, quiet add affordance right — both outside the box */}
+      <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+        {/* 140 g / 180 g — run sizes are shared; each weight keeps its own numbers */}
+        <div
+          className="inline-flex rounded-full p-0.5"
+          style={{ backgroundColor: CARD_SOFT, border: `1px solid ${HAIRLINE}` }}
+          data-testid="weight-toggle"
+        >
+          {(['140', '180'] as const).map((w) => (
+            <button
+              key={w}
+              type="button"
+              onClick={() => onWeight(w)}
+              aria-pressed={weight === w}
+              data-testid={`weight-${w}`}
+              className="rounded-full text-[12px] font-semibold transition-colors"
+              style={{
+                padding: '4px 13px',
+                background: weight === w ? 'rgba(255,255,255,0.13)' : 'transparent',
+                color: weight === w ? INK : FAINT,
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              {w} g
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           data-testid="button-add-run-size"
@@ -2141,7 +2444,7 @@ function PriceStrip({
       {/* caption floats under the box — no rule, just quiet text */}
       <div className="flex items-center justify-center" style={{ marginTop: 10 }}>
         <span className="text-[11.5px]" style={{ color: FAINT }}>
-          Prices are per unit, per finished package.
+          Prices are per unit, per finished package · {weight} g vinyl.
         </span>
       </div>
     </div>
@@ -2210,17 +2513,18 @@ function BlueprintIcon({ kind }: { kind: string }) {
   }
 }
 
-function TemplateRow({ tf, onAttach, onRemove }: { tf: TemplateFile; onAttach: () => void; onRemove: () => void }) {
+function TemplateRow({ tf, onOpen }: { tf: TemplateFile; onOpen: () => void }) {
   const has = !!tf.file;
 
-  // Empty slot — the visible invitation. Dashed, one clear action.
+  // Empty slot — the visible invitation. Dashed, one clear action; the
+  // dialog (not an instant mock-attach) opens on click.
   if (!has) {
     return (
       <button
         type="button"
-        onClick={onAttach}
+        onClick={onOpen}
         data-testid={`template-upload-${tf.key}`}
-        className="flex flex-col items-center justify-center rounded-xl transition-colors hover:bg-white/5 focus:outline-none"
+        className="w-full h-full flex flex-col items-center justify-center rounded-xl transition-colors hover:bg-white/5 focus:outline-none"
         style={{ border: '1.5px dashed rgba(255,255,255,0.18)', padding: '18px 12px', cursor: 'pointer', background: 'transparent' }}
       >
         <span style={{ opacity: 0.55 }}>
@@ -2236,12 +2540,15 @@ function TemplateRow({ tf, onAttach, onRemove }: { tf: TemplateFile; onAttach: (
     );
   }
 
-  // Filled slot — calm and complete. Replace appears only on hover.
+  // Filled slot — calm and complete. No hover surprises; click opens the
+  // same dialog, and Replace lives in the ⋯ menu.
   return (
-    <div
-      className="group relative flex flex-col items-center justify-center rounded-xl text-center"
-      style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, padding: '18px 12px' }}
+    <button
+      type="button"
+      onClick={onOpen}
       data-testid={`template-${tf.key}`}
+      className="w-full h-full flex flex-col items-center justify-center rounded-xl text-center transition-colors hover:bg-white/5 focus:outline-none"
+      style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, padding: '18px 12px', cursor: 'pointer' }}
     >
       <BlueprintIcon kind={tf.key} />
       <div className="text-[13px] font-semibold" style={{ color: INK, marginTop: 8 }}>
@@ -2250,16 +2557,172 @@ function TemplateRow({ tf, onAttach, onRemove }: { tf: TemplateFile; onAttach: (
       <div className="text-[11.5px] tabular-nums" style={{ color: SUBINK, marginTop: 3 }} title={tf.file}>
         {middleTruncate(tf.file!)}
       </div>
-      <button
-        type="button"
-        onClick={onRemove}
-        data-testid={`template-remove-${tf.key}`}
-        className="absolute top-2 right-2 text-[11.5px] font-semibold rounded-full px-2.5 h-7 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/5"
-        style={{ color: SUBINK }}
+    </button>
+  );
+}
+
+// ─── Template dialog — same shape as the album-side "Completed Art" modal:
+// current file on the left, drag-and-drop or URL on the right.
+function TemplateDialog({
+  tf,
+  sizeLine,
+  onClose,
+  onAttach,
+  onRemove,
+}: {
+  tf: TemplateFile;
+  sizeLine: string;
+  onClose: () => void;
+  onAttach: () => void;
+  onRemove: () => void;
+}) {
+  const [url, setUrl] = useState('');
+  const has = !!tf.file;
+  return createPortal(
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1000,
+        background: 'rgba(0,0,0,0.5)',
+        backdropFilter: 'blur(3px)',
+        WebkitBackdropFilter: 'blur(3px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="rounded-2xl"
+        style={{
+          width: 600,
+          padding: 24,
+          background: 'rgba(28,28,30,0.97)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
+          textAlign: 'left',
+          cursor: 'default',
+        }}
       >
-        Replace
-      </button>
-    </div>
+        <div className="flex items-start justify-between" style={{ marginBottom: 16 }}>
+          <span className="text-[17px] font-semibold tracking-tight" style={{ lineHeight: 1.25, paddingRight: 8 }}>
+            <span style={{ color: '#f5f5f7' }}>{tf.label}: </span>
+            <span style={{ color: 'rgba(245,245,247,0.45)' }}>{sizeLine}</span>
+          </span>
+          <button
+            type="button"
+            aria-label="Close"
+            data-testid="button-template-close"
+            onClick={onClose}
+            className="rounded-full flex items-center justify-center transition-colors"
+            style={{ width: 24, height: 24, background: 'none', border: 'none', color: 'rgba(245,245,247,0.5)', cursor: 'pointer' }}
+          >
+            <X style={{ width: 14, height: 14 }} />
+          </button>
+        </div>
+
+        <div className="flex" style={{ gap: 24 }}>
+          {/* Current file */}
+          <div style={{ width: 190, flexShrink: 0 }}>
+            <div className="text-[11px] font-semibold uppercase" style={{ color: 'rgba(245,245,247,0.45)', letterSpacing: 0.8, marginBottom: 8 }}>
+              Current file
+            </div>
+            <div
+              className="rounded-xl flex flex-col items-center justify-center text-center"
+              style={{ height: 208, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', padding: 12 }}
+            >
+              {has ? (
+                <>
+                  <BlueprintIcon kind={tf.key} />
+                  <div className="text-[11.5px] tabular-nums" style={{ color: '#f5f5f7', marginTop: 10 }} title={tf.file}>
+                    {middleTruncate(tf.file!)}
+                  </div>
+                  <button
+                    type="button"
+                    data-testid={`template-dialog-remove-${tf.key}`}
+                    onClick={onRemove}
+                    className="text-[11.5px] font-semibold transition-colors"
+                    style={{ marginTop: 8, color: 'rgba(245,245,247,0.5)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                  >
+                    Remove file
+                  </button>
+                </>
+              ) : (
+                <span className="text-[12px]" style={{ color: 'rgba(245,245,247,0.4)' }}>No file yet</span>
+              )}
+            </div>
+          </div>
+
+          {/* Upload / URL */}
+          <div style={{ flex: 1 }}>
+            <div className="text-[11px] font-semibold uppercase" style={{ color: 'rgba(245,245,247,0.45)', letterSpacing: 0.8, marginBottom: 8 }}>
+              Upload file
+            </div>
+            <button
+              type="button"
+              data-testid={`template-dialog-drop-${tf.key}`}
+              onClick={onAttach}
+              className="w-full rounded-xl flex flex-col items-center justify-center text-center transition-colors hover:bg-white/5"
+              style={{ height: 104, border: '1.5px dashed rgba(255,255,255,0.22)', background: 'transparent', padding: 12, cursor: 'pointer' }}
+            >
+              <UploadCloud style={{ width: 18, height: 18, color: 'rgba(245,245,247,0.6)' }} />
+              <div className="text-[12.5px] font-semibold" style={{ color: '#f5f5f7', marginTop: 6 }}>
+                Drag a file here, or click to pick
+              </div>
+              <div className="text-[11px]" style={{ color: 'rgba(245,245,247,0.45)', marginTop: 3 }}>
+                Press-ready PDF · validated automatically
+              </div>
+            </button>
+
+            <div className="text-[11px] font-semibold uppercase" style={{ color: 'rgba(245,245,247,0.45)', letterSpacing: 0.8, margin: '14px 0 8px' }}>
+              Or paste a URL
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://… Dropbox, Drive, WeTransfer"
+                data-testid={`template-dialog-url-${tf.key}`}
+                className="text-[12px] rounded-full focus:outline-none"
+                style={{
+                  flex: 1,
+                  padding: '7px 14px',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#f5f5f7',
+                }}
+              />
+              <button
+                type="button"
+                data-testid={`template-dialog-use-url-${tf.key}`}
+                onClick={() => {
+                  if (url.trim()) onAttach();
+                }}
+                className="text-[12px] font-semibold rounded-full transition-colors"
+                style={{
+                  padding: '7px 16px',
+                  whiteSpace: 'nowrap',
+                  background: url.trim() ? BLUE : 'rgba(255,255,255,0.08)',
+                  color: url.trim() ? '#fff' : 'rgba(245,245,247,0.35)',
+                  border: 'none',
+                  cursor: url.trim() ? 'pointer' : 'default',
+                }}
+              >
+                Use URL
+              </button>
+            </div>
+            <p className="text-[11px]" style={{ color: 'rgba(245,245,247,0.4)', marginTop: 10, lineHeight: 1.5 }}>
+              Pasted share links are scanned in place — the file is never re-hosted.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -2392,10 +2855,31 @@ function AudioSpecCard({ onEdit }: { onEdit: () => void }) {
 }
 
 // ─── Main page ───────────────────────────────────────────────────────
-export function PressPackagePricingTableRunsDark() {
+function PressPackagePricingTableRunsDarkInner() {
   const [productTypeId, setProductTypeId] = useState<ProductTypeId>('lp12');
+  // Sizes a press can choose not to offer — card stays, grayed, reversible.
+  const [hiddenSizes, setHiddenSizes] = useState<Set<ProductTypeId>>(new Set());
+  const [sizeMenuId, setSizeMenuId] = useState<ProductTypeId | null>(null);
+  const toggleSizeOffered = (id: ProductTypeId) => {
+    setHiddenSizes((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+        if (productTypeId === id) {
+          const fallback = PRODUCT_TYPES.find((p) => p.id !== id && !next.has(p.id));
+          if (fallback) setProductTypeId(fallback.id);
+        }
+      }
+      return next;
+    });
+  };
   const [activeGroupId, setActiveGroupId] = useState<string>('black');
   const [book, setBook] = useState<PriceBook>(() => seedBook());
+  // 180 g heavyweight — same run sizes as 140 g, its own numbers.
+  const [book180, setBook180] = useState<PriceBook>(() => seedBook(1.16));
+  const [weight, setWeight] = useState<'140' | '180'>('140');
   const [turnMin, setTurnMin] = useState('12');
   const [turnMax, setTurnMax] = useState('14');
   const [dirty, setDirty] = useState(false);
@@ -2406,6 +2890,10 @@ export function PressPackagePricingTableRunsDark() {
     { key: 'labels', label: 'Center labels', sub: 'A-side & B-side label template', file: 'MRP-label-3.94in.pdf' },
     { key: 'booklet', label: 'Booklet', sub: 'Lyric & photo booklet template' },
   ]);
+  // Template slots a press can tuck away — booklet starts hidden.
+  const [hiddenTemplates, setHiddenTemplates] = useState<Set<string>>(new Set(['booklet']));
+  const [templateMenuKey, setTemplateMenuKey] = useState<string | null>(null);
+  const [templateDialogKey, setTemplateDialogKey] = useState<string | null>(null);
 
   const product = useMemo(() => PRODUCT_TYPES.find((p) => p.id === productTypeId) ?? PRODUCT_TYPES[1], [productTypeId]);
   const [groups, setGroups] = useState<ColorGroup[]>(COLOR_GROUPS);
@@ -2512,18 +3000,23 @@ export function PressPackagePricingTableRunsDark() {
     setActiveGroupId(groupId);
     setColorSel((prev) => ({ ...prev, [groupId]: colorId }));
   };
-  const row = book[activeGroupId] ?? {};
+  const activeBook = weight === '140' ? book : book180;
+  const row = activeBook[activeGroupId] ?? {};
 
-  const setCell = useCallback((groupId: string, qty: RunQty, patch: Partial<RunCell>) => {
-    setBook((prev) => ({
-      ...prev,
-      [groupId]: {
-        ...prev[groupId],
-        [qty]: { ...prev[groupId][qty], ...patch },
-      },
-    }));
-    setDirty(true);
-  }, []);
+  const setCell = useCallback(
+    (groupId: string, qty: RunQty, patch: Partial<RunCell>) => {
+      const apply = weight === '140' ? setBook : setBook180;
+      apply((prev) => ({
+        ...prev,
+        [groupId]: {
+          ...prev[groupId],
+          [qty]: { ...prev[groupId][qty], ...patch },
+        },
+      }));
+      setDirty(true);
+    },
+    [weight],
+  );
 
   const handleMode = (qty: RunQty, mode: PriceMode) => {
     // Switching to priced with no number seeds a blank input; other modes clear it.
@@ -2540,7 +3033,7 @@ export function PressPackagePricingTableRunsDark() {
     setDirty(true);
   };
 
-  const activePricedCount = pricedCount(book, activeGroupId);
+  const activePricedCount = pricedCount(activeBook, activeGroupId);
 
   const handleSave = () => setDirty(false);
 
@@ -2590,7 +3083,7 @@ export function PressPackagePricingTableRunsDark() {
             </div>
             <div style={{ marginTop: 24 }}>
               <SectionLabel>Vinyl · Package pricing</SectionLabel>
-              <PageHeading lead="Build your vinyl catalog." rest="From scratch." />
+              <PageHeading lead="Build your GoodTunes® packages." rest="For the record." />
             </div>
             <p className="text-[15px]" style={{ color: SUBINK, marginTop: 12, maxWidth: 560, lineHeight: 1.5 }}>
               Quote the way you already do — a single cost per finished package, per run size. Record, jacket,
@@ -2670,25 +3163,75 @@ export function PressPackagePricingTableRunsDark() {
             {/* Pick a size — first step, same cards as the color setup screen */}
             <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
               <span style={{ color: INK }}>Pick a size. </span>
-              <span style={{ color: FAINT }}>Prices follow the record.</span>
+              <span style={{ color: FAINT }}>Start your build.</span>
             </h2>
             <div style={{ marginTop: 14, display: 'flex', gap: 12 }}>
               {PRODUCT_TYPES.map((p) => {
-                const active = p.id === productTypeId;
+                const off = hiddenSizes.has(p.id);
+                const active = p.id === productTypeId && !off;
                 const [big, ...rest] = p.name.split(' ');
                 return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setProductTypeId(p.id)}
-                    aria-pressed={active}
-                    data-testid={`product-type-${p.id}`}
-                    className="rounded-2xl transition-all hover:-translate-y-px focus:outline-none"
-                    style={{ flex: 1, padding: '16px 12px', backgroundColor: CARD, border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, textAlign: 'center', cursor: 'pointer' }}
-                  >
-                    <div className="text-[17px] font-semibold" style={{ color: active ? BLUE : INK }}>{big}</div>
-                    <div className="text-[11px]" style={{ marginTop: 3, color: FAINT }}>{rest.join(' ')}</div>
-                  </button>
+                  <div key={p.id} className="group relative" style={{ flex: 1 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!off) setProductTypeId(p.id);
+                      }}
+                      aria-pressed={active}
+                      data-testid={`product-type-${p.id}`}
+                      className={`w-full rounded-2xl transition-all focus:outline-none${off ? '' : ' hover:-translate-y-px'}`}
+                      style={{
+                        padding: '16px 12px',
+                        backgroundColor: CARD,
+                        border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
+                        textAlign: 'center',
+                        cursor: off ? 'default' : 'pointer',
+                        opacity: off ? 0.4 : 1,
+                      }}
+                    >
+                      <div className="text-[17px] font-semibold" style={{ color: active ? BLUE : INK }}>{big}</div>
+                      <div className="text-[11px]" style={{ marginTop: 3, color: FAINT }}>
+                        {off ? 'Not offered' : rest.join(' ')}
+                      </div>
+                    </button>
+                    <Popover open={sizeMenuId === p.id} onOpenChange={(o) => setSizeMenuId(o ? p.id : null)}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label={`Options for ${p.name}`}
+                          data-testid={`size-menu-${p.id}`}
+                          className={`rounded-full flex items-center justify-center transition-opacity ${sizeMenuId === p.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                          style={{
+                            position: 'absolute',
+                            top: 6,
+                            right: 6,
+                            width: 22,
+                            height: 22,
+                            background: 'rgba(255,255,255,0.08)',
+                            border: 'none',
+                            color: 'rgba(245,245,247,0.75)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <MoreHorizontal style={{ width: 13, height: 13 }} strokeWidth={2.2} />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" sideOffset={6} className="w-auto p-1 rounded-xl" style={FROSTED_PANEL}>
+                        <button
+                          type="button"
+                          data-testid={`size-toggle-${p.id}`}
+                          onClick={() => {
+                            toggleSizeOffered(p.id);
+                            setSizeMenuId(null);
+                          }}
+                          className="block w-full text-left text-[12.5px] font-medium rounded-lg transition-colors hover:bg-white/10"
+                          style={{ padding: '7px 12px', background: 'none', border: 'none', color: '#f5f5f7', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >
+                          {off ? 'Offer this size' : "Don\u2019t offer this size"}
+                        </button>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                 );
               })}
             </div>
@@ -2699,7 +3242,7 @@ export function PressPackagePricingTableRunsDark() {
             <div className="flex items-start justify-between gap-3">
               <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
                 <span style={{ color: INK }}>Pick a type. </span>
-                <span style={{ color: FAINT }}>Each keeps its own package prices.</span>
+                <span style={{ color: FAINT }}>Grow your offering.</span>
               </h2>
               <div className="flex items-center gap-2.5 flex-shrink-0">
                 <span className="text-[12px] tabular-nums" style={{ color: FAINT }}>
@@ -2779,8 +3322,8 @@ export function PressPackagePricingTableRunsDark() {
             {/* Pick a color */}
             <div className="flex items-start justify-between gap-3">
               <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
-                <span style={{ color: INK }}>Pick a color. </span>
-                <span style={{ color: FAINT }}>Or add a new one.</span>
+                <span style={{ color: INK }}>Build colors. </span>
+                <span style={{ color: FAINT }}>The world needs more color.</span>
               </h2>
               <ReorderControls
                 on={reorderColorsOn}
@@ -2893,8 +3436,8 @@ export function PressPackagePricingTableRunsDark() {
 
             {/* Price book */}
             <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
-              <span style={{ color: INK }}>Name your price. </span>
-              <span style={{ color: FAINT }}>Per package, per run.</span>
+              <span style={{ color: INK }}>Set your price. </span>
+              <span style={{ color: FAINT }}>They’ll show you the money.</span>
             </h2>
             <p className="text-[12.5px]" style={{ marginTop: 6 }}>
               <span className="font-semibold" style={{ color: INK }}>{activeGroup.name}</span>
@@ -2905,7 +3448,7 @@ export function PressPackagePricingTableRunsDark() {
               </span>
             </p>
 
-            <PriceStrip row={row} onMode={handleMode} onPrice={handlePrice} />
+            <PriceStrip row={row} onMode={handleMode} onPrice={handlePrice} weight={weight} onWeight={setWeight} />
 
             <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />
 
@@ -2918,33 +3461,149 @@ export function PressPackagePricingTableRunsDark() {
 
             {/* Print templates (secondary) */}
             <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
-              <span style={{ color: INK }}>Print templates. </span>
-              <span style={{ color: FAINT }}>Artwork specs for artists.</span>
+              <span style={{ color: INK }}>Print prep. </span>
+              <span style={{ color: FAINT }}>The template for your templates.</span>
             </h2>
             <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
               Attach a file or paste a link. Optional and quiet.
             </p>
             <div className="grid grid-cols-3 gap-3" style={{ marginTop: 12 }}>
-              {templates.map((tf) => (
-                <TemplateRow key={tf.key} tf={tf} onAttach={() => doAttach(tf.key)} onRemove={() => removeTemplate(tf.key)} />
-              ))}
+              {templates
+                .filter((tf) => !hiddenTemplates.has(tf.key))
+                .map((tf) => (
+                  <div key={tf.key} className="group/slot relative">
+                    <TemplateRow tf={tf} onOpen={() => setTemplateDialogKey(tf.key)} />
+                    <Popover open={templateMenuKey === tf.key} onOpenChange={(o) => setTemplateMenuKey(o ? tf.key : null)}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label={`Options for ${tf.label}`}
+                          data-testid={`template-menu-${tf.key}`}
+                          className={`rounded-full flex items-center justify-center transition-opacity ${templateMenuKey === tf.key ? 'opacity-100' : 'opacity-0 group-hover/slot:opacity-100'}`}
+                          style={{
+                            position: 'absolute',
+                            top: 6,
+                            left: 6,
+                            width: 22,
+                            height: 22,
+                            background: 'rgba(255,255,255,0.08)',
+                            border: 'none',
+                            color: 'rgba(245,245,247,0.75)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <MoreHorizontal style={{ width: 13, height: 13 }} strokeWidth={2.2} />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" sideOffset={6} className="w-auto p-1 rounded-xl" style={FROSTED_PANEL}>
+                        <button
+                          type="button"
+                          data-testid={`template-replace-${tf.key}`}
+                          onClick={() => {
+                            setTemplateDialogKey(tf.key);
+                            setTemplateMenuKey(null);
+                          }}
+                          className="block w-full text-left text-[12.5px] font-medium rounded-lg transition-colors hover:bg-white/10"
+                          style={{ padding: '7px 12px', background: 'none', border: 'none', color: '#f5f5f7', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >
+                          {tf.file ? 'Replace…' : 'Add file…'}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid={`template-hide-${tf.key}`}
+                          onClick={() => {
+                            setHiddenTemplates((prev) => new Set(prev).add(tf.key));
+                            setTemplateMenuKey(null);
+                          }}
+                          className="block w-full text-left text-[12.5px] font-medium rounded-lg transition-colors hover:bg-white/10"
+                          style={{ padding: '7px 12px', background: 'none', border: 'none', color: '#f5f5f7', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >
+                          Hide for now
+                        </button>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                ))}
             </div>
+            {hiddenTemplates.size > 0 && (
+              <p className="text-[12px]" style={{ color: FAINT, marginTop: 10 }}>
+                Hidden:{' '}
+                {templates
+                  .filter((tf) => hiddenTemplates.has(tf.key))
+                  .map((tf, i) => (
+                    <span key={tf.key}>
+                      {i > 0 && ' · '}
+                      {tf.label}{' '}
+                      <button
+                        type="button"
+                        data-testid={`template-show-${tf.key}`}
+                        onClick={() =>
+                          setHiddenTemplates((prev) => {
+                            const next = new Set(prev);
+                            next.delete(tf.key);
+                            return next;
+                          })
+                        }
+                        className="font-semibold"
+                        style={{ color: BLUE, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                      >
+                        Show
+                      </button>
+                    </span>
+                  ))}
+              </p>
+            )}
+            {templateDialogKey && (
+              <TemplateDialog
+                tf={templates.find((t) => t.key === templateDialogKey)!}
+                sizeLine={product.name}
+                onClose={() => setTemplateDialogKey(null)}
+                onAttach={() => {
+                  doAttach(templateDialogKey);
+                  setTemplateDialogKey(null);
+                }}
+                onRemove={() => removeTemplate(templateDialogKey)}
+              />
+            )}
 
             <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />
 
             {/* Audio spec */}
             <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
-              <span style={{ color: INK }}>Audio spec. </span>
-              <span style={{ color: FAINT }}>What the lathe can cut.</span>
+              <span style={{ color: INK }}>Set your audio specs. </span>
+              <span style={{ color: FAINT }}>Help them turn it up to 11.</span>
             </h2>
             <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
-              Leave a field blank to inherit the press default — the gray numbers. These drive each album's audio preflight.
+              Blank fields inherit the press default — the gray numbers.
             </p>
             <AudioSpecCard onEdit={() => setDirty(true)} />
           </div>
         </div>
       </div>
     </PressShell>
+  );
+}
+
+export function PressPackagePricingTableRunsDark() {
+  const [color, setColor] = useState<string>(PRESS_BRAND_DEFAULT);
+  const [logo, setLogo] = useState<string>(PRESS_LABEL_LOGO);
+  const brand = useMemo<PressBrand>(
+    () => ({
+      color,
+      logo,
+      setColor,
+      setLogo,
+      reset: () => {
+        setColor(PRESS_BRAND_DEFAULT);
+        setLogo(PRESS_LABEL_LOGO);
+      },
+    }),
+    [color, logo],
+  );
+  return (
+    <BrandCtx.Provider value={brand}>
+      <PressPackagePricingTableRunsDarkInner />
+    </BrandCtx.Provider>
   );
 }
 

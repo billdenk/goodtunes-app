@@ -21,12 +21,13 @@
 // Ladder save semantics are copied verbatim from the legacy CatalogEditor
 // (same PUT, same rung encoding), so saved data round-trips identically.
 // ─────────────────────────────────────────────────────────────────────
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ALBUM_FORMAT_LABEL, type AlbumFormat } from "@shared/schema";
-import { Check, ChevronDown, DollarSign, FileText, HelpCircle, Loader2, MinusCircle, MoreHorizontal, Plus, RotateCcw, Search, X } from "lucide-react";
+import { Check, ChevronDown, DollarSign, FileText, HelpCircle, Loader2, MinusCircle, MoreHorizontal, Plus, RotateCcw, Search, UploadCloud, X } from "lucide-react";
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -81,6 +82,9 @@ const CARD_SOFT = "#26262a"; // inset chip / input surface (light #fff)
 const PILL_ACTIVE = "#3a3a3e"; // raised active segmented pill (light #fff)
 // Subtle light rim that separates a dark disc silhouette from the dark page.
 const DISC_RIM = "0 0 0 0.5px rgba(255,255,255,0.14), 0 1px 3px rgba(0,0,0,0.5)";
+// Reference-verbatim frosted pill shadow + label-logo recolor filter (Item 28).
+const PILL_SHADOW = "0 1px 2px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.06)";
+const PRESS_LABEL_LOGO_FILTER = "invert(1) brightness(1.7)";
 
 // ─── Frosted editor popovers (same feel as Add Your Vinyl / handoff ref) ──
 function frostedPanel(dark: boolean): React.CSSProperties {
@@ -411,11 +415,342 @@ const VINYL_SIZE_BLURB: Record<string, string> = {
   "12_double": "Double LP",
 };
 
+// ─── Hover-spin physics (Item 28, reference-verbatim) ────────────────
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setReduced(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return reduced;
+}
+
+const SPIN_DPS = 360 / 8000;
+const REWIND_MS = 700;
+const REWIND_EASE = (t: number) => 1 - Math.pow(1 - t, 3);
+
+function useVinylSpin() {
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const angleRef = useRef(0);
+  const rafRef = useRef<number | null>(null);
+  const lastTsRef = useRef<number | null>(null);
+  const reduced = usePrefersReducedMotion();
+  const [showRewind, setShowRewind] = useState(false);
+
+  const apply = useCallback(() => {
+    if (bodyRef.current) {
+      bodyRef.current.style.transform = `rotate(${angleRef.current}deg)`;
+    }
+  }, []);
+
+  const stopRaf = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    lastTsRef.current = null;
+  }, []);
+
+  const spinLoop = useCallback(
+    (ts: number) => {
+      if (lastTsRef.current !== null) {
+        angleRef.current += (ts - lastTsRef.current) * SPIN_DPS;
+        apply();
+      }
+      lastTsRef.current = ts;
+      rafRef.current = requestAnimationFrame(spinLoop);
+    },
+    [apply],
+  );
+
+  const onPointerEnter = useCallback(() => {
+    if (reduced) return;
+    setShowRewind(false);
+    stopRaf();
+    rafRef.current = requestAnimationFrame(spinLoop);
+  }, [reduced, spinLoop, stopRaf]);
+
+  const onPointerLeave = useCallback(() => {
+    if (reduced) return;
+    stopRaf();
+    const settled = ((angleRef.current % 360) + 360) % 360;
+    if (settled > 30) setShowRewind(true);
+  }, [reduced, stopRaf]);
+
+  const rewind = useCallback(() => {
+    if (reduced) return;
+    stopRaf();
+    setShowRewind(false);
+    const start = angleRef.current;
+    const target = start - (((start % 360) + 360) % 360);
+    const delta = target - start;
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const p = Math.min(1, (now - t0) / REWIND_MS);
+      angleRef.current = start + delta * REWIND_EASE(p);
+      apply();
+      if (p < 1) {
+        rafRef.current = requestAnimationFrame(step);
+      } else {
+        angleRef.current = target;
+        apply();
+        rafRef.current = null;
+      }
+    };
+    rafRef.current = requestAnimationFrame(step);
+  }, [reduced, apply, stopRaf]);
+
+  useEffect(() => () => stopRaf(), [stopRaf]);
+
+  return { bodyRef, onPointerEnter, onPointerLeave, showRewind, rewind, reduced };
+}
+
+function RewindButton({ show, onClick, size = 28 }: { show: boolean; onClick: () => void; size?: number }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      aria-label="Rewind record to start"
+      data-testid="button-rewind"
+      className="rounded-full flex items-center justify-center transition-all"
+      style={{
+        width: size,
+        height: size,
+        opacity: show ? 1 : 0,
+        pointerEvents: show ? "auto" : "none",
+        transform: show ? "scale(1)" : "scale(0.9)",
+        background: "rgba(30,30,32,0.72)",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+        border: `1px solid ${HAIRLINE}`,
+        boxShadow: PILL_SHADOW,
+        color: SUBINK,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.color = "var(--apple-ink)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.color = "var(--apple-subink)";
+      }}
+    >
+      <RotateCcw style={{ width: size * 0.5, height: size * 0.5 }} />
+    </button>
+  );
+}
+
+// ─── "Make it yours" branding dialog (Item 28, reference-verbatim) ───
+// Centered modal opened from the jacket ⋯ — brand color chip-as-picker,
+// SVG-only logo replace, Reset to default. Color and logo flow to the
+// cover and center label (persisted via PUT /catalog/branding).
+function BrandDialog({
+  color,
+  logoUrl,
+  onColor,
+  onLogoFile,
+  onReset,
+  onClose,
+  uploading,
+}: {
+  color: string;
+  logoUrl: string | null;
+  onColor: (v: string) => void;
+  onLogoFile: (file: File) => void;
+  onReset: () => void;
+  onClose: () => void;
+  uploading: boolean;
+}) {
+  return createPortal(
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 1000,
+        background: "rgba(0,0,0,0.5)",
+        backdropFilter: "blur(3px)",
+        WebkitBackdropFilter: "blur(3px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="rounded-2xl"
+        style={{
+          width: 420,
+          padding: 20,
+          background: "rgba(28,28,30,0.97)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+          textAlign: "left",
+          cursor: "default",
+        }}
+      >
+        <div className="flex items-start justify-between" style={{ marginBottom: 16 }}>
+          <span className="text-[17px] font-semibold tracking-tight" style={{ lineHeight: 1.25, paddingRight: 8 }}>
+            <span style={{ color: "#f5f5f7" }}>Make it yours. </span>
+            <span style={{ color: "rgba(245,245,247,0.45)" }}>Color and logo flow to the cover and center label.</span>
+          </span>
+          <button
+            type="button"
+            aria-label="Close"
+            data-testid="button-brand-close"
+            onClick={onClose}
+            className="rounded-full flex items-center justify-center transition-colors"
+            style={{ width: 24, height: 24, background: "none", border: "none", color: "rgba(245,245,247,0.5)", cursor: "pointer" }}
+          >
+            <X style={{ width: 14, height: 14 }} />
+          </button>
+        </div>
+
+        {/* Brand color — swatch chip IS the picker, so it always matches */}
+        <div className="text-[11px] font-semibold uppercase" style={{ color: "rgba(245,245,247,0.45)", letterSpacing: 0.8, marginBottom: 8 }}>
+          Brand color
+        </div>
+        <div className="flex items-center" style={{ gap: 8, marginBottom: 18 }}>
+          <label
+            className="rounded-[10px] flex-shrink-0"
+            data-testid="chip-brand-color"
+            style={{
+              width: 46,
+              height: 34,
+              backgroundColor: color,
+              border: "1px solid rgba(255,255,255,0.22)",
+              boxShadow: "inset 0 1px 1px rgba(255,255,255,0.12)",
+              cursor: "pointer",
+              display: "block",
+            }}
+          >
+            <input
+              type="color"
+              value={/^#[0-9a-fA-F]{6}$/.test(color) ? color : "#000000"}
+              onChange={(e) => onColor(e.target.value)}
+              data-testid="input-brand-color-picker"
+              style={{ opacity: 0, width: "100%", height: "100%", cursor: "pointer" }}
+            />
+          </label>
+          <input
+            type="text"
+            value={color}
+            onChange={(e) => onColor(e.target.value)}
+            spellCheck={false}
+            data-testid="input-brand-color-hex"
+            className="rounded-lg text-[13px]"
+            style={{ flex: 1, minWidth: 0, padding: "7px 11px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.14)", color: "#f5f5f7", fontVariantNumeric: "tabular-nums" }}
+          />
+        </div>
+
+        {/* Logo — current + replace, same layout as the admin Logo dialog */}
+        <div style={{ display: "grid", gridTemplateColumns: "150px 1fr", gap: 14 }}>
+          <div>
+            <div className="text-[11px] font-semibold uppercase" style={{ color: "rgba(245,245,247,0.45)", letterSpacing: 0.8, marginBottom: 8 }}>
+              Current logo
+            </div>
+            <div
+              className="rounded-xl flex items-center justify-center"
+              style={{ width: 150, height: 150, background: "#0a0a0a", border: "1px solid rgba(255,255,255,0.1)" }}
+            >
+              {logoUrl ? (
+                <img src={logoUrl} alt="" style={{ width: 104, height: 104, objectFit: "contain", filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.94 }} />
+              ) : (
+                <span className="text-[12px]" style={{ color: "rgba(245,245,247,0.4)" }}>No logo yet</span>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col">
+            <div className="text-[11px] font-semibold uppercase" style={{ color: "rgba(245,245,247,0.45)", letterSpacing: 0.8, marginBottom: 8 }}>
+              Replace logo
+            </div>
+            <label
+              className="rounded-xl flex flex-col items-center justify-center text-center transition-colors"
+              data-testid="dropzone-brand-logo"
+              style={{
+                flex: 1,
+                minHeight: 0,
+                padding: "14px 10px",
+                border: "1px dashed rgba(255,255,255,0.22)",
+                background: "transparent",
+                cursor: "pointer",
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.currentTarget.style.borderColor = "rgba(255,255,255,0.55)";
+                e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+              }}
+              onDragLeave={(e) => {
+                e.currentTarget.style.borderColor = "rgba(255,255,255,0.22)";
+                e.currentTarget.style.background = "transparent";
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.currentTarget.style.borderColor = "rgba(255,255,255,0.22)";
+                e.currentTarget.style.background = "transparent";
+                const file = e.dataTransfer.files?.[0];
+                if (file) onLogoFile(file);
+              }}
+            >
+              {uploading ? (
+                <Loader2 className="w-4 h-4 animate-spin" style={{ color: "rgba(245,245,247,0.4)" }} />
+              ) : (
+                <UploadCloud className="w-4 h-4" style={{ color: "rgba(245,245,247,0.4)" }} />
+              )}
+              <span className="text-[12px] font-medium" style={{ color: "#f5f5f7", marginTop: 7 }}>
+                Drag an image here, or click to pick
+              </span>
+              <span className="text-[11px]" style={{ color: "rgba(245,245,247,0.45)", marginTop: 3 }}>
+                SVG only — we recolor it for any surface
+              </span>
+              <input
+                type="file"
+                accept=".svg,image/svg+xml"
+                data-testid="input-brand-logo"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onLogoFile(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between" style={{ marginTop: 16 }}>
+          <span className="text-[11.5px]" style={{ color: "rgba(245,245,247,0.4)" }}>
+            Square works best — shown on the cover and center label.
+          </span>
+          <button
+            type="button"
+            onClick={onReset}
+            data-testid="button-brand-reset"
+            className="text-[12px] font-medium transition-colors flex-shrink-0"
+            style={{ color: "rgba(245,245,247,0.6)", background: "none", border: "none", padding: 0, cursor: "pointer", marginLeft: 12 }}
+          >
+            Reset to default
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // ─── Left column: jacket + disc stage ────────────────────────────────
 // The album jacket with the vinyl peeking out to the right. Hovering
-// slides the disc further out and spins the disc body (highlight stays
-// fixed — VinylDisc already keeps its sheen static). Double LP shows a
-// second, dimmer disc behind the first.
+// slides the disc further out and spins the disc body continuously
+// (360°/8 s — Item 28); leaving freezes it and surfaces a rewind button
+// that slides the record out while it turns back, then tucks it in.
+// Double LP shows a second, dimmer disc behind the first.
 export function JacketStage({
   format,
   jacketUrl,
@@ -424,12 +759,25 @@ export function JacketStage({
   labelBgColor,
   placeholderIconUrl,
   typeName,
+  brandEditable,
+  onBrandColor,
+  onBrandLogoFile,
+  onBrandReset,
+  brandUploading,
 }: {
   format: AlbumFormat;
   jacketUrl: string | null;
   color: CatalogColor | null;
   labelLogoUrl: string | null;
   labelBgColor: string | null;
+  // Item 28 — "Make it yours" branding dialog behind the jacket ⋯. Passed
+  // only by the press catalog page; the artist package builder keeps the
+  // plain stage (no menu, no dialog).
+  brandEditable?: boolean;
+  onBrandColor?: (hex: string) => void;
+  onBrandLogoFile?: (file: File) => void;
+  onBrandReset?: () => void;
+  brandUploading?: boolean;
   // Bill's rule 2 (handoff v2) — when the album has no uploaded art AND the
   // press has no default jacket, the jacket face is the white product-mark
   // icon at ~45% width on a `#1d1d1f` ink jacket. Passed only by the artist
@@ -447,32 +795,52 @@ export function JacketStage({
   const labelInches = format === "7_inch" ? 3.3 : 3.94;
   const labelRatio = labelInches / inches;
   const holeRatio = 0.3 / inches;
-  // Reference hover mechanics — the record slides right while its body rotates.
-  // The specular highlight lives outside the body in VinylDisc, so it stays
-  // fixed like a real light source. Everything glides back on pointer-leave.
+  // Item 28 hover mechanics — the record slides right while its body spins
+  // continuously (360°/8 s, rAF-driven). The specular highlight lives outside
+  // the body in VinylDisc, so it stays fixed like a real light source.
+  // Leaving freezes the disc mid-turn and surfaces a rewind button below.
   const [hover, setHover] = useState(false);
-  const bodyRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const el = bodyRef.current;
-    if (!el) return;
-    el.style.transition = "transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)";
-    el.style.transform = hover ? "rotate(32deg)" : "rotate(0deg)";
-  }, [hover]);
+  const [peek, setPeek] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { bodyRef, onPointerEnter: spinEnter, onPointerLeave: spinLeave, showRewind, rewind } = useVinylSpin();
+  const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
+  }, []);
+  // Rewind with a peek — the record slides out while it turns back, then
+  // tucks back in once the rewind finishes.
+  const rewindWithPeek = () => {
+    setPeek(true);
+    rewind();
+    if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
+    peekTimerRef.current = setTimeout(() => setPeek(false), 1200);
+  };
+  const out = hover || peek;
   const bodyRef2 = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const el = bodyRef2.current;
     if (!el) return;
     el.style.transition = "transform 0.75s cubic-bezier(0.32, 0.72, 0.28, 1) 0.1s";
-    el.style.transform = hover ? "rotate(18deg)" : "rotate(0deg)";
-  }, [hover]);
+    el.style.transform = out ? "rotate(18deg)" : "rotate(0deg)";
+  }, [out]);
   return (
     <div data-testid="jacket-stage">
-      <div
-        className="relative"
-        onPointerEnter={() => setHover(true)}
-        onPointerLeave={() => setHover(false)}
-        style={{ width: jacketPx + jacketPx * 0.5, height: jacketPx + 24, cursor: "pointer" }}
-      >
+      <div className="relative" style={{ width: jacketPx + jacketPx * 0.5, height: jacketPx + 24 }}>
+        {/* Hover zone — the discs + jacket + floor shadow. The rewind button
+            sits OUTSIDE this zone so clicking it never re-triggers the
+            hover spin/slide. */}
+        <div
+          className="absolute"
+          style={{ inset: 0, cursor: "pointer" }}
+          onPointerEnter={() => {
+            setHover(true);
+            spinEnter();
+          }}
+          onPointerLeave={() => {
+            setHover(false);
+            spinLeave();
+          }}
+        >
         {/* Second record (Double LP) — peeks a touch further, on a slight delay */}
         {isDouble && (
           <div
@@ -482,7 +850,7 @@ export function JacketStage({
               top: (jacketPx - DISC) / 2,
               left: jacketPx - DISC + jacketPx * 0.27,
               transition: "transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1) 0.1s",
-              transform: hover ? `translateX(${jacketPx * 0.3}px)` : "translateX(0)",
+              transform: out ? `translateX(${jacketPx * 0.3}px)` : "translateX(0)",
               willChange: "transform",
               zIndex: 0,
               filter: "brightness(0.88)",
@@ -498,7 +866,7 @@ export function JacketStage({
             top: (jacketPx - DISC) / 2,
             left: jacketPx - DISC + jacketPx * 0.22,
             transition: "transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)",
-            transform: hover ? `translateX(${jacketPx * 0.24}px)` : "translateX(0)",
+            transform: out ? `translateX(${jacketPx * 0.24}px)` : "translateX(0)",
             willChange: "transform",
             zIndex: 1,
           }}
@@ -512,7 +880,7 @@ export function JacketStage({
             width: jacketPx,
             height: jacketPx,
             borderRadius: 3,
-            backgroundColor: "#141416",
+            backgroundColor: labelBgColor ?? "#141416",
             backgroundImage: dark
               ? "linear-gradient(135deg, rgba(255,255,255,0.07) 0%, transparent 45%)"
               : "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 45%)",
@@ -537,6 +905,44 @@ export function JacketStage({
           ) : null}
           {/* spine hint */}
           <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 7, background: "linear-gradient(90deg, rgba(0,0,0,0.5), transparent)" }} />
+          {/* Item 28 — ⋯ opens the "Make it yours" branding dialog */}
+          {brandEditable && (
+            <button
+              type="button"
+              aria-label="Brand options"
+              data-testid="button-brand-menu"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen(true);
+              }}
+              className="rounded-full flex items-center justify-center transition-all"
+              style={{
+                position: "absolute",
+                top: 10,
+                right: 10,
+                zIndex: 5,
+                width: 28,
+                height: 28,
+                opacity: hover || menuOpen ? 1 : 0,
+                pointerEvents: hover || menuOpen ? "auto" : "none",
+                background: menuOpen ? "rgba(0,0,0,0.44)" : "rgba(0,0,0,0.26)",
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
+                border: "none",
+                color: "rgba(255,255,255,0.92)",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(0,0,0,0.44)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = menuOpen ? "rgba(0,0,0,0.44)" : "rgba(0,0,0,0.26)";
+              }}
+            >
+              <MoreHorizontal style={{ width: 15, height: 15, strokeWidth: 2.2 }} />
+            </button>
+          )}
         </div>
         {/* floor shadow — fixed size, stretched with a transform so it never repaints mid-hover */}
         <div
@@ -550,13 +956,33 @@ export function JacketStage({
             borderRadius: "50%",
             background: "rgba(0,0,0,0.28)",
             filter: "blur(9px)",
-            transform: hover ? "scaleX(1.18)" : "scaleX(1)",
+            transform: out ? "scaleX(1.18)" : "scaleX(1)",
             transformOrigin: "30% center",
             transition: "transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)",
             willChange: "transform",
           }}
         />
+        </div>
+        {/* Rewind — outside the hover zone so clicking it never re-triggers
+            the spin; centered under the jacket. */}
+        <div
+          className="absolute"
+          style={{ left: `calc(50% - ${Math.round(jacketPx * 0.25)}px)`, transform: "translateX(-50%)", bottom: -14, zIndex: 3 }}
+        >
+          <RewindButton show={showRewind} onClick={rewindWithPeek} size={28} />
+        </div>
       </div>
+      {menuOpen && brandEditable && (
+        <BrandDialog
+          color={labelBgColor ?? "#141416"}
+          logoUrl={labelLogoUrl}
+          onColor={(v) => onBrandColor?.(v)}
+          onLogoFile={(f) => onBrandLogoFile?.(f)}
+          onReset={() => onBrandReset?.()}
+          onClose={() => setMenuOpen(false)}
+          uploading={!!brandUploading}
+        />
+      )}
       {/* Captions — shifted left so they center under the jacket, not the whole stage. */}
       <div className="flex flex-col items-center" style={{ transform: `translateX(-${Math.round(jacketPx * 0.25)}px)` }} data-testid="stage-caption">
         <div className="flex items-center gap-2.5 text-[13px]" style={{ marginTop: 28, color: SUBINK }}>
@@ -1049,8 +1475,54 @@ export function PressPackagePricingCatalog({
   });
   // Fall back to the press's square logo so white-label instances (Viryl / PMP /
   // Hellbender) show their own mark on the jacket instead of nothing.
-  const labelLogoUrl = pressRow?.labelLogoUrl ?? pressRow?.logoUrl ?? null;
-  const labelBgColor = pressRow?.labelBgColor ?? null;
+  // Item 28 — "Make it yours" branding dialog. Local overrides render
+  // instantly (color picker drags, fresh logo upload); the PUT persists and
+  // the refetch reconciles. `undefined` = no override, `null` = reset.
+  const [brandColorDraft, setBrandColorDraft] = useState<string | null | undefined>(undefined);
+  const [brandLogoDraft, setBrandLogoDraft] = useState<string | null | undefined>(undefined);
+  const [brandUploading, setBrandUploading] = useState(false);
+  const labelLogoUrl = (brandLogoDraft !== undefined ? brandLogoDraft : pressRow?.labelLogoUrl) ?? pressRow?.logoUrl ?? null;
+  const labelBgColor = brandColorDraft !== undefined ? brandColorDraft : (pressRow?.labelBgColor ?? null);
+  const saveBranding = useMutation({
+    mutationFn: async (body: { labelBgColor?: string | null; labelLogoUrl?: string | null }) => {
+      const r = await apiRequest("PUT", `/api/admin/manufacturers/${pressId}/catalog/branding`, body);
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/manufacturers", pressId] });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Couldn't save branding", description: e.message, variant: "destructive" }),
+  });
+  const brandColorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onBrandColor = (hex: string) => {
+    setBrandColorDraft(hex);
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return; // mid-typing hex — preview only
+    if (brandColorTimer.current) clearTimeout(brandColorTimer.current);
+    brandColorTimer.current = setTimeout(() => saveBranding.mutate({ labelBgColor: hex }), 400);
+  };
+  const onBrandLogoFile = async (file: File) => {
+    const isSvg = file.type === "image/svg+xml" || /\.svg$/i.test(file.name);
+    if (!isSvg) {
+      toast({ title: "SVG only", description: "The logo is recolored for any surface, so it must be an SVG.", variant: "destructive" });
+      return;
+    }
+    setBrandUploading(true);
+    try {
+      const url = await uploadAdminDoc(file);
+      setBrandLogoDraft(url);
+      saveBranding.mutate({ labelLogoUrl: url });
+    } catch (e: any) {
+      toast({ title: "Couldn't upload logo", description: e?.message, variant: "destructive" });
+    } finally {
+      setBrandUploading(false);
+    }
+  };
+  const onBrandReset = () => {
+    setBrandColorDraft(null);
+    setBrandLogoDraft(null);
+    saveBranding.mutate({ labelBgColor: null, labelLogoUrl: null });
+  };
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["/api/admin/manufacturers", pressId, "catalog"] });
@@ -1059,7 +1531,10 @@ export function PressPackagePricingCatalog({
   const [activeTab, setActiveTab] = useState<CatalogTab | null>(null);
   useEffect(() => {
     if (!catalog) return;
-    const offeredList = catalog.formats.map((f) => f.format);
+    // Item 28 — "Don't offer this size" grays the card; the active tab must
+    // fall back to the first still-offered size when the current one hides.
+    const visible = catalog.formats.filter((f) => !f.hidden).map((f) => f.format);
+    const offeredList = visible.length > 0 ? visible : catalog.formats.map((f) => f.format);
     if (activeTab === null) {
       // Deep-link: ?catalogFormat=vinyl_12 preselects a size (parity screenshots)
       const wanted = new URLSearchParams(window.location.search).get("catalogFormat");
@@ -1085,7 +1560,28 @@ export function PressPackagePricingCatalog({
   }, [catalog, activeTab]);
 
   const offered = new Set((catalog?.formats ?? []).map((f) => f.format));
+  // Item 28 — ⋯ on a size card toggles "Don't offer this size" (reversible
+  // gray-out; the format PUT's non-destructive hidden flag).
+  const [sizeMenuId, setSizeMenuId] = useState<AlbumFormat | null>(null);
+  const setSizeOffered = useMutation({
+    mutationFn: async ({ format, hidden }: { format: AlbumFormat; hidden: boolean }) => {
+      const r = await apiRequest("PUT", `/api/admin/manufacturers/${pressId}/catalog/formats/${format}`, { hidden });
+      return r.json();
+    },
+    onSuccess: invalidate,
+    onError: (e: Error) => toast({ title: "Couldn't update size", description: e.message, variant: "destructive" }),
+  });
   const fmt = activeTab as AlbumFormat | null;
+  // Item 28 — hide/restore print-prep template tiles (per-format; server
+  // default when never touched is ["booklet"]).
+  const setHiddenTemplates = useMutation({
+    mutationFn: async (keys: string[]) => {
+      const r = await apiRequest("PUT", `/api/admin/manufacturers/${pressId}/catalog/formats/${fmt}`, { hiddenTemplates: keys });
+      return r.json();
+    },
+    onSuccess: invalidate,
+    onError: (e: Error) => toast({ title: "Couldn't update templates", description: e.message, variant: "destructive" }),
+  });
   const fmtRow: CatalogFormat | null =
     (fmt && catalog?.formats.find((f) => f.format === fmt)) || null;
   const isVinyl = !!fmt && VINYL_FORMATS.includes(fmt);
@@ -1276,19 +1772,29 @@ export function PressPackagePricingCatalog({
   const [drafts, setDrafts] = useState<Record<string, Record<number, string>>>({});
   const [offeredDrafts, setOfferedDrafts] = useState<Record<string, Set<number>>>({});
   const [extraQuantities, setExtraQuantities] = useState<number[]>([]);
+  // Item 28 — two price books, 140 g and 180 g. They share run sizes (adding
+  // one adds it to both weights); each keeps its own numbers. Draft keys are
+  // `${format}:${tierId}:${weight}` so edits in one book never clobber the
+  // other.
+  const [weight, setWeight] = useState<"140" | "180">("140");
 
   const defaultJacketId = fmtRow?.defaultJacketId ?? catalog?.defaultJacketId ?? null;
   const ladderForTier = (
     tier: CatalogTier | null,
     fRow: CatalogFormat | null,
-  ): { qty: number; unitCents: number; confirmed?: boolean }[] => {
+    w: "140" | "180" = "140",
+  ): { qty: number; unitCents: number; confirmed?: boolean; offered?: boolean }[] => {
     if (!tier || !catalog) return [];
     const jId = fRow?.defaultJacketId ?? catalog.defaultJacketId;
+    if (w === "180") {
+      if (jId && tier.laddersByJacket180?.[jId]) return tier.laddersByJacket180[jId];
+      return [];
+    }
     if (jId && tier.laddersByJacket[jId]) return tier.laddersByJacket[jId];
     return tier.priceLadder ?? [];
   };
-  const savedLadder = ladderForTier(selectedTier, fmtRow);
-  const comboKey = fmt && selectedTier ? `${fmt}:${selectedTier.id}` : null;
+  const savedLadder = ladderForTier(selectedTier, fmtRow, weight);
+  const comboKey = fmt && selectedTier ? `${fmt}:${selectedTier.id}:${weight}` : null;
 
   // ── Which sizes a type is pressed in (handoff item 20). Real data has no
   // per-tier size field — a tier lives inside one format, and the server
@@ -1355,6 +1861,9 @@ export function PressPackagePricingCatalog({
         for (const r of t.priceLadder ?? []) set.add(r.qty);
         for (const j of Object.keys(t.laddersByJacket))
           for (const r of t.laddersByJacket[j]) set.add(r.qty);
+        // Item 28 — run sizes are shared across both weight books.
+        for (const j of Object.keys(t.laddersByJacket180 ?? {}))
+          for (const r of (t.laddersByJacket180 ?? {})[j]) set.add(r.qty);
       }
     }
     for (const q of extraQuantities) set.add(q);
@@ -1363,19 +1872,24 @@ export function PressPackagePricingCatalog({
 
   const savedRungKey = comboKey
     ? savedLadder
-        .map((r) => `${r.qty}:${r.confirmed === false ? "q" : "p"}`)
+        .map((r) => `${r.qty}:${r.offered === false ? "x" : r.confirmed === false ? "q" : "p"}`)
         .sort()
         .join(",")
     : "";
   useEffect(() => {
     if (!comboKey) return;
-    setOfferedDrafts((prev) => ({ ...prev, [comboKey]: new Set(savedLadder.map((r) => r.qty)) }));
+    setOfferedDrafts((prev) => ({
+      ...prev,
+      [comboKey]: new Set(savedLadder.filter((r) => r.offered !== false).map((r) => r.qty)),
+    }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [comboKey, savedRungKey]);
 
   const modeFor = (q: number): PriceMode => {
     if (!comboKey) return "off";
-    const offeredSet = offeredDrafts[comboKey] ?? new Set(savedLadder.map((r) => r.qty));
+    const offeredSet =
+      offeredDrafts[comboKey] ??
+      new Set(savedLadder.filter((r) => r.offered !== false).map((r) => r.qty));
     if (!offeredSet.has(q)) return "off";
     const d = drafts[comboKey];
     const raw =
@@ -1402,7 +1916,9 @@ export function PressPackagePricingCatalog({
   const setMode = (q: number, m: PriceMode) => {
     if (!comboKey) return;
     setOfferedDrafts((prev) => {
-      const cur = prev[comboKey] ?? new Set<number>(savedLadder.map((r) => r.qty));
+      const cur =
+        prev[comboKey] ??
+        new Set<number>(savedLadder.filter((r) => r.offered !== false).map((r) => r.qty));
       const next = new Set(cur);
       if (m === "off") next.delete(q);
       else next.add(q);
@@ -1413,13 +1929,21 @@ export function PressPackagePricingCatalog({
 
   const buildLadder = (
     cKey: string,
-    saved: { qty: number; unitCents: number; confirmed?: boolean }[],
-  ): { ladder: { qty: number; unitCents: number; confirmed: boolean }[]; error: string | null } => {
-    const off = offeredDrafts[cKey] ?? new Set<number>(saved.map((r) => r.qty));
+    saved: { qty: number; unitCents: number; confirmed?: boolean; offered?: boolean }[],
+  ): { ladder: { qty: number; unitCents: number; confirmed: boolean; offered?: boolean }[]; error: string | null } => {
+    const off =
+      offeredDrafts[cKey] ??
+      new Set<number>(saved.filter((r) => r.offered !== false).map((r) => r.qty));
     const dr = drafts[cKey] ?? {};
-    const out: { qty: number; unitCents: number; confirmed: boolean }[] = [];
+    const out: { qty: number; unitCents: number; confirmed: boolean; offered?: boolean }[] = [];
     for (const q of columns) {
-      if (!off.has(q)) continue;
+      // Item 28 — "Not offered" rungs persist with offered:false so the run
+      // size stays shared across both weight books (server keeps qty sets in
+      // lockstep; dropping the rung entirely would delete it from BOTH).
+      if (!off.has(q)) {
+        out.push({ qty: q, unitCents: 0, confirmed: false, offered: false });
+        continue;
+      }
       let raw: string;
       if (Object.prototype.hasOwnProperty.call(dr, q)) raw = dr[q];
       else {
@@ -1438,19 +1962,23 @@ export function PressPackagePricingCatalog({
     }
     return { ladder: out, error: null };
   };
-  const normalize = (l: { qty: number; unitCents: number; confirmed?: boolean }[]): string =>
+  // Off rungs are dropped before comparing: legacy saved ladders encode "off"
+  // as ABSENT while buildLadder now emits explicit offered:false rungs, so
+  // comparing them raw would flag every viewed combo dirty.
+  const normalize = (l: { qty: number; unitCents: number; confirmed?: boolean; offered?: boolean }[]): string =>
     l
       .slice()
+      .filter((r) => r.offered !== false)
       .sort((a, b) => a.qty - b.qty)
       .map((r) => `${r.qty}:${r.confirmed === false ? "Q" : r.unitCents}`)
       .join("|");
   const comboIsDirty = (cKey: string): boolean => {
     if (!catalog) return false;
-    const [f, tierId] = cKey.split(":");
+    const [f, tierId, w] = cKey.split(":");
     const fRow = catalog.formats.find((x) => x.format === f) ?? null;
     const tier = fRow?.tiers.find((t) => t.id === tierId) ?? null;
     if (!tier) return false;
-    const saved = ladderForTier(tier, fRow);
+    const saved = ladderForTier(tier, fRow, w === "180" ? "180" : "140");
     const { ladder } = buildLadder(cKey, saved);
     return normalize(ladder) !== normalize(saved);
   };
@@ -1479,7 +2007,8 @@ export function PressPackagePricingCatalog({
       for (const cKey of dirtyKeys) {
         savedDraftValues[cKey] = { ...(drafts[cKey] ?? {}) };
         if (offeredDrafts[cKey]) savedOffered[cKey] = Array.from(offeredDrafts[cKey]);
-        const [f, tierId] = cKey.split(":");
+        const [f, tierId, wKey] = cKey.split(":");
+        const w: "140" | "180" = wKey === "180" ? "180" : "140";
         const fRow = catalog.formats.find((x) => x.format === f) ?? null;
         const tier = fRow?.tiers.find((t) => t.id === tierId) ?? null;
         if (!tier) continue;
@@ -1490,13 +2019,13 @@ export function PressPackagePricingCatalog({
           });
           jacketId = ((await jr.json()) as { id: string }).id;
         }
-        const saved = ladderForTier(tier, fRow);
+        const saved = ladderForTier(tier, fRow, w);
         const { ladder, error } = buildLadder(cKey, saved);
         if (error) throw new Error(error);
         await apiRequest(
           "PUT",
           `/api/admin/manufacturers/${pressId}/catalog/tiers/${tier.id}/jackets/${jacketId}/ladder`,
-          { priceLadder: ladder },
+          { priceLadder: ladder, weight: w },
         );
       }
       return { savedDraftValues, savedOffered };
@@ -1608,13 +2137,23 @@ export function PressPackagePricingCatalog({
             <SectionLabel>Vinyl · Package pricing</SectionLabel>
           {!hideHeading ? (
               <h1 className="tracking-tight" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.05, marginTop: 10 }}>
-              <span style={{ color: INK }}>Build your vinyl catalog. </span>
-              <span style={{ color: FAINT, fontWeight: 600 }}>From scratch.</span>
+              <span style={{ color: INK }}>
+                Build your GoodTunes
+                <span style={{ fontSize: "0.38em", fontWeight: 400, verticalAlign: "super", position: "relative", top: "-0.15em" }}>®</span>
+                {" packages."}
+                {" "}
+              </span>
+              <span style={{ color: FAINT, fontWeight: 600 }}>For the record.</span>
             </h1>
           ) : (
             <h2 className="tracking-tight" style={{ fontSize: 22, fontWeight: 700, marginTop: 6 }}>
-              <span style={{ color: INK }}>Build your vinyl catalog. </span>
-              <span style={{ color: FAINT, fontWeight: 600 }}>From scratch.</span>
+              <span style={{ color: INK }}>
+                Build your GoodTunes
+                <span style={{ fontSize: "0.38em", fontWeight: 400, verticalAlign: "super", position: "relative", top: "-0.15em" }}>®</span>
+                {" packages."}
+                {" "}
+              </span>
+              <span style={{ color: FAINT, fontWeight: 600 }}>For the record.</span>
             </h2>
           )}
            <p className="text-[15px]" style={{ color: SUBINK, marginTop: 12, maxWidth: 560, lineHeight: 1.5 }}>
@@ -1665,6 +2204,11 @@ export function PressPackagePricingCatalog({
                     labelLogoUrl={labelLogoUrl}
                     labelBgColor={labelBgColor}
                       typeName={selectedTier?.name}
+                    brandEditable={canEdit}
+                    onBrandColor={onBrandColor}
+                    onBrandLogoFile={onBrandLogoFile}
+                    onBrandReset={onBrandReset}
+                    brandUploading={brandUploading}
                   />
                 </div>
               </div>
@@ -1676,21 +2220,60 @@ export function PressPackagePricingCatalog({
               {isVinyl && (
                 <section id="section-pick-size" data-testid="section-pick-size">
                   <div>
-                    <TwoTone lead="Pick a size." rest="Prices follow the record." />
+                    <TwoTone lead="Pick a size." rest="Start your build." />
                     <div style={{ marginTop: 14, display: "flex", gap: 12 }}>
                       {VINYL_FORMATS.map((f) => {
                         const available = offered.has(f);
-                        const active = activeTab === f;
+                        const row = catalog?.formats.find((x) => x.format === f);
+                        const off = !!row?.hidden;
+                        const active = activeTab === f && !off;
                         const big = f === "7_inch" ? '7"' : '12"';
                         return (
-                          <button key={f} type="button" disabled={!available} onClick={() => available && setActiveTab(f)}
-                            aria-pressed={active}
-                            className="rounded-2xl bg-white transition-all hover:-translate-y-px focus:outline-none disabled:opacity-40"
-                            style={{ flex: 1, padding: "16px 12px", border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, textAlign: "center", cursor: available ? "pointer" : "default" }}
-                            data-testid={`card-size-${f}`}>
-                            <div className="text-[17px] font-semibold" style={{ color: active ? BLUE : INK }}>{big}</div>
-                            <div className="text-[11px]" style={{ marginTop: 3, color: FAINT }}>{VINYL_SIZE_BLURB[f]}</div>
-                          </button>
+                          <div key={f} className="group relative" style={{ flex: 1 }}>
+                            <button type="button" disabled={!available || off} onClick={() => available && !off && setActiveTab(f)}
+                              aria-pressed={active}
+                              className={cn("w-full rounded-2xl bg-white transition-all focus:outline-none disabled:opacity-40", !off && available && "hover:-translate-y-px")}
+                              style={{ padding: "16px 12px", border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, textAlign: "center", cursor: available && !off ? "pointer" : "default", opacity: off ? 0.4 : undefined }}
+                              data-testid={`card-size-${f}`}>
+                              <div className="text-[17px] font-semibold" style={{ color: active ? BLUE : INK }}>{big}</div>
+                              <div className="text-[11px]" style={{ marginTop: 3, color: FAINT }}>{off ? "Not offered" : VINYL_SIZE_BLURB[f]}</div>
+                            </button>
+                            {canEdit && available && (
+                              <Popover open={sizeMenuId === f} onOpenChange={(v) => setSizeMenuId(v ? f : null)}>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    aria-label={`Options for ${ALBUM_FORMAT_LABEL[f]}`}
+                                    data-testid={`size-menu-${f}`}
+                                    className={cn(
+                                      "absolute inline-flex items-center justify-center rounded-full transition-opacity",
+                                      sizeMenuId === f ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                                    )}
+                                    style={{ top: 6, right: 6, width: 22, height: 22, background: "var(--apple-fill-quaternary, rgba(120,120,128,0.12))", color: SUBINK }}
+                                  >
+                                    <MoreHorizontal className="h-3.5 w-3.5" />
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent align="end" sideOffset={6} className="w-56 rounded-2xl p-2" style={{ border: `1px solid ${HAIRLINE}` }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSizeMenuId(null);
+                                      setSizeOffered.mutate({ format: f, hidden: !off });
+                                    }}
+                                    className="w-full rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-black/5"
+                                    style={{ color: INK }}
+                                    data-testid={`size-toggle-${f}`}
+                                  >
+                                    {off ? "Offer this size" : "Don't offer this size"}
+                                    <span className="block text-[11.5px] font-normal" style={{ color: SUBINK }}>
+                                      {off ? "Put this size back in your catalog." : "Keeps pricing and colors — just not offered."}
+                                    </span>
+                                  </button>
+                                </PopoverContent>
+                              </Popover>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
@@ -1703,7 +2286,7 @@ export function PressPackagePricingCatalog({
               {/* Pick a type */}
               <section id="section-pick-type" data-testid="section-pick-type">
                 <div className="flex items-start justify-between gap-3">
-                  <TwoTone lead="Pick a type." rest="Each keeps its own package prices." />
+                  <TwoTone lead="Pick a type." rest="Grow your offering." />
                   <div className="flex items-center gap-2.5 flex-shrink-0">
                     <span className="text-[12px] tabular-nums" style={{ color: FAINT }}>
                       {catalogList.length} colors
@@ -1809,7 +2392,7 @@ export function PressPackagePricingCatalog({
                 <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: "28px 0" }} />
                 <section id="section-pick-color" data-testid="section-pick-color">
                   <div className="flex items-start justify-between gap-3">
-                    <TwoTone lead="Pick a color." rest="Or add a new one." />
+                    <TwoTone lead="Build colors." rest="The world needs more color." />
                     {canEdit && colors.length > 1 && (
                       <ReorderControls
                         on={reorderColorsOn}
@@ -1957,14 +2540,44 @@ export function PressPackagePricingCatalog({
                 <>
                 <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: "28px 0" }} />
                 <section id="section-price" data-testid="section-price">
-                  <TwoTone lead="Name your price." rest="Per package, per run." />
+                  <TwoTone lead="Set your price." rest="They'll show you the money." />
                   <p className="text-[12.5px]" style={{ marginTop: 6 }}>
                     <span className="font-semibold" style={{ color: INK }}>{selectedTier.name}</span>
                     <span style={{ color: FAINT }}>{colors.length > 0 ? ` · one price covers all ${colors.length} colors` : " · add colors in the step above"}</span>
                   </p>
-                  {canEdit && <div className="flex justify-end" style={{ marginBottom: 8 }}>
-                    <AddRunSizePopover onAdd={(q) => setExtraQuantities((prev) => [...prev, q])} existing={columns} />
-                  </div>}
+                  {/* Item 28 — 140 g / 180 g segmented books share run sizes */}
+                  <div className="flex items-center justify-between" style={{ marginTop: 10, marginBottom: 8 }}>
+                    <div
+                      className="inline-flex rounded-full p-0.5"
+                      style={{ backgroundColor: dark ? CARD_SOFT : "#ececf0", border: `1px solid ${HAIRLINE}` }}
+                      role="tablist"
+                      aria-label="Vinyl weight"
+                      data-testid="weight-toggle"
+                    >
+                      {(["140", "180"] as const).map((w) => (
+                        <button
+                          key={w}
+                          type="button"
+                          role="tab"
+                          aria-selected={weight === w}
+                          onClick={() => setWeight(w)}
+                          className="rounded-full text-[12px] font-semibold transition-colors"
+                          style={{
+                            padding: "4px 13px",
+                            backgroundColor: weight === w ? (dark ? "rgba(255,255,255,0.13)" : "var(--apple-pill, #fff)") : "transparent",
+                            color: weight === w ? INK : FAINT,
+                            boxShadow: weight === w ? (dark ? "0 1px 3px rgba(0,0,0,0.4)" : "0 1px 3px rgba(0,0,0,.08)") : undefined,
+                          }}
+                          data-testid={`weight-${w}`}
+                        >
+                          {w} g
+                        </button>
+                      ))}
+                    </div>
+                    {canEdit && (
+                      <AddRunSizePopover onAdd={(q) => setExtraQuantities((prev) => [...prev, q])} existing={columns} />
+                    )}
+                  </div>
                   <div className="rounded-2xl bg-white overflow-hidden" style={{ border: `1px solid ${HAIRLINE}` }} data-testid="price-strip">
                     {columns.map((q, i) => {
                       const mode = modeFor(q);
@@ -2007,7 +2620,7 @@ export function PressPackagePricingCatalog({
                     })}
                   </div>
                   <div className="flex items-center justify-center" style={{ marginTop: 10 }}>
-                    <span className="text-[11.5px]" style={{ color: FAINT }}>Prices are per unit, per finished package.</span>
+                    <span className="text-[11.5px]" style={{ color: FAINT }}>Prices are per unit, per finished package · {weight} g vinyl.</span>
                   </div>
                 </section>
                 </>
@@ -2033,14 +2646,20 @@ export function PressPackagePricingCatalog({
                 <>
                   <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: "28px 0" }} />
                   <section id="section-templates" data-testid="section-templates">
-                    <TwoTone lead="Print templates." rest="Artwork specs for artists." />
+                    <TwoTone lead="Print prep." rest="The template for your templates." />
                   <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>Attach a file or paste a link. Optional and quiet.</p>
-                    <TemplateTilesGrid pressId={pressId} fmt={fmt} canEdit={canEdit} />
+                    <TemplateTilesGrid
+                      pressId={pressId}
+                      fmt={fmt}
+                      canEdit={canEdit}
+                      hiddenTemplates={fmtRow?.hiddenTemplates ?? ["booklet"]}
+                      onSetHidden={(keys) => setHiddenTemplates.mutate(keys)}
+                    />
                   </section>
                     <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: "28px 0" }} />
                     <section id="section-audio" data-testid="section-audio">
-                    <TwoTone lead="Audio spec." rest="What the lathe can cut." />
-                      <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>Leave a field blank to inherit the press default — the gray numbers. These drive each album's audio preflight.</p>
+                    <TwoTone lead="Set your audio specs." rest="Help them turn it up to 11." />
+                      <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>Blank fields inherit the press default — the gray numbers.</p>
                     <AudioSpecEditorCard pressId={pressId} canEdit={canEdit} />
                   </section>
                 </>
@@ -2055,16 +2674,9 @@ export function PressPackagePricingCatalog({
           </div>
         </fieldset>
       )}
-      <div className="mt-12 flex flex-wrap items-center justify-end gap-4 border-t pt-4" style={{ borderColor: HAIRLINE }}>
-        <button type="button" onClick={() => onOpenColors?.()} disabled={!onOpenColors || !canEdit} className="text-[12.5px] font-semibold disabled:opacity-40" style={{ color: BLUE }} data-testid="button-open-vinyl-colors">Add your vinyl</button>
-        <CatalogCsvButtons pressId={pressId} pressName={pressDomain} onApplied={invalidate} canEdit={canEdit} />
-        {canEdit && pressDomain === "hellbendervinyl.com" && (
-          <>
-            <HellbenderImportButton pressId={pressId} catalog={catalog ?? null} onImported={invalidate} />
-            <HellbenderPricingSyncButton pressId={pressId} onSynced={invalidate} />
-          </>
-        )}
-      </div>
+      {/* Item 28 (correction 12) — footer stays empty: "Add your vinyl" and
+          the CSV options were removed from this page entirely. CSV import/
+          export + Hellbender sync move to a separate operator surface. */}
     </div>
   );
 }
@@ -2154,17 +2766,18 @@ function TurnaroundRow({
 
   return (
     <div data-testid="turnaround-row">
-      <div className="flex items-center justify-between gap-6">
+      <div>
         <div>
           <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
-            <span style={{ color: INK }}>Turnaround. </span>
-            <span style={{ color: FAINT }}>Order to ship.</span>
+            <span style={{ color: INK }}>Turnaround time. </span>
+            <span style={{ color: FAINT }}>From order, to out the door.</span>
           </h2>
           <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
             Weeks from confirmed order to finished records on the truck.
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Item 28 — inputs stack below the heading */}
+        <div className="flex items-center gap-2" style={{ marginTop: 12 }}>
           <input
             value={min}
             onChange={(e) => setMin(e.target.value.replace(/[^0-9]/g, ""))}
@@ -2242,6 +2855,7 @@ type PressTemplateSpecRow = {
   color: "process-4c" | "cmyk-or-pms" | null;
   fontsRule: string | null;
   templateFileUrl: string | null;
+  templateFileName: string | null;
 };
 // Blueprint icons — line drawings of the actual piece, drawn like a die-line.
 // Solid strokes are edges; dashed strokes are folds, holes, and hidden parts.
@@ -2310,13 +2924,34 @@ function middleTruncate(s: string, max = 26): string {
   return `${s.slice(0, max - 1 - keep)}…${s.slice(-keep)}`;
 }
 
-function TemplateTilesGrid({ pressId, fmt, canEdit }: { pressId: string; fmt: AlbumFormat; canEdit: boolean }) {
+function TemplateTilesGrid({
+  pressId,
+  fmt,
+  canEdit,
+  hiddenTemplates,
+  onSetHidden,
+}: {
+  pressId: string;
+  fmt: AlbumFormat;
+  canEdit: boolean;
+  // Item 28 — componentKey values the press tucked away (server default when
+  // untouched: ["booklet"]).
+  hiddenTemplates: string[];
+  onSetHidden: (keys: string[]) => void;
+}) {
   const { toast } = useToast();
   const qk = ["/api/admin/manufacturers", pressId, "template-specs"];
   const { data } = useQuery<{ specs: PressTemplateSpecRow[] }>({ queryKey: qk });
   const specsForFmt = (data?.specs ?? []).filter((s) => s.format === fmt && s.variantKey === "" && s.discCount === 0);
   const byComponent = (key: PressTemplateSpecRow["componentKey"]) =>
     specsForFmt.find((s) => s.componentKey === key) ?? null;
+
+  // Item 28 — ⋯ menu + centered add/replace dialog state
+  const [menuKey, setMenuKey] = useState<string | null>(null);
+  const [dialogKey, setDialogKey] = useState<string | null>(null);
+  const hiddenSet = new Set(hiddenTemplates);
+  const visibleTiles = TEMPLATE_TILES.filter((t) => !hiddenSet.has(t.componentKey));
+  const hiddenTiles = TEMPLATE_TILES.filter((t) => hiddenSet.has(t.componentKey));
 
   const save = useMutation({
     mutationFn: async (body: Partial<PressTemplateSpecRow> & { componentKey: string }) => {
@@ -2328,6 +2963,7 @@ function TemplateTilesGrid({ pressId, fmt, canEdit }: { pressId: string; fmt: Al
         variantKey: "",
         discCount: 0,
         templateFileUrl: existing?.templateFileUrl ?? null,
+        templateFileName: existing?.templateFileName ?? null,
         artboardWInches: existing?.artboardWInches ?? null,
         artboardHInches: existing?.artboardHInches ?? null,
         expectedPages: existing?.expectedPages ?? null,
@@ -2349,42 +2985,212 @@ function TemplateTilesGrid({ pressId, fmt, canEdit }: { pressId: string; fmt: Al
     onError: (e: any) => toast({ title: e?.message || "Couldn't remove template", variant: "destructive" }),
   });
 
+  const dialogTile = TEMPLATE_TILES.find((t) => t.key === dialogKey) ?? null;
+
   return (
-    <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-      {TEMPLATE_TILES.map((tile) => (
-        <TemplateTile
-          key={tile.key}
-          tile={tile}
-          spec={byComponent(tile.componentKey)}
-          canEdit={canEdit}
+    <>
+      <div className="mt-3 grid grid-cols-3 gap-3">
+        {visibleTiles.map((tile) => (
+          <div key={tile.key} className="group/slot relative">
+            <TemplateRow
+              tile={tile}
+              spec={byComponent(tile.componentKey)}
+              canEdit={canEdit}
+              onOpen={() => canEdit && setDialogKey(tile.key)}
+            />
+            {canEdit && (
+              <Popover open={menuKey === tile.key} onOpenChange={(v) => setMenuKey(v ? tile.key : null)}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Options for ${tile.label}`}
+                    data-testid={`template-menu-${tile.key}`}
+                    className={cn(
+                      "absolute inline-flex items-center justify-center rounded-full transition-opacity",
+                      menuKey === tile.key ? "opacity-100" : "opacity-0 group-hover/slot:opacity-100",
+                    )}
+                    style={{ top: 6, left: 6, width: 22, height: 22, background: "var(--apple-fill-quaternary, rgba(120,120,128,0.12))", color: SUBINK }}
+                  >
+                    <MoreHorizontal className="h-3.5 w-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" sideOffset={6} className="w-48 rounded-2xl p-2" style={{ border: `1px solid ${HAIRLINE}` }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuKey(null);
+                      setDialogKey(tile.key);
+                    }}
+                    className="w-full rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-black/5"
+                    style={{ color: INK }}
+                    data-testid={`template-replace-${tile.key}`}
+                  >
+                    {byComponent(tile.componentKey)?.templateFileUrl ? "Replace…" : "Add file…"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuKey(null);
+                      onSetHidden(Array.from(new Set([...hiddenTemplates, tile.componentKey])));
+                    }}
+                    className="w-full rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-black/5"
+                    style={{ color: INK }}
+                    data-testid={`template-hide-${tile.key}`}
+                  >
+                    Hide for now
+                  </button>
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
+        ))}
+      </div>
+      {hiddenTiles.length > 0 && (
+        <div className="text-[12px]" style={{ color: FAINT, marginTop: 10 }}>
+          {hiddenTiles.map((tile, i) => (
+            <span key={tile.key}>
+              {i > 0 && <span> · </span>}
+              Hidden: {tile.label} ·{" "}
+              <button
+                type="button"
+                disabled={!canEdit}
+                onClick={() => onSetHidden(hiddenTemplates.filter((k) => k !== tile.componentKey))}
+                className="font-semibold disabled:opacity-50"
+                style={{ color: BLUE, background: "none", border: "none", padding: 0, cursor: canEdit ? "pointer" : "default" }}
+                data-testid={`template-show-${tile.key}`}
+              >
+                Show
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {dialogTile && (
+        <TemplateDialog
+          tile={dialogTile}
+          spec={byComponent(dialogTile.componentKey)}
           busy={save.isPending || remove.isPending}
-          onSave={(body) => save.mutate({ componentKey: tile.componentKey, ...body })}
+          onSave={(body) => save.mutate({ componentKey: dialogTile.componentKey, ...body })}
           onRemove={(specId) => remove.mutate(specId)}
+          onClose={() => setDialogKey(null)}
         />
-      ))}
-    </div>
+      )}
+    </>
   );
 }
 
-function TemplateTile({
+// Item 28 — the tile itself. Clicking anywhere opens the centered dialog; the
+// old hover-"Replace" swap is gone.
+// Item 28 — a tile shows the ORIGINAL filename captured at upload / paste
+// time (upload URLs are opaque /objects/uploads/<id> ids). Legacy rows saved
+// before the name column fall back to the URL tail with any query stripped.
+function templateDisplayName(spec: PressTemplateSpecRow | null): string | null {
+  if (!spec?.templateFileUrl) return null;
+  if (spec.templateFileName) return spec.templateFileName;
+  try {
+    const path = spec.templateFileUrl.startsWith("/")
+      ? spec.templateFileUrl.split("?")[0]
+      : new URL(spec.templateFileUrl).pathname;
+    const tail = path.split("/").filter(Boolean).pop() ?? "";
+    return decodeURIComponent(tail) || "template";
+  } catch {
+    return "template";
+  }
+}
+
+function TemplateRow({
   tile,
   spec,
   canEdit,
-  busy,
-  onSave,
-  onRemove,
+  onOpen,
 }: {
   tile: (typeof TEMPLATE_TILES)[number];
   spec: PressTemplateSpecRow | null;
   canEdit: boolean;
+  onOpen: () => void;
+}) {
+  const dark = useAdminDark();
+  const fileUrl = spec?.templateFileUrl ?? null;
+  const fileName = templateDisplayName(spec);
+
+  // Empty slot — the visible invitation. Dashed, one clear action.
+  if (!fileUrl) {
+    return (
+      <button
+        type="button"
+        disabled={!canEdit}
+        onClick={onOpen}
+        data-testid={`template-upload-${tile.key}`}
+        className="w-full flex flex-col items-center justify-center rounded-xl transition-colors hover:bg-white focus:outline-none disabled:cursor-default"
+        style={{ border: `1.5px dashed ${dark ? "rgba(255,255,255,0.18)" : FAINT}`, padding: "18px 12px", cursor: canEdit ? "pointer" : "default", background: "transparent" }}
+      >
+        <span style={{ opacity: 0.55 }}>
+          <BlueprintIcon kind={tile.key} />
+        </span>
+        <div className="text-[13px] font-semibold" style={{ color: INK, marginTop: 8 }}>
+          {tile.label}
+        </div>
+        {canEdit ? (
+          <div className="text-[11.5px] font-semibold" style={{ color: BLUE, marginTop: 3 }}>
+            Upload or paste a link
+          </div>
+        ) : (
+          <div className="text-[11.5px]" style={{ color: SUBINK, marginTop: 3 }}>
+            {tile.sub}
+          </div>
+        )}
+      </button>
+    );
+  }
+
+  // Filled slot — calm and complete; clicking opens the dialog.
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={!canEdit}
+      className="w-full flex flex-col items-center justify-center rounded-xl bg-white text-center transition-colors hover:bg-white/5 focus:outline-none disabled:cursor-default"
+      style={{ border: `1px solid ${HAIRLINE}`, padding: "18px 12px", background: dark ? CARD : "#fff", cursor: canEdit ? "pointer" : "default" }}
+      data-testid={`template-${tile.key}`}
+    >
+      <BlueprintIcon kind={tile.key} />
+      <div className="text-[13px] font-semibold" style={{ color: INK, marginTop: 8 }}>
+        {tile.label}
+      </div>
+      <div
+        className="text-[11.5px] tabular-nums"
+        style={{ color: SUBINK, marginTop: 3 }}
+        title={fileName ?? undefined}
+        data-testid={`text-template-filename-${tile.key}`}
+      >
+        {middleTruncate(fileName ?? "template")}
+      </div>
+    </button>
+  );
+}
+
+// Item 28 — centered add/replace dialog, like the album "Completed Art"
+// dialog: current file on the left, drag-and-drop + paste-a-URL on the right.
+// Keeps the legacy capability set: download, the optional finished-file check
+// dims, and Remove.
+function TemplateDialog({
+  tile,
+  spec,
+  busy,
+  onSave,
+  onRemove,
+  onClose,
+}: {
+  tile: (typeof TEMPLATE_TILES)[number];
+  spec: PressTemplateSpecRow | null;
   busy: boolean;
   onSave: (body: Partial<PressTemplateSpecRow>) => void;
   onRemove: (specId: string) => void;
+  onClose: () => void;
 }) {
   const { toast } = useToast();
   const dark = useAdminDark();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [open, setOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [urlDraft, setUrlDraft] = useState("");
   const numOrEmpty = (n: number | null | undefined) => (n == null ? "" : String(n));
@@ -2401,15 +3207,14 @@ function TemplateTile({
   }, [spec?.artboardWInches, spec?.artboardHInches, spec?.expectedPages, spec?.minPpi]);
 
   const fileUrl = spec?.templateFileUrl ?? null;
-  const fileName = fileUrl ? fileUrl.split("/").pop() ?? "template" : null;
+  const fileName = templateDisplayName(spec);
 
   const handleUpload = async (file: File | undefined) => {
     if (!file) return;
     setUploading(true);
     try {
       const url = await uploadAdminDoc(file);
-      onSave({ templateFileUrl: url });
-      setOpen(false);
+      onSave({ templateFileUrl: url, templateFileName: file.name });
     } catch (e: any) {
       toast({ title: e?.message || "Upload failed", variant: "destructive" });
     } finally {
@@ -2420,9 +3225,15 @@ function TemplateTile({
   const commitUrl = () => {
     const url = urlDraft.trim();
     if (!url) return;
-    onSave({ templateFileUrl: url });
+    let name: string | null = null;
+    try {
+      const path = url.startsWith("/") ? url.split("?")[0] : new URL(url).pathname;
+      name = decodeURIComponent(path.split("/").filter(Boolean).pop() ?? "") || null;
+    } catch {
+      name = null;
+    }
+    onSave({ templateFileUrl: url, templateFileName: name });
     setUrlDraft("");
-    setOpen(false);
   };
   const saveDims = () => {
     const num = (s: string) => (s.trim() === "" ? null : Number(s));
@@ -2444,7 +3255,6 @@ function TemplateTile({
       expectedPages: pages,
       minPpi: ppi != null ? Math.round(ppi) : null,
     });
-    setOpen(false);
   };
 
   const dimInput: React.CSSProperties = {
@@ -2455,169 +3265,199 @@ function TemplateTile({
     color: INK,
     background: dark ? CARD_SOFT : "#fff",
   };
-  const editor = (
-    <PopoverContent align="center" sideOffset={8} className="w-72 rounded-2xl p-4" style={dark ? frostedPanel(dark) : { border: `1px solid ${HAIRLINE}` }} data-testid={`template-editor-${tile.key}`}>
-      <input
-        ref={fileRef}
-        type="file"
-        accept={DOC_UPLOAD_ACCEPT}
-        className="hidden"
-        onChange={(e) => handleUpload(e.target.files?.[0])}
-      />
-      <button
-        type="button"
-        disabled={busy || uploading}
-        onClick={() => fileRef.current?.click()}
-        className="w-full inline-flex h-9 items-center justify-center gap-2 rounded-full text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
-        style={{ backgroundColor: BLUE }}
-        data-testid={`template-upload-file-${tile.key}`}
-      >
-        {uploading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-        {fileUrl ? "Replace file" : "Upload a file"}
-      </button>
-      <div className="mt-2 flex items-center gap-2">
-        <input
-          value={urlDraft}
-          onChange={(e) => setUrlDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commitUrl();
-          }}
-          placeholder="…or paste a link"
-          className={cn("min-w-0 flex-1 text-[13px] focus:outline-none", dark ? "focus:border-white/30" : "focus:border-slate-400")}
-          style={{ ...dimInput, height: 36 }}
-          data-testid={`input-template-url-${tile.key}`}
-        />
-        {urlDraft.trim() && (
-          <button type="button" onClick={commitUrl} className="text-[12.5px] font-semibold" style={{ color: BLUE }}>
-            Save
-          </button>
-        )}
-      </div>
-      <div className="mt-4">
-        <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: SUBINK }}>
-          Finished-file check
-        </div>
-        <p className="text-[11.5px]" style={{ color: SUBINK, marginTop: 3, lineHeight: 1.35 }}>
-          Optional — refines the artboard check on finished print files.
-        </p>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <label className="flex items-center gap-1.5">
-            <input value={wDraft} onChange={(e) => setWDraft(e.target.value)} inputMode="decimal" placeholder="W" className="w-full text-[13px] tabular-nums focus:outline-none" style={dimInput} data-testid={`input-template-w-${tile.key}`} />
-            <span className="text-[11px]" style={{ color: SUBINK }}>in</span>
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input value={hDraft} onChange={(e) => setHDraft(e.target.value)} inputMode="decimal" placeholder="H" className="w-full text-[13px] tabular-nums focus:outline-none" style={dimInput} data-testid={`input-template-h-${tile.key}`} />
-            <span className="text-[11px]" style={{ color: SUBINK }}>in</span>
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input value={pagesDraft} onChange={(e) => setPagesDraft(e.target.value)} inputMode="numeric" placeholder="Pages" className="w-full text-[13px] tabular-nums focus:outline-none" style={dimInput} data-testid={`input-template-pages-${tile.key}`} />
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input value={ppiDraft} onChange={(e) => setPpiDraft(e.target.value)} inputMode="numeric" placeholder="Min PPI" className="w-full text-[13px] tabular-nums focus:outline-none" style={dimInput} data-testid={`input-template-ppi-${tile.key}`} />
-          </label>
-        </div>
-        <div className="mt-2 flex justify-end">
-          <button type="button" onClick={saveDims} disabled={busy} className="text-[12.5px] font-semibold hover:underline underline-offset-2 disabled:opacity-40" style={{ color: BLUE }} data-testid={`button-save-template-dims-${tile.key}`}>
-            Save check
-          </button>
-        </div>
-      </div>
-      {fileUrl && spec && (
-        <div className="mt-3 flex items-center justify-between" style={{ borderTop: `1px solid ${HAIRLINE}`, paddingTop: 10 }}>
-          <a href={fileUrl} target="_blank" rel="noopener noreferrer" download className="text-[12.5px] font-semibold hover:underline underline-offset-2" style={{ color: BLUE }} data-testid={`link-template-download-${tile.key}`}>
-            Download
-          </a>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              onRemove(spec.id);
-              setOpen(false);
-            }}
-            className="text-[12.5px] font-semibold hover:underline underline-offset-2 disabled:opacity-40"
-            style={{ color: criticalColor(dark) }}
-            data-testid={`template-remove-${tile.key}`}
-          >
-            Remove
-          </button>
-        </div>
-      )}
-    </PopoverContent>
-  );
 
-  // Empty slot — the visible invitation. Dashed, one clear action.
-  if (!fileUrl) {
-    return (
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            disabled={!canEdit}
-            data-testid={`template-upload-${tile.key}`}
-            className="flex flex-col items-center justify-center rounded-xl transition-colors hover:bg-white focus:outline-none disabled:cursor-default"
-            style={{ border: `1.5px dashed ${dark ? "rgba(255,255,255,0.18)" : FAINT}`, padding: "18px 12px", cursor: canEdit ? "pointer" : "default", background: "transparent" }}
-          >
-            <span style={{ opacity: 0.55 }}>
-              <BlueprintIcon kind={tile.key} />
-            </span>
-            <div className="text-[13px] font-semibold" style={{ color: INK, marginTop: 8 }}>
-              {tile.label}
-            </div>
-            {canEdit ? (
-              <div className="text-[11.5px] font-semibold" style={{ color: BLUE, marginTop: 3 }}>
-                Upload or paste a link
-              </div>
-            ) : (
-              <div className="text-[11.5px]" style={{ color: SUBINK, marginTop: 3 }}>
-                {tile.sub}
-              </div>
-            )}
-          </button>
-        </PopoverTrigger>
-        {canEdit && editor}
-      </Popover>
-    );
-  }
-
-  // Filled slot — calm and complete. Replace appears only on hover.
-  return (
+  return createPortal(
     <div
-      className="group relative flex flex-col items-center justify-center rounded-xl bg-white text-center"
-      style={{ border: `1px solid ${HAIRLINE}`, padding: "18px 12px" }}
-      data-testid={`template-${tile.key}`}
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 1000,
+        background: "rgba(0,0,0,0.5)",
+        backdropFilter: "blur(3px)",
+        WebkitBackdropFilter: "blur(3px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
     >
-      <BlueprintIcon kind={tile.key} />
-      <div className="text-[13px] font-semibold" style={{ color: INK, marginTop: 8 }}>
-        {tile.label}
-      </div>
-      <a
-        href={fileUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        download
-        className="text-[11.5px] tabular-nums hover:underline underline-offset-2"
-        style={{ color: SUBINK, marginTop: 3 }}
-        title={fileName ?? undefined}
-        data-testid={`text-template-filename-${tile.key}`}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="rounded-2xl"
+        style={{
+          width: 600,
+          maxWidth: "calc(100vw - 32px)",
+          padding: 24,
+          background: dark ? "rgba(28,28,30,0.97)" : "#fff",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          border: `1px solid ${dark ? "rgba(255,255,255,0.12)" : HAIRLINE}`,
+          boxShadow: dark ? "0 24px 64px rgba(0,0,0,0.6)" : "0 24px 64px rgba(0,0,0,0.25)",
+          textAlign: "left",
+          cursor: "default",
+        }}
+        data-testid={`template-dialog-${tile.key}`}
       >
-        {middleTruncate(fileName ?? "template")}
-      </a>
-      {canEdit && (
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
+        <div className="flex items-start justify-between" style={{ marginBottom: 18 }}>
+          <span className="text-[17px] font-semibold tracking-tight" style={{ lineHeight: 1.25, paddingRight: 8 }}>
+            <span style={{ color: INK }}>{tile.label}: </span>
+            <span style={{ color: FAINT }}>{tile.sub}</span>
+          </span>
+          <button
+            type="button"
+            aria-label="Close"
+            data-testid="button-template-close"
+            onClick={onClose}
+            className="rounded-full flex items-center justify-center transition-colors"
+            style={{ width: 24, height: 24, background: "none", border: "none", color: FAINT, cursor: "pointer" }}
+          >
+            <X style={{ width: 14, height: 14 }} />
+          </button>
+        </div>
+        <div className="flex" style={{ gap: 24 }}>
+          {/* LEFT — current file */}
+          <div style={{ width: 190, flexShrink: 0 }}>
+            <div className="text-[11px] font-semibold uppercase" style={{ color: FAINT, letterSpacing: 0.8, marginBottom: 8 }}>
+              Current file
+            </div>
+            <div
+              className="rounded-xl flex flex-col items-center justify-center text-center"
+              style={{ height: 208, padding: 12, background: dark ? "rgba(255,255,255,0.035)" : "var(--apple-canvas, #f5f5f7)", border: `1px solid ${dark ? "rgba(255,255,255,0.07)" : HAIRLINE}` }}
+            >
+              {fileUrl ? (
+                <>
+                  <BlueprintIcon kind={tile.key} />
+                  <a
+                    href={fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                    className="text-[11.5px] tabular-nums hover:underline underline-offset-2"
+                    style={{ color: SUBINK, marginTop: 10, wordBreak: "break-all" }}
+                    title={fileName ?? undefined}
+                    data-testid={`link-template-download-${tile.key}`}
+                  >
+                    {middleTruncate(fileName ?? "template")}
+                  </a>
+                  {spec && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onRemove(spec.id)}
+                      className="text-[12px] font-semibold disabled:opacity-40"
+                      style={{ color: criticalColor(dark), marginTop: 10, background: "none", border: "none", cursor: "pointer" }}
+                      data-testid={`template-dialog-remove-${tile.key}`}
+                    >
+                      Remove file
+                    </button>
+                  )}
+                </>
+              ) : (
+                <span className="text-[12px]" style={{ color: FAINT }}>No file yet</span>
+              )}
+            </div>
+          </div>
+          {/* RIGHT — upload + paste URL + check dims */}
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-semibold uppercase" style={{ color: FAINT, letterSpacing: 0.8, marginBottom: 8 }}>
+              Upload file
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept={DOC_UPLOAD_ACCEPT}
+              className="hidden"
+              onChange={(e) => handleUpload(e.target.files?.[0])}
+            />
             <button
               type="button"
-              className="absolute right-2 top-2 h-7 rounded-full px-2.5 text-[11.5px] font-semibold opacity-0 transition-opacity hover:bg-slate-100 group-hover:opacity-100"
-              style={{ color: SUBINK }}
-              data-testid={`button-template-replace-${tile.key}`}
+              disabled={busy || uploading}
+              onClick={() => fileRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.currentTarget.style.borderColor = dark ? "rgba(255,255,255,0.55)" : SUBINK;
+              }}
+              onDragLeave={(e) => {
+                e.currentTarget.style.borderColor = dark ? "rgba(255,255,255,0.22)" : FAINT;
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.currentTarget.style.borderColor = dark ? "rgba(255,255,255,0.22)" : FAINT;
+                handleUpload(e.dataTransfer.files?.[0]);
+              }}
+              className="w-full rounded-xl flex flex-col items-center justify-center transition-colors disabled:opacity-50"
+              style={{ height: 104, border: `1.5px dashed ${dark ? "rgba(255,255,255,0.22)" : FAINT}`, background: "transparent", cursor: "pointer" }}
+              data-testid={`template-dialog-drop-${tile.key}`}
             >
-              Replace
+              {uploading ? (
+                <Loader2 className="animate-spin" style={{ width: 18, height: 18, color: SUBINK }} />
+              ) : (
+                <UploadCloud style={{ width: 18, height: 18, color: SUBINK }} />
+              )}
+              <span className="text-[12.5px] font-medium" style={{ color: INK, marginTop: 7 }}>
+                Drag a file here, or click to pick
+              </span>
+              <span className="text-[11px]" style={{ color: FAINT, marginTop: 3 }}>
+                Press-ready PDF · validated automatically
+              </span>
             </button>
-          </PopoverTrigger>
-          {editor}
-        </Popover>
-      )}
-    </div>
+            <div className="text-[11px] font-semibold uppercase" style={{ color: FAINT, letterSpacing: 0.8, marginTop: 14, marginBottom: 8 }}>
+              Or paste a URL
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                value={urlDraft}
+                onChange={(e) => setUrlDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitUrl();
+                }}
+                placeholder="https://… Dropbox, Drive, WeTransfer"
+                className={cn("min-w-0 flex-1 rounded-full text-[13px] focus:outline-none", dark ? "focus:border-white/30" : "focus:border-slate-400")}
+                style={{ height: 36, border: `1px solid ${HAIRLINE}`, padding: "0 14px", color: INK, background: dark ? CARD_SOFT : "#fff" }}
+                data-testid={`template-dialog-url-${tile.key}`}
+              />
+              <button
+                type="button"
+                onClick={commitUrl}
+                disabled={!urlDraft.trim() || busy}
+                className="rounded-full text-[12.5px] font-semibold text-white transition-opacity disabled:opacity-40 flex-shrink-0"
+                style={{ height: 32, padding: "0 14px", backgroundColor: urlDraft.trim() ? BLUE : (dark ? CARD_SOFT : "#d1d1d6"), border: "none", cursor: "pointer" }}
+                data-testid={`template-dialog-use-url-${tile.key}`}
+              >
+                Use URL
+              </button>
+            </div>
+            {/* Finished-file check (legacy capability, kept inside the dialog) */}
+            <div className="text-[11px] font-semibold uppercase" style={{ color: FAINT, letterSpacing: 0.8, marginTop: 14, marginBottom: 6 }}>
+              Finished-file check
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              <label className="flex items-center gap-1.5">
+                <input value={wDraft} onChange={(e) => setWDraft(e.target.value)} inputMode="decimal" placeholder="W" className="w-full text-[13px] tabular-nums focus:outline-none" style={dimInput} data-testid={`input-template-w-${tile.key}`} />
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input value={hDraft} onChange={(e) => setHDraft(e.target.value)} inputMode="decimal" placeholder="H" className="w-full text-[13px] tabular-nums focus:outline-none" style={dimInput} data-testid={`input-template-h-${tile.key}`} />
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input value={pagesDraft} onChange={(e) => setPagesDraft(e.target.value)} inputMode="numeric" placeholder="Pages" className="w-full text-[13px] tabular-nums focus:outline-none" style={dimInput} data-testid={`input-template-pages-${tile.key}`} />
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input value={ppiDraft} onChange={(e) => setPpiDraft(e.target.value)} inputMode="numeric" placeholder="PPI" className="w-full text-[13px] tabular-nums focus:outline-none" style={dimInput} data-testid={`input-template-ppi-${tile.key}`} />
+              </label>
+            </div>
+            <div className="flex justify-end" style={{ marginTop: 6 }}>
+              <button type="button" onClick={saveDims} disabled={busy} className="text-[12.5px] font-semibold hover:underline underline-offset-2 disabled:opacity-40" style={{ color: BLUE, background: "none", border: "none", cursor: "pointer" }} data-testid={`button-save-template-dims-${tile.key}`}>
+                Save check
+              </button>
+            </div>
+          </div>
+        </div>
+        <p className="text-[11px]" style={{ color: FAINT, marginTop: 14 }}>
+          Pasted share links are scanned in place — the file is never re-hosted.
+        </p>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

@@ -1262,6 +1262,10 @@ export type CatalogTier = {
   position: number;
   priceLadder: { qty: number; unitCents: number; confirmed?: boolean }[];
   laddersByJacket: Record<string, { qty: number; unitCents: number; confirmed?: boolean }[]>;
+  // Item 28 — 180 g heavyweight price book (shares run sizes with the 140 g
+  // ladder above; each weight keeps its own numbers). Only jackets with a
+  // saved 180 g ladder appear here.
+  laddersByJacket180?: Record<string, { qty: number; unitCents: number; confirmed?: boolean }[]>;
   colors: CatalogColor[];
 };
 export type CatalogFormat = {
@@ -1276,6 +1280,10 @@ export type CatalogFormat = {
   // press-level default (manufacturers.turnaround_weeks_*).
   turnaroundWeeksMin?: number | null;
   turnaroundWeeksMax?: number | null;
+  // Item 28 — template tiles tucked away by the press (componentKey values:
+  // "jacket" | "inner_sleeve" | "labels" | "booklet"). Server default when the
+  // press has never touched it: ["booklet"].
+  hiddenTemplates?: string[];
 };
 export type CatalogJacket = {
   id: string;

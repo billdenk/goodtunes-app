@@ -227,7 +227,7 @@ type InvitedPressResponse = {
 // ladder and returns the matched rung + a `requiresQuote` flag when
 // the typed quantity exceeds the top rung.
 function snapCatalogLadder(
-  ladder: { qty: number; unitCents: number; confirmed?: boolean }[],
+  ladder: { qty: number; unitCents: number; confirmed?: boolean; offered?: boolean }[],
   n: number,
 ): { qty: number; unitCents: number; requiresQuote: boolean } | null {
   if (!Array.isArray(ladder) || ladder.length === 0) return null;
@@ -237,7 +237,7 @@ function snapCatalogLadder(
   // Above the top confirmed rung the preview surfaces `requiresQuote`
   // (custom-quote prompt) instead of pricing against a stub.
   const sorted = [...ladder]
-    .filter((r) => r.confirmed !== false)
+    .filter((r) => r.confirmed !== false && r.offered !== false)
     .sort((a, b) => a.qty - b.qty);
   if (sorted.length === 0) return null;
   const q = Math.max(1, Math.floor(n));

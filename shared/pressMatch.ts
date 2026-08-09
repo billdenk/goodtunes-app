@@ -289,11 +289,11 @@ const KIND_SUBSCORE: Record<ColorMatchKind, number> = {
 // ── Ladder snapping (mirror of snapToCatalogQuantityTier, pure) ──────
 
 function snapLadder(
-  ladder: { qty: number; unitCents: number; confirmed?: boolean }[],
+  ladder: { qty: number; unitCents: number; confirmed?: boolean; offered?: boolean }[],
   quantity: number,
 ): { unitCents: number; snappedQty: number; requiresQuote: boolean } | null {
   if (!Array.isArray(ladder) || ladder.length === 0) return null;
-  const sorted = ladder.filter((r) => r.confirmed !== false).sort((a, b) => a.qty - b.qty);
+  const sorted = ladder.filter((r) => r.confirmed !== false && r.offered !== false).sort((a, b) => a.qty - b.qty);
   if (sorted.length === 0) return null;
   const n = Number.isFinite(quantity) ? Math.max(1, Math.floor(quantity)) : 1;
   for (const r of sorted) if (n <= r.qty) return { unitCents: r.unitCents, snappedQty: r.qty, requiresQuote: false };

@@ -23077,6 +23077,46 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[17px] font-semibold tracking-tight\" style={{ lineHeight: 1.25, paddingRight: 8 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase\" style={{ color: \"rgba(245,245,247,0.45)\", letterSpacing: 0.8, marginBottom: 8 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"rounded-lg text-[13px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: \"rgba(245,245,247,0.4)\" }}>No logo yet</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[12px] font-medium\" style={{ color: \"#f5f5f7\", marginTop: 7 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[11px]\" style={{ color: \"rgba(245,245,247,0.45)\", marginTop: 3 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[11.5px]\" style={{ color: \"rgba(245,245,247,0.4)\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"text-[12px] font-medium transition-colors flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "<div className=\"flex items-center gap-2.5 text-[13px]\" style={{ marginTop: 28, color: SUBINK }}>"
   },
   {
@@ -23232,7 +23272,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<div className=\"text-[11px]\" style={{ marginTop: 3, color: FAINT }}>{VINYL_SIZE_BLURB[f]}</div>"
+    "snippet": "<div className=\"text-[11px]\" style={{ marginTop: 3, color: FAINT }}>{off ? \"Not offered\" : VINYL_SIZE_BLURB[f]}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"w-full rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-black/5\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -23267,6 +23312,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"rounded-full text-[12px] font-semibold transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "<span className=\"text-[15px] font-bold tabular-nums tracking-tight\" style={{ color: INK }}>{q.toLocaleString()}</span>"
   },
   {
@@ -23292,7 +23342,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[11.5px]\" style={{ color: FAINT }}>Prices are per unit, per finished package.</span>"
+    "snippet": "<span className=\"text-[11.5px]\" style={{ color: FAINT }}>Prices are per unit, per finished package · {weight} g vinyl.</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23302,7 +23352,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<p className=\"text-[12.5px]\" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>Leave a field blank to inherit the press default — the gray numbers. These drive each album's audio preflight.</p>"
+    "snippet": "<p className=\"text-[12.5px]\" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>Blank fields inherit the press default — the gray numbers.</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23352,67 +23402,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"w-full inline-flex h-9 items-center justify-center gap-2 rounded-full text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className={cn(\"min-w-0 flex-1 text-[13px] focus:outline-none\", dark ? \"focus:border-white/30\" : \"focus:border-slate-400\")}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<button type=\"button\" onClick={commitUrl} className=\"text-[12.5px] font-semibold\" style={{ color: BLUE }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: SUBINK }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<p className=\"text-[11.5px]\" style={{ color: SUBINK, marginTop: 3, lineHeight: 1.35 }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<input value={wDraft} onChange={(e) => setWDraft(e.target.value)} inputMode=\"decimal\" placeholder=\"W\" className=\"w-full text-[13px] tabular-nums focus:outline-none\" style={dimInput} data-testid={`inpu"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[11px]\" style={{ color: SUBINK }}>in</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<input value={hDraft} onChange={(e) => setHDraft(e.target.value)} inputMode=\"decimal\" placeholder=\"H\" className=\"w-full text-[13px] tabular-nums focus:outline-none\" style={dimInput} data-testid={`inpu"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<input value={pagesDraft} onChange={(e) => setPagesDraft(e.target.value)} inputMode=\"numeric\" placeholder=\"Pages\" className=\"w-full text-[13px] tabular-nums focus:outline-none\" style={dimInput} data-t"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<input value={ppiDraft} onChange={(e) => setPpiDraft(e.target.value)} inputMode=\"numeric\" placeholder=\"Min PPI\" className=\"w-full text-[13px] tabular-nums focus:outline-none\" style={dimInput} data-tes"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<button type=\"button\" onClick={saveDims} disabled={busy} className=\"text-[12.5px] font-semibold hover:underline underline-offset-2 disabled:opacity-40\" style={{ color: BLUE }} data-testid={`button-sav"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<a href={fileUrl} target=\"_blank\" rel=\"noopener noreferrer\" download className=\"text-[12.5px] font-semibold hover:underline underline-offset-2\" style={{ color: BLUE }} data-testid={`link-template-down"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"text-[12.5px] font-semibold hover:underline underline-offset-2 disabled:opacity-40\""
+    "snippet": "<div className=\"text-[12px]\" style={{ color: FAINT, marginTop: 10 }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23432,12 +23422,87 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"text-[11.5px] tabular-nums\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase\" style={{ color: FAINT, letterSpacing: 0.8, marginBottom: 8 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "className=\"text-[11.5px] tabular-nums hover:underline underline-offset-2\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"absolute right-2 top-2 h-7 rounded-full px-2.5 text-[11.5px] font-semibold opacity-0 transition-opacity hover:bg-slate-100 group-hover:opacity-100\""
+    "snippet": "className=\"text-[12px] font-semibold disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: FAINT }}>No file yet</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[12.5px] font-medium\" style={{ color: INK, marginTop: 7 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<span className=\"text-[11px]\" style={{ color: FAINT, marginTop: 3 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase\" style={{ color: FAINT, letterSpacing: 0.8, marginTop: 14, marginBottom: 8 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className={cn(\"min-w-0 flex-1 rounded-full text-[13px] focus:outline-none\", dark ? \"focus:border-white/30\" : \"focus:border-slate-400\")}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"rounded-full text-[12.5px] font-semibold text-white transition-opacity disabled:opacity-40 flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase\" style={{ color: FAINT, letterSpacing: 0.8, marginTop: 14, marginBottom: 6 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<input value={wDraft} onChange={(e) => setWDraft(e.target.value)} inputMode=\"decimal\" placeholder=\"W\" className=\"w-full text-[13px] tabular-nums focus:outline-none\" style={dimInput} data-testid={`inpu"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<input value={hDraft} onChange={(e) => setHDraft(e.target.value)} inputMode=\"decimal\" placeholder=\"H\" className=\"w-full text-[13px] tabular-nums focus:outline-none\" style={dimInput} data-testid={`inpu"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<input value={pagesDraft} onChange={(e) => setPagesDraft(e.target.value)} inputMode=\"numeric\" placeholder=\"Pages\" className=\"w-full text-[13px] tabular-nums focus:outline-none\" style={dimInput} data-t"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<input value={ppiDraft} onChange={(e) => setPpiDraft(e.target.value)} inputMode=\"numeric\" placeholder=\"PPI\" className=\"w-full text-[13px] tabular-nums focus:outline-none\" style={dimInput} data-testid="
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<button type=\"button\" onClick={saveDims} disabled={busy} className=\"text-[12.5px] font-semibold hover:underline underline-offset-2 disabled:opacity-40\" style={{ color: BLUE, background: \"none\", border"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<p className=\"text-[11px]\" style={{ color: FAINT, marginTop: 14 }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23482,7 +23547,27 @@
   {
     "rule": "naked-icon-button",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<button type=\"button\" aria-label=\"Close\" data-testid=\"button-brand-close\" onClick={onClose} className=\"rounded-full flex items-center justify-center transition-colors\" style={{ width: 24, height: 24, "
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "<button type=\"button\" aria-label={`Options for ${ALBUM_FORMAT_LABEL[format]}`} data-testid={`button-size-menu-${format}`} className={cn( \"absolute right-2 top-2 inline-flex h-6 w-6 items-center justif"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<button type=\"button\" aria-label={`Options for ${ALBUM_FORMAT_LABEL[f]}`} data-testid={`size-menu-${f}`} className={cn( \"absolute inline-flex items-center justify-center rounded-full transition-opacit"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<button type=\"button\" aria-label={`Options for ${tile.label}`} data-testid={`template-menu-${tile.key}`} className={cn( \"absolute inline-flex items-center justify-center rounded-full transition-opacit"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<button type=\"button\" aria-label=\"Close\" data-testid=\"button-template-close\" onClick={onClose} className=\"rounded-full flex items-center justify-center transition-colors\" style={{ width: 24, height: 2"
   },
   {
     "rule": "brand-hex-literal",
