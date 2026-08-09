@@ -193,12 +193,14 @@ function VinylDisc({
   bodyRef,
   labelRatio,
   holeRatio = 0.018,
+  glossOpacity = 0.6,
 }: {
   size: number;
   swatch: Swatch;
   bodyRef?: React.RefObject<HTMLDivElement | null>;
   labelRatio?: number;
   holeRatio?: number;
+  glossOpacity?: number;
 }) {
   const LABEL_RATIO = labelRatio ?? 368 / 1104;
   const INNER_RATIO = 129 / 1104;
@@ -313,7 +315,7 @@ function VinylDisc({
           position: 'absolute',
           inset: 0,
           backgroundColor: '#ffffff',
-          opacity: 0.6,
+          opacity: glossOpacity,
           mixBlendMode: 'normal',
           maskImage: `url(${LAYERS.highlights})`,
           WebkitMaskImage: `url(${LAYERS.highlights})`,
@@ -406,7 +408,7 @@ function useVinylSpin() {
     if (reduced) return;
     stopRaf();
     const settled = ((angleRef.current % 360) + 360) % 360;
-    if (settled > 0.5) setShowRewind(true);
+    if (settled > 30) setShowRewind(true);
   }, [reduced, stopRaf]);
 
   const rewind = useCallback(() => {
@@ -553,6 +555,22 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
   // Continuous slow spin (360°/8s) while hovering — same physics as the color
   // setup page. Leaves freeze the disc in place; the rewind button returns it.
   const { bodyRef, onPointerEnter: spinEnter, onPointerLeave: spinLeave, showRewind, rewind } = useVinylSpin();
+  // Rewind feedback — slide the record out while it turns back, so the
+  // rewind is visible, then tuck it back in.
+  const [peek, setPeek] = useState(false);
+  const peekTimer = useRef<number | null>(null);
+  const rewindWithPeek = useCallback(() => {
+    setPeek(true);
+    rewind();
+    if (peekTimer.current) window.clearTimeout(peekTimer.current);
+    peekTimer.current = window.setTimeout(() => setPeek(false), 1200);
+  }, [rewind]);
+  useEffect(
+    () => () => {
+      if (peekTimer.current) window.clearTimeout(peekTimer.current);
+    },
+    [],
+  );
   // Second record (Double LP) spins too — a little slower and not as far.
   const bodyRef2 = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -569,17 +587,22 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
 
   return (
     <div
-      onPointerEnter={() => {
-        setHover(true);
-        spinEnter();
-      }}
-      onPointerLeave={() => {
-        setHover(false);
-        spinLeave();
-      }}
-      style={{ position: 'relative', width: jacketPx + jacketPx * 0.5, height: jacketPx + 24, cursor: 'pointer' }}
+      style={{ position: 'relative', width: jacketPx + jacketPx * 0.5, height: jacketPx + 24 }}
       aria-label={`${swatch.name} record inside its printed jacket`}
     >
+      {/* hover zone — covers the jacket + record only, NOT the rewind button
+          below, so hovering rewind never restarts the spin. */}
+      <div
+        onPointerEnter={() => {
+          setHover(true);
+          spinEnter();
+        }}
+        onPointerLeave={() => {
+          setHover(false);
+          spinLeave();
+        }}
+        style={{ position: 'absolute', inset: 0, cursor: 'pointer' }}
+      >
       {/* second record (Double LP) — peeks a touch further, on a slight delay */}
       {product.discs > 1 && (
         <div
@@ -588,7 +611,7 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
             top: (jacketPx - discPx) / 2,
             left: jacketPx - discPx + jacketPx * 0.27,
             transition: 'transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1) 0.1s',
-            transform: hover ? `translateX(${jacketPx * 0.3}px)` : 'translateX(0)',
+            transform: hover || peek ? `translateX(${jacketPx * 0.3}px)` : 'translateX(0)',
             willChange: 'transform',
             zIndex: 0,
             filter: 'brightness(0.88)',
@@ -605,7 +628,7 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
           top: (jacketPx - discPx) / 2,
           left: jacketPx - discPx + jacketPx * 0.22,
           transition: 'transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)',
-          transform: hover ? `translateX(${jacketPx * 0.24}px)` : 'translateX(0)',
+          transform: hover || peek ? `translateX(${jacketPx * 0.24}px)` : 'translateX(0)',
           willChange: 'transform',
           zIndex: 1,
         }}
@@ -649,16 +672,18 @@ function JacketStage({ swatch, product }: { swatch: Swatch; product: ProductType
           background: 'rgba(0,0,0,0.28)',
           filter: 'blur(9px)',
           pointerEvents: 'none',
-          transform: hover ? 'scaleX(1.18)' : 'scaleX(1)',
+          transform: hover || peek ? 'scaleX(1.18)' : 'scaleX(1)',
           transformOrigin: '30% center',
           transition: 'transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)',
           willChange: 'transform',
         }}
       />
 
+      </div>
+
       {/* rewind — appears after the record has spun, returns it to start */}
-      <div style={{ position: 'absolute', right: 0, bottom: 0, zIndex: 3 }}>
-        <RewindButton show={showRewind} onClick={rewind} size={28} />
+      <div style={{ position: 'absolute', left: `calc(50% - ${Math.round(jacketPx * 0.25)}px)`, transform: 'translateX(-50%)', bottom: -14, zIndex: 3 }}>
+        <RewindButton show={showRewind} onClick={rewindWithPeek} size={28} />
       </div>
     </div>
   );
@@ -815,7 +840,7 @@ type RunCell = { mode: PriceMode; price: string };
 // package prices that step down with volume; colored vinyl carries a premium.
 type PriceBook = Record<string, Record<number, RunCell>>;
 
-function seedBook(): PriceBook {
+function seedBook(mult = 1): PriceBook {
   const rows: Record<string, number[]> = {
     // per-unit finished-package cost at each run qty
     black: [16.0, 12.5, 10.0, 8.25, 7.25, 6.5, 5.95, 5.4],
@@ -831,7 +856,7 @@ function seedBook(): PriceBook {
     book[g.id] = {};
     const vals = rows[g.id] ?? [];
     RUN_QTYS.forEach((q, i) => {
-      const price = vals[i];
+      const price = vals[i] != null ? Math.round(vals[i] * mult * 20) / 20 : undefined;
       book[g.id][q] = { mode: price != null ? 'priced' : 'off', price: price != null ? price.toFixed(2) : '' };
     });
   }
@@ -2000,15 +2025,45 @@ function PriceStrip({
   row,
   onMode,
   onPrice,
+  weight,
+  onWeight,
 }: {
   row: Record<number, RunCell>;
   onMode: (qty: RunQty, m: PriceMode) => void;
   onPrice: (qty: RunQty, v: string) => void;
+  weight: '140' | '180';
+  onWeight: (w: '140' | '180') => void;
 }) {
   return (
     <div style={{ marginTop: 18 }} data-testid="price-strip">
-      {/* quiet add affordance — top right, outside the box */}
-      <div className="flex justify-end" style={{ marginBottom: 8 }}>
+      {/* weight left, quiet add affordance right — both outside the box */}
+      <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+        {/* 140 g / 180 g — run sizes are shared; each weight keeps its own numbers */}
+        <div
+          className="inline-flex rounded-full p-0.5"
+          style={{ backgroundColor: '#f2f2f4', border: `1px solid ${HAIRLINE}` }}
+          data-testid="weight-toggle"
+        >
+          {(['140', '180'] as const).map((w) => (
+            <button
+              key={w}
+              type="button"
+              onClick={() => onWeight(w)}
+              aria-pressed={weight === w}
+              data-testid={`weight-${w}`}
+              className="rounded-full text-[12px] font-semibold transition-colors"
+              style={{
+                padding: '4px 13px',
+                background: weight === w ? '#ffffff' : 'transparent',
+                color: weight === w ? INK : SUBINK,
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              {w} g
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           data-testid="button-add-run-size"
@@ -2090,7 +2145,7 @@ function PriceStrip({
       {/* caption floats under the box — no rule, just quiet text */}
       <div className="flex items-center justify-center" style={{ marginTop: 10 }}>
         <span className="text-[11.5px]" style={{ color: '#a1a1a6' }}>
-          Prices are per unit, per finished package.
+          Prices are per unit, per finished package · {weight} g vinyl.
         </span>
       </div>
     </div>
@@ -2345,6 +2400,9 @@ export function PressPackagePricingTableRuns() {
   const [productTypeId, setProductTypeId] = useState<ProductTypeId>('lp12');
   const [activeGroupId, setActiveGroupId] = useState<string>('black');
   const [book, setBook] = useState<PriceBook>(() => seedBook());
+  // 180 g heavyweight — same run sizes as 140 g, its own numbers.
+  const [book180, setBook180] = useState<PriceBook>(() => seedBook(1.16));
+  const [weight, setWeight] = useState<'140' | '180'>('140');
   const [turnMin, setTurnMin] = useState('12');
   const [turnMax, setTurnMax] = useState('14');
   const [dirty, setDirty] = useState(false);
@@ -2461,18 +2519,23 @@ export function PressPackagePricingTableRuns() {
     setActiveGroupId(groupId);
     setColorSel((prev) => ({ ...prev, [groupId]: colorId }));
   };
-  const row = book[activeGroupId] ?? {};
+  const activeBook = weight === '140' ? book : book180;
+  const row = activeBook[activeGroupId] ?? {};
 
-  const setCell = useCallback((groupId: string, qty: RunQty, patch: Partial<RunCell>) => {
-    setBook((prev) => ({
-      ...prev,
-      [groupId]: {
-        ...prev[groupId],
-        [qty]: { ...prev[groupId][qty], ...patch },
-      },
-    }));
-    setDirty(true);
-  }, []);
+  const setCell = useCallback(
+    (groupId: string, qty: RunQty, patch: Partial<RunCell>) => {
+      const apply = weight === '140' ? setBook : setBook180;
+      apply((prev) => ({
+        ...prev,
+        [groupId]: {
+          ...prev[groupId],
+          [qty]: { ...prev[groupId][qty], ...patch },
+        },
+      }));
+      setDirty(true);
+    },
+    [weight],
+  );
 
   const handleMode = (qty: RunQty, mode: PriceMode) => {
     // Switching to priced with no number seeds a blank input; other modes clear it.
@@ -2489,7 +2552,7 @@ export function PressPackagePricingTableRuns() {
     setDirty(true);
   };
 
-  const activePricedCount = pricedCount(book, activeGroupId);
+  const activePricedCount = pricedCount(activeBook, activeGroupId);
 
   const handleSave = () => setDirty(false);
 
@@ -2648,7 +2711,7 @@ export function PressPackagePricingTableRuns() {
             <div className="flex items-start justify-between gap-3">
               <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
                 <span style={{ color: INK }}>Pick a type. </span>
-                <span style={{ color: '#a1a1a6' }}>Each keeps its own package prices.</span>
+                <span style={{ color: '#a1a1a6' }}>Own prices.</span>
               </h2>
               <div className="flex items-center gap-2.5 flex-shrink-0">
                 <span className="text-[12px] tabular-nums" style={{ color: '#a1a1a6' }}>
@@ -2853,7 +2916,7 @@ export function PressPackagePricingTableRuns() {
               </span>
             </p>
 
-            <PriceStrip row={row} onMode={handleMode} onPrice={handlePrice} />
+            <PriceStrip row={row} onMode={handleMode} onPrice={handlePrice} weight={weight} onWeight={setWeight} />
 
             <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />
 
@@ -2886,7 +2949,7 @@ export function PressPackagePricingTableRuns() {
               <span style={{ color: '#a1a1a6' }}>What the lathe can cut.</span>
             </h2>
             <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
-              Leave a field blank to inherit the press default — the gray numbers. These drive each album's audio preflight.
+              Blank fields inherit the press default — the gray numbers.
             </p>
             <AudioSpecCard onEdit={() => setDirty(true)} />
           </div>
