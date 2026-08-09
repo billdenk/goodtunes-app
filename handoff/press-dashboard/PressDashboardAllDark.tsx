@@ -204,12 +204,17 @@ function PressAvatar({ logo, size = 36 }: { logo: string; size?: number }) {
 
 // Delta chip — translucent wash + sign, NEVER a stark white pill, never
 // color-only (the +/- sign carries the meaning).
-function DeltaChip({ pct }: { pct: number | null }) {
-  if (pct === null) return <span className="text-[12px]" style={{ color: FAINT }}>vs prior: {DASH}</span>;
+function DeltaChip({ pct, label = true }: { pct: number | null; label?: boolean }) {
+  if (pct === null)
+    return (
+      <span className="text-[12px]" style={{ color: FAINT }}>
+        {label ? `vs prior: ${DASH}` : DASH}
+      </span>
+    );
   const positive = pct >= 0;
   return (
     <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: SUBINK }}>
-      vs prior
+      {label ? 'vs prior' : null}
       <span
         className="inline-flex items-center px-2 h-[20px] rounded-full font-semibold tabular-nums text-[11.5px]"
         style={{
@@ -585,7 +590,7 @@ export function PressDashboardAllDark() {
                   ))}
                 </div>
               </div>
-              <div style={{ height: 260 }}>
+              <div className="flex-1" style={{ minHeight: 260 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={TREND} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
                     <XAxis
@@ -630,6 +635,7 @@ export function PressDashboardAllDark() {
                         fill={p.color}
                         fillOpacity={0.18}
                         dot={false}
+                        isAnimationActive={false}
                       />
                     ))}
                   </AreaChart>
@@ -739,10 +745,10 @@ export function PressDashboardAllDark() {
                     <span className="text-[15px] font-semibold tabular-nums w-24 text-right flex-shrink-0" style={{ color: INK }}>
                       {fmtUsd(s.grossCents)}
                     </span>
-                    <span className="w-16 text-right flex-shrink-0">
-                      <DeltaChip pct={s.deltaGross} />
+                    <span className="w-[76px] flex justify-end flex-shrink-0">
+                      <DeltaChip pct={s.deltaGross} label={false} />
                     </span>
-                    <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: FAINT }} />
+                    <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: FAINT, marginLeft: 4 }} />
                   </a>
                 );
               })}
