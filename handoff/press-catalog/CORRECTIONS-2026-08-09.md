@@ -206,5 +206,16 @@ Rule of thumb for acceptance: on the dark Catalog page, NO white or light-gray r
     Double LP second disc `translateX(jacketPx * 0.3)` on its 0.1s delay. Do NOT slide
     further; the label peeking partially is intentional.
     
+    ## Item 28 — Hover spin is now continuous, with a rewind control (supersedes the spin part of Item 27)
+
+    Item 27 said "slide-out + 32° spin on hover … no rewind control needed". That is superseded. The new behavior, already live in the reference files:
+
+    - On hover, the record still slides out of the jacket at the reference distances (0.24 / 0.3 of the jacket width — unchanged), and the disc body now spins **continuously** at 360° per 8 seconds, driven by requestAnimationFrame. Not a one-shot turn.
+    - On mouse-out, the slide glides back but the disc **freezes at its current angle**. If it has accumulated meaningful rotation, a small circular rewind button (RotateCcw icon, frosted dark pill) fades in at the bottom-right of the jacket stage.
+    - Clicking rewind eases the disc back to its start angle along the shortest path, then the button fades out.
+    - Honors prefers-reduced-motion: no spin, no rewind button.
+    - Copy `useVinylSpin`, `RewindButton`, and the updated `JacketStage` verbatim from the re-exported reference files in handoff/press-catalog/ (dark and light). Do not re-derive the physics.
+    - Applies to EVERY press instance (MRP, PMP, Viryl, Hellbender).
+    
 ## Acceptance for this pass
     FULL-PAGE diff, not above-the-fold. Render the reference component (handoff/press-catalog/PressPackagePricingTableRuns.tsx) and the live page at 1440px, scroll both to the bottom, and compare EVERY section top to bottom: top bar, sidebar, header block, size cards, type tiles, color rail, jacket/vinyl preview + caption, package card, price rows, print-template tiles (filled + empty states, die-line icons), floating save bar, GoodDeeds section, and the page footer (which must be empty of parked buttons). Diff the rendered page against the reference side by side at 1440px. Any card width, copy string, or preview geometry that differs from the reference is a failure. Do not report complete until a screenshot of the live page is visually indistinguishable from the reference (data values aside).
