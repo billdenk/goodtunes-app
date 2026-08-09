@@ -73,3 +73,24 @@
     ## 13. GoodDeeds section styling
     Its placement at the page bottom is acceptable for now, but it still uses old markup: eye-off toggle icons, its own inline Save button, old table styling. Restyle to canon: hairline rows, canon toggles, and it participates in the page's single floating save bar — no per-section Save buttons.
     
+
+---
+
+# THIRD PASS — 2026-08-09 (evening) — REJECTED AGAIN. New approach required.
+
+Two implementation passes have now re-derived the layout instead of copying it, and each pass re-introduces drift. Stop re-deriving.
+
+## 14. MANDATE: copy the reference presentational code VERBATIM
+Replace the Catalog page's presentational layer wholesale with the JSX/CSS from `handoff/press-catalog/PressPackagePricingTableRuns.tsx`. Your only job is wiring real data (presses, types, colors, run prices, templates) into that markup via props/state. Do not restyle, do not "adapt", do not merge with the old page's markup. If a piece of the old page has no counterpart in the reference, it does not ship on this page.
+
+## 15. Size cards are the wrong width and carry copy that isn't in the reference
+Live cards read "7\" Single / Two songs. One single." etc. and stretch wide. The reference cards are compact fixed-width tiles with exactly two lines: big size ("7\"", "12\"", "12\"") over a small gray subline ("Single", "LP", "Double LP"). No taglines, no sentences. Copy the reference card markup exactly (this is a direct consequence of #14).
+
+## 16. Type tiles carry metadata lines that aren't in the reference
+Live tiles read "Black / 0 colors · 3 of 6 runs priced" etc. The reference tile is: swatch disc, type name, "N colors" — nothing else. Remove the "· X of 6 runs priced" line. Also the "+ More types · 14" ghost tile + a second "More types" link is duplicated; the reference has ONE "+ More types" link under the grid.
+
+## 17. Vinyl preview: still wrong, and new art direction
+Item 8 stands: copy the reference JacketStage geometry verbatim — jacket front-left, disc peeking out to the RIGHT from behind, never past the jacket's top/bottom edges, hero scale. New direction on the disc art itself: use each press's REAL disc/label art (MRP, PMP, Viryl, Hellbender) as the base image, with the SAME gloss/highlight overlay layer from the reference rendered on top of all of them. The highlight is a separate absolutely-positioned layer above the artwork — identical for every press — so real art + canonical sheen.
+
+## Acceptance for this pass
+Diff the rendered page against the reference component side by side at 1440px. Any card width, copy string, or preview geometry that differs from the reference is a failure. Do not report complete until a screenshot of the live page is visually indistinguishable from the reference (data values aside).
