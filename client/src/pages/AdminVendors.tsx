@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
 import {
   ViewModeToggle,
@@ -652,7 +653,7 @@ export function AdminVendors() {
     <AdminFrame active={copy.active}>
       <div className="space-y-5">
       <div
-        className="inline-flex items-center bg-slate-100 rounded-full p-0.5"
+        className="inline-flex items-center bg-[var(--apple-track)] rounded-full p-0.5"
         role="tablist"
         data-testid="tabs-section-vendors"
       >
@@ -663,8 +664,8 @@ export function AdminVendors() {
           className={[
             "h-8 px-3 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
             pageTab === "dashboard"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-900",
+              ? "bg-white text-[var(--apple-ink)] shadow-sm"
+              : "text-[var(--apple-subink)]",
           ].join(" ")}
           data-testid="tab-section-dashboard"
         >
@@ -677,8 +678,8 @@ export function AdminVendors() {
           className={[
             "h-8 px-3 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
             pageTab === "list"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-900",
+              ? "bg-white text-[var(--apple-ink)] shadow-sm"
+              : "text-[var(--apple-subink)]",
           ].join(" ")}
           data-testid="tab-section-list"
         >
@@ -711,7 +712,7 @@ export function AdminVendors() {
                   setSearch("");
                   setSearchOpen(false);
                 }}
-                className="text-slate-400 hover:text-slate-700"
+                className="text-[var(--apple-faint)] hover:text-[var(--apple-subink)]"
                 aria-label="Close search"
               >
                 <X className="w-4 h-4" />
@@ -721,7 +722,7 @@ export function AdminVendors() {
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="h-9 w-9 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+              className="h-9 w-9 rounded-full text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center transition-colors"
               aria-label="Search"
               data-testid="button-open-search"
             >
@@ -786,7 +787,7 @@ export function AdminVendors() {
           count badge so recoverable rows are noticeable without opening
           the tab. */}
       <div
-        className="inline-flex items-center gap-1 rounded-lg bg-slate-100 p-1 mb-5"
+        className="inline-flex items-center gap-1 rounded-lg bg-[var(--apple-track)] p-1 mb-5"
         data-testid="tabs-vendors"
       >
         <button
@@ -794,8 +795,8 @@ export function AdminVendors() {
           onClick={() => setTab("active")}
           className={`px-3 h-8 rounded-md text-[13px] font-semibold transition-colors ${
             tab === "active"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-800"
+              ? "bg-white text-[var(--apple-ink)] shadow-sm"
+              : "text-[var(--apple-subink)]"
           }`}
           data-testid="tab-vendors-active"
         >
@@ -806,15 +807,15 @@ export function AdminVendors() {
           onClick={() => setTab("trash")}
           className={`px-3 h-8 rounded-md text-[13px] font-semibold inline-flex items-center gap-1.5 transition-colors ${
             tab === "trash"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-800"
+              ? "bg-white text-[var(--apple-ink)] shadow-sm"
+              : "text-[var(--apple-subink)]"
           }`}
           data-testid="tab-vendors-trash"
         >
           Trash
           {trashed.length > 0 && (
             <span
-              className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-slate-200 text-slate-600 text-[11px] font-semibold"
+              className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--apple-track)] text-[var(--apple-subink)] text-[11px] font-semibold"
               data-testid="badge-trash-count"
             >
               {trashed.length}
@@ -859,7 +860,7 @@ export function AdminVendors() {
           </div>
         ) : (
           <div
-            className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-slate-100"
+            className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-[var(--apple-hairline)]"
             data-testid="list-vendors"
           >
             {filtered.map((v) => (
@@ -883,23 +884,14 @@ export function AdminVendors() {
           testId="admin-vendors-trash-error"
         />
       ) : filteredTrash.length === 0 ? (
-        <div
-          className="py-16 text-center"
-          data-testid="empty-vendors-trash"
-        >
-          <Trash2 className="w-8 h-8 mx-auto text-slate-300" />
-          <p className="mt-3 text-[14px] font-semibold text-slate-700">
-            {search.trim() ? "No matches in trash" : "Trash is empty"}
-          </p>
-          <p className="mt-1 text-[12.5px] text-slate-400">
-            {search.trim()
-              ? "Try a different name or domain."
-              : `Deleted ${copy.title.toLowerCase()} show up here so you can restore or permanently remove them.`}
-          </p>
-        </div>
+        <AdminEmptyState testId="empty-vendors-trash">
+          {search.trim()
+            ? "No matches in trash."
+            : `Trash is empty. Deleted ${copy.title.toLowerCase()} show up here so you can restore or permanently remove them.`}
+        </AdminEmptyState>
       ) : (
         <div
-          className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-slate-100"
+          className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-[var(--apple-hairline)]"
           data-testid="list-vendors-trash"
         >
           {filteredTrash.map((v) => (
@@ -941,19 +933,19 @@ export function AdminVendors() {
         }}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-xl p-6 gap-4"
           data-testid="dialog-add-vendor"
         >
           <DialogHeader className="text-left space-y-1">
-            <DialogTitle className="text-[17px] font-semibold text-slate-900">
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">
               {subBrandPrompt ? "Add as a sub-brand?" : copy.addDialogTitle}
             </DialogTitle>
-            <DialogDescription className="text-[13px] text-slate-500 leading-relaxed">
+            <DialogDescription className="text-[13px] text-[var(--apple-subink)] leading-relaxed">
               {subBrandPrompt ? (
                 <>
                   A vendor with that domain already exists. Add this as a
                   sub-brand of{" "}
-                  <span className="font-semibold text-slate-700">
+                  <span className="font-semibold text-[var(--apple-ink)]">
                     {(subBrandParent ?? subBrandPrompt.parent).name}
                   </span>{" "}
                   — like Epiphone under Gibson — instead of as a duplicate
@@ -974,7 +966,7 @@ export function AdminVendors() {
               <div className="space-y-1.5">
                 <label
                   htmlFor="input-sub-brand-name"
-                  className="block text-xs font-semibold text-slate-700"
+                  className="block text-xs font-semibold text-[var(--apple-subink)]"
                 >
                   Name
                 </label>
@@ -992,19 +984,19 @@ export function AdminVendors() {
                   placeholder="e.g. Epiphone"
                   disabled={createVendor.isPending}
                   autoFocus
-                  className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+                  className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
                   data-testid="input-sub-brand-name"
                 />
-                <p className="text-[11.5px] text-slate-400">
+                <p className="text-[11.5px] text-[var(--apple-faint)]">
                   Suggested from the URL — edit before confirming so the new
                   row saves with the sub-brand's name, not the parent's.
                 </p>
               </div>
               <div
-                className="flex items-center gap-3 rounded-xl border border-slate-200 p-3"
+                className="flex items-center gap-3 rounded-xl border border-[var(--apple-hairline)] p-3"
                 data-testid="sub-brand-current-parent"
               >
-                <div className="w-10 h-10 rounded-md bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 rounded-md bg-white ring-1 ring-[var(--apple-hairline)] overflow-hidden flex items-center justify-center flex-shrink-0">
                   {(subBrandParent ?? subBrandPrompt.parent).logoUrl ? (
                     <img
                       src={(subBrandParent ?? subBrandPrompt.parent).logoUrl!}
@@ -1012,14 +1004,14 @@ export function AdminVendors() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <copy.Icon className="w-5 h-5 text-slate-300" />
+                    <copy.Icon className="w-5 h-5 text-[var(--apple-faint)]" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-slate-900 text-[13.5px] font-semibold truncate">
+                  <div className="text-[var(--apple-ink)] text-[13.5px] font-semibold truncate">
                     {(subBrandParent ?? subBrandPrompt.parent).name}
                   </div>
-                  <div className="text-slate-400 text-[11.5px] truncate">
+                  <div className="text-[var(--apple-faint)] text-[11.5px] truncate">
                     {(subBrandParent ?? subBrandPrompt.parent).domain}
                   </div>
                 </div>
@@ -1027,7 +1019,7 @@ export function AdminVendors() {
                   type="button"
                   onClick={() => setSubBrandPickerOpen((o) => !o)}
                   disabled={createVendor.isPending}
-                  className="px-2.5 py-1 rounded-md text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  className="px-2.5 py-1 rounded-full text-xs font-semibold text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-50 transition-colors"
                   data-testid="button-sub-brand-change-parent"
                 >
                   {subBrandPickerOpen ? "Cancel" : "Change"}
@@ -1035,10 +1027,10 @@ export function AdminVendors() {
               </div>
               {subBrandPickerOpen && (
                 <div
-                  className="rounded-xl border border-slate-200 p-2 space-y-2"
+                  className="rounded-xl border border-[var(--apple-hairline)] p-2 space-y-2"
                   data-testid="sub-brand-parent-picker"
                 >
-                  <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-8">
+                  <div className="flex items-center gap-1.5 bg-white border border-[var(--apple-hairline)] rounded-md px-2.5 h-8">
                     <Search className="w-3.5 h-3.5 text-slate-400" />
                     <input
                       type="text"
@@ -1050,9 +1042,9 @@ export function AdminVendors() {
                       data-testid="input-sub-brand-parent-search"
                     />
                   </div>
-                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-100">
+                  <div className="max-h-48 overflow-y-auto divide-y divide-[var(--apple-hairline)]">
                     {parentCandidates.length === 0 ? (
-                      <p className="text-xs text-slate-400 py-3 text-center">
+                      <p className="text-xs text-[var(--apple-faint)] py-3 text-center">
                         No matches.
                       </p>
                     ) : (
@@ -1070,10 +1062,10 @@ export function AdminVendors() {
                             setSubBrandPickerOpen(false);
                             setSubBrandPickerQuery("");
                           }}
-                          className="w-full text-left flex items-center gap-2.5 px-1.5 py-1.5 hover:bg-slate-50 rounded-md"
+                          className="w-full text-left flex items-center gap-2.5 px-1.5 py-1.5 hover:bg-[var(--apple-track)] rounded-md"
                           data-testid={`button-sub-brand-pick-${c.id}`}
                         >
-                          <div className="w-7 h-7 rounded-md bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+                          <div className="w-7 h-7 rounded-md bg-white ring-1 ring-[var(--apple-hairline)] overflow-hidden flex items-center justify-center flex-shrink-0">
                             {c.logoUrl ? (
                               <img
                                 src={c.logoUrl}
@@ -1081,14 +1073,14 @@ export function AdminVendors() {
                                 className="w-full h-full object-cover"
                               />
                             ) : (
-                              <copy.Icon className="w-3.5 h-3.5 text-slate-300" />
+                              <copy.Icon className="w-3.5 h-3.5 text-[var(--apple-faint)]" />
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="text-slate-800 text-xs font-semibold truncate">
+                            <div className="text-[var(--apple-ink)] text-xs font-semibold truncate">
                               {c.name}
                             </div>
-                            <div className="text-slate-400 text-xs truncate">
+                            <div className="text-[var(--apple-faint)] text-xs truncate">
                               {c.domain}
                             </div>
                           </div>
@@ -1103,7 +1095,7 @@ export function AdminVendors() {
                   type="button"
                   onClick={() => setSubBrandPrompt(null)}
                   disabled={createVendor.isPending}
-                  className="px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-full text-[12.5px] font-semibold text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-50 transition-colors"
                   data-testid="button-sub-brand-cancel"
                 >
                   Back
@@ -1142,7 +1134,7 @@ export function AdminVendors() {
               placeholder="https://…/about"
               autoFocus
               disabled={createVendor.isPending}
-              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+              className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
               data-testid="input-add-vendor-url"
             />
             {pasteError && (
@@ -1173,7 +1165,7 @@ export function AdminVendors() {
                 )}
               </div>
             )}
-            <p className="text-[11.5px] text-slate-400">
+            <p className="text-[11.5px] text-[var(--apple-faint)]">
               Reads the page's Open Graph metadata and rehosts the logo + cover
               image. Instagram and Facebook pages aren't supported — paste the
               vendor's own website instead.
@@ -1184,7 +1176,7 @@ export function AdminVendors() {
               type="button"
               onClick={skipPaste}
               disabled={createVendor.isPending}
-              className="px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              className="px-3 py-1.5 rounded-full text-[12.5px] font-semibold text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-50 transition-colors"
               data-testid="button-add-vendor-skip"
             >
               Skip — create blank
@@ -1265,10 +1257,10 @@ function VendorCard({
     <button
       type="button"
       onClick={onOpen}
-      className="group text-left rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5"
+      className="group text-left rounded-2xl bg-white border border-[var(--apple-hairline)] hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5"
       data-testid={`card-vendor-${vendor.id}`}
     >
-      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {vendor.logoUrl ? (
           <img
             src={vendor.logoUrl}
@@ -1276,21 +1268,21 @@ function VendorCard({
             className="w-full h-full object-cover"
           />
         ) : (
-          <Store className="w-6 h-6 text-slate-300" />
+          <Store className="w-6 h-6 text-[var(--apple-faint)]" />
         )}
       </div>
       <div className="min-w-0 flex-1">
         <div
-          className="text-slate-900 text-[14px] font-semibold leading-tight truncate"
+          className="text-[var(--apple-ink)] text-[14px] font-semibold leading-tight truncate"
           data-testid={`text-vendor-name-${vendor.id}`}
         >
           {vendor.name}
         </div>
-        <div className="text-slate-400 text-[11.5px] truncate mt-0.5">
+        <div className="text-[var(--apple-faint)] text-[11.5px] truncate mt-0.5">
           {vendor.domain}
         </div>
         {vendor.tagline && (
-          <div className="text-slate-500 text-[12px] line-clamp-1 mt-0.5">
+          <div className="text-[var(--apple-subink)] text-[12px] line-clamp-1 mt-0.5">
             {vendor.tagline}
           </div>
         )}
@@ -1310,10 +1302,10 @@ function VendorRow({
     <button
       type="button"
       onClick={onOpen}
-      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
+      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-[var(--apple-track)] transition-colors"
       data-testid={`row-vendor-${vendor.id}`}
     >
-      <div className="w-10 h-10 rounded-md overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+      <div className="w-10 h-10 rounded-md overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {vendor.logoUrl ? (
           <img
             src={vendor.logoUrl}
@@ -1321,22 +1313,22 @@ function VendorRow({
             className="w-full h-full object-cover"
           />
         ) : (
-          <Store className="w-4 h-4 text-slate-300" />
+          <Store className="w-4 h-4 text-[var(--apple-faint)]" />
         )}
       </div>
       <div className="min-w-0 flex-1">
         <div
-          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
+          className="text-[var(--apple-ink)] text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
           data-testid={`text-vendor-name-${vendor.id}`}
         >
           {vendor.name}
         </div>
-        <div className="text-slate-400 text-[11.5px] truncate">
+        <div className="text-[var(--apple-faint)] text-[11.5px] truncate">
           {vendor.domain}
         </div>
       </div>
       {vendor.tagline && (
-        <div className="text-slate-500 text-[12px] truncate flex-shrink-0 max-w-[40%] hidden md:block">
+        <div className="text-[var(--apple-subink)] text-[12px] truncate flex-shrink-0 max-w-[40%] hidden md:block">
           {vendor.tagline}
         </div>
       )}
@@ -1363,7 +1355,7 @@ function TrashedVendorRow({
       className="flex items-center gap-3 px-3 py-2"
       data-testid={`row-trashed-vendor-${vendor.id}`}
     >
-      <div className="w-10 h-10 rounded-md overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0 opacity-70">
+      <div className="w-10 h-10 rounded-md overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0 opacity-70">
         {vendor.logoUrl ? (
           <img
             src={vendor.logoUrl}
@@ -1371,20 +1363,20 @@ function TrashedVendorRow({
             className="w-full h-full object-cover grayscale"
           />
         ) : (
-          <Store className="w-4 h-4 text-slate-300" />
+          <Store className="w-4 h-4 text-[var(--apple-faint)]" />
         )}
       </div>
       <div className="min-w-0 flex-1">
         <div
-          className="text-slate-700 text-[13.5px] font-semibold truncate"
+          className="text-[var(--apple-ink)] text-[13.5px] font-semibold truncate"
           data-testid={`text-trashed-vendor-name-${vendor.id}`}
         >
           {vendor.name}
         </div>
-        <div className="text-slate-400 text-[11.5px] truncate">
+        <div className="text-[var(--apple-faint)] text-[11.5px] truncate">
           {vendor.domain}
           {vendor.deletedAt && (
-            <span className="text-slate-300">
+            <span className="text-[var(--apple-faint)]">
               {" · deleted "}
               {timeAgo(vendor.deletedAt)}
             </span>
@@ -1459,27 +1451,12 @@ function EmptyState({
   filtering?: boolean;
 }) {
   return (
-    <div
-      className="py-16 flex flex-col items-center justify-center text-center"
-      data-testid="empty-vendors"
-    >
-      <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-        <Icon className="w-6 h-6" />
-      </div>
-      <p className="text-slate-700 text-[14px] font-semibold">
-        {searching
-          ? "No matches"
-          : filtering
-            ? "No matches for these filters"
-            : title}
-      </p>
-      <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs">
-        {searching
-          ? searchHint
-          : filtering
-            ? "Adjust or reset the filters to see more."
-            : hint}
-      </p>
-    </div>
+    <AdminEmptyState testId="empty-vendors">
+      {searching
+        ? searchHint
+        : filtering
+          ? "No matches for these filters. Adjust or reset the filters to see more."
+          : `${title} ${hint}`}
+    </AdminEmptyState>
   );
 }

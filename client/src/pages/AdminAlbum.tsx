@@ -1501,7 +1501,7 @@ export function AdminAlbum({
                   <button
                     type="button"
                     disabled={setPrepping.isPending}
-                    className="inline-flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 shadow-sm transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-1"
+                    className="inline-flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-[var(--apple-track)] shadow-sm transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-1"
                     data-testid="album-status-control"
                     title={`Album status — ${lifecycle.label}. Click to change.`}
                   >
@@ -2035,7 +2035,7 @@ export function AdminAlbum({
         onOpenChange={(v) => !deleteAlbum.isPending && setDeleteConfirmOpen(v)}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-4"
           data-testid="dialog-delete-album"
         >
           <DialogHeader className="text-left space-y-1">
@@ -2156,7 +2156,7 @@ export function AdminAlbum({
               type="button"
               onClick={() => setDeleteConfirmOpen(false)}
               disabled={deleteAlbum.isPending || movePublishingData.isPending}
-              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-[var(--apple-track)]"
               data-testid="button-delete-album-cancel"
             >
               Cancel
@@ -2183,7 +2183,7 @@ export function AdminAlbum({
           Slate (informational) chrome, single dismiss action. */}
       <Dialog open={artistDeleteSoldOpen} onOpenChange={setArtistDeleteSoldOpen}>
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-4"
           data-testid="dialog-album-sold-blocked"
         >
           <DialogHeader className="text-left space-y-1">
@@ -2200,7 +2200,7 @@ export function AdminAlbum({
             <Button
               type="button"
               onClick={() => setArtistDeleteSoldOpen(false)}
-              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-[var(--apple-track)]"
               data-testid="button-album-sold-dismiss"
             >
               Got it
@@ -2221,7 +2221,7 @@ export function AdminAlbum({
         }}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-4"
           data-testid="dialog-request-delete-album"
         >
           <DialogHeader className="text-left space-y-1">
@@ -2240,7 +2240,7 @@ export function AdminAlbum({
               type="button"
               onClick={() => setArtistDeleteRequestOpen(false)}
               disabled={requestDeleteAlbum.isPending}
-              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-[var(--apple-track)]"
               data-testid="button-request-delete-cancel"
             >
               Cancel
@@ -2266,7 +2266,7 @@ export function AdminAlbum({
         onOpenChange={(v) => !setPrepping.isPending && setAtPressConfirmOpen(v)}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-4"
           data-testid="dialog-at-press-album"
         >
           <DialogHeader className="text-left space-y-1">
@@ -2285,7 +2285,7 @@ export function AdminAlbum({
               type="button"
               onClick={() => setAtPressConfirmOpen(false)}
               disabled={setPrepping.isPending}
-              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              className="rounded-full bg-transparent shadow-none border-0 text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hover:text-[var(--apple-subink)]"
               data-testid="button-at-press-album-cancel"
             >
               Cancel
@@ -2297,7 +2297,7 @@ export function AdminAlbum({
                 setPrepping.mutate("at_press");
               }}
               disabled={setPrepping.isPending}
-              className="bg-slate-900 hover:bg-slate-800 text-white ml-2"
+              className="rounded-full bg-[var(--apple-blue)] hover:bg-[var(--apple-blue)] text-white ml-2"
               data-testid="button-at-press-album-confirm"
             >
               {setPrepping.isPending ? "Marking…" : "Mark as at press"}
@@ -2316,7 +2316,7 @@ export function AdminAlbum({
         onOpenChange={(v) => !setPrepping.isPending && setDemoteConfirmOpen(v)}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-4"
           data-testid="dialog-demote-album"
         >
           <DialogHeader className="text-left space-y-1">
@@ -2336,7 +2336,7 @@ export function AdminAlbum({
               type="button"
               onClick={() => setDemoteConfirmOpen(false)}
               disabled={setPrepping.isPending}
-              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              className="rounded-full bg-transparent shadow-none border-0 text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hover:text-[var(--apple-subink)]"
               data-testid="button-demote-album-cancel"
             >
               Cancel
@@ -2345,7 +2345,7 @@ export function AdminAlbum({
               type="button"
               onClick={() => setPrepping.mutate(demoteTarget)}
               disabled={setPrepping.isPending}
-              className="bg-slate-900 hover:bg-slate-800 text-white ml-2"
+              className="rounded-full bg-[var(--apple-blue)] hover:bg-[var(--apple-blue)] text-white ml-2"
               data-testid="button-demote-album-confirm"
             >
               {setPrepping.isPending
@@ -2368,7 +2368,7 @@ export function AdminAlbum({
         }
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-4"
           data-testid="dialog-delete-selected-tracks"
         >
           {(() => {
@@ -2416,7 +2416,7 @@ export function AdminAlbum({
                     type="button"
                     onClick={() => setDeleteSelectedOpen(false)}
                     disabled={bulkDeleteSongs.isPending}
-                    className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+                    className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-[var(--apple-track)]"
                     data-testid="button-delete-selected-cancel"
                   >
                     Cancel
@@ -2450,7 +2450,7 @@ export function AdminAlbum({
         }
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-4"
           data-testid="dialog-delete-all-tracks"
         >
           {(() => {
@@ -2500,7 +2500,7 @@ export function AdminAlbum({
                     type="button"
                     onClick={() => setDeleteAllTracksOpen(false)}
                     disabled={bulkDeleteSongs.isPending}
-                    className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+                    className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-[var(--apple-track)]"
                     data-testid="button-delete-all-cancel"
                   >
                     Cancel
@@ -2628,7 +2628,7 @@ function AlbumLockChip({ album }: { album: AlbumFull }) {
       {chip}
       <Dialog open={open} onOpenChange={(v) => !grant.isPending && setOpen(v)}>
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-4"
           data-testid="dialog-album-unlock"
         >
           <DialogHeader className="text-left space-y-1">
@@ -2667,7 +2667,7 @@ function AlbumLockChip({ album }: { album: AlbumFull }) {
               type="button"
               onClick={() => setOpen(false)}
               disabled={grant.isPending}
-              className="bg-white text-slate-900 border border-slate-200 hover:bg-slate-50"
+              className="bg-white text-slate-900 border border-slate-200 hover:bg-[var(--apple-track)]"
               data-testid="button-unlock-cancel"
             >
               Cancel
@@ -4729,7 +4729,7 @@ function RefreshStreamingLinksButton({ album }: { album: AlbumFull }) {
           ? "Re-resolve Tidal/Deezer/Pandora (+ Spotify) links from Apple Music (fills blanks only)"
           : "Resolve a Spotify link from artist + title (fills blank only; no Apple URL so Tidal/Deezer/Pandora stay on search)"
       }
-      className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 px-3 h-7 text-xs font-semibold transition-colors disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 rounded-full bg-[var(--apple-chip)] text-[var(--apple-subink)] hover:bg-[var(--apple-track)] px-3 h-7 text-xs font-semibold transition-colors disabled:opacity-50"
     >
       {mut.isPending ? (
         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -5150,7 +5150,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
         onOpenChange={(v) => !reassignMut.isPending && !v && setReassign(null)}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-4"
           data-testid="dialog-reassign-album-artist"
         >
           <DialogHeader className="text-left space-y-1">
@@ -5174,7 +5174,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
               type="button"
               onClick={() => setReassign(null)}
               disabled={reassignMut.isPending}
-              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-[var(--apple-track)]"
               data-testid="button-reassign-album-artist-cancel"
             >
               Keep current label
@@ -5790,7 +5790,7 @@ function TracksPanel({
         <div className="mt-5 grid gap-2.5 sm:grid-cols-3">
           <button
             onClick={() => setAdding(true)}
-            className="group text-left rounded-xl border border-slate-200 bg-white hover:border-[var(--brand-blue)] hover:bg-slate-50 transition-colors p-4 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
+            className="group text-left rounded-xl border border-slate-200 bg-white hover:border-[var(--brand-blue)] hover:bg-[var(--apple-track)] transition-colors p-4 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
             data-testid="button-add-first-track"
           >
             <div className="w-8 h-8 rounded-md bg-[var(--brand-blue)]/10 text-[var(--brand-blue)] inline-flex items-center justify-center">
@@ -5805,7 +5805,7 @@ function TracksPanel({
           </button>
           <button
             onClick={() => setBulkAddOpen(true)}
-            className="group text-left rounded-xl border border-slate-200 bg-white hover:border-[var(--brand-blue)] hover:bg-slate-50 transition-colors p-4 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
+            className="group text-left rounded-xl border border-slate-200 bg-white hover:border-[var(--brand-blue)] hover:bg-[var(--apple-track)] transition-colors p-4 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
             data-testid="button-bulk-add-tracks-empty"
           >
             <div className="w-8 h-8 rounded-md bg-[var(--brand-blue)]/10 text-[var(--brand-blue)] inline-flex items-center justify-center">
@@ -5877,8 +5877,8 @@ function TracksPanel({
             className={
               "px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 " +
               (adding
-                ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50")
+                ? "bg-slate-100 text-slate-700 hover:bg-[var(--apple-track)]"
+                : "bg-white border border-slate-200 text-slate-700 hover:bg-[var(--apple-track)]")
             }
             data-testid="button-toggle-add-track"
             aria-expanded={adding}
@@ -5891,7 +5891,7 @@ function TracksPanel({
               Sparkles signals the AI-assisted nature of the items. */}
           <DropdownMenu>
             <DropdownMenuTrigger
-              className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 data-[state=open]:bg-slate-100"
+              className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-[var(--apple-track)] data-[state=open]:bg-slate-100"
               data-testid="button-tracks-advanced"
               aria-label="Advanced track actions"
             >
@@ -6068,7 +6068,7 @@ function TracksPanel({
                 aria-label="Clear track search"
                 title="Clear search"
                 onClick={() => setTrackQuery("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 inline-flex items-center justify-center rounded-md text-[var(--apple-faint)] hover:bg-[var(--apple-track)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
                 data-testid="button-clear-track-search"
               >
                 <XIcon className="w-3.5 h-3.5" />
@@ -7103,7 +7103,7 @@ function AddTrackForm({
             "px-2 h-8 rounded-md border text-[11.5px] font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-1",
             streamOnly
               ? "bg-[var(--brand-purple)]/10 border-[var(--brand-purple)]/40 text-[var(--brand-purple)]"
-              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50",
+              : "bg-white border-slate-200 text-slate-600 hover:bg-[var(--apple-track)]",
           ].join(" ")}
           data-testid="button-toggle-stream-only"
         >
@@ -7117,7 +7117,7 @@ function AddTrackForm({
             disabled={createMut.isPending || uploading}
             aria-label="Attach audio file"
             title="Attach audio file"
-            className="px-2 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center"
+            className="px-2 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50 inline-flex items-center justify-center"
             data-testid="button-attach-new-track-audio"
           >
             {uploading ? (
@@ -7144,7 +7144,7 @@ function AddTrackForm({
           type="button"
           onClick={onClose}
           disabled={createMut.isPending}
-          className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50"
+          className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-[var(--apple-track)]"
           data-testid="button-close-add-track"
         >
           Done
@@ -7210,7 +7210,7 @@ function AddTrackForm({
                 if (spotifyUrl.trim()) lookupMut.mutate();
               }}
               disabled={createMut.isPending || lookupMut.isPending || !spotifyUrl.trim()}
-              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1"
+              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50 inline-flex items-center gap-1"
               data-testid="button-lookup-spotify-track"
             >
               {lookupMut.isPending ? (
@@ -7667,7 +7667,7 @@ function AddMultipleTracksDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4 max-h-[85vh] overflow-y-auto [&>*]:min-w-0">
+      <DialogContent className="max-w-md bg-white rounded-2xl border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-4 max-h-[85vh] overflow-y-auto [&>*]:min-w-0">
         <DialogHeader className="text-left space-y-1">
           <DialogTitle className="text-[17px] font-semibold text-slate-900 inline-flex items-center gap-2">
             Upload multiple tracks
@@ -7676,7 +7676,7 @@ function AddMultipleTracksDialog({
                 <button
                   type="button"
                   aria-label="How upload multiple tracks works"
-                  className="w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                  className="w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center flex-shrink-0"
                   data-testid="button-tracks-info"
                 >
                   <Info className="w-3.5 h-3.5" />
@@ -7963,7 +7963,7 @@ function AddMultipleTracksDialog({
             type="button"
             onClick={() => onOpenChange(false)}
             data-testid="button-bulk-cancel"
-            className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100"
+            className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-[var(--apple-track)]"
           >
             {running ? "Close" : "Cancel"}
           </button>
@@ -8280,7 +8280,7 @@ function ImportLyricsFromDropboxDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !running && onOpenChange(v)}>
-      <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
+      <DialogContent className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-4">
         <DialogHeader className="text-left space-y-1">
           <DialogTitle className="text-[17px] font-semibold text-slate-900 inline-flex items-center gap-2">
             Import lyrics from Dropbox
@@ -8289,7 +8289,7 @@ function ImportLyricsFromDropboxDialog({
                 <button
                   type="button"
                   aria-label="How to share the folder"
-                  className="w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                  className="w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center flex-shrink-0"
                   data-testid="button-lyrics-import-info"
                 >
                   <Info className="w-3.5 h-3.5" />
@@ -8442,7 +8442,7 @@ function ImportLyricsFromDropboxDialog({
                       void goodSyncAll(false);
                     }}
                     data-testid="button-goodsync-just-sync"
-                    className="px-2.5 py-1 rounded-md text-[12.5px] font-medium text-slate-600 hover:bg-slate-100"
+                    className="px-2.5 py-1 rounded-md text-[12.5px] font-medium text-slate-600 hover:bg-[var(--apple-track)]"
                   >
                     Just sync
                   </button>
@@ -8471,7 +8471,7 @@ function ImportLyricsFromDropboxDialog({
                     type="button"
                     onClick={() => setSyncDone({ synced: 0, failed: [] })}
                     data-testid="button-goodsync-skip"
-                    className="px-2.5 py-1 rounded-md text-[12.5px] font-medium text-slate-600 hover:bg-slate-100"
+                    className="px-2.5 py-1 rounded-md text-[12.5px] font-medium text-slate-600 hover:bg-[var(--apple-track)]"
                   >
                     Not now
                   </button>
@@ -8549,7 +8549,7 @@ function ImportLyricsFromDropboxDialog({
                 }}
                 disabled={!!syncProgress}
                 data-testid="button-lyrics-import-run-again"
-                className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-[var(--apple-track)] disabled:opacity-50"
               >
                 Run again
               </button>
@@ -8569,7 +8569,7 @@ function ImportLyricsFromDropboxDialog({
                 onClick={() => onOpenChange(false)}
                 disabled={running}
                 data-testid="button-lyrics-import-cancel"
-                className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-[var(--apple-track)] disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -8789,7 +8789,7 @@ function GoodSyncAlbumDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => closeable && onOpenChange(v)}>
-      <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
+      <DialogContent className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-4">
         {step === "intro" && (
           <>
             <DialogHeader className="text-left space-y-1">
@@ -8881,7 +8881,7 @@ function GoodSyncAlbumDialog({
                 type="button"
                 onClick={() => onOpenChange(false)}
                 data-testid="button-goodsync-cancel"
-                className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-[var(--apple-track)]"
               >
                 Not now
               </button>
@@ -8927,7 +8927,7 @@ function GoodSyncAlbumDialog({
                 type="button"
                 onClick={() => runSync(false)}
                 data-testid="button-goodsync-just-sync"
-                className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100"
+                className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-[var(--apple-track)]"
               >
                 Just sync the lyrics
               </button>
@@ -9271,7 +9271,7 @@ function ExpandedPanel({
       data-testid={testId}
       className="rounded-xl border border-[var(--brand-blue)]/50 bg-white shadow-sm overflow-hidden"
     >
-      <div className="relative flex items-center gap-2.5 px-4 py-2.5 hover:bg-slate-50">
+      <div className="relative flex items-center gap-2.5 px-4 py-2.5 hover:bg-[var(--apple-track)]">
         {/* Invisible click target covering the whole header. Sits
             behind the foreground elements so chevron + icon + labels
             all collapse on click, while the headerSlot in the
@@ -9369,7 +9369,7 @@ function StatusBadge({
   // tile doesn't shift by 1px when it becomes active.
   const activeCls = active
     ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5 ring-2 ring-[var(--brand-blue)]/30 hover:bg-[var(--brand-blue)]/5 hover:border-[var(--brand-blue)]"
-    : "border-slate-200 hover:border-slate-300 hover:bg-slate-50";
+    : "border-slate-200 hover:border-slate-300 hover:bg-[var(--apple-track)]";
   if (compact) {
     // Compact tile = miniature of the ExpandedPanel header: icon on
     // the left, label + sublabel stacked to its right. Same shape,
@@ -9856,7 +9856,7 @@ function TrackRow({
         className={[
           "flex items-center gap-4 px-5 py-3",
           !expanded
-            ? "cursor-pointer hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 focus-visible:ring-inset"
+            ? "cursor-pointer hover:bg-[var(--apple-track)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 focus-visible:ring-inset"
             : "",
         ]
           .filter(Boolean)
@@ -10130,7 +10130,7 @@ function TrackRow({
                   href={downloadHref}
                   download={`${String(song.trackNumber).padStart(2, "0")} ${song.title}${downloadExt}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 flex-shrink-0"
+                  className="inline-flex items-center justify-center w-7 h-7 rounded-md text-[var(--apple-faint)] hover:bg-[var(--apple-track)] focus:outline-none focus:ring-2 focus:ring-slate-300 flex-shrink-0"
                   aria-label={`Download master for ${song.title}`}
                   title={
                     isOriginal
@@ -10266,7 +10266,7 @@ function TrackRow({
               setUserExpanded(true);
             }
           }}
-          className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-300 hover:text-slate-600 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 flex-shrink-0"
+          className="inline-flex items-center justify-center w-7 h-7 rounded-md text-[var(--apple-faint)] hover:bg-[var(--apple-track)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 flex-shrink-0"
           aria-label={expanded ? "Collapse track" : "Expand track"}
           aria-expanded={expanded}
           title={expanded ? "Collapse" : "Expand"}
@@ -10564,7 +10564,7 @@ function ExplicitTrackToggle({ song, albumId }: { song: SongLite; albumId: strin
                 <button
                   type="button"
                   aria-label="What Explicit means"
-                  className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                  className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center flex-shrink-0"
                   data-testid={`info-explicit-${song.id}`}
                 >
                   <Info className="w-3 h-3" aria-hidden="true" />
@@ -10719,7 +10719,7 @@ function PreviewableTrackToggle({ song }: { song: SongLite }) {
                   <button
                     type="button"
                     aria-label="What Hide preview means"
-                    className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                    className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center flex-shrink-0"
                     data-testid={`info-previewable-${song.id}`}
                   >
                     <Info className="w-3 h-3" aria-hidden="true" />
@@ -10847,7 +10847,7 @@ function InstrumentalToggle({ song }: { song: SongLite }) {
                 <button
                   type="button"
                   aria-label="What Instrumental means"
-                  className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                  className="w-4 h-4 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center flex-shrink-0"
                   data-testid={`info-instrumental-${song.id}`}
                 >
                   <Info className="w-3 h-3" aria-hidden="true" />
@@ -11335,7 +11335,7 @@ function GoodSyncPanel({
             <button
               type="button"
               aria-label="What is GoodSync™?"
-              className="w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+              className="w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center flex-shrink-0"
               data-testid={`button-goodsync-info-${song.id}`}
             >
               <Info className="w-3.5 h-3.5" />
@@ -11415,7 +11415,7 @@ function GoodSyncPanel({
               type="button"
               onClick={cancelEdit}
               disabled={saveCueEdits.isPending}
-              className="h-6 px-2 rounded-md text-[11px] font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-50"
+              className="h-6 px-2 rounded-md text-[11px] font-medium text-slate-500 hover:bg-[var(--apple-track)] disabled:opacity-50"
               data-testid={`button-cancel-cue-edit-${song.id}`}
             >
               Cancel
@@ -11468,7 +11468,7 @@ function GoodSyncPanel({
                 disabled={syncing}
                 aria-label="Re-sync with audio"
                 title="Re-sync with audio — replaces the existing GoodSync cues with a fresh alignment"
-                className="w-6 h-6 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-6 h-6 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid={`button-sync-audio-${song.id}`}
               >
                 {syncing ? (
@@ -11487,7 +11487,7 @@ function GoodSyncPanel({
                 onClick={enterEdit}
                 aria-label="Edit cue text"
                 title="Edit cue text — fix words STT misheard. Timings stay put."
-                className="w-6 h-6 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center"
+                className="w-6 h-6 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center"
                 data-testid={`button-edit-cues-${song.id}`}
               >
                 <Pencil className="w-3.5 h-3.5" />
@@ -11501,7 +11501,7 @@ function GoodSyncPanel({
                 disabled={previewCues.length === 0}
                 aria-label={playing ? "Pause preview" : "Play preview"}
                 title={playing ? "Pause preview" : "Play preview"}
-                className="w-6 h-6 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-6 h-6 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                 data-testid={`button-play-goodsync-header-${song.id}`}
               >
                 {playing ? (
@@ -11522,7 +11522,7 @@ function GoodSyncPanel({
                 disabled={rerunGoodSync.isPending || autoBusy}
                 aria-label="Re-run GoodSync"
                 title="Re-run GoodSync — re-transcribes, re-aligns, and re-detects chorus / instrumental / explicit (overwrites)."
-                className="w-6 h-6 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-6 h-6 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                 data-testid={`button-rerun-goodsync-${song.id}`}
               >
                 {rerunGoodSync.isPending || autoBusy ? (
@@ -12849,7 +12849,7 @@ function SyncedLyricsEditor({
             type="button"
             onClick={onClose}
             disabled={parsing || saveMut.isPending}
-            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50"
+            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50"
             data-testid={`button-cancel-vtt-${song.id}`}
           >
             Cancel
@@ -13002,7 +13002,7 @@ function CreditsEditor({
               type="button"
               onClick={() => setAdding("writer")}
               disabled={!!adding}
-              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-40 inline-flex items-center gap-1"
+              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-40 inline-flex items-center gap-1"
               data-testid="button-add-writer"
             >
               <Plus className="w-3 h-3" />
@@ -13012,7 +13012,7 @@ function CreditsEditor({
               type="button"
               onClick={() => setAdding("performer")}
               disabled={!!adding}
-              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-40 inline-flex items-center gap-1"
+              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-40 inline-flex items-center gap-1"
               data-testid="button-add-performer"
             >
               <Plus className="w-3 h-3" />
@@ -13022,7 +13022,7 @@ function CreditsEditor({
           <button
             type="button"
             onClick={onClose}
-            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50"
+            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-[var(--apple-track)]"
             data-testid="button-close-credits"
           >
             Close
@@ -13262,7 +13262,7 @@ function CreditRowItem({
             type="button"
             onClick={() => setEditing(false)}
             disabled={save.isPending}
-            className="px-2 h-7 rounded-md bg-white border border-slate-200 text-slate-600 text-[11px] font-semibold hover:bg-slate-50 disabled:opacity-50"
+            className="px-2 h-7 rounded-md bg-white border border-slate-200 text-slate-600 text-[11px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50"
             data-testid={`button-cancel-credit-${row.id}`}
           >
             Cancel
@@ -13284,7 +13284,7 @@ function CreditRowItem({
 
   return (
     <li
-      className="group flex items-center gap-2 text-[12.5px] hover:bg-slate-100/50 rounded px-1 py-0.5"
+      className="group flex items-center gap-2 text-[12.5px] hover:bg-[var(--apple-track)] rounded px-1 py-0.5"
       data-testid={`item-credit-${kind}-${row.id}`}
     >
       <PersonAvatar
@@ -13316,7 +13316,7 @@ function CreditRowItem({
           onClick={() => setEditing(true)}
           aria-label="Edit credit"
           title="Edit"
-          className="w-6 h-6 rounded text-slate-400 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center"
+          className="w-6 h-6 rounded text-[var(--apple-faint)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center"
           data-testid={`button-edit-credit-${row.id}`}
         >
           <Pencil className="w-3 h-3" />
@@ -13475,7 +13475,7 @@ function AddCreditForm({
           type="button"
           onClick={onCancel}
           disabled={create.isPending}
-          className="px-2 h-7 rounded-md bg-white border border-slate-200 text-slate-600 text-[11px] font-semibold hover:bg-slate-50 disabled:opacity-50"
+          className="px-2 h-7 rounded-md bg-white border border-slate-200 text-slate-600 text-[11px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50"
           data-testid={`button-cancel-add-${kind}`}
         >
           Cancel
@@ -13838,7 +13838,7 @@ function PinpointLyricsButton({
                       setOpen(false);
                       setQuery("");
                     }}
-                    className="w-full flex items-baseline gap-3 px-3 py-1.5 hover:bg-slate-50 text-left"
+                    className="w-full flex items-baseline gap-3 px-3 py-1.5 hover:bg-[var(--apple-track)] text-left"
                     data-testid={`button-pinpoint-cue-${songId}-${cue.idx}`}
                   >
                     <span className="text-[10.5px] tabular-nums text-slate-400 w-9 flex-shrink-0">
@@ -14362,7 +14362,7 @@ function RichPreviewEditor({
             "w-11 h-11 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-colors",
             playing
               ? "bg-[var(--brand-blue)] text-white hover:bg-[var(--brand-blue)]/90"
-              : "bg-slate-100 text-slate-700 hover:bg-slate-200",
+              : "bg-slate-100 text-slate-700 hover:bg-[var(--apple-track)]",
           ].join(" ")}
           data-testid={`button-preview-play-${song.id}`}
         >
@@ -14509,7 +14509,7 @@ function RichPreviewEditor({
             disabled={saveMut.isPending}
             aria-label="Revert to saved preview"
             title="Revert to what fans hear now"
-            className="w-9 h-9 rounded-full inline-flex items-center justify-center flex-shrink-0 text-slate-500 hover:bg-slate-100"
+            className="w-9 h-9 rounded-full inline-flex items-center justify-center flex-shrink-0 text-slate-500 hover:bg-[var(--apple-track)]"
             data-testid={`button-preview-revert-${song.id}`}
           >
             <RotateCcw className="w-4 h-4" />
@@ -14535,7 +14535,7 @@ function RichPreviewEditor({
                 : "Lock in when done"
           }
           className={[
-            "w-11 h-11 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-colors hover:bg-slate-100 disabled:opacity-50",
+            "w-11 h-11 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-colors hover:bg-[var(--apple-track)] disabled:opacity-50",
             locked ? "text-emerald-600" : "text-amber-600",
           ].join(" ")}
           data-testid={`button-preview-padlock-${song.id}`}
@@ -15339,7 +15339,7 @@ function AudioEditor({
                   <a
                     href={href}
                     download={`${String(song.trackNumber).padStart(2, "0")} ${song.title}${ext}`}
-                    className="w-8 h-8 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0"
+                    className="w-8 h-8 rounded-md text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center flex-shrink-0"
                     aria-label="Download master"
                     title={isOriginal ? `Download original master (${ext.slice(1).toUpperCase()})` : "Download master"}
                     data-testid={`button-download-master-inline-${song.id}`}
@@ -15354,7 +15354,7 @@ function AudioEditor({
                     type="button"
                     aria-label="File actions"
                     disabled={uploading || saveMut.isPending}
-                    className="w-8 h-8 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center flex-shrink-0 disabled:opacity-40"
+                    className="w-8 h-8 rounded-md text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center flex-shrink-0 disabled:opacity-40"
                     data-testid={`button-audio-actions-${song.id}`}
                   >
                     <MoreHorizontal className="w-4 h-4" />
@@ -15367,7 +15367,7 @@ function AudioEditor({
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
-                    className="w-full flex items-center gap-2 px-2.5 h-8 rounded-md text-[12.5px] text-slate-700 hover:bg-slate-100"
+                    className="w-full flex items-center gap-2 px-2.5 h-8 rounded-md text-[12.5px] text-slate-700 hover:bg-[var(--apple-track)]"
                     data-testid={`button-replace-audio-${song.id}`}
                   >
                     <Upload className="w-3.5 h-3.5" />
@@ -15689,7 +15689,7 @@ function ArtworkPanel({
   return (
     <Dialog open={open} onOpenChange={(v) => (v ? onOpenChange(true) : exitEdit())}>
       <DialogContent
-        className="max-w-3xl bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-5"
+        className="max-w-3xl bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-5"
         data-testid="panel-artwork"
         data-mode="edit"
       >
@@ -15761,7 +15761,7 @@ function ArtworkPanel({
               "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
               dragging
                 ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
-                : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+                : "border-slate-200 hover:border-slate-300 hover:bg-[var(--apple-track)]",
               busy && "opacity-60 cursor-not-allowed",
             ]
               .filter(Boolean)
@@ -15863,7 +15863,7 @@ function ArtworkPanel({
                 type="button"
                 onClick={() => setConfirmRemove(false)}
                 disabled={busy}
-                className="h-7 px-2.5 rounded-md text-slate-600 text-[12px] font-semibold hover:bg-slate-100"
+                className="h-7 px-2.5 rounded-md text-slate-600 text-[12px] font-semibold hover:bg-[var(--apple-track)]"
                 data-testid="button-remove-artwork-cancel"
               >
                 Keep
@@ -15903,7 +15903,7 @@ function ArtworkPanel({
             type="button"
             onClick={exitEdit}
             disabled={busy}
-            className="h-8 px-3 rounded-md bg-white border border-slate-200 text-slate-700 text-[12px] font-semibold hover:bg-slate-50 inline-flex items-center gap-1.5"
+            className="h-8 px-3 rounded-md bg-white border border-slate-200 text-slate-700 text-[12px] font-semibold hover:bg-[var(--apple-track)] inline-flex items-center gap-1.5"
             data-testid="button-cancel-artwork"
           >
             <XIcon className="w-3.5 h-3.5" />
@@ -16460,7 +16460,7 @@ function BulkBonusAdvancedMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 data-[state=open]:bg-slate-100"
+        className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-[var(--apple-track)] data-[state=open]:bg-slate-100"
         data-testid="button-bonus-advanced"
         aria-label="Advanced bonus actions"
       >
@@ -16595,7 +16595,7 @@ function BulkBonusFromDropboxDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
+      <DialogContent className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-4">
         <DialogHeader className="text-left space-y-1">
           <DialogTitle className="text-[17px] font-semibold text-slate-900">
             Upload multiple {nounPlural}
@@ -16643,7 +16643,7 @@ function BulkBonusFromDropboxDialog({
             type="button"
             onClick={() => onOpenChange(false)}
             data-testid={`button-bulk-bonus-${kind}-cancel`}
-            className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100"
+            className="px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-[var(--apple-track)]"
           >
             {running ? "Close" : "Cancel"}
           </button>
@@ -16864,7 +16864,7 @@ function TileActions({
         disabled={disabled}
         aria-label="Edit"
         title="Edit"
-        className="w-8 h-8 rounded-full bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900 inline-flex items-center justify-center shadow-md disabled:opacity-50"
+        className="w-8 h-8 rounded-full bg-white text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center shadow-md disabled:opacity-50"
       >
         <Pencil className="w-4 h-4" />
       </button>
@@ -16927,7 +16927,7 @@ function BonusVideoDropzone({
           "w-full rounded-xl border-2 border-dashed flex flex-col items-center justify-center px-6 py-12 transition-colors",
           dragActive
             ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
-            : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300",
+            : "border-slate-200 bg-slate-50 hover:bg-[var(--apple-track)] hover:border-slate-300",
         ].join(" ")}
         data-testid="dropzone-bonus-video"
       >
@@ -17029,7 +17029,7 @@ function BonusPhotoDropzone({
           "w-full rounded-xl border-2 border-dashed flex flex-col items-center justify-center px-6 py-12 transition-colors",
           dragActive
             ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
-            : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300",
+            : "border-slate-200 bg-slate-50 hover:bg-[var(--apple-track)] hover:border-slate-300",
         ].join(" ")}
         data-testid="dropzone-bonus-photo"
       >
@@ -17442,7 +17442,7 @@ function AlbumVideoSheet({
       }}
     >
       <DialogContent
-        className="!bg-white !border-slate-200 !rounded-2xl !shadow-xl !p-0 !gap-0 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col [&>button]:!text-slate-400 [&>button]:hover:!text-slate-700"
+        className="!bg-white !border !border-[var(--apple-hairline)] !rounded-2xl !shadow-[0_20px_48px_rgba(0,0,0,0.18)] !p-0 !gap-0 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col [&>button]:!text-[var(--apple-faint)] [&>button]:hover:!text-[var(--apple-ink)]"
         data-testid="dialog-album-video-sheet"
       >
         <DialogHeader className="px-5 py-4 border-b border-slate-100 flex-shrink-0 space-y-0">
@@ -17536,7 +17536,7 @@ function AlbumVideoSheet({
                     type="button"
                     onClick={handleUseCurrentFrame}
                     disabled={busy || posterCapturing}
-                    className="text-xs font-medium px-3 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-50 inline-flex items-center gap-1.5"
+                    className="text-xs font-medium px-3 py-1.5 rounded-md bg-slate-100 hover:bg-[var(--apple-track)] text-slate-700 disabled:opacity-50 inline-flex items-center gap-1.5"
                     data-testid="button-use-current-frame-as-thumbnail"
                   >
                     <ImagePlus className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -17597,7 +17597,7 @@ function AlbumVideoSheet({
                       "w-full aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-colors " +
                       (dragActive
                         ? "border-[var(--brand-blue)] bg-blue-50"
-                        : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300")
+                        : "border-slate-200 bg-slate-50 hover:bg-[var(--apple-track)] hover:border-slate-300")
                     }
                     data-testid="button-video-dropzone"
                   >
@@ -17719,7 +17719,7 @@ function AlbumVideoSheet({
                 <button
                   type="button"
                   onClick={() => posterInputRef.current?.click()}
-                  className="aspect-video w-28 rounded-lg border-2 border-dashed border-slate-200 hover:border-slate-300 hover:bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0"
+                  className="aspect-video w-28 rounded-lg border-2 border-dashed border-[var(--apple-hairline)] hover:bg-[var(--apple-track)] flex items-center justify-center text-[var(--apple-faint)] transition-colors flex-shrink-0"
                   title="Upload custom thumbnail"
                   data-testid="button-upload-album-video-poster"
                 >
@@ -17819,7 +17819,7 @@ function AlbumVideoSheet({
               type="button"
               onClick={onClose}
               disabled={busy}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-[var(--apple-track)] rounded-lg transition-colors disabled:opacity-50"
               data-testid="button-cancel-album-video-sheet"
             >
               Cancel
@@ -17995,7 +17995,7 @@ function AlbumPhotoSheet({
       }}
     >
       <DialogContent
-        className="!bg-white !border-slate-200 !rounded-2xl !shadow-xl !p-0 !gap-0 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col [&>button]:!text-slate-400 [&>button]:hover:!text-slate-700"
+        className="!bg-white !border !border-[var(--apple-hairline)] !rounded-2xl !shadow-[0_20px_48px_rgba(0,0,0,0.18)] !p-0 !gap-0 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col [&>button]:!text-[var(--apple-faint)] [&>button]:hover:!text-[var(--apple-ink)]"
         data-testid="dialog-album-photo-sheet"
       >
         <DialogHeader className="px-5 py-4 border-b border-slate-100 flex-shrink-0 space-y-0">
@@ -18088,7 +18088,7 @@ function AlbumPhotoSheet({
                       "w-full block aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-colors disabled:opacity-50 " +
                       (dragActive
                         ? "border-[var(--brand-blue)] bg-blue-50"
-                        : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300")
+                        : "border-slate-200 bg-slate-50 hover:bg-[var(--apple-track)] hover:border-slate-300")
                     }
                     data-testid="button-photo-dropzone"
                   >
@@ -18243,7 +18243,7 @@ function AlbumPhotoSheet({
               type="button"
               onClick={onClose}
               disabled={busy || uploadingImage}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-[var(--apple-track)] rounded-lg transition-colors disabled:opacity-50"
               data-testid="button-cancel-album-photo-sheet"
             >
               Cancel
@@ -18652,7 +18652,7 @@ function CampaignGallerySheet({
       }}
     >
       <DialogContent
-        className="!bg-white !border-slate-200 !rounded-2xl !shadow-xl !p-0 !gap-0 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col [&>button]:!text-slate-400 [&>button]:hover:!text-slate-700"
+        className="!bg-white !border !border-[var(--apple-hairline)] !rounded-2xl !shadow-[0_20px_48px_rgba(0,0,0,0.18)] !p-0 !gap-0 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col [&>button]:!text-[var(--apple-faint)] [&>button]:hover:!text-[var(--apple-ink)]"
         data-testid="dialog-campaign-gallery-sheet"
       >
         <DialogHeader className="px-5 py-4 border-b border-slate-100 flex-shrink-0 space-y-0">
@@ -18741,7 +18741,7 @@ function CampaignGallerySheet({
                       "w-full block aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-colors disabled:opacity-50 " +
                       (dragActive
                         ? "border-[var(--brand-blue)] bg-blue-50"
-                        : "border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300")
+                        : "border-slate-200 bg-slate-50 hover:bg-[var(--apple-track)] hover:border-slate-300")
                     }
                     data-testid="button-gallery-dropzone"
                   >
@@ -18896,7 +18896,7 @@ function CampaignGallerySheet({
               type="button"
               onClick={onClose}
               disabled={busy || uploadingImage}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-[var(--apple-track)] rounded-lg transition-colors disabled:opacity-50"
               data-testid="button-cancel-gallery-sheet"
             >
               Cancel
@@ -19214,7 +19214,7 @@ function AlbumLineupPanel({
               setAddQuery("");
             }}
             disabled={disabled}
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 whitespace-nowrap"
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-[var(--apple-track)] disabled:opacity-50 whitespace-nowrap"
             data-testid="button-add-lineup-member"
           >
             {adding ? "Cancel" : "Add member"}
@@ -19232,7 +19232,7 @@ function AlbumLineupPanel({
                 )
               }
               disabled={disabled || saveMutation.isPending}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50 whitespace-nowrap"
+              className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[var(--apple-blue)] text-white hover:bg-[var(--apple-blue)] disabled:opacity-50 whitespace-nowrap"
               data-testid="button-save-lineup"
             >
               Save lineup
@@ -19256,7 +19256,7 @@ function AlbumLineupPanel({
                 );
               }}
               disabled={disabled}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 whitespace-nowrap"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-[var(--apple-track)] disabled:opacity-50 whitespace-nowrap"
               data-testid="button-prefill-lineup"
             >
               Use band's current roster
@@ -19375,7 +19375,7 @@ function AlbumLineupPanel({
                     })
                   }
                   disabled={saveMutation.isPending}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-[var(--apple-track)] disabled:opacity-50"
                   data-testid={`button-pick-lineup-person-${p.id}`}
                 >
                   <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-xs font-semibold text-slate-600">
@@ -19574,7 +19574,7 @@ function AlbumLineupPanel({
                   ]);
                 }}
                 disabled={disabled}
-                className="text-[12px] font-semibold px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                className="text-[12px] font-semibold px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-[var(--apple-track)] disabled:opacity-50"
                 data-testid={`button-add-lineup-${m.memberId}`}
               >
                 + {m.person!.name}

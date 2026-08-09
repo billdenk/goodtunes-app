@@ -208,11 +208,11 @@ export function AdminFulfillmentPartner() {
             hint="Square works best — shown on the Fulfillment list and anywhere this partner is credited."
           />
           <div className="flex-1 min-w-0">
-            <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider">
+            <div className="text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider">
               Fulfillment partner
             </div>
             <h1
-              className="text-2xl font-bold text-slate-900 truncate"
+              className="text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)] truncate"
               data-testid="heading-fulfillment-name"
             >
               {f.name}
@@ -258,7 +258,7 @@ export function AdminFulfillmentPartner() {
         </div>
 
         <div
-          className="flex items-end gap-5 border-b border-slate-200"
+          className="flex items-end gap-5 border-b border-[var(--apple-hairline)]"
           data-testid="tabs-admin-fulfillment"
         >
           <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
@@ -329,19 +329,19 @@ export function AdminFulfillmentPartner() {
       </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_24px_60px_rgba(0,0,0,0.24)]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this fulfillment partner?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Delete this fulfillment partner?</AlertDialogTitle>
+            <AlertDialogDescription className="text-[13px] text-[var(--apple-subink)]">
               Manufacturers that point at this partner as their default will fall back to no
               default; orders already routed here keep their history.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-full border-0 shadow-none text-[var(--apple-subink)] hover:bg-[var(--apple-track)]">Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => remove.mutate()}
-              className="bg-rose-600 hover:bg-rose-700"
+              className="rounded-full bg-[var(--apple-critical-wash)] text-[var(--apple-critical)] shadow-none hover:bg-[var(--apple-critical-wash)] hover:brightness-95"
             >
               Delete
             </AlertDialogAction>

@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import {
   ViewModeToggle,
   useViewMode,
@@ -549,7 +550,7 @@ export function AdminInstruments() {
                   setSearch("");
                   setSearchOpen(false);
                 }}
-                className="text-slate-400 hover:text-slate-700"
+                className="text-[var(--apple-faint)] hover:text-[var(--apple-subink)]"
                 aria-label="Close search"
               >
                 <X className="w-4 h-4" />
@@ -559,7 +560,7 @@ export function AdminInstruments() {
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="h-9 w-9 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+              className="h-9 w-9 rounded-full text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center transition-colors"
               aria-label="Search"
               data-testid="button-open-search"
             >
@@ -656,7 +657,7 @@ export function AdminInstruments() {
         </div>
       ) : (
         <div
-          className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-slate-100"
+          className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-[var(--apple-hairline)]"
           data-testid="list-instruments"
         >
           {filtered.map((i) => (
@@ -683,14 +684,14 @@ export function AdminInstruments() {
         }}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-0 gap-0 flex flex-col max-h-[calc(100dvh-2rem)] overflow-hidden"
+          className="max-w-md bg-white rounded-2xl border border-[var(--apple-hairline)] shadow-xl p-0 gap-0 flex flex-col max-h-[calc(100dvh-2rem)] overflow-hidden"
           data-testid="dialog-add-gear"
         >
           <DialogHeader className="text-left space-y-1 px-6 pt-6 pb-3 flex-shrink-0">
-            <DialogTitle className="text-[17px] font-semibold text-slate-900">
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">
               Add gear
             </DialogTitle>
-            <DialogDescription className="text-sm text-slate-500 leading-relaxed pr-6">
+            <DialogDescription className="text-sm text-[var(--apple-subink)] leading-relaxed pr-6">
               Paste a product URL — Carter Vintage, Reverb, Gibson, Martin,
               Sweetwater, etc. We'll prefill name, category, photo, and
               attach the reseller + maker.
@@ -717,7 +718,7 @@ export function AdminInstruments() {
               placeholder="https://…"
               autoFocus
               disabled={scrapeUrl.isPending || createInstrument.isPending}
-              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+              className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
               data-testid="input-add-gear-url"
             />
             {pasteError && (
@@ -729,7 +730,7 @@ export function AdminInstruments() {
               </p>
             )}
             {!scraped && !pasteError && (
-              <p className="text-[11.5px] text-slate-400">
+              <p className="text-[11.5px] text-[var(--apple-faint)]">
                 Reads the page's Open Graph + product metadata and rehosts
                 the hero image. Most modern shops work without an account.
               </p>
@@ -737,17 +738,17 @@ export function AdminInstruments() {
             {scraped && (
               <div className="mt-2 space-y-1.5">
                 <p
-                  className="text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  className="text-xs font-semibold uppercase tracking-wide text-[var(--apple-subink)]"
                   data-testid="text-scrape-preview-label"
                 >
                   Ready to add — confirm below
                 </p>
                 <div
-                  className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3"
+                  className="space-y-2 rounded-md border border-[var(--apple-hairline)] bg-[var(--apple-track)] p-3"
                   data-testid="panel-scrape-preview"
                 >
                 <div className="flex items-start gap-3">
-                  <div className="w-12 h-12 rounded-md overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+                  <div className="w-12 h-12 rounded-md overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
                     {scraped.photoUrl ? (
                       <img
                         src={scraped.photoUrl}
@@ -760,7 +761,7 @@ export function AdminInstruments() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div
-                      className="text-slate-900 text-sm font-semibold break-words"
+                      className="text-[var(--apple-ink)] text-sm font-semibold break-words"
                       data-testid="text-scrape-preview-name"
                     >
                       {scraped.name ?? "Untitled gear"}
@@ -811,7 +812,7 @@ export function AdminInstruments() {
                           onClick={() =>
                             setSelectedExtras(allOn ? new Set() : new Set(extras))
                           }
-                          className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+                          className="text-xs font-semibold text-[var(--apple-subink)] hover:text-[var(--apple-ink)]"
                           data-testid="button-scrape-gallery-toggle-all"
                         >
                           {allOn ? "Clear all" : "Select all"}
@@ -871,14 +872,14 @@ export function AdminInstruments() {
             )}
             <div className="h-2" />
           </div>
-          <DialogFooter className="flex-shrink-0 px-6 py-4 border-t border-slate-100 bg-white flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2 sm:space-x-0">
+          <DialogFooter className="flex-shrink-0 px-6 py-4 border-t border-[var(--apple-hairline)] bg-white flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2 sm:space-x-0">
             {scraped ? (
               <>
                 <button
                   type="button"
                   onClick={resetScrape}
                   disabled={createInstrument.isPending}
-                  className="w-full sm:w-auto h-9 px-3 rounded-md text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  className="w-full sm:w-auto h-9 px-3 rounded-full text-xs font-semibold text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-50 transition-colors"
                   data-testid="button-add-gear-reset"
                 >
                   Try another URL
@@ -902,7 +903,7 @@ export function AdminInstruments() {
                   type="button"
                   onClick={skipPaste}
                   disabled={scrapeUrl.isPending || createInstrument.isPending}
-                  className="w-full sm:w-auto h-9 px-3 rounded-md text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  className="w-full sm:w-auto h-9 px-3 rounded-full text-xs font-semibold text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-50 transition-colors"
                   data-testid="button-add-gear-skip"
                 >
                   Skip — create blank
@@ -982,7 +983,7 @@ function InstrumentCard({
       className="group text-left flex flex-col"
       data-testid={`card-instrument-${instrument.id}`}
     >
-      <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-slate-100 ring-1 ring-slate-200 shadow-sm group-hover:shadow-md group-hover:ring-[var(--brand-blue)]/30 transition-all">
+      <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-[var(--apple-track)] ring-1 ring-[var(--apple-hairline)] shadow-sm group-hover:shadow-md group-hover:ring-[var(--brand-blue)]/30 transition-all">
         {instrument.photoUrl ? (
           <img
             src={instrument.photoUrl}
@@ -996,7 +997,7 @@ function InstrumentCard({
         )}
         {vendorCount > 0 && (
           <div
-            className="absolute top-2 right-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/90 backdrop-blur-sm text-slate-700 text-[10.5px] font-bold shadow"
+            className="absolute top-2 right-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/90 backdrop-blur-sm text-[var(--apple-subink)] text-[10.5px] font-bold shadow"
             data-testid={`badge-vendor-count-${instrument.id}`}
           >
             <Store className="w-3 h-3" />
@@ -1005,12 +1006,12 @@ function InstrumentCard({
         )}
       </div>
       <div
-        className="mt-2 text-slate-900 text-[13px] font-semibold leading-snug line-clamp-2"
+        className="mt-2 text-[var(--apple-ink)] text-[13px] font-semibold leading-snug line-clamp-2"
         data-testid={`text-instrument-name-${instrument.id}`}
       >
         {instrument.name}
       </div>
-      <div className="text-slate-400 text-[11.5px] truncate">
+      <div className="text-[var(--apple-faint)] text-[11.5px] truncate">
         {instrument.shortCategory || instrument.category}
       </div>
     </button>
@@ -1029,10 +1030,10 @@ function InstrumentRow({
     <button
       type="button"
       onClick={onOpen}
-      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
+      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-[var(--apple-track)] transition-colors"
       data-testid={`row-instrument-${instrument.id}`}
     >
-      <div className="w-12 h-12 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+      <div className="w-12 h-12 rounded-md overflow-hidden bg-[var(--apple-track)] ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {instrument.photoUrl ? (
           <img
             src={instrument.photoUrl}
@@ -1045,18 +1046,18 @@ function InstrumentRow({
       </div>
       <div className="min-w-0 flex-1">
         <div
-          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
+          className="text-[var(--apple-ink)] text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
           data-testid={`text-instrument-name-${instrument.id}`}
         >
           {instrument.name}
         </div>
-        <div className="text-slate-500 text-[12px] truncate">
+        <div className="text-[var(--apple-subink)] text-[12px] truncate">
           {instrument.shortCategory || instrument.category}
         </div>
       </div>
       {vendorCount > 0 && (
         <div
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10.5px] font-bold flex-shrink-0"
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[var(--apple-track)] text-[var(--apple-subink)] text-[10.5px] font-bold flex-shrink-0"
           data-testid={`badge-vendor-count-${instrument.id}`}
         >
           <Store className="w-3 h-3" />
@@ -1075,27 +1076,12 @@ function EmptyState({
   filtering?: boolean;
 }) {
   return (
-    <div
-      className="py-16 flex flex-col items-center justify-center text-center"
-      data-testid="empty-instruments"
-    >
-      <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-        <Guitar className="w-6 h-6" />
-      </div>
-      <p className="text-slate-700 text-[14px] font-semibold">
-        {searching
-          ? "No gear matches that search"
-          : filtering
-            ? "No gear matches these filters"
-            : "No gear yet"}
-      </p>
-      <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs">
-        {searching
-          ? "Try a different name or category."
-          : filtering
-            ? "Adjust or reset the filters to see more gear."
-            : "Add a guitar, amp, mic, or anything else artists play on — each can carry its own maker / reseller links."}
-      </p>
-    </div>
+    <AdminEmptyState testId="empty-instruments">
+      {searching
+        ? "No gear matches that search."
+        : filtering
+          ? "No gear matches these filters."
+          : "No gear yet. Add a guitar, amp, mic, or anything else artists play on."}
+    </AdminEmptyState>
   );
 }

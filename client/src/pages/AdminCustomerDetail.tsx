@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { OrderDetailSheet, originBadge } from "@/components/admin/OrderDetailSheet";
@@ -390,7 +391,7 @@ export function AdminCustomerDetail() {
                 <Mail className="w-3.5 h-3.5" /> {c.email}
                 {c.emailVerifiedAt ? (
                   <span
-                    className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded"
+                    className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--apple-ready)] bg-[var(--apple-ready-wash)] px-1.5 py-0.5 rounded"
                     title={`Verified ${new Date(c.emailVerifiedAt as unknown as string).toLocaleDateString()}`}
                     data-testid="badge-email-verified"
                   >
@@ -398,7 +399,7 @@ export function AdminCustomerDetail() {
                   </span>
                 ) : (
                   <span
-                    className="inline-flex items-center text-xs font-semibold uppercase tracking-wide text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded"
+                    className="inline-flex items-center text-xs font-semibold uppercase tracking-wide text-[var(--apple-subink)] bg-[var(--apple-chip)] px-1.5 py-0.5 rounded"
                     data-testid="badge-email-unverified"
                   >
                     Unverified
@@ -419,7 +420,7 @@ export function AdminCustomerDetail() {
                   <Phone className="w-3.5 h-3.5" /> {(c as any).phoneE164}
                   {(c as any).phoneVerifiedAt ? (
                     <span
-                      className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded"
+                      className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--apple-ready)] bg-[var(--apple-ready-wash)] px-1.5 py-0.5 rounded"
                       title={`Verified ${new Date((c as any).phoneVerifiedAt).toLocaleDateString()}`}
                       data-testid="badge-phone-verified"
                     >
@@ -427,7 +428,7 @@ export function AdminCustomerDetail() {
                     </span>
                   ) : (
                     <span
-                      className="inline-flex items-center text-xs font-semibold uppercase tracking-wide text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded"
+                      className="inline-flex items-center text-xs font-semibold uppercase tracking-wide text-[var(--apple-subink)] bg-[var(--apple-chip)] px-1.5 py-0.5 rounded"
                       data-testid="badge-phone-unverified"
                     >
                       Unverified
@@ -456,7 +457,7 @@ export function AdminCustomerDetail() {
                   type="button"
                   onClick={() => signInLinkMutation.mutate()}
                   disabled={signInLinkMutation.isPending}
-                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-sm font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors disabled:opacity-50"
                   data-testid="button-signin-link"
                 >
                   <Link2 className="w-3.5 h-3.5" />
@@ -481,7 +482,7 @@ export function AdminCustomerDetail() {
                   href={`https://dashboard.stripe.com/customers/${c.stripeCustomerId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-sm font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
                   data-testid="link-stripe-customer"
                 >
                   Stripe
@@ -519,7 +520,7 @@ export function AdminCustomerDetail() {
                     /* clipboard blocked — the field is selectable as a fallback */
                   }
                 }}
-                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors flex-shrink-0"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-sm font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors flex-shrink-0"
                 data-testid="button-copy-signin-link"
               >
                 Copy
@@ -600,7 +601,7 @@ export function AdminCustomerDetail() {
                 return (
                 <div
                   key={o.id}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors"
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--apple-track)] transition-colors"
                   data-testid={`row-order-${o.id}`}
                 >
                   <button
@@ -848,7 +849,7 @@ function Stat({
       <button
         type="button"
         onClick={onClick}
-        className="w-full text-left rounded-lg border border-slate-200 bg-white px-4 py-3 cursor-pointer transition-colors hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50"
+        className="w-full text-left rounded-lg border border-[var(--apple-hairline)] bg-white px-4 py-3 cursor-pointer transition-colors hover:bg-[var(--apple-track)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50"
         data-testid={testId}
       >
         {body}
@@ -987,7 +988,7 @@ function MergeRow({
               type="button"
               onClick={() => { setConfirming(false); setTyped(""); }}
               disabled={undo.isPending}
-              className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              className="rounded-md border border-[var(--apple-hairline)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
               data-testid={`button-merge-undo-cancel-${m.id}`}
             >
               Cancel
@@ -1194,7 +1195,7 @@ function CombineAccountsPanel({ anchorId, anchorName }: { anchorId: string; anch
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="mt-3 inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            className="mt-3 inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-sm font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
             data-testid="button-combine-open"
           >
             <Users className="w-3.5 h-3.5" />
@@ -1225,7 +1226,7 @@ function CombineAccountsPanel({ anchorId, anchorName }: { anchorId: string; anch
                     setQ("");
                     setDebouncedQ("");
                   }}
-                  className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 transition-colors flex-shrink-0"
+                  className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-[var(--apple-hairline)] bg-white text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors flex-shrink-0"
                   data-testid="button-combine-close"
                   aria-label="Close"
                 >
@@ -1246,7 +1247,7 @@ function CombineAccountsPanel({ anchorId, anchorName }: { anchorId: string; anch
                       key={cand.id}
                       type="button"
                       onClick={() => setPickedId(cand.id)}
-                      className="w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors flex items-start justify-between gap-3"
+                      className="w-full text-left px-3 py-2.5 hover:bg-[var(--apple-track)] transition-colors flex items-start justify-between gap-3"
                       data-testid={`button-merge-candidate-${cand.id}`}
                     >
                       <div className="min-w-0 flex-1">
@@ -1282,11 +1283,11 @@ function CombineAccountsPanel({ anchorId, anchorName }: { anchorId: string; anch
               </button>
 
               <div className="grid sm:grid-cols-2 gap-3">
-                <div className="rounded-md border border-emerald-200 bg-emerald-50/60 p-3" data-testid="card-merge-survivor">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700 flex items-center gap-1.5">
+                <div className="rounded-md border border-[var(--apple-ready)]/30 bg-[var(--apple-ready-wash)] p-3" data-testid="card-merge-survivor">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--apple-ready)] flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Keep
                     {preview.survivingId === preview.recommendedSurvivingId && (
-                      <span className="font-medium normal-case tracking-normal text-emerald-600">· recommended</span>
+                      <span className="font-medium normal-case tracking-normal text-[var(--apple-ready)]">· recommended</span>
                     )}
                   </div>
                   <div className="mt-1 text-sm font-medium text-slate-900 truncate">{accountTitle(surv)}</div>
@@ -1295,8 +1296,8 @@ function CombineAccountsPanel({ anchorId, anchorName }: { anchorId: string; anch
                     <SignInChips providers={surv.providers} hasPassword={surv.hasPassword} isLegacy={surv.isLegacy} />
                   </div>
                 </div>
-                <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="card-merge-loser">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Close & absorb</div>
+                <div className="rounded-md border border-[var(--apple-hairline)] bg-[var(--apple-track)] p-3" data-testid="card-merge-loser">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--apple-subink)]">Close & absorb</div>
                   <div className="mt-1 text-sm font-medium text-slate-900 truncate">{accountTitle(lose)}</div>
                   {accountSub(lose) && <div className="text-xs text-slate-500 truncate">{accountSub(lose)}</div>}
                   <div className="mt-1.5">
@@ -1387,7 +1388,7 @@ function CombineAccountsPanel({ anchorId, anchorName }: { anchorId: string; anch
                       type="button"
                       onClick={() => setConfirming(false)}
                       disabled={mergeMutation.isPending}
-                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                      className="rounded-md border border-[var(--apple-hairline)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
                       data-testid="button-combine-cancel"
                     >
                       Cancel
@@ -1451,7 +1452,7 @@ function GrantAlbumButton({ customerId, ownedAlbumIds, previewAlbumIds }: { cust
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+        className="inline-flex items-center gap-1.5 rounded-md border border-[var(--apple-hairline)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
         data-testid="button-grant-album-open"
       >
         <Plus className="w-3.5 h-3.5" /> Grant album
@@ -1545,7 +1546,7 @@ function PreviewCollectionCard({
 
   return (
     <div
-      className="rounded-lg border border-slate-200 bg-white overflow-hidden"
+      className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden"
       data-testid={`card-collection-preview-${item.id}`}
     >
       <Link href={`/admin/albums/${item.albumId}`} className="block hover:opacity-95 transition-opacity">
@@ -1591,7 +1592,7 @@ function PreviewCollectionCard({
               <button
                 type="button"
                 onClick={() => setExtending(false)}
-                className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-md border border-[var(--apple-hairline)] px-2.5 py-1 text-xs font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)]"
                 data-testid={`button-preview-extend-cancel-${item.id}`}
               >
                 Cancel
@@ -1614,7 +1615,7 @@ function PreviewCollectionCard({
               <button
                 type="button"
                 onClick={() => setRemoving(false)}
-                className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-md border border-[var(--apple-hairline)] px-2.5 py-1 text-xs font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)]"
                 data-testid={`button-preview-remove-cancel-${item.id}`}
               >
                 Cancel
@@ -1715,23 +1716,23 @@ function GrantAlbumDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
       data-testid="dialog-grant-album"
     >
       <div
-        className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden"
+        className="bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_24px_60px_rgba(0,0,0,0.24)] w-full max-w-md max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--apple-hairline)]">
           <div>
-            <div className="text-slate-900 text-sm font-semibold">Grant album (demo)</div>
-            <div className="text-slate-500 text-xs">Preview = time-boxed full-playback, no order/number · Grant = permanent comp · super-admin only</div>
+            <div className="text-[var(--apple-ink)] text-[17px] font-semibold">Grant album (demo)</div>
+            <div className="text-[var(--apple-subink)] text-xs">Preview = time-boxed full-playback, no order/number · Grant = permanent comp · super-admin only</div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-slate-600"
+            className="p-1 text-[var(--apple-faint)] hover:text-[var(--apple-subink)]"
             data-testid="button-grant-album-close"
           >
             <X className="w-4 h-4" />
@@ -1765,11 +1766,11 @@ function GrantAlbumDialog({
         </div>
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
-            <div className="p-6 text-center text-slate-500 text-sm">Loading albums…</div>
+            <div className="p-6 text-center text-[var(--apple-faint)] text-sm">Loading albums…</div>
           ) : filtered.length === 0 ? (
-            <div className="p-6 text-center text-slate-500 text-sm">No albums match.</div>
+            <AdminEmptyState>No albums match.</AdminEmptyState>
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-[var(--apple-hairline)]">
               {filtered.map((a) => {
                 const isOwned = owned.has(a.id);
                 const isPreviewing = previewing.has(a.id);
@@ -1785,7 +1786,7 @@ function GrantAlbumDialog({
                       <div className="text-slate-500 text-xs truncate">{a.artist}</div>
                     </div>
                     {isOwned ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-medium">
+                      <span className="inline-flex items-center gap-1 text-[var(--apple-ready)] text-xs font-medium">
                         <CheckCircle2 className="w-3.5 h-3.5" /> Owned
                       </span>
                     ) : (
@@ -1831,11 +1832,10 @@ function GrantAlbumDialog({
   );
 }
 
-function EmptyRow({ icon: Icon, text }: { icon: React.ComponentType<any>; text: string }) {
+function EmptyRow({ text }: { icon?: React.ComponentType<any>; text: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-6 text-center">
-      <Icon className="w-6 h-6 mx-auto text-slate-300 mb-1.5" strokeWidth={1.5} />
-      <div className="text-slate-500 text-sm">{text}</div>
+    <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white">
+      <AdminEmptyState>{text}</AdminEmptyState>
     </div>
   );
 }
@@ -1895,15 +1895,15 @@ function AddressCard({
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
-    paid: "bg-emerald-50 text-emerald-700",
-    shipped: "bg-blue-50 text-blue-700",
-    complete: "bg-emerald-50 text-emerald-700",
-    completed: "bg-emerald-50 text-emerald-700",
-    refunded: "bg-rose-50 text-rose-700",
-    pending: "bg-amber-50 text-amber-700",
-    cancelled: "bg-slate-100 text-slate-600",
+    paid: "bg-[var(--apple-ready-wash)] text-[var(--apple-ready)]",
+    shipped: "bg-[var(--apple-blue)]/10 text-[var(--apple-blue)]",
+    complete: "bg-[var(--apple-ready-wash)] text-[var(--apple-ready)]",
+    completed: "bg-[var(--apple-ready-wash)] text-[var(--apple-ready)]",
+    refunded: "bg-[var(--apple-critical-wash)] text-[var(--apple-critical)]",
+    pending: "bg-[var(--apple-warning-wash)] text-[var(--apple-warning)]",
+    cancelled: "bg-[var(--apple-chip)] text-[var(--apple-subink)]",
   };
-  const cls = map[status] ?? "bg-slate-100 text-slate-600";
+  const cls = map[status] ?? "bg-[var(--apple-chip)] text-[var(--apple-subink)]";
   return (
     <span className={`inline-block mt-0.5 text-[10.5px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${cls}`}>
       {status}

@@ -8,6 +8,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AdminErrorBoundary } from "@/components/admin/AdminErrorBoundary";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -87,9 +88,9 @@ function AdminQaOrdersInner() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="flex items-start gap-3 mb-6">
           <div className="flex-1">
-            <h1 className="text-xl font-bold text-slate-900">QA Test Orders</h1>
-            <p className="text-sm text-slate-500 mt-0.5">
-              Orders placed in Stripe test mode (origin = <code className="bg-slate-100 px-1 rounded">qa:test</code>).
+            <h1 className="text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]">QA test orders.</h1>
+            <p className="text-sm text-[var(--apple-subink)] mt-0.5">
+              Orders placed in Stripe test mode (origin = <code className="bg-[var(--apple-track)] px-1 rounded">qa:test</code>).
               These are excluded from all reports, buyer rosters, fan libraries, and fulfillment queues.
               Hard-delete them here to keep the database clean.
             </p>
@@ -99,15 +100,15 @@ function AdminQaOrdersInner() {
               <AlertDialogTrigger asChild>
                 <button
                   type="button"
-                  className="shrink-0 text-sm font-medium px-3.5 py-2 rounded-lg text-white bg-red-600 hover:bg-red-700 transition-colors"
+                  className="shrink-0 text-sm font-medium px-3.5 py-2 rounded-full text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/10 transition-colors"
                   data-testid="button-delete-all-qa-orders"
                 >
                   Remove all ({orders.length})
                 </button>
               </AlertDialogTrigger>
-              <AlertDialogContent>
+              <AlertDialogContent className="rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Remove all QA test orders?</AlertDialogTitle>
+                  <AlertDialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Remove all QA test orders?</AlertDialogTitle>
                   <AlertDialogDescription>
                     This will permanently hard-delete{" "}
                     <strong>{orders.length} QA test order{orders.length === 1 ? "" : "s"}</strong>{" "}
@@ -121,7 +122,7 @@ function AdminQaOrdersInner() {
                       e.preventDefault();
                       bulkDeleteMutation.mutate();
                     }}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    className="bg-[var(--apple-critical)]/10 text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/15"
                     disabled={bulkDeleteMutation.isPending}
                     data-testid="button-confirm-delete-all-qa-orders"
                   >
@@ -134,26 +135,24 @@ function AdminQaOrdersInner() {
         </div>
 
         {isLoading && (
-          <div className="py-10 text-center text-slate-400 text-sm">Loading…</div>
+          <div className="py-10 text-center text-[var(--apple-faint)] text-sm">Loading…</div>
         )}
 
         {error && (
-          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">
+          <div className="rounded-2xl bg-[var(--apple-critical-wash)] border border-[var(--apple-critical)]/30 px-4 py-3 text-[var(--apple-critical)] text-sm">
             Failed to load QA orders: {(error as Error).message}
           </div>
         )}
 
         {!isLoading && !error && orders.length === 0 && (
-          <div className="py-16 text-center text-slate-400 text-sm">
-            No QA test orders found.
-          </div>
+          <AdminEmptyState>No QA test orders found.</AdminEmptyState>
         )}
 
         {orders.length > 0 && (
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+          <div className="bg-white border border-[var(--apple-hairline)] rounded-2xl overflow-hidden">
             <table className="w-full text-sm" data-testid="table-qa-orders">
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <tr className="border-b border-[var(--apple-hairline)] bg-[var(--apple-track)] text-left text-[11px] font-semibold text-[var(--apple-subink)] uppercase tracking-wider">
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Album</th>
                   <th className="px-4 py-3">Buyer</th>
@@ -166,26 +165,26 @@ function AdminQaOrdersInner() {
                 {orders.map((o) => (
                   <tr
                     key={o.id}
-                    className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
+                    className="border-b border-[var(--apple-hairline)] last:border-0 hover:bg-[var(--apple-track)] transition-colors"
                     data-testid={`row-qa-order-${o.id}`}
                   >
-                    <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
+                    <td className="px-4 py-3 text-[var(--apple-ink)] whitespace-nowrap">
                       {new Date(o.created_at).toLocaleDateString()}
                     </td>
-                    <td className="px-4 py-3 text-slate-700 max-w-[180px] truncate">
+                    <td className="px-4 py-3 text-[var(--apple-ink)] max-w-[180px] truncate">
                       {o.album_title ?? o.album_id}
                     </td>
-                    <td className="px-4 py-3 text-slate-600 max-w-[180px] truncate">
+                    <td className="px-4 py-3 text-[var(--apple-subink)] max-w-[180px] truncate">
                       <div>{o.buyer_email}</div>
                       {o.buyer_name && (
-                        <div className="text-xs text-slate-400">{o.buyer_name}</div>
+                        <div className="text-xs text-[var(--apple-faint)]">{o.buyer_name}</div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
+                    <td className="px-4 py-3 tabular-nums text-[var(--apple-ink)] whitespace-nowrap">
                       {formatUsdCents(o.total_cents)}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--apple-warning)]/10 text-[var(--apple-warning)]">
                         {o.status}
                       </span>
                     </td>
@@ -198,15 +197,15 @@ function AdminQaOrdersInner() {
                           <button
                             type="button"
                             onClick={() => setPendingDeleteId(o.id)}
-                            className="text-xs font-medium px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+                            className="text-xs font-medium px-3 py-1.5 rounded-full text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/10 transition-colors"
                             data-testid={`button-delete-qa-order-${o.id}`}
                           >
                             Remove
                           </button>
                         </AlertDialogTrigger>
-                        <AlertDialogContent>
+                        <AlertDialogContent className="rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Remove QA test order?</AlertDialogTitle>
+                            <AlertDialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Remove QA test order?</AlertDialogTitle>
                             <AlertDialogDescription>
                               This will permanently hard-delete the test order for{" "}
                               <strong>{o.buyer_email}</strong>
@@ -218,7 +217,7 @@ function AdminQaOrdersInner() {
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction
                               onClick={() => deleteMutation.mutate(o.id)}
-                              className="bg-red-600 hover:bg-red-700 text-white"
+                              className="bg-[var(--apple-critical)]/10 text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/15"
                               disabled={deleteMutation.isPending}
                               data-testid={`button-confirm-delete-qa-order-${o.id}`}
                             >

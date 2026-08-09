@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { AlertCircle, RotateCcw, Trash2 } from "lucide-react";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -161,26 +163,21 @@ export default function AdminTrash() {
   return (
     <AdminFrame active="trash">
       <div className="px-6 py-8 max-w-[1200px] mx-auto">
-        <div className="flex items-end justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900" data-testid="text-trash-title">
-              Deleted items
-            </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Deleted records live here for 30 days, then are permanently removed.
-              Restore brings the row back exactly as it was, including any
-              children that were deleted with it.
-            </p>
-          </div>
+        <div className="mb-6">
+          <AdminPageHeader
+            title="Deleted items."
+            subtitle="Deleted records live here for 30 days, then are permanently removed. Restore brings the row back exactly as it was, including any children that were deleted with it."
+            testId="text-trash-title"
+          />
         </div>
 
         {isLoading && (
-          <div className="text-slate-500 text-sm" data-testid="text-trash-loading">
+          <div className="text-[13px] text-[var(--apple-subink)]" data-testid="text-trash-loading">
             Loading…
           </div>
         )}
         {!!error && (
-          <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <div className="flex items-start gap-2 rounded-xl border border-[var(--apple-critical)]/30 bg-[var(--apple-critical)]/10 px-3 py-2 text-sm text-[var(--apple-critical)]">
             <AlertCircle className="w-4 h-4 mt-0.5" />
             <div>{(error as any)?.message ?? "Failed to load."}</div>
           </div>
@@ -188,10 +185,10 @@ export default function AdminTrash() {
 
         {!isLoading && !error && grouped.length === 0 && (
           <div
-            className="rounded-md border border-slate-200 bg-white p-8 text-center text-slate-500"
+            className="rounded-2xl border border-[var(--apple-hairline)] bg-white"
             data-testid="text-trash-empty"
           >
-            Nothing here.
+            <AdminEmptyState>Nothing here.</AdminEmptyState>
           </div>
         )}
 
@@ -200,22 +197,22 @@ export default function AdminTrash() {
             {grouped.map((g) => (
               <section
                 key={g.kind}
-                className="rounded-md border border-slate-200 bg-white overflow-hidden"
+                className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden"
                 data-testid={`section-trash-${g.kind}`}
               >
-                <header className="flex items-baseline justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
-                  <h2 className="text-sm font-semibold text-slate-700">
+                <header className="flex items-baseline justify-between px-3 py-2 bg-[var(--apple-track)] border-b border-[var(--apple-hairline)]">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
                     {g.label}
                   </h2>
-                  <span className="text-xs text-slate-500">{g.rows.length}</span>
+                  <span className="text-xs text-[var(--apple-subink)]">{g.rows.length}</span>
                 </header>
                 <table className="w-full text-sm">
-                  <thead className="text-slate-500 text-xs">
+                  <thead className="text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider">
                     <tr>
-                      <th className="text-left px-3 py-2 font-medium">Name</th>
-                      <th className="text-left px-3 py-2 font-medium">Deleted</th>
-                      <th className="text-left px-3 py-2 font-medium">By</th>
-                      <th className="text-left px-3 py-2 font-medium">Auto-purge in</th>
+                      <th className="text-left px-3 py-2 font-semibold">Name</th>
+                      <th className="text-left px-3 py-2 font-semibold">Deleted</th>
+                      <th className="text-left px-3 py-2 font-semibold">By</th>
+                      <th className="text-left px-3 py-2 font-semibold">Auto-purge in</th>
                       <th className="px-3 py-2"></th>
                     </tr>
                   </thead>
@@ -225,19 +222,19 @@ export default function AdminTrash() {
                       return (
                         <tr
                           key={`${row.type}:${row.id}`}
-                          className="border-t border-slate-100"
+                          className="border-t border-[var(--apple-hairline)]"
                           data-testid={`row-trash-${row.type}-${row.id}`}
                         >
-                          <td className="px-3 py-2 text-slate-900 font-medium">
+                          <td className="px-3 py-2 text-[var(--apple-ink)] font-medium">
                             {row.label}
                           </td>
-                          <td className="px-3 py-2 text-slate-500">
+                          <td className="px-3 py-2 text-[var(--apple-subink)]">
                             {new Date(row.deletedAt).toLocaleString()}
                           </td>
-                          <td className="px-3 py-2 text-slate-500">
+                          <td className="px-3 py-2 text-[var(--apple-subink)]">
                             {row.deletedByUserName ?? "—"}
                           </td>
-                          <td className="px-3 py-2 text-slate-500">
+                          <td className="px-3 py-2 text-[var(--apple-subink)]">
                             {dLeft} {dLeft === 1 ? "day" : "days"}
                           </td>
                           <td className="px-3 py-2 text-right">
@@ -255,7 +252,7 @@ export default function AdminTrash() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="text-rose-600 hover:text-rose-700 hover:border-rose-300"
+                                className="text-[var(--apple-critical)] hover:text-[var(--apple-critical)] hover:border-[var(--apple-critical)]/40"
                                 disabled={busy === `p:${row.id}`}
                                 onClick={() => setPendingPurge(row)}
                                 data-testid={`button-purge-${row.type}-${row.id}`}
@@ -280,24 +277,24 @@ export default function AdminTrash() {
         open={!!pendingPurge}
         onOpenChange={(open) => !open && setPendingPurge(null)}
       >
-        <AlertDialogContent data-testid="dialog-purge-confirm">
+        <AlertDialogContent className="rounded-2xl overflow-hidden border border-[var(--apple-hairline)]" data-testid="dialog-purge-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Permanently delete this record?</AlertDialogTitle>
+            <AlertDialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Permanently delete this record?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingPurge && (
                 <span className="block">
-                  <strong className="text-slate-900">{pendingPurge.label}</strong>{" "}
+                  <strong className="text-[var(--apple-ink)]">{pendingPurge.label}</strong>{" "}
                   ({prettyTable(pendingPurge.type)}) will be removed from the
                   database. This cannot be undone.
                 </span>
               )}
               {previewQ.isLoading && (
-                <span className="block mt-2 text-slate-500">
+                <span className="block mt-2 text-[var(--apple-subink)]">
                   Counting what else will be deleted…
                 </span>
               )}
               {previewQ.data && previewQ.data.totalChildren > 0 && (
-                <span className="block mt-3 rounded border border-rose-200 bg-rose-50 p-2 text-rose-700 text-sm">
+                <span className="block mt-3 rounded-lg border border-[var(--apple-critical)]/30 bg-[var(--apple-critical)]/10 p-2 text-[var(--apple-critical)] text-sm">
                   <span className="block font-medium mb-1">
                     Also deletes {previewQ.data.totalChildren} child row{previewQ.data.totalChildren === 1 ? "" : "s"}:
                   </span>
@@ -311,7 +308,7 @@ export default function AdminTrash() {
                 </span>
               )}
               {previewQ.data && previewQ.data.totalChildren === 0 && (
-                <span className="block mt-2 text-slate-500">
+                <span className="block mt-2 text-[var(--apple-subink)]">
                   No child records will be affected.
                 </span>
               )}
@@ -320,7 +317,7 @@ export default function AdminTrash() {
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-purge-cancel">Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-rose-600 hover:bg-rose-700"
+              className="rounded-full border-0 bg-[var(--apple-critical)]/10 text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/20"
               disabled={!pendingPurge || busy === `p:${pendingPurge.id}`}
               onClick={() => pendingPurge && purgeM.mutate(pendingPurge)}
               data-testid="button-purge-confirm"

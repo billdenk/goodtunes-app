@@ -34,6 +34,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/hooks/useAuth";
 import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { RecentsRail } from "@/components/admin/RecentsRail";
 import {
@@ -412,14 +413,14 @@ export function AdminInstrument() {
         }
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-xl p-6 gap-4"
           data-testid="dialog-delete-instrument"
         >
           <DialogHeader className="text-left space-y-1">
-            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)] pr-8">
               Delete <span className="italic">{instrument.name}</span>?
             </DialogTitle>
-            <DialogDescription className="text-[13px] font-normal text-slate-500">
+            <DialogDescription className="text-[13px] font-normal text-[var(--apple-subink)]">
               {(() => {
                 const vc = instrument.vendors?.length ?? 0;
                 const pc = usage?.performerCount ?? 0;
@@ -458,7 +459,8 @@ export function AdminInstrument() {
               type="button"
               onClick={() => setDeleteConfirmOpen(false)}
               disabled={deleteInstrument.isPending}
-              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              variant="ghost"
+              className="rounded-full border-0 shadow-none bg-transparent text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hover:text-[var(--apple-subink)]"
               data-testid="button-delete-instrument-cancel"
             >
               Cancel
@@ -467,7 +469,7 @@ export function AdminInstrument() {
               type="button"
               onClick={() => deleteInstrument.mutate()}
               disabled={deleteInstrument.isPending}
-              className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
+              className="rounded-full border-0 shadow-none bg-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/90 text-white ml-2"
               data-testid="button-delete-instrument-confirm"
             >
               {deleteInstrument.isPending ? "Deleting…" : "Delete gear"}
@@ -631,7 +633,7 @@ function SourceUrlExtras({ instrument }: { instrument: InstrumentFull }) {
         wrap: "mt-1 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2",
         icon: "w-3.5 h-3.5 text-slate-500 flex-shrink-0",
         msg: "text-xs text-slate-600 flex-1 min-w-0",
-        btn: "h-7 px-2.5 rounded-md bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-100 disabled:opacity-50 inline-flex items-center gap-1.5",
+        btn: "h-7 px-2.5 rounded-md bg-white border border-[var(--apple-hairline)] text-[var(--apple-ink)] text-xs font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50 inline-flex items-center gap-1.5",
         msgText: "Re-pull the photo from the source page if it's gone stale.",
       };
   return (
@@ -743,7 +745,7 @@ function MakerPickerPanel({ instrument }: { instrument: InstrumentFull }) {
       {instrument.maker ? (
         <Link
           href={`/admin/makers/${instrument.maker.id}`}
-          className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 hover:bg-slate-50 transition-colors"
+          className="flex items-center gap-3 rounded-xl border border-[var(--apple-hairline)] p-3 hover:bg-[var(--apple-track)] transition-colors"
           data-testid="link-current-maker"
         >
           <div className="w-10 h-10 rounded-md bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
@@ -770,7 +772,7 @@ function MakerPickerPanel({ instrument }: { instrument: InstrumentFull }) {
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="w-full rounded-xl border border-dashed border-slate-300 px-3 py-3 text-left text-slate-500 text-[13px] hover:bg-slate-50 transition-colors"
+          className="w-full rounded-xl border border-dashed border-[var(--apple-hairline)] px-3 py-3 text-left text-[var(--apple-subink)] text-[13px] hover:bg-[var(--apple-track)] transition-colors"
           data-testid="button-pick-maker"
         >
           {open ? "Pick a maker…" : "No maker set — pick one"}
@@ -815,7 +817,7 @@ function MakerPickerPanel({ instrument }: { instrument: InstrumentFull }) {
                     type="button"
                     onClick={() => setMaker.mutate(m.id)}
                     disabled={setMaker.isPending}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 text-left disabled:opacity-50"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[var(--apple-track)] text-left disabled:opacity-50"
                     data-testid={`option-maker-${m.id}`}
                   >
                     <div className="w-7 h-7 rounded bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
@@ -844,7 +846,7 @@ function MakerPickerPanel({ instrument }: { instrument: InstrumentFull }) {
             <button
               type="button"
               onClick={() => setAddMode(true)}
-              className="w-full flex items-center gap-2 rounded-md border border-dashed border-slate-300 px-3 py-2.5 text-left text-[13px] text-slate-600 hover:bg-slate-50 hover:border-[var(--brand-blue)] transition-colors"
+              className="w-full flex items-center gap-2 rounded-md border border-dashed border-[var(--apple-hairline)] px-3 py-2.5 text-left text-[13px] text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hover:border-[var(--brand-blue)] transition-colors"
               data-testid="button-add-maker-inline"
             >
               <Plus className="w-3.5 h-3.5 text-[var(--brand-blue)] flex-shrink-0" />
@@ -1270,7 +1272,7 @@ function AddMakerComposer({
             type="button"
             onClick={() => setParentPickerOpen((o) => !o)}
             disabled={busy}
-            className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-white border border-[var(--apple-hairline)] text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-50"
             data-testid="button-maker-sub-brand-change-parent"
           >
             {parentPickerOpen ? "Cancel" : "Change"}
@@ -1313,7 +1315,7 @@ function AddMakerComposer({
                       setParentPickerOpen(false);
                       setParentQuery("");
                     }}
-                    className="w-full text-left flex items-center gap-2.5 px-1.5 py-1.5 hover:bg-slate-50 rounded-md"
+                    className="w-full text-left flex items-center gap-2.5 px-1.5 py-1.5 hover:bg-[var(--apple-track)] rounded-md"
                     data-testid={`button-maker-sub-brand-pick-${c.id}`}
                   >
                     <div className="w-7 h-7 rounded-md bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
@@ -1355,7 +1357,7 @@ function AddMakerComposer({
               setParentQuery("");
             }}
             disabled={busy}
-            className="px-3 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50"
+            className="px-3 h-8 rounded-md bg-white border border-[var(--apple-hairline)] text-[var(--apple-subink)] text-[11.5px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50"
             data-testid="button-maker-sub-brand-back"
           >
             Back
@@ -1543,7 +1545,7 @@ function AddMakerComposer({
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="px-3 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50"
+          className="px-3 h-8 rounded-md bg-white border border-[var(--apple-hairline)] text-[var(--apple-subink)] text-[11.5px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50"
           data-testid="button-cancel-add-maker"
         >
           Cancel
@@ -1719,7 +1721,7 @@ function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
             "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
             dragging
               ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
-              : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+              : "border-[var(--apple-hairline)] hover:border-[var(--apple-hairline)] hover:bg-[var(--apple-track)]",
             busy && "opacity-60 cursor-not-allowed",
           ]
             .filter(Boolean)
@@ -1884,7 +1886,7 @@ function VendorsPanel({ instrument }: { instrument: InstrumentFull }) {
         {adding ? (
           <button
             onClick={() => setAdding(false)}
-            className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200"
+            className="px-2.5 py-1.5 rounded-full text-[11.5px] font-semibold inline-flex items-center gap-1.5 text-[var(--apple-subink)] hover:bg-[var(--apple-track)]"
             aria-expanded={adding}
             data-testid="button-toggle-add-vendor"
           >
@@ -1909,18 +1911,10 @@ function VendorsPanel({ instrument }: { instrument: InstrumentFull }) {
       )}
 
       {vendors.length === 0 ? (
-        <div className="px-6 py-12 text-center">
-          <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-            <Store className="w-6 h-6" />
-          </div>
-          <p className="text-slate-700 text-[14px] font-semibold">
-            No makers or resellers attached yet
-          </p>
-          <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs mx-auto">
-            Click "Add maker / reseller" above — paste the product URL and we'll
-            find or create the entity for you.
-          </p>
-        </div>
+        <AdminEmptyState>
+          No makers or resellers attached yet — click "Add maker / reseller"
+          above and paste the product URL.
+        </AdminEmptyState>
       ) : (
         <ul
           className="divide-y divide-slate-100"
@@ -2163,7 +2157,7 @@ function AddVendorForm({
             type="button"
             onClick={onClose}
             disabled={createMut.isPending}
-            className="px-3 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50"
+            className="px-3 h-8 rounded-md bg-white border border-[var(--apple-hairline)] text-[var(--apple-subink)] text-[11.5px] font-semibold hover:bg-[var(--apple-track)]"
             data-testid="button-cancel-add-vendor"
           >
             Cancel
@@ -2714,7 +2708,7 @@ function PeoplePanel({ instrument }: { instrument: InstrumentFull }) {
           {artists.map((a) => (
             <li
               key={a.id}
-              className="group hover:bg-slate-50/50 transition-colors"
+              className="group hover:bg-[var(--apple-track)]/50 transition-colors"
               data-testid={`row-person-${a.id}`}
             >
               <Link
@@ -2783,7 +2777,7 @@ function VendorRow({
       <div
         className={[
           "flex items-center gap-4 px-6 py-3.5",
-          editing ? "bg-[var(--brand-blue)]/5" : "hover:bg-slate-50/50",
+          editing ? "bg-[var(--brand-blue)]/5" : "hover:bg-[var(--apple-track)]/50",
         ].join(" ")}
       >
         {/* Logo */}
@@ -2873,7 +2867,7 @@ function VendorRow({
             disabled={busy || editing}
             aria-label={vendor.isHidden ? "Show maker / reseller" : "Hide maker / reseller"}
             title={vendor.isHidden ? "Show maker / reseller" : "Hide maker / reseller"}
-            className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-slate-100"
+            className="w-7 h-7 rounded-full bg-[var(--apple-chip)] text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-[var(--apple-chip)]"
             data-testid={`button-toggle-hidden-${vendor.id}`}
           >
             {vendor.isHidden ? (
@@ -2892,7 +2886,7 @@ function VendorRow({
               "w-7 h-7 rounded-full inline-flex items-center justify-center " +
               (editing
                 ? "bg-[var(--brand-blue)] text-white hover:bg-[#2890c8]"
-                : "bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900")
+                : "bg-[var(--apple-chip)] text-[var(--apple-subink)] hover:bg-[var(--apple-track)]")
             }
             data-testid={`button-edit-vendor-${vendor.id}`}
           >
@@ -2904,7 +2898,7 @@ function VendorRow({
             disabled={busy || editing}
             aria-label="Detach maker / reseller"
             title="Detach maker / reseller"
-            className="w-7 h-7 rounded-full bg-slate-100 text-rose-600 hover:bg-rose-50 hover:text-rose-700 inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-slate-100"
+            className="w-7 h-7 rounded-full bg-[var(--apple-chip)] text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/10 inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-[var(--apple-chip)]"
             data-testid={`button-detach-${vendor.id}`}
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -3158,7 +3152,7 @@ function VendorEditForm({
             type="button"
             onClick={onClose}
             disabled={saveMut.isPending}
-            className="px-3 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50"
+            className="px-3 h-8 rounded-md bg-white border border-[var(--apple-hairline)] text-[var(--apple-subink)] text-[11.5px] font-semibold hover:bg-[var(--apple-track)]"
             data-testid={`button-cancel-edit-vendor-${vendor.id}`}
           >
             Cancel
@@ -3275,7 +3269,7 @@ function ImagePicker({
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={disabled || uploading}
-              className="px-2.5 h-7 rounded-md bg-white border border-slate-200 text-slate-700 text-[11px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1.5"
+              className="px-2.5 h-7 rounded-md bg-white border border-[var(--apple-hairline)] text-[var(--apple-ink)] text-[11px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50 inline-flex items-center gap-1.5"
               data-testid={`button-${testId}-upload`}
             >
               {uploading ? (

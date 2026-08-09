@@ -43,6 +43,8 @@ import {
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { KpiCard, type KpiCardModel } from "@/components/admin/KpiCard";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { StatusDot } from "@/components/admin/StatusDot";
 import { useAuth } from "@/hooks/useAuth";
 
 /**
@@ -154,7 +156,7 @@ class DashboardContentBoundary extends Component<
           <button
             type="button"
             onClick={() => this.setState({ error: null, info: null })}
-            className="h-9 px-4 rounded-md bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+            className="h-9 px-5 rounded-full bg-[var(--apple-blue)] text-white text-sm font-semibold hover:bg-[var(--apple-blue)]/90"
             data-testid="button-dashboard-retry"
           >
             Try again
@@ -164,7 +166,7 @@ class DashboardContentBoundary extends Component<
               any corrupt client state that contributed to the crash. */}
           <a
             href="/admin/albums"
-            className="h-9 px-4 rounded-md border border-slate-300 text-slate-900 text-sm font-semibold hover:bg-slate-100 inline-flex items-center"
+            className="h-9 px-4 rounded-full text-[var(--apple-blue)] text-sm font-semibold hover:bg-[var(--apple-blue)]/10 inline-flex items-center transition-colors"
             data-testid="link-dashboard-go-to-albums"
           >
             Go to Albums
@@ -890,7 +892,7 @@ function PrimaryChart({
           (the card's natural height sets the story-grid row). */}
       <div className="h-[300px] lg:h-auto lg:flex-1 lg:min-h-[280px] flex flex-col">
       {loading ? (
-        <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
+        <div className="flex-1 flex items-center justify-center text-[var(--apple-faint)] text-sm">
           Loading…
         </div>
       ) : merged.length === 0 ? (
@@ -909,7 +911,7 @@ function PrimaryChart({
             </AreaChart>
           </ResponsiveContainer>
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <span className="text-slate-400 text-sm">No activity in this range yet.</span>
+            <span className="text-[var(--apple-faint)] text-sm">No activity in this range yet.</span>
           </div>
         </div>
       ) : (
@@ -1058,23 +1060,23 @@ function ArtistKpiTiles({
         ))}
       </div>
       {topAlbum && (
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 flex items-center gap-3" data-testid="artist-top-album">
-          <ShoppingBag className="w-4 h-4 text-slate-400 flex-shrink-0" />
-          <span className="text-sm text-slate-600">Top release this period:</span>
-          <span className="text-sm font-semibold text-slate-900 truncate">{topAlbum.title}</span>
-          <span className="text-sm text-slate-500 ml-auto flex-shrink-0">
+        <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white px-4 py-3 flex items-center gap-3" data-testid="artist-top-album">
+          <ShoppingBag className="w-4 h-4 text-[var(--apple-faint)] flex-shrink-0" />
+          <span className="text-[13px] text-[var(--apple-subink)]">Top release this period:</span>
+          <span className="text-[13px] font-semibold text-[var(--apple-ink)] truncate">{topAlbum.title}</span>
+          <span className="text-[13px] text-[var(--apple-subink)] ml-auto flex-shrink-0 tabular-nums">
             ${(Number(topAlbum.revenue) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
           </span>
         </div>
       )}
       {topFans.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3" data-testid="artist-top-fans">
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Top fans this period</p>
+        <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white px-4 py-3" data-testid="artist-top-fans">
+          <p className="text-[11px] font-semibold text-[var(--apple-subink)] uppercase tracking-wider mb-2">Top fans this period</p>
           <div className="space-y-1.5">
             {topFans.map((fan, i) => (
               <div key={i} className="flex items-center justify-between gap-2">
-                <span className="text-sm text-slate-700 truncate min-w-0">{fan.email}</span>
-                <span className="text-sm font-semibold text-slate-900 flex-shrink-0">
+                <span className="text-[13px] text-[var(--apple-subink)] truncate min-w-0">{fan.email}</span>
+                <span className="text-[13px] font-semibold text-[var(--apple-ink)] flex-shrink-0 tabular-nums">
                   ${(fan.totalCents / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                 </span>
               </div>
@@ -1083,10 +1085,10 @@ function ArtistKpiTiles({
         </div>
       )}
       {npoPayout > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 flex items-center gap-3" data-testid="artist-npo-payout">
+        <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white px-4 py-3 flex items-center gap-3" data-testid="artist-npo-payout">
           <Heart className="w-4 h-4 text-[color:var(--heart-pink)] flex-shrink-0" />
-          <span className="text-sm text-slate-600">NPO giving this period:</span>
-          <span className="text-sm font-semibold text-slate-900 ml-auto">
+          <span className="text-[13px] text-[var(--apple-subink)]">NPO giving this period:</span>
+          <span className="text-[13px] font-semibold text-[var(--apple-ink)] ml-auto tabular-nums">
             ${(npoPayout / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
           </span>
         </div>
@@ -1193,7 +1195,7 @@ function ActivityFeed({ orders, customers, className = "" }: { orders: OrderRow[
         </div>
       </div>
       {visible.length === 0 ? (
-        <p className="text-sm text-slate-400 py-10 text-center">Nothing yet.</p>
+        <AdminEmptyState testId="activity-empty">Nothing yet.</AdminEmptyState>
       ) : (
         // Task #1498 — the feed scrolls inside its own panel (flex-1
         // min-h-0 + overflow-y-auto) rather than stretching the page; on
@@ -1203,7 +1205,7 @@ function ActivityFeed({ orders, customers, className = "" }: { orders: OrderRow[
             <li key={i} data-testid={`activity-${it.kind}-${i}`}>
               <Link
                 href={it.href}
-                className="flex items-center gap-3 -mx-2 px-2 py-2 rounded-xl hover:bg-slate-50 transition-colors"
+                className="flex items-center gap-3 -mx-2 px-2 py-2 rounded-xl hover:bg-[var(--apple-track)] transition-colors"
               >
                 <ActivityIcon kind={it.kind} />
                 <div className="flex-1 min-w-0">
@@ -1337,7 +1339,7 @@ function ReferralPayoutsCard() {
           attention card. */}
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-2xl" data-testid="dialog-referral-payouts-preview">
+        <DialogContent className="max-w-2xl overflow-hidden" data-testid="dialog-referral-payouts-preview">
           <DialogHeader>
             <DialogTitle>Referral payouts preview</DialogTitle>
           </DialogHeader>
@@ -1358,7 +1360,7 @@ function ReferralPayoutsCard() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-referral-payouts-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="border-0 bg-transparent text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hover:text-[var(--apple-subink)]" data-testid="button-referral-payouts-cancel">Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
@@ -1380,20 +1382,20 @@ function ReferralPayoutsCard() {
 function ReferralPayoutsPreviewBody({ data }: { data: ReferralPayoutsPending | undefined }) {
   if (!data || data.batches.length === 0) {
     return (
-      <div className="py-6 text-center text-sm text-slate-500" data-testid="text-referral-payouts-empty">
+      <AdminEmptyState testId="text-referral-payouts-empty">
         No pending referral credits.
-      </div>
+      </AdminEmptyState>
     );
   }
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between text-xs text-slate-500">
+      <div className="flex items-center justify-between text-xs text-[var(--apple-subink)]">
         <span>{data.batches.length} payee{data.batches.length === 1 ? "" : "s"}</span>
         <span>
-          Total: <strong className="text-slate-700">{fmtUsd(data.totalCents)}</strong>
+          Total: <strong className="text-[var(--apple-ink)] tabular-nums">{fmtUsd(data.totalCents)}</strong>
         </span>
       </div>
-      <ul className="divide-y divide-slate-100 border border-slate-200 rounded-md max-h-[60vh] overflow-y-auto">
+      <ul className="divide-y divide-[var(--apple-hairline)] border border-[var(--apple-hairline)] rounded-2xl max-h-[60vh] overflow-y-auto">
         {data.batches.map((b) => {
           const blocked = !b.stripeAccountId || !b.payoutsEnabled;
           const reason = !b.stripeAccountId
@@ -1410,27 +1412,25 @@ function ReferralPayoutsPreviewBody({ data }: { data: ReferralPayoutsPending | u
               data-testid={`row-referral-payout-${b.ownerKind}-${b.ownerId}`}
             >
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-slate-900 truncate">
+                <div className="text-[13px] font-medium text-[var(--apple-ink)] truncate">
                   <Link href={detailHref} className="hover:underline">
                     {b.ownerName || `(unnamed ${b.ownerKind})`}
                   </Link>
-                  <span className="ml-2 text-xs uppercase tracking-wide text-slate-400">
+                  <span className="ml-2 text-[11px] uppercase tracking-wider text-[var(--apple-faint)]">
                     {b.ownerKind}
                   </span>
                 </div>
-                <div className="text-xs text-slate-500 mt-0.5">
+                <div className="text-xs text-[var(--apple-subink)] mt-0.5">
                   {b.creditIds.length} credit{b.creditIds.length === 1 ? "" : "s"} · {b.units} unit
                   {b.units === 1 ? "" : "s"}
-                  {reason ? <span className="text-amber-700"> · {reason}</span> : null}
+                  {reason ? <span className="text-[var(--apple-warning)]"> · {reason}</span> : null}
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-sm font-semibold text-slate-900">{fmtUsd(b.totalCents)}</div>
-                <div
-                  className={`text-xs uppercase tracking-wide font-semibold ${blocked ? "text-amber-700" : "text-emerald-700"}`}
-                >
+              <div className="text-right flex flex-col items-end gap-0.5">
+                <div className="text-[13px] font-semibold text-[var(--apple-ink)] tabular-nums">{fmtUsd(b.totalCents)}</div>
+                <StatusDot tone={blocked ? "warning" : "ready"}>
                   {blocked ? "Blocked" : "Ready"}
-                </div>
+                </StatusDot>
               </div>
             </li>
           );

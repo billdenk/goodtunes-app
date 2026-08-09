@@ -25,7 +25,6 @@ import {
   Trash2,
   Truck,
   Upload,
-  UserPlus,
   X,
   Zap,
 } from "lucide-react";
@@ -40,6 +39,8 @@ import { ViewAsPartnerButton } from "@/components/admin/ViewAsPartnerButton";
 import { useAuth } from "@/hooks/useAuth";
 import { AddressAutocompleteField } from "@/components/admin/AddressAutocompleteField";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { StatusDot } from "@/components/admin/StatusDot";
 import { NotificationsCard, NotificationsBadge } from "@/components/admin/NotificationsCard";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
@@ -134,14 +135,14 @@ function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
     onError: (e: Error) => toast({ title: "Couldn't update", description: e.message, variant: "destructive" }),
   });
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-auto-trigger-consent">
+    <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-5 space-y-4" data-testid="panel-auto-trigger-consent">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-            <Zap className={`w-4 h-4 ${consented ? "text-[var(--brand-blue)]" : "text-slate-400"}`} />
+          <div className="text-sm font-semibold text-[var(--apple-ink)] flex items-center gap-2">
+            <Zap className={`w-4 h-4 ${consented ? "text-[var(--brand-blue)]" : "text-[var(--apple-faint)]"}`} />
             Pool-funded early cut
           </div>
-          <p className="text-slate-500 text-sm mt-1 max-w-xl">
+          <p className="text-[var(--apple-subink)] text-sm mt-1 max-w-xl">
             Allow GoodTunes to stage masters cuts early for this press's
             albums once their per-sale funding pool covers the minimum-run
             floor. Each cut still needs the artist's opt-in and your approval
@@ -150,9 +151,9 @@ function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
           </p>
           <div className="text-xs mt-2" data-testid="text-consent-state">
             {consented ? (
-              <span className="text-emerald-700 font-medium">Consent on — early cuts can be staged.</span>
+              <StatusDot tone="ready">Consent on — early cuts can be staged.</StatusDot>
             ) : (
-              <span className="text-slate-500">Consent off — pools still build, but no cut is ever staged.</span>
+              <StatusDot tone="neutral">Consent off — pools still build, but no cut is ever staged.</StatusDot>
             )}
           </div>
         </div>
@@ -167,12 +168,12 @@ function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
 
       {/* Per-album pool ledger: accrued / released / available across this
           press's albums that have a funding pool building. */}
-      <div className="border-t border-slate-100 pt-3" data-testid="section-early-cut-pools">
-        <div className="text-xs uppercase tracking-wide text-slate-400 font-semibold mb-2">Funding pools</div>
+      <div className="border-t border-[var(--apple-hairline)] pt-3" data-testid="section-early-cut-pools">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-2">Funding pools</div>
         {poolsLoading ? (
-          <div className="text-xs text-slate-500" data-testid="text-pools-loading">Loading pools…</div>
+          <div className="text-xs text-[var(--apple-subink)]" data-testid="text-pools-loading">Loading pools…</div>
         ) : pools.length === 0 ? (
-          <div className="text-xs text-slate-500" data-testid="text-pools-empty">
+          <div className="text-xs text-[var(--apple-faint)] font-medium" data-testid="text-pools-empty">
             No albums are building a funding pool for this press yet.
           </div>
         ) : (
@@ -180,28 +181,28 @@ function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
             {pools.map((p) => (
               <div
                 key={p.albumId}
-                className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                className="flex items-center gap-3 rounded-lg border border-[var(--apple-hairline)] bg-[var(--apple-track)] px-3 py-2"
                 data-testid={`row-pool-${p.albumId}`}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm text-slate-900 truncate" data-testid={`text-pool-title-${p.albumId}`}>
+                  <div className="text-sm text-[var(--apple-ink)] truncate" data-testid={`text-pool-title-${p.albumId}`}>
                     {p.albumTitle}
                   </div>
-                  <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                  <div className="text-xs text-[var(--apple-subink)] flex items-center gap-2 mt-0.5">
                     {p.mastersTriggeredAt ? (
-                      <span className="text-emerald-700 font-medium">Cut staged</span>
+                      <StatusDot tone="ready">Cut staged</StatusDot>
                     ) : p.artistConsentAt ? (
-                      <span>Artist opted in</span>
+                      <StatusDot tone="accent">Artist opted in</StatusDot>
                     ) : (
-                      <span>Awaiting artist opt-in</span>
+                      <StatusDot tone="neutral">Awaiting artist opt-in</StatusDot>
                     )}
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="text-sm font-semibold text-slate-900" data-testid={`text-pool-available-${p.albumId}`}>
+                  <div className="text-sm font-semibold text-[var(--apple-ink)] tabular-nums" data-testid={`text-pool-available-${p.albumId}`}>
                     {usd(p.availableCents)}
                   </div>
-                  <div className="text-xs text-slate-400">
+                  <div className="text-xs text-[var(--apple-faint)] tabular-nums">
                     {usd(p.accruedCents)} in · {usd(p.releasedCents)} out
                   </div>
                 </div>
@@ -378,8 +379,8 @@ export function AdminManufacturer() {
   }
   if (!user?.isAdmin) {
     return (
-      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-8">
-        <p className="text-slate-500 text-sm">Admin only.</p>
+      <main className="min-h-screen bg-[var(--apple-canvas)] flex items-center justify-center p-8">
+        <p className="text-[var(--apple-subink)] text-sm">Admin only.</p>
       </main>
     );
   }
@@ -387,7 +388,7 @@ export function AdminManufacturer() {
     return (
       <AdminFrame active="manufacturers">
         <div className="py-20 text-center">
-          <h1 className="text-slate-900 text-lg font-semibold">Press not found</h1>
+          <h1 className="text-[var(--apple-ink)] text-lg font-semibold">Press not found</h1>
           <Link href="/admin/manufacturers" className="text-[var(--brand-blue)] text-sm hover:underline">
             Back to presses
           </Link>
@@ -598,7 +599,7 @@ export function AdminManufacturer() {
                   type="button"
                   disabled={createAlbum.isPending}
                   onClick={() => { if (!createAlbum.isPending) setArtistDialogOpen(true); }}
-                  className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-2.5 py-1.5 rounded-full text-[11.5px] font-semibold inline-flex items-center gap-1.5 text-[var(--apple-blue)] hover:bg-[var(--apple-blue)]/10 disabled:opacity-50 disabled:cursor-not-allowed"
                   data-testid="button-press-add-album"
                 >
                   <Plus className="w-3 h-3" />
@@ -689,17 +690,17 @@ export function AdminManufacturer() {
       </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this press?</AlertDialogTitle>
+            <AlertDialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Delete this press?</AlertDialogTitle>
             <AlertDialogDescription>
               Open RFQs that invited this plant will keep their reply rows, but the plant won't
               appear in new RFQs.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => remove.mutate()} className="bg-rose-600 hover:bg-rose-700">
+            <AlertDialogCancel className="rounded-full border-0 text-[var(--apple-subink)] hover:bg-[var(--apple-track)]">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => remove.mutate()} className="rounded-full bg-[var(--apple-critical)]/10 text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/20">
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1361,20 +1362,19 @@ function ReferralsPanel({ pressId }: { pressId: string }) {
         </div>
         {!isLoading && artists.length > 0 && (
           <div className="flex-shrink-0 text-right" data-testid="text-referrals-total">
-            <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Paid units</div>
-            <div className="text-slate-900 text-xl font-bold tabular-nums">{totalPaidUnits.toLocaleString()}</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Paid units</div>
+            <div className="text-[var(--apple-ink)] text-xl font-bold tabular-nums">{totalPaidUnits.toLocaleString()}</div>
           </div>
         )}
       </div>
       {isLoading ? (
-        <div className="text-slate-500 text-sm py-4">Loading…</div>
+        <div className="text-[var(--apple-subink)] text-sm py-4">Loading…</div>
       ) : artists.length === 0 ? (
-        <div className="rounded-md border border-dashed border-slate-200 bg-slate-50/60 p-6 text-center" data-testid="empty-referrals">
-          <UserPlus className="w-5 h-5 text-slate-300 mx-auto mb-2" strokeWidth={1.5} />
-          <p className="text-sm text-slate-500">No artists invited yet.</p>
-        </div>
+        <AdminEmptyState testId="empty-referrals">
+          No artists invited yet.
+        </AdminEmptyState>
       ) : (
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-[var(--apple-hairline)]">
           {artists.map((a) => (
             <li key={a.id} className="py-3 first:pt-0 last:pb-0" data-testid={`row-referral-${a.id}`}>
               <div className="flex items-center gap-3">
@@ -1605,9 +1605,9 @@ export function HellbenderImportButton({
         Import from Hellbender
       </Button>
       <Dialog open={open} onOpenChange={(o) => (o ? null : close())}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
           <DialogHeader>
-            <DialogTitle>Import colors from Hellbender</DialogTitle>
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Import colors from Hellbender</DialogTitle>
             <DialogDescription>
               Scrapes <span className="font-mono text-xs">hellbendervinyl.com/pages/custom-vinyl</span>{" "}
               for every color tile, runs each photo through the same disc mask used by the manual
@@ -1616,7 +1616,7 @@ export function HellbenderImportButton({
             </DialogDescription>
           </DialogHeader>
           {previewMut.isPending && (
-            <div className="py-8 text-center text-slate-500 text-sm" data-testid="text-import-preview-loading">
+            <div className="py-8 text-center text-[var(--apple-subink)] text-sm" data-testid="text-import-preview-loading">
               Fetching Hellbender's catalog…
             </div>
           )}
@@ -1776,18 +1776,19 @@ export function HellbenderImportButton({
                 })}
               </div>
               <div className="flex justify-end gap-2 pt-2 sticky bottom-0 bg-white">
-                <Button
+                <button
                   type="button"
-                  variant="outline"
                   onClick={close}
+                  className="rounded-full px-4 py-2 text-sm font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
                   data-testid="button-import-cancel"
                 >
                   Cancel
-                </Button>
+                </button>
                 <Button
                   type="button"
                   onClick={() => commitMut.mutate()}
                   disabled={commitMut.isPending || selectedCount === 0}
+                  className="rounded-full"
                   data-testid="button-import-commit"
                 >
                   {commitMut.isPending ? "Importing…" : `Import ${selectedCount} color${selectedCount === 1 ? "" : "s"}`}
@@ -1982,9 +1983,9 @@ function MrpImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto" data-testid="dialog-mrp-import">
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]" data-testid="dialog-mrp-import">
         <DialogHeader>
-          <DialogTitle>Import colors from memphisrecordpressing.com</DialogTitle>
+          <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Import colors from memphisrecordpressing.com</DialogTitle>
           <DialogDescription>
             Pulls the published <a href="https://memphisrecordpressing.com/all-vinyl-colors/" target="_blank" rel="noreferrer" className="text-[var(--brand-blue)] hover:underline underline-offset-2">all-vinyl-colors</a> page,
             groups tiles by MRP's own section headings (Translucent, Smoke Blends, …), and saves each
@@ -1995,7 +1996,7 @@ function MrpImportDialog({
         </DialogHeader>
 
         {previewMut.isPending && (
-          <div className="py-10 text-center text-sm text-slate-500">Reading MRP color page…</div>
+          <div className="py-10 text-center text-sm text-[var(--apple-subink)]">Reading MRP color page…</div>
         )}
 
         {preview && !result && (
@@ -2119,7 +2120,7 @@ function MrpImportDialog({
 
         {result && (
           <div className="space-y-3" data-testid="mrp-import-results">
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+            <div className="rounded-md border border-[var(--apple-hairline)] bg-[var(--apple-track)] p-3 text-sm text-[var(--apple-ink)]">
               <strong>{result.totals.created}</strong> created ·{" "}
               <strong>{result.totals.updated}</strong> updated ·{" "}
               <strong>{result.totals.skipped}</strong> skipped ·{" "}
@@ -2135,14 +2136,20 @@ function MrpImportDialog({
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-mrp-import-close">
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--apple-hairline)]">
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="rounded-full px-4 py-2 text-sm font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
+            data-testid="button-mrp-import-close"
+          >
             {result ? "Done" : "Cancel"}
-          </Button>
+          </button>
           {preview && !result && (
             <Button
               onClick={() => commitMut.mutate()}
               disabled={commitMut.isPending || selectableCount === 0}
+              className="rounded-full"
               data-testid="button-mrp-import-commit"
             >
               {commitMut.isPending ? "Importing…" : `Import ${selectableCount} ${selectableCount === 1 ? "color" : "colors"}`}
@@ -2418,9 +2425,9 @@ export function CatalogCsvButtons({
       </DropdownMenu>
 
       <Dialog open={syncOpen} onOpenChange={setSyncOpen}>
-        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto" data-testid="dialog-sync-12in">
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto rounded-2xl border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]" data-testid="dialog-sync-12in">
           <DialogHeader>
-            <DialogTitle>Sync 12&quot; formats</DialogTitle>
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Sync 12&quot; formats</DialogTitle>
             <DialogDescription>
               Reconciles differences between the 12&quot; LP and 12&quot; Double LP color catalogs in both
               directions: missing color groups and colors are copied over, and empty swatches inherit
@@ -2430,7 +2437,7 @@ export function CatalogCsvButtons({
           </DialogHeader>
           <div className="space-y-3">
             {syncPreviewMut.isPending && (
-              <div className="text-sm text-slate-600" data-testid="sync-12in-loading">Comparing the two 12&quot; catalogs…</div>
+              <div className="text-sm text-[var(--apple-subink)]" data-testid="sync-12in-loading">Comparing the two 12&quot; catalogs…</div>
             )}
             {syncError && (
               <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" data-testid="sync-12in-error">
@@ -2438,7 +2445,7 @@ export function CatalogCsvButtons({
               </div>
             )}
             {syncPlan && !syncPlan.hasChanges && (
-              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600" data-testid="sync-12in-nochange">
+              <div className="rounded-md border border-[var(--apple-hairline)] bg-[var(--apple-track)] p-3 text-sm text-[var(--apple-subink)]" data-testid="sync-12in-nochange">
                 Already in sync — the two 12&quot; formats match.
               </div>
             )}
@@ -2459,13 +2466,19 @@ export function CatalogCsvButtons({
               </div>
             )}
           </div>
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-            <Button variant="outline" onClick={() => setSyncOpen(false)} data-testid="button-sync-12in-close">
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--apple-hairline)]">
+            <button
+              type="button"
+              onClick={() => setSyncOpen(false)}
+              className="rounded-full px-4 py-2 text-sm font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
+              data-testid="button-sync-12in-close"
+            >
               Cancel
-            </Button>
+            </button>
             <Button
               onClick={() => syncApplyMut.mutate()}
               disabled={!syncPlan?.hasChanges || syncPreviewMut.isPending || syncApplyMut.isPending}
+              className="rounded-full"
               data-testid="button-sync-12in-apply"
             >
               {syncApplyMut.isPending ? "Syncing…" : "Sync now"}
@@ -2475,9 +2488,9 @@ export function CatalogCsvButtons({
       </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="dialog-catalog-csv">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]" data-testid="dialog-catalog-csv">
           <DialogHeader>
-            <DialogTitle>Upload catalog CSV</DialogTitle>
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Upload catalog CSV</DialogTitle>
             <DialogDescription>
               Export the catalog, edit it in a spreadsheet, then upload it here. Every row is validated
               and you'll see exactly what will be added, updated, or removed before anything is saved.
@@ -2505,14 +2518,14 @@ export function CatalogCsvButtons({
                 Choose CSV…
               </Button>
               {fileName && (
-                <span className="text-xs text-slate-500" data-testid="text-catalog-csv-filename">
+                <span className="text-xs text-[var(--apple-subink)]" data-testid="text-catalog-csv-filename">
                   {fileName}
                 </span>
               )}
             </div>
 
             {previewMut.isPending && (
-              <div className="py-6 text-center text-sm text-slate-500">Reading CSV…</div>
+              <div className="py-6 text-center text-sm text-[var(--apple-subink)]">Reading CSV…</div>
             )}
 
             {plan && errs.length > 0 && (
@@ -2561,7 +2574,7 @@ export function CatalogCsvButtons({
                 </div>
               ) : (
                 <div
-                  className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600"
+                  className="rounded-md border border-[var(--apple-hairline)] bg-[var(--apple-track)] p-3 text-sm text-[var(--apple-subink)]"
                   data-testid="catalog-csv-nochange"
                 >
                   No changes — this CSV matches the current catalog.
@@ -2569,13 +2582,19 @@ export function CatalogCsvButtons({
               ))}
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-            <Button variant="outline" onClick={() => setOpen(false)} data-testid="button-catalog-csv-close">
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--apple-hairline)]">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-full px-4 py-2 text-sm font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
+              data-testid="button-catalog-csv-close"
+            >
               Cancel
-            </Button>
+            </button>
             <Button
               onClick={() => applyMut.mutate()}
               disabled={!canApply}
+              className="rounded-full"
               data-testid="button-catalog-csv-apply"
             >
               {applyMut.isPending ? "Applying…" : "Apply changes"}
@@ -2695,9 +2714,9 @@ export function HellbenderPricingSyncButton({
         Sync pricing from Hellbender
       </Button>
       <Dialog open={open} onOpenChange={(o) => (o ? null : close())}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
           <DialogHeader>
-            <DialogTitle>Sync pricing from Hellbender</DialogTitle>
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Sync pricing from Hellbender</DialogTitle>
             <DialogDescription>
               Fetches every color's <span className="font-mono text-xs">/products/&lt;handle&gt;.js</span>{" "}
               from hellbendervinyl.com, decodes the Shopify variants (size × quantity × upgrade),
@@ -2707,7 +2726,7 @@ export function HellbenderPricingSyncButton({
             </DialogDescription>
           </DialogHeader>
           {previewMut.isPending && (
-            <div className="py-8 text-center text-slate-500 text-sm" data-testid="text-pricing-sync-loading">
+            <div className="py-8 text-center text-[var(--apple-subink)] text-sm" data-testid="text-pricing-sync-loading">
               Fetching Hellbender's Shopify catalog…
             </div>
           )}
@@ -2728,7 +2747,7 @@ export function HellbenderPricingSyncButton({
                 </div>
               )}
               <div className="flex justify-end pt-2">
-                <Button type="button" onClick={close} data-testid="button-pricing-sync-close">
+                <Button type="button" onClick={close} className="rounded-full" data-testid="button-pricing-sync-close">
                   Done
                 </Button>
               </div>
@@ -2736,14 +2755,14 @@ export function HellbenderPricingSyncButton({
           )}
           {!previewMut.isPending && !commitResult && proposal && (
             <div className="space-y-3">
-              <div className="text-xs text-slate-500" data-testid="text-pricing-sync-summary">
+              <div className="text-xs text-[var(--apple-subink)]" data-testid="text-pricing-sync-summary">
                 Fetched {proposal.products.length} products · {proposal.writes.length} aggregated rungs ready ·{" "}
                 {proposal.unmapped.length} unmapped
               </div>
               {proposal.writes.length > 0 && (
-                <div className="rounded-md border border-slate-200 overflow-hidden">
+                <div className="rounded-md border border-[var(--apple-hairline)] overflow-hidden">
                   <table className="w-full text-xs">
-                    <thead className="bg-slate-50 text-slate-600">
+                    <thead className="bg-[var(--apple-track)] text-[var(--apple-subink)]">
                       <tr>
                         <th className="px-2 py-1.5 text-left font-medium">Format</th>
                         <th className="px-2 py-1.5 text-left font-medium">Tier</th>
@@ -2756,7 +2775,7 @@ export function HellbenderPricingSyncButton({
                       {proposal.writes.map((w) => (
                         <tr
                           key={`${w.format}|${w.tierName}|${w.qty}`}
-                          className="border-t border-slate-100"
+                          className="border-t border-[var(--apple-hairline)]"
                           data-testid={`row-pricing-write-${w.format}-${w.tierName}-${w.qty}`}
                         >
                           <td className="px-2 py-1 font-mono">{w.format}</td>
@@ -2786,18 +2805,19 @@ export function HellbenderPricingSyncButton({
                 </div>
               )}
               <div className="flex justify-end gap-2 pt-2 sticky bottom-0 bg-white">
-                <Button
+                <button
                   type="button"
-                  variant="outline"
                   onClick={close}
+                  className="rounded-full px-4 py-2 text-sm font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
                   data-testid="button-pricing-sync-cancel"
                 >
                   Cancel
-                </Button>
+                </button>
                 <Button
                   type="button"
                   onClick={() => commitMut.mutate()}
                   disabled={commitMut.isPending || proposal.writes.length === 0}
+                  className="rounded-full"
                   data-testid="button-pricing-sync-commit"
                 >
                   {commitMut.isPending
@@ -2857,13 +2877,13 @@ export function FormatDropdown({
 
   return (
     <div className="space-y-2" data-testid="catalog-format-selector">
-      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Format</span>
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Format</span>
       <div className="flex flex-wrap items-center gap-3">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full border border-slate-300 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]"
+              className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full border border-[var(--apple-hairline)] bg-white text-sm font-medium text-[var(--apple-ink)] hover:bg-[var(--apple-track)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)]"
               data-testid="button-format-dropdown"
             >
               {vinylActive && <Disc3 className="w-3.5 h-3.5 text-slate-500" />}
@@ -3205,7 +3225,7 @@ function AddFormatPicker({
         Add format
       </button>
       {open && (
-        <div className="absolute z-20 mt-1 min-w-[12rem] rounded-md border border-slate-200 bg-white shadow-lg py-1">
+        <div className="absolute z-20 mt-1 min-w-[12rem] rounded-md border border-[var(--apple-hairline)] bg-white shadow-lg py-1">
           {items.map(({ label, icon, fmt }) => (
             <button
               key={fmt}
@@ -3214,7 +3234,7 @@ function AddFormatPicker({
                 onPick(fmt);
                 setOpen(false);
               }}
-              className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+              className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-xs text-[var(--apple-ink)] hover:bg-[var(--apple-track)]"
               data-testid={`option-add-format-${fmt}`}
             >
               {icon}
@@ -3253,7 +3273,7 @@ function AddVinylSizePicker({
         Add size
       </button>
       {open && (
-        <div className="absolute z-20 mt-1 min-w-[11rem] rounded-md border border-slate-200 bg-white shadow-lg py-1">
+        <div className="absolute z-20 mt-1 min-w-[11rem] rounded-md border border-[var(--apple-hairline)] bg-white shadow-lg py-1">
           {available.map((f) => (
             <button
               key={f}
@@ -3262,7 +3282,7 @@ function AddVinylSizePicker({
                 onPick(f);
                 setOpen(false);
               }}
-              className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+              className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-xs text-[var(--apple-ink)] hover:bg-[var(--apple-track)]"
               data-testid={`option-add-vinyl-size-${f}`}
             >
               <Disc3 className="w-3.5 h-3.5 text-slate-400" />
@@ -3864,7 +3884,7 @@ function TemplatePreviewPanel({
             download
             target="_blank"
             rel="noopener noreferrer"
-            className="p-1.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors"
+            className="p-1.5 rounded hover:bg-[var(--apple-track)] text-[var(--apple-subink)] transition-colors"
             title="Download"
             data-testid="button-preview-download"
           >
@@ -4216,18 +4236,18 @@ function TemplateComponentRow({
       />
 
       <AlertDialog open={confirmRemove} onOpenChange={setConfirmRemove}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove the {label} template?</AlertDialogTitle>
+            <AlertDialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Remove the {label} template?</AlertDialogTitle>
             <AlertDialogDescription>
               Artists will no longer be able to download this {label.toLowerCase()} template, and the
               finished-file check falls back to its measured defaults.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-full border-0 text-[var(--apple-subink)] hover:bg-[var(--apple-track)]">Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-rose-600 hover:bg-rose-700"
+              className="rounded-full bg-[var(--apple-critical)]/10 text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/20"
               onClick={() => {
                 if (spec) onRemove(spec.id);
                 setConfirmRemove(false);
@@ -4265,22 +4285,22 @@ function DeleteTierButton({
         Delete tier
       </button>
       <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete "{tier.name}"?</AlertDialogTitle>
+            <AlertDialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Delete "{tier.name}"?</AlertDialogTitle>
             <AlertDialogDescription>
               This removes the tier, every swatch under it, and every (tier × jacket) price ladder
               that used it. Albums already quoted on this tier keep their snapshot.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-full border-0 text-[var(--apple-subink)] hover:bg-[var(--apple-track)]">Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 setOpen(false);
                 onConfirm();
               }}
-              className="bg-rose-600 hover:bg-rose-700"
+              className="rounded-full bg-[var(--apple-critical)]/10 text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/20"
             >
               Delete tier
             </AlertDialogAction>
@@ -4489,12 +4509,12 @@ export function ManageColorsPanel({
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent
-        className="sm:max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden"
+        className="sm:max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden rounded-2xl border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]"
         data-testid={`manage-colors-panel-${tier.id}`}
       >
         {/* Header — shadcn DialogContent auto-adds a close ✕ in the top-right */}
-        <div className="flex items-center px-6 py-4 border-b border-slate-100 shrink-0">
-          <span className="text-base font-medium text-slate-900">Manage colors — {tier.name}</span>
+        <div className="flex items-center px-6 py-4 border-b border-[var(--apple-hairline)] shrink-0">
+          <span className="text-[17px] font-semibold text-[var(--apple-ink)]">Manage colors — {tier.name}</span>
         </div>
 
         {/* Scrollable body */}
@@ -4512,8 +4532,8 @@ export function ManageColorsPanel({
               inp.click();
             }}
           >
-            <Upload className="w-4 h-4 mx-auto text-slate-400 mb-1" />
-            <p className="text-xs text-slate-500">Drop photos here or click — JPEG, PNG, WEBP, HEIC · max 5 MB each</p>
+            <Upload className="w-4 h-4 mx-auto text-[var(--apple-faint)] mb-1" />
+            <p className="text-xs text-[var(--apple-subink)]">Drop photos here or click — JPEG, PNG, WEBP, HEIC · max 5 MB each</p>
             <label
               className="flex items-center justify-center gap-1.5 mt-1.5 cursor-pointer select-none"
               onClick={(e) => e.stopPropagation()}
@@ -4524,7 +4544,7 @@ export function ManageColorsPanel({
                 onChange={(e) => setCropToDisc(e.target.checked)}
                 className="accent-[color:var(--brand-blue)]"
               />
-              <span className="text-xs text-slate-600">Crop to vinyl disc</span>
+              <span className="text-xs text-[var(--apple-subink)]">Crop to vinyl disc</span>
             </label>
           </div>
 
@@ -4543,13 +4563,13 @@ export function ManageColorsPanel({
             >
               + Add color manually
             </button>
-            <span className="text-slate-400"> — name and hex, no photo needed</span>
+            <span className="text-[var(--apple-faint)]"> — name and hex, no photo needed</span>
           </p>
 
           {/* Color rows */}
           <div className="px-6 pb-2" data-testid={`manage-colors-list-${tier.id}`}>
             {visibleRows.length === 0 && (
-              <p className="text-xs text-slate-400 py-3 text-center border-t border-slate-100">No colors yet — drop photos above or add manually.</p>
+              <p className="text-xs text-[var(--apple-faint)] font-medium py-3 text-center border-t border-[var(--apple-hairline)]">No colors yet — drop photos above or add manually.</p>
             )}
             {visibleRows.map((r, idx) => (
               <div key={r.key}>
@@ -4561,7 +4581,7 @@ export function ManageColorsPanel({
                   onDragEnd={handleDragEnd}
                   onDrop={r.uploading ? undefined : handleDrop(r.key)}
                   className={[
-                    "flex items-center gap-3 py-2.5 border-t border-slate-100 select-none",
+                    "flex items-center gap-3 py-2.5 border-t border-[var(--apple-hairline)] select-none",
                     dragId === r.key ? "opacity-50" : "",
                     dropOnId === r.key ? "!border-t-2 !border-[color:var(--brand-blue)]" : "",
                   ].join(" ")}
@@ -4694,19 +4714,19 @@ export function ManageColorsPanel({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[var(--apple-hairline)] shrink-0">
           <div className="flex gap-4">
-            <button type="button" disabled className="text-sm text-slate-300 cursor-not-allowed" title="Undo — coming soon">
+            <button type="button" disabled className="text-sm text-[var(--apple-faint)] cursor-not-allowed" title="Undo — coming soon">
               Undo
             </button>
-            <button type="button" disabled className="text-sm text-slate-300 cursor-not-allowed" title="Redo — coming soon">
+            <button type="button" disabled className="text-sm text-[var(--apple-faint)] cursor-not-allowed" title="Redo — coming soon">
               Redo
             </button>
             <button
               type="button"
               onClick={() => { setRows(buildInitialRows()); setDeletedIds(new Set()); setRowErrors(new Set()); }}
               disabled={saving || !isDirty}
-              className="text-sm text-slate-500 hover:underline underline-offset-2 disabled:opacity-40 disabled:no-underline"
+              className="text-sm text-[var(--apple-subink)] hover:underline underline-offset-2 disabled:opacity-40 disabled:no-underline"
               data-testid={`button-manage-colors-reset-${tier.id}`}
             >
               Reset
@@ -4717,7 +4737,7 @@ export function ManageColorsPanel({
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="text-sm text-slate-500 hover:underline underline-offset-2"
+              className="rounded-full px-4 py-2 text-sm font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
             >
               Cancel
             </button>
@@ -4725,7 +4745,7 @@ export function ManageColorsPanel({
               type="button"
               onClick={handleSave}
               disabled={!isDirty || saving || rows.some((r) => r.uploading)}
-              className="h-9 px-4 text-sm"
+              className="h-9 px-4 text-sm rounded-full"
               data-testid={`button-manage-colors-save-${tier.id}`}
             >
               {saving ? "Saving…" : "Save changes"}
@@ -4735,9 +4755,9 @@ export function ManageColorsPanel({
 
         {/* Delete confirm */}
         <AlertDialog open={!!deleteConfirmKey} onOpenChange={(o) => !o && setDeleteConfirmKey(null)}>
-          <AlertDialogContent>
+          <AlertDialogContent className="rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
             <AlertDialogHeader>
-              <AlertDialogTitle>Remove this color?</AlertDialogTitle>
+              <AlertDialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Remove this color?</AlertDialogTitle>
               <AlertDialogDescription>
                 {deleteRow
                   ? deleteRow.id
@@ -4747,9 +4767,9 @@ export function ManageColorsPanel({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel className="rounded-full border-0 text-[var(--apple-subink)] hover:bg-[var(--apple-track)]">Cancel</AlertDialogCancel>
               <AlertDialogAction
-                className="bg-rose-600 hover:bg-rose-700"
+                className="rounded-full bg-[var(--apple-critical)]/10 text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/20"
                 onClick={() => {
                   if (deleteRow) {
                     if (deleteRow.id) {
@@ -4793,22 +4813,22 @@ function DeleteJacketButton({
         Delete jacket
       </button>
       <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete "{jacket.name}"?</AlertDialogTitle>
+            <AlertDialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Delete "{jacket.name}"?</AlertDialogTitle>
             <AlertDialogDescription>
               This removes every (tier × jacket) price ladder that uses this jacket across every
               format on this press. Saved albums keep their snapshot.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-full border-0 text-[var(--apple-subink)] hover:bg-[var(--apple-track)]">Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 setOpen(false);
                 onConfirm();
               }}
-              className="bg-rose-600 hover:bg-rose-700"
+              className="rounded-full bg-[var(--apple-critical)]/10 text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/20"
             >
               Delete jacket
             </AlertDialogAction>
@@ -5049,9 +5069,9 @@ function SwatchChip({
         title={color.name}
       />
       <Dialog open={editing} onOpenChange={setEditing}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md rounded-2xl border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
           <DialogHeader>
-            <DialogTitle>Edit swatch</DialogTitle>
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Edit swatch</DialogTitle>
             <DialogDescription>
               Rename the color, input the hex code, or upload a photo for the vinyl swatch.
             </DialogDescription>
@@ -5060,7 +5080,7 @@ function SwatchChip({
             {/* Name + Hex — one row, matched h-9 controls */}
             <div className="flex gap-3 items-start">
               <div className="flex-1 min-w-0">
-                <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Name</span>
+                <span className="block text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider mb-1.5">Name</span>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -5069,7 +5089,7 @@ function SwatchChip({
                 />
               </div>
               <div className="w-36 shrink-0">
-                <span className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${imageUrl ? "text-slate-300" : "text-slate-500"}`}>
+                <span className={`block text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${imageUrl ? "text-[var(--apple-faint)]" : "text-[var(--apple-subink)]"}`}>
                   Hex
                 </span>
                 <div className={`flex items-center gap-1.5 ${imageUrl ? "opacity-50 pointer-events-none" : ""}`}>
@@ -5096,7 +5116,7 @@ function SwatchChip({
 
             {/* Photo — disc + Upload/Clear centered, helper text + crop below */}
             <div>
-              <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Photo</span>
+              <span className="block text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider mb-1.5">Photo</span>
               <div className="flex items-center gap-3">
                 {/* Round disc preview — drag-and-drop target; clicking also triggers the picker */}
                 <div
@@ -5123,7 +5143,7 @@ function SwatchChip({
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={upload.isPending}
-                    className="inline-flex items-center gap-1.5 h-9 px-3 text-xs font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                    className="inline-flex items-center gap-1.5 h-9 px-3 text-xs font-medium rounded-md border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] hover:bg-[var(--apple-track)] disabled:opacity-50 transition-colors"
                     data-testid={`button-swatch-upload-${color.id}`}
                   >
                     <Upload className="w-3.5 h-3.5" />
@@ -5153,7 +5173,7 @@ function SwatchChip({
                 data-testid={`input-swatch-upload-${color.id}`}
               />
               {/* Helper text + crop below the photo row */}
-              <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+              <p className="text-xs text-[var(--apple-subink)] mt-2 leading-relaxed">
                 Drag an image onto the photo, or click upload. JPEG, PNG, WEBP, or HEIC — up to 5 MB.
               </p>
               <label className="flex items-center gap-1.5 mt-2 cursor-pointer select-none">
@@ -5164,14 +5184,14 @@ function SwatchChip({
                   className="accent-[color:var(--brand-blue)]"
                   data-testid={`toggle-crop-disc-${color.id}`}
                 />
-                <span className="text-xs text-slate-600 font-medium">Crop to vinyl disc</span>
+                <span className="text-xs text-[var(--apple-subink)] font-medium">Crop to vinyl disc</span>
               </label>
             </div>
 
             {/* Color applies to — segmented pill toggles */}
             {mirror && otherSize && (
               <div>
-                <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-2">
+                <span className="block text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider mb-2">
                   Color applies to
                 </span>
                 <div className="flex items-center gap-2">
@@ -5202,12 +5222,12 @@ function SwatchChip({
           </div>
 
           {/* Footer: trash icon left, Cancel + Save right */}
-          <div className="flex items-center justify-between pt-3 mt-1 border-t border-slate-100">
+          <div className="flex items-center justify-between pt-3 mt-1 border-t border-[var(--apple-hairline)]">
             <button
               type="button"
               onClick={() => setConfirmDelete(true)}
               disabled={remove.isPending}
-              className="inline-flex items-center justify-center w-8 h-8 rounded-md text-rose-500 hover:bg-rose-50 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center justify-center w-8 h-8 rounded-md text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/10 disabled:opacity-50 transition-colors"
               data-testid={`button-delete-color-${color.id}`}
               title="Delete swatch"
             >
@@ -5217,7 +5237,7 @@ function SwatchChip({
               <button
                 type="button"
                 onClick={() => setEditing(false)}
-                className="text-xs text-slate-500 hover:underline underline-offset-2"
+                className="rounded-full px-4 py-2 text-xs font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
               >
                 Cancel
               </button>
@@ -5225,7 +5245,7 @@ function SwatchChip({
                 type="button"
                 onClick={() => save.mutate()}
                 disabled={!name.trim() || save.isPending}
-                className="h-8 px-3 text-xs"
+                className="h-8 px-3 text-xs rounded-full"
                 data-testid={`button-save-color-${color.id}`}
               >
                 {save.isPending ? "Saving…" : "Save"}
@@ -5235,22 +5255,22 @@ function SwatchChip({
         </DialogContent>
       </Dialog>
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete "{color.name}"?</AlertDialogTitle>
+            <AlertDialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Delete "{color.name}"?</AlertDialogTitle>
             <AlertDialogDescription>
               This removes the color from this group. Pricing for the group is unaffected. This can't be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid={`button-cancel-delete-color-${color.id}`}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-full border-0 text-[var(--apple-subink)] hover:bg-[var(--apple-track)]" data-testid={`button-cancel-delete-color-${color.id}`}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
                 remove.mutate();
               }}
               disabled={remove.isPending}
-              className="bg-rose-600 hover:bg-rose-700"
+              className="rounded-full bg-[var(--apple-critical)]/10 text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/20"
               data-testid={`button-confirm-delete-color-${color.id}`}
             >
               {remove.isPending ? "Deleting…" : "Delete swatch"}
@@ -5302,9 +5322,9 @@ function AddSwatchChip({
         <Plus className="w-3.5 h-3.5" />
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm rounded-2xl border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
           <DialogHeader>
-            <DialogTitle>Add swatch</DialogTitle>
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Add swatch</DialogTitle>
             <DialogDescription>Name and pick a hex; you can upload a photo from the chip after it lands.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -5330,7 +5350,7 @@ function AddSwatchChip({
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-xs text-slate-500 hover:underline underline-offset-2"
+                className="rounded-full px-4 py-2 text-xs font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
               >
                 Cancel
               </button>
@@ -5338,7 +5358,7 @@ function AddSwatchChip({
                 type="button"
                 onClick={() => create.mutate()}
                 disabled={!name.trim() || create.isPending}
-                className="h-8 px-3 text-xs"
+                className="h-8 px-3 text-xs rounded-full"
                 data-testid={`button-confirm-add-color-${tierId}`}
               >
                 {create.isPending ? "Adding…" : "Add swatch"}
@@ -5354,7 +5374,7 @@ function AddSwatchChip({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-slate-500 text-[11px] font-semibold uppercase tracking-wider mb-1">
+      <span className="block text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider mb-1">
         {label}
       </span>
       {children}

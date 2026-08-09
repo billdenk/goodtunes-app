@@ -32,13 +32,13 @@ function locationStr(row: OrderRow) {
 
 function StatCard({ label, value, icon: Icon, testId }: { label: string; value: string; icon: React.ElementType; testId?: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 flex items-start gap-3" data-testid={testId}>
+    <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-4 flex items-start gap-3" data-testid={testId}>
       <div className="w-9 h-9 rounded-lg bg-[var(--brand-blue)]/10 flex items-center justify-center flex-shrink-0">
         <Icon className="w-4 h-4 text-[var(--brand-blue)]" strokeWidth={1.8} />
       </div>
       <div>
-        <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">{label}</div>
-        <div className="text-2xl font-bold text-slate-900 tabular-nums mt-0.5">{value}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">{label}</div>
+        <div className="text-[28px] font-semibold tracking-tight text-[var(--apple-ink)] tabular-nums mt-0.5">{value}</div>
       </div>
     </div>
   );
@@ -51,37 +51,37 @@ function AlbumBreakdownTable({ albums, selectedAlbumId, onSelectAlbum }: {
 }) {
   const [expanded, setExpanded] = useState(true);
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+    <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden">
       <button
         type="button"
-        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition-colors text-left"
+        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-[var(--apple-track)] transition-colors text-left"
         onClick={() => setExpanded((v) => !v)}
         data-testid="toggle-album-breakdown"
       >
-        <h2 className="text-sm font-semibold text-slate-900">Per-album breakdown</h2>
-        {expanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        <h2 className="text-sm font-semibold text-[var(--apple-ink)]">Per-album breakdown</h2>
+        {expanded ? <ChevronUp className="w-4 h-4 text-[var(--apple-faint)]" /> : <ChevronDown className="w-4 h-4 text-[var(--apple-faint)]" />}
       </button>
       {expanded && (
-        <div className="overflow-x-auto border-t border-slate-100">
+        <div className="overflow-x-auto border-t border-[var(--apple-hairline)]">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+              <tr className="bg-[var(--apple-track)] border-b border-[var(--apple-hairline)] text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
                 <th className="text-left font-semibold px-5 py-2.5">Album</th>
                 <th className="text-right font-semibold px-4 py-2.5">Orders</th>
                 <th className="text-right font-semibold px-4 py-2.5">Fans</th>
                 <th className="text-right font-semibold px-5 py-2.5">Revenue</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-[var(--apple-hairline)]">
               {albums.length === 0 && (
-                <tr><td colSpan={4} className="px-5 py-6 text-center text-slate-400">No albums found.</td></tr>
+                <tr><td colSpan={4} className="px-5 py-6 text-center text-[var(--apple-faint)]">No albums found.</td></tr>
               )}
               {albums.map((a) => {
                 const active = selectedAlbumId === a.albumId;
                 return (
                   <tr
                     key={a.albumId}
-                    className={`hover:bg-slate-50 transition-colors cursor-pointer ${active ? "bg-[var(--brand-blue)]/5" : ""}`}
+                    className={`hover:bg-[var(--apple-track)] transition-colors cursor-pointer ${active ? "bg-[var(--brand-blue)]/5" : ""}`}
                     onClick={() => onSelectAlbum(active ? null : a.albumId)}
                     data-testid={`row-album-${a.albumId}`}
                   >
@@ -90,17 +90,17 @@ function AlbumBreakdownTable({ albums, selectedAlbumId, onSelectAlbum }: {
                         {a.artwork ? (
                           <img src={a.artwork} alt="" className="w-9 h-9 rounded object-cover flex-shrink-0" />
                         ) : (
-                          <div className="w-9 h-9 rounded bg-slate-100 flex-shrink-0" />
+                          <div className="w-9 h-9 rounded bg-[var(--apple-chip)] flex-shrink-0" />
                         )}
                         <div className="min-w-0">
-                          <div className="font-medium text-slate-900 truncate">{a.title}</div>
+                          <div className="font-medium text-[var(--apple-ink)] truncate">{a.title}</div>
                           {active && <div className="text-xs text-[var(--brand-blue)] font-semibold">Filtered — click to clear</div>}
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">{a.orders.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">{a.fans.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums font-semibold text-slate-900">{formatMoney(a.revenueCents)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-[var(--apple-ink)]">{a.orders.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-[var(--apple-ink)]">{a.fans.toLocaleString()}</td>
+                    <td className="px-5 py-3 text-right tabular-nums font-semibold text-[var(--apple-ink)]">{formatMoney(a.revenueCents)}</td>
                   </tr>
                 );
               })}
@@ -133,24 +133,24 @@ function BuyerList({ orders, total, onLoadMore, isLoading, search, onSearch, per
   }, [orders, search]);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-      <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-slate-100">
-        <h2 className="text-sm font-semibold text-slate-900">
+    <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden">
+      <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-[var(--apple-hairline)]">
+        <h2 className="text-sm font-semibold text-[var(--apple-ink)]">
           Buyer orders
-          {total > 0 && <span className="ml-2 text-slate-400 font-normal text-xs">({total.toLocaleString()} total)</span>}
+          {total > 0 && <span className="ml-2 text-[var(--apple-faint)] font-normal text-xs">({total.toLocaleString()} total)</span>}
         </h2>
-        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-md px-2.5 h-8">
-          <Search className="w-3.5 h-3.5 text-slate-400" />
+        <div className="flex items-center gap-1.5 bg-[var(--apple-track)] border border-[var(--apple-hairline)] rounded-md px-2.5 h-8">
+          <Search className="w-3.5 h-3.5 text-[var(--apple-faint)]" />
           <input
             type="text"
             value={search}
             onChange={(e) => onSearch(e.target.value)}
             placeholder="Filter loaded rows…"
-            className="w-44 text-sm bg-transparent outline-none placeholder:text-slate-400"
+            className="w-44 text-sm bg-transparent outline-none placeholder:text-[var(--apple-faint)]"
             data-testid="input-search-buyers"
           />
           {search && (
-            <button type="button" onClick={() => onSearch("")} className="text-slate-400 hover:text-slate-700">
+            <button type="button" onClick={() => onSearch("")} className="text-[var(--apple-faint)] hover:text-[var(--apple-ink)]">
               <X className="w-3.5 h-3.5" />
             </button>
           )}
@@ -159,7 +159,7 @@ function BuyerList({ orders, total, onLoadMore, isLoading, search, onSearch, per
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+            <tr className="bg-[var(--apple-track)] border-b border-[var(--apple-hairline)] text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
               <th className="text-left font-semibold px-5 py-2.5">Fan</th>
               <th className="text-left font-semibold px-4 py-2.5 hidden sm:table-cell">Album</th>
               <th className="text-left font-semibold px-4 py-2.5 hidden md:table-cell">Location</th>
@@ -167,18 +167,18 @@ function BuyerList({ orders, total, onLoadMore, isLoading, search, onSearch, per
               <th className="text-right font-semibold px-5 py-2.5">Amount</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-[var(--apple-hairline)]">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-5 py-8 text-center text-slate-400">
+                <td colSpan={5} className="px-5 py-8 text-center text-[var(--apple-faint)]">
                   {search ? "No orders match your filter." : "No orders yet."}
                 </td>
               </tr>
             )}
             {filtered.map((o) => (
-              <tr key={o.orderId} className="hover:bg-slate-50 transition-colors" data-testid={`row-order-${o.orderId}`}>
+              <tr key={o.orderId} className="hover:bg-[var(--apple-track)] transition-colors" data-testid={`row-order-${o.orderId}`}>
                 <td className="px-5 py-3">
-                  <div className="font-medium text-slate-900 truncate max-w-[180px]">
+                  <div className="font-medium text-[var(--apple-ink)] truncate max-w-[180px]">
                     {o.customerId ? (
                       <Link
                         href={`/admin/customers/${o.customerId}?from=person&personId=${personId}`}
@@ -192,19 +192,19 @@ function BuyerList({ orders, total, onLoadMore, isLoading, search, onSearch, per
                     )}
                   </div>
                   {o.buyerEmail && (
-                    <div className="text-xs text-slate-500 truncate max-w-[180px]">{o.buyerEmail}</div>
+                    <div className="text-xs text-[var(--apple-subink)] truncate max-w-[180px]">{o.buyerEmail}</div>
                   )}
                 </td>
                 <td className="px-4 py-3 hidden sm:table-cell">
-                  <div className="text-slate-700 truncate max-w-[200px]">{o.albumTitle}</div>
+                  <div className="text-[var(--apple-ink)] truncate max-w-[200px]">{o.albumTitle}</div>
                 </td>
-                <td className="px-4 py-3 hidden md:table-cell text-slate-500">
+                <td className="px-4 py-3 hidden md:table-cell text-[var(--apple-subink)]">
                   {locationStr(o) ?? "—"}
                 </td>
-                <td className="px-4 py-3 hidden md:table-cell text-slate-500 whitespace-nowrap">
+                <td className="px-4 py-3 hidden md:table-cell text-[var(--apple-subink)] whitespace-nowrap">
                   {formatDate(o.createdAt)}
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums font-semibold text-slate-900">
+                <td className="px-5 py-3 text-right tabular-nums font-semibold text-[var(--apple-ink)]">
                   {formatMoney(o.totalCents)}
                 </td>
               </tr>
@@ -213,12 +213,12 @@ function BuyerList({ orders, total, onLoadMore, isLoading, search, onSearch, per
         </table>
       </div>
       {orders.length < total && (
-        <div className="px-5 py-3 border-t border-slate-100 text-center">
+        <div className="px-5 py-3 border-t border-[var(--apple-hairline)] text-center">
           <button
             type="button"
             onClick={onLoadMore}
             disabled={isLoading}
-            className="text-sm font-medium text-[var(--brand-blue)] hover:underline disabled:text-slate-400 disabled:no-underline"
+            className="text-sm font-medium text-[var(--brand-blue)] hover:underline disabled:text-[var(--apple-faint)] disabled:no-underline"
             data-testid="button-load-more-buyers"
           >
             {isLoading ? "Loading…" : `Load more (${orders.length} of ${total.toLocaleString()} loaded)`}
@@ -281,7 +281,7 @@ function AdminArtistBuyersInner() {
       <div className="space-y-5">
         <Link
           href={`/admin/people/${personId}`}
-          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm text-[var(--apple-subink)] hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
           data-testid="link-back-to-person"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
@@ -299,7 +299,7 @@ function AdminArtistBuyersInner() {
         />
 
         {isLoading && offset === 0 && (
-          <div className="py-10 text-slate-500 text-sm">Loading…</div>
+          <div className="py-10 text-[var(--apple-subink)] text-sm">Loading…</div>
         )}
         {isError && offset === 0 && (
           <ErrorState
@@ -328,7 +328,7 @@ function AdminArtistBuyersInner() {
 
             {selectedAlbumId && (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-500">Filtered to album</span>
+                <span className="text-sm text-[var(--apple-subink)]">Filtered to album</span>
                 <button
                   type="button"
                   onClick={() => handleSelectAlbum(null)}

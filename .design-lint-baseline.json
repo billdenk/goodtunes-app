@@ -15372,7 +15372,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 data-[state=open]:bg-slate-100\""
+    "snippet": "className=\"px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-[var(--apple-track)] data-[state=open]:bg-slat"
   },
   {
     "rule": "hardcoded-font-size",
@@ -15427,7 +15427,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"px-2 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center\""
+    "snippet": "className=\"px-2 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50 inline-flex items-center justify-center\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -15437,7 +15437,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50\""
+    "snippet": "className=\"px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-[var(--apple-track)]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -15452,7 +15452,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1\""
+    "snippet": "className=\"px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50 inline-flex items-center gap-1\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -15532,7 +15532,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100\""
+    "snippet": "className=\"px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-[var(--apple-track)]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -15602,7 +15602,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"px-2.5 py-1 rounded-md text-[12.5px] font-medium text-slate-600 hover:bg-slate-100\""
+    "snippet": "className=\"px-2.5 py-1 rounded-md text-[12.5px] font-medium text-slate-600 hover:bg-[var(--apple-track)]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -15617,7 +15617,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50\""
+    "snippet": "className=\"px-3.5 py-1.5 rounded-md text-[13px] font-medium text-slate-600 hover:bg-[var(--apple-track)] disabled:opacity-50\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -15757,7 +15757,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"h-6 px-2 rounded-md text-[11px] font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-50\""
+    "snippet": "className=\"h-6 px-2 rounded-md text-[11px] font-medium text-slate-500 hover:bg-[var(--apple-track)] disabled:opacity-50\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -15937,7 +15937,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50\""
+    "snippet": "className=\"px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -15957,7 +15957,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-40 inline-flex items-center gap-1\""
+    "snippet": "className=\"px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-40 inline-flex items-center gap-1\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -15967,7 +15967,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"px-2 h-7 rounded-md bg-white border border-slate-200 text-slate-600 text-[11px] font-semibold hover:bg-slate-50 disabled:opacity-50\""
+    "snippet": "className=\"px-2 h-7 rounded-md bg-white border border-slate-200 text-slate-600 text-[11px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -15977,7 +15977,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"group flex items-center gap-2 text-[12.5px] hover:bg-slate-100/50 rounded px-1 py-0.5\""
+    "snippet": "className=\"group flex items-center gap-2 text-[12.5px] hover:bg-[var(--apple-track)] rounded px-1 py-0.5\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -16107,7 +16107,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"w-full flex items-center gap-2 px-2.5 h-8 rounded-md text-[12.5px] text-slate-700 hover:bg-slate-100\""
+    "snippet": "className=\"w-full flex items-center gap-2 px-2.5 h-8 rounded-md text-[12.5px] text-slate-700 hover:bg-[var(--apple-track)]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -16187,7 +16187,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"h-7 px-2.5 rounded-md text-slate-600 text-[12px] font-semibold hover:bg-slate-100\""
+    "snippet": "className=\"h-7 px-2.5 rounded-md text-slate-600 text-[12px] font-semibold hover:bg-[var(--apple-track)]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -16202,7 +16202,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"h-8 px-3 rounded-md bg-white border border-slate-200 text-slate-700 text-[12px] font-semibold hover:bg-slate-50 inline-flex items-center gap-1.5\""
+    "snippet": "className=\"h-8 px-3 rounded-md bg-white border border-slate-200 text-slate-700 text-[12px] font-semibold hover:bg-[var(--apple-track)] inline-flex items-center gap-1.5\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -16347,7 +16347,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"text-[12px] font-semibold px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-50\""
+    "snippet": "className=\"text-[12px] font-semibold px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-[var(--apple-track)] disabled:opacity-50\""
   },
   {
     "rule": "naked-icon-button",
@@ -16357,17 +16357,17 @@
   {
     "rule": "naked-icon-button",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<button type=\"button\" aria-label=\"How upload multiple tracks works\" className=\"w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-ce"
+    "snippet": "<button type=\"button\" aria-label=\"How upload multiple tracks works\" className=\"w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center"
   },
   {
     "rule": "naked-icon-button",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<button type=\"button\" aria-label=\"How to share the folder\" className=\"w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex"
+    "snippet": "<button type=\"button\" aria-label=\"How to share the folder\" className=\"w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-"
   },
   {
     "rule": "naked-icon-button",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<button type=\"button\" aria-label=\"What is GoodSync™?\" className=\"w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shri"
+    "snippet": "<button type=\"button\" aria-label=\"What is GoodSync™?\" className=\"w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-cente"
   },
   {
     "rule": "naked-icon-button",
@@ -16387,7 +16387,7 @@
   {
     "rule": "naked-icon-button",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<button type=\"button\" aria-label=\"File actions\" disabled={uploading || saveMut.isPending} className=\"w-8 h-8 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center "
+    "snippet": "<button type=\"button\" aria-label=\"File actions\" disabled={uploading || saveMut.isPending} className=\"w-8 h-8 rounded-md text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-cente"
   },
   {
     "rule": "native-select-on-admin",
@@ -16400,9 +16400,19 @@
     "snippet": "<Link"
   },
   {
-    "rule": "admin-link-missing-shared-treatment",
-    "file": "client/src/pages/AdminAlbumEngagement.tsx",
-    "snippet": "<Link href={`/admin/albums/${albumId}`} className=\"text-[12px] text-slate-500 hover:text-slate-700\">"
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbumBuyers.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">{label}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbumBuyers.tsx",
+    "snippet": "<div className=\"text-[28px] font-semibold tracking-tight text-[var(--apple-ink)] tabular-nums mt-0.5\">{value}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbumBuyers.tsx",
+    "snippet": "<tr className=\"bg-[var(--apple-track)] border-b border-[var(--apple-hairline)] text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -16412,52 +16422,52 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbumEngagement.tsx",
-    "snippet": "<div className=\"text-[11px] text-slate-500 uppercase tracking-wider font-semibold\">{label}</div>"
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">{label}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbumEngagement.tsx",
-    "snippet": "{sub && <div className=\"text-[12px] text-slate-500 mt-1\">{sub}</div>}"
+    "snippet": "<div className=\"text-[28px] font-semibold tabular-nums tracking-tight text-[var(--apple-ink)] mt-1\">{value}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbumEngagement.tsx",
-    "snippet": "<Link href={`/admin/albums/${albumId}`} className=\"text-[12px] text-slate-500 hover:text-slate-700\">"
+    "snippet": "{sub && <div className=\"text-[12px] text-[var(--apple-subink)] mt-1\">{sub}</div>}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbumEngagement.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-3\">Top songs</h2>"
+    "snippet": "<Link href={`/admin/albums/${albumId}`} className=\"text-[12px] text-[var(--apple-subink)] hover:text-[var(--brand-blue)] hover:underline\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbumEngagement.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[13px] py-2\">No plays yet.</div>"
+    "snippet": "<h1 className=\"text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]\">{album?.title ?? \"Album\"}</h1>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbumEngagement.tsx",
-    "snippet": "<div className=\"w-6 text-slate-400 text-[12px] font-mono text-right\">{i + 1}</div>"
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-[var(--apple-ink)] mb-3\">Top songs</h2>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbumEngagement.tsx",
-    "snippet": "<div className=\"flex-1 truncate text-[14px] text-slate-900\">{songTitle(s.songId)}</div>"
+    "snippet": "<div className=\"w-6 text-[var(--apple-faint)] text-[12px] font-mono text-right\">{i + 1}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbumEngagement.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-500 tabular-nums\">{s.plays.toLocaleString()} plays</div>"
+    "snippet": "<div className=\"flex-1 truncate text-[14px] text-[var(--apple-ink)]\">{songTitle(s.songId)}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbumEngagement.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Recent buyers</h2>"
+    "snippet": "<div className=\"text-[12px] text-[var(--apple-subink)] tabular-nums\">{s.plays.toLocaleString()} plays</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbumEngagement.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[13px] py-2\">No purchases yet.</div>"
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-[var(--apple-ink)]\">Recent buyers</h2>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16467,7 +16477,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbumEngagement.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-500\">{b.createdAt ? new Date(b.createdAt).toLocaleDateString() : \"\"}</div>"
+    "snippet": "<div className=\"text-[12px] text-[var(--apple-subink)]\">{b.createdAt ? new Date(b.createdAt).toLocaleDateString() : \"\"}</div>"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -16482,7 +16492,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbums.tsx",
-    "snippet": "className=\"flex-1 h-8 px-2.5 text-[13px] bg-white border border-slate-200 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30 focus:border-[var(--brand-blue)] t"
+    "snippet": "className=\"flex-1 h-8 px-2.5 text-[13px] bg-white border border-[var(--apple-hairline)] rounded-md text-[var(--apple-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30 focus:borde"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16492,7 +16502,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbums.tsx",
-    "snippet": "className=\"text-[12.5px] font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-colors\""
+    "snippet": "className=\"text-[12.5px] font-semibold text-[var(--apple-subink)] hover:text-[var(--apple-ink)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -16512,22 +16522,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbums.tsx",
-    "snippet": "className=\"text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbums.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[12px] truncate\">"
+    "snippet": "<div className=\"text-[var(--apple-subink)] text-[12px] truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbums.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[10.5px] mt-0.5 uppercase tracking-wide font-semibold flex items-center gap-1.5\">"
+    "snippet": "<div className=\"text-[var(--apple-faint)] text-[10.5px] mt-0.5 uppercase tracking-wide font-semibold flex items-center gap-1.5\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbums.tsx",
-    "snippet": "className=\"text-slate-900 text-[13.5px] font-semibold group-hover:text-[var(--brand-blue)] transition-colors flex items-center gap-2.5\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[13.5px] font-semibold group-hover:text-[var(--brand-blue)] transition-colors flex items-center gap-2.5\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -16537,17 +16547,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbums.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wide\""
+    "snippet": "className=\"inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--apple-track)] text-[var(--apple-subink)] text-[10px] font-bold uppercase tracking-wide\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbums.tsx",
-    "snippet": "<span className=\"text-slate-400 text-[11px] uppercase tracking-wide font-semibold tabular-nums\">"
+    "snippet": "<span className=\"text-[var(--apple-faint)] text-[11px] uppercase tracking-wide font-semibold tabular-nums\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbums.tsx",
-    "snippet": "<div className=\"text-[10.5px] font-semibold uppercase tracking-[0.06em] text-slate-500 mb-2\">"
+    "snippet": "<div className=\"text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[var(--apple-subink)] mb-2\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16557,7 +16567,7 @@
   {
     "rule": "naked-icon-button",
     "file": "client/src/pages/AdminAlbums.tsx",
-    "snippet": "<button type=\"button\" onClick={closeSearch} className=\"text-slate-400 hover:text-slate-700\" data-testid=\"button-close-search\" aria-label=\"Close search\" > <X className=\"w-3.5 h-3.5\" /> </button>"
+    "snippet": "<button type=\"button\" onClick={closeSearch} className=\"text-[var(--apple-faint)] hover:text-[var(--apple-subink)]\" data-testid=\"button-close-search\" aria-label=\"Close search\" > <X className=\"w-3.5 h-3"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -16565,6 +16575,21 @@
     "snippet": "<Link"
   },
   {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminArtistBuyers.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">{label}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminArtistBuyers.tsx",
+    "snippet": "<div className=\"text-[28px] font-semibold tracking-tight text-[var(--apple-ink)] tabular-nums mt-0.5\">{value}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminArtistBuyers.tsx",
+    "snippet": "<tr className=\"bg-[var(--apple-track)] border-b border-[var(--apple-hairline)] text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">"
+  },
+  {
     "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/pages/AdminCertNames.tsx",
     "snippet": "<Link"
@@ -16572,52 +16597,47 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCertNames.tsx",
-    "snippet": "<h1 className=\"text-[22px] font-semibold text-slate-900\">Certificate names</h1>"
+    "snippet": "className=\"text-[12px] text-[var(--apple-subink)] hover:text-[color:var(--brand-blue)] hover:underline px-3 py-1.5 rounded-full hover:bg-[var(--apple-track)] transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCertNames.tsx",
-    "snippet": "className=\"text-[12px] text-slate-500 hover:text-[color:var(--brand-blue)] hover:underline\""
+    "snippet": "className={`px-3 py-1.5 rounded-full text-[12px] font-semibold transition-colors ${"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCertNames.tsx",
-    "snippet": "<p className=\"text-slate-500 text-[13px] mb-6\">"
+    "snippet": "{isLoading && <div className=\"text-[13px] text-[var(--apple-subink)]\" data-testid=\"loading\">Loading…</div>}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCertNames.tsx",
-    "snippet": "className={`px-3 py-1.5 rounded-full text-[12px] font-semibold ${"
+    "snippet": "className=\"px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-[var(--apple-critical)]/15 text-[var(--apple-critical)]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCertNames.tsx",
-    "snippet": "className=\"px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-rose-600 text-white\""
+    "snippet": "<span className=\"px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-[var(--apple-chip)] text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCertNames.tsx",
-    "snippet": "<span className=\"px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-slate-200 text-slate-500\">"
+    "snippet": "<span className=\"text-[11px] text-[var(--apple-subink)]\" data-testid={`gooddeed-${r.orderId}`}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCertNames.tsx",
-    "snippet": "<span className=\"text-[11px] text-slate-500\" data-testid={`gooddeed-${r.orderId}`}>"
+    "snippet": "<span className=\"px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-[var(--apple-warning)]/10 text-[var(--apple-warning)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCertNames.tsx",
-    "snippet": "<span className=\"px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-amber-100 text-amber-700\">"
+    "snippet": "className=\"text-[14px] font-medium text-[var(--apple-ink)] truncate mt-0.5\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCertNames.tsx",
-    "snippet": "className=\"text-[14px] font-medium text-slate-900 truncate mt-0.5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCertNames.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-500 truncate\">"
+    "snippet": "<div className=\"text-[12px] text-[var(--apple-subink)] truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16627,12 +16647,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCertNames.tsx",
-    "snippet": "className=\"text-[11px] text-slate-600 hover:text-slate-900 active:opacity-70 disabled:opacity-40\""
+    "snippet": "className=\"text-[11px] text-[var(--apple-subink)] hover:text-[var(--apple-ink)] active:opacity-70 disabled:opacity-40\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCertNames.tsx",
-    "snippet": "className=\"text-[11px] text-rose-600 hover:text-rose-700 active:opacity-70 disabled:opacity-40\""
+    "snippet": "className=\"text-[11px] text-[var(--apple-critical)] hover:text-[var(--apple-critical)] active:opacity-70 disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCustomAddons.tsx",
+    "snippet": "<h3 className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Attached artists</h3>"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -16657,6 +16682,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomerDetail.tsx",
+    "snippet": "<div className=\"text-[var(--apple-ink)] text-[17px] font-semibold\">Grant album (demo)</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCustomerDetail.tsx",
     "snippet": "className=\"text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-100 text-slate-600\""
   },
   {
@@ -16667,7 +16697,7 @@
   {
     "rule": "naked-icon-button",
     "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<button type=\"button\" onClick={onClose} className=\"p-1 text-slate-400 hover:text-slate-600\" data-testid=\"button-grant-album-close\" > <X className=\"w-4 h-4\" /> </button>"
+    "snippet": "<button type=\"button\" onClick={onClose} className=\"p-1 text-[var(--apple-faint)] hover:text-[var(--apple-subink)]\" data-testid=\"button-grant-album-close\" > <X className=\"w-4 h-4\" /> </button>"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -16677,67 +16707,62 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[13px] mt-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomers.tsx",
     "snippet": "className=\"text-[13px] font-medium text-[var(--brand-blue)] hover:underline disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "<div className=\"hidden sm:grid grid-cols-[1fr_64px_96px_112px_112px] gap-4 px-4 py-2 bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-500\">"
+    "snippet": "<div className=\"hidden sm:grid grid-cols-[1fr_64px_96px_112px_112px] gap-4 px-4 py-2 bg-[var(--apple-track)] border-b border-[var(--apple-hairline)] text-[11px] font-semibold uppercase tracking-wide t"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "<div className=\"text-slate-900 text-[14px] font-medium truncate\" data-testid={`text-customer-name-${c.id}`}>"
+    "snippet": "<div className=\"text-[var(--apple-ink)] text-[14px] font-medium truncate\" data-testid={`text-customer-name-${c.id}`}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[12px] truncate\">"
+    "snippet": "<div className=\"text-[var(--apple-subink)] text-[12px] truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "<div className=\"text-slate-700 text-[13px] tabular-nums mt-1 sm:mt-0 sm:text-right\" data-testid={`text-order-count-${c.id}`}>"
+    "snippet": "<div className=\"text-[var(--apple-ink)] text-[13px] tabular-nums mt-1 sm:mt-0 sm:text-right\" data-testid={`text-order-count-${c.id}`}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "<span className=\"sm:hidden text-slate-400 text-[11px] uppercase tracking-wide mr-1\">Orders</span>"
+    "snippet": "<span className=\"sm:hidden text-[var(--apple-faint)] text-[11px] uppercase tracking-wide mr-1\">Orders</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "<div className=\"text-slate-700 text-[13px] tabular-nums sm:text-right\" data-testid={`text-lifetime-${c.id}`}>"
+    "snippet": "<div className=\"text-[var(--apple-ink)] text-[13px] tabular-nums sm:text-right\" data-testid={`text-lifetime-${c.id}`}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "<span className=\"sm:hidden text-slate-400 text-[11px] uppercase tracking-wide mr-1\">Lifetime</span>"
+    "snippet": "<span className=\"sm:hidden text-[var(--apple-faint)] text-[11px] uppercase tracking-wide mr-1\">Lifetime</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[12.5px] sm:text-right\">"
+    "snippet": "<div className=\"text-[var(--apple-subink)] text-[12.5px] sm:text-right\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "<span className=\"sm:hidden text-slate-400 text-[11px] uppercase tracking-wide mr-1\">Last</span>"
+    "snippet": "<span className=\"sm:hidden text-[var(--apple-faint)] text-[11px] uppercase tracking-wide mr-1\">Last</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[12.5px] sm:text-right\" data-testid={`text-signup-${c.id}`}>"
+    "snippet": "<div className=\"text-[var(--apple-subink)] text-[12.5px] sm:text-right\" data-testid={`text-signup-${c.id}`}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "<span className=\"sm:hidden text-slate-400 text-[11px] uppercase tracking-wide mr-1\">Signed up</span>"
+    "snippet": "<span className=\"sm:hidden text-[var(--apple-faint)] text-[11px] uppercase tracking-wide mr-1\">Signed up</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16887,6 +16912,46 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminDashboard.tsx",
+    "snippet": "<span className=\"text-[13px] text-[var(--apple-subink)]\">Top release this period:</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminDashboard.tsx",
+    "snippet": "<span className=\"text-[13px] font-semibold text-[var(--apple-ink)] truncate\">{topAlbum.title}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminDashboard.tsx",
+    "snippet": "<span className=\"text-[13px] text-[var(--apple-subink)] ml-auto flex-shrink-0 tabular-nums\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminDashboard.tsx",
+    "snippet": "<p className=\"text-[11px] font-semibold text-[var(--apple-subink)] uppercase tracking-wider mb-2\">Top fans this period</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminDashboard.tsx",
+    "snippet": "<span className=\"text-[13px] text-[var(--apple-subink)] truncate min-w-0\">{fan.email}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminDashboard.tsx",
+    "snippet": "<span className=\"text-[13px] font-semibold text-[var(--apple-ink)] flex-shrink-0 tabular-nums\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminDashboard.tsx",
+    "snippet": "<span className=\"text-[13px] text-[var(--apple-subink)]\">NPO giving this period:</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminDashboard.tsx",
+    "snippet": "<span className=\"text-[13px] font-semibold text-[var(--apple-ink)] ml-auto tabular-nums\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminDashboard.tsx",
     "snippet": "<h3 className=\"text-[20px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]\">As it happens.</h3>"
   },
   {
@@ -16911,13 +16976,28 @@
   },
   {
     "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminDashboard.tsx",
+    "snippet": "<div className=\"text-[13px] font-medium text-[var(--apple-ink)] truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminDashboard.tsx",
+    "snippet": "<span className=\"ml-2 text-[11px] uppercase tracking-wider text-[var(--apple-faint)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminDashboard.tsx",
+    "snippet": "<div className=\"text-[13px] font-semibold text-[var(--apple-ink)] tabular-nums\">{fmtUsd(b.totalCents)}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminFanOrders.tsx",
     "snippet": "className=\"pl-8 pr-8 h-9 text-[13px]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "className=\"h-9 text-[13px] rounded-md border border-slate-200 bg-white px-2.5 text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20\""
+    "snippet": "className=\"h-9 text-[13px] rounded-full border border-[var(--apple-hairline)] bg-white px-2.5 text-[var(--apple-ink)] hover:border-[var(--apple-subink)] focus:outline-none focus:ring-2 focus:ring-[var"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16927,12 +17007,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<span className=\"text-slate-400 text-[12px]\">to</span>"
+    "snippet": "<span className=\"text-[var(--apple-faint)] text-[12px]\">to</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "className=\"ml-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 disabled:opacit"
+    "snippet": "className=\"ml-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-full border border-[var(--apple-hairline)] bg-white text-[13px] font-medium text-[var(--apple-ink)] hover:bg-[var(--apple-track)] d"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16947,32 +17027,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<p className=\"text-[12px] text-slate-500 mt-1 max-w-md mx-auto\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
     "snippet": "\"text-[11px] font-semibold uppercase tracking-wider inline-flex items-center gap-1 transition-colors\","
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<div className=\"text-[13px] text-slate-900 font-medium flex items-center gap-2 min-w-0\">"
+    "snippet": "<div className=\"text-[13px] text-[var(--apple-ink)] font-medium flex items-center gap-2 min-w-0\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<div className=\"text-[13px] text-slate-700 truncate\">"
+    "snippet": "<div className=\"text-[13px] text-[var(--apple-ink)] truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<div className=\"text-[13px] text-slate-600 truncate\">"
+    "snippet": "<div className=\"text-[13px] text-[var(--apple-subink)] truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<div className=\"text-[13px] text-slate-900 text-right tabular-nums\">"
+    "snippet": "<div className=\"text-[13px] text-[var(--apple-ink)] text-right tabular-nums\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16982,12 +17057,87 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<div className=\"text-[12.5px] text-slate-500 text-right tabular-nums\">"
+    "snippet": "<div className=\"text-[12.5px] text-[var(--apple-subink)] text-right tabular-nums\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminFeedback.tsx",
+    "snippet": "<div className=\"flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminFeedback.tsx",
+    "snippet": "<dt className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Submitted by</dt>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminFeedback.tsx",
+    "snippet": "<dt className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Role &amp; scope</dt>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminFeedback.tsx",
+    "snippet": "<dt className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Page</dt>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminFeedback.tsx",
+    "snippet": "<dt className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminFeedback.tsx",
+    "snippet": "<Label className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Description</Label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminFeedback.tsx",
+    "snippet": "<Label className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Screenshot</Label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminFulfillmentPartner.tsx",
+    "snippet": "<div className=\"text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminFulfillmentPartner.tsx",
+    "snippet": "className=\"text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)] truncate\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminFulfillmentPartner.tsx",
+    "snippet": "<AlertDialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Delete this fulfillment partner?</AlertDialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminFulfillmentPartner.tsx",
+    "snippet": "<AlertDialogDescription className=\"text-[13px] text-[var(--apple-subink)]\">"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/pages/AdminFulfillmentPartners.tsx",
     "snippet": "<Link"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminFulfillmentPartners.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Add fulfillment partner</DialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminGoodDeedPricing.tsx",
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-[var(--apple-ink)]\">{title}</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminGoodDeedPricing.tsx",
+    "snippet": "{subtitle && <p className=\"text-[13px] text-[var(--apple-subink)] mt-1\">{subtitle}</p>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminGoodDeedPricing.tsx",
+    "snippet": "\"block text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider\";"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -17052,12 +17202,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstrument.tsx",
-    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900 pr-8\">"
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)] pr-8\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstrument.tsx",
-    "snippet": "<DialogDescription className=\"text-[13px] font-normal text-slate-500\">"
+    "snippet": "<DialogDescription className=\"text-[13px] font-normal text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -17087,7 +17237,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstrument.tsx",
-    "snippet": "className=\"w-full rounded-xl border border-dashed border-slate-300 px-3 py-3 text-left text-slate-500 text-[13px] hover:bg-slate-50 transition-colors\""
+    "snippet": "className=\"w-full rounded-xl border border-dashed border-[var(--apple-hairline)] px-3 py-3 text-left text-[var(--apple-subink)] text-[13px] hover:bg-[var(--apple-track)] transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17112,7 +17262,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstrument.tsx",
-    "snippet": "className=\"w-full flex items-center gap-2 rounded-md border border-dashed border-slate-300 px-3 py-2.5 text-left text-[13px] text-slate-600 hover:bg-slate-50 hover:border-[var(--brand-blue)] transitio"
+    "snippet": "className=\"w-full flex items-center gap-2 rounded-md border border-dashed border-[var(--apple-hairline)] px-3 py-2.5 text-left text-[13px] text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hove"
   },
   {
     "rule": "hardcoded-font-size",
@@ -17147,7 +17297,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstrument.tsx",
-    "snippet": "className=\"px-2.5 py-1 rounded-md text-[11px] font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50\""
+    "snippet": "className=\"px-2.5 py-1 rounded-md text-[11px] font-semibold bg-white border border-[var(--apple-hairline)] text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-50\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17172,7 +17322,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstrument.tsx",
-    "snippet": "className=\"px-3 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50\""
+    "snippet": "className=\"px-3 h-8 rounded-md bg-white border border-[var(--apple-hairline)] text-[var(--apple-subink)] text-[11.5px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17227,17 +17377,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstrument.tsx",
-    "snippet": "className=\"px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminInstrument.tsx",
-    "snippet": "<p className=\"text-slate-700 text-[14px] font-semibold\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminInstrument.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs mx-auto\">"
+    "snippet": "className=\"px-2.5 py-1.5 rounded-full text-[11.5px] font-semibold inline-flex items-center gap-1.5 text-[var(--apple-subink)] hover:bg-[var(--apple-track)]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17262,7 +17402,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstrument.tsx",
-    "snippet": "className=\"px-3 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50\""
+    "snippet": "className=\"px-3 h-8 rounded-md bg-white border border-[var(--apple-hairline)] text-[var(--apple-subink)] text-[11.5px] font-semibold hover:bg-[var(--apple-track)]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17417,7 +17557,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstrument.tsx",
-    "snippet": "className=\"px-2.5 h-7 rounded-md bg-white border border-slate-200 text-slate-700 text-[11px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1.5\""
+    "snippet": "className=\"px-2.5 h-7 rounded-md bg-white border border-[var(--apple-hairline)] text-[var(--apple-ink)] text-[11px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50 inline-flex items-ce"
   },
   {
     "rule": "hardcoded-font-size",
@@ -17432,7 +17572,7 @@
   {
     "rule": "naked-icon-button",
     "file": "client/src/pages/AdminInstrument.tsx",
-    "snippet": "<button type=\"button\" onClick={onDetach} disabled={busy || editing} aria-label=\"Detach maker / reseller\" title=\"Detach maker / reseller\" className=\"w-7 h-7 rounded-full bg-slate-100 text-rose-600 hove"
+    "snippet": "<button type=\"button\" onClick={onDetach} disabled={busy || editing} aria-label=\"Detach maker / reseller\" title=\"Detach maker / reseller\" className=\"w-7 h-7 rounded-full bg-[var(--apple-chip)] text-[va"
   },
   {
     "rule": "hardcoded-font-size",
@@ -17442,12 +17582,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900\">"
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "className=\"w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50\""
+    "snippet": "className=\"w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disable"
   },
   {
     "rule": "hardcoded-font-size",
@@ -17457,52 +17597,62 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "<p className=\"text-[11.5px] text-slate-400\">"
+    "snippet": "<p className=\"text-[11.5px] text-[var(--apple-faint)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "className=\"absolute top-2 right-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/90 backdrop-blur-sm text-slate-700 text-[10.5px] font-bold shadow\""
+    "snippet": "className=\"absolute top-2 right-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/90 backdrop-blur-sm text-[var(--apple-subink)] text-[10.5px] font-bold shadow\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "className=\"mt-2 text-slate-900 text-[13px] font-semibold leading-snug line-clamp-2\""
+    "snippet": "className=\"mt-2 text-[var(--apple-ink)] text-[13px] font-semibold leading-snug line-clamp-2\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[11.5px] truncate\">"
+    "snippet": "<div className=\"text-[var(--apple-faint)] text-[11.5px] truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "className=\"text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[12px] truncate\">"
+    "snippet": "<div className=\"text-[var(--apple-subink)] text-[12px] truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10.5px] font-bold flex-shrink-0\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "<p className=\"text-slate-700 text-[14px] font-semibold\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs\">"
+    "snippet": "className=\"inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[var(--apple-track)] text-[var(--apple-subink)] text-[10.5px] font-bold flex-shrink-0\""
   },
   {
     "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/pages/AdminInviteDirectory.tsx",
     "snippet": "<Link"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminInviteDirectory.tsx",
+    "snippet": "<th className=\"text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] px-4 py-3\">Invitee</th>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminInviteDirectory.tsx",
+    "snippet": "<th className=\"text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] px-4 py-3\">Referred by</th>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminInviteDirectory.tsx",
+    "snippet": "<th className=\"text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] px-4 py-3\">Role</th>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminInviteDirectory.tsx",
+    "snippet": "<th className=\"text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] px-4 py-3\">Status</th>"
   },
   {
     "rule": "brand-hex-literal",
@@ -17512,7 +17662,47 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInvites.tsx",
-    "snippet": "<div className=\"text-[11px] uppercase tracking-wide font-semibold text-slate-500\">Invite link</div>"
+    "snippet": "<label className=\"block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminInvites.tsx",
+    "snippet": "<label className=\"block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1\">Email</label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminInvites.tsx",
+    "snippet": "<label className=\"block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1\">Role</label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminInvites.tsx",
+    "snippet": "<label className=\"block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminInvites.tsx",
+    "snippet": "<label className=\"block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1\">Target person</label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminInvites.tsx",
+    "snippet": "<label className=\"block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1\">Pre-flight an album draft (optional)</label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminInvites.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Invite link</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminInviteTree.tsx",
+    "snippet": "<label className=\"block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminInviteTree.tsx",
+    "snippet": "<div className=\"text-[13px] text-[var(--apple-subink)]\">Loading tree…</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -17522,32 +17712,32 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminJobs.tsx",
-    "snippet": "<thead className=\"bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500\">"
+    "snippet": "<thead className=\"bg-[var(--apple-track)] text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminJobs.tsx",
-    "snippet": "<div className=\"text-[11px] text-rose-600 mt-0.5\" data-testid={`error-${row.id}`}>"
+    "snippet": "<div className=\"text-[11px] text-[var(--apple-critical)] mt-0.5\" data-testid={`error-${row.id}`}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminJobs.tsx",
-    "snippet": "<div className=\"text-[11px] text-rose-600 mt-0.5\" data-testid={`error-${row.id}`}>{row.errorMessage}</div>"
+    "snippet": "<div className=\"text-[11px] text-[var(--apple-critical)] mt-0.5\" data-testid={`error-${row.id}`}>{row.errorMessage}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminJobs.tsx",
-    "snippet": "className=\"text-[11px] bg-slate-50 text-slate-700 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-words\""
+    "snippet": "className=\"text-[11px] bg-[var(--apple-track)] text-[var(--apple-ink)] rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-words\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminJobs.tsx",
-    "snippet": "<div className=\"text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-1.5\">{title}</div>"
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] font-semibold mb-1.5\">{title}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminJobs.tsx",
-    "snippet": "<div className=\"text-[10px] uppercase text-slate-500\">{k}</div>"
+    "snippet": "<div className=\"text-[10px] uppercase text-[var(--apple-subink)]\">{k}</div>"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -17582,12 +17772,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabel.tsx",
-    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900 pr-8\">"
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)] pr-8\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabel.tsx",
-    "snippet": "<DialogDescription className=\"text-[13px] font-normal text-slate-500\">"
+    "snippet": "<DialogDescription className=\"text-[13px] font-normal text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -17622,6 +17812,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabel.tsx",
+    "snippet": "<DialogTitle className=\"text-[var(--apple-ink)] text-[17px] font-semibold\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminLabel.tsx",
     "snippet": "className=\"w-44 text-[13px] bg-transparent outline-none placeholder:text-slate-400\""
   },
   {
@@ -17637,17 +17832,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabel.tsx",
-    "snippet": "<p className=\"text-slate-700 text-[14px] font-semibold\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminLabel.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs mx-auto\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminLabel.tsx",
-    "snippet": "className=\"mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50\""
+    "snippet": "className=\"inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium text-[var(--apple-blue)] hover:bg-[var(--apple-blue)]/10 transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17727,27 +17912,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabel.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[12.5px]\">"
+    "snippet": "<div className=\"text-[var(--apple-ink)] text-[13.5px] font-semibold truncate\">{a.title}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabel.tsx",
-    "snippet": "<div className=\"text-slate-900 text-[13.5px] font-semibold truncate\">{a.title}</div>"
+    "snippet": "<div className=\"text-[var(--apple-faint)] text-[11.5px] truncate\">{a.artist}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabel.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[11.5px] truncate\">{a.artist}</div>"
+    "snippet": "className=\"inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--apple-ready-wash)] text-[var(--apple-ready)] text-[10px] font-bold uppercase tracking-wider flex-shrink-0\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabel.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex-shrink-0\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminLabel.tsx",
-    "snippet": "className=\"inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wider flex-shrink-0\""
+    "snippet": "className=\"inline-flex items-center px-2 py-0.5 rounded-full bg-[var(--apple-chip)] text-[var(--apple-subink)] text-[10px] font-bold uppercase tracking-wider flex-shrink-0\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17757,17 +17937,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabels.tsx",
-    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900\">"
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabels.tsx",
-    "snippet": "<DialogDescription className=\"text-[13px] text-slate-500 leading-relaxed\">"
+    "snippet": "<DialogDescription className=\"text-[13px] text-[var(--apple-subink)] leading-relaxed\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabels.tsx",
-    "snippet": "className=\"w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50\""
+    "snippet": "className=\"w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disable"
   },
   {
     "rule": "hardcoded-font-size",
@@ -17782,12 +17962,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabels.tsx",
-    "snippet": "<p className=\"text-[11.5px] text-slate-400\">"
+    "snippet": "<p className=\"text-[11.5px] text-[var(--apple-faint)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabels.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50\""
+    "snippet": "className=\"px-3 py-1.5 rounded-full text-[12.5px] font-semibold text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-50 transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17822,17 +18002,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabels.tsx",
-    "snippet": "<p className=\"text-slate-700 text-[14px] font-semibold\">"
+    "snippet": "className=\"inline-flex items-center justify-center h-9 px-3.5 rounded-full text-[12.5px] font-semibold text-[var(--brand-blue)] hover:bg-[var(--apple-blue)]/10 transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminLabels.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminLabels.tsx",
-    "snippet": "className=\"mt-4 inline-flex items-center justify-center h-9 px-3.5 rounded-md text-[12.5px] font-semibold bg-[var(--brand-blue)] text-white hover:bg-[#2789bf] transition-colors\""
+    "file": "client/src/pages/AdminLegacyImageAudit.tsx",
+    "snippet": "<h2 className=\"text-[11px] font-semibold uppercase tracking-wider mb-2 flex items-baseline gap-2 text-[var(--apple-subink)]\">"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -17872,12 +18047,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManager.tsx",
-    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900 pr-8\">"
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)] pr-8\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManager.tsx",
-    "snippet": "<DialogDescription className=\"text-[13px] font-normal text-slate-500\">"
+    "snippet": "<DialogDescription className=\"text-[13px] font-normal text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -17912,6 +18087,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<DialogTitle className=\"text-[var(--apple-ink)] text-[17px] font-semibold\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
     "snippet": "className=\"w-44 text-[13px] bg-transparent outline-none placeholder:text-slate-400\""
   },
   {
@@ -17927,17 +18107,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManager.tsx",
-    "snippet": "<p className=\"text-slate-700 text-[14px] font-semibold\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManager.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs mx-auto\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManager.tsx",
-    "snippet": "className=\"mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50\""
+    "snippet": "className=\"inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium text-[var(--apple-blue)] hover:bg-[var(--apple-blue)]/10 transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -17972,17 +18142,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManagers.tsx",
-    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900\">"
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManagers.tsx",
-    "snippet": "<DialogDescription className=\"text-[13px] text-slate-500 leading-relaxed\">"
+    "snippet": "<DialogDescription className=\"text-[13px] text-[var(--apple-subink)] leading-relaxed\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManagers.tsx",
-    "snippet": "className=\"w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50\""
+    "snippet": "className=\"w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disable"
   },
   {
     "rule": "hardcoded-font-size",
@@ -17997,12 +18167,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManagers.tsx",
-    "snippet": "<p className=\"text-[11.5px] text-slate-400\">"
+    "snippet": "<p className=\"text-[11.5px] text-[var(--apple-faint)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManagers.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50\""
+    "snippet": "className=\"px-3 py-1.5 rounded-full text-[12.5px] font-semibold text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-50 transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -18037,17 +18207,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManagers.tsx",
-    "snippet": "<p className=\"text-slate-700 text-[14px] font-semibold\">"
+    "snippet": "className=\"inline-flex items-center justify-center h-9 px-3.5 rounded-full text-[12.5px] font-semibold text-[var(--brand-blue)] hover:bg-[var(--apple-blue)]/10 transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManagers.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManagers.tsx",
-    "snippet": "className=\"mt-4 inline-flex items-center justify-center h-9 px-3.5 rounded-md text-[12.5px] font-semibold bg-[var(--brand-blue)] text-white hover:bg-[#2789bf] transition-colors\""
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-2\">Funding pools</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18062,7 +18227,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "className=\"px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-n"
+    "snippet": "className=\"px-2.5 py-1.5 rounded-full text-[11.5px] font-semibold inline-flex items-center gap-1.5 text-[var(--apple-blue)] hover:bg-[var(--apple-blue)]/10 disabled:opacity-50 disabled:cursor-not-allo"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<AlertDialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Delete this press?</AlertDialogTitle>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18077,12 +18247,127 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "<span className=\"block text-slate-500 text-[11px] font-semibold uppercase tracking-wider mb-1\">"
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Paid units</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Import colors from Hellbender</DialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Import colors from memphisrecordpressing.com</DialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Sync 12&quot; formats</DialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Upload catalog CSV</DialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Sync pricing from Hellbender</DialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<span className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Format</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<AlertDialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Remove the {label} template?</AlertDialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<AlertDialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Delete \"{tier.name}\"?</AlertDialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<span className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Manage colors — {tier.name}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<AlertDialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Remove this color?</AlertDialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<AlertDialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Delete \"{jacket.name}\"?</AlertDialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Edit swatch</DialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<span className=\"block text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider mb-1.5\">Name</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<span className={`block text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${imageUrl ? \"text-[var(--apple-faint)]\" : \"text-[var(--apple-subink)]\"}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<span className=\"block text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider mb-1.5\">Photo</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<span className=\"block text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider mb-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<AlertDialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Delete \"{color.name}\"?</AlertDialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Add swatch</DialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<span className=\"block text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider mb-1\">"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/pages/AdminManufacturers.tsx",
     "snippet": "<Link"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturers.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminNonProfit.tsx",
+    "snippet": "<div className=\"text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminNonProfit.tsx",
+    "snippet": "className=\"text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)] truncate\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminNonProfits.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -18102,27 +18387,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<h1 className=\"text-[22px] font-semibold text-slate-900\">Orders</h1>"
+    "snippet": "<h1 className=\"text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]\">Orders.</h1>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<p className=\"text-slate-500 text-[13px]\">Physical fulfillment + refund tracking.</p>"
+    "snippet": "<p className=\"text-[var(--apple-subink)] text-[13px] font-medium\">Physical fulfillment and refund tracking.</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "className=\"h-8 px-3 rounded-md border border-slate-200 bg-white text-slate-700 text-[12px] font-medium hover:bg-slate-50 inline-flex items-center gap-1.5\""
+    "snippet": "className=\"h-8 px-3 rounded-full border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] text-[12px] font-medium hover:bg-[var(--apple-track)] inline-flex items-center gap-1.5\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "className={`px-3 py-1 rounded text-[12px] font-medium capitalize ${"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[13px] mt-1\">When fans buy, they'll show up here.</div>"
+    "snippet": "className={`px-3 py-1 rounded-full text-[12px] font-medium capitalize ${"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18132,22 +18412,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<div className=\"text-[11.5px] text-slate-500 mt-1.5 leading-snug\" data-testid={`text-gift-${o.id}`}>"
+    "snippet": "<div className=\"text-[11.5px] text-[var(--apple-subink)] mt-1.5 leading-snug\" data-testid={`text-gift-${o.id}`}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<div className=\"text-[14px] font-medium text-slate-900 mt-1\">"
+    "snippet": "<div className=\"text-[14px] font-medium text-[var(--apple-ink)] mt-1\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<div className=\"text-[12.5px] text-slate-500 mt-0.5\">"
+    "snippet": "<div className=\"text-[12.5px] text-[var(--apple-subink)] mt-0.5\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<span key={it.id} className=\"text-[10.5px] px-2 py-0.5 rounded bg-slate-100 text-slate-600\">"
+    "snippet": "<span key={it.id} className=\"text-[10.5px] px-2 py-0.5 rounded-full bg-[var(--apple-track)] text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18157,117 +18437,142 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<div className=\"text-[11.5px] text-slate-500 mt-1.5 leading-snug\">"
+    "snippet": "<div className=\"text-[11.5px] text-[var(--apple-subink)] mt-1.5 leading-snug\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<div className=\"text-[11.5px] text-rose-600 mt-1.5\" data-testid={`text-payout-error-${o.id}`}>"
+    "snippet": "<div className=\"text-[11.5px] text-[var(--apple-critical)] mt-1.5\" data-testid={`text-payout-error-${o.id}`}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">{dollars(o.totalCents)}</div>"
+    "snippet": "<div className=\"text-[14px] font-semibold tabular-nums text-[var(--apple-ink)]\">{dollars(o.totalCents)}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "className=\"mt-2 px-3 py-1 rounded-md text-[12px] font-medium bg-[var(--brand-blue)] text-white hover:bg-[var(--brand-blue-hover)] disabled:opacity-50\""
+    "snippet": "className=\"mt-2 px-3 py-1 rounded-full text-[12px] font-medium bg-[var(--brand-blue)] text-white hover:bg-[var(--brand-blue-hover)] disabled:opacity-50\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "className=\"mt-2 ml-2 px-3 py-1 rounded-md text-[12px] font-medium bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-200 disabled:opacity-50\""
+    "snippet": "className=\"mt-2 ml-2 px-3 py-1 rounded-full text-[12px] font-medium border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] hover:bg-[var(--apple-track)] disabled:opacity-50\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "className=\"mt-2 ml-2 px-3 py-1 rounded-md text-[12px] font-medium bg-violet-100 text-violet-700 hover:bg-violet-200 disabled:opacity-50\""
+    "snippet": "className=\"mt-2 px-3 py-1 rounded-full text-[12px] font-medium bg-[var(--apple-warning)]/10 text-[var(--apple-warning)] hover:bg-[var(--apple-warning)]/15 disabled:opacity-50 inline-flex items-center "
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "className=\"mt-2 px-3 py-1 rounded-md text-[12px] font-medium bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 inline-flex items-center gap-1.5\""
+    "snippet": "className=\"ml-auto px-2 py-0.5 rounded-full bg-[var(--apple-warning)]/10 text-[var(--apple-warning)] text-[10.5px] font-semibold hover:bg-[var(--apple-warning)]/15 disabled:opacity-60 inline-flex item"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "className=\"ml-auto px-2 py-0.5 rounded-md bg-amber-500 text-white text-[10.5px] font-semibold hover:bg-amber-600 disabled:opacity-60 inline-flex items-center gap-1\""
+    "snippet": "<div className=\"mt-1 text-[10.5px] text-[var(--apple-warning)]\" data-testid={`text-push-error-${o.id}`}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<div className=\"mt-1 text-[10.5px] text-amber-700\" data-testid={`text-push-error-${o.id}`}>"
+    "snippet": "<div className=\"flex items-center gap-3 mt-1.5 text-[10.5px] text-[var(--apple-subink)] flex-wrap\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<div className=\"flex items-center gap-3 mt-1.5 text-[10.5px] text-slate-500 flex-wrap\">"
+    "snippet": "<h2 className=\"text-[var(--apple-warning)] text-[11px] font-semibold uppercase tracking-wider\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<h2 className=\"text-amber-900 text-[13px] font-bold uppercase tracking-wide\">"
+    "snippet": "className=\"rounded-xl bg-white border border-[var(--apple-hairline)] px-3 py-2 flex items-center gap-3 text-[12.5px]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "className=\"rounded-md bg-white border border-amber-100 px-3 py-2 flex items-center gap-3 text-[12.5px]\""
+    "snippet": "<div className=\"text-[var(--apple-subink)] text-[11.5px]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[11.5px]\">"
+    "snippet": "className=\"h-8 px-3 rounded-full bg-[var(--apple-warning)]/10 text-[var(--apple-warning)] text-[12px] font-semibold hover:bg-[var(--apple-warning)]/15 disabled:opacity-60 inline-flex items-center gap-"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "className=\"h-8 px-3 rounded-md bg-amber-500 text-white text-[12px] font-semibold hover:bg-amber-600 disabled:opacity-60 inline-flex items-center gap-1.5\""
+    "snippet": "<h2 className=\"text-[var(--apple-ink)] text-[13px] font-semibold\">Payout settings</h2>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<h2 className=\"text-slate-900 text-[13px] font-bold\">Payout settings</h2>"
+    "snippet": "<button type=\"button\" onClick={onClose} className=\"text-[var(--apple-subink)] hover:text-[var(--apple-ink)] text-[12px]\">Close</button>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<button type=\"button\" onClick={onClose} className=\"text-slate-400 hover:text-slate-700 text-[12px]\">Close</button>"
+    "snippet": "<div className=\"text-[var(--apple-faint)] text-[12px]\">Loading…</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[12px]\">Loading…</div>"
+    "snippet": "<span className=\"text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider\">Platform fee %</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<span className=\"text-slate-500 text-[11px] font-semibold uppercase tracking-wider\">Platform fee %</span>"
+    "snippet": "className=\"mt-1 w-full h-9 px-3 rounded-lg border border-[var(--apple-hairline)] text-[13px] focus:outline-none focus:border-[var(--brand-blue)]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "className=\"mt-1 w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]\""
+    "snippet": "<p className=\"text-[var(--apple-faint)] text-[11px] mt-1\">Currently {currentFee}%. Applied off the top of every paid order.</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[11px] mt-1\">Currently {currentFee}%. Applied off the top of every paid order.</p>"
+    "snippet": "<span className=\"text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider\">Cert cost (cents)</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<span className=\"text-slate-500 text-[11px] font-semibold uppercase tracking-wider\">Cert cost (cents)</span>"
+    "snippet": "<p className=\"text-[var(--apple-faint)] text-[11px] mt-1\">Currently {dollars(currentCert)}. Subtracted before the artist split when a signed cert is in the order.</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[11px] mt-1\">Currently {dollars(currentCert)}. Subtracted before the artist split when a signed cert is in the order.</p>"
+    "snippet": "className=\"h-9 px-4 rounded-full bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-60\""
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "className=\"h-9 px-4 rounded-md bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-60\""
+    "file": "client/src/pages/AdminPaymentRequests.tsx",
+    "snippet": "<DialogTitle className=\"flex items-center gap-2 text-[17px] font-semibold text-[var(--apple-ink)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPaymentRequests.tsx",
+    "snippet": "<AlertDialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Cancel this payment request?</AlertDialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPayoutsRelease.tsx",
+    "snippet": "<h1 className=\"text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]\" data-testid=\"text-page-title\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPayoutsRelease.tsx",
+    "snippet": "<div className=\"text-[28px] font-semibold tabular-nums tracking-tight text-[var(--apple-ink)]\" data-testid=\"text-held-total\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPayoutsRelease.tsx",
+    "snippet": "<h2 className=\"text-[11px] font-semibold text-[var(--apple-subink)] uppercase tracking-wider\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPayoutsRelease.tsx",
+    "snippet": "<AlertDialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Reject this payout earmark?</AlertDialogTitle>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18277,37 +18582,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPeople.tsx",
-    "snippet": "className=\"mt-3 w-full text-center text-slate-900 text-[13px] font-semibold truncate px-1\""
+    "snippet": "className=\"mt-3 w-full text-center text-[var(--apple-ink)] text-[13px] font-semibold truncate px-1\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPeople.tsx",
-    "snippet": "<div className=\"w-full text-center text-slate-400 text-[11.5px] truncate px-1\">"
+    "snippet": "<div className=\"w-full text-center text-[var(--apple-faint)] text-[11.5px] truncate px-1\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPeople.tsx",
-    "snippet": "className=\"text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPeople.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[11.5px] truncate flex-shrink-0\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPeople.tsx",
-    "snippet": "<p className=\"text-slate-700 text-[14px] font-semibold\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPeople.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs\">"
-  },
-  {
-    "rule": "admin-filled-raw-button",
-    "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "<button"
+    "snippet": "<div className=\"text-[var(--apple-faint)] text-[11.5px] truncate flex-shrink-0\">"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -18322,7 +18612,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "<DialogDescription className=\"text-[13px] font-normal text-slate-500\">"
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Assign a non-profit</DialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<DialogDescription className=\"text-[13px] font-normal text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18357,12 +18652,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900 pr-8\">"
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)] pr-8\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Send partner invite</DialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<label className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\" htmlFor={`invite-email-${a.entityId}`}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
     "snippet": "<p className=\"text-slate-400 text-[11.5px] leading-relaxed px-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<AlertDialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Remove {person.name}'s artist profile?</AlertDialogTitle>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18422,11 +18732,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[12.5px]\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPerson.tsx",
     "snippet": "<div className=\"text-slate-900 text-[13.5px] font-semibold truncate\">{a.title}</div>"
   },
   {
@@ -18447,12 +18752,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "<DialogTitle className=\"text-slate-900 text-[15px] font-bold inline-flex items-center gap-2\">"
+    "snippet": "<DialogTitle className=\"text-[var(--apple-ink)] text-[17px] font-semibold inline-flex items-center gap-2\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "<DialogDescription className=\"text-[12.5px] text-slate-500\">"
+    "snippet": "<DialogDescription className=\"text-[12.5px] text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18487,7 +18792,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "<DialogTitle className=\"text-slate-900 text-[14px] font-bold\">"
+    "snippet": "<p className=\"text-slate-400 text-[12.5px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<DialogTitle className=\"text-[var(--apple-ink)] text-[17px] font-semibold\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18497,7 +18807,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent text-[11.5px] font-medium\""
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-40 disabled:hover:bg-transparent text-[11.5px] font-medium\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -18557,7 +18867,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "className=\"px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1.5\""
+    "snippet": "className=\"px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50 inline-flex items-center gap-1.5\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -18662,6 +18972,16 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Back-fill a referral</DialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<label className=\"text-[11px] font-semibold text-[var(--apple-subink)] uppercase tracking-wider mb-1.5 block\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
     "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Members</h2>"
   },
   {
@@ -18672,7 +18992,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "className=\"text-[13px] font-semibold px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-700 active:bg-slate-900\""
+    "snippet": "className=\"text-[13px] font-semibold px-3 py-1.5 rounded-full text-[var(--apple-blue)] hover:bg-[var(--apple-blue)]/10 transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -18702,11 +19022,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "<p className=\"px-5 py-6 text-[13px] text-slate-500\" data-testid=\"empty-members\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPerson.tsx",
     "snippet": "<p className=\"text-[13.5px] font-semibold text-slate-900 truncate\">"
   },
   {
@@ -18727,27 +19042,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "className=\"text-[12px] font-semibold px-3 py-1.5 rounded-md bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50\""
+    "snippet": "className=\"text-[12px] font-semibold px-3 py-1.5 rounded-full bg-[var(--apple-blue)] text-white hover:bg-[var(--apple-blue)]/90 disabled:opacity-50\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPlatformPricing.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[13px] mt-1\">"
+    "snippet": "<div className=\"text-[var(--apple-subink)] text-[13px] mt-1\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPlatformPricing.tsx",
-    "snippet": "<span className=\"absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]\">$</span>"
+    "snippet": "<span className=\"absolute left-2 top-1/2 -translate-y-1/2 text-[var(--apple-faint)] text-[12px]\">$</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPlatformPricing.tsx",
-    "snippet": "<p className=\"text-[12px] text-slate-400 pt-2 border-t border-slate-100\">"
+    "snippet": "<p className=\"text-[12px] text-[var(--apple-faint)] pt-2 border-t border-[var(--apple-hairline)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPlatformPricing.tsx",
-    "snippet": "<span className=\"block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1\">"
+    "snippet": "<span className=\"block text-[var(--apple-subink)] text-[10.5px] font-semibold uppercase tracking-wider mb-1\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18772,37 +19087,37 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPlatformPricing.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[12px] font-semibold text-slate-600 hover:text-[color:var(--brand-blue)] hover:bg-slate-50 disabled:opacity-40\""
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full text-[12px] font-semibold text-[var(--apple-blue)] hover:bg-[var(--apple-blue)]/10 transition-colors disabled:opacity-40\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPlatformPricing.tsx",
-    "snippet": "<ul className=\"text-[12px] text-slate-500 space-y-1.5 pl-4 list-disc\">"
+    "snippet": "<ul className=\"text-[12px] text-[var(--apple-subink)] space-y-1.5 pl-4 list-disc\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPlatformPricing.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Per-format pricing</h2>"
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-[var(--apple-ink)]\">Per-format pricing</h2>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPlatformPricing.tsx",
-    "snippet": "<p className=\"text-[13px] text-slate-500 mt-1\">"
+    "snippet": "<p className=\"text-[13px] text-[var(--apple-subink)] mt-1\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPlatformPricing.tsx",
-    "snippet": "<div className=\"mt-2 text-right text-[12px] text-slate-500\">"
+    "snippet": "<div className=\"mt-2 text-right text-[12px] text-[var(--apple-subink)]\">"
+  },
+  {
+    "rule": "admin-link-missing-shared-treatment",
+    "file": "client/src/pages/AdminPlaylist.tsx",
+    "snippet": "<Link key={s.id} href={`/admin/albums/${s.album.id}?track=${s.id}`} className=\"px-4 py-3 flex items-center gap-3 text-inherit hover:bg-[var(--apple-track)] transition-colors\" data-testid={`row-playlis"
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPressingOrders.tsx",
-    "snippet": "<h1 className=\"text-[22px] font-bold text-slate-900 tracking-tight\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPressingOrders.tsx",
-    "snippet": "<p className=\"text-[13px] text-slate-500 mt-1\">"
+    "file": "client/src/pages/AdminPlaylist.tsx",
+    "snippet": "<h1 className=\"text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)] truncate\" data-testid=\"text-playlist-name\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18812,32 +19127,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPressingOrders.tsx",
-    "snippet": "<div className=\"mt-3 text-[14px] font-medium text-slate-700\">"
+    "snippet": "<div className=\"flex items-center gap-2 text-[11.5px] text-[var(--apple-subink)] uppercase tracking-wide\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPressingOrders.tsx",
-    "snippet": "<div className=\"text-[12.5px] text-slate-500 mt-1\">"
+    "snippet": "<div className=\"mt-1 text-[14px] font-semibold text-[var(--apple-ink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPressingOrders.tsx",
-    "snippet": "<div className=\"flex items-center gap-2 text-[11.5px] text-slate-500 uppercase tracking-wide\">"
+    "snippet": "<div className=\"mt-1 text-[12.5px] text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPressingOrders.tsx",
-    "snippet": "<div className=\"mt-1 text-[14px] font-semibold text-slate-900\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPressingOrders.tsx",
-    "snippet": "<div className=\"mt-1 text-[12.5px] text-slate-600\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPressingOrders.tsx",
-    "snippet": "<div className=\"mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1.5 text-[12.5px]\">"
+    "snippet": "<div className=\"mt-4 pt-4 border-t border-[var(--apple-hairline)] grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1.5 text-[12.5px]\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18847,17 +19152,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPressingOrders.tsx",
-    "snippet": "<div className=\"mt-3 text-[12px] text-slate-500\">"
+    "snippet": "<div className=\"mt-3 text-[12px] text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPressingOrders.tsx",
-    "snippet": "<div className=\"text-[10.5px] uppercase tracking-wider text-slate-400 font-semibold\">"
+    "snippet": "<div className=\"text-[10.5px] uppercase tracking-wider text-[var(--apple-subink)] font-semibold\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPressingOrders.tsx",
-    "snippet": "strong ? \"text-[13.5px] font-semibold text-slate-900\" : \"text-[12.5px] text-slate-700\","
+    "snippet": "strong ? \"text-[13.5px] font-semibold text-[var(--apple-ink)]\" : \"text-[12.5px] text-[var(--apple-ink)]\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPressMatch.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\" data-testid=\"text-match-count\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPressMatch.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -18867,17 +19182,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<h1 className=\"text-[22px] font-semibold text-slate-900\">Print queue</h1>"
+    "snippet": "<h1 className=\"text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]\">Print queue.</h1>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"text-[12px] text-slate-500 hover:text-[color:var(--brand-blue)] hover:underline\""
+    "snippet": "className=\"text-[12px] text-[var(--apple-subink)] hover:text-[color:var(--brand-blue)] hover:underline\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<p className=\"text-slate-500 text-[13px] mb-6\">"
+    "snippet": "<p className=\"text-[var(--apple-subink)] text-[13px] mb-6\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18887,17 +19202,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<label className=\"flex items-center gap-2 text-[12px] text-slate-600 cursor-pointer\">"
+    "snippet": "<label className=\"flex items-center gap-2 text-[12px] text-[var(--apple-subink)] cursor-pointer\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40\""
+    "snippet": "className=\"px-3 py-1.5 rounded-full border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] text-[12px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-40\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-full bg-slate-900 text-white text-[12px] font-semibold hover:bg-slate-800 disabled:opacity-40\""
+    "snippet": "className=\"px-3 py-1.5 rounded-full bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[var(--brand-blue-hover)] disabled:opacity-40\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -18907,27 +19222,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<span className=\"text-[11px] text-slate-500\" data-testid={`gooddeed-${r.id}`}>"
+    "snippet": "<span className=\"text-[11px] text-[var(--apple-subink)]\" data-testid={`gooddeed-${r.id}`}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<span className=\"text-[11px] text-slate-400\">{r.shippingCountry ?? \"?\"}</span>"
+    "snippet": "<span className=\"text-[11px] text-[var(--apple-faint)]\">{r.shippingCountry ?? \"?\"}</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<div className=\"text-[14px] font-medium text-slate-900 truncate mt-0.5\">"
+    "snippet": "<div className=\"text-[14px] font-medium text-[var(--apple-ink)] truncate mt-0.5\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-500 truncate\">"
+    "snippet": "<div className=\"text-[12px] text-[var(--apple-subink)] truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"bg-white border border-slate-200 text-slate-700 text-[11px] rounded px-2 py-1\""
+    "snippet": "className=\"bg-white border border-[var(--apple-hairline)] text-[var(--apple-ink)] text-[11px] rounded px-2 py-1\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -18937,12 +19252,117 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"text-[11px] text-slate-600 hover:text-slate-900 active:opacity-70\""
+    "snippet": "className=\"text-[11px] text-[var(--apple-subink)] hover:text-[var(--apple-ink)] active:opacity-70\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<div className=\"text-[11px] text-slate-400 mt-4\" data-testid=\"ready-summary\">"
+    "snippet": "<div className=\"text-[11px] text-[var(--apple-faint)] mt-4\" data-testid=\"ready-summary\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Total owed</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<div className=\"mt-1 text-[28px] font-semibold tabular-nums tracking-tight text-[var(--apple-ink)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Payees</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Albums with splits</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Statutory rate</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<h2 className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Payees</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<tr className=\"border-b border-[var(--apple-hairline)] text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<h2 className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Releases</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<h1 className=\"truncate text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]\" data-testid=\"text-album-title\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Units pressed</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Rate</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Ready to pay</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Invite publisher portal access</DialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "className=\"truncate text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "className=\"mt-1 text-[28px] font-semibold tabular-nums tracking-tight text-[var(--apple-ink)]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Track lines</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPublishing.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Releases</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminQaOrders.tsx",
+    "snippet": "<h1 className=\"text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]\">QA test orders.</h1>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminQaOrders.tsx",
+    "snippet": "<AlertDialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Remove all QA test orders?</AlertDialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminQaOrders.tsx",
+    "snippet": "<tr className=\"border-b border-[var(--apple-hairline)] bg-[var(--apple-track)] text-left text-[11px] font-semibold text-[var(--apple-subink)] uppercase tracking-wider\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminQaOrders.tsx",
+    "snippet": "<AlertDialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Remove QA test order?</AlertDialogTitle>"
   },
   {
     "rule": "brand-hex-literal",
@@ -18965,94 +19385,79 @@
     "snippet": "const PINK = \"#FF5470\";"
   },
   {
-    "rule": "brand-hex-literal",
+    "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<MapPin className=\"w-4 h-4 text-[#319ED8]\" />"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "{r.stripeAccountId || <span className=\"text-[#FF5470]\">not connected</span>}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "{r.stripeAccountId && !r.payoutsEnabled && <div className=\"text-[10px] text-[#FF5470]\">payouts disabled</div>}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<td className={`py-2.5 text-right tabular-nums font-medium ${r.deltaCents > 0 ? \"text-[#FF5470]\" : \"text-slate-500\"}`}>{fmtUsd(r.deltaCents)}</td>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "className=\"w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "className=\"h-8 px-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30 bg-white\""
+    "snippet": "<h1 className=\"text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)] leading-tight\" data-testid=\"text-reports-title\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<Label htmlFor=\"date-from\" className=\"text-[11px] text-slate-500\">From</Label>"
+    "snippet": "<p className=\"text-[13px] font-medium text-[var(--apple-subink)] mt-0.5\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<Label htmlFor=\"date-to\" className=\"text-[11px] text-slate-500\">To</Label>"
+    "snippet": "<Label htmlFor=\"date-from\" className=\"text-[11px] text-[var(--apple-subink)]\">From</Label>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<div className=\"text-[11px] uppercase tracking-wider text-slate-500 font-bold\">{label}</div>"
+    "snippet": "<Label htmlFor=\"date-to\" className=\"text-[11px] text-[var(--apple-subink)]\">To</Label>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<tr className=\"text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200\">"
+    "snippet": "<div className=\"text-[11px] uppercase tracking-wider text-[var(--apple-subink)] font-semibold\">{label}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<p className=\"text-[11px] text-slate-400 mt-3\">"
+    "snippet": "<div className=\"text-[28px] font-semibold text-[var(--apple-ink)] mt-1 tabular-nums tracking-tight\">{value}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<p className=\"mt-2\">Set <code className=\"px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[12px]\">{envVar}</code> to a PostHog shared-dashboard iframe URL.</p>"
+    "snippet": "<tr className=\"text-left text-[11px] uppercase tracking-wider text-[var(--apple-subink)] border-b border-[var(--apple-hairline)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "{host && <p className=\"text-[11px] text-slate-400 mt-1\">Detected host: {host}</p>}"
+    "snippet": "<p className=\"text-[11px] text-[var(--apple-faint)] mt-3\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<td className=\"py-2.5 text-slate-900 font-mono text-[12px]\">{r.id.slice(0, 8)}</td>"
+    "snippet": "<p className=\"mt-2\">Set <code className=\"px-1.5 py-0.5 bg-white border border-[var(--apple-hairline)] rounded text-[12px]\">{envVar}</code> to a PostHog shared-dashboard iframe URL.</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<td className=\"py-2.5 text-slate-500 font-mono text-[12px]\">{r.orderDeskOrderId || \"—\"}</td>"
+    "snippet": "{host && <p className=\"text-[11px] text-[var(--apple-faint)] mt-1\">Detected host: {host}</p>}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<div className=\"text-[11px] text-slate-400\">{r.kind}</div>"
+    "snippet": "<td className=\"py-2.5 text-[var(--apple-ink)] font-mono text-[12px]\">{r.id.slice(0, 8)}</td>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<td className=\"py-2.5 text-slate-500 font-mono text-[12px]\">"
+    "snippet": "<td className=\"py-2.5 text-[var(--apple-subink)] font-mono text-[12px]\">{r.orderDeskOrderId || \"—\"}</td>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "{r.stripeAccountId && !r.payoutsEnabled && <div className=\"text-[10px] text-[#FF5470]\">payouts disabled</div>}"
+    "snippet": "<div className=\"text-[11px] text-[var(--apple-faint)]\">{r.kind}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminReports.tsx",
+    "snippet": "<td className=\"py-2.5 text-[var(--apple-subink)] font-mono text-[12px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminReports.tsx",
+    "snippet": "{r.stripeAccountId && !r.payoutsEnabled && <div className=\"text-[10px] text-[var(--apple-critical)]\">payouts disabled</div>}"
   },
   {
     "rule": "hardcoded-font-size",
@@ -19062,92 +19467,82 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<li key={i} className=\"flex items-start gap-2 text-[12px] text-slate-600\">"
+    "snippet": "<li key={i} className=\"flex items-start gap-2 text-[12px] text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "className={`px-2.5 py-1 text-[11px] font-medium rounded-full transition-colors ${statusFilter === \"all\" ? \"bg-slate-800 text-white\" : \"bg-slate-100 text-slate-600 hover:bg-slate-200\"}`}"
+    "snippet": "className={`px-2.5 py-1 text-[11px] font-medium rounded-full transition-colors ${statusFilter === \"all\" ? \"bg-[var(--apple-blue)] text-white\" : \"bg-[var(--apple-track)] text-[var(--apple-subink)] hove"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "className={`px-2.5 py-1 text-[11px] font-medium rounded-full transition-colors ${statusFilter === s ? \"bg-slate-800 text-white\" : \"bg-slate-100 text-slate-600 hover:bg-slate-200\"}`}"
+    "snippet": "className={`px-2.5 py-1 text-[11px] font-medium rounded-full transition-colors ${statusFilter === s ? \"bg-[var(--apple-blue)] text-white\" : \"bg-[var(--apple-track)] text-[var(--apple-subink)] hover:bg"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<div className=\"w-6 h-6 rounded bg-slate-100 flex items-center justify-center text-[10px] text-slate-400 shrink-0\">"
+    "snippet": "<div className=\"w-6 h-6 rounded bg-[var(--apple-track)] flex items-center justify-center text-[10px] text-[var(--apple-faint)] shrink-0\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<div className=\"text-[11px] text-slate-400\">{ROLE_LABELS[p.role] ?? p.role}</div>"
+    "snippet": "<div className=\"text-[11px] text-[var(--apple-faint)]\">{ROLE_LABELS[p.role] ?? p.role}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<td className=\"py-2.5 text-slate-500 text-[12px]\">"
+    "snippet": "<td className=\"py-2.5 text-[var(--apple-subink)] text-[12px]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<td className=\"py-2.5 text-slate-500 text-[12px] whitespace-nowrap\">"
+    "snippet": "<td className=\"py-2.5 text-[var(--apple-subink)] text-[12px] whitespace-nowrap\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<div className=\"text-[11px] text-slate-500 font-semibold uppercase tracking-wider pt-2 mb-1\">"
+    "snippet": "<div className=\"text-[11px] text-[var(--apple-subink)] font-semibold uppercase tracking-wider pt-2 mb-1\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<div className=\"mt-2 text-[11px] text-slate-400\">"
+    "snippet": "<div className=\"mt-2 text-[11px] text-[var(--apple-faint)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<Label htmlFor=\"ev-name\" className=\"text-[11px] text-slate-500\">Event name</Label>"
+    "snippet": "<Label htmlFor=\"ev-name\" className=\"text-[11px] text-[var(--apple-subink)]\">Event name</Label>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<Label htmlFor=\"ev-user\" className=\"text-[11px] text-slate-500\">User id</Label>"
+    "snippet": "<Label htmlFor=\"ev-user\" className=\"text-[11px] text-[var(--apple-subink)]\">User id</Label>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<Label htmlFor=\"ev-session\" className=\"text-[11px] text-slate-500\">Session id</Label>"
+    "snippet": "<Label htmlFor=\"ev-session\" className=\"text-[11px] text-[var(--apple-subink)]\">Session id</Label>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<td className=\"py-2 text-slate-500 text-[12px] whitespace-nowrap\">{r.ts ? new Date(r.ts).toLocaleString() : \"\"}</td>"
+    "snippet": "<td className=\"py-2 text-[var(--apple-subink)] text-[12px] whitespace-nowrap\">{r.ts ? new Date(r.ts).toLocaleString() : \"\"}</td>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<td className=\"py-2 text-slate-500 font-mono text-[11px]\">{r.userId ? r.userId.slice(0, 8) : \"—\"}</td>"
+    "snippet": "<td className=\"py-2 text-[var(--apple-subink)] font-mono text-[11px]\">{r.userId ? r.userId.slice(0, 8) : \"—\"}</td>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<td className=\"py-2 text-slate-500 font-mono text-[11px]\">{r.sessionId ? r.sessionId.slice(0, 10) : \"—\"}</td>"
+    "snippet": "<td className=\"py-2 text-[var(--apple-subink)] font-mono text-[11px]\">{r.sessionId ? r.sessionId.slice(0, 10) : \"—\"}</td>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<td className=\"py-2 text-slate-600 font-mono text-[11px] max-w-[400px] truncate\">{r.payload ? JSON.stringify(r.payload) : \"\"}</td>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminReview.tsx",
-    "snippet": "<h1 className=\"text-[22px] font-bold text-slate-900 tracking-tight\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminReview.tsx",
-    "snippet": "<p className=\"text-[13px] text-slate-500 mt-1\">"
+    "snippet": "<td className=\"py-2 text-[var(--apple-subink)] font-mono text-[11px] max-w-[400px] truncate\">{r.payload ? JSON.stringify(r.payload) : \"\"}</td>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -19157,32 +19552,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReview.tsx",
-    "snippet": "<div className=\"mt-3 text-[14px] font-medium text-slate-700\">"
+    "snippet": "<AdminEmptyState action={<span className=\"text-[12.5px] text-[var(--apple-faint)]\">Partner edits with approval-required land here.</span>}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReview.tsx",
-    "snippet": "<div className=\"text-[12.5px] text-slate-500 mt-1\">"
+    "snippet": "<div className=\"flex items-center gap-2 text-[11px] font-semibold text-[var(--apple-subink)] uppercase tracking-wider\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReview.tsx",
-    "snippet": "<div className=\"flex items-center gap-2 text-[11.5px] text-slate-500 uppercase tracking-wide\">"
+    "snippet": "<div className=\"mt-1 text-[14px] font-semibold text-[var(--apple-ink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReview.tsx",
-    "snippet": "<div className=\"mt-1 text-[14px] font-semibold text-slate-900\">"
+    "snippet": "<div className=\"mt-1 text-[12.5px] text-[var(--apple-subink)] italic\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReview.tsx",
-    "snippet": "<div className=\"mt-1 text-[12.5px] text-slate-600 italic\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminReview.tsx",
-    "snippet": "className=\"mt-3 text-[12px] bg-slate-50 border border-slate-200 rounded-md p-3 overflow-x-auto text-slate-700\""
+    "snippet": "className=\"mt-3 text-[12px] bg-[var(--apple-track)] border border-[var(--apple-hairline)] rounded-md p-3 overflow-x-auto text-[var(--apple-ink)]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -19202,67 +19592,62 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReview.tsx",
-    "snippet": "<div className=\"mt-3 text-[12px] text-slate-500\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "className=\"w-full h-9 border border-slate-300 rounded-md px-3 text-sm text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8] disabled"
+    "snippet": "<div className=\"mt-3 text-[12px] text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<p className=\"text-[13px] text-rose-600\" data-testid=\"text-security-error\">"
+    "snippet": "<p className=\"text-[13px] text-[var(--apple-critical)]\" data-testid=\"text-security-error\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Second factor</h2>"
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-[var(--apple-ink)]\">Second factor</h2>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<p className=\"text-[12.5px] text-slate-500 mt-1\">"
+    "snippet": "<p className=\"text-[12.5px] text-[var(--apple-subink)] mt-1\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<div className=\"text-[13.5px] font-medium text-slate-900\">Email a code</div>"
+    "snippet": "<div className=\"text-[13.5px] font-medium text-[var(--apple-ink)]\">Email a code</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<div className=\"text-[12.5px] text-slate-500\">6-digit code sent to {data.email}, valid for 10 minutes.</div>"
+    "snippet": "<div className=\"text-[12.5px] text-[var(--apple-subink)]\">6-digit code sent to {data.email}, valid for 10 minutes.</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<div className=\"text-[13.5px] font-medium text-slate-900\">Authenticator app</div>"
+    "snippet": "<div className=\"text-[13.5px] font-medium text-[var(--apple-ink)]\">Authenticator app</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<div className=\"text-[12.5px] text-slate-500\">"
+    "snippet": "<div className=\"text-[12.5px] text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<p className=\"text-[12.5px] text-slate-500\">"
+    "snippet": "<p className=\"text-[12.5px] text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<p className=\"text-[11px] text-slate-400 text-center break-all\">"
+    "snippet": "<p className=\"text-[11px] text-[var(--apple-faint)] text-center break-all\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<p className=\"text-[13px] font-semibold mb-2 text-slate-900\">Recovery codes</p>"
+    "snippet": "<p className=\"text-[13px] font-semibold mb-2 text-[var(--apple-ink)]\">Recovery codes</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<p className=\"text-[11.5px] text-slate-500 mb-2\">Save these — each works once if you lose your authenticator. You won't see them again.</p>"
+    "snippet": "<p className=\"text-[11.5px] text-[var(--apple-subink)] mb-2\">Save these — each works once if you lose your authenticator. You won't see them again.</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -19272,47 +19657,47 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Recovery codes</h2>"
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-[var(--apple-ink)]\">Recovery codes</h2>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<p className=\"text-[11.5px] text-slate-500 mb-2\">Save these — you won't see them again.</p>"
+    "snippet": "<p className=\"text-[11.5px] text-[var(--apple-subink)] mb-2\">Save these — you won't see them again.</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Change password</h2>"
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-[var(--apple-ink)]\">Change password</h2>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<label className=\"text-[12px] font-medium text-slate-700 block mb-1\" htmlFor=\"current-password\">"
+    "snippet": "<label className=\"text-[12px] font-medium text-[var(--apple-ink)] block mb-1\" htmlFor=\"current-password\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<p className=\"text-[12px] text-rose-600 mt-1\" data-testid=\"text-current-password-error\">"
+    "snippet": "<p className=\"text-[12px] text-[var(--apple-critical)] mt-1\" data-testid=\"text-current-password-error\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<label className=\"text-[12px] font-medium text-slate-700 block mb-1\" htmlFor=\"new-password\">"
+    "snippet": "<label className=\"text-[12px] font-medium text-[var(--apple-ink)] block mb-1\" htmlFor=\"new-password\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<p className=\"text-[12px] text-rose-600 mt-1\" data-testid=\"text-new-password-error\">"
+    "snippet": "<p className=\"text-[12px] text-[var(--apple-critical)] mt-1\" data-testid=\"text-new-password-error\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<label className=\"text-[12px] font-medium text-slate-700 block mb-1\" htmlFor=\"confirm-password\">"
+    "snippet": "<label className=\"text-[12px] font-medium text-[var(--apple-ink)] block mb-1\" htmlFor=\"confirm-password\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<p className=\"text-[12px] text-rose-600 mt-1\" data-testid=\"text-confirm-password-error\">"
+    "snippet": "<p className=\"text-[12px] text-[var(--apple-critical)] mt-1\" data-testid=\"text-confirm-password-error\">"
   },
   {
     "rule": "brand-hex-literal",
@@ -19372,7 +19757,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "className=\"h-10 px-4 rounded-md bg-slate-900 text-white text-[13px] font-medium hover:bg-slate-800 disabled:opacity-50\""
+    "snippet": "className=\"h-10 px-4 rounded-full bg-[var(--apple-blue)] text-white text-[13px] font-semibold hover:brightness-110 transition disabled:opacity-50\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -19388,11 +19773,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminShopify.tsx",
     "snippet": "<div className=\"text-[13px] text-amber-800\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "className=\"rounded-lg border border-slate-200 bg-white px-4 py-6 text-center text-slate-400 text-[13px] leading-snug\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -19442,11 +19822,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "<div className=\"rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-slate-400 text-[13.5px]\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminShopify.tsx",
     "snippet": "<div className=\"w-9 h-9 rounded-md bg-slate-100 text-slate-400 flex items-center justify-center text-[13px] font-bold shrink-0\">"
   },
   {
@@ -19473,6 +19848,51 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminShopify.tsx",
     "snippet": "<div className=\"text-[14px] font-medium text-slate-900 truncate flex items-center gap-1.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminTeamAccounts.tsx",
+    "snippet": "\"inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider transition-colors\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminTeamAccounts.tsx",
+    "snippet": "<div className=\"text-[13px] text-[var(--apple-subink)]\">Loading…</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminTeamAccounts.tsx",
+    "snippet": "<th className=\"text-left font-semibold uppercase tracking-wider text-[11px] text-[var(--apple-subink)] px-4 py-3\">Account</th>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminTeamAccounts.tsx",
+    "snippet": "<th className=\"text-left font-semibold uppercase tracking-wider text-[11px] text-[var(--apple-subink)] px-4 py-3\">Represents</th>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminTeamAccounts.tsx",
+    "snippet": "<th className=\"text-left font-semibold uppercase tracking-wider text-[11px] text-[var(--apple-subink)] px-4 py-3\">Access</th>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminTrash.tsx",
+    "snippet": "<div className=\"text-[13px] text-[var(--apple-subink)]\" data-testid=\"text-trash-loading\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminTrash.tsx",
+    "snippet": "<h2 className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminTrash.tsx",
+    "snippet": "<thead className=\"text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminTrash.tsx",
+    "snippet": "<AlertDialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">Permanently delete this record?</AlertDialogTitle>"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -19507,12 +19927,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendor.tsx",
-    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900 pr-8\">"
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)] pr-8\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendor.tsx",
-    "snippet": "<DialogDescription className=\"text-[13px] font-normal text-slate-500\">"
+    "snippet": "<DialogDescription className=\"text-[13px] font-normal text-[var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -19592,7 +20012,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendor.tsx",
-    "snippet": "<DialogTitle className=\"text-slate-900 text-[14px] font-bold\">"
+    "snippet": "<DialogTitle className=\"text-[var(--apple-ink)] text-[17px] font-semibold\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -19627,52 +20047,42 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "className=\"inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-slate-200 text-slate-600 text-[11px] font-semibold\""
+    "snippet": "className=\"inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--apple-track)] text-[var(--apple-subink)] text-[11px] font-semibold\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "<p className=\"mt-3 text-[14px] font-semibold text-slate-700\">"
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-[var(--apple-ink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "<p className=\"mt-1 text-[12.5px] text-slate-400\">"
+    "snippet": "<DialogDescription className=\"text-[13px] text-[var(--apple-subink)] leading-relaxed\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900\">"
+    "snippet": "className=\"w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disable"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "<DialogDescription className=\"text-[13px] text-slate-500 leading-relaxed\">"
+    "snippet": "<p className=\"text-[11.5px] text-[var(--apple-faint)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "className=\"w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50\""
+    "snippet": "<div className=\"text-[var(--apple-ink)] text-[13.5px] font-semibold truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "<p className=\"text-[11.5px] text-slate-400\">"
+    "snippet": "<div className=\"text-[var(--apple-faint)] text-[11.5px] truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "<div className=\"text-slate-900 text-[13.5px] font-semibold truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[11.5px] truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50\""
+    "snippet": "className=\"px-3 py-1.5 rounded-full text-[12.5px] font-semibold text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-50 transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -19692,32 +20102,32 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "className=\"text-slate-900 text-[14px] font-semibold leading-tight truncate\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[14px] font-semibold leading-tight truncate\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[11.5px] truncate mt-0.5\">"
+    "snippet": "<div className=\"text-[var(--apple-faint)] text-[11.5px] truncate mt-0.5\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[12px] line-clamp-1 mt-0.5\">"
+    "snippet": "<div className=\"text-[var(--apple-subink)] text-[12px] line-clamp-1 mt-0.5\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "className=\"text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[12px] truncate flex-shrink-0 max-w-[40%] hidden md:block\">"
+    "snippet": "<div className=\"text-[var(--apple-subink)] text-[12px] truncate flex-shrink-0 max-w-[40%] hidden md:block\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "className=\"text-slate-700 text-[13.5px] font-semibold truncate\""
+    "snippet": "className=\"text-[var(--apple-ink)] text-[13.5px] font-semibold truncate\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -19731,13 +20141,13 @@
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "<p className=\"text-slate-700 text-[14px] font-semibold\">"
+    "file": "client/src/pages/AdminWelcomeBack.tsx",
+    "snippet": "<div className={`text-[28px] font-semibold tabular-nums tracking-tight leading-none ${color}`}>{value}</div>"
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminVendors.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs\">"
+    "file": "client/src/pages/AdminWelcomeBack.tsx",
+    "snippet": "<div className=\"text-[var(--apple-subink)] text-[11px] mt-1 uppercase tracking-wider font-semibold\">{label}</div>"
   },
   {
     "rule": "brand-hex-literal",

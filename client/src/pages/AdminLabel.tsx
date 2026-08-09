@@ -22,7 +22,6 @@ import {
   Check,
   Link2,
   Unplug,
-  User as UserIcon,
 } from "lucide-react";
 import { SiSpotify, SiApplemusic, SiShopify } from "react-icons/si";
 import { Button } from "@/components/ui/button";
@@ -47,6 +46,7 @@ import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard"
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { NotificationsCard } from "@/components/admin/NotificationsCard";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import {
   LabelPreviewCard,
   type LabelPreviewAlbum,
@@ -560,14 +560,14 @@ export function AdminLabel() {
         onOpenChange={(v) => !deleteLabel.isPending && setDeleteConfirmOpen(v)}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_24px_60px_rgba(0,0,0,0.24)] p-6 gap-4"
           data-testid="dialog-delete-label"
         >
           <DialogHeader className="text-left space-y-1">
-            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)] pr-8">
               Delete <span className="italic">{label.name}</span>?
             </DialogTitle>
-            <DialogDescription className="text-[13px] font-normal text-slate-500">
+            <DialogDescription className="text-[13px] font-normal text-[var(--apple-subink)]">
               {releases.length > 0 || linkedPeopleCount > 0 ? (
                 <>
                   This label is linked to{" "}
@@ -596,12 +596,12 @@ export function AdminLabel() {
               )}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-3 pt-1">
+          <div className="flex justify-end items-center gap-2 pt-1">
             <Button
               type="button"
               onClick={() => setDeleteConfirmOpen(false)}
               disabled={deleteLabel.isPending}
-              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              className="rounded-full bg-transparent border-0 shadow-none text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hover:text-[var(--apple-subink)]"
               data-testid="button-delete-label-cancel"
             >
               Cancel
@@ -610,7 +610,7 @@ export function AdminLabel() {
               type="button"
               onClick={() => deleteLabel.mutate()}
               disabled={deleteLabel.isPending}
-              className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
+              className="rounded-full bg-[var(--apple-critical-wash)] text-[var(--apple-critical)] shadow-none hover:bg-[var(--apple-critical-wash)] hover:brightness-95"
               data-testid="button-delete-label-confirm"
             >
               {deleteLabel.isPending ? "Deleting…" : "Delete label"}
@@ -816,7 +816,7 @@ function ImageUploadPanel({
                 "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 active:scale-[0.94]",
                 locked
                   ? "text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10"
-                  : "text-slate-400 hover:text-slate-700 hover:bg-slate-100",
+                  : "text-[var(--apple-faint)] hover:bg-[var(--apple-track)]",
                 lockMut.isPending && "opacity-50",
               ]
                 .filter(Boolean)
@@ -898,9 +898,9 @@ function ImageUploadPanel({
             "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
             dragging
               ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
-              : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+              : "border-[var(--apple-hairline)] hover:bg-[var(--apple-track)]",
             busy && "opacity-60 cursor-not-allowed",
-            locked && "opacity-40 cursor-not-allowed hover:border-slate-200 hover:bg-transparent",
+            locked && "opacity-40 cursor-not-allowed hover:bg-transparent",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -983,11 +983,11 @@ function LogoEditorDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-3xl bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-5"
+        className="max-w-3xl bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_24px_60px_rgba(0,0,0,0.24)] p-6 gap-5"
         data-testid="dialog-edit-label-logo"
       >
         <DialogHeader className="flex-row items-center justify-between space-y-0">
-          <DialogTitle className="text-slate-900 text-sm font-bold">
+          <DialogTitle className="text-[var(--apple-ink)] text-[17px] font-semibold">
             Logo
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -1156,7 +1156,7 @@ function ArtistsPanel({
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            className="h-9 w-9 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+            className="h-9 w-9 rounded-md text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center transition-colors"
             aria-label="Search"
             data-testid="button-search-label-artists"
           >
@@ -1195,7 +1195,7 @@ function ArtistsPanel({
         </div>
       ) : (
         <div
-          className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+          className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-[var(--apple-hairline)]"
           data-testid="list-label-artists"
         >
           {filtered.map((p) => (
@@ -1221,29 +1221,29 @@ function ArtistsPanel({
         onOpenChange={(v) => !assignMut.isPending && !v && setReassign(null)}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_24px_60px_rgba(0,0,0,0.24)] p-6 gap-4"
           data-testid="dialog-reassign-artist"
         >
           <DialogHeader className="text-left space-y-1">
-            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)] pr-8">
               Reassign <span className="italic">{reassign?.personName}</span>?
             </DialogTitle>
-            <DialogDescription className="text-[13px] font-normal text-slate-500">
+            <DialogDescription className="text-[13px] font-normal text-[var(--apple-subink)]">
               They're currently signed to{" "}
-              <span className="font-semibold text-slate-700">
+              <span className="font-semibold text-[var(--apple-ink)]">
                 {reassign?.fromLabelName}
               </span>
               . Continuing will move them to{" "}
-              <span className="font-semibold text-slate-700">{label.name}</span>
+              <span className="font-semibold text-[var(--apple-ink)]">{label.name}</span>
               {" "}— previous label loses the link.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-3 pt-1">
+          <div className="flex justify-end items-center gap-2 pt-1">
             <Button
               type="button"
               onClick={() => setReassign(null)}
               disabled={assignMut.isPending}
-              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              className="rounded-full bg-transparent border-0 shadow-none text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hover:text-[var(--apple-subink)]"
               data-testid="button-reassign-cancel"
             >
               Cancel
@@ -1255,7 +1255,7 @@ function ArtistsPanel({
                 setReassign(null);
               }}
               disabled={assignMut.isPending}
-              className="bg-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/90 text-white ml-2"
+              className="rounded-full bg-[var(--apple-blue)] hover:bg-[var(--apple-blue)]/90 text-white ml-1"
               data-testid="button-reassign-confirm"
             >
               {assignMut.isPending ? "Moving…" : `Move to ${label.name}`}
@@ -1373,7 +1373,7 @@ function LabelArtistRow({
     <button
       type="button"
       onClick={onOpen}
-      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
+      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-[var(--apple-track)] transition-colors"
       data-testid={`row-label-artist-${person.id}`}
     >
       <div className="relative w-10 h-10 flex-shrink-0">
@@ -1414,31 +1414,26 @@ function ArtistsEmptyState({
   onAdd: () => void;
 }) {
   return (
-    <Card
-      className="rounded-2xl shadow-sm p-10 text-center"
-      data-testid="empty-label-artists"
-    >
-      <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-        <UserIcon className="w-6 h-6" />
-      </div>
-      <p className="text-slate-700 text-[14px] font-semibold">
-        {searching ? "No artists match that search" : "No artists yet"}
-      </p>
-      <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs mx-auto">
+    <Card className="rounded-2xl">
+      <AdminEmptyState
+        testId="empty-label-artists"
+        action={
+          !searching ? (
+            <button
+              type="button"
+              onClick={onAdd}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium text-[var(--apple-blue)] hover:bg-[var(--apple-blue)]/10 transition-colors"
+              data-testid="button-empty-add-first-artist"
+            >
+              Add your first artist
+            </button>
+          ) : undefined
+        }
+      >
         {searching
-          ? "Try a different name."
-          : "Add the first artist signed to this label — search your local catalog or pull one from Spotify or Apple Music."}
-      </p>
-      {!searching && (
-        <button
-          type="button"
-          onClick={onAdd}
-          className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-          data-testid="button-empty-add-first-artist"
-        >
-          Add your first artist
-        </button>
-      )}
+          ? "No artists match that search."
+          : "No artists yet — add the first artist signed to this label."}
+      </AdminEmptyState>
     </Card>
   );
 }
@@ -1458,20 +1453,11 @@ function ReleasesPanel({
 }) {
   if (releases.length === 0) {
     return (
-      <Card
-        className="rounded-2xl shadow-sm p-10 text-center"
-        data-testid="panel-releases-empty"
-      >
-        <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-          <Disc className="w-6 h-6" />
-        </div>
-        <p className="text-slate-700 text-[14px] font-semibold">
-          No releases on this label yet
-        </p>
-        <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs mx-auto">
-          Assign this label to an album from the album's Overview tab and
-          it'll show up here.
-        </p>
+      <Card className="rounded-2xl">
+        <AdminEmptyState testId="panel-releases-empty">
+          No releases on this label yet — assign this label to an album from
+          the album's Overview tab and it'll show up here.
+        </AdminEmptyState>
       </Card>
     );
   }
@@ -1499,7 +1485,7 @@ function ReleasesPanel({
           <li key={a.id} className="relative">
             <Link
               href={albumHref(a.id)}
-              className="absolute inset-0 hover:bg-slate-50 transition-colors"
+              className="absolute inset-0 hover:bg-[var(--apple-track)] transition-colors"
               data-testid={`row-release-${a.id}`}
               aria-label={a.title}
             />
@@ -1825,32 +1811,30 @@ function ShopifyPanel({
           </div>
         </div>
         {data.albums.length === 0 ? (
-          <div className="px-6 py-8 text-center" data-testid="panel-shopify-albums-empty">
-            <p className="text-slate-400 text-[12.5px]">
-              Assign this label to an album from the album's Overview tab and
-              it'll show up here.
-            </p>
-          </div>
+          <AdminEmptyState testId="panel-shopify-albums-empty">
+            Assign this label to an album from the album's Overview tab and
+            it'll show up here.
+          </AdminEmptyState>
         ) : (
-          <ul className="divide-y divide-slate-100" data-testid="list-shopify-albums">
+          <ul className="divide-y divide-[var(--apple-hairline)]" data-testid="list-shopify-albums">
             {data.albums.map((a) => (
               <li key={a.id} className="relative">
                 <button
                   type="button"
                   onClick={() => onOpenAlbum(a.id)}
-                  className="w-full flex items-center gap-3.5 px-6 py-3 text-left hover:bg-slate-50 transition-colors"
+                  className="w-full flex items-center gap-3.5 px-6 py-3 text-left hover:bg-[var(--apple-track)] transition-colors"
                   data-testid={`row-shopify-album-${a.id}`}
                 >
                   <div className="w-11 h-11 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex-shrink-0">
                     <img src={a.artwork} alt={a.title} className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-slate-900 text-[13.5px] font-semibold truncate">{a.title}</div>
-                    <div className="text-slate-400 text-[11.5px] truncate">{a.artist}</div>
+                    <div className="text-[var(--apple-ink)] text-[13.5px] font-semibold truncate">{a.title}</div>
+                    <div className="text-[var(--apple-faint)] text-[11.5px] truncate">{a.artist}</div>
                   </div>
                   {a.mapped ? (
                     <span
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex-shrink-0"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--apple-ready-wash)] text-[var(--apple-ready)] text-[10px] font-bold uppercase tracking-wider flex-shrink-0"
                       data-testid={`status-shopify-album-${a.id}`}
                     >
                       <Check className="w-3 h-3" />
@@ -1858,7 +1842,7 @@ function ShopifyPanel({
                     </span>
                   ) : (
                     <span
-                      className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wider flex-shrink-0"
+                      className="inline-flex items-center px-2 py-0.5 rounded-full bg-[var(--apple-chip)] text-[var(--apple-subink)] text-[10px] font-bold uppercase tracking-wider flex-shrink-0"
                       data-testid={`status-shopify-album-${a.id}`}
                     >
                       Not mapped

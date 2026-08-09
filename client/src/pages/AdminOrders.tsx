@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AlertTriangle, Settings2, RefreshCw, Loader2, Gift } from "lucide-react";
 import type { PayoutSettings, AlbumFormat } from "@shared/schema";
 import { VinylPreview } from "@/components/VinylPreview";
@@ -136,9 +137,9 @@ function UploadValidationBadge({
   const status = rollup?.[albumId];
   if (!status || status === "pass") return null;
   const cls =
-    status === "fail" ? "bg-rose-50 text-rose-700" :
-    status === "warn" ? "bg-amber-50 text-amber-700" :
-    "bg-violet-50 text-violet-700"; // overridden
+    status === "fail" ? "bg-[var(--apple-critical)]/10 text-[var(--apple-critical)]" :
+    status === "warn" ? "bg-[var(--apple-warning)]/10 text-[var(--apple-warning)]" :
+    "bg-[var(--apple-chip)] text-[var(--apple-subink)]"; // overridden
   const label = status === "overridden" ? "Preflight · overridden" : `Preflight · ${status}`;
   return (
     <span
@@ -169,10 +170,10 @@ function OriginBadge({ origin }: { origin: string | undefined }) {
 }
 
 function giftStatus(g: GiftInfo): { label: string; cls: string } {
-  if (g.claimed) return { label: "Gift · Claimed", cls: "bg-violet-50 text-violet-700" };
-  if (new Date(g.expiresAt).getTime() < Date.now()) return { label: "Gift · Expired", cls: "bg-rose-50 text-rose-700" };
-  if (g.resendCount > 0) return { label: `Gift · Resent ×${g.resendCount}`, cls: "bg-amber-50 text-amber-700" };
-  return { label: "Gift · Sent", cls: "bg-fuchsia-50 text-fuchsia-700" };
+  if (g.claimed) return { label: "Gift · Claimed", cls: "bg-[var(--apple-chip)] text-[var(--apple-subink)]" };
+  if (new Date(g.expiresAt).getTime() < Date.now()) return { label: "Gift · Expired", cls: "bg-[var(--apple-critical)]/10 text-[var(--apple-critical)]" };
+  if (g.resendCount > 0) return { label: `Gift · Resent ×${g.resendCount}`, cls: "bg-[var(--apple-warning)]/10 text-[var(--apple-warning)]" };
+  return { label: "Gift · Sent", cls: "bg-[var(--apple-blue)]/10 text-[var(--apple-blue)]" };
 }
 
 const STATUSES = ["all", "paid", "shipped", "refunded"] as const;
@@ -429,8 +430,8 @@ function AdminOrdersInner() {
       <div className="max-w-5xl mx-auto py-8" data-testid="page-admin-orders">
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h1 className="text-[22px] font-semibold text-slate-900">Orders</h1>
-            <p className="text-slate-500 text-[13px]">Physical fulfillment + refund tracking.</p>
+            <h1 className="text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]">Orders.</h1>
+            <p className="text-[var(--apple-subink)] text-[13px] font-medium">Physical fulfillment and refund tracking.</p>
           </div>
           <div className="flex items-center gap-2">
             {needsPushCount > 0 && (
@@ -445,10 +446,10 @@ function AdminOrdersInner() {
                   setNeedsAttentionOnly(next.needsAttentionOnly);
                 }}
                 aria-pressed={needsAttentionOnly}
-                className={`h-8 px-3 rounded-md text-xs font-semibold inline-flex items-center gap-1.5 transition-colors ${
+                className={`h-8 px-3 rounded-full text-xs font-semibold inline-flex items-center gap-1.5 transition-colors ${
                   needsAttentionOnly
-                    ? "bg-rose-600 text-white hover:bg-rose-700"
-                    : "bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100"
+                    ? "bg-[var(--apple-critical)] text-white hover:bg-[var(--apple-critical)]/90"
+                    : "bg-[var(--apple-critical)]/10 text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/15"
                 }`}
                 data-testid="button-needs-attention"
                 title="These physical orders failed to push to Order Desk. Click to filter the list to just them."
@@ -459,7 +460,7 @@ function AdminOrdersInner() {
             )}
             <Link
               href="/admin/print-queue"
-              className="h-8 px-3 rounded-md border border-slate-200 bg-white text-slate-700 text-[12px] font-medium hover:bg-slate-50 inline-flex items-center gap-1.5"
+              className="h-8 px-3 rounded-full border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] text-[12px] font-medium hover:bg-[var(--apple-track)] inline-flex items-center gap-1.5"
               data-testid="link-print-queue"
             >
               Print queue
@@ -467,18 +468,18 @@ function AdminOrdersInner() {
             <button
               type="button"
               onClick={() => setShowSettings((v) => !v)}
-              className="h-8 px-3 rounded-md border border-slate-200 bg-white text-slate-700 text-[12px] font-medium hover:bg-slate-50 inline-flex items-center gap-1.5"
+              className="h-8 px-3 rounded-full border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] text-[12px] font-medium hover:bg-[var(--apple-track)] inline-flex items-center gap-1.5"
               data-testid="button-payout-settings"
             >
               <Settings2 className="w-3.5 h-3.5" /> Payout settings
             </button>
             {fulfillers.length > 0 && (
               <div className="relative inline-flex items-center">
-                <Gift className="w-3.5 h-3.5 text-emerald-600 absolute left-2.5 pointer-events-none" />
+                <Gift className="w-3.5 h-3.5 text-[var(--apple-ready)] absolute left-2.5 pointer-events-none" />
                 <select
                   value={fulfillerFilter}
                   onChange={(e) => setFulfillerFilter(e.target.value)}
-                  className="h-8 pl-7 pr-3 rounded-md border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50"
+                  className="h-8 pl-7 pr-3 rounded-full border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] text-xs font-medium hover:bg-[var(--apple-track)]"
                   data-testid="filter-fulfiller"
                   title="Show only orders with a custom add-on this party fulfills"
                 >
@@ -491,13 +492,13 @@ function AdminOrdersInner() {
                 </select>
               </div>
             )}
-            <div className="flex p-0.5 rounded-md bg-slate-100">
+            <div className="flex p-0.5 rounded-full bg-[var(--apple-track)]">
               {STATUSES.map((s) => (
                 <button
                   key={s}
                   onClick={() => setFilter(s)}
-                  className={`px-3 py-1 rounded text-[12px] font-medium capitalize ${
-                    filter === s ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"
+                  className={`px-3 py-1 rounded-full text-[12px] font-medium capitalize ${
+                    filter === s ? "bg-white shadow-sm text-[var(--apple-ink)]" : "text-[var(--apple-subink)]"
                   }`}
                   data-testid={`filter-status-${s}`}
                 >
@@ -518,7 +519,7 @@ function AdminOrdersInner() {
           />
         )}
 
-        {isLoading && <div className="text-slate-500 text-sm" data-testid="admin-orders-loading">Loading…</div>}
+        {isLoading && <div className="text-[var(--apple-subink)] text-sm" data-testid="admin-orders-loading">Loading…</div>}
         {ordersError && (
           <ErrorState
             error={ordersErrorObj}
@@ -528,13 +529,12 @@ function AdminOrdersInner() {
           />
         )}
         {!isLoading && !ordersError && filtered.length === 0 && (
-          <Card className="rounded-lg shadow-none p-8 text-center" data-testid="admin-orders-empty">
-            <div className="text-slate-700 font-medium">No orders</div>
-            <div className="text-slate-500 text-[13px] mt-1">When fans buy, they'll show up here.</div>
+          <Card className="rounded-2xl shadow-none" data-testid="admin-orders-empty">
+            <AdminEmptyState>No orders yet — when fans buy, they'll show up here.</AdminEmptyState>
           </Card>
         )}
 
-        <Card className="rounded-lg shadow-none divide-y divide-slate-100 overflow-hidden">
+        <Card className="rounded-2xl shadow-none divide-y divide-[var(--apple-hairline)] overflow-hidden">
           {filtered.map((o) => {
             const isFocus = focusOrderId === o.id;
             return (
@@ -573,7 +573,7 @@ function AdminOrdersInner() {
                   <img
                     src={o.albumArtwork}
                     alt=""
-                    className="w-16 h-16 rounded-md object-cover border border-slate-200 flex-shrink-0"
+                    className="w-16 h-16 rounded-md object-cover border border-[var(--apple-hairline)] flex-shrink-0"
                     data-testid={`admin-order-artwork-${o.id}`}
                   />
                 ) : null;
@@ -582,10 +582,10 @@ function AdminOrdersInner() {
                 <div className="flex items-center gap-2 text-[11px] flex-wrap">
                   <span className={[
                     "px-2 py-0.5 rounded-full font-semibold uppercase",
-                    o.status === "paid" ? "bg-emerald-50 text-emerald-700" :
-                    o.status === "shipped" ? "bg-sky-50 text-sky-700" :
-                    o.status === "refunded" ? "bg-rose-50 text-rose-700" :
-                    "bg-slate-100 text-slate-600",
+                    o.status === "paid" ? "bg-[var(--apple-ready)]/10 text-[var(--apple-ready)]" :
+                    o.status === "shipped" ? "bg-[var(--apple-blue)]/10 text-[var(--apple-blue)]" :
+                    o.status === "refunded" ? "bg-[var(--apple-critical)]/10 text-[var(--apple-critical)]" :
+                    "bg-[var(--apple-track)] text-[var(--apple-subink)]",
                   ].join(" ")}>{o.status}</span>
                   <OriginBadge origin={o.origin} />
                   <UploadValidationBadge rollup={preflightRollup} albumId={o.albumId} />
@@ -599,29 +599,29 @@ function AdminOrdersInner() {
                   })()}
                   {o.payoutStatus && <PayoutChip status={o.payoutStatus} amountCents={o.payoutAmountCents} />}
                   {o.goodDeedNumber !== null && (
-                    <span className="text-slate-400">#{o.goodDeedNumber}</span>
+                    <span className="text-[var(--apple-faint)]">#{o.goodDeedNumber}</span>
                   )}
-                  <span className="text-slate-400">{new Date(o.createdAt).toLocaleDateString()}</span>
+                  <span className="text-[var(--apple-faint)]">{new Date(o.createdAt).toLocaleDateString()}</span>
                 </div>
                 {o.gift && (
-                  <div className="text-[11.5px] text-slate-500 mt-1.5 leading-snug" data-testid={`text-gift-${o.id}`}>
-                    Gift to <span className="text-slate-700 font-medium">{o.gift.recipientFirstName} {o.gift.recipientLastName}</span>
+                  <div className="text-[11.5px] text-[var(--apple-subink)] mt-1.5 leading-snug" data-testid={`text-gift-${o.id}`}>
+                    Gift to <span className="text-[var(--apple-ink)] font-medium">{o.gift.recipientFirstName} {o.gift.recipientLastName}</span>
                     {o.gift.recipientEmail && <> · {o.gift.recipientEmail}</>}
                     {o.gift.recipientPhone && <> · {o.gift.recipientPhone}</>}
                   </div>
                 )}
-                <div className="text-[14px] font-medium text-slate-900 mt-1">
+                <div className="text-[14px] font-medium text-[var(--apple-ink)] mt-1">
                   <Link href={`/admin/albums/${o.albumId}`} className="hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors">
                     {o.albumTitle}
                   </Link>
-                  <span className="text-slate-400"> · </span>
-                  <span className="text-slate-600">{o.albumArtist}</span>
+                  <span className="text-[var(--apple-faint)]"> · </span>
+                  <span className="text-[var(--apple-subink)]">{o.albumArtist}</span>
                 </div>
                 {/* Task #131 — Cross-link into the Customers directory.
                     Only orders with a real customerId get the link;
                     guest / orphan orders keep their snapshot text as
                     plain copy so we don't navigate to a 404. */}
-                <div className="text-[12.5px] text-slate-500 mt-0.5">
+                <div className="text-[12.5px] text-[var(--apple-subink)] mt-0.5">
                   {o.customerId ? (
                     <Link
                       href={`/admin/customers/${o.customerId}?from=partner&backHref=${encodeURIComponent("/admin/orders")}&backName=${encodeURIComponent("Orders")}`}
@@ -639,14 +639,14 @@ function AdminOrdersInner() {
                     it.kind === "custom_addon" ? (
                       <span
                         key={it.id}
-                        className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold inline-flex items-center gap-1"
+                        className="text-xs px-2 py-0.5 rounded-full bg-[var(--apple-ready)]/10 text-[var(--apple-ready)] font-semibold inline-flex items-center gap-1"
                         data-testid={`pill-custom-addon-${it.id}`}
                       >
                         <Gift className="w-3 h-3" />
                         {it.label}
                       </span>
                     ) : (
-                      <span key={it.id} className="text-[10.5px] px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                      <span key={it.id} className="text-[10.5px] px-2 py-0.5 rounded-full bg-[var(--apple-track)] text-[var(--apple-subink)]">
                         {it.label}
                       </span>
                     ),
@@ -666,25 +666,25 @@ function AdminOrdersInner() {
                       {addonLines.map((it) => (
                         <div
                           key={`custom-addon-line-${it.id}`}
-                          className="flex items-start gap-2.5 rounded-md border border-emerald-200 bg-emerald-50/60 px-2.5 py-2"
+                          className="flex items-start gap-2.5 rounded-xl border border-[var(--apple-ready)]/20 bg-[var(--apple-ready)]/[0.06] px-2.5 py-2"
                           data-testid={`admin-order-custom-addon-line-${it.id}`}
                         >
-                          <Gift className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                          <Gift className="w-4 h-4 text-[var(--apple-ready)] mt-0.5 flex-shrink-0" />
                           <div className="min-w-0 flex-1 text-[12px] leading-snug">
-                            <div className="font-medium text-slate-900">
+                            <div className="font-medium text-[var(--apple-ink)]">
                               {it.label}
-                              {it.quantity > 1 && <span className="text-slate-500"> · ×{it.quantity}</span>}
+                              {it.quantity > 1 && <span className="text-[var(--apple-subink)]"> · ×{it.quantity}</span>}
                             </div>
-                            <div className="text-slate-500">
+                            <div className="text-[var(--apple-subink)]">
                               {it.orgName ? (
                                 <span data-testid={`text-addon-org-${it.id}`}>{it.orgName}</span>
                               ) : (
-                                <span className="text-slate-400">Non-profit removed</span>
+                                <span className="text-[var(--apple-faint)]">Non-profit removed</span>
                               )}
-                              <span className="text-slate-300"> · </span>
+                              <span className="text-[var(--apple-faint)]"> · </span>
                               <span data-testid={`text-addon-fulfiller-${it.id}`}>
                                 Fulfilled by{" "}
-                                <span className="font-medium text-emerald-700">
+                                <span className="font-medium text-[var(--apple-ready)]">
                                   {it.fulfiller || "Unassigned"}
                                 </span>
                               </span>
@@ -700,16 +700,16 @@ function AdminOrdersInner() {
                                   return (
                                     <div
                                       key={b.id}
-                                      className="rounded border border-emerald-200 bg-white px-2 py-1.5"
+                                      className="rounded-lg border border-[var(--apple-hairline)] bg-white px-2 py-1.5"
                                       data-testid={`admin-gift-box-${b.id}`}
                                     >
                                       <div className="flex items-center justify-between gap-2">
-                                        <span className="font-medium text-slate-700">Gift {b.position}</span>
+                                        <span className="font-medium text-[var(--apple-ink)]">Gift {b.position}</span>
                                         <span
                                           className={`text-xs px-1.5 py-0.5 rounded-full ${
                                             b.personalized
-                                              ? "bg-emerald-100 text-emerald-700"
-                                              : "bg-slate-100 text-slate-500"
+                                              ? "bg-[var(--apple-ready)]/10 text-[var(--apple-ready)]"
+                                              : "bg-[var(--apple-track)] text-[var(--apple-subink)]"
                                           }`}
                                           data-testid={`admin-gift-box-status-${b.id}`}
                                         >
@@ -722,16 +722,16 @@ function AdminOrdersInner() {
                                       </div>
                                       {b.mode === "known" &&
                                         (b.piiVisible ? (
-                                          <div className="mt-1 text-slate-600" data-testid={`admin-gift-box-pii-${b.id}`}>
-                                            <div className="font-medium text-slate-800">{b.recipientName || "—"}</div>
+                                          <div className="mt-1 text-[var(--apple-subink)]" data-testid={`admin-gift-box-pii-${b.id}`}>
+                                            <div className="font-medium text-[var(--apple-ink)]">{b.recipientName || "—"}</div>
                                             {b.recipientPhone && <div>{b.recipientPhone}</div>}
                                             {addr && <div>{addr}</div>}
                                             {cityLine && <div>{cityLine}</div>}
-                                            {b.giverName && <div className="text-slate-500">From {b.giverName}</div>}
-                                            {b.message && <div className="text-slate-500 italic">“{b.message}”</div>}
+                                            {b.giverName && <div className="text-[var(--apple-subink)]">From {b.giverName}</div>}
+                                            {b.message && <div className="text-[var(--apple-subink)] italic">“{b.message}”</div>}
                                           </div>
                                         ) : (
-                                          <div className="mt-1 text-slate-400" data-testid={`admin-gift-box-pii-hidden-${b.id}`}>
+                                          <div className="mt-1 text-[var(--apple-faint)]" data-testid={`admin-gift-box-pii-hidden-${b.id}`}>
                                             Recipient details hidden
                                           </div>
                                         ))}
@@ -762,7 +762,7 @@ function AdminOrdersInner() {
                         return (
                           <div
                             key={`vinyl-line-${it.id}`}
-                            className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-2.5 py-2"
+                            className="flex items-center gap-3 rounded-xl border border-[var(--apple-hairline)] bg-white px-2.5 py-2"
                             data-testid={`admin-order-vinyl-line-${it.id}`}
                           >
                             <div className="flex-shrink-0">
@@ -774,14 +774,14 @@ function AdminOrdersInner() {
                               />
                             </div>
                             <div className="min-w-0 flex-1 text-[12px] leading-snug">
-                              <div className="font-medium text-slate-900">{it.label}</div>
-                              <div className="text-slate-500">
+                              <div className="font-medium text-[var(--apple-ink)]">{it.label}</div>
+                              <div className="text-[var(--apple-subink)]">
                                 {color.name}
-                                <span className="text-slate-300"> · </span>
+                                <span className="text-[var(--apple-faint)]"> · </span>
                                 {JACKET_UPGRADE_LABEL[jacket]}
                                 {it.quantity > 1 && (
                                   <>
-                                    <span className="text-slate-300"> · </span>
+                                    <span className="text-[var(--apple-faint)]"> · </span>
                                     ×{it.quantity}
                                   </>
                                 )}
@@ -794,26 +794,26 @@ function AdminOrdersInner() {
                   );
                 })()}
                 {o.shippingAddress && (
-                  <div className="text-[11.5px] text-slate-500 mt-1.5 leading-snug">
+                  <div className="text-[11.5px] text-[var(--apple-subink)] mt-1.5 leading-snug">
                     Ship to: {o.shippingName ?? o.customerName ?? "—"},{" "}
                     {[o.shippingAddress.line1, o.shippingAddress.line2, o.shippingAddress.city, o.shippingAddress.state, o.shippingAddress.postalCode, o.shippingAddress.country].filter(Boolean).join(", ")}
                   </div>
                 )}
                 {o.payoutError && (
-                  <div className="text-[11.5px] text-rose-600 mt-1.5" data-testid={`text-payout-error-${o.id}`}>
+                  <div className="text-[11.5px] text-[var(--apple-critical)] mt-1.5" data-testid={`text-payout-error-${o.id}`}>
                     Payout error: {o.payoutError}
                   </div>
                 )}
                 <FulfillmentTimeline order={o} />
               </div>
               <div className="text-right">
-                <div className="text-[14px] font-semibold text-slate-900">{dollars(o.totalCents)}</div>
+                <div className="text-[14px] font-semibold tabular-nums text-[var(--apple-ink)]">{dollars(o.totalCents)}</div>
                 {o.status === "paid" && (
                   <button
                     type="button"
                     onClick={() => ship.mutate(o.id)}
                     disabled={ship.isPending}
-                    className="mt-2 px-3 py-1 rounded-md text-[12px] font-medium bg-[var(--brand-blue)] text-white hover:bg-[var(--brand-blue-hover)] disabled:opacity-50"
+                    className="mt-2 px-3 py-1 rounded-full text-[12px] font-medium bg-[var(--brand-blue)] text-white hover:bg-[var(--brand-blue-hover)] disabled:opacity-50"
                     data-testid={`button-ship-${o.id}`}
                   >
                     Mark shipped
@@ -824,7 +824,7 @@ function AdminOrdersInner() {
                     type="button"
                     onClick={() => resendGift.mutate(o.id)}
                     disabled={resendGift.isPending}
-                    className="mt-2 ml-2 px-3 py-1 rounded-md text-[12px] font-medium bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-200 disabled:opacity-50"
+                    className="mt-2 ml-2 px-3 py-1 rounded-full text-[12px] font-medium border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] hover:bg-[var(--apple-track)] disabled:opacity-50"
                     data-testid={`button-resend-gift-${o.id}`}
                   >
                     {new Date(o.gift.expiresAt).getTime() < Date.now() ? "Recover expired link" : "Resend link"}
@@ -835,7 +835,7 @@ function AdminOrdersInner() {
                     type="button"
                     onClick={() => promptChangeRecipient(o)}
                     disabled={patchGift.isPending}
-                    className="mt-2 ml-2 px-3 py-1 rounded-md text-[12px] font-medium bg-violet-100 text-violet-700 hover:bg-violet-200 disabled:opacity-50"
+                    className="mt-2 ml-2 px-3 py-1 rounded-full text-[12px] font-medium border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] hover:bg-[var(--apple-track)] disabled:opacity-50"
                     data-testid={`button-change-recipient-${o.id}`}
                   >
                     Change recipient
@@ -846,7 +846,7 @@ function AdminOrdersInner() {
                     type="button"
                     onClick={() => retryPayout.mutate(o.id)}
                     disabled={retryPayout.isPending}
-                    className="mt-2 px-3 py-1 rounded-md text-[12px] font-medium bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 inline-flex items-center gap-1.5"
+                    className="mt-2 px-3 py-1 rounded-full text-[12px] font-medium bg-[var(--apple-warning)]/10 text-[var(--apple-warning)] hover:bg-[var(--apple-warning)]/15 disabled:opacity-50 inline-flex items-center gap-1.5"
                     data-testid={`button-retry-payout-${o.id}`}
                   >
                     {retryPayout.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
@@ -880,12 +880,12 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
   ];
   const status = o.fulfillmentStatus ?? "pending";
   const tone =
-    status === "delivered" ? "bg-emerald-50 text-emerald-700" :
-    status === "shipped" ? "bg-sky-50 text-sky-700" :
-    status === "in_fulfillment" ? "bg-indigo-50 text-indigo-700" :
-    status === "submitted" ? "bg-violet-50 text-violet-700" :
-    status === "cancelled" || status === "returned" ? "bg-rose-50 text-rose-700" :
-    "bg-amber-50 text-amber-700";
+    status === "delivered" ? "bg-[var(--apple-ready)]/10 text-[var(--apple-ready)]" :
+    status === "shipped" ? "bg-[var(--apple-blue)]/10 text-[var(--apple-blue)]" :
+    status === "in_fulfillment" ? "bg-[var(--apple-blue)]/10 text-[var(--apple-blue)]" :
+    status === "submitted" ? "bg-[var(--apple-chip)] text-[var(--apple-subink)]" :
+    status === "cancelled" || status === "returned" ? "bg-[var(--apple-critical)]/10 text-[var(--apple-critical)]" :
+    "bg-[var(--apple-warning)]/10 text-[var(--apple-warning)]";
 
   // Show a retry push button when the order hasn't reached OD yet.
   const needsPush = isPhysical && !o.orderDeskOrderId && (status === "pending" || !o.fulfillmentStatus);
@@ -944,13 +944,13 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
   });
 
   return (
-    <div className="mt-2 rounded-md bg-slate-50 border border-slate-200 px-2.5 py-2" data-testid={`fulfillment-timeline-${o.id}`}>
+    <div className="mt-2 rounded-xl bg-[var(--apple-track)] border border-[var(--apple-hairline)] px-2.5 py-2" data-testid={`fulfillment-timeline-${o.id}`}>
       <div className="flex items-center gap-2 text-[11px] flex-wrap">
         <span className={`px-2 py-0.5 rounded-full font-semibold uppercase ${tone}`} data-testid={`pill-fulfillment-${o.id}`}>
           {status.replace("_", " ")}
         </span>
         {o.orderDeskOrderId && (
-          <span className="text-slate-400" data-testid={`text-od-id-${o.id}`}>OD #{o.orderDeskOrderId}</span>
+          <span className="text-[var(--apple-faint)]" data-testid={`text-od-id-${o.id}`}>OD #{o.orderDeskOrderId}</span>
         )}
         {canRefreshOd && (
           <button
@@ -958,7 +958,7 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
             onClick={() => odRefresh.mutate()}
             disabled={odRefresh.isPending}
             title="Refresh status from Order Desk"
-            className="px-1.5 py-0.5 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold"
+            className="px-1.5 py-0.5 rounded-full border border-[var(--apple-hairline)] text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold"
             data-testid={`button-od-refresh-${o.id}`}
           >
             {odRefresh.isPending ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
@@ -966,10 +966,10 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
           </button>
         )}
         {o.odooOrderId && (
-          <span className="text-slate-400" data-testid={`text-odoo-id-${o.id}`}>Odoo #{o.odooOrderId}</span>
+          <span className="text-[var(--apple-faint)]" data-testid={`text-odoo-id-${o.id}`}>Odoo #{o.odooOrderId}</span>
         )}
         {(o.carrier || o.trackingNumber) && (
-          <span className="text-slate-500">
+          <span className="text-[var(--apple-subink)]">
             {o.carrier ? `${o.carrier} · ` : ""}
             {o.trackingUrl ? (
               <a href={o.trackingUrl} target="_blank" rel="noreferrer" className="text-[#319ED8] hover:underline" data-testid={`link-tracking-${o.id}`}>
@@ -985,7 +985,7 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
             type="button"
             onClick={() => retryPush.mutate()}
             disabled={retryPush.isPending}
-            className="ml-auto px-2 py-0.5 rounded-md bg-amber-500 text-white text-[10.5px] font-semibold hover:bg-amber-600 disabled:opacity-60 inline-flex items-center gap-1"
+            className="ml-auto px-2 py-0.5 rounded-full bg-[var(--apple-warning)]/10 text-[var(--apple-warning)] text-[10.5px] font-semibold hover:bg-[var(--apple-warning)]/15 disabled:opacity-60 inline-flex items-center gap-1"
             data-testid={`button-push-od-${o.id}`}
           >
             {retryPush.isPending ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
@@ -997,7 +997,7 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
             type="button"
             onClick={() => odooPush.mutate()}
             disabled={odooPush.isPending}
-            className={`${needsPush ? "" : "ml-auto "}px-2 py-0.5 rounded-md bg-indigo-500 text-white text-xs font-semibold hover:bg-indigo-600 disabled:opacity-60 inline-flex items-center gap-1`}
+            className={`${needsPush ? "" : "ml-auto "}px-2 py-0.5 rounded-full border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] text-xs font-semibold hover:bg-[var(--apple-track)] disabled:opacity-60 inline-flex items-center gap-1`}
             data-testid={`button-push-odoo-${o.id}`}
           >
             {odooPush.isPending ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
@@ -1006,21 +1006,21 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
         )}
       </div>
       {o.fulfillmentError && needsPush && (
-        <div className="mt-1 text-[10.5px] text-amber-700" data-testid={`text-push-error-${o.id}`}>
+        <div className="mt-1 text-[10.5px] text-[var(--apple-warning)]" data-testid={`text-push-error-${o.id}`}>
           Error: {o.fulfillmentError}
         </div>
       )}
-      <div className="flex items-center gap-3 mt-1.5 text-[10.5px] text-slate-500 flex-wrap">
+      <div className="flex items-center gap-3 mt-1.5 text-[10.5px] text-[var(--apple-subink)] flex-wrap">
         {stages.map((s) => (
-          <span key={s.key} className={s.at ? "text-slate-700 font-medium" : "text-slate-400"}>
+          <span key={s.key} className={s.at ? "text-[var(--apple-ink)] font-medium" : "text-[var(--apple-faint)]"}>
             {s.label}{s.at ? ` · ${new Date(s.at).toLocaleDateString()}` : ""}
           </span>
         ))}
         {o.cancelledAt && (
-          <span className="text-rose-600 font-medium">Cancelled · {new Date(o.cancelledAt).toLocaleDateString()}</span>
+          <span className="text-[var(--apple-critical)] font-medium">Cancelled · {new Date(o.cancelledAt).toLocaleDateString()}</span>
         )}
         {o.returnedAt && (
-          <span className="text-rose-600 font-medium">Returned · {new Date(o.returnedAt).toLocaleDateString()}</span>
+          <span className="text-[var(--apple-critical)] font-medium">Returned · {new Date(o.returnedAt).toLocaleDateString()}</span>
         )}
       </div>
     </div>
@@ -1030,14 +1030,14 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
 function PayoutChip({ status, amountCents }: { status: string; amountCents: number | null }) {
   const tone =
     status === "transferred"
-      ? "bg-emerald-50 text-emerald-700"
+      ? "bg-[var(--apple-ready)]/10 text-[var(--apple-ready)]"
       : status === "reversed"
-      ? "bg-slate-100 text-slate-600"
+      ? "bg-[var(--apple-chip)] text-[var(--apple-subink)]"
       : status === "skipped"
-      ? "bg-amber-50 text-amber-700"
+      ? "bg-[var(--apple-warning)]/10 text-[var(--apple-warning)]"
       : status === "failed"
-      ? "bg-rose-50 text-rose-700"
-      : "bg-slate-100 text-slate-600";
+      ? "bg-[var(--apple-critical)]/10 text-[var(--apple-critical)]"
+      : "bg-[var(--apple-chip)] text-[var(--apple-subink)]";
   return (
     <span className={`px-2 py-0.5 rounded-full font-semibold uppercase ${tone}`} data-testid={`payout-chip-${status}`}>
       payout: {status}{amountCents != null && status === "transferred" ? ` · ${dollars(amountCents)}` : ""}
@@ -1055,10 +1055,10 @@ function StuckPayoutsPanel({
   isRetrying: boolean;
 }) {
   return (
-    <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-4" data-testid="panel-stuck-payouts">
+    <section className="rounded-2xl border border-[var(--apple-warning)]/30 bg-[var(--apple-warning-wash)] p-4 mb-4" data-testid="panel-stuck-payouts">
       <div className="flex items-center gap-2 mb-3">
-        <AlertTriangle className="w-4 h-4 text-amber-600" />
-        <h2 className="text-amber-900 text-[13px] font-bold uppercase tracking-wide">
+        <AlertTriangle className="w-4 h-4 text-[var(--apple-warning)]" />
+        <h2 className="text-[var(--apple-warning)] text-[11px] font-semibold uppercase tracking-wider">
           Stuck payouts ({rows.length})
         </h2>
       </div>
@@ -1066,26 +1066,26 @@ function StuckPayoutsPanel({
         {rows.map((o) => (
           <div
             key={o.id}
-            className="rounded-md bg-white border border-amber-100 px-3 py-2 flex items-center gap-3 text-[12.5px]"
+            className="rounded-xl bg-white border border-[var(--apple-hairline)] px-3 py-2 flex items-center gap-3 text-[12.5px]"
             data-testid={`row-stuck-${o.id}`}
           >
             <div className="flex-1 min-w-0">
-              <div className="font-medium text-slate-900 truncate">
-                {o.albumTitle} <span className="text-slate-400">·</span>{" "}
-                <span className="text-slate-600">{o.albumArtist}</span>
+              <div className="font-medium text-[var(--apple-ink)] truncate">
+                {o.albumTitle} <span className="text-[var(--apple-faint)]">·</span>{" "}
+                <span className="text-[var(--apple-subink)]">{o.albumArtist}</span>
               </div>
-              <div className="text-slate-500 text-[11.5px]">
+              <div className="text-[var(--apple-subink)] text-[11.5px]">
                 Order {o.id.slice(0, 8)} · shipped {o.shippedAt ? new Date(o.shippedAt).toLocaleDateString() : "—"} ·{" "}
-                <span className="text-amber-700 font-medium">{o.payoutStatus ?? "no-status"}</span>
-                {o.payoutError && <span className="text-rose-600"> — {o.payoutError}</span>}
+                <span className="text-[var(--apple-warning)] font-medium">{o.payoutStatus ?? "no-status"}</span>
+                {o.payoutError && <span className="text-[var(--apple-critical)]"> — {o.payoutError}</span>}
               </div>
             </div>
-            <div className="font-semibold text-slate-900">{dollars(o.totalCents)}</div>
+            <div className="font-semibold tabular-nums text-[var(--apple-ink)]">{dollars(o.totalCents)}</div>
             <button
               type="button"
               onClick={() => onRetry(o.id)}
               disabled={isRetrying}
-              className="h-8 px-3 rounded-md bg-amber-500 text-white text-[12px] font-semibold hover:bg-amber-600 disabled:opacity-60 inline-flex items-center gap-1.5"
+              className="h-8 px-3 rounded-full bg-[var(--apple-warning)]/10 text-[var(--apple-warning)] text-[12px] font-semibold hover:bg-[var(--apple-warning)]/15 disabled:opacity-60 inline-flex items-center gap-1.5"
               data-testid={`button-retry-stuck-${o.id}`}
             >
               {isRetrying ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
@@ -1123,17 +1123,17 @@ function PayoutSettingsPanel({ onClose }: { onClose: () => void }) {
   const currentCert = settings?.certCostCents ?? 500;
 
   return (
-    <Card className="rounded-lg shadow-none p-4 mb-4 space-y-3" data-testid="panel-payout-settings">
+    <Card className="rounded-2xl shadow-none p-4 mb-4 space-y-3" data-testid="panel-payout-settings">
       <div className="flex items-center justify-between">
-        <h2 className="text-slate-900 text-[13px] font-bold">Payout settings</h2>
-        <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 text-[12px]">Close</button>
+        <h2 className="text-[var(--apple-ink)] text-[13px] font-semibold">Payout settings</h2>
+        <button type="button" onClick={onClose} className="text-[var(--apple-subink)] hover:text-[var(--apple-ink)] text-[12px]">Close</button>
       </div>
       {isLoading ? (
-        <div className="text-slate-400 text-[12px]">Loading…</div>
+        <div className="text-[var(--apple-faint)] text-[12px]">Loading…</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label className="block">
-            <span className="text-slate-500 text-[11px] font-semibold uppercase tracking-wider">Platform fee %</span>
+            <span className="text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider">Platform fee %</span>
             <input
               type="number"
               min={0}
@@ -1141,23 +1141,23 @@ function PayoutSettingsPanel({ onClose }: { onClose: () => void }) {
               placeholder={String(currentFee)}
               value={feePct}
               onChange={(e) => setFeePct(e.target.value)}
-              className="mt-1 w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
+              className="mt-1 w-full h-9 px-3 rounded-lg border border-[var(--apple-hairline)] text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
               data-testid="input-platform-fee-pct"
             />
-            <p className="text-slate-400 text-[11px] mt-1">Currently {currentFee}%. Applied off the top of every paid order.</p>
+            <p className="text-[var(--apple-faint)] text-[11px] mt-1">Currently {currentFee}%. Applied off the top of every paid order.</p>
           </label>
           <label className="block">
-            <span className="text-slate-500 text-[11px] font-semibold uppercase tracking-wider">Cert cost (cents)</span>
+            <span className="text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider">Cert cost (cents)</span>
             <input
               type="number"
               min={0}
               placeholder={String(currentCert)}
               value={certCents}
               onChange={(e) => setCertCents(e.target.value)}
-              className="mt-1 w-full h-9 px-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
+              className="mt-1 w-full h-9 px-3 rounded-lg border border-[var(--apple-hairline)] text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
               data-testid="input-cert-cost-cents"
             />
-            <p className="text-slate-400 text-[11px] mt-1">Currently {dollars(currentCert)}. Subtracted before the artist split when a signed cert is in the order.</p>
+            <p className="text-[var(--apple-faint)] text-[11px] mt-1">Currently {dollars(currentCert)}. Subtracted before the artist split when a signed cert is in the order.</p>
           </label>
         </div>
       )}
@@ -1166,7 +1166,7 @@ function PayoutSettingsPanel({ onClose }: { onClose: () => void }) {
           type="button"
           onClick={() => save.mutate()}
           disabled={save.isPending || (feePct === "" && certCents === "")}
-          className="h-9 px-4 rounded-md bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-60"
+          className="h-9 px-4 rounded-full bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-60"
           data-testid="button-save-payout-settings"
         >
           {save.isPending ? "Saving…" : "Save"}

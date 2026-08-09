@@ -11,6 +11,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 type WelcomeStatus = {
   imported: number;
@@ -55,15 +56,14 @@ export function AdminWelcomeBack() {
 
   return (
     <AdminFrame>
-      <div className="max-w-3xl mx-auto px-6 py-8" data-testid="page-admin-welcome-back">
-        <h1 className="text-2xl font-bold text-slate-900 mb-1">Welcome-back campaign</h1>
-        <p className="text-slate-600 text-sm mb-8">
-          Wave-1 email to the ~1,850 imported gogoods.com fans whose addresses have a verified-on-arrival timestamp.
-          Each recipient gets a single-use 30-day sign-in link that drops them into the 3-screen onboarding.
-        </p>
+      <div className="max-w-3xl mx-auto px-6 py-8 space-y-8" data-testid="page-admin-welcome-back">
+        <AdminPageHeader
+          title="Welcome-back campaign."
+          subtitle="Wave-1 email to the ~1,850 imported gogoods.com fans whose addresses have a verified-on-arrival timestamp. Each recipient gets a single-use 30-day sign-in link that drops them into the 3-screen onboarding."
+        />
 
         {isLoading ? (
-          <div className="text-slate-500 text-sm" data-testid="welcomeback-loading">Loading…</div>
+          <div className="text-[var(--apple-subink)] text-sm" data-testid="welcomeback-loading">Loading…</div>
         ) : status ? (
           <>
             <div className="grid grid-cols-3 gap-3 mb-6">
@@ -76,15 +76,15 @@ export function AdminWelcomeBack() {
             </div>
 
             {status.killSwitch && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 mb-5 text-sm text-rose-900" data-testid="kill-switch-banner">
+              <div className="rounded-xl border border-[var(--apple-critical)]/20 bg-[var(--apple-critical)]/10 px-4 py-3 mb-5 text-sm text-[var(--apple-critical)]" data-testid="kill-switch-banner">
                 <strong>Kill switch active.</strong> <code>WELCOME_BACK_KILL_SWITCH=on</code> is set — sends are blocked.
                 Unset the env var and reload to enable.
               </div>
             )}
 
-            <div className="rounded-xl border border-slate-200 bg-white p-5">
-              <h2 className="font-semibold text-slate-900 mb-1">Send wave-1</h2>
-              <p className="text-slate-500 text-sm mb-4">
+            <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-5">
+              <h2 className="font-semibold text-[var(--apple-ink)] mb-1">Send wave-1</h2>
+              <p className="text-[var(--apple-subink)] text-sm mb-4">
                 Always dry-run first — sample addresses appear below so you can sanity-check the audience. The real send
                 batches 25 at a time with a 1-second cooldown between batches.
               </p>
@@ -93,7 +93,7 @@ export function AdminWelcomeBack() {
                   type="button"
                   onClick={() => sendMutation.mutate({ dryRun: true })}
                   disabled={sendMutation.isPending || status.eligible === 0}
-                  className="px-4 py-2 rounded-lg text-sm font-medium border border-slate-300 text-slate-800 bg-white hover:bg-slate-50 disabled:opacity-40"
+                  className="px-4 py-2 rounded-full text-sm font-medium text-[var(--apple-subink)] bg-transparent hover:bg-[var(--apple-track)] disabled:opacity-40 transition-colors"
                   data-testid="button-dry-run"
                 >
                   {sendMutation.isPending ? "Working…" : "Dry run"}
@@ -103,26 +103,26 @@ export function AdminWelcomeBack() {
                   value={confirmText}
                   onChange={(e) => setConfirmText(e.target.value)}
                   placeholder='Type "SEND" to enable'
-                  className="px-3 py-2 rounded-lg text-sm border border-slate-300 bg-white"
+                  className="px-3 py-2 rounded-lg text-sm border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] placeholder:text-[var(--apple-faint)]"
                   data-testid="input-send-confirm"
                 />
                 <button
                   type="button"
                   onClick={() => sendMutation.mutate({ dryRun: false })}
                   disabled={sendMutation.isPending || confirmText !== "SEND" || status.killSwitch || status.eligible === 0}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-40"
+                  className="px-4 py-2 rounded-full text-sm font-medium text-[var(--apple-critical)] bg-[var(--apple-critical)]/10 hover:bg-[var(--apple-critical)]/20 disabled:opacity-40 transition-colors"
                   data-testid="button-send-live"
                 >
                   Send to {status.eligible} fan{status.eligible === 1 ? "" : "s"}
                 </button>
               </div>
               {lastResult && (
-                <div className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-800" data-testid="last-result">
+                <div className="rounded-lg bg-[var(--apple-track)] border border-[var(--apple-hairline)] px-4 py-3 text-sm text-[var(--apple-ink)]" data-testid="last-result">
                   {lastResult.dryRun ? (
                     <>
                       <div className="font-semibold mb-1">Dry run · audience {lastResult.audienceSize}</div>
                       {lastResult.sample && lastResult.sample.length > 0 && (
-                        <ul className="list-disc ml-5 text-slate-600">
+                        <ul className="list-disc ml-5 text-[var(--apple-subink)]">
                           {lastResult.sample.map((e) => <li key={e}>{e}</li>)}
                         </ul>
                       )}
@@ -130,7 +130,7 @@ export function AdminWelcomeBack() {
                   ) : (
                     <>
                       <div className="font-semibold mb-1">Live send · audience {lastResult.audienceSize}</div>
-                      <div className="text-slate-600">sent {lastResult.sent} · failed {lastResult.failed}</div>
+                      <div className="text-[var(--apple-subink)]">sent {lastResult.sent} · failed {lastResult.failed}</div>
                     </>
                   )}
                 </div>
@@ -145,14 +145,14 @@ export function AdminWelcomeBack() {
 
 function Stat({ label, value, testId, tone }: { label: string; value: number; testId: string; tone?: "accent" | "success" | "danger" }) {
   const color =
-    tone === "accent" ? "text-sky-700" :
-    tone === "success" ? "text-emerald-700" :
-    tone === "danger" ? "text-rose-700" :
-    "text-slate-900";
+    tone === "accent" ? "text-[var(--brand-blue)]" :
+    tone === "success" ? "text-[var(--apple-ready)]" :
+    tone === "danger" ? "text-[var(--apple-critical)]" :
+    "text-[var(--apple-ink)]";
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4" data-testid={testId}>
-      <div className={`text-3xl font-bold leading-none ${color}`}>{value}</div>
-      <div className="text-slate-500 text-xs mt-1 uppercase tracking-wider font-semibold">{label}</div>
+    <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white px-4 py-4" data-testid={testId}>
+      <div className={`text-[28px] font-semibold tabular-nums tracking-tight leading-none ${color}`}>{value}</div>
+      <div className="text-[var(--apple-subink)] text-[11px] mt-1 uppercase tracking-wider font-semibold">{label}</div>
     </div>
   );
 }

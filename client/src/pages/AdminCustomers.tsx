@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getInitials } from "@/lib/initials";
 import { Link, useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Users, ArrowUp, ArrowDown, X, MapPin } from "lucide-react";
+import { Search, ArrowUp, ArrowDown, X, MapPin } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
 import { CustomerMap, type CitySelection } from "@/components/admin/CustomerMap";
 import type { CustomerUser } from "@shared/schema";
@@ -97,13 +98,13 @@ function SignupValue({ c }: { c: CustomerRow }) {
     if (c.firstOrderAt) {
       return (
         <span title="Imported account · earliest order date">
-          <span className="text-slate-400">since </span>
+          <span className="text-[var(--apple-faint)]">since </span>
           {formatDate(c.firstOrderAt)}
         </span>
       );
     }
     return (
-      <span className="text-slate-400" title="Imported from GoGoods® — no orders yet">
+      <span className="text-[var(--apple-faint)]" title="Imported from GoGoods® — no orders yet">
         Imported
       </span>
     );
@@ -347,7 +348,7 @@ export function AdminCustomers() {
                     setSearch("");
                     setSearchOpen(false);
                   }}
-                  className="text-slate-400 hover:text-slate-700"
+                  className="text-[var(--apple-faint)] hover:text-[var(--apple-subink)]"
                   aria-label="Close search"
                   data-testid="button-close-search"
                 >
@@ -358,7 +359,7 @@ export function AdminCustomers() {
               <button
                 type="button"
                 onClick={() => setSearchOpen(true)}
-                className="h-9 w-9 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+                className="h-9 w-9 rounded-full text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center transition-colors"
                 aria-label="Search"
                 data-testid="button-open-search"
               >
@@ -372,7 +373,7 @@ export function AdminCustomers() {
             />
           </>)}
           belowHeader={(
-            <div className="border-b border-slate-200 flex items-center gap-6 overflow-x-auto mt-3">
+            <div className="border-b border-[var(--apple-hairline)] flex items-center gap-6 overflow-x-auto mt-3">
               {SEGMENT_KEYS.map((k) => (
                 <TabBtn
                   key={k}
@@ -409,16 +410,16 @@ export function AdminCustomers() {
             data-testid="active-city-filter"
           >
             <MapPin className="w-4 h-4 text-[var(--brand-blue)] flex-shrink-0" />
-            <span className="text-slate-700">
+            <span className="text-[var(--apple-subink)]">
               Showing customers in{" "}
-              <span className="font-semibold text-slate-900" data-testid="text-active-city">
+              <span className="font-semibold text-[var(--apple-ink)]" data-testid="text-active-city">
                 {[city.city, city.region].filter(Boolean).join(", ")}
               </span>
             </span>
             <button
               type="button"
               onClick={() => setCity(null)}
-              className="ml-auto inline-flex items-center gap-1 text-slate-500 hover:text-slate-900 transition-colors"
+              className="ml-auto inline-flex items-center gap-1 text-[var(--apple-subink)] hover:text-[var(--apple-ink)] transition-colors"
               data-testid="button-clear-city"
             >
               <X className="w-3.5 h-3.5" />
@@ -439,26 +440,17 @@ export function AdminCustomers() {
             testId="admin-customers-error"
           />
         ) : rows.length === 0 ? (
-          <div
-            className="rounded-lg border border-slate-200 bg-white p-10 text-center"
-            data-testid="empty-customers"
-          >
-            <Users className="w-8 h-8 mx-auto text-slate-300 mb-2" strokeWidth={1.5} />
-            <div className="text-slate-700 font-medium">
-              {debounced ? "No matching customers" : `No customers in ${SEGMENT_LABELS[tab].toLowerCase()}`}
-            </div>
-            <div className="text-slate-500 text-[13px] mt-1">
-              {debounced
-                ? "Try a different name, email, or username."
-                : tab === "all"
-                ? "Your first fan will show up here once they sign up."
-                : tab === "buyers"
-                ? "No customers have purchased yet."
-                : tab === "no_sales"
-                ? "Every customer has at least one order."
-                : "No unclaimed legacy accounts found."}
-            </div>
-          </div>
+          <AdminEmptyState testId="empty-customers">
+            {debounced
+              ? "No customers match that search."
+              : tab === "all"
+              ? "Your first fan will show up here once they sign up."
+              : tab === "buyers"
+              ? "No customers have purchased yet."
+              : tab === "no_sales"
+              ? "Every customer has at least one order."
+              : "No unclaimed legacy accounts found."}
+          </AdminEmptyState>
         ) : view === "grid" ? (
           <div>
             <div
@@ -477,21 +469,21 @@ export function AdminCustomers() {
                       href={`/admin/customers/${c.id}`}
                       className="block text-left"
                     >
-                      <div className="aspect-square w-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-slate-200 shadow-sm group-hover:shadow-md group-hover:ring-[var(--brand-blue)]/30 transition-all flex items-center justify-center">
+                      <div className="aspect-square w-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-[var(--apple-hairline)] shadow-sm group-hover:shadow-md group-hover:ring-[var(--brand-blue)]/30 transition-all flex items-center justify-center">
                         <span className="text-white text-3xl font-bold">
                           {initialFor(name)}
                         </span>
                       </div>
                       <div
-                        className="mt-3 w-full text-center text-slate-900 text-sm font-semibold truncate px-1"
+                        className="mt-3 w-full text-center text-[var(--apple-ink)] text-sm font-semibold truncate px-1"
                         data-testid={`text-customer-name-${c.id}`}
                       >
                         {name}
                       </div>
-                      <div className="w-full text-center text-slate-500 text-xs truncate px-1">
+                      <div className="w-full text-center text-[var(--apple-subink)] text-xs truncate px-1">
                         {c.email}
                       </div>
-                      <div className="w-full text-center text-slate-400 text-xs truncate px-1 tabular-nums">
+                      <div className="w-full text-center text-[var(--apple-faint)] text-xs truncate px-1 tabular-nums">
                         <span data-testid={`text-lifetime-${c.id}`}>
                           {formatMoney(c.lifetimeSpendCents)}
                         </span>
@@ -518,21 +510,21 @@ export function AdminCustomers() {
             )}
           </div>
         ) : (
-          <div className="rounded-lg border border-slate-200 bg-white overflow-hidden" data-testid="list-customers">
-            <div className="hidden sm:grid grid-cols-[1fr_64px_96px_112px_112px] gap-4 px-4 py-2 bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden" data-testid="list-customers">
+            <div className="hidden sm:grid grid-cols-[1fr_64px_96px_112px_112px] gap-4 px-4 py-2 bg-[var(--apple-track)] border-b border-[var(--apple-hairline)] text-[11px] font-semibold uppercase tracking-wide text-[var(--apple-subink)]">
               <SortHeader label="Customer" k="name" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="left" />
               <SortHeader label="Orders" k="orders" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
               <SortHeader label="Lifetime" k="lifetime" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
               <SortHeader label="Last activity" k="lastActivity" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
               <SortHeader label="Signup" k="signup" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
             </div>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-[var(--apple-hairline)]">
               {rows.map((c) => {
                 const name = c.realName || c.displayName;
                 return (
                   <div
                     key={c.id}
-                    className="hover:bg-slate-50 transition-colors"
+                    className="hover:bg-[var(--apple-track)] transition-colors"
                     data-testid={`row-customer-${c.id}`}
                   >
                     <Link
@@ -541,28 +533,28 @@ export function AdminCustomers() {
                     >
                       <div className="sm:grid sm:grid-cols-[1fr_64px_96px_112px_112px] sm:gap-4 sm:items-center">
                         <div className="min-w-0">
-                          <div className="text-slate-900 text-[14px] font-medium truncate" data-testid={`text-customer-name-${c.id}`}>
+                          <div className="text-[var(--apple-ink)] text-[14px] font-medium truncate" data-testid={`text-customer-name-${c.id}`}>
                             {name}
                           </div>
-                          <div className="text-slate-500 text-[12px] truncate">
+                          <div className="text-[var(--apple-subink)] text-[12px] truncate">
                             {c.email}
                             {c.username && c.username !== c.email ? ` · @${c.username}` : ""}
                           </div>
                         </div>
-                        <div className="text-slate-700 text-[13px] tabular-nums mt-1 sm:mt-0 sm:text-right" data-testid={`text-order-count-${c.id}`}>
-                          <span className="sm:hidden text-slate-400 text-[11px] uppercase tracking-wide mr-1">Orders</span>
+                        <div className="text-[var(--apple-ink)] text-[13px] tabular-nums mt-1 sm:mt-0 sm:text-right" data-testid={`text-order-count-${c.id}`}>
+                          <span className="sm:hidden text-[var(--apple-faint)] text-[11px] uppercase tracking-wide mr-1">Orders</span>
                           {c.orderCount}
                         </div>
-                        <div className="text-slate-700 text-[13px] tabular-nums sm:text-right" data-testid={`text-lifetime-${c.id}`}>
-                          <span className="sm:hidden text-slate-400 text-[11px] uppercase tracking-wide mr-1">Lifetime</span>
+                        <div className="text-[var(--apple-ink)] text-[13px] tabular-nums sm:text-right" data-testid={`text-lifetime-${c.id}`}>
+                          <span className="sm:hidden text-[var(--apple-faint)] text-[11px] uppercase tracking-wide mr-1">Lifetime</span>
                           {formatMoney(c.lifetimeSpendCents)}
                         </div>
-                        <div className="text-slate-500 text-[12.5px] sm:text-right">
-                          <span className="sm:hidden text-slate-400 text-[11px] uppercase tracking-wide mr-1">Last</span>
+                        <div className="text-[var(--apple-subink)] text-[12.5px] sm:text-right">
+                          <span className="sm:hidden text-[var(--apple-faint)] text-[11px] uppercase tracking-wide mr-1">Last</span>
                           {formatDate(c.lastActivityAt)}
                         </div>
-                        <div className="text-slate-500 text-[12.5px] sm:text-right" data-testid={`text-signup-${c.id}`}>
-                          <span className="sm:hidden text-slate-400 text-[11px] uppercase tracking-wide mr-1">Signed up</span>
+                        <div className="text-[var(--apple-subink)] text-[12.5px] sm:text-right" data-testid={`text-signup-${c.id}`}>
+                          <span className="sm:hidden text-[var(--apple-faint)] text-[11px] uppercase tracking-wide mr-1">Signed up</span>
                           <SignupValue c={c} />
                         </div>
                       </div>
@@ -572,7 +564,7 @@ export function AdminCustomers() {
               })}
             </div>
             {rows.length < total && (
-              <div className="px-4 py-3 border-t border-slate-100 text-center">
+              <div className="px-4 py-3 border-t border-[var(--apple-hairline)] text-center">
                 <button
                   type="button"
                   onClick={() => setOffset(allRows.length)}
@@ -611,14 +603,14 @@ function TabBtn({
       data-testid={testId}
       className={[
         "relative py-2.5 text-[13.5px] font-semibold transition-colors inline-flex items-center gap-1.5 flex-shrink-0",
-        active ? "text-slate-900" : "text-slate-400 hover:text-slate-700",
+        active ? "text-[var(--apple-ink)]" : "text-[var(--apple-subink)]",
       ].join(" ")}
     >
       {children}
       <span
         className={[
           "tabular-nums text-[11.5px] font-bold px-1.5 py-px rounded",
-          active ? "bg-slate-100 text-slate-600" : "bg-slate-50 text-slate-400",
+          active ? "bg-[var(--apple-track)] text-[var(--apple-subink)]" : "bg-[var(--apple-track)] text-[var(--apple-faint)]",
         ].join(" ")}
       >
         {count}
@@ -653,7 +645,7 @@ function SortHeader({
       className={[
         "flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide transition-colors",
         align === "right" ? "justify-end" : "justify-start",
-        active ? "text-slate-700" : "text-slate-500 hover:text-slate-700",
+        active ? "text-[var(--apple-ink)]" : "text-[var(--apple-subink)] hover:text-[var(--apple-ink)]",
       ].join(" ")}
       data-testid={`sort-${k}`}
       aria-pressed={active}

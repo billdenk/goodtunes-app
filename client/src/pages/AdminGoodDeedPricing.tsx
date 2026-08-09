@@ -93,7 +93,7 @@ export function AdminGoodDeedPricing({ embedded = false }: { embedded?: boolean 
   if (!user?.isAdmin) {
     return (
       <main className="min-h-screen bg-slate-50 flex items-center justify-center p-8">
-        <p className="text-slate-500 text-sm">Admin only.</p>
+        <p className="text-[var(--apple-subink)] text-sm">Admin only.</p>
       </main>
     );
   }
@@ -108,7 +108,7 @@ export function AdminGoodDeedPricing({ embedded = false }: { embedded?: boolean 
         />
 
         {settingsLoading ? (
-          <div className="py-10 text-slate-500 text-sm">Loading…</div>
+          <div className="py-10 text-[var(--apple-subink)] text-sm">Loading…</div>
         ) : settingsIsError ? (
           <ErrorState
             error={settingsError}
@@ -117,13 +117,13 @@ export function AdminGoodDeedPricing({ embedded = false }: { embedded?: boolean 
             testId="admin-gooddeed-pricing-error"
           />
         ) : !settings ? (
-          <div className="py-10 text-slate-500 text-sm">
+          <div className="py-10 text-[var(--apple-subink)] text-sm">
             {settingsIsFetching ? "Loading…" : "No pricing settings available."}
           </div>
         ) : (
           <>
             {isSuperAdmin && (
-              <Link href="/admin/platform-pricing" className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
+              <Link href="/admin/platform-pricing" className="inline-flex items-center gap-1.5 text-sm text-[var(--apple-subink)] hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
                 data-testid="link-edit-platform-pricing"
               >
                 <Pencil className="w-3.5 h-3.5" />
@@ -146,7 +146,7 @@ export function AdminGoodDeedPricing({ embedded = false }: { embedded?: boolean 
                   title="Quickprinter ladder"
                   subtitle="Per-unit printing cost across the fixed quantity rungs (US Letter)."
                 />
-                <p className="text-sm text-slate-400 mt-3">
+                <p className="text-sm text-[var(--apple-faint)] mt-3">
                   No routing-default Quickprinter is set yet.
                 </p>
               </Card>
@@ -171,7 +171,7 @@ function Card({
 }) {
   return (
     <div
-      className="rounded-lg border border-slate-200 bg-white p-5"
+      className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-5"
       data-testid={testId}
     >
       {children}
@@ -188,14 +188,14 @@ function SectionTitle({
 }) {
   return (
     <div>
-      <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-      {subtitle && <p className="text-sm text-slate-500 mt-1">{subtitle}</p>}
+      <h2 className="text-[15px] font-semibold text-[var(--apple-ink)]">{title}</h2>
+      {subtitle && <p className="text-[13px] text-[var(--apple-subink)] mt-1">{subtitle}</p>}
     </div>
   );
 }
 
 const LABEL_CLASS =
-  "block text-slate-500 text-xs font-semibold uppercase tracking-wider";
+  "block text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider";
 
 function VendorLink({
   leg,
@@ -206,13 +206,13 @@ function VendorLink({
 }) {
   if (!leg) {
     return (
-      <span className="text-sm text-slate-400" data-testid={`text-${name}-empty`}>
+      <span className="text-sm text-[var(--apple-faint)]" data-testid={`text-${name}-empty`}>
         — No vendor assigned —
       </span>
     );
   }
   return (
-    <Link href={`/admin/vendors/${leg.vendorId}?tab=gooddeed`} className="inline-flex items-center gap-1 text-sm text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
+    <Link href={`/admin/vendors/${leg.vendorId}?tab=gooddeed`} className="inline-flex items-center gap-1 text-sm text-[var(--apple-ink)] hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
       data-testid={`link-${name}-vendor`}
     >
       {leg.vendorName}
@@ -231,9 +231,9 @@ function WholesaleLadderCard({ settings }: { settings: PayoutSettings }) {
         title="Signed-cert wholesale ladder"
         subtitle="Per-unit price GoodTunes charges artists and labels for printed, signed, hologrammed GoodDeed certificates — snapped to the actual run size at window close."
       />
-      <div className="overflow-hidden rounded-md border border-slate-200 mt-4">
+      <div className="overflow-hidden rounded-xl border border-[var(--apple-hairline)] mt-4">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-500">
+          <thead className="bg-[var(--apple-track)] text-[var(--apple-subink)]">
             <tr>
               <th className="text-left font-semibold uppercase tracking-wider text-xs px-3 py-2">
                 Batch
@@ -247,12 +247,12 @@ function WholesaleLadderCard({ settings }: { settings: PayoutSettings }) {
             {rungs.map((r, i) => (
               <tr
                 key={`${r.minQty}-${i}`}
-                className="border-t border-slate-100"
+                className="border-t border-[var(--apple-hairline)]"
                 data-testid={`row-wholesale-rung-${i}`}
               >
-                <td className="px-3 py-2 text-slate-700">{r.label}</td>
+                <td className="px-3 py-2 text-[var(--apple-ink)]">{r.label}</td>
                 <td
-                  className="px-3 py-2 text-right text-slate-900 font-semibold tabular-nums"
+                  className="px-3 py-2 text-right text-[var(--apple-ink)] font-semibold tabular-nums"
                   data-testid={`text-wholesale-rung-${i}`}
                 >
                   {dollars(r.wholesaleCents)}
@@ -262,8 +262,8 @@ function WholesaleLadderCard({ settings }: { settings: PayoutSettings }) {
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-slate-500 mt-3">
-        <span className="text-slate-900 font-medium">
+      <p className="text-xs text-[var(--apple-subink)] mt-3">
+        <span className="text-[var(--apple-ink)] font-medium">
           {SIGNED_CERT_MIN_BATCH}-unit minimum.
         </span>{" "}
         If fewer than {SIGNED_CERT_MIN_BATCH} sell at window close, the cert
@@ -294,9 +294,9 @@ function FlatLegsCard() {
         title="Hologram + insertion"
         subtitle="Flat per-unit cost of each leg for the current routing-default vendors."
       />
-      <div className="rounded-md border border-slate-200 divide-y divide-slate-100 mt-4">
+      <div className="rounded-xl border border-[var(--apple-hairline)] divide-y divide-[var(--apple-hairline)] mt-4">
         {isLoading ? (
-          <div className="px-3 py-6 text-sm text-slate-500">
+          <div className="px-3 py-6 text-sm text-[var(--apple-subink)]">
             Loading vendor pricing…
           </div>
         ) : (
@@ -315,7 +315,7 @@ function FlatLegsCard() {
                   </div>
                 </div>
                 <div
-                  className="text-sm font-semibold text-slate-900 tabular-nums shrink-0"
+                  className="text-sm font-semibold text-[var(--apple-ink)] tabular-nums shrink-0"
                   data-testid={`text-flat-${key}-cost`}
                 >
                   {leg?.perUnitCents != null ? dollars(leg.perUnitCents) : "—"}
@@ -354,7 +354,7 @@ function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
           subtitle="Per-unit printing cost at each quantity rung (US Letter). Quantities between rungs walk down to the next-lower rung's price."
         />
         {data?.vendor && (
-          <Link href={`/admin/vendors/${vendorId}?tab=gooddeed`} className="inline-flex items-center gap-1 text-sm text-slate-600 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors shrink-0"
+          <Link href={`/admin/vendors/${vendorId}?tab=gooddeed`} className="inline-flex items-center gap-1 text-sm text-[var(--apple-subink)] hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors shrink-0"
             data-testid="link-quickprinter-vendor"
           >
             View vendor
@@ -363,15 +363,15 @@ function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
         )}
       </div>
 
-      <div className="flex items-center gap-1.5 border-b border-slate-100 mt-4">
+      <div className="flex items-center gap-1.5 border-b border-[var(--apple-hairline)] mt-4">
         <span
-          className="px-3 h-8 inline-flex items-center text-xs font-semibold border-b-2 border-[color:var(--brand-blue)] text-slate-900"
+          className="px-3 h-8 inline-flex items-center text-xs font-semibold border-b-2 border-[color:var(--brand-blue)] text-[var(--apple-ink)]"
           data-testid="tab-paper-letter"
         >
           US Letter (8.5×11)
         </span>
         <span
-          className="px-3 h-8 inline-flex items-center text-xs font-medium text-slate-300"
+          className="px-3 h-8 inline-flex items-center text-xs font-medium text-[var(--apple-faint)]"
           data-testid="tab-paper-12x18"
           title="Scaffolded — wired up in a future task"
         >
@@ -380,13 +380,13 @@ function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
       </div>
 
       {isLoading ? (
-        <div className="py-6 text-slate-500 text-sm">Loading ladder…</div>
+        <div className="py-6 text-[var(--apple-subink)] text-sm">Loading ladder…</div>
       ) : isError ? (
-        <div className="py-6 text-slate-400 text-sm" data-testid="text-qp-error">
+        <div className="py-6 text-[var(--apple-faint)] text-sm" data-testid="text-qp-error">
           Couldn't load the Quickprinter ladder.
         </div>
       ) : !hasLadder ? (
-        <div className="py-6 text-slate-400 text-sm">
+        <div className="py-6 text-[var(--apple-faint)] text-sm">
           The routing-default Quickprinter has no US Letter ladder configured
           yet.
         </div>
@@ -400,13 +400,13 @@ function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
                   {qtyFmt.format(rung)} units
                 </span>
                 <div
-                  className="text-right text-sm font-medium text-slate-900 tabular-nums"
+                  className="text-right text-sm font-medium text-[var(--apple-ink)] tabular-nums"
                   data-testid={`text-qp-rung-${rung}`}
                 >
                   {cents != null ? (
                     dollars(cents)
                   ) : (
-                    <span className="text-slate-300">—</span>
+                    <span className="text-[var(--apple-faint)]">—</span>
                   )}
                 </div>
               </div>
@@ -453,12 +453,12 @@ function ResolvedTotalCard({ settings }: { settings: PayoutSettings }) {
     negative?: boolean;
   }) => (
     <div className="flex items-center justify-between px-3 py-2">
-      <span className="text-sm text-slate-600">{label}</span>
+      <span className="text-sm text-[var(--apple-subink)]">{label}</span>
       <span
         className={[
           "text-sm tabular-nums",
           strong ? "font-semibold" : "font-medium",
-          negative ? "text-[color:var(--brand-heart)]" : "text-slate-900",
+          negative ? "text-[color:var(--brand-heart)]" : "text-[var(--apple-ink)]",
         ].join(" ")}
         data-testid={testId}
       >
@@ -505,7 +505,7 @@ function ResolvedTotalCard({ settings }: { settings: PayoutSettings }) {
         </div>
       )}
 
-      <div className="mt-4 rounded-md border border-slate-200 divide-y divide-slate-100">
+      <div className="mt-4 rounded-xl border border-[var(--apple-hairline)] divide-y divide-[var(--apple-hairline)]">
         <Row
           label="Wholesale per cert (artist pays)"
           value={wholesaleCents != null ? dollars(wholesaleCents) : "—"}
@@ -513,11 +513,11 @@ function ResolvedTotalCard({ settings }: { settings: PayoutSettings }) {
           strong
         />
         {isLoading ? (
-          <div className="px-3 py-2 text-sm text-slate-500">
+          <div className="px-3 py-2 text-sm text-[var(--apple-subink)]">
             Loading cost stack…
           </div>
         ) : isError ? (
-          <div className="px-3 py-2 text-sm text-slate-400">
+          <div className="px-3 py-2 text-sm text-[var(--apple-faint)]">
             Couldn't load the cost stack.
           </div>
         ) : (
@@ -538,7 +538,7 @@ function ResolvedTotalCard({ settings }: { settings: PayoutSettings }) {
       </div>
 
       {!isLoading && !isError && (
-        <div className="mt-3 rounded-md border border-slate-200 divide-y divide-slate-100">
+        <div className="mt-3 rounded-xl border border-[var(--apple-hairline)] divide-y divide-[var(--apple-hairline)]">
           <Row
             label={`Per-run wholesale (× ${qtyFmt.format(runQty)})`}
             value={
@@ -557,7 +557,7 @@ function ResolvedTotalCard({ settings }: { settings: PayoutSettings }) {
         </div>
       )}
 
-      <p className="text-xs text-slate-500 mt-3">
+      <p className="text-xs text-[var(--apple-subink)] mt-3">
         Shipping (print → hologram → insertion → fulfillment) is bundled into
         the Quickprinter rung today.
       </p>

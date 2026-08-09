@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getInitials } from "@/lib/initials";
 import { useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Search, X, User as UserIcon, Check } from "lucide-react";
+import { Search, X, Check } from "lucide-react";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { PRIMARY_CREATIVE_CREDITS } from "@/components/admin/RolePicker";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import {
   ViewModeToggle,
   useViewMode,
@@ -261,7 +262,7 @@ export function AdminPeople() {
                   setSearch("");
                   setSearchOpen(false);
                 }}
-                className="text-slate-400 hover:text-slate-700"
+                className="text-[var(--apple-faint)] hover:text-[var(--apple-subink)]"
                 aria-label="Close search"
               >
                 <X className="w-4 h-4" />
@@ -271,7 +272,7 @@ export function AdminPeople() {
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="h-9 w-9 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+              className="h-9 w-9 rounded-full text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center transition-colors"
               aria-label="Search"
               data-testid="button-open-search"
             >
@@ -349,7 +350,7 @@ export function AdminPeople() {
         </div>
       ) : (
         <div
-          className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-slate-100"
+          className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-[var(--apple-hairline)]"
           data-testid="list-people"
         >
           {filtered.map((p) => (
@@ -443,7 +444,7 @@ export function StreamingBadge({
   if (!glyph) return null;
   return (
     <div
-      className={`absolute bottom-[7%] right-[7%] ${dim} rounded-full bg-white ring-1 ring-slate-200 shadow-sm flex items-center justify-center`}
+      className={`absolute bottom-[7%] right-[7%] ${dim} rounded-full bg-white ring-1 ring-[var(--apple-hairline)] shadow-sm flex items-center justify-center`}
       title={title}
       data-testid={testid}
     >
@@ -469,7 +470,7 @@ export function PersonCard({
       data-testid={`card-person-${person.id}`}
     >
       <div className="relative w-full aspect-square">
-        <div className="gt-avatar-initials w-full h-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-slate-200 shadow-sm group-hover:shadow-md group-hover:ring-[var(--brand-blue)]/30 transition-all">
+        <div className="gt-avatar-initials w-full h-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-[var(--apple-hairline)] shadow-sm group-hover:shadow-md group-hover:ring-[var(--brand-blue)]/30 transition-all">
           {person.photoUrl ? (
             <img
               src={person.photoUrl}
@@ -487,12 +488,12 @@ export function PersonCard({
         <StreamingBadge person={person} size="md" />
       </div>
       <div
-        className="mt-3 w-full text-center text-slate-900 text-[13px] font-semibold truncate px-1"
+        className="mt-3 w-full text-center text-[var(--apple-ink)] text-[13px] font-semibold truncate px-1"
         data-testid={`text-person-name-${person.id}`}
       >
         {person.name}
       </div>
-      <div className="w-full text-center text-slate-400 text-[11.5px] truncate px-1">
+      <div className="w-full text-center text-[var(--apple-faint)] text-[11.5px] truncate px-1">
         {labelName || "Independent"}
       </div>
       {/* Credit pills intentionally omitted in grid view (canon: rows of
@@ -515,11 +516,11 @@ export function PersonRow({
     <button
       type="button"
       onClick={onOpen}
-      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
+      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-[var(--apple-track)] transition-colors"
       data-testid={`row-person-${person.id}`}
     >
       <div className="relative w-10 h-10 flex-shrink-0">
-        <div className="gt-avatar-initials w-full h-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-slate-200">
+        <div className="gt-avatar-initials w-full h-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-[var(--apple-hairline)]">
           {person.photoUrl ? (
             <img
               src={person.photoUrl}
@@ -538,14 +539,14 @@ export function PersonRow({
       </div>
       <div className="min-w-0 flex-1">
         <div
-          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
+          className="text-[var(--apple-ink)] text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
           data-testid={`text-person-name-${person.id}`}
         >
           {person.name}
         </div>
         <CreditBadges credits={creditTags(person)} personId={person.id} />
       </div>
-      <div className="text-slate-400 text-[11.5px] truncate flex-shrink-0">
+      <div className="text-[var(--apple-faint)] text-[11.5px] truncate flex-shrink-0">
         {labelName || "Independent"}
       </div>
     </button>
@@ -799,28 +800,16 @@ export function EmptyState({
   emptyDescription?: string;
 }) {
   return (
-    <div
-      className="py-16 flex flex-col items-center justify-center text-center"
-      data-testid="empty-people"
-    >
-      <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-        <UserIcon className="w-6 h-6" />
-      </div>
-      <p className="text-slate-700 text-[14px] font-semibold">
-        {searching
-          ? "No people match that search"
-          : filtering
-            ? "No people match these filters"
-            : (emptyTitle ?? "No people yet")}
-      </p>
-      <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs">
-        {searching
-          ? "Try a different name."
-          : filtering
-            ? "Adjust or reset the filters to see more people."
-            : (emptyDescription ?? "Add an artist, performer, writer, or producer to start building the SuperCredits™ catalog.")}
-      </p>
-    </div>
+    <AdminEmptyState testId="empty-people">
+      {searching
+        ? "No people match that search."
+        : filtering
+          ? "No people match these filters."
+          : (emptyDescription ??
+            (emptyTitle
+              ? emptyTitle
+              : "No people yet. Add an artist, performer, writer, or producer to start building the SuperCredits™ catalog."))}
+    </AdminEmptyState>
   );
 }
 

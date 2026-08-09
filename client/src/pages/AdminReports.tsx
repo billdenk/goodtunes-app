@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useCallback } from "react";
 import { getInitials } from "@/lib/initials";
 import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import {
   AdminErrorBoundary,
   ErrorState,
@@ -224,10 +225,10 @@ export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) 
       <div className="space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900" data-testid="text-reports-title">
+            <h1 className="text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)] leading-tight" data-testid="text-reports-title">
               Reports
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-[13px] font-medium text-[var(--apple-subink)] mt-0.5">
               Sales, plays, payouts, and fan reach across your catalogue.
             </p>
           </div>
@@ -261,13 +262,13 @@ export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) 
             Platform-wide totals still live in the god-view Overview/Revenue. */}
         {isSuper && !asPartner && showAlbumScopedTabs && (
           <div
-            className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+            className="rounded-lg border border-[var(--apple-hairline)] bg-[var(--apple-track)] px-4 py-3 text-sm text-[var(--apple-subink)]"
             data-testid="banner-pick-partner"
           >
-            Pick a partner in <span className="font-medium text-slate-700">Viewing as</span> above to
+            Pick a partner in <span className="font-medium text-[var(--apple-ink)]">Viewing as</span> above to
             load album-scoped Sales, Plays, Payouts and fan reports. Platform-wide totals live in the{" "}
-            <span className="font-medium text-slate-700">Overview</span> and{" "}
-            <span className="font-medium text-slate-700">Revenue breakdown</span> tabs.
+            <span className="font-medium text-[var(--apple-ink)]">Overview</span> and{" "}
+            <span className="font-medium text-[var(--apple-ink)]">Revenue breakdown</span> tabs.
           </div>
         )}
 
@@ -286,7 +287,7 @@ export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) 
             : { defaultValue: initialTab })}
           className="w-full"
         >
-          <div className="border-b border-slate-200 -mx-1 overflow-x-auto">
+          <div className="border-b border-[var(--apple-hairline)] -mx-1 overflow-x-auto">
             <TabsList className="bg-transparent border-0 p-0 h-auto gap-6 px-1 flex-nowrap justify-start rounded-none">
               {showAlbumScopedTabs && <ReportTab value="sales" testId="tab-sales">Sales</ReportTab>}
               {showAlbumScopedTabs && <ReportTab value="plays" testId="tab-plays">Plays &amp; GoodSync</ReportTab>}
@@ -339,10 +340,10 @@ function ReportTab({ value, testId, children }: { value: string; testId: string;
       data-testid={testId}
       className="
         relative rounded-none border-0 bg-transparent px-0 pb-3 pt-2 h-auto
-        text-sm font-medium text-slate-500 whitespace-nowrap shrink-0
+        text-sm font-medium text-[var(--apple-subink)] whitespace-nowrap shrink-0
         shadow-none ring-0
-        hover:text-slate-900 transition-colors
-        data-[state=active]:bg-transparent data-[state=active]:text-slate-900
+        hover:text-[var(--apple-ink)] transition-colors
+        data-[state=active]:bg-transparent data-[state=active]:text-[var(--apple-ink)]
         data-[state=active]:shadow-none
         after:absolute after:left-0 after:right-0 after:-bottom-px after:h-[2px]
         after:bg-[color:var(--brand-blue)] after:scale-x-0 after:transition-transform
@@ -374,14 +375,14 @@ function PartnerThumb({
         src={imageUrl}
         alt=""
         style={style}
-        className={`${rounded} object-cover bg-slate-100 border border-slate-200 flex-shrink-0`}
+        className={`${rounded} object-cover bg-[var(--apple-track)] border border-[var(--apple-hairline)] flex-shrink-0`}
       />
     );
   }
   return (
     <div
       style={style}
-      className={`${rounded} flex items-center justify-center bg-slate-100 text-slate-500 text-xs font-semibold border border-slate-200 flex-shrink-0`}
+      className={`${rounded} flex items-center justify-center bg-[var(--apple-track)] text-[var(--apple-subink)] text-xs font-semibold border border-[var(--apple-hairline)] flex-shrink-0`}
       aria-hidden
     >
       {initials}
@@ -393,7 +394,7 @@ function PartnerKindChip({ kind }: { kind: PartnerKind }) {
   const Icon = kind === "label" ? Tag : kind === "artist" ? User : Heart;
   const text = kind === "label" ? "Label" : kind === "artist" ? "Artist" : "Non-profit";
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">
+    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--apple-track)] px-1.5 py-0.5 text-xs font-medium text-[var(--apple-subink)]">
       <Icon className="w-3 h-3" />
       {text}
     </span>
@@ -428,10 +429,10 @@ function ViewingAsControl({
   if (asPartner) {
     return (
       <div className="flex flex-col gap-1.5" data-testid="impersonation-bar">
-        <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+        <span className="text-xs uppercase tracking-wider text-[var(--apple-subink)] font-semibold">
           Viewing as
         </span>
-        <div className="inline-flex items-center gap-2 self-start rounded-full border border-slate-200 bg-white pl-1.5 pr-1.5 py-1 text-sm text-slate-900 shadow-sm">
+        <div className="inline-flex items-center gap-2 self-start rounded-full border border-[var(--apple-hairline)] bg-white pl-1.5 pr-1.5 py-1 text-sm text-[var(--apple-ink)] shadow-sm">
           <PartnerThumb
             imageUrl={asPartnerImageUrl}
             name={asPartnerName || asPartner}
@@ -441,7 +442,7 @@ function ViewingAsControl({
           <span className="font-medium" data-testid="text-as-partner-name">
             {asPartnerName || asPartner}
           </span>
-          <span className="text-slate-300">·</span>
+          <span className="text-[var(--apple-faint)]">·</span>
           <PartnerKindChip kind={asKind} />
           <button
             type="button"
@@ -450,7 +451,7 @@ function ViewingAsControl({
             aria-label="Stop viewing as partner"
             className="
               ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full
-              text-slate-500 hover:bg-slate-100 hover:text-slate-900
+              text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors
               focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]
             "
           >
@@ -466,7 +467,7 @@ function ViewingAsControl({
     <div className="flex flex-col gap-1.5" data-testid="impersonation-bar">
       <Label
         htmlFor="viewing-as-trigger"
-        className="text-xs uppercase tracking-wider text-slate-500 font-semibold"
+        className="text-xs uppercase tracking-wider text-[var(--apple-subink)] font-semibold"
       >
         Viewing as
       </Label>
@@ -477,8 +478,8 @@ function ViewingAsControl({
             type="button"
             className="
               inline-flex items-center gap-2 h-9 self-start min-w-[280px] max-w-[420px]
-              rounded-md border border-slate-300 bg-white px-3 text-sm
-              text-left text-slate-500 hover:border-slate-400
+              rounded-md border border-[var(--apple-hairline)] bg-white px-3 text-sm
+              text-left text-[var(--apple-subink)] hover:border-[var(--apple-faint)]
               focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]
               focus:border-transparent
             "
@@ -486,7 +487,7 @@ function ViewingAsControl({
             aria-haspopup="listbox"
             aria-expanded={open}
           >
-            <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+            <Search className="w-3.5 h-3.5 text-[var(--apple-faint)] flex-shrink-0" />
             <span className="flex-1 truncate">
               Search labels, artists, and non-profits…
             </span>
@@ -495,35 +496,35 @@ function ViewingAsControl({
         <PopoverContent
           align="start"
           sideOffset={4}
-          className="p-0 w-[min(420px,calc(100vw-2rem))] bg-white border border-slate-200 text-slate-900 shadow-lg"
+          className="p-0 w-[min(420px,calc(100vw-2rem))] bg-white border border-[var(--apple-hairline)] text-[var(--apple-ink)] shadow-lg"
         >
           <Command
             shouldFilter={false}
             className={[
-              "bg-white text-slate-900",
-              "[&_[cmdk-input-wrapper]]:border-slate-200",
-              "[&_[cmdk-item]]:text-slate-700",
-              "[&_[cmdk-item][data-selected=true]]:bg-slate-100",
-              "[&_[cmdk-item][data-selected=true]]:text-slate-900",
+              "bg-white text-[var(--apple-ink)]",
+              "[&_[cmdk-input-wrapper]]:border-[var(--apple-hairline)]",
+              "[&_[cmdk-item]]:text-[var(--apple-ink)]",
+              "[&_[cmdk-item][data-selected=true]]:bg-[var(--apple-track)]",
+              "[&_[cmdk-item][data-selected=true]]:text-[var(--apple-ink)]",
             ].join(" ")}
           >
             <CommandInput
               placeholder="Search labels, artists, and non-profits…"
               value={query}
               onValueChange={setQuery}
-              className="text-slate-900 placeholder:text-slate-400"
+              className="text-[var(--apple-ink)] placeholder:text-[var(--apple-faint)]"
               data-testid="input-as-partner-search"
             />
             <CommandList>
               {isLoading ? (
-                <div className="p-4 text-xs text-slate-500 inline-flex items-center gap-2">
+                <div className="p-4 text-xs text-[var(--apple-subink)] inline-flex items-center gap-2">
                   <Spinner className="w-3.5 h-3.5 animate-spin" />
                   Searching…
                 </div>
               ) : (
                 <>
                   <CommandEmpty>
-                    <div className="px-3 py-4 text-xs text-slate-500">
+                    <div className="px-3 py-4 text-xs text-[var(--apple-subink)]">
                       {query.trim()
                         ? `No partners matching "${query.trim()}".`
                         : "Start typing to search labels, artists, and non-profits."}
@@ -551,13 +552,13 @@ function ViewingAsControl({
                           />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="truncate font-medium text-slate-900">
+                              <span className="truncate font-medium text-[var(--apple-ink)]">
                                 {r.name}
                               </span>
                               <PartnerKindChip kind={r.kind} />
                             </div>
                             {r.secondary && (
-                              <div className="truncate text-xs text-slate-500 mt-0.5">
+                              <div className="truncate text-xs text-[var(--apple-subink)] mt-0.5">
                                 {r.secondary}
                               </div>
                             )}
@@ -597,12 +598,12 @@ function DateRangePicker({ from, to, setFrom, setTo }: { from: string; to: strin
   return (
     <div className="flex items-end gap-2" data-testid="date-range-picker">
       <div className="flex flex-col gap-1">
-        <Label htmlFor="date-from" className="text-[11px] text-slate-500">From</Label>
-        <Input id="date-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 w-[140px] bg-white border-slate-200 text-slate-900" data-testid="input-date-from" />
+        <Label htmlFor="date-from" className="text-[11px] text-[var(--apple-subink)]">From</Label>
+        <Input id="date-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 w-[140px] bg-white border-[var(--apple-hairline)] text-[var(--apple-ink)]" data-testid="input-date-from" />
       </div>
       <div className="flex flex-col gap-1">
-        <Label htmlFor="date-to" className="text-[11px] text-slate-500">To</Label>
-        <Input id="date-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 w-[140px] bg-white border-slate-200 text-slate-900" data-testid="input-date-to" />
+        <Label htmlFor="date-to" className="text-[11px] text-[var(--apple-subink)]">To</Label>
+        <Input id="date-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 w-[140px] bg-white border-[var(--apple-hairline)] text-[var(--apple-ink)]" data-testid="input-date-to" />
       </div>
       <div className="flex gap-1">
         {presets.map((p) => (
@@ -612,7 +613,7 @@ function DateRangePicker({ from, to, setFrom, setTo }: { from: string; to: strin
             variant="outline"
             size="sm"
             onClick={() => setPreset(p.days)}
-            className="h-9 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
+            className="h-9 bg-white border border-[var(--apple-hairline)] text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
             data-testid={`button-preset-${p.label.toLowerCase()}`}
           >
             {p.label}
@@ -625,7 +626,7 @@ function DateRangePicker({ from, to, setFrom, setTo }: { from: string; to: strin
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white p-5 ${className}`}>
+    <div className={`rounded-2xl border border-[var(--apple-hairline)] bg-white p-5 ${className}`}>
       {children}
     </div>
   );
@@ -634,9 +635,9 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
 function Stat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">{label}</div>
-      <div className="text-2xl font-semibold text-slate-900 mt-1 tabular-nums">{value}</div>
-      {sub && <div className="text-xs text-slate-500 mt-0.5">{sub}</div>}
+      <div className="text-[11px] uppercase tracking-wider text-[var(--apple-subink)] font-semibold">{label}</div>
+      <div className="text-[28px] font-semibold text-[var(--apple-ink)] mt-1 tabular-nums tracking-tight">{value}</div>
+      {sub && <div className="text-xs text-[var(--apple-subink)] mt-0.5">{sub}</div>}
     </div>
   );
 }
@@ -689,11 +690,7 @@ export function ExportLink({ href, label }: { href: string; label: string }) {
 }
 
 function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="py-12 text-center text-slate-500 text-sm" data-testid="empty-state">
-      {message}
-    </div>
-  );
+  return <AdminEmptyState>{message}</AdminEmptyState>;
 }
 
 function SalesTab({ qs }: { qs: string }) {
@@ -712,8 +709,8 @@ function SalesTab({ qs }: { qs: string }) {
       </div>
       <Card>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-slate-700">Sales over time</h3>
-          <TrendingUp className="w-4 h-4 text-slate-400" />
+          <h3 className="text-sm font-semibold text-[var(--apple-ink)]">Sales over time</h3>
+          <TrendingUp className="w-4 h-4 text-[var(--apple-faint)]" />
         </div>
         {data.totalUnits === 0 ? (
           <EmptyState message="No paid orders in this range yet." />
@@ -757,7 +754,7 @@ function PlaysTab({ qs }: { qs: string }) {
       </div>
       <Card>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-slate-700">Plays & engagement</h3>
+          <h3 className="text-sm font-semibold text-[var(--apple-ink)]">Plays & engagement</h3>
           <ExportLink href={`/api/partner/reports/plays.csv?${qs}`} label="CSV" />
         </div>
         {t.playStarts === 0 ? (
@@ -794,7 +791,7 @@ function PayoutsTab({ qs }: { qs: string }) {
         <Card className="sm:col-span-2 flex items-center justify-end"><ExportLink href={`/api/partner/reports/payouts.csv?${qs}`} label="Download CSV" /></Card>
       </div>
       <Card>
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">Payouts received</h3>
+        <h3 className="text-sm font-semibold text-[var(--apple-ink)] mb-3">Payouts received</h3>
         {data.totalCount === 0 ? (
           <EmptyState message="No payouts yet for this range." />
         ) : (
@@ -834,7 +831,7 @@ function RedemptionTab({ qs }: { qs: string }) {
         <Card className="flex items-center justify-end"><ExportLink href={`/api/partner/reports/redemption.csv?${qs}`} label="Download CSV" /></Card>
       </div>
       <Card>
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">Orders vs. redemptions</h3>
+        <h3 className="text-sm font-semibold text-[var(--apple-ink)] mb-3">Orders vs. redemptions</h3>
         {data.ordered === 0 ? (
           <EmptyState message="No Shopify-origin orders in this range." />
         ) : (
@@ -864,7 +861,7 @@ function TopFansTab({ qs }: { qs: string }) {
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-700">Top fans by spend</h3>
+        <h3 className="text-sm font-semibold text-[var(--apple-ink)]">Top fans by spend</h3>
         <ExportLink href={`/api/partner/reports/top-fans.csv?${qs}`} label="CSV" />
       </div>
       {data.rows.length === 0 ? (
@@ -872,7 +869,7 @@ function TopFansTab({ qs }: { qs: string }) {
       ) : (
         <table className="w-full text-sm" data-testid="table-top-fans">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+            <tr className="text-left text-[11px] uppercase tracking-wider text-[var(--apple-subink)] border-b border-[var(--apple-hairline)]">
               <th className="py-2 font-bold">Fan</th>
               <th className="py-2 font-bold">Location</th>
               <th className="py-2 font-bold text-right">Units</th>
@@ -881,17 +878,17 @@ function TopFansTab({ qs }: { qs: string }) {
           </thead>
           <tbody>
             {data.rows.map((r: any, i: number) => (
-              <tr key={i} className="border-b border-slate-100" data-testid={`row-fan-${i}`}>
-                <td className="py-2.5 text-slate-900 font-medium">{r.name}</td>
-                <td className="py-2.5 text-slate-500">{[r.city, r.region, r.country].filter(Boolean).join(", ") || "—"}</td>
-                <td className="py-2.5 text-slate-700 text-right tabular-nums">{r.units}</td>
-                <td className="py-2.5 text-slate-900 text-right tabular-nums font-medium">{fmtUsd(r.spendCents)}</td>
+              <tr key={i} className="border-b border-[var(--apple-hairline)]" data-testid={`row-fan-${i}`}>
+                <td className="py-2.5 text-[var(--apple-ink)] font-medium">{r.name}</td>
+                <td className="py-2.5 text-[var(--apple-subink)]">{[r.city, r.region, r.country].filter(Boolean).join(", ") || "—"}</td>
+                <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums">{r.units}</td>
+                <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums font-medium">{fmtUsd(r.spendCents)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
-      <p className="text-[11px] text-slate-400 mt-3">
+      <p className="text-[11px] text-[var(--apple-faint)] mt-3">
         Name is first name + last initial only. No email, phone, or street address is ever included.
       </p>
     </Card>
@@ -913,11 +910,11 @@ function FanMapTab({ qs }: { qs: string }) {
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-          <MapPin className="w-4 h-4 text-[#319ED8]" />
+        <h3 className="text-sm font-semibold text-[var(--apple-ink)] flex items-center gap-2">
+          <MapPin className="w-4 h-4 text-[var(--brand-blue)]" />
           Where your fans are
         </h3>
-        <div className="text-xs text-slate-500">
+        <div className="text-xs text-[var(--apple-subink)]">
           {data.geocoded} of {data.totalCities} cities mapped
         </div>
       </div>
@@ -926,7 +923,7 @@ function FanMapTab({ qs }: { qs: string }) {
       ) : (
         <WorldMap points={data.points} />
       )}
-      <p className="text-[11px] text-slate-400 mt-3">
+      <p className="text-[11px] text-[var(--apple-faint)] mt-3">
         Dots are city-level. Geocoding is cached via OpenStreetMap (Nominatim).
       </p>
     </Card>
@@ -989,7 +986,7 @@ function WorldMap({ points }: { points: Array<{ lat: number; lon: number; orders
   const geoData = useWorldGeoData();
   const maxOrders = Math.max(1, ...points.map((p) => p.orders));
   return (
-    <div className="relative w-full overflow-hidden rounded-md border border-slate-200 bg-[#eef2f7]">
+    <div className="relative w-full overflow-hidden rounded-md border border-[var(--apple-hairline)] bg-[#eef2f7]">
       <svg viewBox={VIEWBOX} className="w-full h-auto" data-testid="svg-fan-map">
         {/* Country outlines — rendered first so dots sit on top */}
         {geoData?.features?.map((f: any, i: number) => {
@@ -1053,13 +1050,13 @@ function ReferralsTab({ qs }: { qs: string }) {
         <Card className="flex items-center justify-end"><ExportLink href={`/api/partner/reports/referrals.csv?${qs}`} label="Download CSV" /></Card>
       </div>
       <Card>
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">Artists you referred</h3>
+        <h3 className="text-sm font-semibold text-[var(--apple-ink)] mb-3">Artists you referred</h3>
         {data.artists.length === 0 ? (
           <EmptyState message="No referred artists with sales in this range yet." />
         ) : (
           <table className="w-full text-sm" data-testid="table-referrals">
             <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+              <tr className="text-left text-[11px] uppercase tracking-wider text-[var(--apple-subink)] border-b border-[var(--apple-hairline)]">
                 <th className="py-2 font-bold">Artist</th>
                 <th className="py-2 font-bold text-right">Units</th>
                 <th className="py-2 font-bold text-right">Rate</th>
@@ -1068,17 +1065,17 @@ function ReferralsTab({ qs }: { qs: string }) {
             </thead>
             <tbody>
               {data.artists.map((a: any) => (
-                <tr key={a.artistId} className="border-b border-slate-100" data-testid={`row-referral-${a.artistId}`}>
-                  <td className="py-2.5 text-slate-900 font-medium">{a.artistName}</td>
-                  <td className="py-2.5 text-slate-700 text-right tabular-nums">{a.units}</td>
-                  <td className="py-2.5 text-slate-500 text-right tabular-nums">{fmtUsd(a.perUnitCents)}</td>
-                  <td className="py-2.5 text-slate-900 text-right tabular-nums font-medium">{fmtUsd(a.earningsCents)}</td>
+                <tr key={a.artistId} className="border-b border-[var(--apple-hairline)]" data-testid={`row-referral-${a.artistId}`}>
+                  <td className="py-2.5 text-[var(--apple-ink)] font-medium">{a.artistName}</td>
+                  <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums">{a.units}</td>
+                  <td className="py-2.5 text-[var(--apple-subink)] text-right tabular-nums">{fmtUsd(a.perUnitCents)}</td>
+                  <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums font-medium">{fmtUsd(a.earningsCents)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-        <p className="text-[11px] text-slate-400 mt-3">
+        <p className="text-[11px] text-[var(--apple-faint)] mt-3">
           Per-unit rate is set per referred artist (default $1.00). NPO and person referrers both earn the same way; GoodTunes funds the kickback from platform fees.
         </p>
       </Card>
@@ -1127,7 +1124,7 @@ function OverviewTab({ qs }: { qs: string }) {
       </div>
       <Card>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-slate-700">GMV & signups over time</h3>
+          <h3 className="text-sm font-semibold text-[var(--apple-ink)]">GMV & signups over time</h3>
           <ExportLink href={`/api/admin/reports/kpis.csv?${qs}`} label="CSV" />
         </div>
         {data.orderCount === 0 && data.newSignups === 0 ? (
@@ -1195,7 +1192,7 @@ function BreakdownTable({
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
+        <h3 className="text-sm font-semibold text-[var(--apple-ink)]">{title}</h3>
         <ExportLink href={csv} label="CSV" />
       </div>
       {rows.length === 0 ? (
@@ -1203,7 +1200,7 @@ function BreakdownTable({
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+            <tr className="text-left text-[11px] uppercase tracking-wider text-[var(--apple-subink)] border-b border-[var(--apple-hairline)]">
               <th className="py-2 font-bold">Name</th>
               <th className="py-2 font-bold text-right">Units</th>
               <th className="py-2 font-bold text-right">Revenue</th>
@@ -1214,13 +1211,13 @@ function BreakdownTable({
             {rows.map((r) => (
               <tr
                 key={r.key}
-                className={`border-b border-slate-100 ${onRowClick ? "cursor-pointer hover:bg-slate-50" : ""}`}
+                className={`border-b border-[var(--apple-hairline)] transition-colors ${onRowClick ? "cursor-pointer hover:bg-[var(--apple-track)]" : ""}`}
                 data-testid={`row-breakdown-${r.key}`}
                 onClick={onRowClick ? () => onRowClick(r.key) : undefined}
               >
-                <td className="py-2.5 text-slate-900 font-medium">{r.name || "—"}</td>
-                <td className="py-2.5 text-slate-700 text-right tabular-nums">{r.units.toLocaleString()}</td>
-                <td className="py-2.5 text-slate-900 text-right tabular-nums font-medium">{fmtUsd(r.cents)}</td>
+                <td className="py-2.5 text-[var(--apple-ink)] font-medium">{r.name || "—"}</td>
+                <td className="py-2.5 text-[var(--apple-subink)] text-right tabular-nums">{r.units.toLocaleString()}</td>
+                <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums font-medium">{fmtUsd(r.cents)}</td>
                 {onRowClick && (
                   <td className="py-2.5 text-right">
                     <span className="inline-flex items-center gap-1 text-xs text-[var(--brand-blue)] font-medium">
@@ -1254,12 +1251,12 @@ function EarningsLine({
   testId: string;
 }) {
   return (
-    <div className={`flex items-start justify-between py-2 ${strong ? "border-t border-slate-200 pt-3 mt-1" : ""}`}>
+    <div className={`flex items-start justify-between py-2 ${strong ? "border-t border-[var(--apple-hairline)] pt-3 mt-1" : ""}`}>
       <div>
-        <div className={`text-sm ${strong ? "font-semibold text-slate-900" : "text-slate-700"}`}>{label}</div>
-        {sub && <div className="text-xs text-slate-400 mt-0.5">{sub}</div>}
+        <div className={`text-sm ${strong ? "font-semibold text-[var(--apple-ink)]" : "text-[var(--apple-ink)]"}`}>{label}</div>
+        {sub && <div className="text-xs text-[var(--apple-faint)] mt-0.5">{sub}</div>}
       </div>
-      <div className={`tabular-nums ${strong ? "text-base font-bold text-slate-900" : "text-sm text-slate-900"}`} data-testid={testId}>
+      <div className={`tabular-nums ${strong ? "text-base font-bold text-[var(--apple-ink)]" : "text-sm text-[var(--apple-ink)]"}`} data-testid={testId}>
         {negative ? "−" : ""}{fmtUsd(Math.abs(cents))}
       </div>
     </div>
@@ -1276,7 +1273,7 @@ function AlbumEarningsPanel({ albumId, qs, onBack }: { albumId: string; qs: stri
       <button
         type="button"
         onClick={onBack}
-        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"
+        className="inline-flex items-center gap-1 text-sm text-[var(--apple-subink)] hover:text-[var(--apple-ink)]"
         data-testid="button-back-to-revenue"
       >
         <ChevronDown className="w-3.5 h-3.5 rotate-90" />
@@ -1288,15 +1285,15 @@ function AlbumEarningsPanel({ albumId, qs, onBack }: { albumId: string; qs: stri
         <>
           <Card>
             <div className="flex items-center justify-between mb-1">
-              <h3 className="text-base font-semibold text-slate-900" data-testid="text-earnings-album-title">
+              <h3 className="text-base font-semibold text-[var(--apple-ink)]" data-testid="text-earnings-album-title">
                 {data.album.title} — {data.album.artist}
               </h3>
             </div>
-            <p className="text-xs text-slate-500 mb-4">
+            <p className="text-xs text-[var(--apple-subink)] mb-4">
               {data.units.toLocaleString()} units across {data.orderCount.toLocaleString()} orders · {data.signedCerts.toLocaleString()} signed certs
             </p>
 
-            <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">What fans paid</div>
+            <div className="text-xs uppercase tracking-wider text-[var(--apple-faint)] font-semibold mb-1">What fans paid</div>
             <EarningsLine label="Gross sales (fan-charged total)" cents={data.grossCents} testId="text-earnings-gross" />
             <EarningsLine label="Sales tax collected" sub="remitted to state, not artist funds" cents={data.taxCents} negative testId="text-earnings-tax" />
             <EarningsLine
@@ -1308,7 +1305,7 @@ function AlbumEarningsPanel({ albumId, qs, onBack }: { albumId: string; qs: stri
             />
             <EarningsLine label="Merchandise gross" cents={data.merchandiseGrossCents} strong testId="text-earnings-merch-gross" />
 
-            <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1 mt-5">Artist funds toward vinyl</div>
+            <div className="text-xs uppercase tracking-wider text-[var(--apple-faint)] font-semibold mb-1 mt-5">Artist funds toward vinyl</div>
             {data.giftOfHopeCents > 0 && (
               <EarningsLine
                 label="Gift of Hope donations"
@@ -1332,7 +1329,7 @@ function AlbumEarningsPanel({ albumId, qs, onBack }: { albumId: string; qs: stri
 
             {data.foundationTotalCents > 0 && (
               <>
-                <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1 mt-5">With foundation money included</div>
+                <div className="text-xs uppercase tracking-wider text-[var(--apple-faint)] font-semibold mb-1 mt-5">With foundation money included</div>
                 <EarningsLine
                   label="Foundation total"
                   sub={`Gift of Hope ${fmtUsd(data.giftOfHopeCents)} + $1/unit earmark ${fmtUsd(data.earmarkCents)}`}
@@ -1370,7 +1367,7 @@ function TopList({ title, rows, columns, csv, testIdPrefix, idKey }: { title: st
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
+        <h3 className="text-sm font-semibold text-[var(--apple-ink)]">{title}</h3>
         <ExportLink href={csv} label="CSV" />
       </div>
       {rows.length === 0 ? (
@@ -1378,7 +1375,7 @@ function TopList({ title, rows, columns, csv, testIdPrefix, idKey }: { title: st
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+            <tr className="text-left text-[11px] uppercase tracking-wider text-[var(--apple-subink)] border-b border-[var(--apple-hairline)]">
               {columns.map((c) => <th key={c.key} className="py-2 font-bold">{c.label}</th>)}
               <th className="py-2 font-bold text-right">Plays</th>
               <th className="py-2 font-bold text-right">Listeners</th>
@@ -1386,10 +1383,10 @@ function TopList({ title, rows, columns, csv, testIdPrefix, idKey }: { title: st
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r[idKey]} className="border-b border-slate-100" data-testid={`${testIdPrefix}-${r[idKey]}`}>
-                {columns.map((c) => <td key={c.key} className="py-2.5 text-slate-900 font-medium">{r[c.key] || "—"}</td>)}
-                <td className="py-2.5 text-slate-900 text-right tabular-nums font-medium">{r.plays.toLocaleString()}</td>
-                <td className="py-2.5 text-slate-700 text-right tabular-nums">{r.listeners.toLocaleString()}</td>
+              <tr key={r[idKey]} className="border-b border-[var(--apple-hairline)]" data-testid={`${testIdPrefix}-${r[idKey]}`}>
+                {columns.map((c) => <td key={c.key} className="py-2.5 text-[var(--apple-ink)] font-medium">{r[c.key] || "—"}</td>)}
+                <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums font-medium">{r.plays.toLocaleString()}</td>
+                <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums">{r.listeners.toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
@@ -1432,7 +1429,7 @@ function ReleasePicker({
     <div className="flex flex-col gap-1.5">
       <Label
         htmlFor="funnel-release-trigger"
-        className="text-xs uppercase tracking-wider text-slate-500 font-semibold"
+        className="text-xs uppercase tracking-wider text-[var(--apple-subink)] font-semibold"
       >
         Release
       </Label>
@@ -1443,8 +1440,8 @@ function ReleasePicker({
             type="button"
             className="
               inline-flex items-center gap-2 h-9 self-start min-w-[280px] max-w-[420px]
-              rounded-md border border-slate-300 bg-white px-3 text-sm
-              text-left text-slate-900 hover:border-slate-400
+              rounded-md border border-[var(--apple-hairline)] bg-white px-3 text-sm
+              text-left text-[var(--apple-ink)] hover:border-[var(--apple-faint)]
               focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]
               focus:border-transparent
             "
@@ -1452,7 +1449,7 @@ function ReleasePicker({
             aria-haspopup="listbox"
             aria-expanded={open}
           >
-            <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+            <Search className="w-3.5 h-3.5 text-[var(--apple-faint)] flex-shrink-0" />
             <span className="flex-1 truncate">
               {selected ? `${selected.title} — ${selected.artist}` : "Pick a release…"}
             </span>
@@ -1461,25 +1458,25 @@ function ReleasePicker({
         <PopoverContent
           align="start"
           sideOffset={4}
-          className="p-0 w-[min(420px,calc(100vw-2rem))] bg-white border border-slate-200 text-slate-900 shadow-lg"
+          className="p-0 w-[min(420px,calc(100vw-2rem))] bg-white border border-[var(--apple-hairline)] text-[var(--apple-ink)] shadow-lg"
         >
           <Command
             className={[
-              "bg-white text-slate-900",
-              "[&_[cmdk-input-wrapper]]:border-slate-200",
-              "[&_[cmdk-item]]:text-slate-700",
-              "[&_[cmdk-item][data-selected=true]]:bg-slate-100",
-              "[&_[cmdk-item][data-selected=true]]:text-slate-900",
+              "bg-white text-[var(--apple-ink)]",
+              "[&_[cmdk-input-wrapper]]:border-[var(--apple-hairline)]",
+              "[&_[cmdk-item]]:text-[var(--apple-ink)]",
+              "[&_[cmdk-item][data-selected=true]]:bg-[var(--apple-track)]",
+              "[&_[cmdk-item][data-selected=true]]:text-[var(--apple-ink)]",
             ].join(" ")}
           >
             <CommandInput
               placeholder="Search releases…"
-              className="text-slate-900 placeholder:text-slate-400"
+              className="text-[var(--apple-ink)] placeholder:text-[var(--apple-faint)]"
               data-testid="input-funnel-release-search"
             />
             <CommandList>
               <CommandEmpty>
-                <div className="px-3 py-4 text-xs text-slate-500">No releases with funnel traffic yet.</div>
+                <div className="px-3 py-4 text-xs text-[var(--apple-subink)]">No releases with funnel traffic yet.</div>
               </CommandEmpty>
               <CommandGroup heading="Releases with traffic">
                 {releases.map((r) => (
@@ -1494,10 +1491,10 @@ function ReleasePicker({
                     className="flex items-center justify-between gap-2 py-2"
                   >
                     <div className="min-w-0">
-                      <div className="truncate font-medium text-slate-900">{r.title}</div>
-                      <div className="truncate text-xs text-slate-500 mt-0.5">{r.artist}</div>
+                      <div className="truncate font-medium text-[var(--apple-ink)]">{r.title}</div>
+                      <div className="truncate text-xs text-[var(--apple-subink)] mt-0.5">{r.artist}</div>
                     </div>
-                    <span className="text-xs text-slate-400 tabular-nums flex-shrink-0">
+                    <span className="text-xs text-[var(--apple-faint)] tabular-nums flex-shrink-0">
                       {r.landed.toLocaleString()} landed
                     </span>
                   </CommandItem>
@@ -1550,11 +1547,11 @@ function NativeFunnel({ qs }: { qs: string }) {
     <Card>
       <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
         <div>
-          <h3 className="text-sm font-semibold text-slate-700">Acquisition funnel</h3>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h3 className="text-sm font-semibold text-[var(--apple-ink)]">Acquisition funnel</h3>
+          <p className="text-xs text-[var(--apple-subink)] mt-0.5">
             Landed → viewed the offer → started checkout → bought. Distinct sessions, computed from
             first-party analytics — no PostHog required.{" "}
-            <span className="text-slate-400">
+            <span className="text-[var(--apple-faint)]">
               "Landed" counts unique sessions that opened the release page. Operator/staff
               views and preview-link opens are filtered out by default.
             </span>
@@ -1563,12 +1560,12 @@ function NativeFunnel({ qs }: { qs: string }) {
         <div className="flex flex-wrap items-end gap-3">
           {releases.length > 0 && (
             <label
-              className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none"
+              className="flex items-center gap-2 text-xs text-[var(--apple-subink)] cursor-pointer select-none"
               data-testid="toggle-funnel-exclude-internal"
             >
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-slate-300 accent-[var(--brand-blue)]"
+                className="h-4 w-4 rounded border-[var(--apple-hairline)] accent-[var(--brand-blue)]"
                 checked={excludeInternal}
                 onChange={(e) => setExcludeInternal(e.target.checked)}
                 data-testid="checkbox-funnel-exclude-internal"
@@ -1593,16 +1590,16 @@ function NativeFunnel({ qs }: { qs: string }) {
       ) : (
         <div className="space-y-5" data-testid="native-funnel">
           <div className="flex items-baseline gap-3">
-            <span className="text-2xl font-semibold text-slate-900 tabular-nums" data-testid="text-funnel-overall-conversion">
+            <span className="text-2xl font-semibold text-[var(--apple-ink)] tabular-nums" data-testid="text-funnel-overall-conversion">
               {fmtPct(data.overallConversion)}
             </span>
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-[var(--apple-subink)]">
               landed → bought ({data.steps[0]?.sessions.toLocaleString() ?? 0} sessions →{" "}
               {data.steps[3]?.sessions.toLocaleString() ?? 0} purchases)
             </span>
           </div>
           {excludeInternal && (data.excludedInternal ?? 0) > 0 && (
-            <p className="text-xs text-slate-400 -mt-3" data-testid="text-funnel-excluded-internal">
+            <p className="text-xs text-[var(--apple-faint)] -mt-3" data-testid="text-funnel-excluded-internal">
               {data.excludedInternal?.toLocaleString()} internal/test record
               {data.excludedInternal === 1 ? "" : "s"} excluded (sessions + purchases)
             </p>
@@ -1614,19 +1611,19 @@ function NativeFunnel({ qs }: { qs: string }) {
               return (
                 <div key={step.key} data-testid={`funnel-step-${step.key}`}>
                   <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="font-medium text-slate-700">{step.label}</span>
-                    <span className="text-slate-500 tabular-nums">
-                      <span className="font-semibold text-slate-900" data-testid={`text-funnel-step-count-${step.key}`}>
+                    <span className="font-medium text-[var(--apple-ink)]">{step.label}</span>
+                    <span className="text-[var(--apple-subink)] tabular-nums">
+                      <span className="font-semibold text-[var(--apple-ink)]" data-testid={`text-funnel-step-count-${step.key}`}>
                         {step.sessions.toLocaleString()}
                       </span>
                       {i > 0 && (
-                        <span className="ml-2 text-xs text-slate-400">
+                        <span className="ml-2 text-xs text-[var(--apple-faint)]">
                           {fmtPct(step.stepConversion)} from prev
                         </span>
                       )}
                     </span>
                   </div>
-                  <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                  <div className="h-2.5 rounded-full bg-[var(--apple-track)] overflow-hidden">
                     <div
                       className="h-full rounded-full bg-[var(--brand-blue)]"
                       style={{ width: `${pct}%` }}
@@ -1639,14 +1636,14 @@ function NativeFunnel({ qs }: { qs: string }) {
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs uppercase tracking-wider text-slate-500 font-bold">By source</h4>
+              <h4 className="text-xs uppercase tracking-wider text-[var(--apple-subink)] font-bold">By source</h4>
             </div>
             {data.bySource.length === 0 ? (
               <EmptyState message="No source breakdown for this window." />
             ) : (
               <table className="w-full text-sm" data-testid="table-funnel-sources">
                 <thead>
-                  <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                  <tr className="text-left text-[11px] uppercase tracking-wider text-[var(--apple-subink)] border-b border-[var(--apple-hairline)]">
                     <th className="py-2 font-bold">Source</th>
                     <th className="py-2 font-bold text-right">Landed</th>
                     <th className="py-2 font-bold text-right">Offer</th>
@@ -1657,13 +1654,13 @@ function NativeFunnel({ qs }: { qs: string }) {
                 </thead>
                 <tbody>
                   {data.bySource.map((s) => (
-                    <tr key={s.key} className="border-b border-slate-100" data-testid={`row-funnel-source-${s.key}`}>
-                      <td className="py-2 text-slate-700">{s.source}</td>
-                      <td className="py-2 text-right tabular-nums text-slate-700">{s.landed.toLocaleString()}</td>
-                      <td className="py-2 text-right tabular-nums text-slate-700">{s.viewedOffer.toLocaleString()}</td>
-                      <td className="py-2 text-right tabular-nums text-slate-700">{s.startedCheckout.toLocaleString()}</td>
-                      <td className="py-2 text-right tabular-nums text-slate-900 font-medium">{s.completed.toLocaleString()}</td>
-                      <td className="py-2 text-right tabular-nums text-slate-700">{fmtPct(s.conversion)}</td>
+                    <tr key={s.key} className="border-b border-[var(--apple-hairline)]" data-testid={`row-funnel-source-${s.key}`}>
+                      <td className="py-2 text-[var(--apple-ink)]">{s.source}</td>
+                      <td className="py-2 text-right tabular-nums text-[var(--apple-ink)]">{s.landed.toLocaleString()}</td>
+                      <td className="py-2 text-right tabular-nums text-[var(--apple-ink)]">{s.viewedOffer.toLocaleString()}</td>
+                      <td className="py-2 text-right tabular-nums text-[var(--apple-ink)]">{s.startedCheckout.toLocaleString()}</td>
+                      <td className="py-2 text-right tabular-nums text-[var(--apple-ink)] font-medium">{s.completed.toLocaleString()}</td>
+                      <td className="py-2 text-right tabular-nums text-[var(--apple-ink)]">{fmtPct(s.conversion)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1687,11 +1684,11 @@ function FunnelsTab({ qs }: { qs: string }) {
     <div className="space-y-4">
       <NativeFunnel qs={qs} />
       <Card>
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">Funnel — visit → play → checkout</h3>
+        <h3 className="text-sm font-semibold text-[var(--apple-ink)] mb-3">Funnel — visit → play → checkout</h3>
         {data?.funnelUrl ? (
           <iframe
             src={data.funnelUrl}
-            className="w-full h-[520px] rounded-md border border-slate-200 bg-slate-50"
+            className="w-full h-[520px] rounded-md border border-[var(--apple-hairline)] bg-[var(--apple-track)]"
             data-testid="iframe-posthog-funnel"
             title="PostHog funnel"
           />
@@ -1700,11 +1697,11 @@ function FunnelsTab({ qs }: { qs: string }) {
         )}
       </Card>
       <Card>
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">Cohort retention</h3>
+        <h3 className="text-sm font-semibold text-[var(--apple-ink)] mb-3">Cohort retention</h3>
         {data?.retentionUrl ? (
           <iframe
             src={data.retentionUrl}
-            className="w-full h-[520px] rounded-md border border-slate-200 bg-slate-50"
+            className="w-full h-[520px] rounded-md border border-[var(--apple-hairline)] bg-[var(--apple-track)]"
             data-testid="iframe-posthog-retention"
             title="PostHog retention"
           />
@@ -1718,10 +1715,10 @@ function FunnelsTab({ qs }: { qs: string }) {
 
 function PosthogPlaceholder({ envVar, host }: { envVar: string; host?: string }) {
   return (
-    <div className="py-10 text-center text-sm text-slate-500 bg-slate-50 rounded-md border border-dashed border-slate-200" data-testid={`empty-${envVar.toLowerCase()}`}>
-      <p className="font-medium text-slate-700">PostHog embed not configured.</p>
-      <p className="mt-2">Set <code className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[12px]">{envVar}</code> to a PostHog shared-dashboard iframe URL.</p>
-      {host && <p className="text-[11px] text-slate-400 mt-1">Detected host: {host}</p>}
+    <div className="py-10 text-center text-sm text-[var(--apple-subink)] bg-[var(--apple-track)] rounded-md border border-dashed border-[var(--apple-hairline)]" data-testid={`empty-${envVar.toLowerCase()}`}>
+      <p className="font-medium text-[var(--apple-ink)]">PostHog embed not configured.</p>
+      <p className="mt-2">Set <code className="px-1.5 py-0.5 bg-white border border-[var(--apple-hairline)] rounded text-[12px]">{envVar}</code> to a PostHog shared-dashboard iframe URL.</p>
+      {host && <p className="text-[11px] text-[var(--apple-faint)] mt-1">Detected host: {host}</p>}
     </div>
   );
 }
@@ -1745,7 +1742,7 @@ function OpsTab({ qs }: { qs: string }) {
       </div>
       <Card>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-slate-700">Failed fulfillment pushes</h3>
+          <h3 className="text-sm font-semibold text-[var(--apple-ink)]">Failed fulfillment pushes</h3>
           <ExportLink href={`/api/admin/reports/ops/stuck.csv?${qs}`} label="CSV" />
         </div>
         {data.stuckFulfillments.rows.length === 0 ? (
@@ -1753,7 +1750,7 @@ function OpsTab({ qs }: { qs: string }) {
         ) : (
           <table className="w-full text-sm" data-testid="table-stuck-fulfillments">
             <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+              <tr className="text-left text-[11px] uppercase tracking-wider text-[var(--apple-subink)] border-b border-[var(--apple-hairline)]">
                 <th className="py-2 font-bold">Order</th>
                 <th className="py-2 font-bold">Buyer</th>
                 <th className="py-2 font-bold">Status</th>
@@ -1763,12 +1760,12 @@ function OpsTab({ qs }: { qs: string }) {
             </thead>
             <tbody>
               {data.stuckFulfillments.rows.map((r: any) => (
-                <tr key={r.id} className="border-b border-slate-100" data-testid={`row-stuck-${r.id}`}>
-                  <td className="py-2.5 text-slate-900 font-mono text-[12px]">{r.id.slice(0, 8)}</td>
-                  <td className="py-2.5 text-slate-700">{r.buyerName || r.buyerEmail || "—"}</td>
-                  <td className="py-2.5 text-slate-700">{r.fulfillmentStatus}</td>
-                  <td className="py-2.5 text-slate-500 font-mono text-[12px]">{r.orderDeskOrderId || "—"}</td>
-                  <td className="py-2.5 text-slate-500 text-right tabular-nums">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}</td>
+                <tr key={r.id} className="border-b border-[var(--apple-hairline)]" data-testid={`row-stuck-${r.id}`}>
+                  <td className="py-2.5 text-[var(--apple-ink)] font-mono text-[12px]">{r.id.slice(0, 8)}</td>
+                  <td className="py-2.5 text-[var(--apple-ink)]">{r.buyerName || r.buyerEmail || "—"}</td>
+                  <td className="py-2.5 text-[var(--apple-ink)]">{r.fulfillmentStatus}</td>
+                  <td className="py-2.5 text-[var(--apple-subink)] font-mono text-[12px]">{r.orderDeskOrderId || "—"}</td>
+                  <td className="py-2.5 text-[var(--apple-subink)] text-right tabular-nums">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -1777,7 +1774,7 @@ function OpsTab({ qs }: { qs: string }) {
       </Card>
       <Card>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-slate-700">Pending checkouts (never advanced)</h3>
+          <h3 className="text-sm font-semibold text-[var(--apple-ink)]">Pending checkouts (never advanced)</h3>
           <ExportLink href={`/api/admin/reports/ops/failed.csv?${qs}`} label="CSV" />
         </div>
         {data.failedCheckouts.rows.length === 0 ? (
@@ -1785,7 +1782,7 @@ function OpsTab({ qs }: { qs: string }) {
         ) : (
           <table className="w-full text-sm" data-testid="table-failed-checkouts">
             <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+              <tr className="text-left text-[11px] uppercase tracking-wider text-[var(--apple-subink)] border-b border-[var(--apple-hairline)]">
                 <th className="py-2 font-bold">Order</th>
                 <th className="py-2 font-bold">Buyer</th>
                 <th className="py-2 font-bold text-right">Amount</th>
@@ -1794,18 +1791,18 @@ function OpsTab({ qs }: { qs: string }) {
             </thead>
             <tbody>
               {data.failedCheckouts.rows.map((r: any) => (
-                <tr key={r.id} className="border-b border-slate-100" data-testid={`row-failed-${r.id}`}>
-                  <td className="py-2.5 text-slate-900 font-mono text-[12px]">{r.id.slice(0, 8)}</td>
-                  <td className="py-2.5 text-slate-700">{r.buyerEmail || "—"}</td>
-                  <td className="py-2.5 text-slate-900 text-right tabular-nums font-medium">{fmtUsd(r.totalCents)}</td>
-                  <td className="py-2.5 text-slate-500 text-right tabular-nums">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}</td>
+                <tr key={r.id} className="border-b border-[var(--apple-hairline)]" data-testid={`row-failed-${r.id}`}>
+                  <td className="py-2.5 text-[var(--apple-ink)] font-mono text-[12px]">{r.id.slice(0, 8)}</td>
+                  <td className="py-2.5 text-[var(--apple-ink)]">{r.buyerEmail || "—"}</td>
+                  <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums font-medium">{fmtUsd(r.totalCents)}</td>
+                  <td className="py-2.5 text-[var(--apple-subink)] text-right tabular-nums">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-        <p className="text-[11px] text-slate-400 mt-3">
-          {data.failedCheckouts.proxyNote || "Counts include abandoned Checkout Sessions that never advanced to paid."} Cross-check disputes at <code className="px-1 py-0.5 bg-slate-50 border border-slate-200 rounded">stripe.com/dashboard/payments/disputes</code>.
+        <p className="text-[11px] text-[var(--apple-faint)] mt-3">
+          {data.failedCheckouts.proxyNote || "Counts include abandoned Checkout Sessions that never advanced to paid."} Cross-check disputes at <code className="px-1 py-0.5 bg-[var(--apple-track)] border border-[var(--apple-hairline)] rounded">stripe.com/dashboard/payments/disputes</code>.
         </p>
       </Card>
     </div>
@@ -1822,7 +1819,7 @@ function ReconciliationTab({ qs }: { qs: string }) {
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-700">Payout reconciliation by owner</h3>
+        <h3 className="text-sm font-semibold text-[var(--apple-ink)]">Payout reconciliation by owner</h3>
         <ExportLink href={`/api/admin/reports/reconciliation.csv?${qs}`} label="CSV" />
       </div>
       {data.rows.length === 0 ? (
@@ -1830,7 +1827,7 @@ function ReconciliationTab({ qs }: { qs: string }) {
       ) : (
         <table className="w-full text-sm" data-testid="table-reconciliation">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+            <tr className="text-left text-[11px] uppercase tracking-wider text-[var(--apple-subink)] border-b border-[var(--apple-hairline)]">
               <th className="py-2 font-bold">Owner</th>
               <th className="py-2 font-bold">Stripe acct</th>
               <th className="py-2 font-bold text-right">Shipped</th>
@@ -1841,25 +1838,25 @@ function ReconciliationTab({ qs }: { qs: string }) {
           </thead>
           <tbody>
             {data.rows.map((r: any) => (
-              <tr key={`${r.kind}:${r.id}`} className="border-b border-slate-100" data-testid={`row-recon-${r.id}`}>
+              <tr key={`${r.kind}:${r.id}`} className="border-b border-[var(--apple-hairline)]" data-testid={`row-recon-${r.id}`}>
                 <td className="py-2.5">
-                  <div className="text-slate-900 font-medium">{r.ownerName}</div>
-                  <div className="text-[11px] text-slate-400">{r.kind}</div>
+                  <div className="text-[var(--apple-ink)] font-medium">{r.ownerName}</div>
+                  <div className="text-[11px] text-[var(--apple-faint)]">{r.kind}</div>
                 </td>
-                <td className="py-2.5 text-slate-500 font-mono text-[12px]">
-                  {r.stripeAccountId || <span className="text-[#FF5470]">not connected</span>}
-                  {r.stripeAccountId && !r.payoutsEnabled && <div className="text-[10px] text-[#FF5470]">payouts disabled</div>}
+                <td className="py-2.5 text-[var(--apple-subink)] font-mono text-[12px]">
+                  {r.stripeAccountId || <span className="text-[var(--apple-critical)]">not connected</span>}
+                  {r.stripeAccountId && !r.payoutsEnabled && <div className="text-[10px] text-[var(--apple-critical)]">payouts disabled</div>}
                 </td>
-                <td className="py-2.5 text-slate-700 text-right tabular-nums">{r.shippedCount}</td>
-                <td className="py-2.5 text-slate-700 text-right tabular-nums">{r.transferredCount} · {fmtUsd(r.transferredCents)}</td>
-                <td className="py-2.5 text-slate-900 text-right tabular-nums font-medium">{fmtUsd(r.computedCents)}</td>
-                <td className={`py-2.5 text-right tabular-nums font-medium ${r.deltaCents > 0 ? "text-[#FF5470]" : "text-slate-500"}`}>{fmtUsd(r.deltaCents)}</td>
+                <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums">{r.shippedCount}</td>
+                <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums">{r.transferredCount} · {fmtUsd(r.transferredCents)}</td>
+                <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums font-medium">{fmtUsd(r.computedCents)}</td>
+                <td className={`py-2.5 text-right tabular-nums font-medium ${r.deltaCents > 0 ? "text-[var(--apple-critical)]" : "text-[var(--apple-subink)]"}`}>{fmtUsd(r.deltaCents)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
-      <p className="text-[11px] text-slate-400 mt-3">
+      <p className="text-[11px] text-[var(--apple-faint)] mt-3">
         Δ Delta = computed (snapshot at ship) − transferred via Stripe Connect. Non-zero deltas surface owners with skipped/failed transfers that need a retry from the Payouts admin.
       </p>
     </Card>
@@ -1911,14 +1908,14 @@ const ROLE_LABELS: Record<string, string> = {
 
 const STATUS_META: Record<PartnerActivityStatus, { label: string; className: string }> = {
   invited:           { label: "Invite sent",      className: "bg-blue-50 text-blue-700" },
-  expired_or_revoked:{ label: "Expired / Revoked", className: "bg-slate-100 text-slate-500" },
+  expired_or_revoked:{ label: "Expired / Revoked", className: "bg-[var(--apple-track)] text-[var(--apple-subink)]" },
   idle:              { label: "Joined · idle",    className: "bg-amber-50 text-amber-700" },
   active:            { label: "Active",            className: "bg-green-50 text-green-700" },
   stalled:           { label: "Stalled",           className: "bg-orange-50 text-orange-700" },
 };
 
 function StatusPill({ status }: { status: PartnerActivityStatus }) {
-  const { label, className } = STATUS_META[status] ?? { label: status, className: "bg-slate-100 text-slate-500" };
+  const { label, className } = STATUS_META[status] ?? { label: status, className: "bg-[var(--apple-track)] text-[var(--apple-subink)]" };
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${className}`}>
       {label}
@@ -1942,11 +1939,11 @@ function fmtDate(iso: string | null): string {
 }
 
 function TimelineIcon({ kind }: { kind: ActivityTimelineItem["kind"] }) {
-  if (kind === "login") return <LogIn className="w-3.5 h-3.5 shrink-0 text-slate-400" />;
-  if (kind === "edit") return <FileEdit className="w-3.5 h-3.5 shrink-0 text-slate-400" />;
-  if (kind === "import") return <Package className="w-3.5 h-3.5 shrink-0 text-slate-400" />;
-  if (kind === "sale") return <ShoppingCart className="w-3.5 h-3.5 shrink-0 text-slate-400" />;
-  return <RefreshCw className="w-3.5 h-3.5 shrink-0 text-slate-400" />;
+  if (kind === "login") return <LogIn className="w-3.5 h-3.5 shrink-0 text-[var(--apple-faint)]" />;
+  if (kind === "edit") return <FileEdit className="w-3.5 h-3.5 shrink-0 text-[var(--apple-faint)]" />;
+  if (kind === "import") return <Package className="w-3.5 h-3.5 shrink-0 text-[var(--apple-faint)]" />;
+  if (kind === "sale") return <ShoppingCart className="w-3.5 h-3.5 shrink-0 text-[var(--apple-faint)]" />;
+  return <RefreshCw className="w-3.5 h-3.5 shrink-0 text-[var(--apple-faint)]" />;
 }
 
 function PartnerTimeline({ inviteId }: { inviteId: string }) {
@@ -1956,13 +1953,13 @@ function PartnerTimeline({ inviteId }: { inviteId: string }) {
   });
 
   if (isLoading) {
-    return <div className="py-3 text-xs text-slate-400">Loading activity…</div>;
+    return <div className="py-3 text-xs text-[var(--apple-faint)]">Loading activity…</div>;
   }
 
   const items = data?.timeline ?? [];
   if (items.length === 0) {
     return (
-      <div className="py-3 text-xs text-slate-400 italic">
+      <div className="py-3 text-xs text-[var(--apple-faint)] italic">
         No dated activity recorded yet — counts above are snapshot totals only.
       </div>
     );
@@ -1971,9 +1968,9 @@ function PartnerTimeline({ inviteId }: { inviteId: string }) {
   return (
     <ul className="space-y-1.5 py-2" data-testid="list-partner-timeline">
       {items.map((item, i) => (
-        <li key={i} className="flex items-start gap-2 text-[12px] text-slate-600">
+        <li key={i} className="flex items-start gap-2 text-[12px] text-[var(--apple-subink)]">
           <TimelineIcon kind={item.kind} />
-          <span className="text-slate-400 shrink-0 tabular-nums">{fmtDate(item.ts)}</span>
+          <span className="text-[var(--apple-faint)] shrink-0 tabular-nums">{fmtDate(item.ts)}</span>
           <span>{item.detail}</span>
         </li>
       ))}
@@ -2028,19 +2025,19 @@ function PartnerActivityTab() {
       <Card>
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="relative flex-1 min-w-[180px] max-w-[280px]">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--apple-faint)] pointer-events-none" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search partners…"
-              className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30"
+              className="w-full pl-8 pr-3 py-1.5 text-sm border border-[var(--apple-hairline)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
               data-testid="input-partner-search"
             />
           </div>
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="h-8 px-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#319ED8]/30 bg-white"
+            className="h-8 px-2 text-sm border border-[var(--apple-hairline)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30 bg-white"
             data-testid="select-partner-type"
           >
             <option value="all">All types</option>
@@ -2051,7 +2048,7 @@ function PartnerActivityTab() {
           <div className="flex items-center gap-1.5 flex-wrap">
             <button
               onClick={() => setStatusFilter("all")}
-              className={`px-2.5 py-1 text-[11px] font-medium rounded-full transition-colors ${statusFilter === "all" ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-full transition-colors ${statusFilter === "all" ? "bg-[var(--apple-blue)] text-white" : "bg-[var(--apple-track)] text-[var(--apple-subink)] hover:bg-black/[0.05]"}`}
               data-testid="filter-status-all"
             >
               All
@@ -2060,7 +2057,7 @@ function PartnerActivityTab() {
               <button
                 key={s}
                 onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
-                className={`px-2.5 py-1 text-[11px] font-medium rounded-full transition-colors ${statusFilter === s ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded-full transition-colors ${statusFilter === s ? "bg-[var(--apple-blue)] text-white" : "bg-[var(--apple-track)] text-[var(--apple-subink)] hover:bg-black/[0.05]"}`}
                 data-testid={`filter-status-${s}`}
               >
                 {STATUS_META[s].label}
@@ -2075,7 +2072,7 @@ function PartnerActivityTab() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm" data-testid="table-partner-activity">
               <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                <tr className="text-left text-[11px] uppercase tracking-wider text-[var(--apple-subink)] border-b border-[var(--apple-hairline)]">
                   <th className="py-2 font-bold w-6"></th>
                   <th className="py-2 font-bold">Partner</th>
                   <th className="py-2 font-bold">Status</th>
@@ -2097,11 +2094,11 @@ function PartnerActivityTab() {
                   return [
                     <tr
                       key={p.inviteId}
-                      className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
+                      className="border-b border-[var(--apple-hairline)] hover:bg-[var(--apple-track)] transition-colors cursor-pointer"
                       onClick={() => toggleRow(p.inviteId)}
                       data-testid={`row-partner-${p.inviteId}`}
                     >
-                      <td className="py-2.5 pl-1 text-slate-400">
+                      <td className="py-2.5 pl-1 text-[var(--apple-faint)]">
                         {isExpanded
                           ? <ChevronDown className="w-3.5 h-3.5" />
                           : <ChevronRight className="w-3.5 h-3.5" />
@@ -2112,79 +2109,79 @@ function PartnerActivityTab() {
                           {p.scopeThumbUrl ? (
                             <img src={p.scopeThumbUrl} alt="" className="w-6 h-6 rounded object-cover shrink-0" />
                           ) : (
-                            <div className="w-6 h-6 rounded bg-slate-100 flex items-center justify-center text-[10px] text-slate-400 shrink-0">
+                            <div className="w-6 h-6 rounded bg-[var(--apple-track)] flex items-center justify-center text-[10px] text-[var(--apple-faint)] shrink-0">
                               {p.scopeName.slice(0, 1).toUpperCase()}
                             </div>
                           )}
                           <div>
-                            <div className="text-slate-900 font-medium leading-tight">{p.scopeName}</div>
-                            <div className="text-[11px] text-slate-400">{ROLE_LABELS[p.role] ?? p.role}</div>
+                            <div className="text-[var(--apple-ink)] font-medium leading-tight">{p.scopeName}</div>
+                            <div className="text-[11px] text-[var(--apple-faint)]">{ROLE_LABELS[p.role] ?? p.role}</div>
                           </div>
                         </div>
                       </td>
                       <td className="py-2.5">
                         <StatusPill status={p.status} />
                       </td>
-                      <td className="py-2.5 text-slate-600 whitespace-nowrap">
+                      <td className="py-2.5 text-[var(--apple-subink)] whitespace-nowrap">
                         <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                          <Clock className="w-3 h-3 text-[var(--apple-faint)] shrink-0" />
                           <span title={p.lastSeenAt ? new Date(p.lastSeenAt).toLocaleString() : undefined}>
                             {fmtRelative(p.lastSeenAt)}
                           </span>
                         </div>
                       </td>
-                      <td className="py-2.5 text-right tabular-nums text-slate-700">
-                        {p.albumCount > 0 ? p.albumCount : <span className="text-slate-300">—</span>}
+                      <td className="py-2.5 text-right tabular-nums text-[var(--apple-ink)]">
+                        {p.albumCount > 0 ? p.albumCount : <span className="text-[var(--apple-faint)]">—</span>}
                       </td>
-                      <td className="py-2.5 text-right tabular-nums text-slate-700">
+                      <td className="py-2.5 text-right tabular-nums text-[var(--apple-ink)]">
                         {p.rosterCount > 0 ? (
                           <span className="inline-flex items-center gap-0.5">
-                            <Users className="w-3 h-3 text-slate-400" />
+                            <Users className="w-3 h-3 text-[var(--apple-faint)]" />
                             {p.rosterCount}
                           </span>
-                        ) : <span className="text-slate-300">—</span>}
+                        ) : <span className="text-[var(--apple-faint)]">—</span>}
                       </td>
-                      <td className="py-2.5 text-right tabular-nums text-slate-700">
-                        {p.pendingChangesCount > 0 ? p.pendingChangesCount : <span className="text-slate-300">—</span>}
+                      <td className="py-2.5 text-right tabular-nums text-[var(--apple-ink)]">
+                        {p.pendingChangesCount > 0 ? p.pendingChangesCount : <span className="text-[var(--apple-faint)]">—</span>}
                       </td>
-                      <td className="py-2.5 text-right tabular-nums text-slate-700">
-                        {p.importsCount > 0 ? p.importsCount : <span className="text-slate-300">—</span>}
+                      <td className="py-2.5 text-right tabular-nums text-[var(--apple-ink)]">
+                        {p.importsCount > 0 ? p.importsCount : <span className="text-[var(--apple-faint)]">—</span>}
                       </td>
-                      <td className="py-2.5 text-right tabular-nums text-slate-700">
-                        {p.recentSalesCount > 0 ? p.recentSalesCount : <span className="text-slate-300">—</span>}
+                      <td className="py-2.5 text-right tabular-nums text-[var(--apple-ink)]">
+                        {p.recentSalesCount > 0 ? p.recentSalesCount : <span className="text-[var(--apple-faint)]">—</span>}
                       </td>
-                      <td className="py-2.5 text-right tabular-nums text-slate-700">
-                        {p.pricingSyncsCount > 0 ? p.pricingSyncsCount : <span className="text-slate-300">—</span>}
+                      <td className="py-2.5 text-right tabular-nums text-[var(--apple-ink)]">
+                        {p.pricingSyncsCount > 0 ? p.pricingSyncsCount : <span className="text-[var(--apple-faint)]">—</span>}
                       </td>
-                      <td className="py-2.5 text-right tabular-nums text-slate-700">
+                      <td className="py-2.5 text-right tabular-nums text-[var(--apple-ink)]">
                         {p.catalogItemsCount > 0 ? (
                           <span title="press_format_costs + press_color_tiers rows configured">
                             {p.catalogItemsCount}
                           </span>
-                        ) : <span className="text-slate-300">—</span>}
+                        ) : <span className="text-[var(--apple-faint)]">—</span>}
                       </td>
-                      <td className="py-2.5 text-slate-500 text-[12px]">
+                      <td className="py-2.5 text-[var(--apple-subink)] text-[12px]">
                         {p.inviterDisplayName ?? p.inviterEmail ?? "—"}
                       </td>
-                      <td className="py-2.5 text-slate-500 text-[12px] whitespace-nowrap">
-                        {p.acceptedAt ? fmtDate(p.acceptedAt) : <span className="text-slate-300">Not yet</span>}
+                      <td className="py-2.5 text-[var(--apple-subink)] text-[12px] whitespace-nowrap">
+                        {p.acceptedAt ? fmtDate(p.acceptedAt) : <span className="text-[var(--apple-faint)]">Not yet</span>}
                       </td>
                     </tr>,
                     isExpanded && (
-                      <tr key={`${p.inviteId}:timeline`} className="border-b border-slate-100 bg-slate-50/60">
+                      <tr key={`${p.inviteId}:timeline`} className="border-b border-[var(--apple-hairline)] bg-[var(--apple-track)]">
                         <td></td>
                         <td colSpan={12} className="px-3 pb-3">
-                          <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider pt-2 mb-1">
+                          <div className="text-[11px] text-[var(--apple-subink)] font-semibold uppercase tracking-wider pt-2 mb-1">
                             Recent activity
                           </div>
                           {p.acceptedAt ? (
                             <PartnerTimeline inviteId={p.inviteId} />
                           ) : (
-                            <div className="py-2 text-xs text-slate-400 italic">
+                            <div className="py-2 text-xs text-[var(--apple-faint)] italic">
                               Partner hasn't accepted their invite yet.
                             </div>
                           )}
-                          <div className="mt-2 text-[11px] text-slate-400">
+                          <div className="mt-2 text-[11px] text-[var(--apple-faint)]">
                             Invited {fmtDate(p.invitedAt)}
                             {p.inviteeEmail && ` · ${p.inviteeEmail}`}
                             {p.pricingSyncsCount > 0 && ` · ${p.pricingSyncsCount} pricing sync${p.pricingSyncsCount !== 1 ? "s" : ""} total`}
@@ -2200,7 +2197,7 @@ function PartnerActivityTab() {
           </div>
         )}
 
-        <p className="text-[11px] text-slate-400 mt-3">
+        <p className="text-[11px] text-[var(--apple-faint)] mt-3">
           {filtered.length} of {data.partners.length} partners shown.
           {" "}<span className="font-medium">Active</span> = any signal within {activeWithinDays} days (logins · edits · imports · orders · pricing syncs).
           {" "}<span className="font-medium">Albums / Roster</span> are snapshot totals (no created_at).
@@ -2232,15 +2229,15 @@ function RawEventsTab({ qs }: { qs: string }) {
     <Card>
       <div className="flex flex-wrap items-end gap-3 mb-4">
         <div className="flex flex-col gap-1">
-          <Label htmlFor="ev-name" className="text-[11px] text-slate-500">Event name</Label>
+          <Label htmlFor="ev-name" className="text-[11px] text-[var(--apple-subink)]">Event name</Label>
           <Input id="ev-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="play_start" className="h-9 w-[180px]" data-testid="input-event-name" />
         </div>
         <div className="flex flex-col gap-1">
-          <Label htmlFor="ev-user" className="text-[11px] text-slate-500">User id</Label>
+          <Label htmlFor="ev-user" className="text-[11px] text-[var(--apple-subink)]">User id</Label>
           <Input id="ev-user" value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="uuid…" className="h-9 w-[220px]" data-testid="input-event-user" />
         </div>
         <div className="flex flex-col gap-1">
-          <Label htmlFor="ev-session" className="text-[11px] text-slate-500">Session id</Label>
+          <Label htmlFor="ev-session" className="text-[11px] text-[var(--apple-subink)]">Session id</Label>
           <Input id="ev-session" value={sessionId} onChange={(e) => setSessionId(e.target.value)} placeholder="session…" className="h-9 w-[220px]" data-testid="input-event-session" />
         </div>
         <ExportLink href={`/api/admin/reports/events.csv?${filterQs}`} label="CSV" />
@@ -2255,7 +2252,7 @@ function RawEventsTab({ qs }: { qs: string }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="table-raw-events">
             <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+              <tr className="text-left text-[11px] uppercase tracking-wider text-[var(--apple-subink)] border-b border-[var(--apple-hairline)]">
                 <th className="py-2 font-bold">Time</th>
                 <th className="py-2 font-bold">Event</th>
                 <th className="py-2 font-bold">User</th>
@@ -2265,19 +2262,19 @@ function RawEventsTab({ qs }: { qs: string }) {
             </thead>
             <tbody>
               {data.rows.map((r: any) => (
-                <tr key={r.id} className="border-b border-slate-100 align-top" data-testid={`row-event-${r.id}`}>
-                  <td className="py-2 text-slate-500 text-[12px] whitespace-nowrap">{r.ts ? new Date(r.ts).toLocaleString() : ""}</td>
-                  <td className="py-2 text-slate-900 font-medium whitespace-nowrap">{r.name}</td>
-                  <td className="py-2 text-slate-500 font-mono text-[11px]">{r.userId ? r.userId.slice(0, 8) : "—"}</td>
-                  <td className="py-2 text-slate-500 font-mono text-[11px]">{r.sessionId ? r.sessionId.slice(0, 10) : "—"}</td>
-                  <td className="py-2 text-slate-600 font-mono text-[11px] max-w-[400px] truncate">{r.payload ? JSON.stringify(r.payload) : ""}</td>
+                <tr key={r.id} className="border-b border-[var(--apple-hairline)] align-top" data-testid={`row-event-${r.id}`}>
+                  <td className="py-2 text-[var(--apple-subink)] text-[12px] whitespace-nowrap">{r.ts ? new Date(r.ts).toLocaleString() : ""}</td>
+                  <td className="py-2 text-[var(--apple-ink)] font-medium whitespace-nowrap">{r.name}</td>
+                  <td className="py-2 text-[var(--apple-subink)] font-mono text-[11px]">{r.userId ? r.userId.slice(0, 8) : "—"}</td>
+                  <td className="py-2 text-[var(--apple-subink)] font-mono text-[11px]">{r.sessionId ? r.sessionId.slice(0, 10) : "—"}</td>
+                  <td className="py-2 text-[var(--apple-subink)] font-mono text-[11px] max-w-[400px] truncate">{r.payload ? JSON.stringify(r.payload) : ""}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      <p className="text-[11px] text-slate-400 mt-3">
+      <p className="text-[11px] text-[var(--apple-faint)] mt-3">
         Showing up to {data?.limit ?? 200} most-recent matching events. Use filters to drill down; download a 1,000-row CSV for analysis in a spreadsheet.
       </p>
     </Card>

@@ -32,6 +32,7 @@ import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPa
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { apiRequest } from "@/lib/queryClient";
 import { uploadImageFile } from "@/lib/adminUpload";
@@ -618,18 +619,18 @@ export function AdminVendor() {
         onOpenChange={(v) => !deleteVendor.isPending && setDeleteConfirmOpen(v)}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_24px_60px_rgba(0,0,0,0.24)] p-6 gap-4"
           data-testid="dialog-delete-vendor"
         >
           <DialogHeader className="text-left space-y-1">
-            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)] pr-8">
               Delete <span className="italic">{vendor.name}</span>?
             </DialogTitle>
-            <DialogDescription className="text-[13px] font-normal text-slate-500">
+            <DialogDescription className="text-[13px] font-normal text-[var(--apple-subink)]">
               {instruments.length > 0 ? (
                 <>
                   This maker / reseller is listed on{" "}
-                  <span className="font-semibold text-slate-700">
+                  <span className="font-semibold text-[var(--apple-ink)]">
                     {instruments.length}{" "}
                     {instruments.length === 1
                       ? "piece of gear"
@@ -646,12 +647,12 @@ export function AdminVendor() {
               )}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-3 pt-1">
+          <div className="flex justify-end items-center gap-2 pt-1">
             <Button
               type="button"
               onClick={() => setDeleteConfirmOpen(false)}
               disabled={deleteVendor.isPending}
-              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              className="rounded-full bg-transparent border-0 shadow-none text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hover:text-[var(--apple-subink)]"
               data-testid="button-delete-vendor-cancel"
             >
               Cancel
@@ -660,7 +661,7 @@ export function AdminVendor() {
               type="button"
               onClick={() => deleteVendor.mutate()}
               disabled={deleteVendor.isPending}
-              className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
+              className="rounded-full bg-[var(--apple-critical-wash)] text-[var(--apple-critical)] shadow-none hover:bg-[var(--apple-critical-wash)] hover:brightness-95"
               data-testid="button-delete-vendor-confirm"
             >
               {deleteVendor.isPending ? "Deleting…" : `Delete ${mode === "maker" ? "maker" : "reseller"}`}
@@ -997,7 +998,7 @@ function RoleToggle({
         "text-left rounded-xl border p-3 flex items-center justify-between gap-3 transition-colors w-full",
         checked
           ? "border-[var(--brand-blue)]/40 bg-[var(--brand-blue)]/5"
-          : "border-slate-200 bg-white hover:bg-slate-50",
+          : "border-[var(--apple-hairline)] bg-white hover:bg-[var(--apple-track)]",
         disabled && "opacity-50",
       ]
         .filter(Boolean)
@@ -1233,7 +1234,7 @@ function ImageUploadPanel({
                 "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 active:scale-[0.94]",
                 locked
                   ? "text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10"
-                  : "text-slate-400 hover:text-slate-700 hover:bg-slate-100",
+                  : "text-[var(--apple-faint)] hover:bg-[var(--apple-track)]",
                 lockMut.isPending && "opacity-50",
               ]
                 .filter(Boolean)
@@ -1315,9 +1316,9 @@ function ImageUploadPanel({
             "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
             dragging
               ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
-              : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+              : "border-[var(--apple-hairline)] hover:bg-[var(--apple-track)]",
             busy && "opacity-60 cursor-not-allowed",
-            locked && "opacity-40 cursor-not-allowed hover:border-slate-200 hover:bg-transparent",
+            locked && "opacity-40 cursor-not-allowed hover:bg-transparent",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -1401,11 +1402,11 @@ function LogoEditorDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-3xl bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-5"
+        className="max-w-3xl bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_24px_60px_rgba(0,0,0,0.24)] p-6 gap-5"
         data-testid="dialog-edit-vendor-logo"
       >
         <DialogHeader className="flex-row items-center justify-between space-y-0">
-          <DialogTitle className="text-slate-900 text-[14px] font-bold">
+          <DialogTitle className="text-[var(--apple-ink)] text-[17px] font-semibold">
             Logo
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -1475,7 +1476,7 @@ function InstrumentsPanel({
         </div>
         <Link
           href={addGearHref}
-          className="inline-flex items-center gap-1 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors px-2.5 py-1 text-xs font-semibold text-slate-700 flex-shrink-0"
+          className="inline-flex items-center gap-1 rounded-full hover:bg-[var(--apple-track)] transition-colors px-2.5 py-1 text-xs font-medium text-[var(--apple-subink)] flex-shrink-0"
           data-testid="button-add-gear"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -1484,30 +1485,17 @@ function InstrumentsPanel({
       </div>
       <div className="px-5 py-4">
         {instruments.length === 0 ? (
-          <div
-            className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-5 py-8 text-center"
-            data-testid="panel-instruments-empty"
-          >
-            <div className="w-10 h-10 mx-auto rounded-full bg-white ring-1 ring-slate-200 text-slate-400 flex items-center justify-center mb-3">
-              <Guitar className="w-5 h-5" />
-            </div>
-            <p className="text-slate-700 text-sm font-semibold">
-              {isMaker
-                ? "No gear yet attributes its build to this maker"
-                : "No gear linked to this reseller yet"}
-            </p>
-            <p className="text-slate-400 text-xs mt-1 max-w-xs mx-auto">
-              {isMaker
-                ? "Open a piece of gear and pick this brand as its Maker — it'll show up here."
-                : "Attach a product URL to any piece of gear and this reseller will appear here."}
-            </p>
-          </div>
+          <AdminEmptyState testId="panel-instruments-empty">
+            {isMaker
+              ? "No gear yet attributes its build to this maker — open a piece of gear and pick this brand as its Maker and it'll show up here."
+              : "No gear linked to this reseller yet — attach a product URL to any piece of gear and this reseller will appear here."}
+          </AdminEmptyState>
         ) : (
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="list-instruments">
             {instruments.map((i) => (
               <li
                 key={i.id}
-                className="rounded-xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition-all overflow-hidden"
+                className="rounded-xl border border-[var(--apple-hairline)] bg-white hover:shadow-sm transition-all overflow-hidden"
               >
                 <Link
                   href={`/admin/instruments/${i.id}`}
@@ -1554,7 +1542,7 @@ function InstrumentsPanel({
                           <Link
                             key={`${i.id}-${r.id}`}
                             href={`/admin/vendors/${r.id}`}
-                            className="inline-flex items-center gap-1 rounded-full bg-white ring-1 ring-slate-200 hover:bg-slate-50 transition-colors px-2 py-0.5 text-xs text-slate-700"
+                            className="inline-flex items-center gap-1 rounded-full bg-white ring-1 ring-[var(--apple-hairline)] hover:bg-[var(--apple-track)] transition-colors px-2 py-0.5 text-xs text-[var(--apple-subink)]"
                             data-testid={`chip-reseller-${i.id}-${r.id}`}
                           >
                             {r.logoUrl ? (

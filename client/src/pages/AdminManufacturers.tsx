@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
@@ -227,7 +228,7 @@ export function AdminManufacturers() {
     <AdminFrame active="manufacturers">
       <div className="space-y-5">
         <div
-          className="inline-flex items-center bg-slate-100 rounded-full p-0.5"
+          className="inline-flex items-center bg-[var(--apple-track)] rounded-full p-0.5"
           role="tablist"
           data-testid="tabs-section-manufacturers"
         >
@@ -238,8 +239,8 @@ export function AdminManufacturers() {
             className={[
               "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
               pageTab === "dashboard"
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-900",
+                ? "bg-white text-[var(--apple-ink)] shadow-sm"
+                : "text-[var(--apple-subink)]",
             ].join(" ")}
             data-testid="tab-section-dashboard"
           >
@@ -252,8 +253,8 @@ export function AdminManufacturers() {
             className={[
               "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
               pageTab === "list"
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-900",
+                ? "bg-white text-[var(--apple-ink)] shadow-sm"
+                : "text-[var(--apple-subink)]",
             ].join(" ")}
             data-testid="tab-section-list"
           >
@@ -281,7 +282,7 @@ export function AdminManufacturers() {
                     }}
                     placeholder="Search presses"
                     autoFocus
-                    className="h-9 w-56 pl-8 pr-8 rounded-md border border-slate-200 bg-white text-xs focus:outline-none focus:border-[var(--brand-blue)]"
+                    className="h-9 w-56 pl-8 pr-8 rounded-md border border-[var(--apple-hairline)] bg-white text-xs focus:outline-none focus:border-[var(--brand-blue)]"
                     data-testid="input-search-manufacturers"
                   />
                   <button
@@ -290,7 +291,7 @@ export function AdminManufacturers() {
                       setSearch("");
                       setSearchOpen(false);
                     }}
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 inline-flex items-center justify-center text-slate-400 hover:text-slate-700"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 inline-flex items-center justify-center text-[var(--apple-faint)] hover:text-[var(--apple-subink)]"
                     aria-label="Clear search"
                     data-testid="button-clear-search"
                   >
@@ -301,7 +302,7 @@ export function AdminManufacturers() {
                 <button
                   type="button"
                   onClick={() => setSearchOpen(true)}
-                  className="h-9 w-9 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+                  className="h-9 w-9 rounded-full text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center transition-colors"
                   aria-label="Search"
                   data-testid="button-open-search"
                 >
@@ -311,7 +312,7 @@ export function AdminManufacturers() {
               {/* Task #916 — capability filter (All / Vinyl / GoodDeeds).
                   slate-100 segmented control, matching ViewModeToggle. */}
               <div
-                className="inline-flex items-center rounded-md bg-slate-100 p-0.5"
+                className="inline-flex items-center rounded-full bg-[var(--apple-track)] p-0.5"
                 data-testid="filter-capability"
               >
                 {([
@@ -324,10 +325,10 @@ export function AdminManufacturers() {
                     type="button"
                     onClick={() => setCapFilter(opt.key)}
                     className={[
-                      "h-8 px-2.5 rounded text-xs font-semibold transition-colors",
+                      "h-8 px-2.5 rounded-full text-xs font-semibold transition-colors",
                       capFilter === opt.key
-                        ? "bg-white text-slate-900 shadow-sm"
-                        : "text-slate-500 hover:text-slate-800",
+                        ? "bg-white text-[var(--apple-ink)] shadow-sm"
+                        : "text-[var(--apple-subink)]",
                     ].join(" ")}
                     data-testid={`filter-capability-${opt.key}`}
                   >
@@ -359,22 +360,11 @@ export function AdminManufacturers() {
             testId="admin-manufacturers-error"
           />
         ) : filtered.length === 0 ? (
-          <div
-            className="py-16 flex flex-col items-center justify-center text-center"
-            data-testid="empty-manufacturers"
-          >
-            <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-              <Factory className="w-6 h-6" strokeWidth={1.5} />
-            </div>
-            <p className="text-slate-700 text-sm font-semibold">
-              {search.trim() ? "No matches" : "No presses yet"}
-            </p>
-            <p className="text-slate-400 text-xs mt-1 max-w-xs">
-              {search.trim()
-                ? "Try a different name or location."
-                : "Add your first pressing plant to start collecting quotes."}
-            </p>
-          </div>
+          <AdminEmptyState testId="empty-manufacturers">
+            {search.trim()
+              ? "No presses match that search."
+              : "No presses yet. Add your first pressing plant to start collecting quotes."}
+          </AdminEmptyState>
         ) : view === "grid" ? (
           <div
             className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
@@ -386,7 +376,7 @@ export function AdminManufacturers() {
           </div>
         ) : (
           <div
-            className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden"
+            className="rounded-2xl border border-[var(--apple-hairline)] bg-white divide-y divide-[var(--apple-hairline)] overflow-hidden"
             data-testid="list-manufacturers"
           >
             {filtered.map((m) => (
@@ -410,14 +400,14 @@ export function AdminManufacturers() {
         }}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-xl p-6 gap-4"
           data-testid="dialog-add-manufacturer"
         >
           <DialogHeader className="text-left space-y-1">
-            <DialogTitle className="text-base font-semibold text-slate-900">
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">
               Add Press
             </DialogTitle>
-            <DialogDescription className="text-sm text-slate-500 leading-relaxed">
+            <DialogDescription className="text-sm text-[var(--apple-subink)] leading-relaxed">
               Paste the plant's website — we'll prefill name, domain, logo,
               cover, and bio from the page's Open Graph metadata. Or just
               type the name to create a blank entry.
@@ -440,7 +430,7 @@ export function AdminManufacturers() {
               }}
               placeholder="https://memphisrecordpressing.com  or  Pirates Press"
               disabled={create.isPending}
-              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+              className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
               data-testid="input-new-manufacturer-name"
             />
             {duplicate && (
@@ -471,7 +461,7 @@ export function AdminManufacturers() {
                 {pasteError}
               </p>
             )}
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-[var(--apple-faint)]">
               {inputLooksLikeUrl
                 ? "Reads the page's Open Graph metadata and rehosts the logo + cover."
                 : "Paste an https:// URL to auto-fill, or enter a name to create blank."}
@@ -553,10 +543,10 @@ function PressCard({ press }: { press: Manufacturer }) {
   return (
     <Link
       href={`/admin/manufacturers/${press.id}`}
-      className="group text-left rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 min-h-[8rem] flex items-center gap-3.5 underline-offset-2"
+      className="group text-left rounded-2xl bg-white border border-[var(--apple-hairline)] hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 min-h-[8rem] flex items-center gap-3.5 underline-offset-2"
       data-testid={`card-manufacturer-${press.id}`}
     >
-      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {press.logoUrl ? (
           <img src={press.logoUrl} alt={press.name} className="w-full h-full object-cover" />
         ) : (
@@ -593,11 +583,11 @@ function PressRow({ press }: { press: Manufacturer }) {
   return (
     <Link
       href={`/admin/manufacturers/${press.id}`}
-      className="block px-4 py-3 hover:bg-slate-50 transition-colors underline-offset-2"
+      className="block px-4 py-3 hover:bg-[var(--apple-track)] transition-colors underline-offset-2"
       data-testid={`row-manufacturer-${press.id}`}
     >
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-md bg-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0">
+        <div className="w-10 h-10 rounded-md bg-[var(--apple-track)] flex items-center justify-center overflow-hidden flex-shrink-0">
           {press.logoUrl ? (
             <img src={press.logoUrl} alt="" className="w-full h-full object-cover" />
           ) : (

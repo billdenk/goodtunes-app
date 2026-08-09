@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { getAuthToken } from "@/lib/queryClient";
 
@@ -93,7 +94,7 @@ function Inner() {
     <AdminFrame active="none">
       <div className="space-y-5" data-testid="page-legacy-image-audit">
         <AdminPageHeader
-          title="Legacy image audit"
+          title="Legacy image audit."
           subtitle="Imported rows whose image is still hosted off-platform (typically tinifycdn.com). Open each row in its editor and re-upload the image — the count below ticks down as you go. No images are moved or rewritten by this page."
           testId="heading-legacy-image-audit"
           actions={
@@ -101,7 +102,7 @@ function Inner() {
               type="button"
               onClick={downloadCsv}
               disabled={!data || data.total === 0}
-              className="h-9 px-3 rounded-md border border-slate-300 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+              className="h-9 px-3 rounded-full text-sm font-medium text-[var(--apple-subink)] bg-transparent hover:bg-[var(--apple-track)] disabled:opacity-40 transition-colors"
               data-testid="button-download-csv"
             >
               Download CSV
@@ -126,23 +127,23 @@ function Inner() {
         {data && (
           <>
             <div
-              className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 flex items-center justify-between gap-4 flex-wrap"
+              className="rounded-xl border border-[var(--apple-hairline)] bg-[var(--apple-track)] px-4 py-3 text-sm text-[var(--apple-ink)] flex items-center justify-between gap-4 flex-wrap"
               data-testid="summary"
             >
               <span data-testid="total-count">
                 <span className="font-semibold">{data.total}</span> image{data.total === 1 ? "" : "s"} still off-platform.
               </span>
               {hostsSummary && (
-                <span className="text-slate-500" data-testid="hosts-summary">{hostsSummary}</span>
+                <span className="text-[var(--apple-subink)]" data-testid="hosts-summary">{hostsSummary}</span>
               )}
             </div>
 
             {data.total === 0 && (
               <div
-                className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500"
+                className="rounded-2xl border border-[var(--apple-hairline)] bg-white"
                 data-testid="empty"
               >
-                Everything's on Object Storage. Nothing left to fix.
+                <AdminEmptyState>Everything's on Object Storage. Nothing left to fix.</AdminEmptyState>
               </div>
             )}
 
@@ -151,11 +152,11 @@ function Inner() {
               if (rows.length === 0) return null;
               return (
                 <section key={t} data-testid={`group-${t}`}>
-                  <h2 className="text-base font-semibold mb-2 flex items-baseline gap-2 text-slate-900">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-wider mb-2 flex items-baseline gap-2 text-[var(--apple-subink)]">
                     <span>{GROUP_LABEL[t]}</span>
-                    <span className="text-slate-400 text-xs font-normal">{rows.length}</span>
+                    <span className="text-[var(--apple-faint)] font-normal">{rows.length}</span>
                   </h2>
-                  <div className="rounded-lg border bg-white divide-y divide-slate-100">
+                  <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white divide-y divide-[var(--apple-hairline)]">
                     {rows.map((row) => (
                       <div
                         key={`${row.entityType}-${row.entityId}-${row.field}`}
@@ -166,29 +167,29 @@ function Inner() {
                           src={row.currentUrl}
                           alt=""
                           loading="lazy"
-                          className="w-12 h-12 rounded-md object-cover bg-slate-100 flex-shrink-0 border border-slate-200"
+                          className="w-12 h-12 rounded-md object-cover bg-[var(--apple-track)] flex-shrink-0 border border-[var(--apple-hairline)]"
                           onError={(e) => {
                             (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
                           }}
                         />
                         <div className="flex-1 min-w-0">
-                          <Link href={row.adminHref} className="text-sm font-medium text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline truncate block" data-testid={`link-edit-${row.entityType}-${row.entityId}-${row.field}`}>
+                          <Link href={row.adminHref} className="text-sm font-medium text-[var(--apple-ink)] hover:underline truncate block" data-testid={`link-edit-${row.entityType}-${row.entityId}-${row.field}`}>
                             {row.displayName}
                           </Link>
-                          <div className="text-xs text-slate-500 truncate">
-                            <span className="text-slate-700">{FIELD_LABEL[row.field]}</span>
-                            <span className="text-slate-300 mx-1.5">·</span>
+                          <div className="text-xs text-[var(--apple-subink)] truncate">
+                            <span className="text-[var(--apple-ink)]">{FIELD_LABEL[row.field]}</span>
+                            <span className="text-[var(--apple-faint)] mx-1.5">·</span>
                             <a
                               href={row.currentUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-slate-500 hover:text-[color:var(--brand-blue)] hover:underline"
+                              className="text-[var(--apple-subink)] hover:text-[color:var(--brand-blue)] hover:underline"
                             >
                               {row.currentUrl}
                             </a>
                           </div>
                         </div>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 flex-shrink-0 font-medium">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--apple-warning)]/10 text-[var(--apple-warning)] flex-shrink-0 font-medium">
                           {row.host}
                         </span>
                       </div>

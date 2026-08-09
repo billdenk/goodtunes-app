@@ -53,6 +53,7 @@ import { ShopifyProductBrowser, type ShopifyBrowseProduct } from "@/components/a
 import { useAuth } from "@/hooks/useAuth";
 import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import {
   PersonPreviewCard,
   type PersonPreviewAlbum,
@@ -159,10 +160,10 @@ function AssignNonProfitDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !assign.isPending && onOpenChange(v)}>
-      <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4" data-testid="dialog-assign-npo">
+      <DialogContent className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-xl p-6 gap-4" data-testid="dialog-assign-npo">
         <DialogHeader className="text-left space-y-1">
-          <DialogTitle className="text-lg font-semibold text-slate-900">Assign a non-profit</DialogTitle>
-          <DialogDescription className="text-[13px] font-normal text-slate-500">
+          <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Assign a non-profit</DialogTitle>
+          <DialogDescription className="text-[13px] font-normal text-[var(--apple-subink)]">
             Link this person to a non-profit so they can be promoted to an ambassador inviter.
           </DialogDescription>
         </DialogHeader>
@@ -1073,7 +1074,7 @@ export function AdminPerson() {
                 onClick={() => setRemoveConfirmOpen(true)}
                 disabled={removeFromPress.isPending}
                 aria-label="Remove from press"
-                className="inline-flex items-center gap-1.5 h-7 px-2.5 mb-1 rounded-md text-xs font-medium text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-800 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 flex-shrink-0"
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 mb-1 rounded-md text-xs font-medium text-[var(--apple-subink)] border border-[var(--apple-hairline)] bg-white hover:bg-[var(--apple-track)] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 flex-shrink-0"
                 data-testid="button-remove-from-press"
               >
                 Remove from press
@@ -1217,14 +1218,14 @@ export function AdminPerson() {
         onOpenChange={(v) => !deletePerson.isPending && setDeleteConfirmOpen(v)}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-xl p-6 gap-4"
           data-testid="dialog-delete-person"
         >
           <DialogHeader className="text-left space-y-1">
-            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)] pr-8">
               Delete <span className="italic">{person.name}</span>?
             </DialogTitle>
-            <DialogDescription className="text-[13px] font-normal text-slate-500">
+            <DialogDescription className="text-[13px] font-normal text-[var(--apple-subink)]">
               This removes the person from your catalog. Any credits and
               albums linked to them stay in place — the credits keep their
               name snapshot, and albums simply lose the artist link.
@@ -1236,7 +1237,8 @@ export function AdminPerson() {
               type="button"
               onClick={() => setDeleteConfirmOpen(false)}
               disabled={deletePerson.isPending}
-              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              variant="ghost"
+              className="rounded-full border-0 shadow-none bg-transparent text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hover:text-[var(--apple-subink)]"
               data-testid="button-delete-person-cancel"
             >
               Cancel
@@ -1245,7 +1247,7 @@ export function AdminPerson() {
               type="button"
               onClick={() => deletePerson.mutate()}
               disabled={deletePerson.isPending}
-              className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
+              className="rounded-full border-0 shadow-none bg-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/90 text-white ml-2"
               data-testid="button-delete-person-confirm"
             >
               {deletePerson.isPending ? "Deleting…" : "Delete person"}
@@ -1262,14 +1264,14 @@ export function AdminPerson() {
         onOpenChange={(v) => !removeFromPress.isPending && setRemoveConfirmOpen(v)}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-xl p-6 gap-4"
           data-testid="dialog-remove-from-press"
         >
           <DialogHeader className="text-left space-y-1">
-            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)] pr-8">
               Remove <span className="italic">{person.name}</span> from your press?
             </DialogTitle>
-            <DialogDescription className="text-[13px] font-normal text-slate-500">
+            <DialogDescription className="text-[13px] font-normal text-[var(--apple-subink)]">
               This un-links the artist from your press. Their profile,
               credits, and releases stay on GoodTunes — you just won't see
               them in your People list anymore. You can re-add them later
@@ -1281,7 +1283,8 @@ export function AdminPerson() {
               type="button"
               onClick={() => setRemoveConfirmOpen(false)}
               disabled={removeFromPress.isPending}
-              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              variant="ghost"
+              className="rounded-full border-0 shadow-none bg-transparent text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hover:text-[var(--apple-subink)]"
               data-testid="button-remove-from-press-cancel"
             >
               Cancel
@@ -1290,7 +1293,7 @@ export function AdminPerson() {
               type="button"
               onClick={() => removeFromPress.mutate()}
               disabled={removeFromPress.isPending}
-              className="bg-slate-900 hover:bg-slate-800 text-white ml-2"
+              className="rounded-full border-0 shadow-none bg-[var(--apple-blue)] hover:bg-[var(--apple-blue)]/90 text-white ml-2"
               data-testid="button-remove-from-press-confirm"
             >
               {removeFromPress.isPending ? "Removing…" : "Remove from press"}
@@ -1625,7 +1628,7 @@ function AffiliationRow({
               <button
                 type="button"
                 onClick={() => { setDraft(initial); setEditing(false); }}
-                className="h-7 px-2 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-100"
+                className="h-7 px-2 rounded-md text-xs font-medium text-slate-500 hover:bg-[var(--apple-track)]"
                 data-testid={`button-cancel-affiliation-title-${a.entityId}`}
               >
                 Cancel
@@ -1691,18 +1694,18 @@ function AffiliationRow({
 
       {/* Inline invite dialog — keeps the operator on the person page */}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-        <DialogContent className="max-w-sm" data-testid={`dialog-invite-affiliation-${a.entityId}`}>
+        <DialogContent className="max-w-sm rounded-2xl overflow-hidden border border-[var(--apple-hairline)]" data-testid={`dialog-invite-affiliation-${a.entityId}`}>
           <DialogHeader>
-            <DialogTitle>Send partner invite</DialogTitle>
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Send partner invite</DialogTitle>
             <DialogDescription>
               Invite{" "}
-              <span className="font-semibold text-slate-900">{personName}</span> to{" "}
-              <span className="font-semibold text-slate-900">{a.entityName}</span> as a{" "}
+              <span className="font-semibold text-[var(--apple-ink)]">{personName}</span> to{" "}
+              <span className="font-semibold text-[var(--apple-ink)]">{a.entityName}</span> as a{" "}
               {CONTACT_ATTACHMENT_LABEL[a.entityKind].toLowerCase()} partner. They'll receive an email with a link to accept.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5 py-1">
-            <label className="text-xs font-medium text-slate-700" htmlFor={`invite-email-${a.entityId}`}>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]" htmlFor={`invite-email-${a.entityId}`}>
               Email
             </label>
             <Input
@@ -1716,8 +1719,9 @@ function AffiliationRow({
           </div>
           <DialogFooter>
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={() => setInviteOpen(false)}
+              className="rounded-full border-0 shadow-none bg-transparent text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hover:text-[var(--apple-subink)]"
               data-testid={`button-cancel-invite-${a.entityId}`}
             >
               Cancel
@@ -1725,6 +1729,7 @@ function AffiliationRow({
             <Button
               onClick={() => sendInvite.mutate()}
               disabled={!inviteEmail.trim() || sendInvite.isPending}
+              className="rounded-full border-0 shadow-none bg-[var(--apple-blue)] hover:bg-[var(--apple-blue)]/90 text-white"
               data-testid={`button-send-invite-${a.entityId}`}
             >
               {sendInvite.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
@@ -2625,9 +2630,9 @@ function RemoveArtistProfilePanel({ person }: { person: PersonFull }) {
             {demote.isPending ? "Removing…" : "Remove artist profile"}
           </Button>
         </AlertDialogTrigger>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-2xl overflow-hidden border border-[var(--apple-hairline)]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove {person.name}'s artist profile?</AlertDialogTitle>
+            <AlertDialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Remove {person.name}'s artist profile?</AlertDialogTitle>
             <AlertDialogDescription>
               The Dashboard, Releases, Streaming, Gear, Splits, and Payouts tabs go away and the page
               becomes a business-contact page. Their contact details, partner affiliations, and any
@@ -2637,7 +2642,7 @@ function RemoveArtistProfilePanel({ person }: { person: PersonFull }) {
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-demote-cancel">Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-rose-600 text-white hover:bg-rose-700"
+              className="rounded-full bg-[var(--apple-critical)] text-white hover:bg-[var(--apple-critical)]/90"
               onClick={() => demote.mutate()}
               data-testid="button-demote-confirm"
             >
@@ -2836,7 +2841,7 @@ function PersonShopifyPanel({ person }: { person: PersonFull }) {
             <span
               className={[
                 "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0",
-                store.connected ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600",
+                store.connected ? "bg-[var(--apple-ready)]/10 text-[var(--apple-ready)]" : "bg-[var(--apple-track)] text-[var(--apple-subink)]",
               ].join(" ")}
             >
               {store.connected ? "Connected" : "Disconnected"}
@@ -2932,19 +2937,17 @@ function PersonShopifyPanel({ person }: { person: PersonFull }) {
           </p>
         </div>
         {data.albums.length === 0 ? (
-          <div className="px-6 py-8 text-center" data-testid="panel-person-shopify-albums-empty">
-            <p className="text-slate-400 text-[12.5px]">
-              Set this person as the primary artist on a release and it'll show
-              up here.
-            </p>
-          </div>
+          <AdminEmptyState testId="panel-person-shopify-albums-empty">
+            Set this person as the primary artist on a release and it'll show
+            up here.
+          </AdminEmptyState>
         ) : (
           <ul className="divide-y divide-slate-100" data-testid="list-person-shopify-albums">
             {data.albums.map((a) => (
               <li key={a.id}>
                 <Link
                   href={`/admin/albums/${a.id}?tab=shopify`}
-                  className="w-full flex items-center gap-3.5 px-6 py-3 text-left hover:bg-slate-50 transition-colors"
+                  className="w-full flex items-center gap-3.5 px-6 py-3 text-left hover:bg-[var(--apple-track)] transition-colors"
                   data-testid={`row-person-shopify-album-${a.id}`}
                 >
                   <div className="w-11 h-11 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex-shrink-0">
@@ -3059,15 +3062,15 @@ function PersonShopifyBrowseDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-2xl bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-4"
+        className="max-w-2xl bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-xl p-6 gap-4"
         data-testid="dialog-person-shopify-browse"
       >
         <DialogHeader className="text-left space-y-1">
-          <DialogTitle className="text-slate-900 text-[15px] font-bold inline-flex items-center gap-2">
+          <DialogTitle className="text-[var(--apple-ink)] text-[17px] font-semibold inline-flex items-center gap-2">
             <SiShopify className="w-4 h-4 text-[#5E8E3E]" />
             {picked ? "Map to a release" : "Browse store products"}
           </DialogTitle>
-          <DialogDescription className="text-[12.5px] text-slate-500">
+          <DialogDescription className="text-[12.5px] text-[var(--apple-subink)]">
             {picked
               ? "Choose which of this artist's releases this product unlocks. Fine-tune the signed certificate and digital unlock later on the album's Shopify tab."
               : "Pick a product from the artist's live catalog. Search by title or page through the whole catalog."}
@@ -3193,11 +3196,11 @@ function PhotoEditorDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-3xl bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-5"
+        className="max-w-3xl bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-xl p-6 gap-5"
         data-testid="dialog-edit-person-photo"
       >
         <DialogHeader className="flex-row items-center justify-between space-y-0">
-          <DialogTitle className="text-slate-900 text-[14px] font-bold">
+          <DialogTitle className="text-[var(--apple-ink)] text-[17px] font-semibold">
             Photo
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -3364,7 +3367,7 @@ function ImageUploadPanel({
                     ? "Re-pull the portrait from this artist's Spotify profile"
                     : "Link this person to Spotify on the Overview tab first"
                 }
-                className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent text-[11.5px] font-medium"
+                className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-40 disabled:hover:bg-transparent text-[11.5px] font-medium"
                 data-testid="button-refresh-photo-spotify"
               >
                 {refreshSpotifyMut.isPending ? (
@@ -3389,7 +3392,7 @@ function ImageUploadPanel({
                 "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40",
                 locked
                   ? "text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10"
-                  : "text-slate-400 hover:text-slate-700 hover:bg-slate-100",
+                  : "text-[var(--apple-faint)] hover:bg-[var(--apple-track)]",
                 lockMut.isPending && "opacity-50",
               ]
                 .filter(Boolean)
@@ -3479,7 +3482,7 @@ function ImageUploadPanel({
             "flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
             dragging
               ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
-              : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+              : "border-slate-200 hover:border-slate-300 hover:bg-[var(--apple-track)]",
             busy && "opacity-60 cursor-not-allowed",
             locked && "opacity-40 cursor-not-allowed hover:border-slate-200 hover:bg-transparent",
           ]
@@ -3657,7 +3660,7 @@ function ReleasesPanel({
           {!pressMode && releases.length > 0 && (
             <Link
               href={`/admin/people/${person.id}/buyers`}
-              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors inline-flex items-center gap-1.5 text-xs font-medium"
+              className="px-2.5 h-8 rounded-md bg-white border border-[var(--apple-hairline)] text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors inline-flex items-center gap-1.5 text-xs font-medium"
               data-testid="link-buyer-roster"
             >
               <Users className="w-3.5 h-3.5" />
@@ -3683,7 +3686,7 @@ function ReleasesPanel({
             onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
             disabled={releases.length === 0}
             title={searchOpen ? "Close search" : "Search releases"}
-            className="px-2 h-8 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center"
+            className="px-2 h-8 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-[var(--apple-track)] disabled:opacity-50 inline-flex items-center justify-center"
             data-testid="button-search-releases"
           >
             {searchOpen ? (
@@ -3704,7 +3707,7 @@ function ReleasesPanel({
                 if (createAlbum.isPending) return;
                 setTitleDialogOpen(true);
               }}
-              className="px-2.5 h-8 rounded-md text-xs font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2.5 h-8 rounded-md text-xs font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-[var(--apple-track)] disabled:opacity-50 disabled:cursor-not-allowed"
               data-testid="button-new-album-for-person"
             >
               <Plus className="w-3 h-3" />
@@ -3961,7 +3964,7 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
             onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
             disabled={rows.length === 0}
             title={searchOpen ? "Close search" : "Search releases"}
-            className="px-2 h-8 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center"
+            className="px-2 h-8 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-[var(--apple-track)] disabled:opacity-50 inline-flex items-center justify-center"
             data-testid="button-search-streaming"
           >
             {searchOpen ? (
@@ -3978,7 +3981,7 @@ function DiscographyPanel({ person }: { person: PersonFull }) {
                 ? "Pull the latest discography from Apple Music"
                 : "Set the Apple Music URL on the Overview tab first"
             }
-            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1.5"
+            className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-700 text-[11.5px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-50 inline-flex items-center gap-1.5"
             data-testid="button-pull-discography"
           >
             {pullMut.isPending ? (
@@ -4244,9 +4247,9 @@ function BackfillReferralPanel({ kind, id }: { kind: "artist" | "non_profit"; id
           if (!o) reset();
         }}
       >
-        <DialogContent data-testid="dialog-backfill-referral">
+        <DialogContent className="rounded-2xl overflow-hidden border border-[var(--apple-hairline)]" data-testid="dialog-backfill-referral">
           <DialogHeader>
-            <DialogTitle>Back-fill a referral</DialogTitle>
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Back-fill a referral</DialogTitle>
             <DialogDescription>
               Record a referral relationship that already happened off-platform and hand the
               referred artist a one-tap sign-in link. No invite email is sent.
@@ -4277,7 +4280,7 @@ function BackfillReferralPanel({ kind, id }: { kind: "artist" | "non_profit"; id
                       /* clipboard blocked — the field is selectable as a fallback */
                     }
                   }}
-                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors flex-shrink-0"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-sm font-medium text-[var(--apple-ink)] hover:bg-[var(--apple-track)] transition-colors flex-shrink-0"
                   data-testid="button-copy-backfill-signin-link"
                 >
                   Copy
@@ -4293,7 +4296,7 @@ function BackfillReferralPanel({ kind, id }: { kind: "artist" | "non_profit"; id
           ) : (
             <div className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+                <label className="text-[11px] font-semibold text-[var(--apple-subink)] uppercase tracking-wider mb-1.5 block">
                   Referred artist
                 </label>
                 <PersonPicker
@@ -4305,7 +4308,7 @@ function BackfillReferralPanel({ kind, id }: { kind: "artist" | "non_profit"; id
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+                <label className="text-[11px] font-semibold text-[var(--apple-subink)] uppercase tracking-wider mb-1.5 block">
                   Email
                 </label>
                 <input
@@ -4321,7 +4324,7 @@ function BackfillReferralPanel({ kind, id }: { kind: "artist" | "non_profit"; id
                 </p>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+                <label className="text-[11px] font-semibold text-[var(--apple-subink)] uppercase tracking-wider mb-1.5 block">
                   Effective date
                 </label>
                 <input
@@ -4341,8 +4344,9 @@ function BackfillReferralPanel({ kind, id }: { kind: "artist" | "non_profit"; id
               <DialogFooter>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   onClick={() => setOpen(false)}
+                  className="rounded-full border-0 shadow-none bg-transparent text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hover:text-[var(--apple-subink)]"
                   data-testid="button-cancel-backfill-referral"
                 >
                   Cancel
@@ -4351,6 +4355,7 @@ function BackfillReferralPanel({ kind, id }: { kind: "artist" | "non_profit"; id
                   type="button"
                   disabled={!referred || !email.trim() || mutation.isPending}
                   onClick={() => mutation.mutate()}
+                  className="rounded-full border-0 shadow-none bg-[var(--apple-blue)] hover:bg-[var(--apple-blue)]/90 text-white"
                   data-testid="button-submit-backfill-referral"
                 >
                   {mutation.isPending ? "Recording…" : "Record referral & get link"}
@@ -4506,7 +4511,7 @@ function MembersPanel({ person }: { person: PersonFull }) {
         <button
           type="button"
           onClick={() => setPickerOpen((v) => !v)}
-          className="text-[13px] font-semibold px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-700 active:bg-slate-900"
+          className="text-[13px] font-semibold px-3 py-1.5 rounded-full text-[var(--apple-blue)] hover:bg-[var(--apple-blue)]/10 transition-colors"
           data-testid="button-add-member"
         >
           {pickerOpen ? "Cancel" : "Add member"}
@@ -4537,7 +4542,7 @@ function MembersPanel({ person }: { person: PersonFull }) {
                   type="button"
                   onClick={() => addMutation.mutate(c.id)}
                   disabled={addMutation.isPending}
-                  className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left disabled:opacity-50"
+                  className="w-full flex items-center gap-3 px-3 py-2 hover:bg-[var(--apple-track)] text-left disabled:opacity-50"
                   data-testid={`option-add-member-${c.id}`}
                 >
                   <div className="w-8 h-8 rounded-full bg-slate-100 overflow-hidden flex-shrink-0">
@@ -4566,9 +4571,9 @@ function MembersPanel({ person }: { person: PersonFull }) {
           <p className="px-5 py-6 text-[13px] text-slate-500">Loading…</p>
         )}
         {!isLoading && members.length === 0 && (
-          <p className="px-5 py-6 text-[13px] text-slate-500" data-testid="empty-members">
+          <AdminEmptyState testId="empty-members">
             No members yet. Add the first lineup above.
-          </p>
+          </AdminEmptyState>
         )}
         {members.map((m, i) => (
           <MemberRow
@@ -4708,7 +4713,7 @@ function MemberRow({
             type="button"
             onClick={onMoveUp}
             disabled={reordering || index === 0}
-            className="flex-1 px-1.5 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-30 inline-flex items-center justify-center"
+            className="flex-1 px-1.5 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-[var(--apple-track)] disabled:opacity-30 inline-flex items-center justify-center"
             aria-label="Move up"
             data-testid={`button-member-up-${row.memberId}`}
           >
@@ -4718,7 +4723,7 @@ function MemberRow({
             type="button"
             onClick={onMoveDown}
             disabled={reordering || index === total - 1}
-            className="flex-1 px-1.5 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-30 inline-flex items-center justify-center"
+            className="flex-1 px-1.5 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-[var(--apple-track)] disabled:opacity-30 inline-flex items-center justify-center"
             aria-label="Move down"
             data-testid={`button-member-down-${row.memberId}`}
           >
@@ -4732,7 +4737,7 @@ function MemberRow({
             type="button"
             onClick={save}
             disabled={saving}
-            className="text-[12px] font-semibold px-3 py-1.5 rounded-md bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50"
+            className="text-[12px] font-semibold px-3 py-1.5 rounded-full bg-[var(--apple-blue)] text-white hover:bg-[var(--apple-blue)]/90 disabled:opacity-50"
             data-testid={`button-save-member-${row.memberId}`}
           >
             Save
@@ -4741,7 +4746,7 @@ function MemberRow({
         <button
           type="button"
           onClick={onRemove}
-          className="text-xs font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto"
+          className="text-xs font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-[var(--apple-track)] opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto"
           data-testid={`button-remove-member-${row.memberId}`}
         >
           Remove

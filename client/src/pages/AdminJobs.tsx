@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 
 interface AlbumPick {
   id: string;
@@ -152,7 +153,7 @@ function StatusPill({ status, id }: { status: string; id: string }) {
       ? "bg-emerald-50 text-emerald-700"
       : status === "partial"
         ? "bg-amber-50 text-amber-700"
-        : "bg-rose-50 text-rose-700";
+        : "bg-[var(--apple-critical)]/10 text-[var(--apple-critical)]";
   return (
     <span
       className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${tone}`}
@@ -188,7 +189,7 @@ function SongLink({ row }: { row: JobRun }) {
       </a>
     );
   }
-  return <span className="text-slate-400">—</span>;
+  return <span className="text-[var(--apple-faint)]">—</span>;
 }
 
 function JobRow({ row, children }: { row: JobRun; children: React.ReactNode }) {
@@ -196,7 +197,7 @@ function JobRow({ row, children }: { row: JobRun; children: React.ReactNode }) {
   return (
     <tr
       {...rowProps}
-      className="hover:bg-slate-50 cursor-pointer focus:outline-none focus:bg-slate-50"
+      className="hover:bg-[var(--apple-track)] cursor-pointer focus:outline-none focus:bg-[var(--apple-track)]"
       data-testid={`row-job-${row.id}`}
     >
       {children}
@@ -325,10 +326,13 @@ export function AdminJobs() {
 
   return (
     <AdminFrame active="jobs">
-      <AdminPageHeader title="Jobs" />
+      <AdminPageHeader
+        title="Jobs."
+        subtitle="Background jobs from the last 100 runs. Pick a job type to see the columns that matter for it, or stay on All for a unified timeline."
+      />
       <OpenRunContext.Provider value={openRun}>
-      <div className="max-w-[1100px]">
-        <p className="text-sm text-slate-600 mb-4">
+      <div className="max-w-[1100px] mt-4">
+        <p className="sr-only">
           Background jobs from the last 100 runs. Pick a job type to see the columns that matter for it, or stay on All for a unified timeline.
         </p>
 
@@ -342,7 +346,7 @@ export function AdminJobs() {
                 "px-3 py-1.5 rounded-full text-xs font-semibold transition-colors",
                 jobType === t.value
                   ? "bg-[color:var(--brand-blue)] text-white border border-transparent"
-                  : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-100",
+                  : "bg-white text-[var(--apple-subink)] border border-[var(--apple-hairline)] hover:bg-[var(--apple-track)]",
               ].join(" ")}
               data-testid={`button-type-${t.value}`}
             >
@@ -381,12 +385,12 @@ export function AdminJobs() {
                   onFocus={() => setAlbumFocused(true)}
                   onBlur={() => setTimeout(() => setAlbumFocused(false), 150)}
                   placeholder="Filter by album or artist…"
-                  className="text-xs bg-white text-slate-900 placeholder:text-slate-400 border border-slate-200 rounded-full px-3 py-1.5 w-[280px] focus:outline-none focus:border-[var(--brand-blue)]"
+                  className="text-xs bg-white text-[var(--apple-ink)] placeholder:text-[var(--apple-faint)] border border-[var(--apple-hairline)] rounded-full px-3 py-1.5 w-[280px] focus:outline-none focus:border-[var(--brand-blue)]"
                   data-testid="input-album-search"
                 />
                 {albumFocused && filteredAlbums.length > 0 && (
                   <div
-                    className="absolute z-10 mt-1 w-[320px] max-h-[280px] overflow-auto bg-white border border-slate-200 rounded-lg shadow-lg"
+                    className="absolute z-10 mt-1 w-[320px] max-h-[280px] overflow-auto bg-white border border-[var(--apple-hairline)] rounded-lg shadow-lg"
                     data-testid="list-album-options"
                   >
                     {filteredAlbums.map((a) => (
@@ -399,12 +403,12 @@ export function AdminJobs() {
                           setAlbumSearch("");
                           setAlbumFocused(false);
                         }}
-                        className="w-full text-left px-3 py-2 hover:bg-slate-50 text-xs"
+                        className="w-full text-left px-3 py-2 hover:bg-[var(--apple-track)] text-xs"
                         data-testid={`button-album-option-${a.id}`}
                       >
-                        <div className="font-semibold text-slate-900 truncate">{a.title}</div>
+                        <div className="font-semibold text-[var(--apple-ink)] truncate">{a.title}</div>
                         {a.artist && (
-                          <div className="text-slate-500 truncate">{a.artist}</div>
+                          <div className="text-[var(--apple-subink)] truncate">{a.artist}</div>
                         )}
                       </button>
                     ))}
@@ -426,7 +430,7 @@ export function AdminJobs() {
                 const found = albumFull.songs.find((s) => s.id === id);
                 setSongPick(found ?? null);
               }}
-              className="text-xs border border-slate-200 rounded-full px-3 py-1.5 bg-white focus:outline-none focus:border-[var(--brand-blue)]"
+              className="text-xs border border-[var(--apple-hairline)] rounded-full px-3 py-1.5 bg-white focus:outline-none focus:border-[var(--brand-blue)]"
               data-testid="select-song"
             >
               <option value="">All songs in album</option>
@@ -452,8 +456,8 @@ export function AdminJobs() {
                   className={[
                     "px-3 py-1.5 rounded-full text-xs font-semibold transition-colors",
                     sort === o.value
-                      ? "bg-slate-900 text-white"
-                      : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-100",
+                      ? "bg-[var(--apple-ink)] text-white"
+                      : "bg-white text-[var(--apple-subink)] border border-[var(--apple-hairline)] hover:bg-[var(--apple-track)]",
                   ].join(" ")}
                   data-testid={`button-sort-${o.value}`}
                 >
@@ -461,12 +465,12 @@ export function AdminJobs() {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-slate-500 mb-4" data-testid="text-sort-help">{activeSortHelp}</p>
+            <p className="text-xs text-[var(--apple-subink)] mb-4" data-testid="text-sort-help">{activeSortHelp}</p>
           </>
         )}
 
         {isLoading ? (
-          <div className="text-sm text-slate-500" data-testid="loading-jobs">Loading…</div>
+          <div className="text-sm text-[var(--apple-subink)]" data-testid="loading-jobs">Loading…</div>
         ) : jobsError ? (
           <ErrorState
             error={jobsErrorObj}
@@ -475,11 +479,11 @@ export function AdminJobs() {
             testId="admin-jobs-error"
           />
         ) : sorted.length === 0 ? (
-          <div className="text-sm text-slate-500 bg-white border border-slate-200 rounded-2xl p-6 text-center" data-testid="empty-jobs">
-            No runs recorded for this filter yet.
+          <div className="bg-white border border-[var(--apple-hairline)] rounded-2xl" data-testid="empty-jobs">
+            <AdminEmptyState>No runs recorded for this filter yet.</AdminEmptyState>
           </div>
         ) : (
-          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden" data-testid="table-jobs">
+          <div className="bg-white border border-[var(--apple-hairline)] rounded-2xl overflow-hidden" data-testid="table-jobs">
             {jobType === "auto-sync-lyrics" ? (
               <AutoSyncTable rows={sorted} />
             ) : jobType === "import-tracks-from-dropbox" ? (
@@ -507,7 +511,7 @@ export function AdminJobs() {
 function AutoSyncTable({ rows }: { rows: JobRun[] }) {
   return (
     <table className="w-full text-sm">
-      <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+      <thead className="bg-[var(--apple-track)] text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
         <tr>
           <th className="text-left px-4 py-2 font-semibold">When</th>
           <th className="text-left px-4 py-2 font-semibold">Status</th>
@@ -518,20 +522,20 @@ function AutoSyncTable({ rows }: { rows: JobRun[] }) {
           <th className="text-left px-4 py-2 font-semibold">Song</th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-slate-100">
+      <tbody className="divide-y divide-[var(--apple-hairline)]">
         {rows.map((row) => {
           const s = row.summary ?? {};
           const sttMs = s.sttMs ?? null;
           const sttHot = sttMs != null && sttMs >= 90_000;
           return (
             <JobRow key={row.id} row={row}>
-              <td className="px-4 py-2 text-slate-700 whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
+              <td className="px-4 py-2 text-[var(--apple-ink)] whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
               <td className="px-4 py-2 whitespace-nowrap"><StatusPill status={row.status} id={row.id} /></td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-700">{fmtMB(s.sourceBytes)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-700">{fmtMB(s.transcodedBytes)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-700">{fmtMs(s.transcodeMs)}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-[var(--apple-ink)]">{fmtMB(s.sourceBytes)}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-[var(--apple-ink)]">{fmtMB(s.transcodedBytes)}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-[var(--apple-ink)]">{fmtMs(s.transcodeMs)}</td>
               <td
-                className={["px-4 py-2 text-right tabular-nums", sttHot ? "text-rose-600 font-semibold" : "text-slate-700"].join(" ")}
+                className={["px-4 py-2 text-right tabular-nums", sttHot ? "text-[var(--apple-critical)] font-semibold" : "text-[var(--apple-ink)]"].join(" ")}
                 data-testid={`stt-${row.id}`}
               >
                 {fmtMs(sttMs)}
@@ -539,7 +543,7 @@ function AutoSyncTable({ rows }: { rows: JobRun[] }) {
               <td className="px-4 py-2">
                 <SongLink row={row} />
                 {row.errorMessage && (
-                  <div className="text-[11px] text-rose-600 mt-0.5" data-testid={`error-${row.id}`}>
+                  <div className="text-[11px] text-[var(--apple-critical)] mt-0.5" data-testid={`error-${row.id}`}>
                     {row.errorMessage}
                   </div>
                 )}
@@ -555,7 +559,7 @@ function AutoSyncTable({ rows }: { rows: JobRun[] }) {
 function ImportTracksTable({ rows }: { rows: JobRun[] }) {
   return (
     <table className="w-full text-sm">
-      <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+      <thead className="bg-[var(--apple-track)] text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
         <tr>
           <th className="text-left px-4 py-2 font-semibold">When</th>
           <th className="text-left px-4 py-2 font-semibold">Status</th>
@@ -565,20 +569,20 @@ function ImportTracksTable({ rows }: { rows: JobRun[] }) {
           <th className="text-left px-4 py-2 font-semibold">Album</th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-slate-100">
+      <tbody className="divide-y divide-[var(--apple-hairline)]">
         {rows.map((row) => {
           const s = row.summary ?? {};
           return (
             <JobRow key={row.id} row={row}>
-              <td className="px-4 py-2 text-slate-700 whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
+              <td className="px-4 py-2 text-[var(--apple-ink)] whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
               <td className="px-4 py-2"><StatusPill status={row.status} id={row.id} /></td>
               <td className="px-4 py-2 text-right tabular-nums text-emerald-700">{len(s.created)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-rose-700">{len(s.errors)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-500">{len(s.skipped)}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-[var(--apple-critical)]">{len(s.errors)}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-[var(--apple-subink)]">{len(s.skipped)}</td>
               <td className="px-4 py-2">
                 <SongLink row={row} />
                 {row.errorMessage && (
-                  <div className="text-[11px] text-rose-600 mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
+                  <div className="text-[11px] text-[var(--apple-critical)] mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
                 )}
               </td>
             </JobRow>
@@ -592,7 +596,7 @@ function ImportTracksTable({ rows }: { rows: JobRun[] }) {
 function ImportLyricsTable({ rows }: { rows: JobRun[] }) {
   return (
     <table className="w-full text-sm">
-      <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+      <thead className="bg-[var(--apple-track)] text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
         <tr>
           <th className="text-left px-4 py-2 font-semibold">When</th>
           <th className="text-left px-4 py-2 font-semibold">Status</th>
@@ -603,21 +607,21 @@ function ImportLyricsTable({ rows }: { rows: JobRun[] }) {
           <th className="text-left px-4 py-2 font-semibold">Album</th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-slate-100">
+      <tbody className="divide-y divide-[var(--apple-hairline)]">
         {rows.map((row) => {
           const s = row.summary ?? {};
           return (
             <JobRow key={row.id} row={row}>
-              <td className="px-4 py-2 text-slate-700 whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
+              <td className="px-4 py-2 text-[var(--apple-ink)] whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
               <td className="px-4 py-2"><StatusPill status={row.status} id={row.id} /></td>
               <td className="px-4 py-2 text-right tabular-nums text-emerald-700">{len(s.matched)}</td>
               <td className="px-4 py-2 text-right tabular-nums text-amber-700">{len(s.unmatched)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-rose-700">{len(s.errors)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-500">{s.fileCount ?? "—"}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-[var(--apple-critical)]">{len(s.errors)}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-[var(--apple-subink)]">{s.fileCount ?? "—"}</td>
               <td className="px-4 py-2">
                 <SongLink row={row} />
                 {row.errorMessage && (
-                  <div className="text-[11px] text-rose-600 mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
+                  <div className="text-[11px] text-[var(--apple-critical)] mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
                 )}
               </td>
             </JobRow>
@@ -631,7 +635,7 @@ function ImportLyricsTable({ rows }: { rows: JobRun[] }) {
 function FindMissingLyricsTable({ rows }: { rows: JobRun[] }) {
   return (
     <table className="w-full text-sm">
-      <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+      <thead className="bg-[var(--apple-track)] text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
         <tr>
           <th className="text-left px-4 py-2 font-semibold">When</th>
           <th className="text-left px-4 py-2 font-semibold">Status</th>
@@ -644,23 +648,23 @@ function FindMissingLyricsTable({ rows }: { rows: JobRun[] }) {
           <th className="text-left px-4 py-2 font-semibold">Album</th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-slate-100">
+      <tbody className="divide-y divide-[var(--apple-hairline)]">
         {rows.map((row) => {
           const s = row.summary ?? {};
           return (
             <JobRow key={row.id} row={row}>
-              <td className="px-4 py-2 text-slate-700 whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
+              <td className="px-4 py-2 text-[var(--apple-ink)] whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
               <td className="px-4 py-2"><StatusPill status={row.status} id={row.id} /></td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-700">{s.scanned ?? 0}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-[var(--apple-ink)]">{s.scanned ?? 0}</td>
               <td className="px-4 py-2 text-right tabular-nums text-emerald-700">{s.synced ?? 0}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-700">{s.plain ?? 0}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-500">{s.instrumental ?? 0}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-[var(--apple-ink)]">{s.plain ?? 0}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-[var(--apple-subink)]">{s.instrumental ?? 0}</td>
               <td className="px-4 py-2 text-right tabular-nums text-amber-700">{s.notFound ?? 0}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-rose-700">{s.failed ?? 0}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-[var(--apple-critical)]">{s.failed ?? 0}</td>
               <td className="px-4 py-2">
                 <SongLink row={row} />
                 {row.errorMessage && (
-                  <div className="text-[11px] text-rose-600 mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
+                  <div className="text-[11px] text-[var(--apple-critical)] mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
                 )}
               </td>
             </JobRow>
@@ -674,7 +678,7 @@ function FindMissingLyricsTable({ rows }: { rows: JobRun[] }) {
 function LrclibTable({ rows }: { rows: JobRun[] }) {
   return (
     <table className="w-full text-sm">
-      <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+      <thead className="bg-[var(--apple-track)] text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
         <tr>
           <th className="text-left px-4 py-2 font-semibold">When</th>
           <th className="text-left px-4 py-2 font-semibold">Status</th>
@@ -684,23 +688,23 @@ function LrclibTable({ rows }: { rows: JobRun[] }) {
           <th className="text-left px-4 py-2 font-semibold">Song</th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-slate-100">
+      <tbody className="divide-y divide-[var(--apple-hairline)]">
         {rows.map((row) => {
           const s = row.summary ?? {};
           return (
             <JobRow key={row.id} row={row}>
-              <td className="px-4 py-2 text-slate-700 whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
+              <td className="px-4 py-2 text-[var(--apple-ink)] whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
               <td className="px-4 py-2"><StatusPill status={row.status} id={row.id} /></td>
-              <td className="px-4 py-2 text-slate-700">
+              <td className="px-4 py-2 text-[var(--apple-ink)]">
                 {s.source ?? "—"}
-                {s.hasSynced === false && s.source ? <span className="text-slate-400"> (plain)</span> : null}
+                {s.hasSynced === false && s.source ? <span className="text-[var(--apple-faint)]"> (plain)</span> : null}
               </td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-700">{s.cueCount ?? "—"}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-500">{s.charCount ?? "—"}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-[var(--apple-ink)]">{s.cueCount ?? "—"}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-[var(--apple-subink)]">{s.charCount ?? "—"}</td>
               <td className="px-4 py-2">
                 <SongLink row={row} />
                 {row.errorMessage && (
-                  <div className="text-[11px] text-rose-600 mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
+                  <div className="text-[11px] text-[var(--apple-critical)] mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
                 )}
               </td>
             </JobRow>
@@ -714,7 +718,7 @@ function LrclibTable({ rows }: { rows: JobRun[] }) {
 function CreditsTable({ rows }: { rows: JobRun[] }) {
   return (
     <table className="w-full text-sm">
-      <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+      <thead className="bg-[var(--apple-track)] text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
         <tr>
           <th className="text-left px-4 py-2 font-semibold">When</th>
           <th className="text-left px-4 py-2 font-semibold">Status</th>
@@ -722,20 +726,20 @@ function CreditsTable({ rows }: { rows: JobRun[] }) {
           <th className="text-left px-4 py-2 font-semibold">Song</th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-slate-100">
+      <tbody className="divide-y divide-[var(--apple-hairline)]">
         {rows.map((row) => {
           const s = row.summary ?? {};
           return (
             <JobRow key={row.id} row={row}>
-              <td className="px-4 py-2 text-slate-700 whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
+              <td className="px-4 py-2 text-[var(--apple-ink)] whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
               <td className="px-4 py-2"><StatusPill status={row.status} id={row.id} /></td>
-              <td className="px-4 py-2 text-slate-700 truncate max-w-[320px]" data-testid={`file-${row.id}`}>
+              <td className="px-4 py-2 text-[var(--apple-ink)] truncate max-w-[320px]" data-testid={`file-${row.id}`}>
                 {s.filename ?? (s.fileCount != null ? `${s.fileCount} candidate${s.fileCount === 1 ? "" : "s"}` : "—")}
               </td>
               <td className="px-4 py-2">
                 <SongLink row={row} />
                 {row.errorMessage && (
-                  <div className="text-[11px] text-rose-600 mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
+                  <div className="text-[11px] text-[var(--apple-critical)] mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
                 )}
               </td>
             </JobRow>
@@ -749,7 +753,7 @@ function CreditsTable({ rows }: { rows: JobRun[] }) {
 function AllTimelineTable({ rows }: { rows: JobRun[] }) {
   return (
     <table className="w-full text-sm">
-      <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+      <thead className="bg-[var(--apple-track)] text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
         <tr>
           <th className="text-left px-4 py-2 font-semibold">When</th>
           <th className="text-left px-4 py-2 font-semibold">Type</th>
@@ -758,18 +762,18 @@ function AllTimelineTable({ rows }: { rows: JobRun[] }) {
           <th className="text-left px-4 py-2 font-semibold">Target</th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-slate-100">
+      <tbody className="divide-y divide-[var(--apple-hairline)]">
         {rows.map((row) => (
           <JobRow key={row.id} row={row}>
-            <td className="px-4 py-2 text-slate-700 whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
-            <td className="px-4 py-2 text-slate-700 whitespace-nowrap" data-testid={`type-${row.id}`}>
+            <td className="px-4 py-2 text-[var(--apple-ink)] whitespace-nowrap">{fmtWhen(row.finishedAt)}</td>
+            <td className="px-4 py-2 text-[var(--apple-ink)] whitespace-nowrap" data-testid={`type-${row.id}`}>
               {TYPE_LABEL[row.jobType] ?? row.jobType}
             </td>
             <td className="px-4 py-2"><StatusPill status={row.status} id={row.id} /></td>
-            <td className="px-4 py-2 text-slate-700" data-testid={`summary-${row.id}`}>
+            <td className="px-4 py-2 text-[var(--apple-ink)]" data-testid={`summary-${row.id}`}>
               {describeRun(row)}
               {row.errorMessage && (
-                <div className="text-[11px] text-rose-600 mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
+                <div className="text-[11px] text-[var(--apple-critical)] mt-0.5" data-testid={`error-${row.id}`}>{row.errorMessage}</div>
               )}
             </td>
             <td className="px-4 py-2"><SongLink row={row} /></td>
@@ -811,20 +815,20 @@ function JobDetailSheet({
               <SheetTitle data-testid="text-job-title">
                 {TYPE_LABEL[run.jobType] ?? run.jobType}
               </SheetTitle>
-              <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+              <div className="flex items-center gap-2 text-xs text-[var(--apple-subink)] mt-1">
                 <StatusPill status={run.status} id={`detail-${run.id}`} />
                 <span>{fmtWhen(run.finishedAt)}</span>
                 <span className="font-mono">{run.id}</span>
               </div>
             </SheetHeader>
             <div className="mt-4 space-y-4">
-              <div className="text-xs text-slate-500" data-testid="text-target">
+              <div className="text-xs text-[var(--apple-subink)]" data-testid="text-target">
                 Target: <SongLink row={run} />
               </div>
               {run.errorMessage && (
                 <DetailSection title="Error">
                   <pre
-                    className="text-xs bg-rose-50 text-rose-800 rounded-lg p-3 whitespace-pre-wrap break-words"
+                    className="text-xs bg-[var(--apple-critical)]/10 text-[var(--apple-critical)] rounded-lg p-3 whitespace-pre-wrap break-words"
                     data-testid="text-error-message"
                   >
                     {run.errorMessage}
@@ -834,7 +838,7 @@ function JobDetailSheet({
               <SummaryRenderer run={run} />
               <DetailSection title="Raw summary">
                 <pre
-                  className="text-[11px] bg-slate-50 text-slate-700 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-words"
+                  className="text-[11px] bg-[var(--apple-track)] text-[var(--apple-ink)] rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-words"
                   data-testid="text-raw-summary"
                 >
                   {JSON.stringify(run.summary ?? {}, null, 2)}
@@ -843,7 +847,7 @@ function JobDetailSheet({
             </div>
           </>
         ) : (
-          <div className="text-sm text-slate-500" data-testid="loading-job-detail">Loading…</div>
+          <div className="text-sm text-[var(--apple-subink)]" data-testid="loading-job-detail">Loading…</div>
         )}
       </SheetContent>
     </Sheet>
@@ -853,7 +857,7 @@ function JobDetailSheet({
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-1.5">{title}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] font-semibold mb-1.5">{title}</div>
       {children}
     </div>
   );
@@ -866,8 +870,8 @@ function StringList({ items, tone, testId }: { items: any[]; tone: "good" | "war
       : tone === "warn"
         ? "text-amber-700"
         : tone === "bad"
-          ? "text-rose-700"
-          : "text-slate-600";
+          ? "text-[var(--apple-critical)]"
+          : "text-[var(--apple-subink)]";
   return (
     <ul className={`text-xs ${toneClass} space-y-0.5`} data-testid={testId}>
       {items.map((it, i) => {
@@ -884,7 +888,7 @@ function StringList({ items, tone, testId }: { items: any[]; tone: "good" | "war
         return (
           <li key={i} className="font-mono break-all">
             {label}
-            {extra && <span className="text-slate-500">{extra}</span>}
+            {extra && <span className="text-[var(--apple-subink)]">{extra}</span>}
           </li>
         );
       })}
@@ -917,7 +921,7 @@ function SummaryRenderer({ run }: { run: JobRun }) {
       if (s.fileCount != null) {
         sections.push(
           <DetailSection key="filecount" title="Files scanned">
-            <div className="text-xs text-slate-600" data-testid="text-file-count">{s.fileCount}</div>
+            <div className="text-xs text-[var(--apple-subink)]" data-testid="text-file-count">{s.fileCount}</div>
           </DetailSection>,
         );
       }
@@ -938,9 +942,9 @@ function SummaryRenderer({ run }: { run: JobRun }) {
         <DetailSection key="stats" title="Counts">
           <div className="grid grid-cols-3 gap-2 text-xs">
             {stats.map(([k, v]) => (
-              <div key={k} className="bg-slate-50 rounded-lg px-2 py-1.5">
-                <div className="text-[10px] uppercase text-slate-500">{k}</div>
-                <div className="text-slate-800 tabular-nums">{v ?? 0}</div>
+              <div key={k} className="bg-[var(--apple-track)] rounded-lg px-2 py-1.5">
+                <div className="text-[10px] uppercase text-[var(--apple-subink)]">{k}</div>
+                <div className="text-[var(--apple-ink)] tabular-nums">{v ?? 0}</div>
               </div>
             ))}
           </div>
@@ -964,8 +968,8 @@ function SummaryRenderer({ run }: { run: JobRun }) {
             <dl className="text-xs space-y-1">
               {lines.map(([k, v]) => (
                 <div key={k} className="flex gap-2">
-                  <dt className="w-28 text-slate-500">{k}</dt>
-                  <dd className="text-slate-800 break-all">
+                  <dt className="w-28 text-[var(--apple-subink)]">{k}</dt>
+                  <dd className="text-[var(--apple-ink)] break-all">
                     {typeof v === "string" && /^https?:\/\//.test(v) ? (
                       <a href={v} target="_blank" rel="noreferrer" className="text-[var(--brand-blue)] hover:underline">
                         {v}
@@ -996,8 +1000,8 @@ function SummaryRenderer({ run }: { run: JobRun }) {
           <dl className="text-xs space-y-1">
             {lines.map(([k, v]) => (
               <div key={k} className="flex gap-2">
-                <dt className="w-28 text-slate-500">{k}</dt>
-                <dd className="text-slate-800 tabular-nums">{String(v)}</dd>
+                <dt className="w-28 text-[var(--apple-subink)]">{k}</dt>
+                <dd className="text-[var(--apple-ink)] tabular-nums">{String(v)}</dd>
               </div>
             ))}
           </dl>

@@ -4,6 +4,8 @@ import { Gift, Loader2, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-r
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { StatusDot } from "@/components/admin/StatusDot";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import {
   Dialog,
@@ -137,7 +139,7 @@ export function AdminCustomAddons() {
   if (!user?.isAdmin) {
     return (
       <AdminFrame active="custom-addons">
-        <div className="py-20 text-center text-slate-500">
+        <div className="py-20 text-center text-[var(--apple-subink)]">
           You need to be signed in as an admin to view this page.
         </div>
       </AdminFrame>
@@ -153,13 +155,13 @@ export function AdminCustomAddons() {
           actions={
             <>
               <div className="flex items-center gap-1.5 bg-white border border-[var(--apple-hairline)] rounded-full px-3 h-9">
-                <Search className="w-4 h-4 text-slate-400" />
+                <Search className="w-4 h-4 text-[var(--apple-faint)]" />
                 <input
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search add-ons"
-                  className="w-44 text-sm bg-transparent outline-none placeholder:text-slate-400"
+                  className="w-44 text-sm bg-transparent outline-none placeholder:text-[var(--apple-faint)]"
                   data-testid="input-search-custom-addons"
                 />
               </div>
@@ -186,25 +188,14 @@ export function AdminCustomAddons() {
             testId="custom-addons-error"
           />
         ) : filtered.length === 0 ? (
-          <div
-            className="py-16 flex flex-col items-center justify-center text-center"
-            data-testid="empty-custom-addons"
-          >
-            <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-              <Gift className="w-6 h-6" />
-            </div>
-            <p className="text-slate-700 text-sm font-semibold">
-              {search.trim() ? "No matches" : "No custom add-ons yet"}
-            </p>
-            <p className="text-slate-400 text-xs mt-1 max-w-xs">
-              {search.trim()
-                ? "Try a different name, non-profit, or artist."
-                : "Click Add to build a non-profit-owned add-on and attach it to an artist."}
-            </p>
-          </div>
+          <AdminEmptyState testId="empty-custom-addons">
+            {search.trim()
+              ? "No matches — try a different name, non-profit, or artist."
+              : "No custom add-ons yet. Click Add to build a non-profit-owned add-on and attach it to an artist."}
+          </AdminEmptyState>
         ) : (
           <div
-            className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-slate-100"
+            className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-[var(--apple-hairline)]"
             data-testid="list-custom-addons"
           >
             {filtered.map((a) => (
@@ -212,31 +203,29 @@ export function AdminCustomAddons() {
                 key={a.id}
                 type="button"
                 onClick={() => setEditing(a)}
-                className="group w-full text-left flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors"
+                className="group w-full text-left flex items-center gap-3 px-3 py-2.5 hover:bg-[var(--apple-track)] transition-colors"
                 data-testid={`row-custom-addon-${a.id}`}
               >
-                <div className="w-11 h-11 rounded-md overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+                <div className="w-11 h-11 rounded-md overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
                   {a.imageUrl ? (
                     <img src={a.imageUrl} alt={a.name} className="w-full h-full object-cover" />
                   ) : (
-                    <Gift className="w-5 h-5 text-slate-300" />
+                    <Gift className="w-5 h-5 text-[var(--apple-faint)]" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span
-                      className="text-slate-900 text-sm font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
+                      className="text-[var(--apple-ink)] text-sm font-semibold truncate"
                       data-testid={`text-custom-addon-name-${a.id}`}
                     >
                       {a.name}
                     </span>
                     {!a.active && (
-                      <span className="text-xs uppercase tracking-wide font-bold text-slate-400 bg-slate-100 rounded px-1.5 py-0.5">
-                        Inactive
-                      </span>
+                      <StatusDot tone="neutral">Inactive</StatusDot>
                     )}
                   </div>
-                  <div className="text-slate-400 text-xs truncate">
+                  <div className="text-[var(--apple-faint)] text-xs truncate">
                     {a.orgName}
                     {a.appliesToAllArtists
                       ? " · all artists"
@@ -245,7 +234,7 @@ export function AdminCustomAddons() {
                         : " · no artists yet"}
                   </div>
                 </div>
-                <div className="text-slate-700 text-sm font-semibold flex-shrink-0">
+                <div className="text-[var(--apple-ink)] text-sm font-semibold flex-shrink-0">
                   {formatPrice(a.priceCents)}
                 </div>
               </button>
@@ -345,14 +334,14 @@ function ReadOnlyAddonDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => !requestChanges.isPending && onOpenChange(o)}>
       <DialogContent
-        className="max-w-lg bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4 max-h-[90vh] overflow-y-auto"
+        className="max-w-lg p-6 gap-4 max-h-[90vh] overflow-y-auto"
         data-testid="dialog-view-custom-addon"
       >
         <DialogHeader className="text-left space-y-1">
-          <DialogTitle className="text-base font-semibold text-slate-900">
+          <DialogTitle>
             {addon?.name ?? "Add-on"}
           </DialogTitle>
-          <DialogDescription className="text-sm text-slate-500 leading-relaxed">
+          <DialogDescription className="leading-relaxed">
             This add-on is managed by GoodTunes. You can review every detail here;
             to change anything, send a note and a super-admin will take care of it.
           </DialogDescription>
@@ -361,7 +350,7 @@ function ReadOnlyAddonDialog({
         {addon && (
           <div className="space-y-4">
             <div className="flex items-start gap-4">
-              <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 bg-slate-50 ring-1 ring-slate-200">
+              <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 bg-[var(--apple-track)] ring-1 ring-[var(--apple-hairline)]">
                 {addon.imageUrl ? (
                   <img
                     src={addon.imageUrl}
@@ -370,35 +359,31 @@ function ReadOnlyAddonDialog({
                     data-testid="img-view-custom-addon"
                   />
                 ) : (
-                  <Gift className="w-7 h-7 text-slate-300" />
+                  <Gift className="w-7 h-7 text-[var(--apple-faint)]" />
                 )}
               </div>
               <div className="flex-1 min-w-0 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <span
-                    className="text-slate-900 text-base font-semibold truncate"
+                    className="text-[var(--apple-ink)] text-base font-semibold truncate"
                     data-testid="text-view-custom-addon-name"
                   >
                     {addon.name}
                   </span>
-                  <span
-                    className={`text-xs uppercase tracking-wide font-bold rounded px-1.5 py-0.5 ${
-                      addon.active
-                        ? "text-emerald-700 bg-emerald-50"
-                        : "text-slate-400 bg-slate-100"
-                    }`}
-                    data-testid="status-view-custom-addon-active"
+                  <StatusDot
+                    tone={addon.active ? "ready" : "neutral"}
+                    testId="status-view-custom-addon-active"
                   >
                     {addon.active ? "Active" : "Inactive"}
-                  </span>
+                  </StatusDot>
                 </div>
-                <div className="text-slate-500 text-sm" data-testid="text-view-custom-addon-price">
+                <div className="text-[var(--apple-subink)] text-sm" data-testid="text-view-custom-addon-price">
                   {addon.orgName} · {formatPrice(addon.priceCents)}
                 </div>
               </div>
             </div>
 
-            <dl className="rounded-lg border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+            <dl className="rounded-xl border border-[var(--apple-hairline)] divide-y divide-[var(--apple-hairline)] overflow-hidden">
               <ReadOnlyRow label="Non-profit" value={addon.orgName} testId="text-view-custom-addon-npo" />
               <ReadOnlyRow label="Price" value={formatPrice(addon.priceCents)} testId="text-view-custom-addon-price-row" />
               <ReadOnlyRow
@@ -424,9 +409,9 @@ function ReadOnlyAddonDialog({
               />
             </dl>
 
-            <p className="text-xs text-slate-500 leading-relaxed pt-1">
+            <p className="text-xs text-[var(--apple-subink)] leading-relaxed pt-1">
               Need a change? Custom add-ons are managed by GoodTunes — tap{" "}
-              <span className="font-semibold text-slate-600">Request changes</span> and a
+              <span className="font-semibold text-[var(--apple-ink)]">Request changes</span> and a
               super-admin will take care of it for you.
             </p>
           </div>
@@ -470,8 +455,8 @@ function ReadOnlyRow({
 }) {
   return (
     <div className="flex items-baseline gap-3 px-3 py-2.5">
-      <dt className="text-xs font-semibold text-slate-500 w-28 flex-shrink-0">{label}</dt>
-      <dd className="text-sm text-slate-800 flex-1 min-w-0 break-words" data-testid={testId}>
+      <dt className="text-xs font-semibold text-[var(--apple-subink)] w-28 flex-shrink-0">{label}</dt>
+      <dd className="text-sm text-[var(--apple-ink)] flex-1 min-w-0 break-words" data-testid={testId}>
         {value}
       </dd>
     </div>
@@ -666,14 +651,14 @@ export function AddonDialog({
     <>
     <Dialog open={open} onOpenChange={(o) => !save.isPending && onOpenChange(o)}>
       <DialogContent
-        className="max-w-lg bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4 max-h-[90vh] overflow-y-auto"
+        className="max-w-lg p-6 gap-4 max-h-[90vh] overflow-y-auto"
         data-testid={`dialog-${mode}-custom-addon`}
       >
         <DialogHeader className="text-left space-y-1">
-          <DialogTitle className="text-base font-semibold text-slate-900">
+          <DialogTitle>
             {isEdit ? "Edit add-on" : "Add a custom add-on"}
           </DialogTitle>
-          <DialogDescription className="text-sm text-slate-500 leading-relaxed">
+          <DialogDescription className="leading-relaxed">
             A non-profit-owned product offered as a single optional checkbox in
             the Buy sheet of every attached artist's albums.
           </DialogDescription>
@@ -684,7 +669,7 @@ export function AddonDialog({
             <button
               type="button"
               onClick={() => setImageEditorOpen(true)}
-              className="group relative w-20 h-20 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 bg-slate-50 ring-1 ring-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2"
+              className="group relative w-20 h-20 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 bg-[var(--apple-track)] ring-1 ring-[var(--apple-hairline)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2"
               data-testid="button-edit-custom-addon-image"
               aria-label="Edit add-on image"
             >
@@ -695,28 +680,28 @@ export function AddonDialog({
                   className="w-full h-full object-cover transition-transform group-hover:scale-[1.03]"
                 />
               ) : (
-                <Gift className="w-7 h-7 text-slate-300" />
+                <Gift className="w-7 h-7 text-[var(--apple-faint)]" />
               )}
               <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 [@media(hover:none)]:bg-black/30 transition-colors" />
               <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
-                <span className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                <span className="w-8 h-8 rounded-full bg-white text-[var(--apple-ink)] inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
                   <Pencil className="w-4 h-4" />
                 </span>
               </span>
               {uploading && (
                 <span className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                  <Loader2 className="w-5 h-5 animate-spin text-slate-500" />
+                  <Loader2 className="w-5 h-5 animate-spin text-[var(--apple-subink)]" />
                 </span>
               )}
             </button>
             <div className="flex-1 min-w-0 space-y-1">
-              <label className="text-xs font-semibold text-slate-600">Name</label>
+              <label className="text-xs font-semibold text-[var(--apple-subink)]">Name</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Gift of Hope"
-                className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
                 data-testid="input-custom-addon-name"
               />
             </div>
@@ -724,11 +709,11 @@ export function AddonDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">Non-profit</label>
+              <label className="text-xs font-semibold text-[var(--apple-subink)]">Non-profit</label>
               <select
                 value={organizationId}
                 onChange={(e) => setOrganizationId(e.target.value)}
-                className="w-full h-10 px-2 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                className="w-full h-10 px-2 rounded-md border border-[var(--apple-hairline)] bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
                 data-testid="select-custom-addon-npo"
               >
                 <option value="">Select…</option>
@@ -743,7 +728,7 @@ export function AddonDialog({
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">Price (USD)</label>
+              <label className="text-xs font-semibold text-[var(--apple-subink)]">Price (USD)</label>
               <input
                 type="number"
                 min="0"
@@ -751,12 +736,12 @@ export function AddonDialog({
                 value={priceDollars}
                 onChange={(e) => setPriceDollars(e.target.value)}
                 placeholder="25.00"
-                className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
                 data-testid="input-custom-addon-price"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">Shipping per box (USD)</label>
+              <label className="text-xs font-semibold text-[var(--apple-subink)]">Shipping per box (USD)</label>
               <input
                 type="number"
                 min="0"
@@ -764,17 +749,17 @@ export function AddonDialog({
                 value={shippingDollars}
                 onChange={(e) => setShippingDollars(e.target.value)}
                 placeholder="0.00"
-                className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
                 data-testid="input-custom-addon-shipping"
               />
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-[var(--apple-faint)]">
                 Charged to the fan per box (× quantity), folded into checkout shipping. Leave blank for free shipping.
               </p>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-600">Who sees it</label>
+            <label className="text-xs font-semibold text-[var(--apple-subink)]">Who sees it</label>
             <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Add-on scope">
               <button
                 type="button"
@@ -784,15 +769,15 @@ export function AddonDialog({
                 onClick={() => setScope("specific")}
                 className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                   scope === "specific"
-                    ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5 text-slate-900"
-                    : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
+                    ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5 text-[var(--apple-ink)]"
+                    : "border-[var(--apple-hairline)] bg-white text-[var(--apple-subink)] hover:border-[var(--apple-faint)]"
                 } ${!canScopeToArtist ? "opacity-50 cursor-not-allowed" : ""}`}
                 data-testid="button-custom-addon-scope-specific"
               >
                 <span className="block font-semibold">
                   {inline && albumArtist?.name ? `Just ${albumArtist.name}` : "Specific artists"}
                 </span>
-                <span className="block text-xs text-slate-400">
+                <span className="block text-xs text-[var(--apple-faint)]">
                   {inline
                     ? "Only this artist's albums"
                     : "Pick artists below after saving"}
@@ -805,39 +790,39 @@ export function AddonDialog({
                 onClick={() => setScope("all")}
                 className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                   scope === "all"
-                    ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5 text-slate-900"
-                    : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
+                    ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5 text-[var(--apple-ink)]"
+                    : "border-[var(--apple-hairline)] bg-white text-[var(--apple-subink)] hover:border-[var(--apple-faint)]"
                 }`}
                 data-testid="button-custom-addon-scope-all"
               >
                 <span className="block font-semibold">All artists</span>
-                <span className="block text-xs text-slate-400">Every eligible album</span>
+                <span className="block text-xs text-[var(--apple-faint)]">Every eligible album</span>
               </button>
             </div>
             {!canScopeToArtist && (
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-[var(--apple-faint)]">
                 Link a primary artist to this album to scope the add-on to just them.
               </p>
             )}
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">
-              Fulfiller <span className="text-slate-400 font-normal">(who ships / handles it)</span>
+            <label className="text-xs font-semibold text-[var(--apple-subink)]">
+              Fulfiller <span className="text-[var(--apple-faint)] font-normal">(who ships / handles it)</span>
             </label>
             <input
               type="text"
               value={fulfiller}
               onChange={(e) => setFulfiller(e.target.value)}
               placeholder="e.g. The Nightbirde Foundation"
-              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+              className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
               data-testid="input-custom-addon-fulfiller"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">
-              Display order <span className="text-slate-400 font-normal">(lower shows first in the Buy sheet)</span>
+            <label className="text-xs font-semibold text-[var(--apple-subink)]">
+              Display order <span className="text-[var(--apple-faint)] font-normal">(lower shows first in the Buy sheet)</span>
             </label>
             <input
               type="number"
@@ -845,21 +830,21 @@ export function AddonDialog({
               value={position}
               onChange={(e) => setPosition(e.target.value)}
               placeholder="0"
-              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+              className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
               data-testid="input-custom-addon-position"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">
-              Description <span className="text-slate-400 font-normal">(optional)</span>
+            <label className="text-xs font-semibold text-[var(--apple-subink)]">
+              Description <span className="text-[var(--apple-faint)] font-normal">(optional)</span>
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={4}
               placeholder="Shown to fans under the checkbox."
-              className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 resize-y min-h-[5rem]"
+              className="w-full px-3 py-2 rounded-md border border-[var(--apple-hairline)] bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 resize-y min-h-[5rem]"
               data-testid="input-custom-addon-description"
             />
           </div>
@@ -868,8 +853,8 @@ export function AddonDialog({
               picks how much to give (preset chips + free input) rather than
               paying a flat price. The Price field above becomes the suggested
               default shown in the input when no chip is selected. */}
-          <div className="space-y-3 rounded-md border border-slate-200 p-3">
-            <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+          <div className="space-y-3 rounded-xl border border-[var(--apple-hairline)] p-3">
+            <label className="flex items-center gap-2 text-sm text-[var(--apple-ink)] cursor-pointer">
               <input
                 type="checkbox"
                 checked={fanChoosesAmount}
@@ -878,16 +863,16 @@ export function AddonDialog({
                 data-testid="checkbox-custom-addon-fan-chooses-amount"
               />
               <span className="font-semibold">Fan chooses amount</span>
-              <span className="text-xs text-slate-400 ml-0.5">
+              <span className="text-xs text-[var(--apple-faint)] ml-0.5">
                 (fan picks; Price above is the starting suggestion)
               </span>
             </label>
             {fanChoosesAmount && (
               <div className="space-y-3 pl-6">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600">
+                  <label className="text-xs font-semibold text-[var(--apple-subink)]">
                     Minimum amount (USD)
-                    <span className="text-slate-400 font-normal ml-1">— enforced server-side</span>
+                    <span className="text-[var(--apple-faint)] font-normal ml-1">— enforced server-side</span>
                   </label>
                   <input
                     type="number"
@@ -896,21 +881,21 @@ export function AddonDialog({
                     value={minAmountDollars}
                     onChange={(e) => setMinAmountDollars(e.target.value)}
                     placeholder="50.00"
-                    className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                    className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
                     data-testid="input-custom-addon-min-amount"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600">
+                  <label className="text-xs font-semibold text-[var(--apple-subink)]">
                     Preset suggestions
-                    <span className="text-slate-400 font-normal ml-1">— shown as quick-pick chips (comma-separated, e.g. "$50, $75, $100, $250")</span>
+                    <span className="text-[var(--apple-faint)] font-normal ml-1">— shown as quick-pick chips (comma-separated, e.g. "$50, $75, $100, $250")</span>
                   </label>
                   <input
                     type="text"
                     value={presetsText}
                     onChange={(e) => setPresetsText(e.target.value)}
                     placeholder="$50, $75, $100, $250"
-                    className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                    className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
                     data-testid="input-custom-addon-presets"
                   />
                 </div>
@@ -919,7 +904,7 @@ export function AddonDialog({
           </div>
 
           {isEdit && (
-            <label className="flex items-center gap-2 text-sm text-slate-700">
+            <label className="flex items-center gap-2 text-sm text-[var(--apple-ink)]">
               <input
                 type="checkbox"
                 checked={active}
@@ -962,7 +947,7 @@ export function AddonDialog({
 
         {isEdit && addon && scope === "specific" && <AddonArtists addon={addon} />}
         {inline && (
-          <p className="text-xs text-slate-400 pt-1" data-testid="text-custom-addon-inline-note">
+          <p className="text-xs text-[var(--apple-faint)] pt-1" data-testid="text-custom-addon-inline-note">
             Manage every custom add-on — including attaching more artists — on the{" "}
             <a
               href="/admin/custom-addons"
@@ -1016,18 +1001,18 @@ function AddonImageEditorDialog({
   return (
     <Dialog open={open} onOpenChange={(v) => !uploading && onOpenChange(v)}>
       <DialogContent
-        className="max-w-md bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-5"
+        className="max-w-md p-6 gap-5"
         data-testid="dialog-edit-custom-addon-image"
       >
         <DialogHeader className="flex-row items-center justify-between space-y-0">
-          <DialogTitle className="text-slate-900 text-sm font-bold">Image</DialogTitle>
+          <DialogTitle>Image</DialogTitle>
           <DialogDescription className="sr-only">
             Replace the image shown for this add-on.
           </DialogDescription>
         </DialogHeader>
 
         <div
-          className="relative rounded-full overflow-hidden aspect-square w-32 mx-auto bg-slate-50 ring-1 ring-slate-200"
+          className="relative rounded-full overflow-hidden aspect-square w-32 mx-auto bg-[var(--apple-track)] ring-1 ring-[var(--apple-hairline)]"
           data-testid="panel-custom-addon-image-current"
         >
           {imageUrl ? (
@@ -1038,14 +1023,14 @@ function AddonImageEditorDialog({
               data-testid="img-custom-addon-image-current"
             />
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+            <div className="absolute inset-0 flex items-center justify-center text-[var(--apple-faint)]">
               <Gift className="w-12 h-12" strokeWidth={1.5} />
             </div>
           )}
           {uploading && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
               <Loader2 className="w-6 h-6 animate-spin text-[color:var(--brand-blue)]" />
-              <span className="text-xs text-slate-700 font-semibold">Uploading…</span>
+              <span className="text-xs text-[var(--apple-ink)] font-semibold">Uploading…</span>
             </div>
           )}
         </div>
@@ -1085,19 +1070,19 @@ function AddonImageEditorDialog({
             "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
             dragging
               ? "border-[color:var(--brand-blue)] bg-[var(--brand-blue)]/5"
-              : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+              : "border-[var(--apple-hairline)] hover:border-[var(--apple-faint)] hover:bg-[var(--apple-track)]",
             uploading && "opacity-60 cursor-not-allowed",
           ]
             .filter(Boolean)
             .join(" ")}
         >
           <Upload
-            className={["w-7 h-7", dragging ? "text-[color:var(--brand-blue)]" : "text-slate-400"].join(" ")}
+            className={["w-7 h-7", dragging ? "text-[color:var(--brand-blue)]" : "text-[var(--apple-faint)]"].join(" ")}
           />
-          <div className="text-slate-700 text-sm font-semibold">
+          <div className="text-[var(--apple-ink)] text-sm font-semibold">
             {dragging ? "Drop to upload" : "Drag an image here, or click to pick"}
           </div>
-          <div className="text-slate-400 text-xs">JPG, PNG, or WebP</div>
+          <div className="text-[var(--apple-faint)] text-xs">JPG, PNG, or WebP</div>
         </button>
         <input
           ref={fileInputRef}
@@ -1168,9 +1153,9 @@ function AddonArtists({ addon }: { addon: CustomAddon }) {
   });
 
   return (
-    <div className="border-t border-slate-200 pt-4 space-y-3" data-testid="panel-custom-addon-artists">
+    <div className="border-t border-[var(--apple-hairline)] pt-4 space-y-3" data-testid="panel-custom-addon-artists">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold text-slate-900">Attached artists</h3>
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Attached artists</h3>
         <button
           type="button"
           onClick={() => setAdding((v) => !v)}
@@ -1184,14 +1169,14 @@ function AddonArtists({ addon }: { addon: CustomAddon }) {
       {adding && (
         <div className="space-y-1">
           <div className="flex items-center gap-1.5 bg-white border border-[var(--apple-hairline)] rounded-full px-3 h-9">
-            <Search className="w-4 h-4 text-slate-400" />
+            <Search className="w-4 h-4 text-[var(--apple-faint)]" />
             <input
               autoFocus
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search artists"
-              className="flex-1 text-sm bg-transparent outline-none placeholder:text-slate-400"
+              className="flex-1 text-sm bg-transparent outline-none placeholder:text-[var(--apple-faint)]"
               data-testid="input-search-custom-addon-artist"
             />
             <button
@@ -1200,29 +1185,29 @@ function AddonArtists({ addon }: { addon: CustomAddon }) {
                 setQuery("");
                 setAdding(false);
               }}
-              className="text-slate-400 hover:text-slate-700"
+              className="text-[var(--apple-faint)] rounded-full p-0.5 hover:bg-[var(--apple-track)] transition-colors"
               aria-label="Close"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
           {matches.length > 0 && (
-            <div className="rounded-md border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
+            <div className="rounded-xl border border-[var(--apple-hairline)] bg-white divide-y divide-[var(--apple-hairline)] overflow-hidden">
               {matches.map((p) => (
                 <button
                   key={p.id}
                   type="button"
                   onClick={() => attach.mutate(p.id)}
                   disabled={attach.isPending}
-                  className="w-full text-left flex items-center gap-2 px-2.5 py-1.5 hover:bg-slate-50 disabled:opacity-50"
+                  className="w-full text-left flex items-center gap-2 px-2.5 py-1.5 hover:bg-[var(--apple-track)] transition-colors disabled:opacity-50"
                   data-testid={`option-custom-addon-artist-${p.id}`}
                 >
                   {p.photoUrl ? (
-                    <img src={p.photoUrl} alt="" className="w-7 h-7 rounded-full object-cover bg-slate-100" />
+                    <img src={p.photoUrl} alt="" className="w-7 h-7 rounded-full object-cover bg-[var(--apple-track)]" />
                   ) : (
-                    <div className="w-7 h-7 rounded-full bg-slate-100" />
+                    <div className="w-7 h-7 rounded-full bg-[var(--apple-track)]" />
                   )}
-                  <span className="text-sm text-slate-800">{p.name}</span>
+                  <span className="text-sm text-[var(--apple-ink)]">{p.name}</span>
                 </button>
               ))}
             </div>
@@ -1231,11 +1216,11 @@ function AddonArtists({ addon }: { addon: CustomAddon }) {
       )}
 
       {addon.artists.length === 0 ? (
-        <p className="text-xs text-slate-500" data-testid="text-custom-addon-no-artists">
+        <p className="text-xs text-[var(--apple-subink)]" data-testid="text-custom-addon-no-artists">
           No artists attached yet — fans won't see this add-on until you add one.
         </p>
       ) : (
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-[var(--apple-hairline)]">
           {addon.artists.map((p) => (
             <li
               key={p.personId}
@@ -1243,11 +1228,11 @@ function AddonArtists({ addon }: { addon: CustomAddon }) {
               data-testid={`row-custom-addon-artist-${p.personId}`}
             >
               {p.photoUrl ? (
-                <img src={p.photoUrl} alt="" className="w-8 h-8 rounded-full object-cover bg-slate-100" />
+                <img src={p.photoUrl} alt="" className="w-8 h-8 rounded-full object-cover bg-[var(--apple-track)]" />
               ) : (
-                <div className="w-8 h-8 rounded-full bg-slate-100" />
+                <div className="w-8 h-8 rounded-full bg-[var(--apple-track)]" />
               )}
-              <span className="flex-1 text-sm font-semibold text-slate-800 truncate">{p.name}</span>
+              <span className="flex-1 text-sm font-semibold text-[var(--apple-ink)] truncate">{p.name}</span>
               <button
                 type="button"
                 onClick={() => detach.mutate(p.personId)}

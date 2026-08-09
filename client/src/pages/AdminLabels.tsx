@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
 import {
   ViewModeToggle,
@@ -317,7 +318,7 @@ export function AdminLabels() {
     <AdminFrame active="labels">
       <div className="space-y-5">
       <div
-        className="inline-flex items-center bg-slate-100 rounded-full p-0.5"
+        className="inline-flex items-center bg-[var(--apple-track)] rounded-full p-0.5"
         role="tablist"
         data-testid="tabs-section-labels"
       >
@@ -328,8 +329,8 @@ export function AdminLabels() {
           className={[
             "h-8 px-3 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
             pageTab === "dashboard"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-900",
+              ? "bg-white text-[var(--apple-ink)] shadow-sm"
+              : "text-[var(--apple-subink)]",
           ].join(" ")}
           data-testid="tab-section-dashboard"
         >
@@ -342,8 +343,8 @@ export function AdminLabels() {
           className={[
             "h-8 px-3 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
             pageTab === "list"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-900",
+              ? "bg-white text-[var(--apple-ink)] shadow-sm"
+              : "text-[var(--apple-subink)]",
           ].join(" ")}
           data-testid="tab-section-list"
         >
@@ -376,7 +377,7 @@ export function AdminLabels() {
                   setSearch("");
                   setSearchOpen(false);
                 }}
-                className="text-slate-400 hover:text-slate-700"
+                className="text-[var(--apple-faint)] hover:text-[var(--apple-subink)]"
                 aria-label="Close search"
               >
                 <X className="w-4 h-4" />
@@ -386,7 +387,7 @@ export function AdminLabels() {
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="h-9 w-9 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+              className="h-9 w-9 rounded-full text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center transition-colors"
               aria-label="Search"
               data-testid="button-open-search"
             >
@@ -456,7 +457,7 @@ export function AdminLabels() {
         </div>
       ) : (
         <div
-          className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-slate-100"
+          className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-[var(--apple-hairline)]"
           data-testid="list-labels"
         >
           {filtered.map((l) => (
@@ -481,14 +482,14 @@ export function AdminLabels() {
         }}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-xl p-6 gap-4"
           data-testid="dialog-add-label"
         >
           <DialogHeader className="text-left space-y-1">
-            <DialogTitle className="text-[17px] font-semibold text-slate-900">
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">
               Add label
             </DialogTitle>
-            <DialogDescription className="text-[13px] text-slate-500 leading-relaxed">
+            <DialogDescription className="text-[13px] text-[var(--apple-subink)] leading-relaxed">
               Name the label, and optionally paste its website — we'll
               prefill domain, logo, and bio from the page's Open Graph
               metadata. Your typed name always wins.
@@ -497,7 +498,7 @@ export function AdminLabels() {
           <div className="space-y-2 pt-1">
             <label
               htmlFor="add-label-name"
-              className="block text-xs font-semibold text-slate-600"
+              className="block text-xs font-semibold text-[var(--apple-subink)]"
             >
               Label name
             </label>
@@ -519,14 +520,14 @@ export function AdminLabels() {
               placeholder="Blue Note"
               autoFocus
               disabled={createLabel.isPending}
-              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+              className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
               data-testid="input-add-label-name"
             />
             <label
               htmlFor="add-label-url"
-              className="block text-xs font-semibold text-slate-600 pt-1"
+              className="block text-xs font-semibold text-[var(--apple-subink)] pt-1"
             >
-              Website URL <span className="font-normal text-slate-400">(optional)</span>
+              Website URL <span className="font-normal text-[var(--apple-faint)]">(optional)</span>
             </label>
             <input
               id="add-label-url"
@@ -545,7 +546,7 @@ export function AdminLabels() {
               }}
               placeholder="https://www.bluenote.com/"
               disabled={createLabel.isPending}
-              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+              className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
               data-testid="input-add-label-url"
             />
             {duplicateLabel && (
@@ -576,7 +577,7 @@ export function AdminLabels() {
                 {pasteError}
               </p>
             )}
-            <p className="text-[11.5px] text-slate-400">
+            <p className="text-[11.5px] text-[var(--apple-faint)]">
               Reads the page's Open Graph metadata. Instagram and Facebook
               pages aren't supported — paste the label's own website
               instead.
@@ -587,7 +588,7 @@ export function AdminLabels() {
               type="button"
               onClick={skipPaste}
               disabled={createLabel.isPending}
-              className="px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              className="px-3 py-1.5 rounded-full text-[12.5px] font-semibold text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-50 transition-colors"
               data-testid="button-add-label-skip"
             >
               {pasteName.trim() ? "Create from scratch" : "Skip — create blank"}
@@ -630,10 +631,10 @@ function LabelCard({
     <button
       type="button"
       onClick={onOpen}
-      className="group text-left rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5"
+      className="group text-left rounded-2xl bg-white border border-[var(--apple-hairline)] hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5"
       data-testid={`card-label-${label.id}`}
     >
-      <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-50 ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+      <div className="w-14 h-14 rounded-xl overflow-hidden bg-[var(--apple-track)] ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {label.logoUrl ? (
           <img
             src={label.logoUrl}
@@ -672,10 +673,10 @@ function LabelRow({
     <button
       type="button"
       onClick={onOpen}
-      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
+      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-[var(--apple-track)] transition-colors"
       data-testid={`row-label-${label.id}`}
     >
-      <div className="w-10 h-10 rounded-md overflow-hidden bg-slate-50 ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+      <div className="w-10 h-10 rounded-md overflow-hidden bg-[var(--apple-track)] ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {label.logoUrl ? (
           <img
             src={label.logoUrl}
@@ -719,37 +720,26 @@ function EmptyState({
   onAdd: () => void;
 }) {
   return (
-    <div
-      className="py-16 flex flex-col items-center justify-center text-center"
-      data-testid="empty-labels"
+    <AdminEmptyState
+      testId="empty-labels"
+      action={
+        !searching && !filtering ? (
+          <button
+            type="button"
+            onClick={onAdd}
+            className="inline-flex items-center justify-center h-9 px-3.5 rounded-full text-[12.5px] font-semibold text-[var(--brand-blue)] hover:bg-[var(--apple-blue)]/10 transition-colors"
+            data-testid="button-empty-add-label"
+          >
+            Add your first label
+          </button>
+        ) : undefined
+      }
     >
-      <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-        <Tag className="w-6 h-6" />
-      </div>
-      <p className="text-slate-700 text-[14px] font-semibold">
-        {searching
-          ? "No labels match that search"
-          : filtering
-            ? "No labels match these filters"
-            : "No labels yet"}
-      </p>
-      <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs">
-        {searching
-          ? "Try a different name or domain."
-          : filtering
-            ? "Adjust or reset the filters to see more labels."
-            : "Paste a label's website and we'll do the rest — name, logo, and bio in one click."}
-      </p>
-      {!searching && !filtering && (
-        <button
-          type="button"
-          onClick={onAdd}
-          className="mt-4 inline-flex items-center justify-center h-9 px-3.5 rounded-md text-[12.5px] font-semibold bg-[var(--brand-blue)] text-white hover:bg-[#2789bf] transition-colors"
-          data-testid="button-empty-add-label"
-        >
-          Add your first label
-        </button>
-      )}
-    </div>
+      {searching
+        ? "No labels match that search."
+        : filtering
+          ? "No labels match these filters."
+          : "No labels yet. Paste a label's website and we'll do the rest."}
+    </AdminEmptyState>
   );
 }

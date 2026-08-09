@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { ROLE_LABEL } from "@/components/admin/RoleScopePicker";
 import { ArrowUpDown, ArrowDown, ArrowUp, Check, Heart, Link2, Search, UserPlus } from "lucide-react";
@@ -51,8 +53,8 @@ const STATUS_TABS: { value: StatusFilter; label: string }[] = [
 const STATUS_BADGE: Record<DirectoryInvite["status"], string> = {
   invited: "bg-sky-50 text-sky-700 border-sky-200",
   joined: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  revoked: "bg-rose-50 text-rose-700 border-rose-200",
-  expired: "bg-slate-100 text-slate-500 border-slate-200",
+  revoked: "bg-[var(--apple-critical)]/10 text-[var(--apple-critical)] border-[var(--apple-critical)]/20",
+  expired: "bg-[var(--apple-chip)] text-[var(--apple-subink)] border-[var(--apple-hairline)]",
 };
 
 // Pretty label for the referrer's kind. `ambassador` is a Person promoted
@@ -190,7 +192,7 @@ export function AdminInviteDirectory() {
         onClick={() => toggleSort(k)}
         className={[
           "inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide transition-colors",
-          active ? "text-slate-900" : "text-slate-500 hover:text-slate-700",
+          active ? "text-[var(--apple-ink)]" : "text-[var(--apple-subink)] hover:text-[var(--apple-ink)]",
           className || "",
         ].join(" ")}
         data-testid={`sort-${k}`}
@@ -203,50 +205,49 @@ export function AdminInviteDirectory() {
 
   return (
     <AdminFrame active="invite-directory" contentWidth="wide">
-      <div>
-        <div className="flex items-start justify-between mb-1 gap-4">
-          <h1 className="text-2xl font-semibold text-slate-900" data-testid="text-page-title">
-            {isArtist ? "Invites" : "Invite directory"}
-          </h1>
-          {isArtist && (
-            <Link
-              href="/admin/invites"
-              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-[var(--brand-blue)] text-white text-sm font-semibold hover:opacity-90 transition-opacity flex-shrink-0"
-              data-testid="link-new-invite"
-            >
-              <UserPlus className="w-4 h-4" />
-              + Add Invite
-            </Link>
-          )}
-        </div>
-        <p className="text-sm text-slate-600 mb-6">
-          {isArtist
-            ? "Invites you've sent — pending, joined, revoked, and expired. Use + Add Invite to refer an artist or NPO partner."
-            : "Every invite ever sent — pending, joined, revoked, and expired — in one read-only list. Search by invitee or referrer, filter by status, referrer, or role, and sort by date or units sold (the units credited to each referral). To send a new invite use\u00a0"
+      <div className="space-y-5">
+        <AdminPageHeader
+          title={isArtist ? "Invites." : "Invite directory."}
+          subtitle={
+            isArtist ? (
+              "Invites you've sent — pending, joined, revoked, and expired. Use + Add Invite to refer an artist or NPO partner."
+            ) : (
+              <>
+                Every invite ever sent — pending, joined, revoked, and expired — in one read-only list. Search by invitee or referrer, filter by status, referrer, or role, and sort by date or units sold (the units credited to each referral). To send a new invite use{"\u00a0"}
+                <span className="font-medium text-[var(--apple-ink)]">Invites</span>; for the referral hierarchy use{" "}
+                <span className="font-medium text-[var(--apple-ink)]">Invite tree</span>.
+              </>
+            )
           }
-          {!isArtist && (
-            <>
-              <span className="font-medium text-slate-700">Invites</span>; for the referral hierarchy use{" "}
-              <span className="font-medium text-slate-700">Invite tree</span>.
-            </>
-          )}
-        </p>
+          actions={
+            isArtist ? (
+              <Link
+                href="/admin/invites"
+                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-[var(--brand-blue)] text-white text-sm font-semibold hover:opacity-90 transition-opacity flex-shrink-0"
+                data-testid="link-new-invite"
+              >
+                <UserPlus className="w-4 h-4" />
+                + Add Invite
+              </Link>
+            ) : undefined
+          }
+        />
 
         {/* Controls — search, status tabs, role filter. */}
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative flex-1 max-w-sm">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-[var(--apple-faint)] absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search invitee or referrer…"
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20 text-sm"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-[var(--apple-hairline)] focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20 text-sm"
               data-testid="input-search"
             />
           </div>
           <div className="flex items-center gap-3">
-            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5" data-testid="tabs-status">
+            <div className="inline-flex rounded-lg border border-[var(--apple-hairline)] bg-white p-0.5" data-testid="tabs-status">
               {STATUS_TABS.map((t) => (
                 <button
                   key={t.value}
@@ -256,7 +257,7 @@ export function AdminInviteDirectory() {
                     "px-3 py-1.5 text-xs font-semibold rounded-md transition-colors",
                     statusFilter === t.value
                       ? "bg-[var(--brand-blue)] text-white"
-                      : "text-slate-600 hover:bg-slate-100",
+                      : "text-[var(--apple-subink)] hover:bg-[var(--apple-track)]",
                   ].join(" ")}
                   data-testid={`tab-status-${t.value}`}
                 >
@@ -267,7 +268,7 @@ export function AdminInviteDirectory() {
             <select
               value={refKindFilter}
               onChange={(e) => setRefKindFilter(e.target.value)}
-              className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+              className="px-3 py-2 rounded-lg border border-[var(--apple-hairline)] bg-white text-sm focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
               data-testid="select-referrer-kind"
             >
               <option value="all">All referrers</option>
@@ -278,7 +279,7 @@ export function AdminInviteDirectory() {
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+              className="px-3 py-2 rounded-lg border border-[var(--apple-hairline)] bg-white text-sm focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
               data-testid="select-role"
             >
               <option value="all">All roles</option>
@@ -290,7 +291,7 @@ export function AdminInviteDirectory() {
         </div>
 
         {isLoading ? (
-          <div className="text-sm text-slate-500">Loading…</div>
+          <div className="text-sm text-[var(--apple-subink)]">Loading…</div>
         ) : isError ? (
           <ErrorState
             error={error}
@@ -300,21 +301,23 @@ export function AdminInviteDirectory() {
           />
         ) : filtered.length === 0 ? (
           <div
-            className="text-sm text-slate-500 bg-white border border-slate-200 rounded-2xl p-6 text-center"
+            className="bg-white border border-[var(--apple-hairline)] rounded-2xl"
             data-testid="empty-directory"
           >
-            {invites.length === 0 ? "No invites yet." : "No invites match these filters."}
+            <AdminEmptyState>
+              {invites.length === 0 ? "No invites yet." : "No invites match these filters."}
+            </AdminEmptyState>
           </div>
         ) : (
-          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+          <div className="bg-white border border-[var(--apple-hairline)] rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm" data-testid="table-invite-directory">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/60">
-                    <th className="text-left font-semibold uppercase tracking-wide text-xs text-slate-500 px-4 py-3">Invitee</th>
-                    <th className="text-left font-semibold uppercase tracking-wide text-xs text-slate-500 px-4 py-3">Referred by</th>
-                    <th className="text-left font-semibold uppercase tracking-wide text-xs text-slate-500 px-4 py-3">Role</th>
-                    <th className="text-left font-semibold uppercase tracking-wide text-xs text-slate-500 px-4 py-3">Status</th>
+                  <tr className="border-b border-[var(--apple-hairline)] bg-[var(--apple-track)]/60">
+                    <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] px-4 py-3">Invitee</th>
+                    <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] px-4 py-3">Referred by</th>
+                    <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] px-4 py-3">Role</th>
+                    <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] px-4 py-3">Status</th>
                     <th className="text-left px-4 py-3"><SortHeader label="Invited" k="invitedAt" /></th>
                     <th className="text-left px-4 py-3"><SortHeader label="Joined" k="joinedAt" /></th>
                     <th className="text-right px-4 py-3"><SortHeader label="Units sold" k="unitsSold" className="justify-end" /></th>
@@ -322,36 +325,36 @@ export function AdminInviteDirectory() {
                     <th className="w-10 px-2 py-3" aria-label="Actions" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-[var(--apple-hairline)]">
                   {filtered.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-slate-50/60" data-testid={`row-invite-${inv.id}`}>
+                    <tr key={inv.id} className="hover:bg-[var(--apple-track)]/60" data-testid={`row-invite-${inv.id}`}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5 min-w-0">
                           {inv.inviteeThumbUrl ? (
                             <img
                               src={inv.inviteeThumbUrl}
                               alt=""
-                              className="w-8 h-8 rounded-full object-cover bg-slate-100 flex-shrink-0"
+                              className="w-8 h-8 rounded-full object-cover bg-[var(--apple-chip)] flex-shrink-0"
                               data-testid={`img-invitee-${inv.id}`}
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-full bg-slate-200 flex-shrink-0" />
+                            <div className="w-8 h-8 rounded-full bg-[var(--apple-chip)] flex-shrink-0" />
                           )}
                           <div className="min-w-0">
                             {inv.inviteeName && (() => {
                               const href = adminHrefFor(inv.inviteeKind, inv.inviteeId);
                               return href ? (
-                                <Link href={href} className="font-medium text-slate-900 truncate block transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2" data-testid={`link-invitee-name-${inv.id}`}>
+                                <Link href={href} className="font-medium text-[var(--apple-ink)] truncate block transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2" data-testid={`link-invitee-name-${inv.id}`}>
                                   {inv.inviteeName}
                                 </Link>
                               ) : (
-                                <div className="font-medium text-slate-900 truncate" data-testid={`text-invitee-name-${inv.id}`}>
+                                <div className="font-medium text-[var(--apple-ink)] truncate" data-testid={`text-invitee-name-${inv.id}`}>
                                   {inv.inviteeName}
                                 </div>
                               );
                             })()}
                             <div
-                              className={inv.inviteeName ? "text-xs text-slate-500 truncate" : "font-medium text-slate-900 truncate"}
+                              className={inv.inviteeName ? "text-xs text-[var(--apple-subink)] truncate" : "font-medium text-[var(--apple-ink)] truncate"}
                               data-testid={`text-invitee-email-${inv.id}`}
                             >
                               {inv.email}
@@ -366,27 +369,27 @@ export function AdminInviteDirectory() {
                             {(() => {
                               const href = adminHrefFor(inv.referrerKind, inv.referrerId);
                               return href ? (
-                                <Link href={href} className="text-slate-700 truncate transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2" data-testid={`link-referrer-${inv.id}`}>
+                                <Link href={href} className="text-[var(--apple-ink)] truncate transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2" data-testid={`link-referrer-${inv.id}`}>
                                   {inv.referrerName}
                                 </Link>
                               ) : (
-                                <span className="text-slate-700 truncate">{inv.referrerName}</span>
+                                <span className="text-[var(--apple-ink)] truncate">{inv.referrerName}</span>
                               );
                             })()}
                             {inv.referrerKind && (
-                              <span className="text-xs text-slate-400 flex-shrink-0">
+                              <span className="text-xs text-[var(--apple-faint)] flex-shrink-0">
                                 {REFERRER_KIND_LABEL[inv.referrerKind] || inv.referrerKind}
                               </span>
                             )}
                           </div>
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-[var(--apple-faint)]">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-slate-700" data-testid={`text-role-${inv.id}`}>
+                      <td className="px-4 py-3 text-[var(--apple-ink)]" data-testid={`text-role-${inv.id}`}>
                         {ROLE_LABEL[inv.role] || inv.role}
                         {inv.inviteRole && (
-                          <span className="text-xs text-slate-400"> · {inv.inviteRole}</span>
+                          <span className="text-xs text-[var(--apple-faint)]"> · {inv.inviteRole}</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -400,13 +403,13 @@ export function AdminInviteDirectory() {
                           {inv.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap" data-testid={`text-invited-${inv.id}`}>
+                      <td className="px-4 py-3 text-[var(--apple-subink)] whitespace-nowrap" data-testid={`text-invited-${inv.id}`}>
                         {fmtDate(inv.invitedAt)}
                       </td>
-                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap" data-testid={`text-joined-${inv.id}`}>
+                      <td className="px-4 py-3 text-[var(--apple-subink)] whitespace-nowrap" data-testid={`text-joined-${inv.id}`}>
                         {fmtDate(inv.joinedAt)}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-700" data-testid={`text-units-${inv.id}`}>
+                      <td className="px-4 py-3 text-right tabular-nums text-[var(--apple-ink)]" data-testid={`text-units-${inv.id}`}>
                         {inv.unitsSold.toLocaleString()}
                       </td>
                       <td className="px-2 py-3 text-right">
@@ -418,7 +421,7 @@ export function AdminInviteDirectory() {
                               "p-2 rounded-md transition-colors",
                               copiedId === inv.id
                                 ? "text-emerald-600 bg-emerald-50"
-                                : "text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100",
+                                : "text-[var(--apple-faint)] hover:text-[var(--brand-blue)] hover:bg-[var(--apple-chip)]",
                             ].join(" ")}
                             title="Copy invite link — send it directly if the email was lost or went to spam"
                             aria-label="Copy invite link"
@@ -433,7 +436,7 @@ export function AdminInviteDirectory() {
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-2.5 border-t border-slate-100 text-xs text-slate-500" data-testid="text-row-count">
+            <div className="px-4 py-2.5 border-t border-[var(--apple-hairline)] text-xs text-[var(--apple-subink)]" data-testid="text-row-count">
               {filtered.length} {filtered.length === 1 ? "invite" : "invites"}
               {filtered.length !== invites.length ? ` of ${invites.length}` : ""}
             </div>

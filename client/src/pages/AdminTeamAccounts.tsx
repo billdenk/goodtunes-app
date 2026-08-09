@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { ArrowUpDown, ArrowDown, ArrowUp, Search } from "lucide-react";
 
@@ -172,8 +174,8 @@ export function AdminTeamAccounts() {
         type="button"
         onClick={() => toggleSort(k)}
         className={[
-          "inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide transition-colors",
-          active ? "text-slate-900" : "text-slate-500 hover:text-slate-700",
+          "inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider transition-colors",
+          active ? "text-[var(--apple-ink)]" : "text-[var(--apple-subink)] hover:text-[var(--apple-ink)]",
         ].join(" ")}
         data-testid={`sort-${k}`}
       >
@@ -186,33 +188,28 @@ export function AdminTeamAccounts() {
   return (
     <AdminFrame active="team-accounts" contentWidth="wide">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900 mb-1" data-testid="text-page-title">
-          Team accounts
-        </h1>
-        <p className="text-sm text-slate-600 mb-6">
-          Every partner account that can sign in — who they represent, their access, and how they
-          got in. Accounts land here whether they joined from an invite or were added directly, so
-          this is the one place to look after someone accepts. Click a name to open its page and
-          manage access from the Permissions tab.
-        </p>
+        <AdminPageHeader
+          title="Team accounts."
+          subtitle="Every partner account that can sign in — who they represent, their access, and how they got in. Accounts land here whether they joined from an invite or were added directly, so this is the one place to look after someone accepts. Click a name to open its page and manage access from the Permissions tab."
+        />
 
         {/* Controls — search + scope-kind filter. */}
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-5 mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative flex-1 max-w-sm">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-[var(--apple-faint)] absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search account or artist…"
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20 text-sm"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-[var(--apple-hairline)] focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20 text-sm"
               data-testid="input-search"
             />
           </div>
           <select
             value={kindFilter}
             onChange={(e) => setKindFilter(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+            className="px-3 py-2 rounded-lg border border-[var(--apple-hairline)] bg-white text-sm focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
             data-testid="select-scope-kind"
           >
             <option value="all">All partner types</option>
@@ -223,7 +220,7 @@ export function AdminTeamAccounts() {
         </div>
 
         {isLoading ? (
-          <div className="text-sm text-slate-500">Loading…</div>
+          <div className="text-[13px] text-[var(--apple-subink)]">Loading…</div>
         ) : isError ? (
           <ErrorState
             error={error}
@@ -233,40 +230,42 @@ export function AdminTeamAccounts() {
           />
         ) : filtered.length === 0 ? (
           <div
-            className="text-sm text-slate-500 bg-white border border-slate-200 rounded-2xl p-6 text-center"
+            className="bg-white border border-[var(--apple-hairline)] rounded-2xl"
             data-testid="empty-team-accounts"
           >
-            {accounts.length === 0 ? "No partner accounts yet." : "No accounts match these filters."}
+            <AdminEmptyState>
+              {accounts.length === 0 ? "No partner accounts yet." : "No accounts match these filters."}
+            </AdminEmptyState>
           </div>
         ) : (
-          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+          <div className="bg-white border border-[var(--apple-hairline)] rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm" data-testid="table-team-accounts">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/60">
-                    <th className="text-left font-semibold uppercase tracking-wide text-xs text-slate-500 px-4 py-3">Account</th>
-                    <th className="text-left font-semibold uppercase tracking-wide text-xs text-slate-500 px-4 py-3">Represents</th>
-                    <th className="text-left font-semibold uppercase tracking-wide text-xs text-slate-500 px-4 py-3">Access</th>
+                  <tr className="border-b border-[var(--apple-hairline)] bg-[var(--apple-track)]">
+                    <th className="text-left font-semibold uppercase tracking-wider text-[11px] text-[var(--apple-subink)] px-4 py-3">Account</th>
+                    <th className="text-left font-semibold uppercase tracking-wider text-[11px] text-[var(--apple-subink)] px-4 py-3">Represents</th>
+                    <th className="text-left font-semibold uppercase tracking-wider text-[11px] text-[var(--apple-subink)] px-4 py-3">Access</th>
                     <th className="text-left px-4 py-3"><SortHeader label="Joined" k="createdAt" /></th>
                     <th className="text-left px-4 py-3"><SortHeader label="Last sign-in" k="lastSignInAt" /></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-[var(--apple-hairline)]">
                   {filtered.map((a) => (
-                    <tr key={a.id} className="hover:bg-slate-50/60" data-testid={`row-account-${a.id}`}>
+                    <tr key={a.id} className="hover:bg-[var(--apple-track)]" data-testid={`row-account-${a.id}`}>
                       <td className="px-4 py-3">
                         <div className="min-w-0">
-                          <div className="font-medium text-slate-900 truncate" data-testid={`text-account-name-${a.id}`}>
+                          <div className="font-medium text-[var(--apple-ink)] truncate" data-testid={`text-account-name-${a.id}`}>
                             {a.displayName || a.username}
                           </div>
-                          <div className="text-xs text-slate-500 truncate" data-testid={`text-account-email-${a.id}`}>
+                          <div className="text-xs text-[var(--apple-subink)] truncate" data-testid={`text-account-email-${a.id}`}>
                             {a.email}
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         {a.attachments.length === 0 ? (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-[var(--apple-faint)]">—</span>
                         ) : (
                           <div className="flex flex-col gap-1.5">
                             {a.attachments.map((t, i) => {
@@ -278,21 +277,21 @@ export function AdminTeamAccounts() {
                                     <img
                                       src={t.thumbUrl}
                                       alt=""
-                                      className="w-6 h-6 rounded-full object-cover bg-slate-100 flex-shrink-0"
+                                      className="w-6 h-6 rounded-full object-cover bg-[var(--apple-track)] flex-shrink-0"
                                     />
                                   ) : (
-                                    <div className="w-6 h-6 rounded-full bg-slate-200 flex-shrink-0" />
+                                    <div className="w-6 h-6 rounded-full bg-[var(--apple-chip)] flex-shrink-0" />
                                   )}
                                   {href ? (
-                                    <Link href={href} className="text-slate-900 font-medium truncate transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2" data-testid={`link-scope-${a.id}-${i}`}>
+                                    <Link href={href} className="text-[var(--apple-ink)] font-medium truncate transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2" data-testid={`link-scope-${a.id}-${i}`}>
                                       {name}
                                     </Link>
                                   ) : (
-                                    <span className={t.scopeId ? "text-slate-900 font-medium truncate" : "text-slate-400 truncate"}>
+                                    <span className={t.scopeId ? "text-[var(--apple-ink)] font-medium truncate" : "text-[var(--apple-faint)] truncate"}>
                                       {name}
                                     </span>
                                   )}
-                                  <span className="text-xs text-slate-400 flex-shrink-0">
+                                  <span className="text-xs text-[var(--apple-faint)] flex-shrink-0">
                                     {KIND_LABEL[t.scopeKind] || t.scopeKind}
                                   </span>
                                 </div>
@@ -301,16 +300,16 @@ export function AdminTeamAccounts() {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-slate-700" data-testid={`text-access-${a.id}`}>
+                      <td className="px-4 py-3 text-[var(--apple-ink)]" data-testid={`text-access-${a.id}`}>
                         {Array.from(new Set(a.attachments.map((t) => subRoleLabel(t.subRole)))).join(", ") || "—"}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap" data-testid={`text-joined-${a.id}`}>
-                        <div className="text-slate-600">{fmtDate(a.createdAt)}</div>
-                        <div className="text-xs text-slate-400">
+                        <div className="text-[var(--apple-subink)]">{fmtDate(a.createdAt)}</div>
+                        <div className="text-xs text-[var(--apple-faint)]">
                           {a.invitedAt ? "via invite" : "added directly"}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap" data-testid={`text-last-signin-${a.id}`}>
+                      <td className="px-4 py-3 text-[var(--apple-subink)] whitespace-nowrap" data-testid={`text-last-signin-${a.id}`}>
                         {fmtDate(a.lastSignInAt)}
                       </td>
                     </tr>
@@ -318,7 +317,7 @@ export function AdminTeamAccounts() {
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-2.5 border-t border-slate-100 text-xs text-slate-500" data-testid="text-row-count">
+            <div className="px-4 py-2.5 border-t border-[var(--apple-hairline)] text-xs text-[var(--apple-subink)]" data-testid="text-row-count">
               {filtered.length} {filtered.length === 1 ? "account" : "accounts"}
               {filtered.length !== accounts.length ? ` of ${accounts.length}` : ""}
             </div>

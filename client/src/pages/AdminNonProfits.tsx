@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Heart, Loader2, Search, X } from "lucide-react";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
@@ -185,7 +186,7 @@ export function AdminNonProfits() {
     <AdminFrame active="nonprofits">
       <div className="space-y-5" data-testid="page-admin-nonprofits">
         <div
-          className="inline-flex items-center bg-slate-100 rounded-full p-0.5"
+          className="inline-flex items-center bg-[var(--apple-track)] rounded-full p-0.5"
           role="tablist"
           data-testid="tabs-section-nonprofits"
         >
@@ -196,8 +197,8 @@ export function AdminNonProfits() {
             className={[
               "h-8 px-3 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
               pageTab === "dashboard"
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-900",
+                ? "bg-white text-[var(--apple-ink)] shadow-sm"
+                : "text-[var(--apple-subink)]",
             ].join(" ")}
             data-testid="tab-section-dashboard"
           >
@@ -210,8 +211,8 @@ export function AdminNonProfits() {
             className={[
               "h-8 px-3 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
               pageTab === "list"
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-900",
+                ? "bg-white text-[var(--apple-ink)] shadow-sm"
+                : "text-[var(--apple-subink)]",
             ].join(" ")}
             data-testid="tab-section-list"
           >
@@ -245,7 +246,7 @@ export function AdminNonProfits() {
                       setSearch("");
                       setSearchOpen(false);
                     }}
-                    className="text-slate-400 hover:text-slate-700"
+                    className="text-[var(--apple-faint)] hover:text-[var(--apple-subink)]"
                     aria-label="Close search"
                   >
                     <X className="w-4 h-4" />
@@ -255,7 +256,7 @@ export function AdminNonProfits() {
                 <button
                   type="button"
                   onClick={() => setSearchOpen(true)}
-                  className="h-9 w-9 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+                  className="h-9 w-9 rounded-full text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center transition-colors"
                   aria-label="Search"
                   data-testid="button-open-search"
                 >
@@ -293,22 +294,11 @@ export function AdminNonProfits() {
             testId="admin-nonprofits-error"
           />
         ) : filtered.length === 0 ? (
-          <div
-            className="py-16 flex flex-col items-center justify-center text-center"
-            data-testid="empty-nonprofits"
-          >
-            <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-              <Heart className="w-6 h-6" />
-            </div>
-            <p className="text-slate-700 text-sm font-semibold">
-              {search.trim() ? "No matches" : "No NPO partners yet"}
-            </p>
-            <p className="text-slate-400 text-xs mt-1 max-w-xs">
-              {search.trim()
-                ? "Try a different name or domain."
-                : "Click Add NPO and paste the org's main website, or invite one from the Invites page."}
-            </p>
-          </div>
+          <AdminEmptyState testId="empty-nonprofits">
+            {search.trim()
+              ? "No NPO partners match that search."
+              : "No NPO partners yet. Add one with the org's main website."}
+          </AdminEmptyState>
         ) : view === "grid" ? (
           <div
             className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
@@ -320,7 +310,7 @@ export function AdminNonProfits() {
           </div>
         ) : (
           <div
-            className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-slate-100"
+            className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-[var(--apple-hairline)]"
             data-testid="list-nonprofits"
           >
             {filtered.map((npo) => (
@@ -343,14 +333,14 @@ export function AdminNonProfits() {
         }}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-xl p-6 gap-4"
           data-testid="dialog-add-npo"
         >
           <DialogHeader className="text-left space-y-1">
-            <DialogTitle className="text-base font-semibold text-slate-900">
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">
               Add NPO
             </DialogTitle>
-            <DialogDescription className="text-sm text-slate-500 leading-relaxed">
+            <DialogDescription className="text-sm text-[var(--apple-subink)] leading-relaxed">
               Paste the org's main website — we'll pull the name, logo, and
               homepage from the page. You can attach contacts on the detail
               page.
@@ -367,7 +357,7 @@ export function AdminNonProfits() {
               }}
               disabled={createNpo.isPending}
               autoFocus
-              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+              className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
               data-testid="input-add-npo-url"
             />
             {pasteError && (
@@ -375,7 +365,7 @@ export function AdminNonProfits() {
                 {pasteError}
               </p>
             )}
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-[var(--apple-faint)]">
               Reads the page's Open Graph metadata and rehosts the logo.
               Instagram and Facebook pages aren't supported — use the NPO's
               own site instead.
@@ -387,7 +377,7 @@ export function AdminNonProfits() {
                   if (!createNpo.isPending) createNpo.mutate({});
                 }}
                 disabled={createNpo.isPending}
-                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                className="px-3 py-1.5 rounded-full text-xs font-semibold text-[var(--apple-subink)] hover:bg-[var(--apple-track)] disabled:opacity-50 transition-colors"
                 data-testid="button-add-npo-skip"
               >
                 Skip — create blank
@@ -414,8 +404,8 @@ export function AdminNonProfits() {
 
 function NpoCard({ npo }: { npo: NonProfit }) {
   return (
-    <Link href={`/admin/non-profits/${npo.id}`} className="group text-left rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5 underline-offset-2" data-testid={`card-npo-${npo.id}`}>
-      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+    <Link href={`/admin/non-profits/${npo.id}`} className="group text-left rounded-2xl bg-white border border-[var(--apple-hairline)] hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5 underline-offset-2" data-testid={`card-npo-${npo.id}`}>
+      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {npo.logoUrl ? (
           <img src={npo.logoUrl} alt={npo.name} className="w-full h-full object-cover" />
         ) : (
@@ -441,8 +431,8 @@ function NpoCard({ npo }: { npo: NonProfit }) {
 
 function NpoRow({ npo }: { npo: NonProfit }) {
   return (
-    <Link href={`/admin/non-profits/${npo.id}`} className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors underline-offset-2" data-testid={`row-npo-${npo.id}`}>
-      <div className="w-10 h-10 rounded-md overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+    <Link href={`/admin/non-profits/${npo.id}`} className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-[var(--apple-track)] transition-colors underline-offset-2" data-testid={`row-npo-${npo.id}`}>
+      <div className="w-10 h-10 rounded-md overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {npo.logoUrl ? (
           <img src={npo.logoUrl} alt={npo.name} className="w-full h-full object-cover" />
         ) : (

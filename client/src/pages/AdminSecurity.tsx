@@ -179,7 +179,7 @@ export default function AdminSecurity() {
 
   const header = (
     <AdminPageHeader
-      title="Security"
+      title="Security."
       subtitle="Choose how you confirm admin sign-ins and manage your recovery codes."
       testId="text-security-title"
     />
@@ -191,7 +191,7 @@ export default function AdminSecurity() {
         <div className="space-y-5">
           {header}
           <Card className="p-5">
-            <p className="text-[13px] text-rose-600" data-testid="text-security-error">
+            <p className="text-[13px] text-[var(--apple-critical)]" data-testid="text-security-error">
               Couldn't load security settings{error instanceof Error && error.message ? `: ${error.message}` : "."}
             </p>
           </Card>
@@ -205,7 +205,7 @@ export default function AdminSecurity() {
       <AdminFrame active="none">
         <div className="space-y-5">
           {header}
-          <p className="text-sm text-slate-500" data-testid="text-security-loading">Loading…</p>
+          <p className="text-sm text-[var(--apple-subink)]" data-testid="text-security-loading">Loading…</p>
         </div>
       </AdminFrame>
     );
@@ -223,14 +223,14 @@ export default function AdminSecurity() {
 
         <Card className="p-5 space-y-4">
           <div>
-            <h2 className="text-[15px] font-semibold text-slate-900">Second factor</h2>
-            <p className="text-[12.5px] text-slate-500 mt-1">
+            <h2 className="text-[15px] font-semibold text-[var(--apple-ink)]">Second factor</h2>
+            <p className="text-[12.5px] text-[var(--apple-subink)] mt-1">
               Required every time you sign in to the admin. Email codes are the default — switch to an authenticator app for offline use or extra speed.
             </p>
           </div>
 
           <div className="space-y-2">
-            <label className="flex items-start gap-3 p-3 rounded-md border border-slate-200 cursor-pointer hover:bg-slate-50" data-testid="option-factor-email">
+            <label className="flex items-start gap-3 p-3 rounded-md border border-[var(--apple-hairline)] cursor-pointer hover:bg-[var(--apple-track)]" data-testid="option-factor-email">
               <input
                 type="radio"
                 checked={data.factorPref === "email"}
@@ -239,13 +239,13 @@ export default function AdminSecurity() {
                 data-testid="input-factor-email"
               />
               <div className="flex-1">
-                <div className="text-[13.5px] font-medium text-slate-900">Email a code</div>
-                <div className="text-[12.5px] text-slate-500">6-digit code sent to {data.email}, valid for 10 minutes.</div>
+                <div className="text-[13.5px] font-medium text-[var(--apple-ink)]">Email a code</div>
+                <div className="text-[12.5px] text-[var(--apple-subink)]">6-digit code sent to {data.email}, valid for 10 minutes.</div>
               </div>
             </label>
 
-            <div className="rounded-md border border-slate-200 overflow-hidden" data-testid="option-factor-totp">
-              <label className="flex items-start gap-3 p-3 cursor-pointer hover:bg-slate-50">
+            <div className="rounded-md border border-[var(--apple-hairline)] overflow-hidden" data-testid="option-factor-totp">
+              <label className="flex items-start gap-3 p-3 cursor-pointer hover:bg-[var(--apple-track)]">
                 <input
                   type="radio"
                   checked={data.totpEnrolled ? data.factorPref === "totp" : enrolling}
@@ -260,8 +260,8 @@ export default function AdminSecurity() {
                   data-testid="input-factor-totp"
                 />
                 <div className="flex-1">
-                  <div className="text-[13.5px] font-medium text-slate-900">Authenticator app</div>
-                  <div className="text-[12.5px] text-slate-500">
+                  <div className="text-[13.5px] font-medium text-[var(--apple-ink)]">Authenticator app</div>
+                  <div className="text-[12.5px] text-[var(--apple-subink)]">
                     {data.totpEnrolled
                       ? `Linked. ${data.recoveryCodesRemaining} recovery code${data.recoveryCodesRemaining === 1 ? "" : "s"} remaining.`
                       : enrolling
@@ -272,10 +272,10 @@ export default function AdminSecurity() {
               </label>
 
               {!data.totpEnrolled && enrolling && (
-                <div className="border-t border-slate-200 bg-slate-50/50 p-4">
+                <div className="border-t border-[var(--apple-hairline)] bg-[var(--apple-track)]/50 p-4">
                   {!enrollData ? (
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-[12.5px] text-slate-500">
+                      <p className="text-[12.5px] text-[var(--apple-subink)]">
                         {startEnroll.isPending ? "Preparing your QR code…" : "Couldn't start enrollment."}
                       </p>
                       <Button
@@ -289,9 +289,9 @@ export default function AdminSecurity() {
                     </div>
                   ) : (
                     <div className="space-y-3 max-w-sm mx-auto">
-                      <img src={enrollData.qr} alt="2FA QR code" className="mx-auto w-40 h-40 border border-slate-200 rounded bg-white" />
-                      <p className="text-[11px] text-slate-400 text-center break-all">
-                        Manual: <span className="font-mono text-slate-700">{enrollData.secret}</span>
+                      <img src={enrollData.qr} alt="2FA QR code" className="mx-auto w-40 h-40 border border-[var(--apple-hairline)] rounded bg-white" />
+                      <p className="text-[11px] text-[var(--apple-faint)] text-center break-all">
+                        Manual: <span className="font-mono text-[var(--apple-ink)]">{enrollData.secret}</span>
                       </p>
                       <input
                         type="text"
@@ -300,10 +300,10 @@ export default function AdminSecurity() {
                         placeholder="123 456"
                         inputMode="numeric"
                         autoComplete="one-time-code"
-                        className="w-full text-center text-lg font-mono tracking-widest border border-slate-300 rounded-md h-10 px-3 text-slate-900 placeholder:text-slate-400 bg-white"
+                        className="w-full text-center text-lg font-mono tracking-widest border border-[var(--apple-hairline)] rounded-md h-10 px-3 text-[var(--apple-ink)] placeholder:text-[var(--apple-faint)] bg-white"
                         data-testid="input-totp-enroll-code"
                       />
-                      {enrollError && <p className="text-sm text-red-600">{enrollError}</p>}
+                      {enrollError && <p className="text-sm text-[var(--apple-critical)]">{enrollError}</p>}
                       <div className="flex gap-2">
                         <Button
                           onClick={cancelEnroll}
@@ -322,12 +322,12 @@ export default function AdminSecurity() {
                           {confirmEnroll.isPending ? "Verifying…" : "Confirm & link"}
                         </Button>
                       </div>
-                      <div className="mt-2 p-3 bg-white rounded-md border border-slate-200">
-                        <p className="text-[13px] font-semibold mb-2 text-slate-900">Recovery codes</p>
-                        <p className="text-[11.5px] text-slate-500 mb-2">Save these — each works once if you lose your authenticator. You won't see them again.</p>
+                      <div className="mt-2 p-3 bg-white rounded-md border border-[var(--apple-hairline)]">
+                        <p className="text-[13px] font-semibold mb-2 text-[var(--apple-ink)]">Recovery codes</p>
+                        <p className="text-[11.5px] text-[var(--apple-subink)] mb-2">Save these — each works once if you lose your authenticator. You won't see them again.</p>
                         <div className="grid grid-cols-2 gap-1.5 font-mono text-[13px]">
                           {enrollData.recoveryCodes.map((c) => (
-                            <div key={c} className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-slate-900" data-testid={`text-recovery-${c}`}>{c}</div>
+                            <div key={c} className="px-2 py-1 bg-[var(--apple-track)] border border-[var(--apple-hairline)] rounded text-[var(--apple-ink)]" data-testid={`text-recovery-${c}`}>{c}</div>
                           ))}
                         </div>
                       </div>
@@ -341,8 +341,8 @@ export default function AdminSecurity() {
 
         {data.totpEnrolled && (
           <Card className="p-5 space-y-3" data-testid="card-recovery-codes">
-            <h2 className="text-[15px] font-semibold text-slate-900">Recovery codes</h2>
-            <p className="text-[12.5px] text-slate-500">
+            <h2 className="text-[15px] font-semibold text-[var(--apple-ink)]">Recovery codes</h2>
+            <p className="text-[12.5px] text-[var(--apple-subink)]">
               {data.recoveryCodesRemaining} code{data.recoveryCodesRemaining === 1 ? "" : "s"} remaining. Regenerate if you've lost the printed list or used most of them — old codes stop working immediately.
             </p>
             {!regeneratedCodes ? (
@@ -355,11 +355,11 @@ export default function AdminSecurity() {
                 {regenerate.isPending ? "Generating…" : "Regenerate recovery codes"}
               </Button>
             ) : (
-              <div className="p-3 bg-slate-50 rounded-md border border-slate-200">
-                <p className="text-[11.5px] text-slate-500 mb-2">Save these — you won't see them again.</p>
+              <div className="p-3 bg-[var(--apple-track)] rounded-md border border-[var(--apple-hairline)]">
+                <p className="text-[11.5px] text-[var(--apple-subink)] mb-2">Save these — you won't see them again.</p>
                 <div className="grid grid-cols-2 gap-1.5 font-mono text-[13px]">
                   {regeneratedCodes.map((c) => (
-                    <div key={c} className="px-2 py-1 bg-white border border-slate-200 rounded text-slate-900" data-testid={`text-new-recovery-${c}`}>{c}</div>
+                    <div key={c} className="px-2 py-1 bg-white border border-[var(--apple-hairline)] rounded text-[var(--apple-ink)]" data-testid={`text-new-recovery-${c}`}>{c}</div>
                   ))}
                 </div>
                 <Button
@@ -377,8 +377,8 @@ export default function AdminSecurity() {
 
         <Card className="p-5 space-y-4" data-testid="card-change-password">
           <div>
-            <h2 className="text-[15px] font-semibold text-slate-900">Change password</h2>
-            <p className="text-[12.5px] text-slate-500 mt-1">
+            <h2 className="text-[15px] font-semibold text-[var(--apple-ink)]">Change password</h2>
+            <p className="text-[12.5px] text-[var(--apple-subink)] mt-1">
               {hasPassword
                 ? "Use your current password to set a new one. Must be at least 8 characters."
                 : "You sign in via Google or Apple, so there's no password on this account to change."}
@@ -394,7 +394,7 @@ export default function AdminSecurity() {
             }}
           >
             <div>
-              <label className="text-[12px] font-medium text-slate-700 block mb-1" htmlFor="current-password">
+              <label className="text-[12px] font-medium text-[var(--apple-ink)] block mb-1" htmlFor="current-password">
                 Current password
               </label>
               <input
@@ -407,18 +407,18 @@ export default function AdminSecurity() {
                   if (currentPwError) setCurrentPwError(null);
                 }}
                 disabled={!hasPassword || changePassword.isPending}
-                className="w-full h-9 border border-slate-300 rounded-md px-3 text-sm text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8] disabled:bg-slate-50 disabled:text-slate-400"
+                className="w-full h-9 border border-[var(--apple-hairline)] rounded-md px-3 text-sm text-[var(--apple-ink)] placeholder-[var(--apple-faint)] bg-white focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)] disabled:bg-[var(--apple-track)] disabled:text-[var(--apple-faint)]"
                 data-testid="input-current-password"
               />
               {currentPwError && (
-                <p className="text-[12px] text-rose-600 mt-1" data-testid="text-current-password-error">
+                <p className="text-[12px] text-[var(--apple-critical)] mt-1" data-testid="text-current-password-error">
                   {currentPwError}
                 </p>
               )}
             </div>
 
             <div>
-              <label className="text-[12px] font-medium text-slate-700 block mb-1" htmlFor="new-password">
+              <label className="text-[12px] font-medium text-[var(--apple-ink)] block mb-1" htmlFor="new-password">
                 New password
               </label>
               <input
@@ -428,18 +428,18 @@ export default function AdminSecurity() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 disabled={!hasPassword || changePassword.isPending}
-                className="w-full h-9 border border-slate-300 rounded-md px-3 text-sm text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8] disabled:bg-slate-50 disabled:text-slate-400"
+                className="w-full h-9 border border-[var(--apple-hairline)] rounded-md px-3 text-sm text-[var(--apple-ink)] placeholder-[var(--apple-faint)] bg-white focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)] disabled:bg-[var(--apple-track)] disabled:text-[var(--apple-faint)]"
                 data-testid="input-new-password"
               />
               {newPwTooShort && (
-                <p className="text-[12px] text-rose-600 mt-1" data-testid="text-new-password-error">
+                <p className="text-[12px] text-[var(--apple-critical)] mt-1" data-testid="text-new-password-error">
                   Must be at least 8 characters.
                 </p>
               )}
             </div>
 
             <div>
-              <label className="text-[12px] font-medium text-slate-700 block mb-1" htmlFor="confirm-password">
+              <label className="text-[12px] font-medium text-[var(--apple-ink)] block mb-1" htmlFor="confirm-password">
                 Confirm new password
               </label>
               <input
@@ -449,11 +449,11 @@ export default function AdminSecurity() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 disabled={!hasPassword || changePassword.isPending}
-                className="w-full h-9 border border-slate-300 rounded-md px-3 text-sm text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8] disabled:bg-slate-50 disabled:text-slate-400"
+                className="w-full h-9 border border-[var(--apple-hairline)] rounded-md px-3 text-sm text-[var(--apple-ink)] placeholder-[var(--apple-faint)] bg-white focus:outline-none focus:border-[var(--brand-blue)] focus:ring-1 focus:ring-[var(--brand-blue)] disabled:bg-[var(--apple-track)] disabled:text-[var(--apple-faint)]"
                 data-testid="input-confirm-password"
               />
               {mismatch && (
-                <p className="text-[12px] text-rose-600 mt-1" data-testid="text-confirm-password-error">
+                <p className="text-[12px] text-[var(--apple-critical)] mt-1" data-testid="text-confirm-password-error">
                   Passwords don't match.
                 </p>
               )}

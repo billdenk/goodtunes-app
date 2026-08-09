@@ -5,6 +5,7 @@ import { useRoute, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 
 type Engagement = {
   redemptions: { paid: number; refunded: number; direct: number; shopify: number };
@@ -19,10 +20,10 @@ type Song = { id: string; title: string; albumId: string };
 
 function Stat({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">{label}</div>
-      <div className="text-3xl font-bold text-slate-900 mt-1">{value}</div>
-      {sub && <div className="text-[12px] text-slate-500 mt-1">{sub}</div>}
+    <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-4">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">{label}</div>
+      <div className="text-[28px] font-semibold tabular-nums tracking-tight text-[var(--apple-ink)] mt-1">{value}</div>
+      {sub && <div className="text-[12px] text-[var(--apple-subink)] mt-1">{sub}</div>}
     </div>
   );
 }
@@ -54,18 +55,21 @@ function AdminAlbumEngagementInner() {
   return (
     <AdminFrame active="albums" contentWidth="wide">
       <div data-testid="page-album-engagement">
-        <Link href={`/admin/albums/${albumId}`} className="text-[12px] text-slate-500 hover:text-slate-700">
+        <Link href={`/admin/albums/${albumId}`} className="text-[12px] text-[var(--apple-subink)] hover:text-[var(--brand-blue)] hover:underline">
           ← Back to album
         </Link>
+        {/* FLAGGED: detail page with artwork header — h1 restyled in place to
+            Apple-canon (30px semibold ink) rather than AdminPageHeader, which
+            is for index pages without adjacent artwork. */}
         <div className="flex items-center gap-4 mt-4 mb-8">
           {album?.artwork && <img src={album.artwork} alt={album.title} className="w-16 h-16 rounded-lg object-cover" />}
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">{album?.title ?? "Album"}</h1>
-            <p className="text-slate-500 text-sm">{album?.artist}</p>
+            <h1 className="text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]">{album?.title ?? "Album"}</h1>
+            <p className="text-[var(--apple-subink)] text-sm">{album?.artist}</p>
           </div>
         </div>
 
-        {isLoading && <div className="text-slate-400 text-sm">Loading engagement…</div>}
+        {isLoading && <div className="text-[var(--apple-faint)] text-sm">Loading engagement…</div>}
         {engagementError && (
           <ErrorState
             error={engagementErrorObj}
@@ -87,25 +91,25 @@ function AdminAlbumEngagementInner() {
               <Stat label="Refunded" value={data.redemptions.refunded} />
             </section>
 
-            <section className="rounded-xl border border-slate-200 bg-white p-5 mb-6">
-              <h2 className="text-[15px] font-semibold text-slate-900 mb-3">Top songs</h2>
+            <section className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-5 mb-6">
+              <h2 className="text-[15px] font-semibold text-[var(--apple-ink)] mb-3">Top songs</h2>
               {data.topSongs.length === 0 && (
-                <div className="text-slate-400 text-[13px] py-2">No plays yet.</div>
+                <AdminEmptyState>No plays yet.</AdminEmptyState>
               )}
-              <ol className="divide-y divide-slate-100">
+              <ol className="divide-y divide-[var(--apple-hairline)]">
                 {data.topSongs.map((s, i) => (
                   <li key={s.songId} className="flex items-center gap-3 py-2.5" data-testid={`top-song-${s.songId}`}>
-                    <div className="w-6 text-slate-400 text-[12px] font-mono text-right">{i + 1}</div>
-                    <div className="flex-1 truncate text-[14px] text-slate-900">{songTitle(s.songId)}</div>
-                    <div className="text-[12px] text-slate-500 tabular-nums">{s.plays.toLocaleString()} plays</div>
+                    <div className="w-6 text-[var(--apple-faint)] text-[12px] font-mono text-right">{i + 1}</div>
+                    <div className="flex-1 truncate text-[14px] text-[var(--apple-ink)]">{songTitle(s.songId)}</div>
+                    <div className="text-[12px] text-[var(--apple-subink)] tabular-nums">{s.plays.toLocaleString()} plays</div>
                   </li>
                 ))}
               </ol>
             </section>
 
-            <section className="rounded-xl border border-slate-200 bg-white p-5">
+            <section className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-5">
               <div className="flex items-center justify-between gap-3 mb-3">
-                <h2 className="text-[15px] font-semibold text-slate-900">Recent buyers</h2>
+                <h2 className="text-[15px] font-semibold text-[var(--apple-ink)]">Recent buyers</h2>
                 <Link
                   href={`/admin/albums/${albumId}/buyers`}
                   className="text-xs font-medium hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
@@ -115,13 +119,13 @@ function AdminAlbumEngagementInner() {
                 </Link>
               </div>
               {data.recentBuyers.length === 0 && (
-                <div className="text-slate-400 text-[13px] py-2">No purchases yet.</div>
+                <AdminEmptyState>No purchases yet.</AdminEmptyState>
               )}
-              <ol className="divide-y divide-slate-100">
+              <ol className="divide-y divide-[var(--apple-hairline)]">
                 {data.recentBuyers.map((b, i) => (
                   <li key={i} className="flex items-center gap-3 py-2.5 text-[13.5px]">
-                    <div className="flex-1 min-w-0 truncate text-slate-900">{b.email ?? "—"}</div>
-                    <div className="text-[12px] text-slate-500">{b.createdAt ? new Date(b.createdAt).toLocaleDateString() : ""}</div>
+                    <div className="flex-1 min-w-0 truncate text-[var(--apple-ink)]">{b.email ?? "—"}</div>
+                    <div className="text-[12px] text-[var(--apple-subink)]">{b.createdAt ? new Date(b.createdAt).toLocaleDateString() : ""}</div>
                   </li>
                 ))}
               </ol>

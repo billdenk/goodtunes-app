@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Link } from "wouter";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
@@ -330,16 +331,16 @@ export function AdminInvites() {
     return (
       <AdminFrame active="invites" contentWidth="wide">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900 mb-1" data-testid="text-page-title">Invites</h1>
+          <AdminPageHeader title="Invites." />
           <div
-            className="bg-white border border-slate-200 rounded-2xl p-6 mt-6 text-center"
+            className="bg-white border border-[var(--apple-hairline)] rounded-2xl p-6 mt-6 text-center"
             data-testid="state-cannot-invite"
           >
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-              <Lock className="h-6 w-6 text-slate-400" />
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--apple-chip)]">
+              <Lock className="h-6 w-6 text-[var(--apple-faint)]" />
             </div>
-            <h2 className="text-base font-semibold text-slate-900 mb-1">Inviting isn't enabled for your team</h2>
-            <p className="text-sm text-slate-600 max-w-sm mx-auto">
+            <h2 className="text-base font-semibold text-[var(--apple-ink)] mb-1">Inviting isn't enabled for your team</h2>
+            <p className="text-sm text-[var(--apple-subink)] max-w-sm mx-auto">
               Your account doesn't have permission to send invites yet. If you need to add a partner or teammate, just
               ask GoodTunes and we'll set it up for you.
             </p>
@@ -352,11 +353,11 @@ export function AdminInvites() {
   return (
     <AdminFrame active="invites" contentWidth="wide">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900 mb-1" data-testid="text-page-title">Invites</h1>
-        <p className="text-sm text-slate-600 mb-6">
-          Invite a partner to join GoodTunes. Pick the kind of partner, tell us who they are, and we'll email them a
-          one-time link to set their password and land on their own dashboard.
-        </p>
+        <AdminPageHeader
+          title="Invites."
+          subtitle="Invite a partner to join GoodTunes. Pick the kind of partner, tell us who they are, and we'll email them a one-time link to set their password and land on their own dashboard."
+        />
+        <div className="mt-6" />
 
         <form
           onSubmit={(e) => {
@@ -376,12 +377,12 @@ export function AdminInvites() {
               preFlightedAlbumId: inviteRole ? preFlightedAlbumId : null,
             } as any);
           }}
-          className="bg-white border border-slate-200 rounded-2xl p-5 mb-6"
+          className="bg-white border border-[var(--apple-hairline)] rounded-2xl p-5 mb-6"
           data-testid="form-create-invite"
         >
           {inviteMode === "quick" && (
             <div className="mb-4">
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-2">
                 Who are you inviting?
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" data-testid="partner-type-grid">
@@ -397,13 +398,13 @@ export function AdminInvites() {
                         "flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition-colors",
                         selected
                           ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5 ring-1 ring-[var(--brand-blue)]/30"
-                          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+                          : "border-[var(--apple-hairline)] hover:border-[var(--apple-hairline)] hover:bg-[var(--apple-track)]",
                       ].join(" ")}
                       data-testid={`button-partner-type-${t.value}`}
                     >
-                      <t.Icon className={selected ? "w-5 h-5 text-[var(--brand-blue)]" : "w-5 h-5 text-slate-400"} />
-                      <span className="text-sm font-semibold text-slate-900">{t.label}</span>
-                      <span className="text-xs text-slate-500 leading-snug">{t.blurb}</span>
+                      <t.Icon className={selected ? "w-5 h-5 text-[var(--brand-blue)]" : "w-5 h-5 text-[var(--apple-faint)]"} />
+                      <span className="text-sm font-semibold text-[var(--apple-ink)]">{t.label}</span>
+                      <span className="text-xs text-[var(--apple-subink)] leading-snug">{t.blurb}</span>
                     </button>
                   );
                 })}
@@ -414,14 +415,14 @@ export function AdminInvites() {
           {/* Email — its own full-width row. */}
           {(inviteMode === "advanced" || !!role) && (
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Email</label>
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="name@example.com"
-                className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--apple-hairline)] focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
                 data-testid="input-invite-email"
               />
             </div>
@@ -431,7 +432,7 @@ export function AdminInvites() {
           {inviteMode === "advanced" && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Role</label>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1">Role</label>
                 <Select
                   value={role || undefined}
                   onValueChange={(v) => setRole(v)}
@@ -448,7 +449,7 @@ export function AdminInvites() {
               </div>
               {/* Optional referrer attribution. */}
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1">
                   <span className="inline-flex items-center gap-1">
                     <Heart className="w-3.5 h-3.5 text-[color:var(--brand-pink)]" /> Referrer (optional)
                   </span>
@@ -473,7 +474,7 @@ export function AdminInvites() {
                   role is picked, the invite is gated to a specific Person;
                   super-admin can also pre-flight an album draft. */}
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1">
                   Team invite (optional)
                 </label>
                 <Select
@@ -511,17 +512,17 @@ export function AdminInvites() {
           {needsScope && (
             role === "artist" ? (
               <div className="mt-3">
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1">
                   Artist
                 </label>
                 {scopeId ? (
-                  <div className="flex items-center gap-3 px-3 py-2 rounded-lg border border-slate-300 bg-white">
-                    <div className="w-8 h-8 rounded-full bg-slate-200" />
-                    <div className="flex-1 min-w-0 font-medium text-slate-900 truncate">{scopeName}</div>
+                  <div className="flex items-center gap-3 px-3 py-2 rounded-lg border border-[var(--apple-hairline)] bg-white">
+                    <div className="w-8 h-8 rounded-full bg-[var(--apple-chip)]" />
+                    <div className="flex-1 min-w-0 font-medium text-[var(--apple-ink)] truncate">{scopeName}</div>
                     <button
                       type="button"
                       onClick={() => { setScopeId(null); setScopeName(""); }}
-                      className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                      className="p-1.5 rounded-md text-[var(--apple-faint)] hover:text-[var(--apple-ink)] hover:bg-[var(--apple-track)]"
                       aria-label="Clear selection"
                     >
                       <X className="w-4 h-4" />
@@ -531,7 +532,7 @@ export function AdminInvites() {
                   <button
                     type="button"
                     onClick={() => setComposerOpen(true)}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-left text-sm text-slate-600 hover:border-[var(--brand-blue)] hover:text-slate-900"
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--apple-hairline)] bg-white text-left text-sm text-[var(--apple-subink)] hover:border-[var(--brand-blue)] hover:text-[var(--apple-ink)]"
                   >
                     <Plus className="w-4 h-4 text-[var(--brand-blue)] flex-shrink-0" />
                     Search or add an artist…
@@ -571,23 +572,23 @@ export function AdminInvites() {
           {/* Team invite detail — gate to a specific Person + optional pre-flight. */}
           {inviteMode === "advanced" && inviteRole && (
             <div className="mt-3">
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Target person</label>
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1">Target person</label>
               {role === "artist" ? (
                 // Artist-role invites already name the Person in the Artist
                 // field above — reuse it as the target instead of a second
                 // redundant search that left the invite stuck on a 400.
                 scopeId ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2" data-testid="text-target-person">
-                    <span className="text-sm text-slate-800 flex-1 truncate">{effectiveTargetPersonName || "Selected artist"}</span>
-                    <span className="text-xs text-slate-400">from Artist above</span>
+                  <div className="flex items-center gap-2 rounded-lg border border-[var(--apple-hairline)] bg-[var(--apple-track)] px-3 py-2" data-testid="text-target-person">
+                    <span className="text-sm text-[var(--apple-ink)] flex-1 truncate">{effectiveTargetPersonName || "Selected artist"}</span>
+                    <span className="text-xs text-[var(--apple-faint)]">from Artist above</span>
                   </div>
                 ) : (
-                  <p className="text-sm text-slate-500" data-testid="text-target-person-hint">Pick the artist above first — they'll be the target.</p>
+                  <p className="text-sm text-[var(--apple-subink)]" data-testid="text-target-person-hint">Pick the artist above first — they'll be the target.</p>
                 )
               ) : targetPersonId ? (
-                <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2">
-                  <span className="text-sm text-slate-800 flex-1 truncate" data-testid="text-target-person">{targetPersonName}</span>
-                  <button type="button" onClick={() => { setTargetPersonId(null); setTargetPersonName(""); setPreFlightedAlbumId(null); }} className="text-slate-400 hover:text-rose-600" data-testid="button-clear-target-person">
+                <div className="flex items-center gap-2 rounded-lg border border-[var(--apple-hairline)] bg-[var(--apple-track)] px-3 py-2">
+                  <span className="text-sm text-[var(--apple-ink)] flex-1 truncate" data-testid="text-target-person">{targetPersonName}</span>
+                  <button type="button" onClick={() => { setTargetPersonId(null); setTargetPersonName(""); setPreFlightedAlbumId(null); }} className="text-[var(--apple-faint)] hover:text-[var(--apple-critical)]" data-testid="button-clear-target-person">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -598,21 +599,21 @@ export function AdminInvites() {
                     value={personSearch}
                     onChange={(e) => setPersonSearch(e.target.value)}
                     placeholder="Search People (local catalog) — 2+ chars"
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                    className="w-full px-3 py-2 rounded-lg border border-[var(--apple-hairline)] focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
                     data-testid="input-target-person-search"
                   />
                   {personSearch.length >= 2 && personResults.data && personResults.data.length > 0 && (
-                    <ul className="mt-2 bg-white border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-56 overflow-y-auto" data-testid="list-person-results">
+                    <ul className="mt-2 bg-white border border-[var(--apple-hairline)] rounded-lg divide-y divide-[var(--apple-hairline)] max-h-56 overflow-y-auto" data-testid="list-person-results">
                       {personResults.data.map((p) => (
                         <li key={p.id}>
                           <button
                             type="button"
                             onClick={() => { setTargetPersonId(p.id); setTargetPersonName(p.name); setPersonSearch(""); }}
-                            className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-slate-50"
+                            className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-[var(--apple-track)]"
                             data-testid={`button-pick-person-${p.id}`}
                           >
-                            {p.photoUrl ? <img src={p.photoUrl} alt="" className="w-6 h-6 rounded-full object-cover" /> : <div className="w-6 h-6 rounded-full bg-slate-200" />}
-                            <span className="text-sm text-slate-800">{p.name}</span>
+                            {p.photoUrl ? <img src={p.photoUrl} alt="" className="w-6 h-6 rounded-full object-cover" /> : <div className="w-6 h-6 rounded-full bg-[var(--apple-chip)]" />}
+                            <span className="text-sm text-[var(--apple-ink)]">{p.name}</span>
                           </button>
                         </li>
                       ))}
@@ -622,7 +623,7 @@ export function AdminInvites() {
               )}
               {effectiveTargetPersonId && targetAlbums.data && targetAlbums.data.length > 0 && (
                 <div className="mt-3">
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Pre-flight an album draft (optional)</label>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1">Pre-flight an album draft (optional)</label>
                   <Select
                     value={preFlightedAlbumId || undefined}
                     onValueChange={(v) => setPreFlightedAlbumId(v === "__none__" ? null : v)}
@@ -637,7 +638,7 @@ export function AdminInvites() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="mt-1 text-xs text-slate-500">The invitee lands straight in the album editor after sign-up.</p>
+                  <p className="mt-1 text-xs text-[var(--apple-subink)]">The invitee lands straight in the album editor after sign-up.</p>
                 </div>
               )}
             </div>
@@ -645,7 +646,7 @@ export function AdminInvites() {
 
           {(inviteMode === "advanced" || !!role) && (
           <div className="mt-4">
-            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+            <label className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1">
               Welcome note (optional)
             </label>
             <textarea
@@ -654,10 +655,10 @@ export function AdminInvites() {
               rows={3}
               maxLength={1000}
               placeholder="Hi Jenny — really excited to have you on board. — Nick"
-              className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20 text-sm"
+              className="w-full px-3 py-2 rounded-lg border border-[var(--apple-hairline)] focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20 text-sm"
               data-testid="textarea-welcome-note"
             />
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-[var(--apple-subink)]">
               They'll see this note on their first sign-in, above their dashboard.
             </p>
           </div>
@@ -666,7 +667,7 @@ export function AdminInvites() {
           {/* Task #933 — power options live behind a disclosure so the
               everyday partner invite stays a three-field flow. The Send
               invite button anchors the bottom of the form. */}
-          <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+          <div className="mt-5 pt-4 border-t border-[var(--apple-hairline)] flex items-center justify-between gap-3">
             {inviteMode === "quick" ? (
               // Task #1791 — the Advanced power form (any role, referrer
               // attribution, team invites) is super-admin only; scoped
@@ -688,7 +689,7 @@ export function AdminInvites() {
               <button
                 type="button"
                 onClick={() => { setInviteMode("quick"); setRole(""); setReferrerKind(""); setReferrerScopeId(null); setInviteRole(""); setTargetPersonId(null); setTargetPersonName(""); setPreFlightedAlbumId(null); }}
-                className="text-xs font-semibold text-slate-500 hover:text-slate-800 inline-flex items-center gap-1.5"
+                className="text-xs font-semibold text-[var(--apple-subink)] hover:text-[var(--apple-ink)] inline-flex items-center gap-1.5"
                 data-testid="button-quick-invite"
               >
                 <ArrowLeft className="w-3.5 h-3.5" /> Back to quick partner invite
@@ -698,7 +699,7 @@ export function AdminInvites() {
               <button
                 type="submit"
                 disabled={submitDisabled}
-                className="bg-[var(--brand-blue)] hover:bg-[#2789bd] disabled:bg-slate-300 text-white font-semibold rounded-lg px-4 py-2 transition-colors shrink-0"
+                className="bg-[var(--brand-blue)] hover:bg-[#2789bd] disabled:bg-[var(--apple-hairline)] text-white font-semibold rounded-lg px-4 py-2 transition-colors shrink-0"
                 data-testid="button-send-invite"
               >
                 {createMutation.isPending ? "Sending…" : "Send invite"}
@@ -717,7 +718,7 @@ export function AdminInvites() {
                 <button
                   type="button"
                   onClick={() => setDuplicateConfirm(null)}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-amber-100 rounded-md"
+                  className="px-3 py-1.5 text-xs font-semibold text-[var(--apple-ink)] hover:bg-amber-100 rounded-md"
                   data-testid="button-duplicate-cancel"
                 >
                   Cancel
@@ -749,9 +750,9 @@ export function AdminInvites() {
           )}
 
           {lastUrl && (
-            <div className="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-3" data-testid="last-invite-url">
+            <div className="mt-4 bg-[var(--apple-track)] border border-[var(--apple-hairline)] rounded-lg p-3" data-testid="last-invite-url">
               <div className="flex items-center justify-between gap-3">
-                <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Invite link</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Invite link</div>
                 <button
                   type="button"
                   onClick={copyUrl}
@@ -762,14 +763,14 @@ export function AdminInvites() {
                   {copied ? "Copied" : "Copy"}
                 </button>
               </div>
-              <div className="mt-1 text-xs text-slate-700 break-all font-mono">{lastUrl}</div>
+              <div className="mt-1 text-xs text-[var(--apple-ink)] break-all font-mono">{lastUrl}</div>
             </div>
           )}
         </form>
 
-        <h2 className="text-sm font-semibold text-slate-900 mb-3">Pending</h2>
+        <h2 className="text-sm font-semibold text-[var(--apple-ink)] mb-3">Pending</h2>
         {isLoading ? (
-          <div className="text-sm text-slate-500">Loading…</div>
+          <div className="text-sm text-[var(--apple-subink)]">Loading…</div>
         ) : invitesError ? (
           <ErrorState
             error={invitesErrorObj}
@@ -778,11 +779,11 @@ export function AdminInvites() {
             testId="admin-invites-error"
           />
         ) : invites.length === 0 ? (
-          <div className="text-sm text-slate-500 bg-white border border-slate-200 rounded-2xl p-6 text-center" data-testid="empty-invites">
+          <div className="text-sm text-[var(--apple-subink)] bg-white border border-[var(--apple-hairline)] rounded-2xl p-6 text-center" data-testid="empty-invites">
             No pending invites.
           </div>
         ) : (
-          <ul className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100" data-testid="list-invites">
+          <ul className="bg-white border border-[var(--apple-hairline)] rounded-2xl divide-y divide-[var(--apple-hairline)]" data-testid="list-invites">
             {invites.map((inv) => {
               const expires = new Date(inv.expiresAt);
               const expired = expires < new Date();
@@ -797,18 +798,18 @@ export function AdminInvites() {
                     <img
                       src={inv.scopeThumbUrl}
                       alt=""
-                      className="w-9 h-9 rounded-full object-cover bg-slate-100 flex-shrink-0"
+                      className="w-9 h-9 rounded-full object-cover bg-[var(--apple-chip)] flex-shrink-0"
                       data-testid={`img-scope-${inv.id}`}
                     />
                   ) : inv.roleScopeId ? (
-                    <div className="w-9 h-9 rounded-full bg-slate-200 flex-shrink-0" />
+                    <div className="w-9 h-9 rounded-full bg-[var(--apple-chip)] flex-shrink-0" />
                   ) : null}
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium text-slate-900 truncate">{inv.email}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">
+                    <div className="font-medium text-[var(--apple-ink)] truncate">{inv.email}</div>
+                    <div className="text-xs text-[var(--apple-subink)] mt-0.5">
                       <span data-testid={`text-scope-${inv.id}`}>{scopeLabel}</span>
                       <span className="mx-2">·</span>
-                      <span className={expired ? "text-rose-600" : ""}>
+                      <span className={expired ? "text-[var(--apple-critical)]" : ""}>
                         {expired ? "expired" : `expires ${expires.toLocaleDateString()}`}
                       </span>
                       {inv.referrerName && (
@@ -822,7 +823,7 @@ export function AdminInvites() {
                       {inv.resentAt && (
                         <>
                           <span className="mx-2">·</span>
-                          <span className="text-slate-400">re-sent {new Date(inv.resentAt).toLocaleDateString()}</span>
+                          <span className="text-[var(--apple-faint)]">re-sent {new Date(inv.resentAt).toLocaleDateString()}</span>
                         </>
                       )}
                     </div>
@@ -831,7 +832,7 @@ export function AdminInvites() {
                     type="button"
                     onClick={() => resendMutation.mutate(inv.id)}
                     disabled={resendMutation.isPending}
-                    className="p-2 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 transition-colors"
+                    className="p-2 rounded-md text-[var(--apple-faint)] hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] transition-colors"
                     title="Resend invite"
                     aria-label="Resend invite"
                     data-testid={`button-resend-${inv.id}`}
@@ -841,7 +842,7 @@ export function AdminInvites() {
                   <button
                     type="button"
                     onClick={() => revokeMutation.mutate(inv.id)}
-                    className="p-2 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                    className="p-2 rounded-md text-[var(--apple-faint)] hover:text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/10 transition-colors"
                     title="Revoke invite"
                     aria-label="Revoke invite"
                     data-testid={`button-revoke-${inv.id}`}
@@ -973,9 +974,9 @@ function ArtistApplicationsPanel() {
   const pendingCount = statusFilter === "pending" ? items.length : "?";
 
   const failedBanner = failedApprove ? (
-    <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 mb-3" data-testid="banner-approve-failed-app">
+    <div className="bg-[var(--apple-critical)]/10 border border-[var(--apple-critical)]/20 rounded-xl p-3 mb-3" data-testid="banner-approve-failed-app">
       <div className="flex items-center justify-between gap-3">
-        <div className="text-xs font-semibold text-rose-800">
+        <div className="text-xs font-semibold text-[var(--apple-critical)]">
           Approved {failedApprove.email} — invite email failed
         </div>
         <button
@@ -992,7 +993,7 @@ function ArtistApplicationsPanel() {
           {copiedApprove ? "Copied" : "Copy link"}
         </button>
       </div>
-      <div className="mt-1 text-xs font-mono text-slate-700 break-all">{failedApprove.acceptUrl}</div>
+      <div className="mt-1 text-xs font-mono text-[var(--apple-ink)] break-all">{failedApprove.acceptUrl}</div>
     </div>
   ) : null;
 
@@ -1000,11 +1001,11 @@ function ArtistApplicationsPanel() {
 
   return (
     <div
-      className="mt-8 bg-white border border-slate-200 rounded-2xl p-5"
+      className="mt-8 bg-white border border-[var(--apple-hairline)] rounded-2xl p-5"
       data-testid="panel-artist-applications"
     >
       <div className="flex items-center justify-between gap-3 mb-1">
-        <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-[var(--apple-ink)] flex items-center gap-2">
           <Users className="w-4 h-4 text-[var(--brand-blue)]" />
           Artist applications
           {statusFilter === "pending" && items.length > 0 && (
@@ -1023,7 +1024,7 @@ function ArtistApplicationsPanel() {
                 "text-xs px-2.5 py-1 rounded-lg border transition-colors font-medium",
                 statusFilter === s
                   ? "bg-[var(--brand-blue)] border-[var(--brand-blue)] text-white"
-                  : "bg-white border-slate-200 text-slate-600 hover:border-slate-300",
+                  : "bg-white border-[var(--apple-hairline)] text-[var(--apple-subink)] hover:border-[var(--apple-hairline)]",
               ].join(" ")}
               data-testid={`button-app-filter-${s}`}
             >
@@ -1032,7 +1033,7 @@ function ArtistApplicationsPanel() {
           ))}
         </div>
       </div>
-      <p className="text-xs text-slate-500 mb-4">
+      <p className="text-xs text-[var(--apple-subink)] mb-4">
         Applications submitted via reusable artist referral links. Approve to send
         the standard invite email; reject to decline without emailing.
       </p>
@@ -1040,13 +1041,13 @@ function ArtistApplicationsPanel() {
       {failedBanner}
 
       {q.isLoading ? (
-        <p className="text-sm text-slate-400 py-4 text-center">Loading…</p>
+        <p className="text-sm text-[var(--apple-faint)] py-4 text-center">Loading…</p>
       ) : items.length === 0 ? (
-        <p className="text-sm text-slate-500 py-4 text-center" data-testid="empty-artist-applications">
+        <p className="text-sm text-[var(--apple-subink)] py-4 text-center" data-testid="empty-artist-applications">
           {statusFilter === "pending" ? "No pending applications." : "No applications yet."}
         </p>
       ) : (
-        <ul className="divide-y divide-slate-100" data-testid="list-artist-applications">
+        <ul className="divide-y divide-[var(--apple-hairline)]" data-testid="list-artist-applications">
           {items.map((appl) => (
             <li key={appl.id} className="py-4 flex gap-3" data-testid={`row-application-${appl.id}`}>
               {/* Spotify photo or initials */}
@@ -1055,11 +1056,11 @@ function ArtistApplicationsPanel() {
                   <img
                     src={appl.spotifyPhotoUrl}
                     alt=""
-                    className="w-10 h-10 rounded-full object-cover bg-slate-200"
+                    className="w-10 h-10 rounded-full object-cover bg-[var(--apple-chip)]"
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center">
-                    <Music2 className="w-5 h-5 text-slate-400" />
+                  <div className="w-10 h-10 rounded-full bg-[var(--apple-chip)] flex items-center justify-center">
+                    <Music2 className="w-5 h-5 text-[var(--apple-faint)]" />
                   </div>
                 )}
               </div>
@@ -1067,15 +1068,15 @@ function ArtistApplicationsPanel() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="font-medium text-slate-900 text-sm" data-testid={`text-appl-name-${appl.id}`}>
+                    <div className="font-medium text-[var(--apple-ink)] text-sm" data-testid={`text-appl-name-${appl.id}`}>
                       {appl.applicantName}
                     </div>
-                    <div className="text-xs text-slate-500 mt-0.5" data-testid={`text-appl-email-${appl.id}`}>
+                    <div className="text-xs text-[var(--apple-subink)] mt-0.5" data-testid={`text-appl-email-${appl.id}`}>
                       {appl.applicantEmail}
                     </div>
                     {appl.spotifyArtistName && (
                       <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-xs text-slate-400">Spotify:</span>
+                        <span className="text-xs text-[var(--apple-faint)]">Spotify:</span>
                         {appl.spotifyArtistUrl ? (
                           <a
                             href={appl.spotifyArtistUrl}
@@ -1088,12 +1089,12 @@ function ArtistApplicationsPanel() {
                             <ExternalLink className="w-3 h-3" />
                           </a>
                         ) : (
-                          <span className="text-xs text-slate-600">{appl.spotifyArtistName}</span>
+                          <span className="text-xs text-[var(--apple-subink)]">{appl.spotifyArtistName}</span>
                         )}
                       </div>
                     )}
                     {appl.referrerName && (
-                      <div className="text-xs text-slate-400 mt-0.5">
+                      <div className="text-xs text-[var(--apple-faint)] mt-0.5">
                         Referred by {appl.referrerName}
                       </div>
                     )}
@@ -1103,7 +1104,7 @@ function ArtistApplicationsPanel() {
                       <span className="text-xs font-medium bg-green-100 text-green-700 rounded-full px-2 py-0.5">Approved</span>
                     )}
                     {appl.status === "rejected" && (
-                      <span className="text-xs font-medium bg-rose-100 text-rose-700 rounded-full px-2 py-0.5">Rejected</span>
+                      <span className="text-xs font-medium bg-[var(--apple-critical)]/15 text-[var(--apple-critical)] rounded-full px-2 py-0.5">Rejected</span>
                     )}
                     {appl.status === "pending" && (
                       <span className="text-xs font-medium bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">Pending</span>
@@ -1114,14 +1115,14 @@ function ArtistApplicationsPanel() {
                 {/* Impersonation flag */}
                 {appl.impersonationFlag && (
                   <div
-                    className="flex items-start gap-1.5 mt-1.5 rounded-md bg-rose-50 border border-rose-200 px-2.5 py-1.5"
+                    className="flex items-start gap-1.5 mt-1.5 rounded-md bg-[var(--apple-critical)]/10 border border-[var(--apple-critical)]/20 px-2.5 py-1.5"
                     data-testid={`badge-impersonation-${appl.id}`}
                   >
-                    <AlertTriangle className="w-3.5 h-3.5 text-rose-500 flex-shrink-0 mt-0.5" />
+                    <AlertTriangle className="w-3.5 h-3.5 text-[var(--apple-critical)] flex-shrink-0 mt-0.5" />
                     <div>
-                      <div className="text-xs font-semibold text-rose-700">Possible impersonation</div>
+                      <div className="text-xs font-semibold text-[var(--apple-critical)]">Possible impersonation</div>
                       {appl.impersonationMatch && (
-                        <div className="text-xs text-rose-600 mt-0.5">{appl.impersonationMatch}</div>
+                        <div className="text-xs text-[var(--apple-critical)] mt-0.5">{appl.impersonationMatch}</div>
                       )}
                     </div>
                   </div>
@@ -1190,7 +1191,7 @@ function ArtistApplicationsPanel() {
                       onChange={(e) =>
                         setReviewNotes((p) => ({ ...p, [appl.id]: e.target.value }))
                       }
-                      className="w-full text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:border-[var(--brand-blue)] focus:outline-none"
+                      className="w-full text-xs rounded-lg border border-[var(--apple-hairline)] px-2.5 py-1.5 focus:border-[var(--brand-blue)] focus:outline-none"
                       data-testid={`input-review-note-${appl.id}`}
                     />
 
@@ -1265,7 +1266,7 @@ function ArtistApplicationsPanel() {
                             reject.mutate({ id: appl.id, reviewNote: reviewNotes[appl.id] ?? "" })
                           }
                           disabled={approve.isPending || reject.isPending}
-                          className="rounded-lg border border-slate-200 text-slate-600 text-xs font-semibold px-3 py-1.5 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-700 disabled:opacity-50 transition-colors"
+                          className="rounded-lg border border-[var(--apple-hairline)] text-[var(--apple-subink)] text-xs font-semibold px-3 py-1.5 hover:bg-[var(--apple-critical)]/10 hover:border-[var(--apple-critical)]/40 hover:text-[var(--apple-critical)] disabled:opacity-50 transition-colors"
                           data-testid={`button-reject-${appl.id}`}
                         >
                           Reject
@@ -1277,12 +1278,12 @@ function ArtistApplicationsPanel() {
 
                 {/* Reviewed note display */}
                 {appl.status !== "pending" && appl.reviewNote && (
-                  <p className="text-xs text-slate-500 mt-1 italic">
+                  <p className="text-xs text-[var(--apple-subink)] mt-1 italic">
                     Note: {appl.reviewNote}
                   </p>
                 )}
                 {appl.status === "approved" && appl.linkedInviteId && (
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className="text-xs text-[var(--apple-faint)] mt-1">
                     Invite sent —{" "}
                     <span className="font-mono">{appl.linkedInviteId.slice(0, 8)}…</span>
                   </p>
@@ -1377,9 +1378,9 @@ function ReviewQueuePanel() {
   // Non-super (403) hides the whole panel — they can't approve anyway.
   if (q.isError) return null;
   const failedBanner = failedApprove ? (
-    <div className="bg-rose-50 border border-rose-200 rounded-xl p-3" data-testid="banner-approve-failed">
+    <div className="bg-[var(--apple-critical)]/10 border border-[var(--apple-critical)]/20 rounded-xl p-3" data-testid="banner-approve-failed">
       <div className="flex items-center justify-between gap-3">
-        <div className="text-xs font-semibold text-rose-800">
+        <div className="text-xs font-semibold text-[var(--apple-critical)]">
           Approved {failedApprove.email} — but the email failed to send
         </div>
         <button
@@ -1393,10 +1394,10 @@ function ReviewQueuePanel() {
         </button>
       </div>
       {failedApprove.reason && (
-        <div className="mt-1 text-xs text-rose-700">{failedApprove.reason}</div>
+        <div className="mt-1 text-xs text-[var(--apple-critical)]">{failedApprove.reason}</div>
       )}
-      <div className="mt-1 text-xs text-slate-700 break-all font-mono">{failedApprove.acceptUrl}</div>
-      <div className="mt-1 text-xs text-slate-500">
+      <div className="mt-1 text-xs text-[var(--apple-ink)] break-all font-mono">{failedApprove.acceptUrl}</div>
+      <div className="mt-1 text-xs text-[var(--apple-subink)]">
         Share this link manually, or use the Resend button in the Pending list above. See "Recent email failures" below for why it didn't send.
       </div>
     </div>
@@ -1408,23 +1409,23 @@ function ReviewQueuePanel() {
   }
   return (
     <div className="mt-8 bg-white border border-amber-200 rounded-2xl p-5" data-testid="panel-review-queue">
-      <h2 className="text-sm font-semibold text-slate-900 mb-1">Held for review ({q.data.length})</h2>
-      <p className="text-xs text-slate-500 mb-3">
+      <h2 className="text-sm font-semibold text-[var(--apple-ink)] mb-1">Held for review ({q.data.length})</h2>
+      <p className="text-xs text-[var(--apple-subink)] mb-3">
         Identity invites for claimed People (linked login, Spotify artist, GoodTunes releases, or groups), and any team invite from a non-super-admin
         whose email isn't on file for the target Person, are held here until approved.
       </p>
       {failedBanner && <div className="mb-3">{failedBanner}</div>}
-      <ul className="divide-y divide-slate-100">
+      <ul className="divide-y divide-[var(--apple-hairline)]">
         {q.data.map((inv) => (
           <li key={inv.id} className="flex items-center gap-3 py-3" data-testid={`row-review-${inv.id}`}>
             {inv.targetPersonPhoto
-              ? <img src={inv.targetPersonPhoto} alt="" className="w-9 h-9 rounded-full object-cover bg-slate-100 flex-shrink-0" />
-              : <div className="w-9 h-9 rounded-full bg-slate-200 flex-shrink-0" />}
+              ? <img src={inv.targetPersonPhoto} alt="" className="w-9 h-9 rounded-full object-cover bg-[var(--apple-chip)] flex-shrink-0" />
+              : <div className="w-9 h-9 rounded-full bg-[var(--apple-chip)] flex-shrink-0" />}
             <div className="min-w-0 flex-1">
-              <div className="font-medium text-slate-900 truncate" data-testid={`text-review-email-${inv.id}`}>{inv.email}</div>
-              <div className="text-xs text-slate-500 mt-0.5">
+              <div className="font-medium text-[var(--apple-ink)] truncate" data-testid={`text-review-email-${inv.id}`}>{inv.email}</div>
+              <div className="text-xs text-[var(--apple-subink)] mt-0.5">
                 {inv.inviteRole ? (INVITE_ROLE_DISPLAY[inv.inviteRole] ?? inv.inviteRole) : inv.role}
-                {inv.targetPersonName && <> · <span className="font-medium text-slate-700">{inv.targetPersonName}</span></>}
+                {inv.targetPersonName && <> · <span className="font-medium text-[var(--apple-ink)]">{inv.targetPersonName}</span></>}
                 {inv.targetSpotifyId && <> · <span className="text-amber-700">Spotify-claimed</span></>}
                 {inv.targetIsGroup && <> · <span className="text-amber-700">group</span></>}
                 {inv.createdByName && <> · invited by {inv.createdByName}</>}
@@ -1433,8 +1434,8 @@ function ReviewQueuePanel() {
                 )}
               </div>
               {inv.referrerKind === "manufacturer" && inv.draftAlbumTitle && (
-                <div className="text-xs text-slate-500 mt-0.5" data-testid={`text-review-draft-album-${inv.id}`}>
-                  Draft album: <span className="font-medium text-slate-700">{inv.draftAlbumTitle}</span>
+                <div className="text-xs text-[var(--apple-subink)] mt-0.5" data-testid={`text-review-draft-album-${inv.id}`}>
+                  Draft album: <span className="font-medium text-[var(--apple-ink)]">{inv.draftAlbumTitle}</span>
                 </div>
               )}
             </div>
@@ -1453,7 +1454,7 @@ function ReviewQueuePanel() {
                 const reason = prompt("Reason for rejecting this invite? (optional)") || "";
                 reject.mutate({ id: inv.id, reason });
               }}
-              className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-rose-700 hover:bg-rose-50 rounded-md"
+              className="px-3 py-1.5 text-xs font-semibold text-[var(--apple-subink)] hover:text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/10 rounded-md"
               data-testid={`button-reject-${inv.id}`}
             >
               Reject
@@ -1487,8 +1488,8 @@ type MailHealthData = {
 const MAIL_STATUS_BANNER: Record<MailHealthData["status"], { label: string; cls: string }> = {
   ok: { label: "Email delivery healthy", cls: "bg-emerald-50 text-emerald-800 border-emerald-200" },
   degraded: { label: "Email delivery degraded", cls: "bg-amber-50 text-amber-800 border-amber-200" },
-  down: { label: "Email delivery is DOWN", cls: "bg-rose-50 text-rose-800 border-rose-200" },
-  unconfigured: { label: "Email not configured (dev)", cls: "bg-slate-50 text-slate-600 border-slate-200" },
+  down: { label: "Email delivery is DOWN", cls: "bg-[var(--apple-critical)]/10 text-[var(--apple-critical)] border-[var(--apple-critical)]/20" },
+  unconfigured: { label: "Email not configured (dev)", cls: "bg-[var(--apple-track)] text-[var(--apple-subink)] border-[var(--apple-hairline)]" },
 };
 
 function MailFailuresPanel() {
@@ -1502,14 +1503,14 @@ function MailFailuresPanel() {
   const failures = h.recentFailures;
   const banner = MAIL_STATUS_BANNER[h.status];
   return (
-    <div className="mt-8 bg-white border border-slate-200 rounded-2xl p-5" data-testid="panel-mail-failures">
+    <div className="mt-8 bg-white border border-[var(--apple-hairline)] rounded-2xl p-5" data-testid="panel-mail-failures">
       <div className="flex items-center justify-between gap-3 mb-1">
-        <h2 className="text-sm font-semibold text-slate-900">Email delivery</h2>
+        <h2 className="text-sm font-semibold text-[var(--apple-ink)]">Email delivery</h2>
         <button
           type="button"
           onClick={() => q.refetch()}
           disabled={q.isFetching}
-          className="p-2 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 transition-colors"
+          className="p-2 rounded-md text-[var(--apple-faint)] hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] transition-colors"
           title="Refresh"
           aria-label="Refresh email health"
           data-testid="button-refresh-mail-failures"
@@ -1529,31 +1530,31 @@ function MailFailuresPanel() {
             : "No successful send this session"}
         </span>
       </div>
-      <p className="text-xs text-slate-500 mb-3">
+      <p className="text-xs text-[var(--apple-subink)] mb-3">
         Transactional emails (invites, sign-in codes, receipts) this server tried and failed to send, newest first. Use the reason to fix the
         cause (e.g. verify the from-address / domain in Resend, or check that RESEND_API_KEY is set on the live host). A sustained outage also
-        logs a <code className="text-slate-600">[mail-health]</code> line you can alert on. This data lives in memory for this environment only
+        logs a <code className="text-[var(--apple-subink)]">[mail-health]</code> line you can alert on. This data lives in memory for this environment only
         and clears on restart.
       </p>
       {h.consecutiveFailures > 0 && (
-        <p className="text-xs text-rose-700 mb-3" data-testid="text-mail-consecutive-failures">
+        <p className="text-xs text-[var(--apple-critical)] mb-3" data-testid="text-mail-consecutive-failures">
           {h.consecutiveFailures} send{h.consecutiveFailures === 1 ? "" : "s"} failed in a row · {h.recentFailureCount} in the last{" "}
           {h.windowMinutes} min.
         </p>
       )}
       {failures.length === 0 ? (
-        <div className="text-sm text-slate-500" data-testid="empty-mail-failures">No send failures recorded.</div>
+        <div className="text-sm text-[var(--apple-subink)]" data-testid="empty-mail-failures">No send failures recorded.</div>
       ) : (
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-[var(--apple-hairline)]">
           {failures.slice().reverse().map((f, i) => (
             <li key={`${f.ts}-${i}`} className="py-2.5" data-testid={`row-mail-failure-${i}`}>
               <div className="flex items-center justify-between gap-3">
-                <div className="font-medium text-slate-900 text-sm truncate">
-                  {f.template} <span className="text-slate-400 font-normal">→ @{f.recipientDomain}</span>
+                <div className="font-medium text-[var(--apple-ink)] text-sm truncate">
+                  {f.template} <span className="text-[var(--apple-faint)] font-normal">→ @{f.recipientDomain}</span>
                 </div>
-                <div className="text-xs text-slate-400 flex-shrink-0">{new Date(f.ts).toLocaleString()}</div>
+                <div className="text-xs text-[var(--apple-faint)] flex-shrink-0">{new Date(f.ts).toLocaleString()}</div>
               </div>
-              <div className="text-xs text-rose-700 break-words mt-0.5" data-testid={`text-mail-failure-reason-${i}`}>{f.reason}</div>
+              <div className="text-xs text-[var(--apple-critical)] break-words mt-0.5" data-testid={`text-mail-failure-reason-${i}`}>{f.reason}</div>
             </li>
           ))}
         </ul>
@@ -1585,9 +1586,9 @@ function ReferralFundingPanel() {
   if (q.isError) return null;
   const enabled = !!q.data?.inviteeCharityBonusEnabled;
   return (
-    <div className="mt-8 bg-white border border-slate-200 rounded-2xl p-5" data-testid="panel-referral-funding">
-      <h2 className="text-sm font-semibold text-slate-900 mb-1">Referral funding</h2>
-      <p className="text-xs text-slate-500 mb-3">
+    <div className="mt-8 bg-white border border-[var(--apple-hairline)] rounded-2xl p-5" data-testid="panel-referral-funding">
+      <h2 className="text-sm font-semibold text-[var(--apple-ink)] mb-1">Referral funding</h2>
+      <p className="text-xs text-[var(--apple-subink)] mb-3">
         Lift the NPO referral rate from <strong>$1.00</strong> to <strong>$1.50</strong> per paid unit.
         Funded out of GoodTunes margin. Affects all future paid orders — past credits aren't backfilled.
       </p>
@@ -1600,11 +1601,11 @@ function ReferralFundingPanel() {
           className="mt-1 w-4 h-4 accent-[var(--brand-blue)]"
           data-testid="toggle-invitee-charity-bonus"
         />
-        <span className="text-sm text-slate-700">
+        <span className="text-sm text-[var(--apple-ink)]">
           Pay non-profit referrers <strong>$1.50</strong> per paid unit (default $1.00)
         </span>
       </label>
-      <div className="mt-4 pt-3 border-t border-slate-100">
+      <div className="mt-4 pt-3 border-t border-[var(--apple-hairline)]">
         <Link href="/admin/invite-tree" className="text-xs font-semibold text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2" data-testid="link-invite-tree">
           Open the invite tree →
         </Link>

@@ -3,6 +3,7 @@ import { useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { Input } from "@/components/ui/input";
 import {
@@ -417,11 +418,14 @@ function AdminFanOrdersInner() {
   return (
     <AdminFrame active="fan-orders">
       <div className="space-y-5" data-testid="page-admin-fan-orders">
-        <AdminPageHeader title="Fan orders" />
+        <AdminPageHeader
+          title="Fan orders."
+          subtitle="Every fan purchase across the catalog — search, filter, and export."
+        />
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[220px] max-w-md">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--apple-faint)] pointer-events-none" />
             <Input
               type="search"
               value={search}
@@ -436,7 +440,7 @@ function AdminFanOrdersInner() {
                 onClick={() => setSearch("")}
                 aria-label="Clear search"
                 data-testid="button-clear-search"
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--apple-faint)] hover:text-[var(--apple-ink)]"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -447,7 +451,7 @@ function AdminFanOrdersInner() {
             value={datePreset}
             onChange={(e) => setDatePreset(e.target.value as DateRangePreset)}
             data-testid="select-date-range"
-            className="h-9 text-[13px] rounded-md border border-slate-200 bg-white px-2.5 text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+            className="h-9 text-[13px] rounded-full border border-[var(--apple-hairline)] bg-white px-2.5 text-[var(--apple-ink)] hover:border-[var(--apple-subink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
           >
             {DATE_PRESETS.map((p) => (
               <option key={p.key} value={p.key}>
@@ -466,7 +470,7 @@ function AdminFanOrdersInner() {
                 data-testid="input-date-from"
                 aria-label="From date"
               />
-              <span className="text-slate-400 text-[12px]">to</span>
+              <span className="text-[var(--apple-faint)] text-[12px]">to</span>
               <Input
                 type="date"
                 value={customTo}
@@ -483,7 +487,7 @@ function AdminFanOrdersInner() {
             onClick={() => downloadOrdersCsv(filtered, tab)}
             disabled={filtered.length === 0}
             data-testid="button-export-csv"
-            className="ml-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="ml-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-full border border-[var(--apple-hairline)] bg-white text-[13px] font-medium text-[var(--apple-ink)] hover:bg-[var(--apple-track)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             title={
               filtered.length === 0
                 ? "No rows to export"
@@ -492,12 +496,12 @@ function AdminFanOrdersInner() {
           >
             <Download className="w-3.5 h-3.5" />
             Export CSV
-            <span className="text-slate-400 tabular-nums">({filtered.length})</span>
+            <span className="text-[var(--apple-faint)] tabular-nums">({filtered.length})</span>
           </button>
         </div>
 
         <div
-          className="flex items-center gap-1 border-b border-slate-200"
+          className="flex items-center gap-1 border-b border-[var(--apple-hairline)]"
           role="tablist"
           aria-label="Fan order status"
         >
@@ -515,7 +519,7 @@ function AdminFanOrdersInner() {
                   "px-3 py-2 text-[13px] font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5",
                   isActive
                     ? "border-[var(--brand-blue)] text-[var(--brand-blue)]"
-                    : "border-transparent text-slate-500 hover:text-slate-900",
+                    : "border-transparent text-[var(--apple-subink)]",
                 ].join(" ")}
               >
                 {t.label}
@@ -524,7 +528,7 @@ function AdminFanOrdersInner() {
                     "rounded-full text-[10.5px] font-semibold px-1.5 py-0.5 leading-none",
                     isActive
                       ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
-                      : "bg-slate-100 text-slate-500",
+                      : "bg-[var(--apple-track)] text-[var(--apple-subink)]",
                   ].join(" ")}
                   data-testid={`tab-count-${t.key}`}
                 >
@@ -537,7 +541,7 @@ function AdminFanOrdersInner() {
 
         {isLoading && (
           <div
-            className="text-slate-500 text-sm"
+            className="text-[var(--apple-subink)] text-sm"
             data-testid="loading-fan-orders"
           >
             Loading fan orders…
@@ -555,24 +559,21 @@ function AdminFanOrdersInner() {
 
         {!isLoading && !isError && filtered.length === 0 && (
           <div
-            className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center"
+            className="rounded-2xl border border-[var(--apple-hairline)] bg-white"
             data-testid={`empty-fan-orders-${tab}`}
           >
-            <p className="text-sm font-semibold text-slate-700">
-              No {active.label.toLowerCase()} orders yet
-            </p>
-            <p className="text-[12px] text-slate-500 mt-1 max-w-md mx-auto">
-              {active.blurb}
-            </p>
+            <AdminEmptyState>
+              No {active.label.toLowerCase()} orders yet — {active.blurb}
+            </AdminEmptyState>
           </div>
         )}
 
         {!isLoading && !isError && filtered.length > 0 && (
           <div
-            className="rounded-2xl border border-slate-200 bg-white overflow-hidden"
+            className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden"
             data-testid="table-fan-orders"
           >
-            <div className="grid grid-cols-[1.1fr_1.6fr_2fr_0.9fr_0.9fr_1fr] gap-3 px-4 py-2.5 border-b border-slate-200 bg-slate-50">
+            <div className="grid grid-cols-[1.1fr_1.6fr_2fr_0.9fr_0.9fr_1fr] gap-3 px-4 py-2.5 border-b border-[var(--apple-hairline)] bg-[var(--apple-track)]">
               {columns.map((c) => {
                 const isSorted = sortKey === c.key;
                 const Arrow = !isSorted
@@ -590,8 +591,8 @@ function AdminFanOrdersInner() {
                       "text-[11px] font-semibold uppercase tracking-wider inline-flex items-center gap-1 transition-colors",
                       c.align === "right" ? "justify-end" : "justify-start",
                       isSorted
-                        ? "text-slate-900"
-                        : "text-slate-500 hover:text-slate-700",
+                        ? "text-[var(--apple-ink)]"
+                        : "text-[var(--apple-subink)]",
                     ].join(" ")}
                     aria-sort={
                       isSorted
@@ -618,27 +619,27 @@ function AdminFanOrdersInner() {
                 data-testid={`row-fan-order-${o.id}`}
                 data-focused={isFocus ? "true" : undefined}
                 className={[
-                  "w-full grid grid-cols-[1.1fr_1.6fr_2fr_0.9fr_0.9fr_1fr] gap-3 px-4 py-3 border-b border-slate-100 last:border-b-0 text-left hover:bg-slate-50 transition-colors",
+                  "w-full grid grid-cols-[1.1fr_1.6fr_2fr_0.9fr_0.9fr_1fr] gap-3 px-4 py-3 border-b border-[var(--apple-hairline)] last:border-b-0 text-left hover:bg-[var(--apple-track)] transition-colors",
                   isFocus ? "bg-[var(--brand-blue)]/5 ring-2 ring-inset ring-[var(--brand-blue)]/40" : "",
                 ].join(" ")}
               >
-                <div className="text-[13px] text-slate-900 font-medium flex items-center gap-2 min-w-0">
+                <div className="text-[13px] text-[var(--apple-ink)] font-medium flex items-center gap-2 min-w-0">
                   <span className="truncate">{orderShort(o)}</span>
                   {originBadge(o.origin)}
                 </div>
-                <div className="text-[13px] text-slate-700 truncate">
+                <div className="text-[13px] text-[var(--apple-ink)] truncate">
                   {customerLabel(o)}
                 </div>
-                <div className="text-[13px] text-slate-600 truncate">
-                  <span className="text-slate-900 font-medium">{o.albumTitle}</span>
-                  <span className="text-slate-400"> · </span>
+                <div className="text-[13px] text-[var(--apple-subink)] truncate">
+                  <span className="text-[var(--apple-ink)] font-medium">{o.albumTitle}</span>
+                  <span className="text-[var(--apple-faint)]"> · </span>
                   <span>{itemsLabel(o)}</span>
                 </div>
-                <div className="text-[13px] text-slate-900 text-right tabular-nums">
+                <div className="text-[13px] text-[var(--apple-ink)] text-right tabular-nums">
                   {dollars(o.totalCents)}
                 </div>
                 <div className="text-[13px]">{statusPill(o)}</div>
-                <div className="text-[12.5px] text-slate-500 text-right tabular-nums">
+                <div className="text-[12.5px] text-[var(--apple-subink)] text-right tabular-nums">
                   {new Date(o.createdAt).toLocaleDateString()}
                 </div>
               </button>

@@ -124,7 +124,7 @@ export function AdminPlatformPricing() {
   if (!user?.isAdmin) {
     return (
       <main className="min-h-screen bg-slate-50 flex items-center justify-center p-8">
-        <p className="text-slate-500 text-sm">Admin only.</p>
+        <p className="text-[var(--apple-subink)] text-sm">Admin only.</p>
       </main>
     );
   }
@@ -132,9 +132,9 @@ export function AdminPlatformPricing() {
     return (
       <AdminFrame active="platform-pricing">
         <AdminPageHeader title="Platform pricing" subtitle="Restricted." />
-        <div className="rounded-lg border border-slate-200 bg-white p-10 text-center">
-          <div className="text-slate-700 font-medium">Super admin only</div>
-          <div className="text-slate-500 text-[13px] mt-1">
+        <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-10 text-center">
+          <div className="text-[var(--apple-ink)] font-medium">Super admin only</div>
+          <div className="text-[var(--apple-subink)] text-[13px] mt-1">
             Ask a super admin to update platform-wide costs.
           </div>
         </div>
@@ -151,7 +151,7 @@ export function AdminPlatformPricing() {
         />
 
         {settingsLoading ? (
-          <div className="py-10 text-slate-500 text-sm">Loading…</div>
+          <div className="py-10 text-[var(--apple-subink)] text-sm">Loading…</div>
         ) : settingsIsError ? (
           <ErrorState
             error={settingsError}
@@ -160,7 +160,7 @@ export function AdminPlatformPricing() {
             testId="admin-platform-pricing-error"
           />
         ) : !settings ? (
-          <div className="py-10 text-slate-500 text-sm">
+          <div className="py-10 text-[var(--apple-subink)] text-sm">
             {settingsIsFetching ? "Loading…" : "No pricing settings available."}
           </div>
         ) : (
@@ -221,7 +221,7 @@ function PlatformFeesCard({ settings }: { settings: PayoutSettings }) {
 
   return (
     <div
-      className="rounded-lg border border-slate-200 bg-white p-5 space-y-4"
+      className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-5 space-y-4"
       data-testid="panel-platform-fees"
     >
       <CardHeader
@@ -240,10 +240,10 @@ function PlatformFeesCard({ settings }: { settings: PayoutSettings }) {
 
       <dl className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-sm text-slate-600">Shopify checkout fee</dt>
+          <dt className="text-sm text-[var(--apple-subink)]">Shopify checkout fee</dt>
           {editing ? (
             <div className="relative">
-              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]">$</span>
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--apple-faint)] text-[12px]">$</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -254,7 +254,7 @@ function PlatformFeesCard({ settings }: { settings: PayoutSettings }) {
               />
             </div>
           ) : (
-            <dd className="text-sm font-semibold text-slate-900" data-testid="text-shopify-fee">
+            <dd className="text-sm font-semibold text-[var(--apple-ink)]" data-testid="text-shopify-fee">
               {dollars(settings.shopifyFeeCents)}
             </dd>
           )}
@@ -269,7 +269,7 @@ function PlatformFeesCard({ settings }: { settings: PayoutSettings }) {
               setShopifyStr((settings.shopifyFeeCents / 100).toFixed(2));
               setEditing(false);
             }}
-            className="h-8 px-2.5 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-50"
+            className="h-8 px-2.5 rounded-full text-xs font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
             data-testid="button-cancel-platform-fees"
           >
             Cancel
@@ -283,7 +283,7 @@ function PlatformFeesCard({ settings }: { settings: PayoutSettings }) {
         </div>
       )}
 
-      <p className="text-[12px] text-slate-400 pt-2 border-t border-slate-100">
+      <p className="text-[12px] text-[var(--apple-faint)] pt-2 border-t border-[var(--apple-hairline)]">
         Printed &amp; signed certificate wholesale cost lives in the
         Wholesale Ladder below — every rung's price is the source of truth
         for what a cert costs at that run size.
@@ -373,7 +373,7 @@ function RoutingDefaultsCard({ settings }: { settings: PayoutSettings }) {
 
   return (
     <div
-      className="rounded-lg border border-slate-200 bg-white p-5 space-y-4"
+      className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-5 space-y-4"
       data-testid="panel-gooddeed-routing"
     >
       <CardHeader
@@ -396,7 +396,7 @@ function RoutingDefaultsCard({ settings }: { settings: PayoutSettings }) {
           const vendorName = nameOf(leg, vendorId);
           return (
             <div key={leg} data-testid={`row-routing-${leg}`}>
-              <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
+              <span className="block text-[var(--apple-subink)] text-[10.5px] font-semibold uppercase tracking-wider mb-1">
                 {LEG_LABEL[leg]}
               </span>
               {editing ? (
@@ -415,12 +415,12 @@ function RoutingDefaultsCard({ settings }: { settings: PayoutSettings }) {
                   ))}
                 </select>
               ) : vendorId && vendorName ? (
-                <Link href={`/admin/vendors/${vendorId}?tab=gooddeed`} className="inline-flex items-center gap-1.5 text-sm text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors" data-testid={`link-routing-${leg}`}>
+                <Link href={`/admin/vendors/${vendorId}?tab=gooddeed`} className="inline-flex items-center gap-1.5 text-sm text-[var(--apple-ink)] hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors" data-testid={`link-routing-${leg}`}>
                   {vendorName}
                   <ExternalLink className="w-3.5 h-3.5 opacity-60" />
                 </Link>
               ) : (
-                <span className="text-sm text-slate-400" data-testid={`text-routing-${leg}-empty`}>
+                <span className="text-sm text-[var(--apple-faint)]" data-testid={`text-routing-${leg}-empty`}>
                   — None selected —
                 </span>
               )}
@@ -443,7 +443,7 @@ function RoutingDefaultsCard({ settings }: { settings: PayoutSettings }) {
               setDraft(live);
               setEditing(false);
             }}
-            className="h-8 px-2.5 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-50"
+            className="h-8 px-2.5 rounded-full text-xs font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
             data-testid="button-cancel-routing"
           >
             Cancel
@@ -552,7 +552,7 @@ function SignedCertLadderCard({ settings }: { settings: PayoutSettings }) {
 
   return (
     <div
-      className="rounded-lg border border-slate-200 bg-white p-5 space-y-3"
+      className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-5 space-y-3"
       data-testid="panel-signed-cert-ladder"
     >
       <CardHeader
@@ -568,9 +568,9 @@ function SignedCertLadderCard({ settings }: { settings: PayoutSettings }) {
         testId="signed-cert-ladder"
       />
 
-      <div className="overflow-hidden rounded-md border border-slate-200">
+      <div className="overflow-hidden rounded-xl border border-[var(--apple-hairline)]">
         <table className="w-full text-[13px]">
-          <thead className="bg-slate-50 text-slate-500">
+          <thead className="bg-[var(--apple-track)] text-[var(--apple-subink)]">
             <tr>
               <th className="w-9" />
               <th className="text-left font-semibold uppercase tracking-wider text-[10.5px] px-3 py-2 w-[110px]">
@@ -621,7 +621,7 @@ function SignedCertLadderCard({ settings }: { settings: PayoutSettings }) {
             type="button"
             onClick={add}
             disabled={draft.length >= 10}
-            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[12px] font-semibold text-slate-600 hover:text-[color:var(--brand-blue)] hover:bg-slate-50 disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full text-[12px] font-semibold text-[var(--apple-blue)] hover:bg-[var(--apple-blue)]/10 transition-colors disabled:opacity-40"
             data-testid="button-rung-add"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -631,7 +631,7 @@ function SignedCertLadderCard({ settings }: { settings: PayoutSettings }) {
             <button
               type="button"
               onClick={resetToDefaults}
-              className="h-8 px-3 rounded-md text-xs font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-50"
+              className="h-8 px-3 rounded-full text-xs font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
               data-testid="button-rung-reset"
             >
               Reset to defaults
@@ -642,7 +642,7 @@ function SignedCertLadderCard({ settings }: { settings: PayoutSettings }) {
                 setDraft(rungsToDraft(liveRungs));
                 setEditing(false);
               }}
-              className="h-8 px-2.5 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-50"
+              className="h-8 px-2.5 rounded-full text-xs font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
               data-testid="button-cancel-signed-cert-ladder"
             >
               Cancel
@@ -657,19 +657,19 @@ function SignedCertLadderCard({ settings }: { settings: PayoutSettings }) {
         </div>
       )}
 
-      <ul className="text-[12px] text-slate-500 space-y-1.5 pl-4 list-disc">
+      <ul className="text-[12px] text-[var(--apple-subink)] space-y-1.5 pl-4 list-disc">
         <li>
-          <span className="text-slate-900 font-medium">{SIGNED_CERT_MIN_BATCH}-unit minimum.</span>{" "}
+          <span className="text-[var(--apple-ink)] font-medium">{SIGNED_CERT_MIN_BATCH}-unit minimum.</span>{" "}
           If fewer than {SIGNED_CERT_MIN_BATCH} sell at window close, the cert add-on auto-refunds
           and no print run happens. The first rung is pinned to this floor.
         </li>
         <li>
-          <span className="text-slate-900 font-medium">Billed on actuals.</span>{" "}
+          <span className="text-[var(--apple-ink)] font-medium">Billed on actuals.</span>{" "}
           Artist is wholesale-billed on the count that actually sold, snapped
           to the ladder above — no pre-buying to lock a lower tier.
         </li>
         <li>
-          <span className="text-slate-900 font-medium">Pass-throughs.</span>{" "}
+          <span className="text-[var(--apple-ink)] font-medium">Pass-throughs.</span>{" "}
           Expedited shipping, international shipping, and any mid-cycle vendor
           fee bumps (Hoover, Sticker Mule, Spinney) are billed at cost on top
           of the ladder.
@@ -723,7 +723,7 @@ function FragmentRow({
   return (
     <>
       <tr
-        className="border-t border-slate-100"
+        className="border-t border-[var(--apple-hairline)]"
         data-testid={`row-signed-cert-ladder-${index}`}
       >
         <td className="px-1 py-2 text-center">
@@ -732,7 +732,7 @@ function FragmentRow({
             onClick={onToggle}
             aria-label={isExpanded ? "Collapse cost stack" : "Expand cost stack"}
             aria-expanded={isExpanded}
-            className="relative h-7 w-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-50"
+            className="relative h-7 w-7 inline-flex items-center justify-center rounded-md text-[var(--apple-faint)] hover:bg-[var(--apple-track)] transition-colors"
             data-testid={`button-toggle-rung-${index}`}
           >
             {isExpanded ? (
@@ -759,11 +759,11 @@ function FragmentRow({
               onChange={(e) => onUpdate({ minQty: e.target.value })}
               disabled={isFirst}
               title={isFirst ? `Locked to the ${SIGNED_CERT_MIN_BATCH}-unit print floor` : undefined}
-              className="w-full h-8 border border-slate-200 rounded-md px-2 text-xs focus:outline-none focus:border-[color:var(--brand-blue)] disabled:bg-slate-50 disabled:text-slate-500"
+              className="w-full h-8 border border-slate-200 rounded-md px-2 text-xs focus:outline-none focus:border-[color:var(--brand-blue)] disabled:bg-slate-50 disabled:text-[var(--apple-subink)]"
               data-testid={`input-rung-minqty-${index}`}
             />
           ) : (
-            <span className="text-slate-900 text-xs font-medium" data-testid={`text-rung-minqty-${index}`}>
+            <span className="text-[var(--apple-ink)] text-xs font-medium" data-testid={`text-rung-minqty-${index}`}>
               {draft.minQty}
             </span>
           )}
@@ -779,7 +779,7 @@ function FragmentRow({
               data-testid={`input-rung-label-${index}`}
             />
           ) : (
-            <span className="text-slate-700 text-xs" data-testid={`text-rung-label-${index}`}>
+            <span className="text-[var(--apple-ink)] text-xs" data-testid={`text-rung-label-${index}`}>
               {draft.label}
             </span>
           )}
@@ -787,7 +787,7 @@ function FragmentRow({
         <td className="px-3 py-2">
           {editing ? (
             <div className="relative">
-              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]">$</span>
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--apple-faint)] text-[12px]">$</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -798,7 +798,7 @@ function FragmentRow({
               />
             </div>
           ) : (
-            <span className="text-slate-900 text-xs font-semibold block text-right" data-testid={`text-rung-wholesale-${index}`}>
+            <span className="text-[var(--apple-ink)] text-xs font-semibold block text-right" data-testid={`text-rung-wholesale-${index}`}>
               ${draft.wholesale}
             </span>
           )}
@@ -811,7 +811,7 @@ function FragmentRow({
               onClick={onRemove}
               disabled={isFirst || draftLen === 1}
               title={isFirst ? "Can't remove the print-floor rung" : "Remove rung"}
-              className="h-8 w-8 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-[color:var(--brand-heart)] hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+              className="h-8 w-8 inline-flex items-center justify-center rounded-md text-[var(--apple-faint)] hover:text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/10 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[var(--apple-faint)]"
               data-testid={`button-rung-remove-${index}`}
             >
               <Trash2 className="w-4 h-4" />
@@ -820,7 +820,7 @@ function FragmentRow({
         )}
       </tr>
       {isExpanded && (
-        <tr className="bg-slate-50/60">
+        <tr className="bg-[var(--apple-track)]">
           <td className="px-3 py-3" />
           <td className="px-3 py-3" colSpan={editing ? 4 : 3}>
             <RungCostStack
@@ -870,9 +870,9 @@ const MISMATCH_TOLERANCE_CENTS = 5;
 // when it doesn't (newly seeded vendors etc).
 function PriceChangeLine({ updatedAt }: { updatedAt: string | null }) {
   if (updatedAt) {
-    return <div className="text-xs text-slate-400">changed {timeAgo(updatedAt)}</div>;
+    return <div className="text-xs text-[var(--apple-faint)]">changed {timeAgo(updatedAt)}</div>;
   }
-  return <div className="text-xs text-slate-400 italic">no recorded changes yet</div>;
+  return <div className="text-xs text-[var(--apple-faint)] italic">no recorded changes yet</div>;
 }
 
 // True when any leg's updatedAt is newer than the ladder's last save —
@@ -913,16 +913,16 @@ function RungCostStack({
 
   return (
     <div className="space-y-3" data-testid={testId}>
-      <div className="text-xs uppercase tracking-wider font-semibold text-slate-500">
+      <div className="text-xs uppercase tracking-wider font-semibold text-[var(--apple-subink)]">
         Cost stack at {runQty} units
       </div>
 
       {isLoading ? (
-        <div className="text-xs text-slate-500">Loading vendor pricing…</div>
+        <div className="text-xs text-[var(--apple-subink)]">Loading vendor pricing…</div>
       ) : !data ? (
-        <div className="text-xs text-slate-400">No cost stack available.</div>
+        <div className="text-xs text-[var(--apple-faint)]">No cost stack available.</div>
       ) : (
-        <div className="rounded-md bg-white border border-slate-200 divide-y divide-slate-100">
+        <div className="rounded-xl bg-white border border-[var(--apple-hairline)] divide-y divide-[var(--apple-hairline)]">
           {legs.map((leg) => {
             const row = data[leg];
             return (
@@ -932,22 +932,22 @@ function RungCostStack({
                 data-testid={`${testId}-leg-${leg}`}
               >
                 <div className="min-w-0">
-                  <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                  <div className="text-xs uppercase tracking-wider text-[var(--apple-faint)] font-semibold">
                     {STACK_LABEL[leg]}
                   </div>
                   {row ? (
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      <Link href={`/admin/vendors/${row.vendorId}?tab=gooddeed`} className="text-sm text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors inline-flex items-center gap-1" data-testid={`${testId}-leg-${leg}-link`}>
+                      <Link href={`/admin/vendors/${row.vendorId}?tab=gooddeed`} className="text-sm text-[var(--apple-ink)] hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors inline-flex items-center gap-1" data-testid={`${testId}-leg-${leg}-link`}>
                         {row.vendorName}
                         <ExternalLink className="w-3 h-3 opacity-60" />
                       </Link>
                     </div>
                   ) : (
-                    <div className="text-sm text-slate-400 mt-0.5">— No vendor assigned —</div>
+                    <div className="text-sm text-[var(--apple-faint)] mt-0.5">— No vendor assigned —</div>
                   )}
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="text-sm font-semibold text-slate-900 tabular-nums" data-testid={`${testId}-leg-${leg}-cost`}>
+                  <div className="text-sm font-semibold text-[var(--apple-ink)] tabular-nums" data-testid={`${testId}-leg-${leg}-cost`}>
                     {row?.perUnitCents != null ? dollars(row.perUnitCents) : "—"}
                   </div>
                   <PriceChangeLine updatedAt={row?.updatedAt ?? null} />
@@ -956,7 +956,7 @@ function RungCostStack({
             );
           })}
 
-          <div className="px-3 py-2 text-xs text-slate-500 italic" data-testid={`${testId}-shipping-note`}>
+          <div className="px-3 py-2 text-xs text-[var(--apple-subink)] italic" data-testid={`${testId}-shipping-note`}>
             Shipping (print → hologram → insertion → fulfillment) is
             bundled into the Quickprinter rung today. Per-leg shipping
             vendors will list here individually once the shipping-leg
@@ -965,22 +965,22 @@ function RungCostStack({
         </div>
       )}
 
-      <div className="rounded-md bg-white border border-slate-200 text-sm divide-y divide-slate-100">
+      <div className="rounded-xl bg-white border border-[var(--apple-hairline)] text-sm divide-y divide-[var(--apple-hairline)]">
         <div className="flex items-center justify-between px-3 py-1.5">
-          <span className="text-slate-600">Vendor subtotal / unit</span>
-          <span className="text-slate-900 font-medium tabular-nums" data-testid={`${testId}-subtotal`}>
+          <span className="text-[var(--apple-subink)]">Vendor subtotal / unit</span>
+          <span className="text-[var(--apple-ink)] font-medium tabular-nums" data-testid={`${testId}-subtotal`}>
             {dollars(subtotalCents)}
           </span>
         </div>
         <div className="flex items-center justify-between px-3 py-1.5">
-          <span className="text-slate-600">GoodTunes margin / unit</span>
-          <span className={"font-medium tabular-nums " + (marginCents < 0 ? "text-[color:var(--brand-heart)]" : "text-slate-900")} data-testid={`${testId}-margin`}>
+          <span className="text-[var(--apple-subink)]">GoodTunes margin / unit</span>
+          <span className={"font-medium tabular-nums " + (marginCents < 0 ? "text-[color:var(--brand-heart)]" : "text-[var(--apple-ink)]")} data-testid={`${testId}-margin`}>
             {dollars(marginCents)}
           </span>
         </div>
         <div className="flex items-center justify-between px-3 py-1.5">
-          <span className="text-slate-900 font-semibold">Rung wholesale / unit</span>
-          <span className="text-slate-900 font-semibold tabular-nums" data-testid={`${testId}-wholesale`}>
+          <span className="text-[var(--apple-ink)] font-semibold">Rung wholesale / unit</span>
+          <span className="text-[var(--apple-ink)] font-semibold tabular-nums" data-testid={`${testId}-wholesale`}>
             {dollars(wholesaleCents)}
           </span>
         </div>
@@ -1016,10 +1016,10 @@ function RungCostStack({
 
 function FormatCostsCard({ formatCosts }: { formatCosts: PayoutFormatCost[] }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-format-costs">
+    <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-5 space-y-4" data-testid="panel-format-costs">
       <div>
-        <h2 className="text-[15px] font-semibold text-slate-900">Per-format pricing</h2>
-        <p className="text-[13px] text-slate-500 mt-1">
+        <h2 className="text-[15px] font-semibold text-[var(--apple-ink)]">Per-format pricing</h2>
+        <p className="text-[13px] text-[var(--apple-subink)] mt-1">
           Publishing fee, payment processing, and the GoodTunes margin charged on every unit
           of each format. Manufacturing is a placeholder for free / non-invited flows — when
           a press's catalog covers the format, the catalog's price ladder wins on cost.
@@ -1080,9 +1080,9 @@ function FormatCostRow({ row }: { row: PayoutFormatCost }) {
   );
 
   return (
-    <div className="rounded-md border border-slate-200 p-3" data-testid={`row-format-cost-${row.format}`}>
+    <div className="rounded-xl border border-[var(--apple-hairline)] p-3" data-testid={`row-format-cost-${row.format}`}>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-semibold text-slate-900">
+        <span className="text-sm font-semibold text-[var(--apple-ink)]">
           {ALBUM_FORMAT_LABEL[row.format as AlbumFormat]}
         </span>
         <div className="flex items-center gap-1">
@@ -1094,7 +1094,7 @@ function FormatCostRow({ row }: { row: PayoutFormatCost }) {
                   setValues(initial);
                   setEditing(false);
                 }}
-                className="h-8 px-2.5 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-50"
+                className="h-8 px-2.5 rounded-full text-xs font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
                 data-testid={`button-cancel-format-cost-${row.format}`}
               >
                 Cancel
@@ -1126,12 +1126,12 @@ function FormatCostRow({ row }: { row: PayoutFormatCost }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {FORMAT_COST_FIELDS.map((f) => (
           <div key={f.key}>
-            <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
+            <span className="block text-[var(--apple-subink)] text-[10.5px] font-semibold uppercase tracking-wider mb-1">
               {f.label}
             </span>
             {editing ? (
               <div className="relative">
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]">$</span>
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--apple-faint)] text-[12px]">$</span>
                 <input
                   value={values[f.key]}
                   onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
@@ -1141,16 +1141,16 @@ function FormatCostRow({ row }: { row: PayoutFormatCost }) {
                 />
               </div>
             ) : (
-              <div className="text-sm text-slate-900 font-medium tabular-nums" data-testid={`text-${f.key}-${row.format}`}>
+              <div className="text-sm text-[var(--apple-ink)] font-medium tabular-nums" data-testid={`text-${f.key}-${row.format}`}>
                 ${values[f.key]}
               </div>
             )}
           </div>
         ))}
       </div>
-      <div className="mt-2 text-right text-[12px] text-slate-500">
+      <div className="mt-2 text-right text-[12px] text-[var(--apple-subink)]">
         Total per unit:{" "}
-        <span className="text-slate-900 font-semibold" data-testid={`text-format-total-${row.format}`}>
+        <span className="text-[var(--apple-ink)] font-semibold" data-testid={`text-format-total-${row.format}`}>
           {dollars(total)}
         </span>
       </div>
@@ -1236,7 +1236,7 @@ function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
   });
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-quickprinter-ladder">
+    <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-5 space-y-3" data-testid="panel-quickprinter-ladder">
       <CardHeader
         title={`Quickprinter price ladder${data?.vendor ? ` — ${data.vendor.name}` : ""}`}
         subtitle="Per-unit cost at each quantity rung. Quantities between rungs walk down to the next-lower rung's price. Blank cells fall through too."
@@ -1250,10 +1250,10 @@ function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
         testId="quickprinter-ladder"
       />
 
-      <div className="flex items-center gap-1.5 border-b border-slate-100">
+      <div className="flex items-center gap-1.5 border-b border-[var(--apple-hairline)]">
         <button
           type="button"
-          className="px-3 h-8 text-xs font-semibold border-b-2 border-[color:var(--brand-blue)] text-slate-900"
+          className="px-3 h-8 text-xs font-semibold border-b-2 border-[color:var(--brand-blue)] text-[var(--apple-ink)]"
           data-testid="tab-paper-letter"
         >
           US Letter (8.5×11)
@@ -1261,7 +1261,7 @@ function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
         <button
           type="button"
           disabled
-          className="px-3 h-8 text-xs font-medium text-slate-300 cursor-not-allowed"
+          className="px-3 h-8 text-xs font-medium text-[var(--apple-faint)] cursor-not-allowed"
           data-testid="tab-paper-12x18"
           title="Scaffolded — wired up in a future task"
         >
@@ -1270,7 +1270,7 @@ function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
       </div>
 
       {isLoading || !printing ? (
-        <div className="py-6 text-slate-500 text-sm">
+        <div className="py-6 text-[var(--apple-subink)] text-sm">
           {isLoading ? "Loading ladder…" : "This vendor has no Printing row yet — add one from their vendor portal."}
         </div>
       ) : (
@@ -1278,12 +1278,12 @@ function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {QP_RUNGS.map((rung) => (
               <div key={rung} data-testid={`field-qp-rung-${rung}`}>
-                <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
+                <span className="block text-[var(--apple-subink)] text-[10.5px] font-semibold uppercase tracking-wider mb-1">
                   {rung} units
                 </span>
                 {editing ? (
                   <div className="relative">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]">$</span>
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--apple-faint)] text-[12px]">$</span>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -1295,8 +1295,8 @@ function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
                     />
                   </div>
                 ) : (
-                  <div className="text-right text-sm font-medium text-slate-900 tabular-nums" data-testid={`text-qp-rung-${rung}`}>
-                    {letter[rung] ? `$${letter[rung]}` : <span className="text-slate-300">—</span>}
+                  <div className="text-right text-sm font-medium text-[var(--apple-ink)] tabular-nums" data-testid={`text-qp-rung-${rung}`}>
+                    {letter[rung] ? `$${letter[rung]}` : <span className="text-[var(--apple-faint)]">—</span>}
                   </div>
                 )}
               </div>
@@ -1310,7 +1310,7 @@ function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
                   setLetter(seed());
                   setEditing(false);
                 }}
-                className="h-8 px-2.5 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-50"
+                className="h-8 px-2.5 rounded-full text-xs font-medium text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
                 data-testid="button-cancel-qp-ladder"
               >
                 Cancel

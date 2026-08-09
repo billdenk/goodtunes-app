@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
@@ -254,7 +255,7 @@ export function AdminFulfillmentPartners() {
     <AdminFrame active="fulfillment">
       <div className="space-y-5">
         <div
-          className="inline-flex items-center bg-slate-100 rounded-full p-0.5"
+          className="inline-flex items-center bg-[var(--apple-track)] rounded-full p-0.5"
           role="tablist"
           data-testid="tabs-section-fulfillment"
         >
@@ -265,8 +266,8 @@ export function AdminFulfillmentPartners() {
             className={[
               "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
               pageTab === "dashboard"
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-900",
+                ? "bg-white text-[var(--apple-ink)] shadow-sm"
+                : "text-[var(--apple-subink)]",
             ].join(" ")}
             data-testid="tab-section-dashboard"
           >
@@ -279,8 +280,8 @@ export function AdminFulfillmentPartners() {
             className={[
               "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
               pageTab === "list"
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-900",
+                ? "bg-white text-[var(--apple-ink)] shadow-sm"
+                : "text-[var(--apple-subink)]",
             ].join(" ")}
             data-testid="tab-section-list"
           >
@@ -314,7 +315,7 @@ export function AdminFulfillmentPartners() {
                       setSearch("");
                       setSearchOpen(false);
                     }}
-                    className="text-slate-400 hover:text-slate-700"
+                    className="text-[var(--apple-faint)] hover:text-[var(--apple-subink)]"
                     aria-label="Close search"
                   >
                     <X className="w-4 h-4" />
@@ -324,7 +325,7 @@ export function AdminFulfillmentPartners() {
                 <button
                   type="button"
                   onClick={() => setSearchOpen(true)}
-                  className="h-9 w-9 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+                  className="h-9 w-9 rounded-full text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center transition-colors"
                   aria-label="Search"
                   data-testid="button-open-search"
                 >
@@ -355,22 +356,11 @@ export function AdminFulfillmentPartners() {
             testId="admin-fulfillment-error"
           />
         ) : entries.length === 0 ? (
-          <div
-            className="py-16 flex flex-col items-center justify-center text-center"
-            data-testid="empty-fulfillment"
-          >
-            <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-              <Truck className="w-6 h-6" />
-            </div>
-            <p className="text-slate-700 text-sm font-semibold">
-              {search.trim() ? "No matches" : "No fulfillment partners yet"}
-            </p>
-            <p className="text-slate-400 text-xs mt-1 max-w-xs">
-              {search.trim()
-                ? "Try a different name or location."
-                : "Add a warehouse to ship orders from."}
-            </p>
-          </div>
+          <AdminEmptyState testId="empty-fulfillment">
+            {search.trim()
+              ? "No fulfillment partners match that search."
+              : "No fulfillment partners yet. Add a warehouse to ship orders from."}
+          </AdminEmptyState>
         ) : view === "grid" ? (
           <div
             className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
@@ -386,7 +376,7 @@ export function AdminFulfillmentPartners() {
           </div>
         ) : (
           <div
-            className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden"
+            className="rounded-2xl border border-[var(--apple-hairline)] bg-white divide-y divide-[var(--apple-hairline)] overflow-hidden"
             data-testid="list-fulfillment"
           >
             {entries.map((e) =>
@@ -414,7 +404,7 @@ export function AdminFulfillmentPartners() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add fulfillment partner</DialogTitle>
+            <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Add fulfillment partner</DialogTitle>
             <DialogDescription>
               Paste the warehouse's website and we'll pull the name, logo, and
               location. No website? Type the partner name and we'll create a
@@ -436,7 +426,7 @@ export function AdminFulfillmentPartners() {
               }
             }}
             placeholder="https://example-fulfillment.com  —  or  Northern Music Fulfillment"
-            className="w-full h-10 px-3 rounded-md border border-slate-200 text-sm focus:outline-none focus:border-[var(--brand-blue)]"
+            className="w-full h-10 px-3 rounded-md border border-[var(--apple-hairline)] text-sm focus:outline-none focus:border-[var(--brand-blue)]"
             data-testid="input-new-fulfillment-url"
           />
           {pasteError && (
@@ -499,10 +489,10 @@ function PartnerCard({ partner }: { partner: FulfillmentPartner }) {
   return (
     <Link
       href={`/admin/fulfillment-partners/${partner.id}`}
-      className="group text-left rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5"
+      className="group text-left rounded-2xl bg-white border border-[var(--apple-hairline)] hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5"
       data-testid={`card-fulfillment-${partner.id}`}
     >
-      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {partner.logoUrl ? (
           <img src={partner.logoUrl} alt={partner.name} className="w-full h-full object-cover" />
         ) : (
@@ -528,11 +518,11 @@ function PartnerRow({ partner }: { partner: FulfillmentPartner }) {
   return (
     <Link
       href={`/admin/fulfillment-partners/${partner.id}`}
-      className="block px-4 py-3 hover:bg-slate-50 transition-colors"
+      className="block px-4 py-3 hover:bg-[var(--apple-track)] transition-colors"
       data-testid={`row-fulfillment-${partner.id}`}
     >
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-md bg-white ring-1 ring-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+        <div className="w-10 h-10 rounded-md bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center overflow-hidden flex-shrink-0">
           {partner.logoUrl ? (
             <img src={partner.logoUrl} alt="" className="w-full h-full object-cover" />
           ) : (
@@ -572,10 +562,10 @@ function PressFulfillmentCard({ press }: { press: Manufacturer }) {
   return (
     <Link
       href={`/admin/manufacturers/${press.id}`}
-      className="group text-left rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5"
+      className="group text-left rounded-2xl bg-white border border-[var(--apple-hairline)] hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5"
       data-testid={`card-fulfillment-press-${press.id}`}
     >
-      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {press.logoUrl ? (
           <img src={press.logoUrl} alt={press.name} className="w-full h-full object-cover" />
         ) : (
@@ -604,11 +594,11 @@ function PressFulfillmentRow({ press }: { press: Manufacturer }) {
   return (
     <Link
       href={`/admin/manufacturers/${press.id}`}
-      className="block px-4 py-3 hover:bg-slate-50 transition-colors"
+      className="block px-4 py-3 hover:bg-[var(--apple-track)] transition-colors"
       data-testid={`row-fulfillment-press-${press.id}`}
     >
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-md bg-white ring-1 ring-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+        <div className="w-10 h-10 rounded-md bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center overflow-hidden flex-shrink-0">
           {press.logoUrl ? (
             <img src={press.logoUrl} alt="" className="w-full h-full object-cover" />
           ) : (

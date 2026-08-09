@@ -31,13 +31,13 @@ function locationStr(row: OrderRow) {
 
 function StatCard({ label, value, icon: Icon, testId }: { label: string; value: string; icon: React.ElementType; testId?: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 flex items-start gap-3" data-testid={testId}>
+    <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-4 flex items-start gap-3" data-testid={testId}>
       <div className="w-9 h-9 rounded-lg bg-[var(--brand-blue)]/10 flex items-center justify-center flex-shrink-0">
         <Icon className="w-4 h-4 text-[var(--brand-blue)]" strokeWidth={1.8} />
       </div>
       <div>
-        <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">{label}</div>
-        <div className="text-2xl font-bold text-slate-900 tabular-nums mt-0.5">{value}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">{label}</div>
+        <div className="text-[28px] font-semibold tracking-tight text-[var(--apple-ink)] tabular-nums mt-0.5">{value}</div>
       </div>
     </div>
   );
@@ -87,7 +87,7 @@ function AdminAlbumBuyersInner() {
       <div className="space-y-5">
         <Link
           href={`/admin/albums/${albumId}/engagement`}
-          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm text-[var(--apple-subink)] hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
           data-testid="link-back-to-engagement"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
@@ -101,7 +101,7 @@ function AdminAlbumBuyersInner() {
         />
 
         {isLoading && offset === 0 && (
-          <div className="py-10 text-slate-500 text-sm">Loading…</div>
+          <div className="py-10 text-[var(--apple-subink)] text-sm">Loading…</div>
         )}
         {isError && offset === 0 && (
           <ErrorState
@@ -120,28 +120,28 @@ function AdminAlbumBuyersInner() {
               <StatCard label="Gross revenue" value={formatMoney(kpis.totalCents)} icon={DollarSign} testId="kpi-revenue" />
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-              <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-slate-100">
-                <h2 className="text-sm font-semibold text-slate-900">
+            <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden">
+              <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-[var(--apple-hairline)]">
+                <h2 className="text-sm font-semibold text-[var(--apple-ink)]">
                   Orders
                   {totalOrders > 0 && (
-                    <span className="ml-2 text-slate-400 font-normal text-xs">
+                    <span className="ml-2 text-[var(--apple-faint)] font-normal text-xs">
                       ({totalOrders.toLocaleString()} total)
                     </span>
                   )}
                 </h2>
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-md px-2.5 h-8">
-                  <Search className="w-3.5 h-3.5 text-slate-400" />
+                <div className="flex items-center gap-1.5 bg-[var(--apple-track)] border border-[var(--apple-hairline)] rounded-md px-2.5 h-8">
+                  <Search className="w-3.5 h-3.5 text-[var(--apple-faint)]" />
                   <input
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Filter loaded rows…"
-                    className="w-40 text-sm bg-transparent outline-none placeholder:text-slate-400"
+                    className="w-40 text-sm bg-transparent outline-none placeholder:text-[var(--apple-faint)]"
                     data-testid="input-search-buyers"
                   />
                   {search && (
-                    <button type="button" onClick={() => setSearch("")} className="text-slate-400 hover:text-slate-700">
+                    <button type="button" onClick={() => setSearch("")} className="text-[var(--apple-faint)] hover:text-[var(--apple-ink)]">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   )}
@@ -150,25 +150,25 @@ function AdminAlbumBuyersInner() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+                    <tr className="bg-[var(--apple-track)] border-b border-[var(--apple-hairline)] text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
                       <th className="text-left font-semibold px-5 py-2.5">Fan</th>
                       <th className="text-left font-semibold px-4 py-2.5 hidden md:table-cell">Location</th>
                       <th className="text-left font-semibold px-4 py-2.5 hidden md:table-cell">Date</th>
                       <th className="text-right font-semibold px-5 py-2.5">Amount</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-[var(--apple-hairline)]">
                     {filtered.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-5 py-8 text-center text-slate-400">
+                        <td colSpan={4} className="px-5 py-8 text-center text-[var(--apple-faint)]">
                           {search ? "No orders match your filter." : "No orders yet."}
                         </td>
                       </tr>
                     )}
                     {filtered.map((o) => (
-                      <tr key={o.orderId} className="hover:bg-slate-50 transition-colors" data-testid={`row-order-${o.orderId}`}>
+                      <tr key={o.orderId} className="hover:bg-[var(--apple-track)] transition-colors" data-testid={`row-order-${o.orderId}`}>
                         <td className="px-5 py-3">
-                          <div className="font-medium text-slate-900 truncate max-w-[200px]">
+                          <div className="font-medium text-[var(--apple-ink)] truncate max-w-[200px]">
                             {o.customerId ? (
                               <Link
                                 href={`/admin/customers/${o.customerId}?from=album&albumId=${albumId}`}
@@ -182,16 +182,16 @@ function AdminAlbumBuyersInner() {
                             )}
                           </div>
                           {o.buyerEmail && (
-                            <div className="text-xs text-slate-500 truncate max-w-[200px]">{o.buyerEmail}</div>
+                            <div className="text-xs text-[var(--apple-subink)] truncate max-w-[200px]">{o.buyerEmail}</div>
                           )}
                         </td>
-                        <td className="px-4 py-3 hidden md:table-cell text-slate-500">
+                        <td className="px-4 py-3 hidden md:table-cell text-[var(--apple-subink)]">
                           {locationStr(o) ?? "—"}
                         </td>
-                        <td className="px-4 py-3 hidden md:table-cell text-slate-500 whitespace-nowrap">
+                        <td className="px-4 py-3 hidden md:table-cell text-[var(--apple-subink)] whitespace-nowrap">
                           {formatDate(o.createdAt)}
                         </td>
-                        <td className="px-5 py-3 text-right tabular-nums font-semibold text-slate-900">
+                        <td className="px-5 py-3 text-right tabular-nums font-semibold text-[var(--apple-ink)]">
                           {formatMoney(o.totalCents)}
                         </td>
                       </tr>
@@ -200,12 +200,12 @@ function AdminAlbumBuyersInner() {
                 </table>
               </div>
               {allOrders.length < totalOrders && (
-                <div className="px-5 py-3 border-t border-slate-100 text-center">
+                <div className="px-5 py-3 border-t border-[var(--apple-hairline)] text-center">
                   <button
                     type="button"
                     onClick={() => setOffset(allOrders.length)}
                     disabled={isFetching}
-                    className="text-sm font-medium text-[var(--brand-blue)] hover:underline disabled:text-slate-400"
+                    className="text-sm font-medium text-[var(--brand-blue)] hover:underline disabled:text-[var(--apple-faint)]"
                     data-testid="button-load-more-buyers"
                   >
                     {isFetching ? "Loading…" : `Load more (${allOrders.length} of ${totalOrders.toLocaleString()} loaded)`}

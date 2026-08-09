@@ -23,6 +23,7 @@ import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { AlbumCover } from "@/components/ui/AlbumCover";
 import { realArtwork } from "@/lib/realArtwork";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { TabBtn } from "@/components/admin/TabBtn";
 import {
   ViewModeToggle,
@@ -660,7 +661,7 @@ export function AdminAlbums() {
                 <button
                   type="button"
                   onClick={closeSearch}
-                  className="text-slate-400 hover:text-slate-700"
+                  className="text-[var(--apple-faint)] hover:text-[var(--apple-subink)]"
                   data-testid="button-close-search"
                   aria-label="Close search"
                 >
@@ -683,7 +684,7 @@ export function AdminAlbums() {
                   aria-label="Filter"
                   title="Filter"
                   data-testid="button-filter"
-                  className="relative w-9 h-9 inline-flex items-center justify-center rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 data-[state=open]:bg-slate-100 data-[state=open]:text-slate-900 data-[state=open]:ring-1 data-[state=open]:ring-slate-200 transition-colors"
+                  className="relative w-9 h-9 inline-flex items-center justify-center rounded-full text-[var(--apple-subink)] hover:text-[var(--apple-ink)] hover:bg-[var(--apple-track)] data-[state=open]:bg-[var(--apple-track)] data-[state=open]:text-[var(--apple-ink)] data-[state=open]:ring-1 data-[state=open]:ring-[var(--apple-hairline)] transition-colors"
                 >
                   <Filter className="w-4 h-4" />
                   {isFilterActive && (
@@ -698,7 +699,7 @@ export function AdminAlbums() {
                 align="end"
                 alignOffset={-8}
                 sideOffset={6}
-                className="w-[300px] p-0 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_-12px_rgba(15,23,42,0.18)]"
+                className="w-[300px] p-0 bg-white border border-[var(--apple-hairline)] rounded-2xl shadow-[0_10px_30px_-12px_rgba(15,23,42,0.18)]"
                 data-testid="popover-filter"
               >
                 {/* Apple-style caret tying the popover to the Filter button —
@@ -762,7 +763,7 @@ export function AdminAlbums() {
                           setDateAddedYear(v ? parseInt(v, 10) : null);
                         }}
                         data-testid="filter-date-added-input"
-                        className="flex-1 h-8 px-2.5 text-[13px] bg-white border border-slate-200 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30 focus:border-[var(--brand-blue)] tabular-nums"
+                        className="flex-1 h-8 px-2.5 text-[13px] bg-white border border-[var(--apple-hairline)] rounded-md text-[var(--apple-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30 focus:border-[var(--brand-blue)] tabular-nums"
                       >
                         <option value="">Any year</option>
                         {(() => {
@@ -789,7 +790,7 @@ export function AdminAlbums() {
 
                   {/* Explicit — tri-state segmented control */}
                   <FilterSection label="Explicit">
-                    <div className="inline-flex items-center bg-slate-100 rounded-md p-0.5 w-full">
+                    <div className="inline-flex items-center bg-[var(--apple-track)] rounded-md p-0.5 w-full">
                       {(
                         [
                           { v: "any", label: "Any" },
@@ -808,8 +809,8 @@ export function AdminAlbums() {
                             className={[
                               "flex-1 h-8 text-[12px] font-semibold rounded transition-colors",
                               active
-                                ? "bg-white text-slate-900 shadow-sm"
-                                : "text-slate-500 hover:text-slate-900",
+                                ? "bg-white text-[var(--apple-ink)] shadow-sm"
+                                : "text-[var(--apple-subink)]",
                             ].join(" ")}
                           >
                             {opt.label}
@@ -824,7 +825,7 @@ export function AdminAlbums() {
                       titles so Bill can audit the set without opening each
                       album. Mirrored to the URL as `?spinPromo=1`. */}
                   <FilterSection label="SPIN Promo">
-                    <div className="inline-flex items-center bg-slate-100 rounded-md p-0.5 w-full">
+                    <div className="inline-flex items-center bg-[var(--apple-track)] rounded-md p-0.5 w-full">
                       {(
                         [
                           { v: false, label: "Any" },
@@ -842,8 +843,8 @@ export function AdminAlbums() {
                             className={[
                               "flex-1 h-8 text-[12px] font-semibold rounded transition-colors",
                               active
-                                ? "bg-white text-slate-900 shadow-sm"
-                                : "text-slate-500 hover:text-slate-900",
+                                ? "bg-white text-[var(--apple-ink)] shadow-sm"
+                                : "text-[var(--apple-subink)]",
                             ].join(" ")}
                           >
                             {opt.label}
@@ -853,13 +854,13 @@ export function AdminAlbums() {
                     </div>
                   </FilterSection>
                 </div>
-                <div className="flex items-center justify-end px-4 py-2.5 border-t border-slate-100 bg-slate-50/60">
+                <div className="flex items-center justify-end px-4 py-2.5 border-t border-[var(--apple-hairline)] bg-[var(--apple-track)]/60">
                   <button
                     type="button"
                     onClick={resetFilters}
                     disabled={!isFilterActive}
                     data-testid="button-filter-reset"
-                    className="text-[12.5px] font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="text-[12.5px] font-semibold text-[var(--apple-subink)] hover:text-[var(--apple-ink)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
                     Reset
                   </button>
@@ -950,7 +951,7 @@ export function AdminAlbums() {
             />
           </>)}
           belowHeader={(
-            <div className="border-b border-slate-200 flex items-center gap-6 overflow-x-auto mt-3">
+            <div className="border-b border-[var(--apple-hairline)] flex items-center gap-6 overflow-x-auto mt-3">
               <TabBtn active={tab === "prepping"} onClick={() => setTab("prepping")} count={counts.prepping} testId="tab-prepping">
                 Prepping
               </TabBtn>
@@ -1009,9 +1010,7 @@ export function AdminAlbums() {
             testId="admin-albums-error"
           />
         ) : filtered.length === 0 ? (
-          <div className="py-20 text-center text-slate-500 text-sm max-w-md mx-auto">
-            {emptyCopy}
-          </div>
+          <AdminEmptyState testId="empty-albums">{emptyCopy}</AdminEmptyState>
         ) : view === "grid" ? (
           <div
             className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-5 gap-y-7"
@@ -1027,7 +1026,7 @@ export function AdminAlbums() {
           </div>
         ) : (
           <div
-            className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+            className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-[var(--apple-hairline)]"
             data-testid="list-admin-albums"
           >
             {filtered.map((a) => (
@@ -1132,10 +1131,11 @@ const STAGE_BADGE: Record<
   ReturnType<typeof albumStage>,
   { label: string; className: string }
 > = {
-  prepping: { label: "Prepping", className: "bg-slate-100 text-slate-600" },
+  prepping: { label: "Prepping", className: "bg-[var(--apple-track)] text-[var(--apple-subink)]" },
+  at_press: { label: "At press", className: "bg-[color:var(--brand-blue)]/10 text-[color:var(--brand-blue)]" },
   staged: { label: "Staged", className: "bg-[color:var(--brand-blue)]/10 text-[color:var(--brand-blue)]" },
   released: { label: "Released", className: "bg-emerald-100 text-emerald-700" },
-  sunset: { label: "Sunset", className: "bg-slate-200 text-slate-700" },
+  sunset: { label: "Sunset", className: "bg-[var(--apple-track)] text-[var(--apple-subink)]" },
 };
 
 function StageBadge({ stage }: { stage: ReturnType<typeof albumStage> }) {
@@ -1177,7 +1177,7 @@ function CountCell({
   const badge = (
     <span
       className={`inline-flex items-center justify-end gap-1 px-1.5 py-0.5 rounded text-xs font-semibold tabular-nums ${
-        complete ? "text-slate-600" : "bg-amber-100 text-amber-800"
+        complete ? "text-[var(--apple-subink)]" : "bg-amber-100 text-amber-800"
       }`}
       data-testid={testId}
     >
@@ -1222,7 +1222,7 @@ function NeedsAttentionTable({
   if (query.isLoading) {
     return (
       <div
-        className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+        className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-hidden divide-y divide-[var(--apple-hairline)]"
         data-testid="loading-needs-attention"
       >
         {Array.from({ length: 6 }).map((_, i) => (
@@ -1257,8 +1257,8 @@ function NeedsAttentionTable({
         data-testid="empty-needs-attention"
       >
         <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
-        <p className="text-slate-900 text-sm font-semibold">Everything's complete</p>
-        <p className="text-slate-500 text-sm mt-1 leading-snug">
+        <p className="text-[var(--apple-ink)] text-sm font-semibold">Everything's complete</p>
+        <p className="text-[var(--apple-subink)] text-sm mt-1 leading-snug">
           Every GoodTunes release has all its tracks, masters, lyrics, and
           credits in place. Nothing needs attention right now.
         </p>
@@ -1268,12 +1268,12 @@ function NeedsAttentionTable({
 
   return (
     <div
-      className="rounded-lg border border-slate-200 bg-white overflow-x-auto"
+      className="rounded-2xl border border-[var(--apple-hairline)] bg-white overflow-x-auto"
       data-testid="table-needs-attention"
     >
       <table className="w-full text-left border-collapse">
         <thead>
-          <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <tr className="border-b border-[var(--apple-hairline)] bg-[var(--apple-track)] text-xs uppercase tracking-wide text-[var(--apple-subink)]">
             <th className="px-3 py-2 font-semibold">Album</th>
             <th className="px-3 py-2 font-semibold hidden sm:table-cell">Artist</th>
             <th className="px-3 py-2 font-semibold">Stage</th>
@@ -1283,14 +1283,14 @@ function NeedsAttentionTable({
             <th className="px-3 py-2 font-semibold text-right">Credits</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-[var(--apple-hairline)]">
           {rows.map((r) => {
             const href = albumHref(r.id, listQuery);
             return (
               <tr
                 key={r.id}
                 onClick={() => navigate(href)}
-                className="hover:bg-slate-50 cursor-pointer transition-colors"
+                className="hover:bg-[var(--apple-track)] cursor-pointer transition-colors"
                 data-testid={`row-attention-${r.id}`}
               >
                 <td className="px-3 py-2.5">
@@ -1300,7 +1300,7 @@ function NeedsAttentionTable({
                     className="flex items-center gap-2.5 min-w-0 group"
                     data-testid={`link-attention-${r.id}`}
                   >
-                    <div className="w-10 h-10 rounded overflow-hidden bg-slate-100 ring-1 ring-slate-200/60 flex-shrink-0">
+                    <div className="w-10 h-10 rounded overflow-hidden bg-[var(--apple-track)] ring-1 ring-[var(--apple-hairline)] flex-shrink-0">
                       <AlbumCover
                         artwork={realArtwork(r.artwork)}
                         title={r.title}
@@ -1312,16 +1312,16 @@ function NeedsAttentionTable({
                       />
                     </div>
                     <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-slate-900 truncate group-hover:text-[var(--brand-blue)] transition-colors">
+                      <span className="block text-sm font-semibold text-[var(--apple-ink)] truncate group-hover:text-[var(--brand-blue)] transition-colors">
                         {r.title}
                       </span>
-                      <span className="block text-xs text-slate-500 truncate sm:hidden">
+                      <span className="block text-xs text-[var(--apple-subink)] truncate sm:hidden">
                         {r.artist}
                       </span>
                     </span>
                   </Link>
                 </td>
-                <td className="px-3 py-2.5 text-xs text-slate-600 truncate hidden sm:table-cell">
+                <td className="px-3 py-2.5 text-xs text-[var(--apple-subink)] truncate hidden sm:table-cell">
                   {r.artist}
                 </td>
                 <td className="px-3 py-2.5">
@@ -1376,7 +1376,7 @@ function AlbumTile({ album, href }: { album: AlbumLite; href: string }) {
       className="group block"
       data-testid={`tile-album-${album.id}`}
     >
-      <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 shadow-sm group-hover:shadow-md transition-shadow ring-1 ring-slate-200/60">
+      <div className="relative aspect-square rounded-xl overflow-hidden bg-[var(--apple-track)] shadow-sm group-hover:shadow-md transition-shadow ring-1 ring-[var(--apple-hairline)]">
         <AlbumCover
           artwork={realArtwork(album.artwork)}
           title={album.title}
@@ -1409,15 +1409,15 @@ function AlbumTile({ album, href }: { album: AlbumLite; href: string }) {
       </div>
       <div className="mt-2 px-0.5">
         <div
-          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
+          className="text-[var(--apple-ink)] text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
           data-testid={`text-album-title-${album.id}`}
         >
           {album.title}
         </div>
-        <div className="text-slate-500 text-[12px] truncate">
+        <div className="text-[var(--apple-subink)] text-[12px] truncate">
           {album.artist}
         </div>
-        <div className="text-slate-400 text-[10.5px] mt-0.5 uppercase tracking-wide font-semibold flex items-center gap-1.5">
+        <div className="text-[var(--apple-faint)] text-[10.5px] mt-0.5 uppercase tracking-wide font-semibold flex items-center gap-1.5">
           <span>
             {album.type}
             {album.year && <> · {album.year}</>}
@@ -1459,10 +1459,10 @@ function AlbumRow({
   return (
     <Link
       href={href}
-      className="group flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
+      className="group flex items-center gap-3 px-3 py-2 hover:bg-[var(--apple-track)] transition-colors"
       data-testid={`row-album-${album.id}`}
     >
-      <div className="w-12 h-12 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex-shrink-0">
+      <div className="w-12 h-12 rounded-md overflow-hidden bg-[var(--apple-track)] ring-1 ring-[var(--apple-hairline)] flex-shrink-0">
         <AlbumCover
           artwork={realArtwork(album.artwork)}
           title={album.title}
@@ -1475,13 +1475,13 @@ function AlbumRow({
       </div>
       <div className="min-w-0 flex-1">
         <div
-          className="text-slate-900 text-[13.5px] font-semibold group-hover:text-[var(--brand-blue)] transition-colors flex items-center gap-2.5"
+          className="text-[var(--apple-ink)] text-[13.5px] font-semibold group-hover:text-[var(--brand-blue)] transition-colors flex items-center gap-2.5"
           data-testid={`text-album-title-${album.id}`}
         >
           <span className="min-w-0 flex-1 truncate">{album.title}</span>
           {album.isExplicit && <ExplicitBadge tone="slate" />}
         </div>
-        <div className="text-slate-500 text-[12px] truncate">
+        <div className="text-[var(--apple-subink)] text-[12px] truncate">
           {album.artist}
         </div>
       </div>
@@ -1500,7 +1500,7 @@ function AlbumRow({
         )}
         {album.isHidden && (
           <span
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wide"
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--apple-track)] text-[var(--apple-subink)] text-[10px] font-bold uppercase tracking-wide"
             title="Pulled from sale — owners keep access"
           >
             <EyeOff className="w-2.5 h-2.5" />
@@ -1517,7 +1517,7 @@ function AlbumRow({
             {countdown}
           </span>
         )}
-        <span className="text-slate-400 text-[11px] uppercase tracking-wide font-semibold tabular-nums">
+        <span className="text-[var(--apple-faint)] text-[11px] uppercase tracking-wide font-semibold tabular-nums">
           {album.type}
           {album.year && <> · {album.year}</>}
         </span>
@@ -1538,7 +1538,7 @@ function AlbumRow({
               disabled={isDuplicating}
               aria-label="Album actions"
               title="Album actions"
-              className="inline-flex items-center justify-center w-7 h-7 -mr-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 data-[state=open]:bg-slate-100 data-[state=open]:text-slate-700 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+              className="inline-flex items-center justify-center w-7 h-7 -mr-1 rounded-md text-[var(--apple-faint)] hover:text-[var(--apple-subink)] hover:bg-[var(--apple-track)] data-[state=open]:bg-[var(--apple-track)] data-[state=open]:text-[var(--apple-subink)] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--apple-hairline)] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 transition-opacity"
               data-testid={`button-album-actions-${album.id}`}
             >
               <span className="sr-only">Album actions</span>
@@ -1552,20 +1552,20 @@ function AlbumRow({
               e.preventDefault();
               e.stopPropagation();
             }}
-            className="min-w-[240px] p-1.5 bg-white text-slate-900 border border-slate-200 shadow-lg"
+            className="min-w-[240px] p-1.5 bg-white text-[var(--apple-ink)] border border-[var(--apple-hairline)] shadow-lg"
           >
             <DropdownMenuItem
               onSelect={() => onDuplicate(album.id)}
               disabled={isDuplicating}
               data-testid={`menu-duplicate-album-${album.id}`}
-              className="gap-2.5 px-2.5 py-2 text-xs cursor-pointer focus:bg-slate-100 focus:text-slate-900 data-[disabled]:opacity-50"
+              className="gap-2.5 px-2.5 py-2 text-xs cursor-pointer focus:bg-[var(--apple-track)] focus:text-[var(--apple-ink)] data-[disabled]:opacity-50"
             >
-              <Copy className="w-4 h-4 text-slate-500" />
+              <Copy className="w-4 h-4 text-[var(--apple-subink)]" />
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-slate-900">
+                <div className="font-medium text-[var(--apple-ink)]">
                   {isDuplicating ? "Duplicating…" : "Duplicate album"}
                 </div>
-                <div className="text-xs text-slate-500">
+                <div className="text-xs text-[var(--apple-subink)]">
                   Clones into a new Prepping draft.
                 </div>
               </div>
@@ -1589,7 +1589,7 @@ function FilterSection({
 }) {
   return (
     <div>
-      <div className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-slate-500 mb-2">
+      <div className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[var(--apple-subink)] mb-2">
         {label}
       </div>
       {children}
@@ -1623,7 +1623,7 @@ function FilterChip({
         "h-7 px-2.5 text-[12px] font-semibold rounded-md transition-colors inline-flex items-center",
         active
           ? "bg-[var(--brand-blue)]/12 text-[#1f7ab4] ring-1 ring-inset ring-[var(--brand-blue)]/40"
-          : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900",
+          : "bg-[var(--apple-track)] text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hover:text-[var(--apple-ink)]",
       ].join(" ")}
     >
       {children}
@@ -1657,8 +1657,8 @@ function IconBtn({
       className={[
         "w-9 h-9 inline-flex items-center justify-center rounded-full transition-colors",
         tone === "primary"
-          ? "bg-transparent border border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900"
-          : "text-slate-500 hover:text-slate-900 hover:bg-slate-100",
+          ? "bg-transparent border border-[var(--apple-hairline)] text-[var(--apple-subink)] hover:bg-[var(--apple-track)] hover:text-[var(--apple-ink)]"
+          : "text-[var(--apple-subink)] hover:text-[var(--apple-ink)] hover:bg-[var(--apple-track)]",
         "disabled:opacity-50 disabled:cursor-not-allowed",
       ].join(" ")}
     >

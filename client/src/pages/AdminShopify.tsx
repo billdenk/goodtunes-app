@@ -9,6 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Trash2, CheckCircle2, FlaskConical, Copy, Check, Pencil, ShieldAlert, ChevronDown, ChevronUp, TriangleAlert, X, Info } from "lucide-react";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { ShopifyConnectCard } from "@/components/admin/ShopifyConnectCard";
 import { PersonPicker, type PersonLite } from "@/components/admin/AddPeopleMenu";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -197,10 +199,12 @@ function AdminShopifyInner() {
   return (
     <AdminFrame active="shopify" contentWidth="wide">
       <div data-testid="page-admin-shopify">
-        <h1 className="text-2xl font-bold text-slate-900 mb-1">Shopify</h1>
-        <p className="text-slate-500 text-sm mb-8">
-          Connect a label's Shopify store. Their physical orders flow into GoodTunes and bundled fans land on a "Get your music" CTA.
-        </p>
+        <div className="mb-8">
+          <AdminPageHeader
+            title="Shopify"
+            subtitle={`Connect a label's Shopify store. Their physical orders flow into GoodTunes and bundled fans land on a "Get your music" CTA.`}
+          />
+        </div>
 
         {/* Connect card (shared with the artist portal — Task #2914) */}
         <ShopifyConnectCard variant="admin" configured={!!cfg?.configured} recordLink={recordInstallLink}>
@@ -323,7 +327,7 @@ Get your music now
               type="button"
               onClick={() => mint.mutate()}
               disabled={!mintAlbumId || !mintEmail.includes("@") || mint.isPending}
-              className="h-10 px-4 rounded-md bg-slate-900 text-white text-[13px] font-medium hover:bg-slate-800 disabled:opacity-50"
+              className="h-10 px-4 rounded-full bg-[var(--apple-blue)] text-white text-[13px] font-semibold hover:brightness-110 transition disabled:opacity-50"
               data-testid="button-mint-code"
             >
               {mint.isPending ? "Minting…" : "Mint test code"}
@@ -390,12 +394,10 @@ Get your music now
           )}
 
           {gdprRequests !== undefined && gdprRequests.length === 0 && (
-            <div
-              className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-center text-slate-400 text-[13px] leading-snug"
-              data-testid="gdpr-requests-empty"
-            >
-              No requests received. When a customer requests their data through Shopify, it appears here — you
-              have 30 days to fulfill it.
+            <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white">
+              <AdminEmptyState testId="gdpr-requests-empty">
+                No requests received. When a customer requests their data through Shopify, it appears here — you have 30 days to fulfill it.
+              </AdminEmptyState>
             </div>
           )}
 
@@ -460,7 +462,7 @@ Get your music now
                       )}
                     </div>
                     {isExpanded && (
-                      <div className="border-t border-slate-100 px-4 py-3" data-testid={`gdpr-data-${r.id}`}>
+                      <div className="border-t border-[var(--apple-hairline)] px-4 py-3" data-testid={`gdpr-data-${r.id}`}>
                         <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Compiled personal data</div>
                         <pre className="text-[11.5px] bg-slate-50 border border-slate-200 rounded-md p-3 overflow-x-auto whitespace-pre-wrap break-words max-h-80 overflow-y-auto text-slate-700">
                           {JSON.stringify(r.compiledData, null, 2)}
@@ -499,8 +501,8 @@ Get your music now
             />
           )}
           {!isLoading && !storesError && (stores?.length ?? 0) === 0 && (pendingInstalls?.length ?? 0) === 0 && (
-            <div className="rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-slate-400 text-[13.5px]">
-              No stores connected yet.
+            <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white">
+              <AdminEmptyState>No stores connected yet.</AdminEmptyState>
             </div>
           )}
           <div className="space-y-2">

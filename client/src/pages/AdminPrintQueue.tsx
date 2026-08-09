@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 
 type QueueRow = {
   id: string;
@@ -45,10 +46,10 @@ const TABS: { key: QueueRow["nameStatus"]; label: string }[] = [
 ];
 
 const STATUS_PILL: Record<QueueRow["nameStatus"], string> = {
-  awaiting: "bg-amber-100 text-amber-700",
-  confirmed: "bg-emerald-100 text-emerald-700",
-  locked_for_print: "bg-indigo-100 text-indigo-700",
-  printed: "bg-slate-100 text-slate-500",
+  awaiting: "bg-[var(--apple-warning)]/10 text-[var(--apple-warning)]",
+  confirmed: "bg-[var(--apple-ready)]/10 text-[var(--apple-ready)]",
+  locked_for_print: "bg-[var(--apple-blue)]/10 text-[var(--apple-blue)]",
+  printed: "bg-[var(--apple-track)] text-[var(--apple-subink)]",
 };
 
 export function AdminPrintQueue() {
@@ -207,26 +208,26 @@ function AdminPrintQueueInner() {
     <AdminFrame active="pressing-orders">
       <div className="max-w-5xl mx-auto py-8" data-testid="page-admin-print-queue">
         <div className="flex items-center justify-between mb-1">
-          <h1 className="text-[22px] font-semibold text-slate-900">Print queue</h1>
+          <h1 className="text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]">Print queue.</h1>
           <div className="flex items-center gap-4">
             <Link
               href="/admin/cert-names"
-              className="text-[12px] text-slate-500 hover:text-[color:var(--brand-blue)] hover:underline"
+              className="text-[12px] text-[var(--apple-subink)] hover:text-[color:var(--brand-blue)] hover:underline"
               data-testid="link-cert-names"
             >
               Cert names →
             </Link>
             <Link
               href="/admin/orders"
-              className="text-[12px] text-slate-500 hover:text-[color:var(--brand-blue)] hover:underline"
+              className="text-[12px] text-[var(--apple-subink)] hover:text-[color:var(--brand-blue)] hover:underline"
               data-testid="link-admin-orders"
             >
               ← All orders
             </Link>
           </div>
         </div>
-        <p className="text-slate-500 text-[13px] mb-6">
-          Printable GoodDeed certificates. Confirmed rows are ready to print — batch them into a ZIP of single-page PDFs, one merged PDF, or split into single-stock <span className="text-slate-900">US Letter</span> / <span className="text-slate-900">A4</span> files (one clean merged PDF or ZIP per paper size), then download. Downloading the batch flips those rows to <span className="text-slate-900">printed</span>.
+        <p className="text-[var(--apple-subink)] text-[13px] mb-6">
+          Printable GoodDeed certificates. Confirmed rows are ready to print — batch them into a ZIP of single-page PDFs, one merged PDF, or split into single-stock <span className="text-[var(--apple-ink)]">US Letter</span> / <span className="text-[var(--apple-ink)]">A4</span> files (one clean merged PDF or ZIP per paper size), then download. Downloading the batch flips those rows to <span className="text-[var(--apple-ink)]">printed</span>.
         </p>
 
         {/* Tabs */}
@@ -237,7 +238,7 @@ function AdminPrintQueueInner() {
               type="button"
               onClick={() => { setTab(t.key); setSelected(new Set()); }}
               className={`px-3 py-1.5 rounded-full text-[12px] font-semibold ${
-                tab === t.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                tab === t.key ? "bg-[var(--apple-ink)] text-[var(--apple-canvas)]" : "bg-[var(--apple-track)] text-[var(--apple-subink)] hover:bg-[var(--apple-chip)]"
               }`}
               data-testid={`tab-${t.key}`}
             >
@@ -249,7 +250,7 @@ function AdminPrintQueueInner() {
         {/* Batch toolbar */}
         {tab === "confirmed" && (
           <div className="flex items-center gap-2 mb-3" data-testid="batch-toolbar">
-            <label className="flex items-center gap-2 text-[12px] text-slate-600 cursor-pointer">
+            <label className="flex items-center gap-2 text-[12px] text-[var(--apple-subink)] cursor-pointer">
               <input
                 type="checkbox"
                 checked={allSelected}
@@ -264,7 +265,7 @@ function AdminPrintQueueInner() {
               type="button"
               onClick={() => batchDownload("zip")}
               disabled={selected.size === 0}
-              className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
+              className="px-3 py-1.5 rounded-full border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] text-[12px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-40"
               data-testid="button-batch-zip"
             >
               Download ZIP ({selected.size})
@@ -273,7 +274,7 @@ function AdminPrintQueueInner() {
               type="button"
               onClick={() => batchDownload("merged_pdf")}
               disabled={selected.size === 0}
-              className="px-3 py-1.5 rounded-full bg-slate-900 text-white text-[12px] font-semibold hover:bg-slate-800 disabled:opacity-40"
+              className="px-3 py-1.5 rounded-full bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[var(--brand-blue-hover)] disabled:opacity-40"
               data-testid="button-batch-pdf"
             >
               Download merged PDF ({selected.size})
@@ -284,7 +285,7 @@ function AdminPrintQueueInner() {
               type="button"
               onClick={() => batchDownload("merged_pdf", "letter")}
               disabled={letterCount === 0}
-              className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
+              className="px-3 py-1.5 rounded-full border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] text-[12px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-40"
               data-testid="button-batch-pdf-letter"
             >
               US Letter PDF ({letterCount})
@@ -293,7 +294,7 @@ function AdminPrintQueueInner() {
               type="button"
               onClick={() => batchDownload("merged_pdf", "a4")}
               disabled={a4Count === 0}
-              className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
+              className="px-3 py-1.5 rounded-full border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] text-[12px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-40"
               data-testid="button-batch-pdf-a4"
             >
               A4 PDF ({a4Count})
@@ -305,7 +306,7 @@ function AdminPrintQueueInner() {
               type="button"
               onClick={() => batchDownload("zip", "letter")}
               disabled={letterCount === 0}
-              className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
+              className="px-3 py-1.5 rounded-full border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] text-[12px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-40"
               data-testid="button-batch-zip-letter"
             >
               US Letter ZIP ({letterCount})
@@ -314,7 +315,7 @@ function AdminPrintQueueInner() {
               type="button"
               onClick={() => batchDownload("zip", "a4")}
               disabled={a4Count === 0}
-              className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
+              className="px-3 py-1.5 rounded-full border border-[var(--apple-hairline)] bg-white text-[var(--apple-ink)] text-[12px] font-semibold hover:bg-[var(--apple-track)] disabled:opacity-40"
               data-testid="button-batch-zip-a4"
             >
               A4 ZIP ({a4Count})
@@ -322,7 +323,7 @@ function AdminPrintQueueInner() {
           </div>
         )}
 
-        {isLoading && <div className="text-slate-500 text-sm" data-testid="loading">Loading…</div>}
+        {isLoading && <div className="text-[var(--apple-subink)] text-sm" data-testid="loading">Loading…</div>}
         {rowsError && (
           <ErrorState
             error={rowsErrorObj}
@@ -332,8 +333,8 @@ function AdminPrintQueueInner() {
           />
         )}
         {!isLoading && !rowsError && visible.length === 0 && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-500" data-testid="empty">
-            Nothing here.
+          <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white" data-testid="empty">
+            <AdminEmptyState>Nothing here.</AdminEmptyState>
           </div>
         )}
 
@@ -349,7 +350,7 @@ function AdminPrintQueueInner() {
               <div
                 key={r.id}
                 className={`rounded-2xl border p-3 flex items-center gap-3 ${
-                  sel ? "border-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)]" : "border-slate-200 bg-white"
+                  sel ? "border-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)]" : "border-[var(--apple-hairline)] bg-white"
                 }`}
                 data-testid={`row-cert-${r.id}`}
               >
@@ -371,14 +372,14 @@ function AdminPrintQueueInner() {
                       {r.nameStatus.replace("_", " ")}
                     </span>
                     {r.goodDeedNumber !== null && (
-                      <span className="text-[11px] text-slate-500" data-testid={`gooddeed-${r.id}`}>
+                      <span className="text-[11px] text-[var(--apple-subink)]" data-testid={`gooddeed-${r.id}`}>
                         #{r.goodDeedNumber}
                       </span>
                     )}
-                    <span className="text-[11px] text-slate-400">{r.shippingCountry ?? "?"}</span>
+                    <span className="text-[11px] text-[var(--apple-faint)]">{r.shippingCountry ?? "?"}</span>
                     {r.origin === "legacy:gogoods" && (
                       <span
-                        className="px-2 py-0.5 rounded-full text-xs font-semibold uppercase bg-amber-100 text-amber-700"
+                        className="px-2 py-0.5 rounded-full text-xs font-semibold uppercase bg-[var(--apple-warning)]/10 text-[var(--apple-warning)]"
                         title="Imported from gogoods.com — fan already has the original physical certificate; don't re-print unless asked."
                         data-testid={`badge-legacy-${r.id}`}
                       >
@@ -386,10 +387,10 @@ function AdminPrintQueueInner() {
                       </span>
                     )}
                   </div>
-                  <div className="text-[14px] font-medium text-slate-900 truncate mt-0.5">
-                    {r.confirmedName ?? <span className="text-slate-400 italic">No name yet</span>}
+                  <div className="text-[14px] font-medium text-[var(--apple-ink)] truncate mt-0.5">
+                    {r.confirmedName ?? <span className="text-[var(--apple-faint)] italic">No name yet</span>}
                   </div>
-                  <div className="text-[12px] text-slate-500 truncate">
+                  <div className="text-[12px] text-[var(--apple-subink)] truncate">
                     {r.albumTitle} — {r.albumArtist} · {r.customerEmail}
                   </div>
                 </div>
@@ -397,7 +398,7 @@ function AdminPrintQueueInner() {
                   <select
                     value={r.paperSize}
                     onChange={(e) => setPaper.mutate({ certId: r.id, paperSize: e.target.value as "letter" | "a4" })}
-                    className="bg-white border border-slate-200 text-slate-700 text-[11px] rounded px-2 py-1"
+                    className="bg-white border border-[var(--apple-hairline)] text-[var(--apple-ink)] text-[11px] rounded px-2 py-1"
                     data-testid={`select-paper-${r.id}`}
                   >
                     <option value="letter">Letter</option>
@@ -415,11 +416,11 @@ function AdminPrintQueueInner() {
                     </a>
                     {editable && (
                       <>
-                        <span className="text-slate-300">·</span>
+                        <span className="text-[var(--apple-faint)]">·</span>
                         <button
                           type="button"
                           onClick={() => promptOverrideName(r)}
-                          className="text-[11px] text-slate-600 hover:text-slate-900 active:opacity-70"
+                          className="text-[11px] text-[var(--apple-subink)] hover:text-[var(--apple-ink)] active:opacity-70"
                           data-testid={`button-override-name-${r.id}`}
                         >
                           Override name
@@ -433,7 +434,7 @@ function AdminPrintQueueInner() {
           })}
         </div>
         {tab === "confirmed" && readyCount > 0 && (
-          <div className="text-[11px] text-slate-400 mt-4" data-testid="ready-summary">
+          <div className="text-[11px] text-[var(--apple-faint)] mt-4" data-testid="ready-summary">
             {readyCount} ready certificate(s).
           </div>
         )}

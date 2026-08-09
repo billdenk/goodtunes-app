@@ -14,6 +14,8 @@ import { apiRequest, queryClient, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { formatUsdCents } from "@shared/money";
 
 type CertNameRow = {
@@ -124,33 +126,37 @@ function AdminCertNamesInner() {
 
   return (
     <AdminFrame active="cert-names">
-      <div className="max-w-5xl mx-auto py-8" data-testid="page-admin-cert-names">
-        <div className="flex items-center justify-between mb-1">
-          <h1 className="text-[22px] font-semibold text-slate-900">Certificate names</h1>
-          <Link
-            href="/admin/print-queue"
-            className="text-[12px] text-slate-500 hover:text-[color:var(--brand-blue)] hover:underline"
-            data-testid="link-print-queue"
-          >
-            Print queue →
-          </Link>
-        </div>
-        <p className="text-slate-500 text-[13px] mb-6">
-          Names fans chose for their <span className="text-slate-900">digital</span> GoodDeed certificates. Suspect
-          entries are flagged for review — clear a bad name to let the fan pick again, or cancel + refund the order.
-          Physical signed-certificate names live in the{" "}
-          <Link href="/admin/print-queue" className="text-[color:var(--brand-blue)] hover:underline">
-            print queue
-          </Link>{" "}
-          instead.
-        </p>
+      <div className="max-w-5xl mx-auto py-8 space-y-5" data-testid="page-admin-cert-names">
+        <AdminPageHeader
+          title="Certificate names."
+          subtitle={
+            <>
+              Names fans chose for their <span className="text-[var(--apple-ink)]">digital</span> GoodDeed certificates. Suspect
+              entries are flagged for review — clear a bad name to let the fan pick again, or cancel + refund the order.
+              Physical signed-certificate names live in the{" "}
+              <Link href="/admin/print-queue" className="text-[color:var(--brand-blue)] hover:underline">
+                print queue
+              </Link>{" "}
+              instead.
+            </>
+          }
+          actions={
+            <Link
+              href="/admin/print-queue"
+              className="text-[12px] text-[var(--apple-subink)] hover:text-[color:var(--brand-blue)] hover:underline px-3 py-1.5 rounded-full hover:bg-[var(--apple-track)] transition-colors"
+              data-testid="link-print-queue"
+            >
+              Print queue →
+            </Link>
+          }
+        />
 
-        <div className="flex items-center gap-2 mb-5">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setFlaggedOnly(false)}
-            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold ${
-              !flaggedOnly ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold transition-colors ${
+              !flaggedOnly ? "bg-[var(--apple-ink)] text-white" : "bg-[var(--apple-track)] text-[var(--apple-subink)] hover:bg-[var(--apple-chip)]"
             }`}
             data-testid="tab-all"
           >
@@ -159,8 +165,8 @@ function AdminCertNamesInner() {
           <button
             type="button"
             onClick={() => setFlaggedOnly(true)}
-            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold ${
-              flaggedOnly ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold transition-colors ${
+              flaggedOnly ? "bg-[var(--apple-critical)]/15 text-[var(--apple-critical)]" : "bg-[var(--apple-track)] text-[var(--apple-subink)] hover:bg-[var(--apple-chip)]"
             }`}
             data-testid="tab-flagged"
           >
@@ -168,7 +174,7 @@ function AdminCertNamesInner() {
           </button>
         </div>
 
-        {isLoading && <div className="text-slate-500 text-sm" data-testid="loading">Loading…</div>}
+        {isLoading && <div className="text-[13px] text-[var(--apple-subink)]" data-testid="loading">Loading…</div>}
         {isError && (
           <ErrorState
             error={error}
@@ -178,8 +184,10 @@ function AdminCertNamesInner() {
           />
         )}
         {!isLoading && !isError && visible.length === 0 && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-500" data-testid="empty">
-            {flaggedOnly ? "No flagged names." : "No fan-chosen certificate names yet."}
+          <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white" data-testid="empty">
+            <AdminEmptyState>
+              {flaggedOnly ? "No flagged names." : "No fan-chosen certificate names yet."}
+            </AdminEmptyState>
           </div>
         )}
 
@@ -190,7 +198,7 @@ function AdminCertNamesInner() {
               <div
                 key={r.orderId}
                 className={`rounded-2xl border p-3 flex items-center gap-3 ${
-                  r.flagged ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-white"
+                  r.flagged ? "border-[var(--apple-critical)]/30 bg-[var(--apple-critical)]/[0.06]" : "border-[var(--apple-hairline)] bg-white"
                 }`}
                 data-testid={`row-cert-name-${r.orderId}`}
               >
@@ -201,7 +209,7 @@ function AdminCertNamesInner() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {r.flagged && (
                       <span
-                        className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-rose-600 text-white"
+                        className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-[var(--apple-critical)]/15 text-[var(--apple-critical)]"
                         title={`Matched: ${r.flagMatches.join(", ")}`}
                         data-testid={`badge-flagged-${r.orderId}`}
                       >
@@ -209,28 +217,28 @@ function AdminCertNamesInner() {
                       </span>
                     )}
                     {refunded && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-slate-200 text-slate-500">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-[var(--apple-chip)] text-[var(--apple-subink)]">
                         Refunded
                       </span>
                     )}
                     {r.goodDeedNumber !== null && (
-                      <span className="text-[11px] text-slate-500" data-testid={`gooddeed-${r.orderId}`}>
+                      <span className="text-[11px] text-[var(--apple-subink)]" data-testid={`gooddeed-${r.orderId}`}>
                         #{r.goodDeedNumber}
                       </span>
                     )}
                     {r.origin === "legacy:gogoods" && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-amber-100 text-amber-700">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-[var(--apple-warning)]/10 text-[var(--apple-warning)]">
                         Legacy
                       </span>
                     )}
                   </div>
                   <div
-                    className="text-[14px] font-medium text-slate-900 truncate mt-0.5"
+                    className="text-[14px] font-medium text-[var(--apple-ink)] truncate mt-0.5"
                     data-testid={`name-${r.orderId}`}
                   >
                     {r.confirmedName}
                   </div>
-                  <div className="text-[12px] text-slate-500 truncate">
+                  <div className="text-[12px] text-[var(--apple-subink)] truncate">
                     {r.albumTitle} — {r.albumArtist} · {r.customerEmail}
                   </div>
                 </div>
@@ -251,19 +259,19 @@ function AdminCertNamesInner() {
                       type="button"
                       onClick={() => onClear(r)}
                       disabled={reset.isPending}
-                      className="text-[11px] text-slate-600 hover:text-slate-900 active:opacity-70 disabled:opacity-40"
+                      className="text-[11px] text-[var(--apple-subink)] hover:text-[var(--apple-ink)] active:opacity-70 disabled:opacity-40"
                       data-testid={`button-clear-${r.orderId}`}
                     >
                       Clear name
                     </button>
                     {!refunded && (
                       <>
-                        <span className="text-slate-300">·</span>
+                        <span className="text-[var(--apple-faint)]">·</span>
                         <button
                           type="button"
                           onClick={() => onRefund(r)}
                           disabled={refund.isPending}
-                          className="text-[11px] text-rose-600 hover:text-rose-700 active:opacity-70 disabled:opacity-40"
+                          className="text-[11px] text-[var(--apple-critical)] hover:text-[var(--apple-critical)] active:opacity-70 disabled:opacity-40"
                           data-testid={`button-refund-${r.orderId}`}
                         >
                           Cancel + refund

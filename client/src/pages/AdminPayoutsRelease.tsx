@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { CheckCircle2, Clock, Mail, ShieldAlert, X } from "lucide-react";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { StatusDot, type StatusDotTone } from "@/components/admin/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -142,19 +144,19 @@ export default function AdminPayoutsRelease() {
       <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-6">
         <header className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
-              Payouts to release
+            <h1 className="text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]" data-testid="text-page-title">
+              Payouts to release.
             </h1>
-            <p className="text-sm text-slate-600 mt-1 max-w-xl">
+            <p className="text-sm text-[var(--apple-subink)] mt-1 max-w-xl">
               Every Stripe Connect transfer is held here until you release it. Other admins see this page read-only.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="text-right pr-3 border-r border-slate-200">
-              <div className="text-2xl font-semibold" data-testid="text-held-total">
+            <div className="text-right pr-3 border-r border-[var(--apple-hairline)]">
+              <div className="text-[28px] font-semibold tabular-nums tracking-tight text-[var(--apple-ink)]" data-testid="text-held-total">
                 {fmtUsd(data?.heldTotalCents ?? 0)}
               </div>
-              <div className="text-xs text-slate-500">{data?.heldCount ?? 0} held</div>
+              <div className="text-xs text-[var(--apple-subink)]">{data?.heldCount ?? 0} held</div>
             </div>
             <Button
               variant="outline"
@@ -169,7 +171,7 @@ export default function AdminPayoutsRelease() {
         </header>
 
         {!viewerIsBill && (
-          <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div className="flex items-start gap-3 rounded-2xl border border-[var(--apple-warning)]/30 bg-[var(--apple-warning-wash)] px-4 py-3 text-sm text-[var(--apple-warning)]">
             <ShieldAlert className="w-4 h-4 mt-0.5 flex-shrink-0" />
             <div>
               Read-only view. Only Bill can release, reject, or annotate earmarks. Set <code>BILL_USER_ID</code>{" "}
@@ -178,7 +180,7 @@ export default function AdminPayoutsRelease() {
           </div>
         )}
 
-        <div className="flex items-center gap-1 border-b border-slate-200">
+        <div className="flex items-center gap-1 border-b border-[var(--apple-hairline)]">
           {(["held", "failed", "released", "rejected", "all"] as const).map((s) => (
             <button
               key={s}
@@ -187,8 +189,8 @@ export default function AdminPayoutsRelease() {
               data-testid={`tab-${s}`}
               className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${
                 status === s
-                  ? "border-slate-900 text-slate-900 font-medium"
-                  : "border-transparent text-slate-500 hover:text-slate-700"
+                  ? "border-[var(--apple-ink)] text-[var(--apple-ink)] font-medium"
+                  : "border-transparent text-[var(--apple-subink)]"
               }`}
             >
               {s[0].toUpperCase() + s.slice(1)}
@@ -196,19 +198,19 @@ export default function AdminPayoutsRelease() {
           ))}
         </div>
 
-        {isLoading && <div className="text-sm text-slate-500">Loading…</div>}
+        {isLoading && <div className="text-sm text-[var(--apple-subink)]">Loading…</div>}
         {!isLoading && (data?.earmarks ?? []).length === 0 && (
-          <div className="text-center py-12 text-slate-500" data-testid="text-empty">
+          <AdminEmptyState testId="text-empty">
             Nothing {status === "all" ? "in the queue" : `with status “${status}”`}.
-          </div>
+          </AdminEmptyState>
         )}
 
         {grouped.map(([kind, rows]) => (
           <section key={kind} className="space-y-2">
-            <h2 className="text-sm font-medium text-slate-600 uppercase tracking-wide">
+            <h2 className="text-[11px] font-semibold text-[var(--apple-subink)] uppercase tracking-wider">
               {SOURCE_LABEL[kind as EarmarkRow["sourceKind"]] ?? kind} · {rows.length}
             </h2>
-            <div className="rounded-md border border-slate-200 divide-y divide-slate-100 bg-white">
+            <div className="rounded-2xl border border-[var(--apple-hairline)] divide-y divide-[var(--apple-hairline)] bg-white">
               {rows.map((r) => (
                 <EarmarkRowCard
                   key={r.id}
@@ -229,9 +231,9 @@ export default function AdminPayoutsRelease() {
       </div>
 
       <AlertDialog open={!!rejecting} onOpenChange={(open) => !open && setRejecting(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Reject this payout earmark?</AlertDialogTitle>
+            <AlertDialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Reject this payout earmark?</AlertDialogTitle>
             <AlertDialogDescription>
               The {rejecting ? SOURCE_LABEL[rejecting.sourceKind] : ""} earmark for{" "}
               <strong>{rejecting ? fmtUsd(rejecting.amountCents) : "—"}</strong> to{" "}
@@ -254,6 +256,7 @@ export default function AdminPayoutsRelease() {
             <AlertDialogAction
               disabled={rejectReason.trim().length < 3 || rejectMut.isPending}
               onClick={() => rejecting && rejectMut.mutate({ id: rejecting.id, reason: rejectReason.trim() })}
+              className="bg-[var(--apple-critical)]/10 text-[var(--apple-critical)] hover:bg-[var(--apple-critical)]/15"
               data-testid="button-reject-confirm"
             >
               Reject earmark
@@ -280,27 +283,27 @@ function EarmarkRowCard({ row, viewerIsBill, onRelease, onReject, onSaveNotes, r
     <div className="p-4 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3" data-testid={`row-earmark-${row.id}`}>
       <div className="space-y-1.5">
         <div className="flex items-baseline gap-3 flex-wrap">
-          <span className="text-lg font-semibold" data-testid={`text-amount-${row.id}`}>
+          <span className="text-lg font-semibold tabular-nums text-[var(--apple-ink)]" data-testid={`text-amount-${row.id}`}>
             {fmtUsd(row.amountCents)}
           </span>
-          <span className="text-sm text-slate-600">
+          <span className="text-sm text-[var(--apple-subink)]">
             to <strong>{row.ownerName ?? `${row.ownerKind}:${row.ownerId.slice(0, 8)}`}</strong>
-            <span className="text-slate-400"> ({row.ownerKind})</span>
+            <span className="text-[var(--apple-faint)]"> ({row.ownerKind})</span>
           </span>
           <StatusChip status={row.status} />
         </div>
-        <div className="text-xs text-slate-500">
+        <div className="text-xs text-[var(--apple-subink)]">
           {row.albumTitle && <span>album: <strong>{row.albumTitle}</strong> · </span>}
           source ref: <code className="text-xs">{row.sourceRef.slice(0, 60)}{row.sourceRef.length > 60 ? "…" : ""}</code> · held {fmtDate(row.heldAt)}
         </div>
         {row.transferError && (
-          <div className="text-xs text-red-600">Last attempt: {row.transferError}</div>
+          <div className="text-xs text-[var(--apple-critical)]">Last attempt: {row.transferError}</div>
         )}
         {row.rejectionReason && (
-          <div className="text-xs text-slate-600">Rejected: {row.rejectionReason}</div>
+          <div className="text-xs text-[var(--apple-subink)]">Rejected: {row.rejectionReason}</div>
         )}
         {row.stripeTransferId && (
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-[var(--apple-subink)]">
             Transfer: <code>{row.stripeTransferId}</code> at {fmtDate(row.releasedAt)}
           </div>
         )}
@@ -321,7 +324,7 @@ function EarmarkRowCard({ row, viewerIsBill, onRelease, onReject, onSaveNotes, r
               type="button"
               disabled={!viewerIsBill || notes === (row.notes ?? "")}
               onClick={() => onSaveNotes(notes)}
-              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 disabled:text-slate-400 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1 text-xs text-[var(--brand-blue)] hover:opacity-80 disabled:text-[var(--apple-faint)] disabled:cursor-not-allowed"
               data-testid={`button-save-notes-${row.id}`}
             >
               <Clock className="w-3.5 h-3.5" /> Save
@@ -356,15 +359,11 @@ function EarmarkRowCard({ row, viewerIsBill, onRelease, onReject, onSaveNotes, r
 }
 
 function StatusChip({ status }: { status: EarmarkRow["status"] }) {
-  const map: Record<EarmarkRow["status"], string> = {
-    held: "bg-amber-100 text-amber-900",
-    released: "bg-emerald-100 text-emerald-900",
-    rejected: "bg-slate-200 text-slate-700",
-    failed: "bg-red-100 text-red-900",
+  const map: Record<EarmarkRow["status"], StatusDotTone> = {
+    held: "warning",
+    released: "ready",
+    rejected: "neutral",
+    failed: "critical",
   };
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${map[status]}`}>
-      {status}
-    </span>
-  );
+  return <StatusDot tone={map[status]}>{status}</StatusDot>;
 }

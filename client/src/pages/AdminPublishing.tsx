@@ -18,6 +18,7 @@ import { Link, useRoute, useSearch } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import {
   AlertTriangle,
@@ -134,20 +135,20 @@ function rateLabel(rateMicros: number) {
 function PayoutStatusPill({ has, enabled }: { has: boolean; enabled: boolean }) {
   if (enabled) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--apple-ready)]/10 px-2 py-0.5 text-xs font-medium text-[var(--apple-ready)]">
         <CheckCircle2 className="h-3 w-3" /> Ready to pay
       </span>
     );
   }
   if (has) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--apple-warning)]/10 px-2 py-0.5 text-xs font-medium text-[var(--apple-warning)]">
         <Clock className="h-3 w-3" /> Onboarding
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--apple-track)] px-2 py-0.5 text-xs font-medium text-[var(--apple-subink)]">
       <Clock className="h-3 w-3" /> Not onboarded
     </span>
   );
@@ -156,27 +157,27 @@ function PayoutStatusPill({ has, enabled }: { has: boolean; enabled: boolean }) 
 function InviteStatusBadge({ status }: { status: PayeeInviteStatus }) {
   if (status === "payout_ready") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--apple-ready)]/10 px-2 py-0.5 text-xs font-medium text-[var(--apple-ready)]">
         <CheckCircle2 className="h-3 w-3" /> Payout ready
       </span>
     );
   }
   if (status === "portal_active") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--apple-blue)]/10 px-2 py-0.5 text-xs font-medium text-[var(--apple-blue)]">
         <CheckCircle2 className="h-3 w-3" /> Portal active
       </span>
     );
   }
   if (status === "invite_sent") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--apple-warning)]/10 px-2 py-0.5 text-xs font-medium text-[var(--apple-warning)]">
         <Clock className="h-3 w-3" /> Invite sent
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--apple-track)] px-2 py-0.5 text-xs font-medium text-[var(--apple-subink)]">
       Not invited
     </span>
   );
@@ -186,7 +187,7 @@ function Flag({ icon: Icon, count, label }: { icon: typeof AlertTriangle; count:
   if (count <= 0) return null;
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700"
+      className="inline-flex items-center gap-1 rounded-full bg-[var(--apple-critical)]/10 px-2 py-0.5 text-xs font-medium text-[var(--apple-critical)]"
       title={label}
     >
       <Icon className="h-3 w-3" /> {count} {label}
@@ -211,7 +212,7 @@ function CatalogList() {
     <AdminFrame active="publishing">
       <div className="space-y-5">
         <AdminPageHeader
-          title="Publishing"
+          title="Publishing."
           subtitle="Mechanical-royalty settlements on pressed units — who is owed, whether they can be paid, and whether the splits are documented."
         />
 
@@ -226,27 +227,27 @@ function CatalogList() {
         {!isError && (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid="stat-total-owed">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Total owed</div>
-                <div className="mt-1 text-2xl font-semibold text-slate-900">
+              <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-4" data-testid="stat-total-owed">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Total owed</div>
+                <div className="mt-1 text-[28px] font-semibold tabular-nums tracking-tight text-[var(--apple-ink)]">
                   {data ? dollars(data.totalCents) : "—"}
                 </div>
               </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid="stat-payees">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Payees</div>
-                <div className="mt-1 text-2xl font-semibold text-slate-900">
+              <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-4" data-testid="stat-payees">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Payees</div>
+                <div className="mt-1 text-[28px] font-semibold tabular-nums tracking-tight text-[var(--apple-ink)]">
                   {data ? data.payeeCount : "—"}
                 </div>
               </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid="stat-albums">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Albums with splits</div>
-                <div className="mt-1 text-2xl font-semibold text-slate-900">
+              <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-4" data-testid="stat-albums">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Albums with splits</div>
+                <div className="mt-1 text-[28px] font-semibold tabular-nums tracking-tight text-[var(--apple-ink)]">
                   {data ? data.albums.length : "—"}
                 </div>
               </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid="stat-rate">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Statutory rate</div>
-                <div className="mt-1 text-2xl font-semibold text-slate-900">
+              <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-4" data-testid="stat-rate">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Statutory rate</div>
+                <div className="mt-1 text-[28px] font-semibold tabular-nums tracking-tight text-[var(--apple-ink)]">
                   {data ? rateLabel(data.rateMicros) : "—"}
                 </div>
               </div>
@@ -254,15 +255,15 @@ function CatalogList() {
 
             <div className="space-y-2">
               <div className="flex items-baseline justify-between">
-                <h2 className="text-sm font-semibold text-slate-900">Payees</h2>
-                <p className="text-xs text-slate-500">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Payees</h2>
+                <p className="text-xs text-[var(--apple-subink)]">
                   Each payee is settled once across the catalog — the amount they're actually paid.
                 </p>
               </div>
-              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="overflow-hidden rounded-2xl border border-[var(--apple-hairline)] bg-white">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <tr className="border-b border-[var(--apple-hairline)] text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
                       <th className="px-4 py-2.5 font-medium">Payee</th>
                       <th className="px-4 py-2.5 text-right font-medium">Lines</th>
                       <th className="px-4 py-2.5 text-right font-medium">Owed</th>
@@ -273,34 +274,36 @@ function CatalogList() {
                   <tbody>
                     {isLoading && (
                       <tr>
-                        <td className="px-4 py-6 text-slate-400" colSpan={5}>
+                        <td className="px-4 py-6 text-[var(--apple-faint)]" colSpan={5}>
                           Loading…
                         </td>
                       </tr>
                     )}
                     {!isLoading && data && data.payees.length === 0 && (
                       <tr>
-                        <td className="px-4 py-6 text-slate-500" colSpan={5}>
-                          No payees yet. Add publishing splits with non-zero shares to settle the catalog.
+                        <td colSpan={5}>
+                          <AdminEmptyState>
+                            No payees yet. Add publishing splits with non-zero shares to settle the catalog.
+                          </AdminEmptyState>
                         </td>
                       </tr>
                     )}
                     {data?.payees.map((p) => (
                       <tr
                         key={p.payeeKey}
-                        className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                        className="border-b border-[var(--apple-hairline)] last:border-0 hover:bg-[var(--apple-track)]"
                         data-testid={`row-catalog-payee-${p.payeeKey}`}
                       >
                         <td className="px-4 py-3">
                           <Link href={payeeHref(p.payeeKey)} className="block transition-colors hover:text-[color:var(--brand-blue)]" data-testid={`link-catalog-payee-${p.payeeKey}`}>
-                            <div className="font-medium text-slate-900">{p.displayName}</div>
+                            <div className="font-medium text-[var(--apple-ink)]">{p.displayName}</div>
                             {p.payToName && (
-                              <div className="text-xs text-slate-500">administered by {p.payToName}</div>
+                              <div className="text-xs text-[var(--apple-subink)]">administered by {p.payToName}</div>
                             )}
                           </Link>
                         </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-700">{p.lineCount}</td>
-                        <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">
+                        <td className="px-4 py-3 text-right tabular-nums text-[var(--apple-subink)]">{p.lineCount}</td>
+                        <td className="px-4 py-3 text-right font-medium tabular-nums text-[var(--apple-ink)]">
                           {dollars(p.amountCents)}
                         </td>
                         <td className="px-4 py-3">
@@ -313,7 +316,7 @@ function CatalogList() {
                               <button
                                 type="button"
                                 onClick={() => setInvitePayee({ key: p.payeeKey, name: p.displayName })}
-                                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                                className="inline-flex items-center gap-1 rounded-full border border-[var(--apple-hairline)] bg-white px-2 py-1 text-xs font-medium text-[var(--apple-subink)] transition-colors hover:bg-[var(--apple-track)]"
                                 data-testid={`button-invite-catalog-payee-${p.payeeKey}`}
                               >
                                 <UserPlus className="h-3.5 w-3.5" /> Invite
@@ -321,7 +324,7 @@ function CatalogList() {
                             )}
                             {p.inviteStatus === "not_invited" && p.ownerKind === null && (
                               <span
-                                className="text-xs text-slate-400"
+                                className="text-xs text-[var(--apple-faint)]"
                                 title="Link this payee to a person or organization to enable invites"
                               >
                                 no linked entity
@@ -343,11 +346,11 @@ function CatalogList() {
               displayName={invitePayee?.name ?? "this payee"}
             />
 
-            <h2 className="text-sm font-semibold text-slate-900">Releases</h2>
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Releases</h2>
+            <div className="overflow-hidden rounded-2xl border border-[var(--apple-hairline)] bg-white">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <tr className="border-b border-[var(--apple-hairline)] text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
                     <th className="px-4 py-2.5 font-medium">Release</th>
                     <th className="px-4 py-2.5 text-right font-medium">Units</th>
                     <th className="px-4 py-2.5 text-right font-medium">Owed</th>
@@ -358,26 +361,28 @@ function CatalogList() {
                 <tbody>
                   {isLoading && (
                     <tr>
-                      <td className="px-4 py-6 text-slate-400" colSpan={5}>
+                      <td className="px-4 py-6 text-[var(--apple-faint)]" colSpan={5}>
                         Loading…
                       </td>
                     </tr>
                   )}
                   {!isLoading && data && data.albums.length === 0 && (
                     <tr>
-                      <td className="px-4 py-6 text-slate-500" colSpan={5}>
-                        No albums carry publishing splits yet. Add splits on a song's Splits panel to see them here.
+                      <td colSpan={5}>
+                        <AdminEmptyState>
+                          No albums carry publishing splits yet. Add splits on a song's Splits panel to see them here.
+                        </AdminEmptyState>
                       </td>
                     </tr>
                   )}
                   {data?.albums.map((a) => (
                     <tr
                       key={a.albumId}
-                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                      className="border-b border-[var(--apple-hairline)] last:border-0 hover:bg-[var(--apple-track)]"
                       data-testid={`row-publishing-${a.albumId}`}
                     >
                       <td className="px-4 py-3">
-                        <Link href={`/admin/publishing/albums/${a.albumId}`} className="flex items-center gap-3 text-slate-900 transition-colors hover:text-[color:var(--brand-blue)]" data-testid={`link-publishing-${a.albumId}`}>
+                        <Link href={`/admin/publishing/albums/${a.albumId}`} className="flex items-center gap-3 text-[var(--apple-ink)] transition-colors hover:text-[color:var(--brand-blue)]" data-testid={`link-publishing-${a.albumId}`}>
                           {a.artwork ? (
                             <img
                               src={a.artwork}
@@ -385,36 +390,36 @@ function CatalogList() {
                               className="h-9 w-9 flex-none rounded object-cover"
                             />
                           ) : (
-                            <div className="h-9 w-9 flex-none rounded bg-slate-100" />
+                            <div className="h-9 w-9 flex-none rounded bg-[var(--apple-track)]" />
                           )}
                           <span className="min-w-0">
                             <span className="block truncate font-medium">{a.title}</span>
                             {a.artist && (
-                              <span className="block truncate text-xs text-slate-500">{a.artist}</span>
+                              <span className="block truncate text-xs text-[var(--apple-subink)]">{a.artist}</span>
                             )}
                           </span>
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                      <td className="px-4 py-3 text-right tabular-nums text-[var(--apple-subink)]">
                         {a.unitsPressed.toLocaleString()}
                       </td>
-                      <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">
+                      <td className="px-4 py-3 text-right font-medium tabular-nums text-[var(--apple-ink)]">
                         {dollars(a.totalCents)}
                       </td>
-                      <td className="px-4 py-3 text-center tabular-nums text-slate-700">{a.payeeCount}</td>
+                      <td className="px-4 py-3 text-center tabular-nums text-[var(--apple-subink)]">{a.payeeCount}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Flag icon={AlertTriangle} count={a.allocationIssueCount} label="allocation" />
                           <Flag icon={FileWarning} count={a.missingSplitCount} label="missing" />
                           {a.unpaidPayees > 0 && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--apple-warning)]/10 px-2 py-0.5 text-xs font-medium text-[var(--apple-warning)]">
                               <Clock className="h-3 w-3" /> {a.unpaidPayees} awaiting onboarding
                             </span>
                           )}
                           {a.allocationIssueCount === 0 &&
                             a.missingSplitCount === 0 &&
                             a.unpaidPayees === 0 && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--apple-ready)]/10 px-2 py-0.5 text-xs font-medium text-[var(--apple-ready)]">
                                 <CheckCircle2 className="h-3 w-3" /> Clean
                               </span>
                             )}
@@ -448,7 +453,7 @@ function AlbumDetail({ albumId }: { albumId: string }) {
   return (
     <AdminFrame active="publishing">
       <div className="space-y-5">
-        <Link href="/admin/publishing" className="inline-flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-[color:var(--brand-blue)]" data-testid="link-back-publishing">
+        <Link href="/admin/publishing" className="inline-flex items-center gap-1.5 text-sm text-[var(--apple-subink)] transition-colors hover:text-[color:var(--brand-blue)]" data-testid="link-back-publishing">
           <ArrowLeft className="h-4 w-4" /> Publishing
         </Link>
 
@@ -466,56 +471,56 @@ function AlbumDetail({ albumId }: { albumId: string }) {
               {data?.album.artwork ? (
                 <img src={data.album.artwork} alt="" className="h-16 w-16 flex-none rounded-lg object-cover" />
               ) : (
-                <div className="h-16 w-16 flex-none rounded-lg bg-slate-100" />
+                <div className="h-16 w-16 flex-none rounded-lg bg-[var(--apple-track)]" />
               )}
               <div className="min-w-0">
-                <h1 className="truncate text-xl font-semibold text-slate-900" data-testid="text-album-title">
+                <h1 className="truncate text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]" data-testid="text-album-title">
                   {data?.album.title ?? "…"}
                 </h1>
-                {data?.album.artist && <p className="text-sm text-slate-500">{data.album.artist}</p>}
+                {data?.album.artist && <p className="text-sm text-[var(--apple-subink)]">{data.album.artist}</p>}
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-lg border border-slate-200 bg-white p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Units pressed</div>
+              <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Units pressed</div>
                 <input
                   type="number"
                   min={0}
                   value={unitsOverride}
                   placeholder={data ? String(data.unitsPressed) : "0"}
                   onChange={(e) => setUnitsOverride(e.target.value)}
-                  className="mt-1 w-full rounded border border-slate-200 px-2 py-1 text-lg font-semibold tabular-nums text-slate-900 focus:border-[color:var(--brand-blue)] focus:outline-none"
+                  className="mt-1 w-full rounded border border-[var(--apple-hairline)] px-2 py-1 text-lg font-semibold tabular-nums text-[var(--apple-ink)] focus:border-[color:var(--brand-blue)] focus:outline-none"
                   data-testid="input-units-pressed"
                 />
-                <div className="mt-1 text-xs text-slate-400">Defaults to approved pressing runs.</div>
+                <div className="mt-1 text-xs text-[var(--apple-faint)]">Defaults to approved pressing runs.</div>
               </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Rate</div>
-                <div className="mt-1 text-lg font-semibold text-slate-900">
+              <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Rate</div>
+                <div className="mt-1 text-lg font-semibold tabular-nums text-[var(--apple-ink)]">
                   {data ? rateLabel(data.rateMicros) : "—"}
                 </div>
               </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Total owed</div>
-                <div className="mt-1 text-lg font-semibold text-slate-900" data-testid="text-total-owed">
+              <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Total owed</div>
+                <div className="mt-1 text-lg font-semibold tabular-nums text-[var(--apple-ink)]" data-testid="text-total-owed">
                   {data ? dollars(data.totalCents) : "—"}
                 </div>
               </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Ready to pay</div>
-                <div className="mt-1 text-lg font-semibold text-slate-900">
+              <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Ready to pay</div>
+                <div className="mt-1 text-lg font-semibold tabular-nums text-[var(--apple-ink)]">
                   {data ? `${cleanCount} / ${data.payees.length}` : "—"}
                 </div>
               </div>
             </div>
 
             {(data?.allocationIssues.length || data?.songsMissingSplits.length) ? (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
-                <div className="flex items-center gap-2 text-sm font-medium text-rose-800">
+              <div className="rounded-2xl border border-[var(--apple-critical)]/30 bg-[var(--apple-critical-wash)] p-4">
+                <div className="flex items-center gap-2 text-sm font-medium text-[var(--apple-critical)]">
                   <AlertTriangle className="h-4 w-4" /> Data needs attention before paying
                 </div>
-                <ul className="mt-2 space-y-1 text-sm text-rose-700">
+                <ul className="mt-2 space-y-1 text-sm text-[var(--apple-ink)]">
                   {data?.allocationIssues.map((i) => (
                     <li key={`alloc-${i.songId}`} data-testid={`issue-alloc-${i.songId}`}>
                       <span className="font-medium">{i.title}</span> — shares sum to {(i.totalBp / 100).toFixed(2)}%, not 100%
@@ -530,10 +535,10 @@ function AlbumDetail({ albumId }: { albumId: string }) {
               </div>
             ) : null}
 
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="overflow-hidden rounded-2xl border border-[var(--apple-hairline)] bg-white">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <tr className="border-b border-[var(--apple-hairline)] text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
                     <th className="px-4 py-2.5 font-medium">Payee</th>
                     <th className="px-4 py-2.5 text-right font-medium">Lines</th>
                     <th className="px-4 py-2.5 text-right font-medium">Owed</th>
@@ -543,34 +548,36 @@ function AlbumDetail({ albumId }: { albumId: string }) {
                 <tbody>
                   {isLoading && (
                     <tr>
-                      <td className="px-4 py-6 text-slate-400" colSpan={4}>
+                      <td className="px-4 py-6 text-[var(--apple-faint)]" colSpan={4}>
                         Loading…
                       </td>
                     </tr>
                   )}
                   {!isLoading && data && data.payees.length === 0 && (
                     <tr>
-                      <td className="px-4 py-6 text-slate-500" colSpan={4}>
-                        No payees. Add publishing splits with non-zero shares to settle this release.
+                      <td colSpan={4}>
+                        <AdminEmptyState>
+                          No payees. Add publishing splits with non-zero shares to settle this release.
+                        </AdminEmptyState>
                       </td>
                     </tr>
                   )}
                   {data?.payees.map((p) => (
                     <tr
                       key={p.payeeKey}
-                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                      className="border-b border-[var(--apple-hairline)] last:border-0 hover:bg-[var(--apple-track)]"
                       data-testid={`row-payee-${p.payeeKey}`}
                     >
                       <td className="px-4 py-3">
                         <Link href={payeeHref(p.payeeKey)} className="block transition-colors hover:text-[color:var(--brand-blue)]" data-testid={`link-album-payee-${p.payeeKey}`}>
-                          <div className="font-medium text-slate-900">{p.displayName}</div>
+                          <div className="font-medium text-[var(--apple-ink)]">{p.displayName}</div>
                           {p.payToName && (
-                            <div className="text-xs text-slate-500">administered by {p.payToName}</div>
+                            <div className="text-xs text-[var(--apple-subink)]">administered by {p.payToName}</div>
                           )}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">{p.lineCount}</td>
-                      <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">
+                      <td className="px-4 py-3 text-right tabular-nums text-[var(--apple-subink)]">{p.lineCount}</td>
+                      <td className="px-4 py-3 text-right font-medium tabular-nums text-[var(--apple-ink)]">
                         {dollars(p.amountCents)}
                       </td>
                       <td className="px-4 py-3">
@@ -663,12 +670,12 @@ function InvitePublisherDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent data-testid="dialog-invite-publisher">
+      <DialogContent data-testid="dialog-invite-publisher" className="rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
         <DialogHeader>
-          <DialogTitle>Invite publisher portal access</DialogTitle>
+          <DialogTitle className="text-[17px] font-semibold text-[var(--apple-ink)]">Invite publisher portal access</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-slate-500">
-          Send an invite link to <span className="font-medium text-slate-700">{displayName}</span>.
+        <p className="text-sm text-[var(--apple-subink)]">
+          Send an invite link to <span className="font-medium text-[var(--apple-ink)]">{displayName}</span>.
           They'll create an account and see only their own mechanical-royalty statement.
         </p>
         <div className="space-y-1.5 pt-1">
@@ -723,7 +730,7 @@ function PayeeDetail({ payeeKey }: { payeeKey: string }) {
   return (
     <AdminFrame active="publishing">
       <div className="space-y-5">
-        <Link href="/admin/publishing" className="inline-flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-[color:var(--brand-blue)]" data-testid="link-back-publishing">
+        <Link href="/admin/publishing" className="inline-flex items-center gap-1.5 text-sm text-[var(--apple-subink)] transition-colors hover:text-[color:var(--brand-blue)]" data-testid="link-back-publishing">
           <ArrowLeft className="h-4 w-4" /> Publishing
         </Link>
 
@@ -741,13 +748,13 @@ function PayeeDetail({ payeeKey }: { payeeKey: string }) {
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <h1
-                  className="truncate text-xl font-semibold text-slate-900"
+                  className="truncate text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)]"
                   data-testid="text-payee-name"
                 >
                   {data?.displayName ?? "…"}
                 </h1>
                 {data?.payToName && (
-                  <p className="mt-0.5 text-sm text-slate-500">
+                  <p className="mt-0.5 text-sm text-[var(--apple-subink)]">
                     administered by {data.payToName}
                   </p>
                 )}
@@ -760,14 +767,14 @@ function PayeeDetail({ payeeKey }: { payeeKey: string }) {
                   <button
                     type="button"
                     onClick={() => setInviteOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[var(--apple-hairline)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--apple-subink)] transition-colors hover:bg-[var(--apple-track)]"
                     data-testid="button-invite-publisher"
                   >
                     <UserPlus className="h-3.5 w-3.5" /> Invite publisher
                   </button>
                 )}
                 {data && data.ownerKind === null && (
-                  <span className="text-xs text-slate-400" title="Link this payee to a person or organization to enable invites">
+                  <span className="text-xs text-[var(--apple-faint)]" title="Link this payee to a person or organization to enable invites">
                     No linked entity — can't invite
                   </span>
                 )}
@@ -782,25 +789,25 @@ function PayeeDetail({ payeeKey }: { payeeKey: string }) {
 
             {/* Summary stats */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <div className="rounded-lg border border-slate-200 bg-white p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Total owed</div>
+              <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Total owed</div>
                 <div
-                  className="mt-1 text-2xl font-semibold text-slate-900"
+                  className="mt-1 text-[28px] font-semibold tabular-nums tracking-tight text-[var(--apple-ink)]"
                   data-testid="text-payee-total"
                 >
                   {data ? dollars(data.totalCents) : "—"}
                 </div>
-                <div className="mt-1 text-xs text-slate-400">rounded once across catalog</div>
+                <div className="mt-1 text-xs text-[var(--apple-faint)]">rounded once across catalog</div>
               </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Track lines</div>
-                <div className="mt-1 text-2xl font-semibold text-slate-900">
+              <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Track lines</div>
+                <div className="mt-1 text-[28px] font-semibold tabular-nums tracking-tight text-[var(--apple-ink)]">
                   {data ? data.lineCount : "—"}
                 </div>
               </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Releases</div>
-                <div className="mt-1 text-2xl font-semibold text-slate-900">
+              <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Releases</div>
+                <div className="mt-1 text-[28px] font-semibold tabular-nums tracking-tight text-[var(--apple-ink)]">
                   {data ? data.albums.length : "—"}
                 </div>
               </div>
@@ -809,7 +816,7 @@ function PayeeDetail({ payeeKey }: { payeeKey: string }) {
             {/* Album → track breakdown */}
             <div className="space-y-4">
               {isLoading && (
-                <div className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-sm text-slate-400">
+                <div className="rounded-2xl border border-[var(--apple-hairline)] bg-white px-4 py-6 text-sm text-[var(--apple-faint)]">
                   Loading…
                 </div>
               )}
@@ -821,11 +828,11 @@ function PayeeDetail({ payeeKey }: { payeeKey: string }) {
                 return (
                   <div
                     key={album.albumId}
-                    className="overflow-hidden rounded-lg border border-slate-200 bg-white"
+                    className="overflow-hidden rounded-2xl border border-[var(--apple-hairline)] bg-white"
                     data-testid={`section-album-${album.albumId}`}
                   >
                     {/* Album header row */}
-                    <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
+                    <div className="flex items-center gap-3 border-b border-[var(--apple-hairline)] px-4 py-3">
                       {album.artwork ? (
                         <img
                           src={album.artwork}
@@ -833,21 +840,21 @@ function PayeeDetail({ payeeKey }: { payeeKey: string }) {
                           className="h-9 w-9 flex-none rounded object-cover"
                         />
                       ) : (
-                        <div className="h-9 w-9 flex-none rounded bg-slate-100" />
+                        <div className="h-9 w-9 flex-none rounded bg-[var(--apple-track)]" />
                       )}
                       <div className="min-w-0 flex-1">
-                        <Link href={`/admin/publishing/albums/${album.albumId}`} className="block truncate font-medium text-slate-900 transition-colors hover:text-[color:var(--brand-blue)]" data-testid={`link-payee-album-${album.albumId}`}>
+                        <Link href={`/admin/publishing/albums/${album.albumId}`} className="block truncate font-medium text-[var(--apple-ink)] transition-colors hover:text-[color:var(--brand-blue)]" data-testid={`link-payee-album-${album.albumId}`}>
                           {album.title}
                         </Link>
                         {album.artist && (
-                          <div className="truncate text-xs text-slate-500">{album.artist}</div>
+                          <div className="truncate text-xs text-[var(--apple-subink)]">{album.artist}</div>
                         )}
                       </div>
                       <div className="shrink-0 text-right">
-                        <div className="text-sm font-semibold tabular-nums text-slate-900">
+                        <div className="text-sm font-semibold tabular-nums text-[var(--apple-ink)]">
                           {dollars(albumLineCents)}
                         </div>
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-[var(--apple-subink)]">
                           {album.unitsPressed.toLocaleString()} units
                         </div>
                       </div>
@@ -856,7 +863,7 @@ function PayeeDetail({ payeeKey }: { payeeKey: string }) {
                     {/* Per-track lines: units × split % = owed */}
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
+                        <tr className="border-b border-[var(--apple-hairline)] text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
                           <th className="px-4 py-2 font-medium">Track</th>
                           <th className="px-4 py-2 text-right font-medium">Units</th>
                           <th className="px-4 py-2 text-right font-medium">Split</th>
@@ -867,17 +874,17 @@ function PayeeDetail({ payeeKey }: { payeeKey: string }) {
                         {album.lines.map((line) => (
                           <tr
                             key={line.lineId}
-                            className="border-b border-slate-100 last:border-0"
+                            className="border-b border-[var(--apple-hairline)] last:border-0"
                             data-testid={`row-payee-line-${line.lineId}`}
                           >
-                            <td className="px-4 py-2.5 text-slate-700">{line.songTitle}</td>
-                            <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">
+                            <td className="px-4 py-2.5 text-[var(--apple-ink)]">{line.songTitle}</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums text-[var(--apple-subink)]">
                               {album.unitsPressed.toLocaleString()}
                             </td>
-                            <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">
+                            <td className="px-4 py-2.5 text-right tabular-nums text-[var(--apple-subink)]">
                               {(line.splitBp / 100).toFixed(2)}%
                             </td>
-                            <td className="px-4 py-2.5 text-right tabular-nums text-slate-900">
+                            <td className="px-4 py-2.5 text-right tabular-nums text-[var(--apple-ink)]">
                               {dollars(reconciledCents.get(line.lineId) ?? 0)}
                             </td>
                           </tr>

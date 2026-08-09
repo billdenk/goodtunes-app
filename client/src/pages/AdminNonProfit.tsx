@@ -148,11 +148,11 @@ export default function AdminNonProfit() {
             hint="Square works best — shown on the NPOs list and anywhere this partner is credited."
           />
           <div className="flex-1 min-w-0">
-            <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider">
+            <div className="text-[var(--apple-subink)] text-[11px] font-semibold uppercase tracking-wider">
               Non-profit
             </div>
             <h1
-              className="text-2xl font-bold text-slate-900 truncate"
+              className="text-[30px] font-semibold tracking-[-0.02em] text-[var(--apple-ink)] truncate"
               data-testid="text-npo-admin-name"
             >
               {npo.name}
@@ -173,7 +173,7 @@ export default function AdminNonProfit() {
         </div>
 
         <div
-          className="flex items-end gap-5 border-b border-slate-200"
+          className="flex items-end gap-5 border-b border-[var(--apple-hairline)]"
           data-testid="tabs-admin-npo"
         >
           <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">

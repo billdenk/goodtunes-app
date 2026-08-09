@@ -3,6 +3,8 @@ import { formatUsdCents } from "@shared/money";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { ChevronRight, ChevronDown, User as UserIcon, Heart, Factory } from "lucide-react";
 import { ScopePicker, SCOPE_CONFIG } from "@/components/admin/RoleScopePicker";
@@ -44,18 +46,13 @@ export function AdminInviteTree() {
   return (
     <AdminFrame active="invite-tree">
       <div className="max-w-3xl">
-        <h1 className="text-2xl font-bold text-slate-900 mb-1" data-testid="text-page-title">
-          Invite tree
-        </h1>
-        <p className="text-sm text-slate-600 mb-6">
-          Pick any artist, non-profit, or press to see the partners they've
-          referred onto GoodTunes — ambassadors, artists, and the projects
-          those artists shipped. Per-node $ totals show pending referral
-          credit for that artist.
-        </p>
+        <AdminPageHeader
+          title="Invite tree."
+          subtitle="Pick any artist, non-profit, or press to see the partners they've referred onto GoodTunes — ambassadors, artists, and the projects those artists shipped. Per-node $ totals show pending referral credit for that artist."
+        />
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-6">
-          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+        <div className="bg-white border border-[var(--apple-hairline)] rounded-2xl p-5 mt-5 mb-6">
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-1">
             Root
           </label>
           <select
@@ -64,7 +61,7 @@ export function AdminInviteTree() {
               setScopeKind(e.target.value as any);
               setScopeId(null);
             }}
-            className="w-full sm:w-64 px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+            className="w-full sm:w-64 px-3 py-2 rounded-lg border border-[var(--apple-hairline)] bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
             data-testid="select-scope-kind"
           >
             <option value="artist">Artist</option>
@@ -80,11 +77,11 @@ export function AdminInviteTree() {
         </div>
 
         {!enabled ? (
-          <div className="text-sm text-slate-500 bg-white border border-slate-200 rounded-2xl p-6 text-center" data-testid="empty-invite-tree">
-            Pick a root above to render its invite subtree.
+          <div className="bg-white border border-[var(--apple-hairline)] rounded-2xl" data-testid="empty-invite-tree">
+            <AdminEmptyState>Pick a root above to render its invite subtree.</AdminEmptyState>
           </div>
         ) : isLoading ? (
-          <div className="text-sm text-slate-500">Loading tree…</div>
+          <div className="text-[13px] text-[var(--apple-subink)]">Loading tree…</div>
         ) : isError ? (
           <ErrorState
             error={error as any}
@@ -93,11 +90,11 @@ export function AdminInviteTree() {
             testId="invite-tree-error"
           />
         ) : !data || data.nodes.length === 0 ? (
-          <div className="text-sm text-slate-500 bg-white border border-slate-200 rounded-2xl p-6 text-center">
-            No descendants yet.
+          <div className="bg-white border border-[var(--apple-hairline)] rounded-2xl">
+            <AdminEmptyState>No descendants yet.</AdminEmptyState>
           </div>
         ) : (
-          <div className="bg-white border border-slate-200 rounded-2xl p-3" data-testid="tree-root">
+          <div className="bg-white border border-[var(--apple-hairline)] rounded-2xl p-3" data-testid="tree-root">
             <TreeNode nodes={data.nodes} nodeId={data.nodes[0].id} depth={0} navigate={navigate} />
           </div>
         )}
@@ -121,7 +118,7 @@ function TreeNode({ nodes, nodeId, depth, navigate }: { nodes: Node[]; nodeId: s
   return (
     <div className="text-sm">
       <div
-        className="flex items-center gap-2 py-1.5 px-2 hover:bg-slate-50 rounded-md"
+        className="flex items-center gap-2 py-1.5 px-2 hover:bg-[var(--apple-track)] rounded-md"
         style={{ paddingLeft: `${depth * 20 + 8}px` }}
         data-testid={`tree-node-${node.id}`}
       >
@@ -129,7 +126,7 @@ function TreeNode({ nodes, nodeId, depth, navigate }: { nodes: Node[]; nodeId: s
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className="p-0.5 text-slate-400 hover:text-slate-700"
+            className="p-0.5 text-[var(--apple-faint)] hover:text-[var(--apple-ink)]"
             aria-label={open ? "Collapse" : "Expand"}
             data-testid={`button-toggle-${node.id}`}
           >
@@ -139,23 +136,23 @@ function TreeNode({ nodes, nodeId, depth, navigate }: { nodes: Node[]; nodeId: s
           <div className="w-4" />
         )}
         {thumb ? (
-          <img src={thumb} alt="" className="w-7 h-7 rounded-full object-cover bg-slate-100 flex-shrink-0" />
+          <img src={thumb} alt="" className="w-7 h-7 rounded-full object-cover bg-[var(--apple-track)] flex-shrink-0" />
         ) : (
-          <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
-            <KindIcon className="w-3.5 h-3.5 text-slate-500" />
+          <div className="w-7 h-7 rounded-full bg-[var(--apple-chip)] flex items-center justify-center flex-shrink-0">
+            <KindIcon className="w-3.5 h-3.5 text-[var(--apple-subink)]" />
           </div>
         )}
         <button
           type="button"
           onClick={() => navigate(linkHref)}
-          className="flex-1 min-w-0 text-left font-medium text-slate-900 truncate hover:underline"
+          className="flex-1 min-w-0 text-left font-medium text-[var(--apple-ink)] truncate hover:underline"
           data-testid={`link-tree-${node.id}`}
         >
           {node.name}
         </button>
         {node.kind === "artist" && (
           <>
-            <span className="text-xs text-slate-500 tabular-nums" data-testid={`text-units-${node.id}`}>
+            <span className="text-xs text-[var(--apple-subink)] tabular-nums" data-testid={`text-units-${node.id}`}>
               {node.paidUnits} unit{node.paidUnits === 1 ? "" : "s"}
             </span>
             <span className="text-xs font-semibold text-[color:var(--brand-mint)] tabular-nums w-16 text-right" data-testid={`text-pending-${node.id}`}>

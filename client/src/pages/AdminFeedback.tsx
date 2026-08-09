@@ -17,6 +17,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -69,7 +71,7 @@ const STATUS_PILL: Record<string, string> = {
   reviewing: "bg-amber-50 text-amber-700 ring-amber-200",
   in_progress: "bg-violet-50 text-violet-700 ring-violet-200",
   shipped: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  closed: "bg-slate-100 text-slate-600 ring-slate-200",
+  closed: "bg-[var(--apple-chip)] text-[var(--apple-subink)] ring-[var(--apple-hairline)]",
 };
 
 function StatusPill({ status }: { status: string }) {
@@ -217,38 +219,36 @@ function AdminFeedbackInner() {
   const content = (
     <div className="p-4 sm:p-6">
       <div className="mb-5">
-        <h1 className="text-xl font-bold text-slate-900" data-testid="text-feedback-heading">
-          Partner feedback
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Bug reports and feature requests submitted by partners from inside
-          their portals.
-        </p>
+        <AdminPageHeader
+          title="Partner feedback."
+          subtitle="Bug reports and feature requests submitted by partners from inside their portals."
+          testId="text-feedback-heading"
+        />
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[12rem]">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--apple-faint)]" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by title, partner, or keyword…"
-            className="h-9 w-full rounded-md border border-slate-200 bg-white pl-8 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+            className="h-9 w-full rounded-md border border-[var(--apple-hairline)] bg-white pl-8 pr-3 text-sm text-[var(--apple-ink)] placeholder:text-[var(--apple-faint)] focus:border-[var(--apple-subink)] focus:outline-none focus:ring-1 focus:ring-[var(--apple-subink)]"
             data-testid="input-feedback-search"
           />
         </div>
-        <div className="flex rounded-md border border-slate-200 p-0.5">
+        <div className="flex rounded-md border border-[var(--apple-hairline)] p-0.5">
           {(["all", "bug", "feature"] as const).map((k) => (
             <button
               key={k}
               type="button"
               onClick={() => setKindFilter(k)}
               className={cn(
-                "rounded px-3 py-1 text-sm capitalize",
+                "rounded px-3 py-1 text-sm capitalize transition-colors",
                 kindFilter === k
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100",
+                  ? "bg-[var(--apple-ink)] text-white"
+                  : "text-[var(--apple-subink)] hover:bg-[var(--apple-track)]",
               )}
               data-testid={`filter-kind-${k}`}
             >
@@ -274,13 +274,13 @@ function AdminFeedbackInner() {
       {isError ? (
         <ErrorState error={error} onRetry={refetch} />
       ) : isLoading ? (
-        <div className="py-16 text-center text-slate-400">Loading…</div>
+        <div className="py-16 text-center text-[var(--apple-faint)]">Loading…</div>
       ) : filtered.length === 0 ? (
         <div
-          className="rounded-lg border border-dashed border-slate-200 py-16 text-center text-sm text-slate-500"
+          className="rounded-2xl border border-[var(--apple-hairline)]"
           data-testid="text-feedback-empty"
         >
-          No feedback matches these filters.
+          <AdminEmptyState>No feedback matches these filters.</AdminEmptyState>
         </div>
       ) : (
         <ul className="space-y-2" data-testid="list-feedback">
@@ -289,10 +289,10 @@ function AdminFeedbackInner() {
               <button
                 type="button"
                 onClick={() => setSelectedId(f.id)}
-                className="flex w-full items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-left hover:border-slate-300 hover:shadow-sm"
+                className="flex w-full items-start gap-3 rounded-2xl border border-[var(--apple-hairline)] bg-white p-3 text-left hover:bg-[var(--apple-track)]"
                 data-testid={`row-feedback-${f.id}`}
               >
-                <span className="mt-0.5 text-slate-400">
+                <span className="mt-0.5 text-[var(--apple-faint)]">
                   {f.kind === "bug" ? (
                     <Bug className="h-4 w-4" />
                   ) : (
@@ -301,14 +301,14 @@ function AdminFeedbackInner() {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
-                    <span className="truncate font-medium text-slate-900">
+                    <span className="truncate font-medium text-[var(--apple-ink)]">
                       {f.title}
                     </span>
                     {f.escalated && (
-                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-500" />
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[var(--apple-critical)]" />
                     )}
                   </span>
-                  <span className="mt-0.5 block truncate text-xs text-slate-500">
+                  <span className="mt-0.5 block truncate text-xs text-[var(--apple-subink)]">
                     {f.submitterName ?? "Unknown"} · {submitterLine(f)}
                   </span>
                 </span>
@@ -388,48 +388,48 @@ function FeedbackDetail({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--apple-ink)]/40 p-4"
       onClick={onClose}
       data-testid="dialog-feedback-detail"
     >
       <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--apple-hairline)] bg-white p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
               {feedback.kind === "bug" ? "Bug report" : "Feature request"}
             </div>
-            <h2 className="mt-1 text-lg font-bold text-slate-900" data-testid="text-detail-title">
+            <h2 className="mt-1 text-lg font-semibold text-[var(--apple-ink)]" data-testid="text-detail-title">
               {feedback.title}
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700"
+            className="text-[var(--apple-subink)] hover:text-[var(--apple-ink)]"
             data-testid="button-close-detail"
           >
             Close
           </button>
         </div>
 
-        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-slate-50 p-3 text-sm">
+        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl bg-[var(--apple-track)] p-3 text-sm">
           <div className="col-span-2">
-            <dt className="text-xs uppercase tracking-wide text-slate-400">Submitted by</dt>
-            <dd className="text-slate-800" data-testid="text-detail-submitter">
+            <dt className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Submitted by</dt>
+            <dd className="text-[var(--apple-ink)]" data-testid="text-detail-submitter">
               {feedback.submitterName ?? "Unknown"}
               {feedback.submitterEmail ? ` · ${feedback.submitterEmail}` : ""}
             </dd>
           </div>
           <div className="col-span-2">
-            <dt className="text-xs uppercase tracking-wide text-slate-400">Role &amp; scope</dt>
-            <dd className="capitalize text-slate-800">{submitterLine(feedback)}</dd>
+            <dt className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Role &amp; scope</dt>
+            <dd className="capitalize text-[var(--apple-ink)]">{submitterLine(feedback)}</dd>
           </div>
           {feedback.pageUrl && (
             <div className="col-span-2">
-              <dt className="text-xs uppercase tracking-wide text-slate-400">Page</dt>
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Page</dt>
               <dd className="truncate">
                 {partnerUrl ? (
                   // When a scoped partner link is available (super-admin view),
@@ -438,7 +438,7 @@ function FeedbackDetail({
                   // context, which routes to the global Resellers page instead of
                   // the partner's portal. Use the "Open in portal" action below.
                   <span
-                    className="text-slate-500 text-sm break-all"
+                    className="text-[var(--apple-subink)] text-sm break-all"
                     data-testid="text-detail-page-ref"
                   >
                     {feedback.pageUrl}
@@ -448,7 +448,7 @@ function FeedbackDetail({
                     href={feedback.pageUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-slate-700 underline"
+                    className="inline-flex items-center gap-1 text-[var(--apple-ink)] underline"
                     data-testid="link-detail-page"
                   >
                     <span className="truncate">{feedback.pageUrl}</span>
@@ -460,7 +460,7 @@ function FeedbackDetail({
           )}
           {partnerUrl && (
             <div className="col-span-2">
-              <dt className="text-xs uppercase tracking-wide text-slate-400">
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">
                 {isPortalView ? "Open in portal" : "Partner profile"}
               </dt>
               <dd>
@@ -468,7 +468,7 @@ function FeedbackDetail({
                   href={partnerUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded bg-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-300"
+                  className="inline-flex items-center gap-1 rounded-full bg-[var(--apple-chip)] px-2.5 py-1 text-xs font-medium text-[var(--apple-ink)] hover:bg-[var(--apple-track)]"
                   data-testid="link-detail-view-as-partner"
                 >
                   {isPortalView ? `Open ${partnerLabel}'s portal` : `Open ${partnerLabel}`}
@@ -480,20 +480,20 @@ function FeedbackDetail({
         </dl>
 
         <div className="mt-4">
-          <Label className="text-xs uppercase tracking-wide text-slate-400">Description</Label>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800" data-testid="text-detail-body">
+          <Label className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Description</Label>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--apple-ink)]" data-testid="text-detail-body">
             {feedback.body}
           </p>
         </div>
 
         {feedback.screenshotUrl && (
           <div className="mt-4">
-            <Label className="text-xs uppercase tracking-wide text-slate-400">Screenshot</Label>
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Screenshot</Label>
             <a href={feedback.screenshotUrl} target="_blank" rel="noreferrer">
               <img
                 src={feedback.screenshotUrl}
                 alt="Submitter screenshot"
-                className="mt-1 max-h-64 w-full rounded-lg border border-slate-200 object-contain"
+                className="mt-1 max-h-64 w-full rounded-lg border border-[var(--apple-hairline)] object-contain"
                 data-testid="img-detail-screenshot"
               />
             </a>
@@ -517,12 +517,12 @@ function FeedbackDetail({
             </Select>
           </div>
           <div className="flex items-end">
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--apple-ink)]">
               <input
                 type="checkbox"
                 checked={escalated}
                 onChange={(e) => setEscalated(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300"
+                className="h-4 w-4 rounded border-[var(--apple-hairline)]"
                 data-testid="checkbox-escalated"
               />
               Escalated to dev

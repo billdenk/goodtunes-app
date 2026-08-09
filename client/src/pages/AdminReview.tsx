@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { CheckCircle2, XCircle, Clock, FileText, ChevronDown } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, ChevronDown } from "lucide-react";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/Spinner";
@@ -96,47 +98,40 @@ export function AdminReview() {
   return (
     <AdminFrame active="none">
       <div className="px-6 py-6 max-w-5xl">
-        <div className="flex items-end justify-between gap-4 mb-5">
-          <div>
-            <h1 className="text-[22px] font-bold text-slate-900 tracking-tight">
-              Pending changes
-            </h1>
-            <p className="text-[13px] text-slate-500 mt-1">
-              Partner-submitted metadata edits awaiting GoodTunes review.
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {(["pending", "approved", "rejected", "all"] as Status[]).map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatus(s)}
-                className={[
-                  "px-3 py-1.5 text-[12.5px] font-semibold rounded-full transition-colors",
-                  status === s
-                    ? "bg-slate-900 text-white"
-                    : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50",
-                ].join(" ")}
-                data-testid={`tab-status-${s}`}
-              >
-                {s[0].toUpperCase() + s.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
+        <AdminPageHeader
+          title="Pending changes."
+          subtitle="Partner-submitted metadata edits awaiting GoodTunes review."
+          actions={
+            <div className="flex items-center gap-1.5">
+              {(["pending", "approved", "rejected", "all"] as Status[]).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setStatus(s)}
+                  className={[
+                    "px-3 py-1.5 text-[12.5px] font-semibold rounded-full transition-colors",
+                    status === s
+                      ? "bg-[var(--apple-ink)] text-white"
+                      : "text-[var(--apple-subink)] hover:bg-[var(--apple-track)]",
+                  ].join(" ")}
+                  data-testid={`tab-status-${s}`}
+                >
+                  {s[0].toUpperCase() + s.slice(1)}
+                </button>
+              ))}
+            </div>
+          }
+        />
 
+        <div className="mt-5">
         {isLoading ? (
           <Card className="p-10 grid place-items-center" data-testid="state-review-loading">
             <Spinner className="w-6 h-6 text-[var(--brand-blue)] animate-spin" />
           </Card>
         ) : !rows || rows.length === 0 ? (
-          <Card className="p-10 text-center" data-testid="state-review-empty">
-            <FileText className="w-10 h-10 mx-auto text-slate-300" />
-            <div className="mt-3 text-[14px] font-medium text-slate-700">
+          <Card data-testid="state-review-empty">
+            <AdminEmptyState action={<span className="text-[12.5px] text-[var(--apple-faint)]">Partner edits with approval-required land here.</span>}>
               Nothing {status === "all" ? "to show" : status} right now.
-            </div>
-            <div className="text-[12.5px] text-slate-500 mt-1">
-              Partner edits with approval-required land here.
-            </div>
+            </AdminEmptyState>
           </Card>
         ) : (
           <div className="space-y-3">
@@ -159,7 +154,7 @@ export function AdminReview() {
                   data-testid={`button-toggle-${row.id}`}
                 >
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-[11.5px] text-slate-500 uppercase tracking-wide">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold text-[var(--apple-subink)] uppercase tracking-wider">
                       <Clock className="w-3 h-3" />
                       <span>{new Date(row.createdAt).toLocaleString()}</span>
                       <span>·</span>
@@ -167,7 +162,7 @@ export function AdminReview() {
                       <span>·</span>
                       <span>{row.status}</span>
                     </div>
-                    <div className="mt-1 text-[14px] font-semibold text-slate-900">
+                    <div className="mt-1 text-[14px] font-semibold text-[var(--apple-ink)]">
                       Edit to{" "}
                       {row.targetTable === "albums" ? (
                         <Link href={`/admin/albums/${row.targetId}`} className="text-[var(--brand-blue)] hover:underline underline-offset-2"
@@ -191,14 +186,14 @@ export function AdminReview() {
                       )}
                     </div>
                     {row.submittedNote && (
-                      <div className="mt-1 text-[12.5px] text-slate-600 italic">
+                      <div className="mt-1 text-[12.5px] text-[var(--apple-subink)] italic">
                         “{row.submittedNote}”
                       </div>
                     )}
                   </div>
                   <ChevronDown
                     className={[
-                      "w-4 h-4 text-slate-400 mt-1 transition-transform flex-shrink-0",
+                      "w-4 h-4 text-[var(--apple-faint)] mt-1 transition-transform flex-shrink-0",
                       expanded ? "rotate-180" : "",
                     ].join(" ")}
                   />
@@ -207,7 +202,7 @@ export function AdminReview() {
                 {expanded && (
                   <>
                 <pre
-                  className="mt-3 text-[12px] bg-slate-50 border border-slate-200 rounded-md p-3 overflow-x-auto text-slate-700"
+                  className="mt-3 text-[12px] bg-[var(--apple-track)] border border-[var(--apple-hairline)] rounded-md p-3 overflow-x-auto text-[var(--apple-ink)]"
                   data-testid={`patch-${row.id}`}
                 >
                   {JSON.stringify(row.patch, null, 2)}
@@ -262,7 +257,7 @@ export function AdminReview() {
                               : { ...m, [row.id]: JSON.stringify(row.patch, null, 2) },
                           )
                         }
-                        className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                        className="rounded-full border-0 bg-transparent text-[var(--apple-subink)] shadow-none hover:bg-[var(--apple-track)] hover:text-[var(--apple-subink)]"
                         data-testid={`button-edit-patch-${row.id}`}
                       >
                         {edits[row.id] !== undefined ? "Cancel edits" : "Edit patch"}
@@ -278,7 +273,7 @@ export function AdminReview() {
                             })
                           }
                           disabled={review.isPending}
-                          className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                          className="rounded-full border-0 bg-transparent text-[var(--apple-critical)] shadow-none hover:bg-[var(--apple-critical)]/10 hover:text-[var(--apple-critical)]"
                           data-testid={`button-reject-${row.id}`}
                         >
                           <XCircle className="w-4 h-4 mr-1.5" />
@@ -309,7 +304,7 @@ export function AdminReview() {
                             });
                           }}
                           disabled={review.isPending || !!editErrors[row.id]}
-                          className="bg-emerald-600 text-white hover:bg-emerald-700"
+                          className="rounded-full bg-[var(--apple-blue)] text-white hover:bg-[var(--apple-blue)]/90"
                           data-testid={`button-approve-${row.id}`}
                         >
                           <CheckCircle2 className="w-4 h-4 mr-1.5" />
@@ -319,7 +314,7 @@ export function AdminReview() {
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-3 text-[12px] text-slate-500">
+                  <div className="mt-3 text-[12px] text-[var(--apple-subink)]">
                     Reviewed{row.reviewedAt && ` ${new Date(row.reviewedAt).toLocaleString()}`}
                     {row.reviewerNote && <> · “{row.reviewerNote}”</>}
                   </div>
@@ -331,6 +326,7 @@ export function AdminReview() {
             })}
           </div>
         )}
+        </div>
       </div>
     </AdminFrame>
   );
