@@ -284,7 +284,7 @@ function NdActivityFeed({ items, loading, orgName }: { items: ActivityItem[]; lo
         )}
         {items.map((it, i) => {
           const body = (
-            <div className="flex items-center gap-3 -mx-2 px-2 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+            <div className="flex items-center gap-3 -mx-2 px-2 py-2 rounded-xl hover:bg-[color:var(--apple-tile)] transition-colors">
               <NdActivityIcon kind={it.kind} />
               <div className="flex-1 min-w-0">
                 <div className="text-[13.5px] truncate" style={{ color: ND_INK }}>{it.title}</div>
@@ -642,10 +642,10 @@ export function NonProfitDashboard() {
   if (me.error) {
     const msg = (me.error as any)?.message || "We couldn't load your non-profit scope.";
     return (
-      <main className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[color:var(--apple-tile)] text-[color:var(--apple-ink)] flex items-center justify-center p-6">
         <div className="max-w-md text-center" data-testid="non-profit-gate">
           <h1 className="text-2xl font-bold mb-2">Non-profit dashboard</h1>
-          <p className="text-slate-500 text-sm">{msg}</p>
+          <p className="text-[color:var(--apple-subink)] text-sm">{msg}</p>
         </div>
       </main>
     );
@@ -731,13 +731,13 @@ function ArtistsTab() {
       </section>
 
       <section className="mt-6">
-        <h2 className="text-sm font-semibold text-slate-700 mb-3">Your artists</h2>
+        <h2 className="text-sm font-semibold text-[color:var(--apple-ink)] mb-3">Your artists</h2>
         {dash.isLoading ? (
-          <p className="py-8 text-center text-slate-400 text-sm">Loading…</p>
+          <p className="py-8 text-center text-[color:var(--apple-faint)] text-sm">Loading…</p>
         ) : (dash.data?.artists.length ?? 0) === 0 ? (
           <DashboardPanel className="p-8 text-center" padding="none" data-testid="empty-npo-artists">
             <Heart className="w-8 h-8 text-rose-500 mx-auto mb-3" />
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-[color:var(--apple-subink)]">
               You haven't referred any artists yet. Use the Invites tab to send your first artist invite —
               you'll earn $1 on every paid unit they ship.
             </p>
@@ -749,41 +749,38 @@ function ArtistsTab() {
               <DashboardPanel>
                 <div className="group/artist flex items-center gap-3 mb-3">
                   {a.photoUrl ? (
-                    <img src={a.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover bg-slate-100" />
+                    <img src={a.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover bg-[color:var(--apple-tile)]" />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-slate-100" />
+                    <div className="w-10 h-10 rounded-full bg-[color:var(--apple-tile)]" />
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold truncate">{a.name}</p>
-                    <p className="text-xs text-slate-500">{a.albums.length} album{a.albums.length === 1 ? "" : "s"} listed</p>
+                    <p className="text-xs text-[color:var(--apple-subink)]">{a.albums.length} album{a.albums.length === 1 ? "" : "s"} listed</p>
                   </div>
                   {a.status === "active" && (
                     <AmbassadorChip personId={a.id} canInviteAmbassadors={a.canInviteAmbassadors} />
                   )}
                   <span
-                    className={`px-2 py-0.5 rounded-full text-xs uppercase tracking-wider font-semibold ${
-                      a.status === "active"
-                        ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                        : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                    }`}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--apple-subink)]"
                     data-testid={`status-npo-artist-${a.id}`}
                   >
+                    <span className={`w-1.5 h-1.5 rounded-full ${a.status === "active" ? "bg-[color:var(--apple-ready)]" : "bg-[color:var(--apple-warning)]"}`} aria-hidden />
                     {a.status === "active" ? "Active" : "Pending invite"}
                   </span>
                   <Link href={`/artist/${a.id}`} className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors">View →</Link>
                 </div>
                 {a.albums.length > 0 && (
-                  <ul className="divide-y divide-slate-100">
+                  <ul className="divide-y divide-[color:var(--apple-hairline)]">
                     {a.albums.map((al) => (
                       <li key={al.id} className="flex items-center gap-3 py-2" data-testid={`row-npo-album-${al.id}`}>
                         {al.coverUrl ? (
                           <img src={al.coverUrl} alt="" className="w-9 h-9 rounded object-cover" />
                         ) : (
-                          <div className="w-9 h-9 rounded bg-slate-100 flex items-center justify-center"><MusicIcon className="w-4 h-4 text-slate-400" /></div>
+                          <div className="w-9 h-9 rounded bg-[color:var(--apple-tile)] flex items-center justify-center"><MusicIcon className="w-4 h-4 text-[color:var(--apple-faint)]" /></div>
                         )}
                         <p className="flex-1 min-w-0 text-sm truncate">{al.title}</p>
-                        <span className="text-xs text-slate-500 tabular-nums">
-                          {al.paidUnits} paid · <span className="text-emerald-600">{fmt(al.paidUnits * 100)}</span>
+                        <span className="text-xs text-[color:var(--apple-subink)] tabular-nums">
+                          {al.paidUnits} paid · <span className="text-[color:var(--apple-ready)]">{fmt(al.paidUnits * 100)}</span>
                         </span>
                       </li>
                     ))}
@@ -837,7 +834,7 @@ function InvitesTab({ npoId, caps }: { npoId: string | undefined; caps: CallerCa
   });
 
   if (!caps?.ok) {
-    return <p className="py-8 text-center text-slate-400 text-sm">Loading…</p>;
+    return <p className="py-8 text-center text-[color:var(--apple-faint)] text-sm">Loading…</p>;
   }
 
   const ctas: { id: "ambassador" | "staff" | "artist"; label: string; enabled: boolean; testId: string }[] = [
@@ -874,18 +871,18 @@ function InvitesTab({ npoId, caps }: { npoId: string | undefined; caps: CallerCa
           </button>
         ))}
         {ctas.length === 0 && (
-          <p className="text-xs text-slate-500">Ask your NPO admin to grant invite permissions.</p>
+          <p className="text-xs text-[color:var(--apple-subink)]">Ask your NPO admin to grant invite permissions.</p>
         )}
       </div>
 
       {lastUrl && (
         <DashboardPanel className="mb-4 flex flex-wrap items-center gap-2 px-4 py-3 text-xs" padding="none" data-testid="invite-link-banner">
-          <span className="text-slate-500">Accept link:</span>
-          <code className="flex-1 min-w-0 truncate font-mono text-slate-700">{lastUrl}</code>
+          <span className="text-[color:var(--apple-subink)]">Accept link:</span>
+          <code className="flex-1 min-w-0 truncate font-mono text-[color:var(--apple-ink)]">{lastUrl}</code>
           <button
             type="button"
             onClick={async () => { await navigator.clipboard.writeText(lastUrl); setCopied(true); setTimeout(() => setCopied(false), 1200); }}
-            className="inline-flex items-center gap-1 rounded-md bg-slate-100 hover:bg-slate-200 px-2 py-1 font-semibold"
+            className="inline-flex items-center gap-1 rounded-md bg-[color:var(--apple-tile)] hover:bg-[color:var(--apple-track)] px-2 py-1 font-semibold"
             data-testid="button-copy-invite-link"
           >
             {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -894,24 +891,24 @@ function InvitesTab({ npoId, caps }: { npoId: string | undefined; caps: CallerCa
         </DashboardPanel>
       )}
 
-      <h2 className="text-sm font-semibold text-slate-700 mb-3">Outstanding invites</h2>
+      <h2 className="text-sm font-semibold text-[color:var(--apple-ink)] mb-3">Outstanding invites</h2>
       {dash.isLoading ? (
-        <p className="py-8 text-center text-slate-400 text-sm">Loading…</p>
+        <p className="py-8 text-center text-[color:var(--apple-faint)] text-sm">Loading…</p>
       ) : items.length === 0 ? (
         <DashboardPanel className="p-8 text-center" padding="none" data-testid="empty-npo-invites">
-          <Mail className="w-8 h-8 text-slate-400 mx-auto mb-3" />
-          <p className="text-sm text-slate-600">No outstanding ambassador / staff invites.</p>
+          <Mail className="w-8 h-8 text-[color:var(--apple-faint)] mx-auto mb-3" />
+          <p className="text-sm text-[color:var(--apple-subink)]">No outstanding ambassador / staff invites.</p>
         </DashboardPanel>
       ) : (
-        <DashboardPanel as="ul" padding="none" className="divide-y divide-slate-100" data-testid="list-npo-invites">
+        <DashboardPanel as="ul" padding="none" className="divide-y divide-[color:var(--apple-hairline)]" data-testid="list-npo-invites">
           {items.map((i) => (
             <li key={i.id} className="flex items-center gap-3 px-4 py-3 text-sm" data-testid={`row-npo-invite-${i.id}`}>
-              <Mail className="w-4 h-4 text-slate-400" />
+              <Mail className="w-4 h-4 text-[color:var(--apple-faint)]" />
               <span className="flex-1 min-w-0 truncate">
                 {i.email}{" "}
-                <span className="ml-2 text-xs uppercase tracking-wider text-slate-500">{labelForRole(i.role)}</span>
+                <span className="ml-2 text-xs uppercase tracking-wider text-[color:var(--apple-subink)]">{labelForRole(i.role)}</span>
               </span>
-              <span className="text-xs text-slate-500 inline-flex items-center gap-1">
+              <span className="text-xs text-[color:var(--apple-subink)] inline-flex items-center gap-1">
                 <Clock className="w-3 h-3" /> expires {new Date(i.expiresAt).toLocaleDateString()}
               </span>
               {caps.isAdmin && (
@@ -920,7 +917,7 @@ function InvitesTab({ npoId, caps }: { npoId: string | undefined; caps: CallerCa
                     type="button"
                     onClick={() => resend.mutate(i.id)}
                     disabled={resend.isPending}
-                    className="inline-flex items-center gap-1 rounded-md bg-slate-100 hover:bg-slate-200 px-2 py-1 text-xs font-semibold disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-md bg-[color:var(--apple-tile)] hover:bg-[color:var(--apple-track)] px-2 py-1 text-xs font-semibold disabled:opacity-50"
                     data-testid={`button-resend-invite-${i.id}`}
                   >
                     <Send className="w-3.5 h-3.5" /> Resend
@@ -929,7 +926,7 @@ function InvitesTab({ npoId, caps }: { npoId: string | undefined; caps: CallerCa
                     type="button"
                     onClick={() => { if (confirm(`Revoke invite for ${i.email}?`)) revoke.mutate(i.id); }}
                     disabled={revoke.isPending}
-                    className="inline-flex items-center gap-1 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 ring-1 ring-rose-200 px-2 py-1 text-xs font-semibold disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-md bg-[color:var(--apple-critical-wash)] hover:opacity-80 text-[color:var(--apple-critical)] ring-1 ring-[color:var(--apple-hairline)] px-2 py-1 text-xs font-semibold disabled:opacity-50"
                     data-testid={`button-revoke-invite-${i.id}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" /> Revoke
@@ -1048,51 +1045,51 @@ function InviteDialog({
       <form
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => { e.preventDefault(); m.mutate(); }}
-        className="w-full max-w-md rounded-2xl bg-white border border-slate-200 p-6 text-slate-900"
+        className="w-full max-w-md rounded-2xl bg-white border border-[color:var(--apple-hairline)] p-6 text-[color:var(--apple-ink)]"
       >
         <h3 className="text-lg font-bold mb-1">{title}</h3>
-        <p className="text-xs text-slate-500 mb-4">{blurb}</p>
-        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1 font-semibold">Email</label>
+        <p className="text-xs text-[color:var(--apple-subink)] mb-4">{blurb}</p>
+        <label className="block text-xs uppercase tracking-wider text-[color:var(--apple-subink)] mb-1 font-semibold">Email</label>
         <input
           type="email" required value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="name@example.com"
-          className="w-full px-3 py-2 mb-3 rounded-lg bg-slate-100 ring-1 ring-slate-200 focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
+          className="w-full px-3 py-2 mb-3 rounded-lg bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)] focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
           data-testid="input-invite-email"
         />
         {kind === "artist" && (
           <>
-            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1 font-semibold">Artist name</label>
+            <label className="block text-xs uppercase tracking-wider text-[color:var(--apple-subink)] mb-1 font-semibold">Artist name</label>
             <input
               type="text" value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Stage or band name (optional)"
-              className="w-full px-3 py-2 mb-3 rounded-lg bg-slate-100 ring-1 ring-slate-200 focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
+              className="w-full px-3 py-2 mb-3 rounded-lg bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)] focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
               data-testid="input-invite-name"
             />
           </>
         )}
         {(kind === "ambassador" || kind === "staff") && (
           <>
-            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1 font-semibold">Name (optional)</label>
+            <label className="block text-xs uppercase tracking-wider text-[color:var(--apple-subink)] mb-1 font-semibold">Name (optional)</label>
             <input
               type="text" value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Their name"
-              className="w-full px-3 py-2 mb-3 rounded-lg bg-slate-100 ring-1 ring-slate-200 focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
+              className="w-full px-3 py-2 mb-3 rounded-lg bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)] focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
               data-testid="input-invite-name"
             />
           </>
         )}
-        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1 font-semibold">Welcome note (optional)</label>
+        <label className="block text-xs uppercase tracking-wider text-[color:var(--apple-subink)] mb-1 font-semibold">Welcome note (optional)</label>
         <textarea
           value={note} onChange={(e) => setNote(e.target.value)} rows={3}
           placeholder="A short note that ships in the invite email."
-          className="w-full px-3 py-2 mb-4 rounded-lg bg-slate-100 ring-1 ring-slate-200 focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
+          className="w-full px-3 py-2 mb-4 rounded-lg bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)] focus:ring-[color:var(--brand-blue)] focus:outline-none text-sm"
           data-testid="textarea-invite-note"
         />
         <div className="flex items-center justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-3 py-2 text-sm text-slate-600 hover:text-slate-900" data-testid="button-cancel-invite">
+          <button type="button" onClick={onClose} className="px-3 py-2 text-sm text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)]" data-testid="button-cancel-invite">
             Cancel
           </button>
           <button
@@ -1112,39 +1109,39 @@ function InviteDialog({
 function TreeTab({ npoId }: { npoId: string }) {
   const tree = useQuery<Tree>({ queryKey: ["/api/non-profit", npoId, "tree"] });
   if (tree.isLoading) {
-    return <p className="py-8 text-center text-slate-400 text-sm">Loading tree…</p>;
+    return <p className="py-8 text-center text-[color:var(--apple-faint)] text-sm">Loading tree…</p>;
   }
   const data = tree.data;
   if (!data) return null;
   return (
     <section data-testid="npo-tree">
-      <h2 className="text-sm font-semibold text-slate-700 mb-3">Who invited whom</h2>
+      <h2 className="text-sm font-semibold text-[color:var(--apple-ink)] mb-3">Who invited whom</h2>
       <DashboardPanel className="p-5">
         <div className="flex items-center gap-3 mb-4">
           {data.npo.logoUrl ? (
-            <img src={data.npo.logoUrl} alt="" className="w-10 h-10 rounded-lg object-cover bg-slate-100" />
+            <img src={data.npo.logoUrl} alt="" className="w-10 h-10 rounded-lg object-cover bg-[color:var(--apple-tile)]" />
           ) : (
-            <div className="w-10 h-10 rounded-lg bg-rose-50 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-[color:var(--apple-critical-wash)] flex items-center justify-center">
               <Heart className="w-5 h-5 text-rose-500" />
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Non-profit</p>
+            <p className="text-xs uppercase tracking-wider text-[color:var(--apple-subink)] font-semibold">Non-profit</p>
             <p className="font-semibold truncate">{data.npo.name}</p>
           </div>
         </div>
         {data.team.length === 0 ? (
-          <p className="text-sm text-slate-500">No teammates yet. Invite an ambassador or staff to grow the tree.</p>
+          <p className="text-sm text-[color:var(--apple-subink)]">No teammates yet. Invite an ambassador or staff to grow the tree.</p>
         ) : (
-          <ul className="space-y-3 border-l border-slate-200 pl-4">
+          <ul className="space-y-3 border-l border-[color:var(--apple-hairline)] pl-4">
             {data.team.map((n) => (
               <TreeTeamNodeRow key={n.id} node={n} />
             ))}
           </ul>
         )}
         {data.orphanArtists.length > 0 && (
-          <div className="mt-5 pt-4 border-t border-slate-200">
-            <p className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Other referred artists</p>
+          <div className="mt-5 pt-4 border-t border-[color:var(--apple-hairline)]">
+            <p className="text-xs uppercase tracking-wider text-[color:var(--apple-subink)] font-semibold mb-2">Other referred artists</p>
             <ul className="space-y-1">
               {data.orphanArtists.map((a) => (
                 <TreeArtistRow key={a.id} artist={a} />
@@ -1160,31 +1157,34 @@ function TreeTab({ npoId }: { npoId: string }) {
 function TreeTeamNodeRow({ node }: { node: TreeTeamNode }) {
   const [open, setOpen] = useState(true);
   const badge =
-    node.subRole === "admin" ? { bg: "bg-slate-100 ring-1 ring-slate-200", text: "text-slate-700", label: "Admin" }
-      : node.subRole === "ambassador" ? { bg: "bg-emerald-50 ring-1 ring-emerald-200", text: "text-emerald-700", label: "Ambassador" }
-      : { bg: "bg-blue-50 ring-1 ring-blue-200", text: "text-blue-700", label: "Staff" };
+    node.subRole === "admin" ? { bg: "bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)]", text: "text-[color:var(--apple-ink)]", label: "Admin" }
+      : node.subRole === "ambassador" ? { bg: "bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)]", text: "text-[color:var(--apple-subink)]", label: "Ambassador" }
+      : { bg: "bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)]", text: "text-[color:var(--apple-subink)]", label: "Staff" };
   return (
     <li data-testid={`tree-node-${node.id}`}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 w-full text-left hover:text-slate-900 transition-colors"
+        className="flex items-center gap-2 w-full text-left hover:text-[color:var(--apple-ink)] transition-colors"
       >
-        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
-        <Users className="w-4 h-4 text-slate-500" />
+        <ChevronDown className={`w-4 h-4 text-[color:var(--apple-faint)] transition-transform ${open ? "" : "-rotate-90"}`} />
+        <Users className="w-4 h-4 text-[color:var(--apple-subink)]" />
         <span className="text-sm font-semibold truncate">{node.name}</span>
         <span className={`px-2 py-0.5 rounded-full text-xs uppercase tracking-wider font-semibold ${badge.bg} ${badge.text}`}>
           {badge.label}
         </span>
         {node.nodeKind === "pending" && (
-          <span className="text-xs uppercase tracking-wider text-amber-700">Pending</span>
+          <span className="inline-flex items-center gap-1.5 text-xs text-[color:var(--apple-subink)]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--apple-warning)]" aria-hidden />
+            Pending
+          </span>
         )}
-        <span className="ml-auto text-xs text-slate-500">
+        <span className="ml-auto text-xs text-[color:var(--apple-subink)]">
           {node.artists.length} artist{node.artists.length === 1 ? "" : "s"}
         </span>
       </button>
       {open && node.artists.length > 0 && (
-        <ul className="mt-2 ml-6 space-y-1 border-l border-slate-200 pl-3">
+        <ul className="mt-2 ml-6 space-y-1 border-l border-[color:var(--apple-hairline)] pl-3">
           {node.artists.map((a) => (
             <TreeArtistRow key={a.id} artist={a} />
           ))}
@@ -1198,18 +1198,13 @@ function TreeArtistRow({ artist }: { artist: TreeArtist }) {
   return (
     <li className="flex items-center gap-2 text-xs" data-testid={`tree-artist-${artist.id}`}>
       {artist.photoUrl ? (
-        <img src={artist.photoUrl} alt="" className="w-6 h-6 rounded-md object-cover bg-slate-100" />
+        <img src={artist.photoUrl} alt="" className="w-6 h-6 rounded-md object-cover bg-[color:var(--apple-tile)]" />
       ) : (
-        <div className="w-6 h-6 rounded-md bg-slate-100" />
+        <div className="w-6 h-6 rounded-md bg-[color:var(--apple-tile)]" />
       )}
       <span className="truncate">{artist.name}</span>
-      <span
-        className={`px-1.5 py-0.5 rounded text-xs uppercase tracking-wider font-semibold ${
-          artist.status === "accepted"
-            ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-            : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-        }`}
-      >
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--apple-subink)]">
+        <span className={`w-1.5 h-1.5 rounded-full ${artist.status === "accepted" ? "bg-[color:var(--apple-ready)]" : "bg-[color:var(--apple-warning)]"}`} aria-hidden />
         {artist.status === "accepted" ? "Active" : "Pending"}
       </span>
       {artist.status === "accepted" && artist.personId && (
@@ -1251,7 +1246,7 @@ function AmbassadorChip({ personId, canInviteAmbassadors }: { personId: string; 
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] focus-visible:opacity-100",
         on
           ? "bg-[color:var(--brand-blue)] text-white"
-          : "bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-200 opacity-0 group-hover/artist:opacity-100",
+          : "bg-[color:var(--apple-tile)] text-[color:var(--apple-subink)] ring-1 ring-inset ring-[color:var(--apple-hairline)] opacity-0 group-hover/artist:opacity-100",
         m.isPending && "opacity-60 cursor-wait",
       ].filter(Boolean).join(" ")}
       data-testid={`chip-npo-ambassador-${personId}`}

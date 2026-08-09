@@ -54,24 +54,26 @@ const STATUS_LABELS: Record<string, string> = {
   closed: "Closed",
 };
 
-// Light-admin status pills (no mint/pink on white — see design-system.md).
-const STATUS_PILL: Record<string, string> = {
-  new: "bg-blue-50 text-blue-700 ring-blue-200",
-  reviewing: "bg-amber-50 text-amber-700 ring-amber-200",
-  in_progress: "bg-violet-50 text-violet-700 ring-violet-200",
-  shipped: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  closed: "bg-slate-100 text-slate-600 ring-slate-200",
+// Apple-canon status: small colored dot + quiet label (no colored pills).
+const STATUS_DOT: Record<string, string> = {
+  new: "var(--apple-blue)",
+  reviewing: "var(--apple-warning)",
+  in_progress: "var(--apple-blue)",
+  shipped: "var(--apple-ready)",
+  closed: "var(--apple-faint)",
 };
 
 export function FeedbackStatusPill({ status }: { status: string }) {
   return (
     <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
-        STATUS_PILL[status] ?? STATUS_PILL.closed,
-      )}
+      className="inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--apple-subink)]"
       data-testid={`pill-feedback-status-${status}`}
     >
+      <span
+        className="w-1.5 h-1.5 rounded-full shrink-0"
+        style={{ backgroundColor: STATUS_DOT[status] ?? STATUS_DOT.closed }}
+        aria-hidden
+      />
       {STATUS_LABELS[status] ?? status}
     </span>
   );
@@ -185,7 +187,7 @@ export function FeedbackLauncher({ className }: { className?: string }) {
           // Apple-canon header utility action: ghost pill — subink text +
           // icon, transparent, light-gray hover, NEVER filled blue (the
           // filled slot belongs to the screen's one primary CTA).
-          "gap-1.5 rounded-full bg-transparent text-[var(--apple-subink)] hover:bg-slate-100 hover:text-[var(--apple-ink)] border-0 shadow-none",
+          "gap-1.5 rounded-full bg-transparent text-[var(--apple-subink)] hover:bg-[color:var(--apple-tile)] hover:text-[var(--apple-ink)] border-0 shadow-none",
           className
         )}
         onClick={() => {
@@ -222,7 +224,7 @@ export function FeedbackLauncher({ className }: { className?: string }) {
                 <button
                   type="button"
                   onClick={() => setView("mine")}
-                  className="shrink-0 mt-0.5 text-xs text-slate-400 hover:text-slate-600 transition-colors underline underline-offset-2"
+                  className="shrink-0 mt-0.5 text-xs text-[color:var(--apple-faint)] hover:text-[color:var(--apple-subink)] transition-colors underline underline-offset-2"
                   data-testid="link-feedback-my-requests"
                 >
                   My requests
@@ -231,7 +233,7 @@ export function FeedbackLauncher({ className }: { className?: string }) {
                 <button
                   type="button"
                   onClick={() => setView("report")}
-                  className="shrink-0 mt-0.5 text-xs text-slate-400 hover:text-slate-600 transition-colors underline underline-offset-2"
+                  className="shrink-0 mt-0.5 text-xs text-[color:var(--apple-faint)] hover:text-[color:var(--apple-subink)] transition-colors underline underline-offset-2"
                   data-testid="link-feedback-new-report"
                 >
                   New report
@@ -244,7 +246,7 @@ export function FeedbackLauncher({ className }: { className?: string }) {
             <form onSubmit={handleSubmit} className="mt-5 space-y-5">
               {/* Compact inline kind selector */}
               <div
-                className="inline-flex rounded-md border border-slate-200 overflow-hidden text-sm"
+                className="inline-flex rounded-md border border-[color:var(--apple-hairline)] overflow-hidden text-sm"
                 role="group"
                 aria-label="Report type"
               >
@@ -254,10 +256,10 @@ export function FeedbackLauncher({ className }: { className?: string }) {
                   aria-checked={kind === "bug"}
                   onClick={() => setKind("bug")}
                   className={cn(
-                    "px-3.5 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400",
+                    "px-3.5 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--apple-faint)]",
                     kind === "bug"
-                      ? "bg-slate-900 text-white"
-                      : "bg-white text-slate-600 hover:bg-slate-50",
+                      ? "bg-[color:var(--apple-ink)] text-white"
+                      : "bg-white text-[color:var(--apple-subink)] hover:bg-[color:var(--apple-tile)]",
                   )}
                   data-testid="seg-feedback-bug"
                 >
@@ -269,10 +271,10 @@ export function FeedbackLauncher({ className }: { className?: string }) {
                   aria-checked={kind === "feature"}
                   onClick={() => setKind("feature")}
                   className={cn(
-                    "px-3.5 py-1.5 font-medium border-l border-slate-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400",
+                    "px-3.5 py-1.5 font-medium border-l border-[color:var(--apple-hairline)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--apple-faint)]",
                     kind === "feature"
-                      ? "bg-slate-900 text-white"
-                      : "bg-white text-slate-600 hover:bg-slate-50",
+                      ? "bg-[color:var(--apple-ink)] text-white"
+                      : "bg-white text-[color:var(--apple-subink)] hover:bg-[color:var(--apple-tile)]",
                   )}
                   data-testid="seg-feedback-feature"
                 >
@@ -281,7 +283,7 @@ export function FeedbackLauncher({ className }: { className?: string }) {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="feedback-title" className="text-slate-700">
+                <Label htmlFor="feedback-title" className="text-[color:var(--apple-ink)]">
                   Title
                 </Label>
                 <Input
@@ -299,7 +301,7 @@ export function FeedbackLauncher({ className }: { className?: string }) {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="feedback-body" className="text-slate-700">
+                <Label htmlFor="feedback-body" className="text-[color:var(--apple-ink)]">
                   Details
                 </Label>
                 <Textarea
@@ -314,7 +316,7 @@ export function FeedbackLauncher({ className }: { className?: string }) {
               </div>
 
               <div className="space-y-3">
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-[color:var(--apple-faint)]">
                   A screenshot of this page is attached automatically.
                 </p>
 
@@ -338,12 +340,12 @@ export function FeedbackLauncher({ className }: { className?: string }) {
           ) : (
             <div className="mt-5">
               {mine.isLoading ? (
-                <div className="flex items-center justify-center py-10 text-slate-400">
+                <div className="flex items-center justify-center py-10 text-[color:var(--apple-faint)]">
                   <Loader2 className="h-5 w-5 animate-spin" />
                 </div>
               ) : !mine.data || mine.data.length === 0 ? (
                 <p
-                  className="py-10 text-center text-sm text-slate-500"
+                  className="py-10 text-center text-sm text-[color:var(--apple-subink)]"
                   data-testid="text-feedback-empty"
                 >
                   You haven't sent any feedback yet.
@@ -353,18 +355,18 @@ export function FeedbackLauncher({ className }: { className?: string }) {
                   {mine.data.map((f) => (
                     <li
                       key={f.id}
-                      className="rounded-lg border border-slate-100 bg-white px-3.5 py-3"
+                      className="rounded-lg border border-[color:var(--apple-hairline)] bg-white px-3.5 py-3"
                       data-testid={`row-feedback-${f.id}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-slate-900">
+                          <p className="truncate text-sm font-medium text-[color:var(--apple-ink)]">
                             {f.title}
                           </p>
-                          <p className="mt-0.5 text-xs uppercase tracking-wide text-slate-400">
+                          <p className="mt-0.5 text-xs uppercase tracking-wide text-[color:var(--apple-faint)]">
                             {f.kind === "bug" ? "Bug" : "Feature request"}
                             {formatFeedbackDate(f.createdAt) && (
-                              <span className="ml-2 normal-case tracking-normal text-slate-400">
+                              <span className="ml-2 normal-case tracking-normal text-[color:var(--apple-faint)]">
                                 · {formatFeedbackDate(f.createdAt)}
                               </span>
                             )}
@@ -374,7 +376,7 @@ export function FeedbackLauncher({ className }: { className?: string }) {
                       </div>
                       {f.publicReply ? (
                         <p
-                          className="mt-2.5 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                          className="mt-2.5 rounded-md bg-[color:var(--apple-tile)] px-3 py-2 text-sm text-[color:var(--apple-ink)]"
                           data-testid={`text-feedback-reply-${f.id}`}
                         >
                           <span className="font-medium">GoodTunes: </span>
@@ -382,7 +384,7 @@ export function FeedbackLauncher({ className }: { className?: string }) {
                         </p>
                       ) : (
                         <p
-                          className="mt-2 text-xs italic text-slate-400"
+                          className="mt-2 text-xs italic text-[color:var(--apple-faint)]"
                           data-testid={`text-feedback-noreply-${f.id}`}
                         >
                           No reply yet

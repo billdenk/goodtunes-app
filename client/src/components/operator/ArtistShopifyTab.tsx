@@ -66,7 +66,7 @@ export function ArtistShopifyTab() {
       />
 
       <section data-testid="artist-shopify-stores">
-        <h2 className="text-[15px] font-semibold text-slate-900 mb-2">Connected stores</h2>
+        <h2 className="text-[15px] font-semibold text-[color:var(--apple-ink)] mb-2">Connected stores</h2>
         {isLoading && (
           <div className="space-y-2">
             <Skeleton className="h-14 w-full rounded-lg" />
@@ -74,7 +74,7 @@ export function ArtistShopifyTab() {
         )}
         {!isLoading && (data?.stores.length ?? 0) === 0 && (data?.pendingLinks.length ?? 0) === 0 && (
           <div
-            className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-center text-slate-400 text-[13px]"
+            className="rounded-lg border border-[color:var(--apple-hairline)] bg-white px-4 py-6 text-center text-[color:var(--apple-faint)] text-[13px]"
             data-testid="artist-shopify-empty"
           >
             No store connected yet. Connect yours above — once it's live, you can map your products to your
@@ -85,18 +85,19 @@ export function ArtistShopifyTab() {
           {(data?.stores ?? []).map((s) => (
             <div
               key={s.id}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-3 flex items-center gap-3"
+              className="rounded-lg border border-[color:var(--apple-hairline)] bg-white px-4 py-3 flex items-center gap-3"
               data-testid={`row-artist-store-${s.id}`}
             >
-              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-[color:var(--apple-ready)] shrink-0" />
               <div className="min-w-0 flex-1">
-                <div className="text-[13.5px] font-medium text-slate-900 truncate">{s.storeName ?? s.shopDomain}</div>
-                <div className="text-[12px] text-slate-500 truncate">
+                <div className="text-[13.5px] font-medium text-[color:var(--apple-ink)] truncate">{s.storeName ?? s.shopDomain}</div>
+                <div className="text-[12px] text-[color:var(--apple-subink)] truncate">
                   {s.shopDomain}
                   {s.installedAt && ` · Connected ${new Date(s.installedAt).toLocaleDateString()}`}
                 </div>
               </div>
-              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded shrink-0">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--apple-subink)] shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--apple-ready)]" aria-hidden />
                 Live
               </span>
               <ShopifyDisconnectButton shopDomain={s.shopDomain} testId={`button-disconnect-artist-store-${s.id}`} />
@@ -105,13 +106,13 @@ export function ArtistShopifyTab() {
           {(data?.pendingLinks ?? []).map((l) => (
             <div
               key={l.id}
-              className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 flex items-center gap-3"
+              className="rounded-lg border border-dashed border-[color:var(--apple-hairline)] bg-[color:var(--apple-tile)] px-4 py-3 flex items-center gap-3"
               data-testid={`row-artist-pending-${l.id}`}
             >
-              <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+              <Clock className="w-4 h-4 text-[color:var(--apple-faint)] shrink-0" />
               <div className="min-w-0 flex-1">
-                <div className="text-[13.5px] font-medium text-slate-700 truncate">{l.shopDomain}</div>
-                <div className="text-[12px] text-slate-500">Waiting for install — link generated {new Date(l.lastGeneratedAt).toLocaleDateString()}</div>
+                <div className="text-[13.5px] font-medium text-[color:var(--apple-ink)] truncate">{l.shopDomain}</div>
+                <div className="text-[12px] text-[color:var(--apple-subink)]">Waiting for install — link generated {new Date(l.lastGeneratedAt).toLocaleDateString()}</div>
               </div>
             </div>
           ))}

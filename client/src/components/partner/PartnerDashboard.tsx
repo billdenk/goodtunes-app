@@ -124,7 +124,7 @@ export function PartnerDashboard({
     const msg = (error as any)?.message || "We couldn't load your dashboard.";
     return (
       <DashboardPanel className="p-6 text-center" padding="none" data-testid={`partner-dashboard-${scope}-error`}>
-        <p className="text-slate-600 text-sm">{msg}</p>
+        <p className="text-[color:var(--apple-subink)] text-sm">{msg}</p>
       </DashboardPanel>
     );
   }
@@ -152,11 +152,11 @@ export function PartnerDashboard({
         ) : (
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-slate-500 text-[12px] uppercase tracking-wider font-semibold">Dashboard</p>
+              <p className="text-[color:var(--apple-subink)] text-[12px] uppercase tracking-wider font-semibold">Dashboard</p>
               <h2 className="text-2xl sm:text-3xl font-bold truncate" data-testid={`heading-partner-dashboard-${scope}`}>
                 {title}
               </h2>
-              {subtitle && <p className="text-slate-500 text-[13px] mt-0.5">{subtitle}</p>}
+              {subtitle && <p className="text-[color:var(--apple-subink)] text-[13px] mt-0.5">{subtitle}</p>}
             </div>
             <RangePicker
               presets={RANGE_PRESETS}
@@ -175,8 +175,8 @@ export function PartnerDashboard({
         <DashboardPanel data-testid={`trend-${scope}`} className="lg:col-span-2">
           <div className="flex items-baseline justify-between mb-3">
             <div>
-              <h3 className="text-sm font-semibold text-slate-700">Trend</h3>
-              <p className="text-[11px] text-slate-400">Daily activity over the selected window</p>
+              <h3 className="text-sm font-semibold text-[color:var(--apple-ink)]">Trend</h3>
+              <p className="text-[11px] text-[color:var(--apple-faint)]">Daily activity over the selected window</p>
             </div>
           </div>
           <TrendChart
@@ -187,7 +187,7 @@ export function PartnerDashboard({
         </DashboardPanel>
 
         <DashboardPanel data-testid={`activity-${scope}`}>
-          <h3 className="text-sm font-semibold text-slate-700 mb-3">Recent activity</h3>
+          <h3 className="text-sm font-semibold text-[color:var(--apple-ink)] mb-3">Recent activity</h3>
           <ActivityList items={data?.activity ?? []} loading={isLoading} />
         </DashboardPanel>
       </div>
@@ -317,7 +317,7 @@ export function TrendChart({
   loading: boolean;
 }) {
   if (loading) {
-    return <div className="h-[220px] bg-slate-100 rounded-lg animate-pulse" />;
+    return <div className="h-[220px] bg-[color:var(--apple-tile)] rounded-lg animate-pulse" />;
   }
   if (!metrics.length || !series.length) {
     // Render a real (empty) chart frame — grid + axes — rather than a
@@ -327,13 +327,13 @@ export function TrendChart({
       <div className="h-[220px] relative" data-testid="trend-empty">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={[]} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
-            <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} width={42} domain={[0, 1]} />
+            <CartesianGrid stroke="var(--apple-grid)" vertical={false} />
+            <XAxis dataKey="date" tick={{ fill: "var(--apple-axis)", fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: "var(--apple-axis)", fontSize: 11 }} axisLine={false} tickLine={false} width={42} domain={[0, 1]} />
           </LineChart>
         </ResponsiveContainer>
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <span className="text-slate-400 text-xs">No activity in this window yet.</span>
+          <span className="text-[color:var(--apple-faint)] text-xs">No activity in this window yet.</span>
         </div>
       </div>
     );
@@ -343,9 +343,9 @@ export function TrendChart({
     <div className="h-[220px]">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
-          <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} width={42} />
+          <CartesianGrid stroke="var(--apple-grid)" vertical={false} />
+          <XAxis dataKey="date" tick={{ fill: "var(--apple-axis)", fontSize: 11 }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fill: "var(--apple-axis)", fontSize: 11 }} axisLine={false} tickLine={false} width={42} />
           <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
           {metrics.map((m, i) => (
             <Line
@@ -371,34 +371,34 @@ export function ActivityList({ items, loading }: { items: ActivityItem[]; loadin
     return (
       <ul className="space-y-2">
         {Array.from({ length: 4 }).map((_, i) => (
-          <li key={i} className="h-10 bg-slate-100 rounded animate-pulse" />
+          <li key={i} className="h-10 bg-[color:var(--apple-tile)] rounded animate-pulse" />
         ))}
       </ul>
     );
   }
   if (!items.length) {
     return (
-      <p className="text-slate-400 text-[13px] py-2" data-testid="activity-empty">
+      <p className="text-[color:var(--apple-faint)] text-[13px] py-2" data-testid="activity-empty">
         Nothing here yet — your latest activity will show up as it comes in.
       </p>
     );
   }
   return (
-    <ul className="divide-y divide-slate-100" data-testid="activity-list">
+    <ul className="divide-y divide-[color:var(--apple-hairline)]" data-testid="activity-list">
       {items.map((it, i) => (
         <li key={i} className="py-2 flex items-center gap-3" data-testid={`activity-item-${i}`}>
-          <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <Clock className="w-3.5 h-3.5 text-[color:var(--apple-faint)] shrink-0" />
           <div className="min-w-0 flex-1">
             {it.href ? (
-              <a href={it.href} className="text-[13px] font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline truncate block">
+              <a href={it.href} className="text-[13px] font-semibold text-[color:var(--apple-ink)] hover:text-[color:var(--brand-blue)] hover:underline truncate block">
                 {it.title}
               </a>
             ) : (
-              <p className="text-[13px] font-semibold text-slate-900 truncate">{it.title}</p>
+              <p className="text-[13px] font-semibold text-[color:var(--apple-ink)] truncate">{it.title}</p>
             )}
-            {it.detail && <p className="text-[11px] text-slate-500 truncate">{it.detail}</p>}
+            {it.detail && <p className="text-[11px] text-[color:var(--apple-subink)] truncate">{it.detail}</p>}
           </div>
-          <time className="text-[11px] text-slate-400 tabular-nums shrink-0">
+          <time className="text-[11px] text-[color:var(--apple-faint)] tabular-nums shrink-0">
             {new Date(it.ts).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
           </time>
         </li>

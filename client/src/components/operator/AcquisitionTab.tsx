@@ -86,7 +86,7 @@ function fmtPct(n: number): string {
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white p-5 ${className}`}>
+    <div className={`rounded-xl border border-[color:var(--apple-hairline)] bg-white p-5 ${className}`}>
       {children}
     </div>
   );
@@ -94,7 +94,7 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="py-12 text-center text-slate-500 text-sm" data-testid="empty-state">
+    <div className="py-12 text-center text-[color:var(--apple-subink)] text-sm" data-testid="empty-state">
       {message}
     </div>
   );
@@ -115,7 +115,7 @@ function ReleasePicker({
     <div className="flex flex-col gap-1.5">
       <Label
         htmlFor="partner-funnel-release-trigger"
-        className="text-xs uppercase tracking-wider text-slate-500 font-semibold"
+        className="text-xs uppercase tracking-wider text-[color:var(--apple-subink)] font-semibold"
       >
         Release
       </Label>
@@ -124,12 +124,12 @@ function ReleasePicker({
           <button
             id="partner-funnel-release-trigger"
             type="button"
-            className="inline-flex items-center gap-2 h-9 self-start min-w-[280px] max-w-[420px] rounded-md border border-slate-300 bg-white px-3 text-sm text-left text-slate-900 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
+            className="inline-flex items-center gap-2 h-9 self-start min-w-[280px] max-w-[420px] rounded-md border border-[color:var(--apple-hairline)] bg-white px-3 text-sm text-left text-[color:var(--apple-ink)] hover:border-[color:var(--apple-faint)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
             data-testid="button-partner-funnel-release"
             aria-haspopup="listbox"
             aria-expanded={open}
           >
-            <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+            <Search className="w-3.5 h-3.5 text-[color:var(--apple-faint)] flex-shrink-0" />
             <span className="flex-1 truncate">
               {selected ? `${selected.title} — ${selected.artist}` : "Pick a release…"}
             </span>
@@ -138,25 +138,25 @@ function ReleasePicker({
         <PopoverContent
           align="start"
           sideOffset={4}
-          className="p-0 w-[min(420px,calc(100vw-2rem))] bg-white border border-slate-200 text-slate-900 shadow-lg"
+          className="p-0 w-[min(420px,calc(100vw-2rem))] bg-white border border-[color:var(--apple-hairline)] text-[color:var(--apple-ink)] shadow-lg"
         >
           <Command
             className={[
-              "bg-white text-slate-900",
-              "[&_[cmdk-input-wrapper]]:border-slate-200",
-              "[&_[cmdk-item]]:text-slate-700",
-              "[&_[cmdk-item][data-selected=true]]:bg-slate-100",
-              "[&_[cmdk-item][data-selected=true]]:text-slate-900",
+              "bg-white text-[color:var(--apple-ink)]",
+              "[&_[cmdk-input-wrapper]]:border-[color:var(--apple-hairline)]",
+              "[&_[cmdk-item]]:text-[color:var(--apple-ink)]",
+              "[&_[cmdk-item][data-selected=true]]:bg-[color:var(--apple-tile)]",
+              "[&_[cmdk-item][data-selected=true]]:text-[color:var(--apple-ink)]",
             ].join(" ")}
           >
             <CommandInput
               placeholder="Search releases…"
-              className="text-slate-900 placeholder:text-slate-400"
+              className="text-[color:var(--apple-ink)] placeholder:text-[color:var(--apple-faint)]"
               data-testid="input-partner-funnel-release-search"
             />
             <CommandList>
               <CommandEmpty>
-                <div className="px-3 py-4 text-xs text-slate-500">No matching releases.</div>
+                <div className="px-3 py-4 text-xs text-[color:var(--apple-subink)]">No matching releases.</div>
               </CommandEmpty>
               <CommandGroup heading="Your releases">
                 {releases.map((r) => (
@@ -171,10 +171,10 @@ function ReleasePicker({
                     className="flex items-center justify-between gap-2 py-2"
                   >
                     <div className="min-w-0">
-                      <div className="truncate font-medium text-slate-900">{r.title}</div>
-                      <div className="truncate text-xs text-slate-500 mt-0.5">{r.artist}</div>
+                      <div className="truncate font-medium text-[color:var(--apple-ink)]">{r.title}</div>
+                      <div className="truncate text-xs text-[color:var(--apple-subink)] mt-0.5">{r.artist}</div>
                     </div>
-                    <span className="text-xs text-slate-400 tabular-nums flex-shrink-0">
+                    <span className="text-xs text-[color:var(--apple-faint)] tabular-nums flex-shrink-0">
                       {r.landed.toLocaleString()} landed
                     </span>
                   </CommandItem>
@@ -273,11 +273,11 @@ export function AcquisitionTab({
       <Card>
         <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
           <div>
-            <h3 className="text-sm font-semibold text-slate-700">Acquisition funnel</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <h3 className="text-sm font-semibold text-[color:var(--apple-ink)]">Acquisition funnel</h3>
+            <p className="text-xs text-[color:var(--apple-subink)] mt-0.5">
               Landed → viewed the offer → started checkout → bought, for your own
               releases. Distinct sessions from first-party analytics.{" "}
-              <span className="text-slate-400">
+              <span className="text-[color:var(--apple-faint)]">
                 "Landed" counts unique sessions that opened the release page. Your team's
                 own views and preview-link opens are filtered out by default.
               </span>
@@ -294,12 +294,12 @@ export function AcquisitionTab({
             )}
             {releases.length > 0 && (
               <label
-                className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none"
+                className="flex items-center gap-2 text-xs text-[color:var(--apple-subink)] cursor-pointer select-none"
                 data-testid="toggle-partner-funnel-exclude-internal"
               >
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-slate-300 accent-[var(--brand-blue)]"
+                  className="h-4 w-4 rounded border-[color:var(--apple-hairline)] accent-[var(--brand-blue)]"
                   checked={excludeInternal}
                   onChange={(e) => setExcludeInternal(e.target.checked)}
                   data-testid="checkbox-partner-funnel-exclude-internal"
@@ -325,18 +325,18 @@ export function AcquisitionTab({
           <div className="space-y-5" data-testid="partner-native-funnel">
             <div className="flex items-baseline gap-3">
               <span
-                className="text-2xl font-semibold text-slate-900 tabular-nums"
+                className="text-2xl font-semibold text-[color:var(--apple-ink)] tabular-nums"
                 data-testid="text-partner-funnel-overall-conversion"
               >
                 {fmtPct(data.overallConversion)}
               </span>
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-[color:var(--apple-subink)]">
                 landed → bought ({data.steps[0]?.sessions.toLocaleString() ?? 0} sessions →{" "}
                 {data.steps[3]?.sessions.toLocaleString() ?? 0} purchases)
               </span>
             </div>
             {excludeInternal && (data.excludedInternal ?? 0) > 0 && (
-              <p className="text-xs text-slate-400 -mt-3" data-testid="text-partner-funnel-excluded-internal">
+              <p className="text-xs text-[color:var(--apple-faint)] -mt-3" data-testid="text-partner-funnel-excluded-internal">
                 {data.excludedInternal?.toLocaleString()} internal/test record
                 {data.excludedInternal === 1 ? "" : "s"} excluded (sessions + purchases)
               </p>
@@ -348,22 +348,22 @@ export function AcquisitionTab({
                 return (
                   <div key={step.key} data-testid={`partner-funnel-step-${step.key}`}>
                     <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="font-medium text-slate-700">{step.label}</span>
-                      <span className="text-slate-500 tabular-nums">
+                      <span className="font-medium text-[color:var(--apple-ink)]">{step.label}</span>
+                      <span className="text-[color:var(--apple-subink)] tabular-nums">
                         <span
-                          className="font-semibold text-slate-900"
+                          className="font-semibold text-[color:var(--apple-ink)]"
                           data-testid={`text-partner-funnel-step-count-${step.key}`}
                         >
                           {step.sessions.toLocaleString()}
                         </span>
                         {i > 0 && (
-                          <span className="ml-2 text-xs text-slate-400">
+                          <span className="ml-2 text-xs text-[color:var(--apple-faint)]">
                             {fmtPct(step.stepConversion)} from prev
                           </span>
                         )}
                       </span>
                     </div>
-                    <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div className="h-2.5 rounded-full bg-[color:var(--apple-tile)] overflow-hidden">
                       <div
                         className="h-full rounded-full bg-[var(--brand-blue)]"
                         style={{ width: `${pct}%` }}
@@ -376,14 +376,14 @@ export function AcquisitionTab({
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs uppercase tracking-wider text-slate-500 font-bold">By source</h4>
+                <h4 className="text-xs uppercase tracking-wider text-[color:var(--apple-subink)] font-bold">By source</h4>
               </div>
               {data.bySource.length === 0 ? (
                 <EmptyState message="No source breakdown for this window." />
               ) : (
                 <table className="w-full text-sm" data-testid="table-partner-funnel-sources">
                   <thead>
-                    <tr className="text-left text-xs uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                    <tr className="text-left text-xs uppercase tracking-wider text-[color:var(--apple-subink)] border-b border-[color:var(--apple-hairline)]">
                       <th className="py-2 font-bold">Source</th>
                       <th className="py-2 font-bold text-right">Landed</th>
                       <th className="py-2 font-bold text-right">Offer</th>
@@ -396,15 +396,15 @@ export function AcquisitionTab({
                     {data.bySource.map((s) => (
                       <tr
                         key={s.key}
-                        className="border-b border-slate-100"
+                        className="border-b border-[color:var(--apple-hairline)]"
                         data-testid={`row-partner-funnel-source-${s.key}`}
                       >
-                        <td className="py-2 text-slate-700">{s.source}</td>
-                        <td className="py-2 text-right tabular-nums text-slate-700">{s.landed.toLocaleString()}</td>
-                        <td className="py-2 text-right tabular-nums text-slate-700">{s.viewedOffer.toLocaleString()}</td>
-                        <td className="py-2 text-right tabular-nums text-slate-700">{s.startedCheckout.toLocaleString()}</td>
-                        <td className="py-2 text-right tabular-nums text-slate-900 font-medium">{s.completed.toLocaleString()}</td>
-                        <td className="py-2 text-right tabular-nums text-slate-700">{fmtPct(s.conversion)}</td>
+                        <td className="py-2 text-[color:var(--apple-ink)]">{s.source}</td>
+                        <td className="py-2 text-right tabular-nums text-[color:var(--apple-ink)]">{s.landed.toLocaleString()}</td>
+                        <td className="py-2 text-right tabular-nums text-[color:var(--apple-ink)]">{s.viewedOffer.toLocaleString()}</td>
+                        <td className="py-2 text-right tabular-nums text-[color:var(--apple-ink)]">{s.startedCheckout.toLocaleString()}</td>
+                        <td className="py-2 text-right tabular-nums text-[color:var(--apple-ink)] font-medium">{s.completed.toLocaleString()}</td>
+                        <td className="py-2 text-right tabular-nums text-[color:var(--apple-ink)]">{fmtPct(s.conversion)}</td>
                       </tr>
                     ))}
                   </tbody>

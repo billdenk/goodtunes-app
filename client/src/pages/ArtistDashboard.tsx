@@ -257,10 +257,10 @@ export function ArtistDashboard() {
       ? "Sign in with your artist account to continue."
       : "We couldn't load your artist scope. Please try again.";
     return (
-      <main className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[color:var(--apple-tile)] text-[color:var(--apple-ink)] flex items-center justify-center p-6">
         <div className="max-w-md text-center" data-testid="artist-dashboard-gate">
           <h1 className="text-2xl font-bold mb-2">Artist dashboard</h1>
-          <p className="text-slate-500 text-sm">{errorCopy}</p>
+          <p className="text-[color:var(--apple-subink)] text-sm">{errorCopy}</p>
         </div>
       </main>
     );
@@ -444,8 +444,8 @@ function KpiStrip({
       {loading
         ? Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="rounded-2xl bg-white p-5 animate-pulse" style={{ border: `1px solid ${HAIRLINE}` }} data-testid={`kpi-skeleton-${i}`}>
-              <div className="h-3 w-24 rounded bg-slate-100" />
-              <div className="mt-4 h-8 w-20 rounded bg-slate-100" />
+              <div className="h-3 w-24 rounded bg-[color:var(--apple-tile)]" />
+              <div className="mt-4 h-8 w-20 rounded bg-[color:var(--apple-tile)]" />
             </div>
           ))
         : tiles.map((t) => {
@@ -456,7 +456,7 @@ function KpiStrip({
                 <div className="mt-3 tabular-nums truncate" style={{ fontSize: 32, lineHeight: 1, fontWeight: 600, letterSpacing: "-0.03em", color: INK }} title={t.value}>
                   {t.value}
                 </div>
-                <div className="mt-3 flex items-center gap-1.5 text-[13px] min-w-0">
+                <div className="mt-3 flex items-start flex-wrap gap-x-1.5 gap-y-0.5 text-[13px] min-w-0">
                   {d && (
                     <>
                       <span className="font-semibold tabular-nums flex-shrink-0" style={{ color: d.positive ? "var(--apple-ready)" : "var(--apple-critical)" }}>{d.text}</span>
@@ -464,7 +464,7 @@ function KpiStrip({
                     </>
                   )}
                   {t.note && (
-                    <span className="text-[12px] truncate" style={{ color: SUBINK }} title={t.note}>
+                    <span className="text-[12px] min-w-0 [overflow-wrap:anywhere]" style={{ color: SUBINK }}>
                       {d ? `· ${t.note}` : t.note}
                     </span>
                   )}
@@ -691,8 +691,9 @@ function ActivityFeed({ items, loading }: { items: ActivityItem[]; loading: bool
       data-testid="panel-activity"
     >
       <div className="flex items-center justify-between mb-3 flex-shrink-0">
-        <h3 className="text-[20px] font-semibold" style={{ color: INK, letterSpacing: "-0.01em" }}>
-          As it happens.
+        <h3 className="text-[20px]" style={{ letterSpacing: "-0.01em" }}>
+          <span className="font-semibold" style={{ color: INK }}>As it happens.</span>{" "}
+          <span className="font-medium" style={{ color: SUBINK }}>Recent activity.</span>
         </h3>
         <Link
           href="/artist?tab=orders"
@@ -705,7 +706,7 @@ function ActivityFeed({ items, loading }: { items: ActivityItem[]; loading: bool
       </div>
       {loading ? (
         <div className="space-y-2 animate-pulse">
-          {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-9 rounded-xl bg-slate-100" />)}
+          {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-9 rounded-xl bg-[color:var(--apple-tile)]" />)}
         </div>
       ) : rows.length === 0 ? (
         <p className="py-8 text-center text-[13px]" style={{ color: SUBINK }} data-testid="activity-empty">
@@ -729,7 +730,7 @@ function ActivityFeed({ items, loading }: { items: ActivityItem[]; loading: bool
                 </div>
               </>
             );
-            const rowClass = "flex items-center gap-3 -mx-2 px-2 py-2 rounded-xl hover:bg-slate-50 transition-colors";
+            const rowClass = "flex items-center gap-3 -mx-2 px-2 py-2 rounded-xl hover:bg-[color:var(--apple-tile)] transition-colors";
             return (
               <li key={i} data-testid={`activity-${it.kind}-${i}`}>
                 {it.href ? (
@@ -756,8 +757,9 @@ function TopProjects({ rows, loading }: { rows: AlbumsPayload["albums"]; loading
       data-testid="dashboard-top-projects"
     >
       <div className="flex items-center justify-between mb-3 flex-shrink-0">
-        <h3 className="text-[20px] font-semibold" style={{ color: INK, letterSpacing: "-0.01em" }}>
-          Top projects.
+        <h3 className="text-[20px]" style={{ letterSpacing: "-0.01em" }}>
+          <span className="font-semibold" style={{ color: INK }}>Top projects.</span>{" "}
+          <span className="font-medium" style={{ color: SUBINK }}>Ranked by sales.</span>
         </h3>
         <Link
           href="/artist?tab=catalog"
@@ -770,7 +772,7 @@ function TopProjects({ rows, loading }: { rows: AlbumsPayload["albums"]; loading
       </div>
       {loading ? (
         <div className="space-y-2 animate-pulse">
-          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-10 rounded-xl bg-slate-100" />)}
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-10 rounded-xl bg-[color:var(--apple-tile)]" />)}
         </div>
       ) : top.length === 0 ? (
         <p className="py-8 text-center text-[13px]" style={{ color: SUBINK }} data-testid="top-projects-empty">
@@ -782,7 +784,7 @@ function TopProjects({ rows, loading }: { rows: AlbumsPayload["albums"]; loading
             <li key={a.albumId} data-testid={`project-${a.albumId}`} style={{ borderTop: i > 0 ? `1px solid ${HAIRLINE}` : undefined }}>
               <Link
                 href={`/artist/albums/${a.albumId}`}
-                className="flex items-center gap-3 -mx-2 px-2 py-2.5 rounded-xl hover:bg-slate-50 transition-colors"
+                className="flex items-center gap-3 -mx-2 px-2 py-2.5 rounded-xl hover:bg-[color:var(--apple-tile)] transition-colors"
               >
                 <span className="text-[12px] font-semibold tabular-nums w-4 flex-shrink-0 text-center" style={{ color: FAINT }}>
                   {i + 1}
@@ -961,12 +963,12 @@ function AudienceTab({ qs }: { qs: string }) {
       {/* Task #2870 — two separate footnote lines: one for grant/comp plays,
           one for staff/internal. Either can be zero independently. */}
       {(d.grantPlays ?? 0) > 0 ? (
-        <p className="text-xs text-slate-400" data-testid="text-audience-grant">
+        <p className="text-xs text-[color:var(--apple-faint)]" data-testid="text-audience-grant">
           {compact(d.grantPlays!)} grant/comp play{d.grantPlays === 1 ? "" : "s"} ({compact(d.grantListeners ?? 0)} listener{(d.grantListeners ?? 0) === 1 ? "" : "s"}) from comped copies & previews — not counted in fan totals above.
         </p>
       ) : null}
       {d.excludedPlays && d.excludedPlays > 0 ? (
-        <p className="text-xs text-slate-400" data-testid="text-audience-excluded">
+        <p className="text-xs text-[color:var(--apple-faint)]" data-testid="text-audience-excluded">
           {compact(d.excludedPlays)} staff/internal play{d.excludedPlays === 1 ? "" : "s"} also excluded.
         </p>
       ) : null}
@@ -975,25 +977,25 @@ function AudienceTab({ qs }: { qs: string }) {
           <div style={{ width: "100%", height: 260 }}>
             <ResponsiveContainer>
               <BarChart data={d.repeatCohort}>
-                <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
-                <XAxis dataKey="range" stroke="#64748b" tick={{ fontSize: 11 }} />
-                <YAxis stroke="#64748b" tick={{ fontSize: 11 }} />
+                <CartesianGrid stroke="var(--apple-grid)" vertical={false} />
+                <XAxis dataKey="range" stroke="var(--apple-axis)" tick={{ fontSize: 11 }} />
+                <YAxis stroke="var(--apple-axis)" tick={{ fontSize: 11 }} />
                 <Tooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="listeners" fill={C.mint} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="listeners" fill="var(--apple-blue)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </Card>
         <Card title="Top fans" subtitle="Anonymized — plays in window" testId="table-top-fans">
           <table className="w-full text-[13px]">
-            <thead className="text-slate-400 text-[11px] uppercase tracking-wider">
+            <thead className="text-[color:var(--apple-faint)] text-[11px] uppercase tracking-wider">
               <tr><th className="text-left font-medium py-2">Fan</th><th className="text-right font-medium">Plays</th></tr>
             </thead>
             <tbody>
-              {d.topFans.length === 0 && <tr><td colSpan={2} className="py-6 text-center text-slate-400">No fans yet in this window.</td></tr>}
+              {d.topFans.length === 0 && <tr><td colSpan={2} className="py-6 text-center text-[color:var(--apple-faint)]">No fans yet in this window.</td></tr>}
               {d.topFans.map((f, i) => (
-                <tr key={i} className="border-t border-slate-100" data-testid={`row-fan-${i}`}>
-                  <td className="py-2 font-mono text-slate-600">{f.handle}</td>
+                <tr key={i} className="border-t border-[color:var(--apple-hairline)]" data-testid={`row-fan-${i}`}>
+                  <td className="py-2 font-mono text-[color:var(--apple-subink)]">{f.handle}</td>
                   <td className="py-2 text-right tabular-nums">{compact(f.plays)}</td>
                 </tr>
               ))}
@@ -1021,7 +1023,7 @@ function CatalogTab({ qs }: { qs: string }) {
       >
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
-            <thead className="text-slate-400 text-[11px] uppercase tracking-wider">
+            <thead className="text-[color:var(--apple-faint)] text-[11px] uppercase tracking-wider">
               <tr>
                 <th className="text-left font-medium py-2 pr-3">Album</th>
                 <th className="text-left font-medium px-2 w-36">Break-even</th>
@@ -1035,10 +1037,10 @@ function CatalogTab({ qs }: { qs: string }) {
               </tr>
             </thead>
             <tbody>
-              {albums.isLoading && <tr><td colSpan={9} className="py-6 text-center text-slate-400">Loading…</td></tr>}
-              {!albums.isLoading && (albums.data?.albums.length ?? 0) === 0 && <tr><td colSpan={9} className="py-6 text-center text-slate-400">No albums in scope.</td></tr>}
+              {albums.isLoading && <tr><td colSpan={9} className="py-6 text-center text-[color:var(--apple-faint)]">Loading…</td></tr>}
+              {!albums.isLoading && (albums.data?.albums.length ?? 0) === 0 && <tr><td colSpan={9} className="py-6 text-center text-[color:var(--apple-faint)]">No albums in scope.</td></tr>}
               {albums.data?.albums.map((a) => (
-                <tr key={a.albumId} className="border-t border-slate-100" data-testid={`row-album-${a.albumId}`}>
+                <tr key={a.albumId} className="border-t border-[color:var(--apple-hairline)]" data-testid={`row-album-${a.albumId}`}>
                   <td className="py-2 pr-3">
                     <Link
                       href={`/artist/albums/${a.albumId}`}
@@ -1048,7 +1050,7 @@ function CatalogTab({ qs }: { qs: string }) {
                       {a.artwork && <img src={a.artwork} alt="" className="w-9 h-9 rounded object-cover" />}
                       <div className="min-w-0">
                         <p className="truncate font-semibold transition-colors group-hover:text-[color:var(--brand-blue)] group-hover:underline underline-offset-2">{a.title}</p>
-                        <p className="truncate text-slate-400 text-[11px]">{a.artist}</p>
+                        <p className="truncate text-[color:var(--apple-faint)] text-[11px]">{a.artist}</p>
                       </div>
                     </Link>
                   </td>
@@ -1056,11 +1058,11 @@ function CatalogTab({ qs }: { qs: string }) {
                     <BreakEvenBar albumId={a.albumId} tone="light" variant="compact" />
                   </td>
                   <td className="px-2 text-right tabular-nums font-semibold">{dollars(a.revenueCents)}</td>
-                  <td className="px-2 text-right tabular-nums text-emerald-600">{dollars(a.artistShareCents)}</td>
+                  <td className="px-2 text-right tabular-nums text-[color:var(--apple-ready)]">{dollars(a.artistShareCents)}</td>
                   <td className="px-2 text-right tabular-nums">{a.units}</td>
                   <td className="px-2 text-right tabular-nums">{a.buyers}</td>
                   <td className="px-2 text-right tabular-nums">{compact(a.plays)}</td>
-                  <td className="px-2 text-right tabular-nums text-slate-500" data-testid={`text-grant-plays-${a.albumId}`}>{compact(a.grantPlays ?? 0)}</td>
+                  <td className="px-2 text-right tabular-nums text-[color:var(--apple-subink)]" data-testid={`text-grant-plays-${a.albumId}`}>{compact(a.grantPlays ?? 0)}</td>
                   <td className="pl-2 text-right tabular-nums">{compact(a.listeners)}</td>
                 </tr>
               ))}
@@ -1077,7 +1079,7 @@ function CatalogTab({ qs }: { qs: string }) {
       >
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
-            <thead className="text-slate-400 text-[11px] uppercase tracking-wider">
+            <thead className="text-[color:var(--apple-faint)] text-[11px] uppercase tracking-wider">
               <tr>
                 <th className="text-left font-medium py-2 pr-3">Track</th>
                 <th className="text-right font-medium px-2">Fan plays</th>
@@ -1094,18 +1096,18 @@ function CatalogTab({ qs }: { qs: string }) {
               </tr>
             </thead>
             <tbody>
-              {tracks.isLoading && <tr><td colSpan={hasStaff ? 8 : 7} className="py-6 text-center text-slate-400">Loading…</td></tr>}
-              {!tracks.isLoading && (tracks.data?.tracks.length ?? 0) === 0 && <tr><td colSpan={hasStaff ? 8 : 7} className="py-6 text-center text-slate-400">No plays yet in this window.</td></tr>}
+              {tracks.isLoading && <tr><td colSpan={hasStaff ? 8 : 7} className="py-6 text-center text-[color:var(--apple-faint)]">Loading…</td></tr>}
+              {!tracks.isLoading && (tracks.data?.tracks.length ?? 0) === 0 && <tr><td colSpan={hasStaff ? 8 : 7} className="py-6 text-center text-[color:var(--apple-faint)]">No plays yet in this window.</td></tr>}
               {tracks.data?.tracks.map((t) => (
-                <tr key={t.songId} className="border-t border-slate-100" data-testid={`row-track-${t.songId}`}>
+                <tr key={t.songId} className="border-t border-[color:var(--apple-hairline)]" data-testid={`row-track-${t.songId}`}>
                   <td className="py-2 pr-3">
                     <p className="font-semibold truncate">{t.title}</p>
-                    <p className="text-slate-400 text-[11px] truncate">{t.albumTitle}</p>
+                    <p className="text-[color:var(--apple-faint)] text-[11px] truncate">{t.albumTitle}</p>
                   </td>
                   <td className="px-2 text-right tabular-nums">{compact(t.plays)}</td>
-                  <td className="px-2 text-right tabular-nums text-slate-500" data-testid={`text-grant-plays-track-${t.songId}`}>{compact(t.grantPlays ?? 0)}</td>
+                  <td className="px-2 text-right tabular-nums text-[color:var(--apple-subink)]" data-testid={`text-grant-plays-track-${t.songId}`}>{compact(t.grantPlays ?? 0)}</td>
                   {hasStaff && (
-                    <td className="px-2 text-right tabular-nums text-slate-400" title={`${t.staffCompletes ?? 0} full listens`} data-testid={`text-staff-plays-track-${t.songId}`}>
+                    <td className="px-2 text-right tabular-nums text-[color:var(--apple-faint)]" title={`${t.staffCompletes ?? 0} full listens`} data-testid={`text-staff-plays-track-${t.songId}`}>
                       {compact(t.staffPlays ?? 0)}
                     </td>
                   )}
@@ -1119,7 +1121,7 @@ function CatalogTab({ qs }: { qs: string }) {
           </table>
         </div>
         {hasStaff && (
-          <p className="mt-2 text-xs text-slate-400" data-testid="text-staff-note">
+          <p className="mt-2 text-xs text-[color:var(--apple-faint)]" data-testid="text-staff-note">
             Staff/internal listening is visible to operators only — partners never see this column, and it is never added to fan or grant totals.
           </p>
         )}
@@ -1139,11 +1141,11 @@ const tooltipStyle = CHART_TOOLTIP_STYLE;
 
 function Card({ title, subtitle, children, testId, action }: { title: string; subtitle?: string; children: React.ReactNode; testId: string; action?: React.ReactNode }) {
   return (
-    <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4" data-testid={testId}>
+    <div className="rounded-2xl bg-white ring-1 ring-[color:var(--apple-hairline)] p-4" data-testid={testId}>
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0">
-          <h2 className="text-[15px] font-bold">{title}</h2>
-          {subtitle && <p className="text-slate-400 text-[12px] mt-0.5">{subtitle}</p>}
+          <h2 className="text-[15px] font-semibold text-[color:var(--apple-ink)]">{title}</h2>
+          {subtitle && <p className="text-[color:var(--apple-faint)] text-[12px] mt-0.5">{subtitle}</p>}
         </div>
         {action}
       </div>
@@ -1161,7 +1163,7 @@ function CsvButton({ href, label, testId }: { href: string; label: string; testI
 }
 
 function SkeletonBlock() {
-  return <div className="h-48 rounded-2xl bg-white ring-1 ring-slate-200 animate-pulse" />;
+  return <div className="h-48 rounded-2xl bg-white ring-1 ring-[color:var(--apple-hairline)] animate-pulse" />;
 }
 
 // ─── Referrals tab (Task #78) ─────────────────────────────────────────
@@ -1238,16 +1240,9 @@ function ArtistPeoplePanel() {
         </Button>
       }
     >
-      <div
-        className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center"
-        data-testid="empty-team"
-      >
-        <p className="font-semibold text-sm text-slate-900">Bring your team onboard</p>
-        <p className="mx-auto mt-1 max-w-sm text-slate-500 text-xs">
-          Invite a manager or band member to help run your presence on GoodTunes.
-          They'll get their own sign-in — you stay in control of what they can do.
-        </p>
-      </div>
+      <p className="py-10 text-center text-[13px] text-[color:var(--apple-faint)]" data-testid="empty-team">
+        Invite a manager or band member — they'll get their own sign-in, and you stay in control.
+      </p>
 
       <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEmail(""); }}>
         <DialogContent className="sm:max-w-md" data-testid="dialog-invite-teammate">
@@ -1271,8 +1266,8 @@ function ArtistPeoplePanel() {
                   onClick={() => setInviteRole(r)}
                   className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
                     inviteRole === r
-                      ? "border-transparent bg-slate-900 text-white"
-                      : "border-slate-200 bg-white text-slate-600 hover:text-slate-900"
+                      ? "border-transparent bg-[color:var(--apple-ink)] text-white"
+                      : "border-[color:var(--apple-hairline)] bg-white text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)]"
                   }`}
                   data-testid={`button-teammate-role-${r}`}
                 >
@@ -1286,7 +1281,7 @@ function ArtistPeoplePanel() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="teammate@example.com"
               required
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400"
+              className="w-full rounded-md border border-[color:var(--apple-hairline)] bg-white px-3 py-2 text-sm text-[color:var(--apple-ink)] placeholder:text-[color:var(--apple-faint)]"
               data-testid="input-teammate-email"
             />
           </form>
@@ -1335,19 +1330,21 @@ type EarmarkedSuggestion = { id: string; name: string; email: string; notes: str
 // rollup styled consistently in one place.
 type InviteStatus = "Invited" | "Joined" | "Revoked" | "Expired";
 
-const INVITE_STATUS_STYLE: Record<InviteStatus, string> = {
-  Invited: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
-  Joined: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-  Revoked: "bg-slate-100 text-slate-500",
-  Expired: "bg-slate-100 text-slate-500",
+// Canon status = small dot + quiet label (no colored pills).
+const INVITE_STATUS_DOT: Record<InviteStatus, string> = {
+  Invited: "var(--apple-blue)",
+  Joined: "var(--apple-ready)",
+  Revoked: "var(--apple-faint)",
+  Expired: "var(--apple-faint)",
 };
 
 function InviteStatusPill({ status, testId }: { status: InviteStatus; testId?: string }) {
   return (
     <span
-      className={`shrink-0 text-xs font-semibold uppercase tracking-wider rounded-full px-2 py-0.5 ${INVITE_STATUS_STYLE[status]}`}
+      className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--apple-subink)]"
       data-testid={testId}
     >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: INVITE_STATUS_DOT[status] }} aria-hidden />
       {status}
     </span>
   );
@@ -1355,9 +1352,9 @@ function InviteStatusPill({ status, testId }: { status: InviteStatus; testId?: s
 
 function FunnelStat({ label, value, accent, testId }: { label: string; value: string; accent?: boolean; testId: string }) {
   return (
-    <div className="rounded-xl bg-white ring-1 ring-slate-200 px-3 py-2.5" data-testid={testId}>
-      <p className={`text-lg font-bold tabular-nums leading-none ${accent ? "text-emerald-600" : ""}`} data-testid={`${testId}-value`}>{value}</p>
-      <p className="mt-1 text-slate-500 text-xs">{label}</p>
+    <div className="rounded-xl bg-white ring-1 ring-[color:var(--apple-hairline)] px-3 py-2.5" data-testid={testId}>
+      <p className={`text-lg font-bold tabular-nums leading-none ${accent ? "text-[color:var(--apple-ready)]" : ""}`} data-testid={`${testId}-value`}>{value}</p>
+      <p className="mt-1 text-[color:var(--apple-subink)] text-xs">{label}</p>
     </div>
   );
 }
@@ -1504,7 +1501,7 @@ export function InviteArtistPanel() {
         </Button>
       }
     >
-      <p className="text-slate-500 text-xs mb-3" data-testid="text-invite-slots">
+      <p className="text-[color:var(--apple-subink)] text-xs mb-3" data-testid="text-invite-slots">
         {atCap
           ? "All invite slots used — revoke one below to free a slot"
           : `${slotsLeft} of ${cap} invite slot${cap === 1 ? "" : "s"} left`}
@@ -1541,8 +1538,8 @@ export function InviteArtistPanel() {
                   onClick={() => setInviteeRole(r)}
                   className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
                     inviteeRole === r
-                      ? "border-transparent bg-slate-900 text-white"
-                      : "border-slate-200 bg-white text-slate-600 hover:text-slate-900"
+                      ? "border-transparent bg-[color:var(--apple-ink)] text-white"
+                      : "border-[color:var(--apple-hairline)] bg-white text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)]"
                   }`}
                   data-testid={`button-invitee-role-${r}`}
                 >
@@ -1560,7 +1557,7 @@ export function InviteArtistPanel() {
                   enableSpotify
                   hidePaste
                 />
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[color:var(--apple-subink)]">
                   Search GoodTunes, then Spotify. New to us? Create them from the name.
                 </p>
               </div>
@@ -1571,7 +1568,7 @@ export function InviteArtistPanel() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Label name"
                 required
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400"
+                className="w-full rounded-md border border-[color:var(--apple-hairline)] bg-white px-3 py-2 text-sm text-[color:var(--apple-ink)] placeholder:text-[color:var(--apple-faint)]"
                 data-testid="input-label-name"
               />
             )}
@@ -1581,7 +1578,7 @@ export function InviteArtistPanel() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="artist@example.com"
               required
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400"
+              className="w-full rounded-md border border-[color:var(--apple-hairline)] bg-white px-3 py-2 text-sm text-[color:var(--apple-ink)] placeholder:text-[color:var(--apple-faint)]"
               data-testid="input-artist-email"
             />
             <textarea
@@ -1590,7 +1587,7 @@ export function InviteArtistPanel() {
               placeholder="Optional personal note (1-2 sentences)"
               maxLength={1000}
               rows={2}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400"
+              className="w-full rounded-md border border-[color:var(--apple-hairline)] bg-white px-3 py-2 text-sm text-[color:var(--apple-ink)] placeholder:text-[color:var(--apple-faint)]"
               data-testid="input-artist-welcome-note"
             />
           </form>
@@ -1617,7 +1614,7 @@ export function InviteArtistPanel() {
 
       {suggestions.length > 0 && (
         <div className="mt-4" data-testid="earmarked-suggestions">
-          <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Suggested by GoodTunes</p>
+          <p className="text-xs uppercase tracking-wider text-[color:var(--apple-subink)] mb-2">Suggested by GoodTunes</p>
           <div className="flex flex-wrap gap-2">
             {suggestions.map((s) => (
               <button
@@ -1626,11 +1623,11 @@ export function InviteArtistPanel() {
                 onClick={() => pickSuggestion(s)}
                 disabled={atCap}
                 title={s.notes ?? s.email}
-                className="text-xs px-2.5 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 disabled:opacity-40"
+                className="text-xs px-2.5 py-1.5 rounded-full bg-[color:var(--apple-tile)] hover:bg-[color:var(--apple-track)] border border-[color:var(--apple-hairline)] text-[color:var(--apple-ink)] disabled:opacity-40"
                 data-testid={`button-earmarked-${s.id}`}
               >
                 <span className="font-semibold">{s.name}</span>
-                <span className="text-slate-400 ml-1.5">{s.email}</span>
+                <span className="text-[color:var(--apple-faint)] ml-1.5">{s.email}</span>
               </button>
             ))}
           </div>
@@ -1638,7 +1635,7 @@ export function InviteArtistPanel() {
       )}
 
       {invites.length > 0 ? (
-        <ul className="mt-4 divide-y divide-slate-100" data-testid="list-artist-invites">
+        <ul className="mt-4 divide-y divide-[color:var(--apple-hairline)]" data-testid="list-artist-invites">
           {invites.map((iv) => {
             const accepted = !!iv.usedAt;
             const revoked = !!iv.revokedAt;
@@ -1658,30 +1655,30 @@ export function InviteArtistPanel() {
               <li key={iv.id} className="py-2.5" data-testid={`row-artist-invite-${iv.id}`}>
                 <div className="flex items-center gap-3">
                   {iv.scopeThumbUrl ? (
-                    <img src={iv.scopeThumbUrl} alt="" className="w-11 h-11 rounded-full object-cover bg-slate-100" />
+                    <img src={iv.scopeThumbUrl} alt="" className="w-11 h-11 rounded-full object-cover bg-[color:var(--apple-tile)]" />
                   ) : (
-                    <div className="w-11 h-11 rounded-full bg-slate-100" />
+                    <div className="w-11 h-11 rounded-full bg-[color:var(--apple-tile)]" />
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold truncate text-sm flex items-center gap-1.5" data-testid={`text-artist-invite-name-${iv.id}`}>
                       <span className="truncate min-w-0">{iv.scopeName ?? iv.email}</span>
                       {iv.role === "label" && (
-                        <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-slate-500 bg-slate-100 rounded px-1.5 py-0.5" data-testid={`tag-artist-invite-role-${iv.id}`}>Label</span>
+                        <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-[color:var(--apple-subink)] bg-[color:var(--apple-tile)] rounded px-1.5 py-0.5" data-testid={`tag-artist-invite-role-${iv.id}`}>Label</span>
                       )}
                     </p>
-                    <p className="text-xs text-slate-500 truncate">{iv.email}</p>
+                    <p className="text-xs text-[color:var(--apple-subink)] truncate">{iv.email}</p>
                   </div>
                   <InviteStatusPill status={status} testId={`text-artist-invite-status-${iv.id}`} />
                 </div>
                 <div className="mt-1.5 pl-14 flex items-start justify-between gap-3">
-                  <p className="text-xs text-slate-500 min-w-0" data-testid={`text-artist-invite-meta-${iv.id}`}>
+                  <p className="text-xs text-[color:var(--apple-subink)] min-w-0" data-testid={`text-artist-invite-meta-${iv.id}`}>
                     {metaBits.join(" · ")}
                   </p>
                   {accepted && (
                     <div className="text-right shrink-0" data-testid={`text-artist-invite-units-${iv.id}`}>
-                      <p className="text-xs text-slate-700 tabular-nums">{stats?.units ?? 0} unit{(stats?.units ?? 0) === 1 ? "" : "s"} sold</p>
+                      <p className="text-xs text-[color:var(--apple-ink)] tabular-nums">{stats?.units ?? 0} unit{(stats?.units ?? 0) === 1 ? "" : "s"} sold</p>
                       {stats && stats.pendingCents > 0 && (
-                        <p className="text-xs text-emerald-600 tabular-nums">{fmtMoney(stats.pendingCents)} pending</p>
+                        <p className="text-xs text-[color:var(--apple-ready)] tabular-nums">{fmtMoney(stats.pendingCents)} pending</p>
                       )}
                     </div>
                   )}
@@ -1692,7 +1689,7 @@ export function InviteArtistPanel() {
                       <button
                         type="button"
                         onClick={() => copyLink(iv)}
-                        className="text-slate-500 hover:text-slate-900 px-2 py-1"
+                        className="text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)] px-2 py-1"
                         data-testid={`button-copy-artist-invite-${iv.id}`}
                       >
                         {copiedId === iv.id ? "Copied" : "Copy link"}
@@ -1702,7 +1699,7 @@ export function InviteArtistPanel() {
                       type="button"
                       onClick={() => resend.mutate(iv.id)}
                       disabled={resend.isPending}
-                      className="text-slate-500 hover:text-slate-900 px-2 py-1 disabled:opacity-40"
+                      className="text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)] px-2 py-1 disabled:opacity-40"
                       data-testid={`button-resend-artist-invite-${iv.id}`}
                     >
                       Resend
@@ -1711,7 +1708,7 @@ export function InviteArtistPanel() {
                       type="button"
                       onClick={() => { if (confirm(`Revoke invite to ${iv.email}? This frees up an invite slot.`)) revoke.mutate(iv.id); }}
                       disabled={revoke.isPending}
-                      className="text-rose-600 hover:text-rose-700 px-2 py-1 disabled:opacity-40"
+                      className="text-[color:var(--apple-critical)] hover:opacity-80 px-2 py-1 disabled:opacity-40"
                       data-testid={`button-revoke-artist-invite-${iv.id}`}
                     >
                       Revoke
@@ -1723,10 +1720,10 @@ export function InviteArtistPanel() {
           })}
         </ul>
       ) : (
-        <div className="mt-4 rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center" data-testid="empty-artist-invites">
-          <p className="font-semibold text-sm text-slate-900">Tell other artists about GoodTunes</p>
-          <p className="mt-1 text-slate-500 text-xs max-w-sm mx-auto">
-            Invite the artists and labels you rate. When they join and start selling, you earn $1 on every paid unit they ship — for one year. Use <span className="font-semibold text-slate-700">Invite</span> above to send your first one.
+        <div className="mt-4 rounded-xl border border-dashed border-[color:var(--apple-hairline)] px-4 py-8 text-center" data-testid="empty-artist-invites">
+          <p className="font-semibold text-sm text-[color:var(--apple-ink)]">Tell other artists about GoodTunes</p>
+          <p className="mt-1 text-[color:var(--apple-subink)] text-xs max-w-sm mx-auto">
+            Invite the artists and labels you rate. When they join and start selling, you earn $1 on every paid unit they ship — for one year. Use <span className="font-semibold text-[color:var(--apple-ink)]">Invite</span> above to send your first one.
           </p>
         </div>
       )}
@@ -1742,7 +1739,7 @@ function BuyersTab({ qs, personId }: { qs: string; personId: string | null }) {
         <div className="flex justify-end">
           <Link
             href={`/admin/people/${personId}/buyers`}
-            className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 ring-1 ring-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)] px-3 py-1.5 text-xs font-semibold text-[color:var(--apple-ink)] hover:bg-[color:var(--apple-track)] transition-colors"
             data-testid="link-buyer-roster"
           >
             <Users className="w-3.5 h-3.5" />
@@ -1789,10 +1786,10 @@ function ReferralsTab() {
     nonProfits: { id: string; name: string; logoUrl: string | null }[];
   }>({ queryKey: ["/api/artist/referrals"] });
   if (q.isLoading) {
-    return <p className="py-10 text-center text-slate-400 text-[13px]">Loading…</p>;
+    return <p className="py-10 text-center text-[color:var(--apple-faint)] text-[13px]">Loading…</p>;
   }
   if (q.isError) {
-    return <p className="py-10 text-center text-slate-400 text-[13px]">Couldn't load referrals.</p>;
+    return <p className="py-10 text-center text-[color:var(--apple-faint)] text-[13px]">Couldn't load referrals.</p>;
   }
   const d = q.data!;
   const fmt = (c: number) => formatUsdCents(c);
@@ -1806,33 +1803,33 @@ function ReferralsTab() {
       </section>
       <Card title="Artists you've referred" subtitle="$1 per paid unit, for one year" testId="table-referred-artists">
         {d.partners.length === 0 ? (
-          <p className="py-8 text-center text-slate-500 text-sm" data-testid="empty-referrals">
+          <p className="py-8 text-center text-[color:var(--apple-subink)] text-sm" data-testid="empty-referrals">
             No one's joined yet. Invite an artist or label above — once they accept, they'll
             show up here with the units they've sold and your $1-per-unit payout.
           </p>
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-[color:var(--apple-hairline)]">
             {d.partners.map((p) => (
               <li key={p.id} className="flex items-center gap-3 py-3" data-testid={`row-referred-${p.id}`}>
                 {p.photoUrl ? (
-                  <img src={p.photoUrl} alt="" className="w-11 h-11 rounded-full object-cover bg-slate-100" />
+                  <img src={p.photoUrl} alt="" className="w-11 h-11 rounded-full object-cover bg-[color:var(--apple-tile)]" />
                 ) : (
-                  <div className="w-11 h-11 rounded-full bg-slate-100" />
+                  <div className="w-11 h-11 rounded-full bg-[color:var(--apple-tile)]" />
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold truncate">{p.name}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-[color:var(--apple-subink)]">
                     {p.units} unit{p.units === 1 ? "" : "s"} attributed
                     {p.earningWindowActive === false ? (
-                      <span className="ml-2 text-slate-400" data-testid={`status-window-ended-${p.id}`}>· Earning ended</span>
+                      <span className="ml-2 text-[color:var(--apple-faint)]" data-testid={`status-window-ended-${p.id}`}>· Earning ended</span>
                     ) : p.earningWindowEndsAt ? (
-                      <span className="ml-2 text-slate-400" data-testid={`status-window-active-${p.id}`}>
+                      <span className="ml-2 text-[color:var(--apple-faint)]" data-testid={`status-window-active-${p.id}`}>
                         · Earning through {new Date(p.earningWindowEndsAt).toLocaleDateString(undefined, { month: "short", year: "numeric" })}
                       </span>
                     ) : null}
                   </p>
                 </div>
-                <span className="text-emerald-600 tabular-nums font-semibold text-sm">{fmt(p.pendingCents)}</span>
+                <span className="text-[color:var(--apple-ready)] tabular-nums font-semibold text-sm">{fmt(p.pendingCents)}</span>
               </li>
             ))}
           </ul>
@@ -1842,23 +1839,23 @@ function ReferralsTab() {
           active per-album referral rows. */}
       {swapRows.length > 0 && (
         <Card title="Project swaps" subtitle="Artist-to-artist referrals — one project each, until a swap is set." testId="table-swaps">
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-[color:var(--apple-hairline)]">
             {swapRows.map((s) => {
               const frozen = !!s.frozenAt;
               return (
                 <li key={s.id} className="py-3" data-testid={`row-swap-${s.id}`}>
                   <div className="flex items-center gap-3">
                     {s.otherPhotoUrl ? (
-                      <img src={s.otherPhotoUrl} alt="" className="w-11 h-11 rounded-full object-cover bg-slate-100" />
+                      <img src={s.otherPhotoUrl} alt="" className="w-11 h-11 rounded-full object-cover bg-[color:var(--apple-tile)]" />
                     ) : (
-                      <div className="w-11 h-11 rounded-full bg-slate-100" />
+                      <div className="w-11 h-11 rounded-full bg-[color:var(--apple-tile)]" />
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold truncate">{s.otherName}</p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-[color:var(--apple-subink)]">
                         {s.role === "referrer" ? "You referred them" : "They referred you"}
-                        {s.albumId ? <> · <span className="text-slate-600">project bound</span></> : <> · <span className="text-slate-600">not yet bound to a project</span></>}
-                        {frozen && <span className="ml-2 text-emerald-600">· Frozen (first sale shipped)</span>}
+                        {s.albumId ? <> · <span className="text-[color:var(--apple-subink)]">project bound</span></> : <> · <span className="text-[color:var(--apple-subink)]">not yet bound to a project</span></>}
+                        {frozen && <span className="ml-2 text-[color:var(--apple-ready)]">· Frozen (first sale shipped)</span>}
                       </p>
                     </div>
                   </div>
@@ -1866,15 +1863,15 @@ function ReferralsTab() {
                     <div className="mt-2 pl-14 flex flex-wrap items-center gap-2 text-xs">
                       {s.role === "invitee" ? (
                         <>
-                          <span className="text-slate-500">Keep the per-unit credit on this project?</span>
+                          <span className="text-[color:var(--apple-subink)]">Keep the per-unit credit on this project?</span>
                           <button
                             type="button"
                             onClick={() => preElect.mutate({ id: s.id, state: "invitee_keeps_full" })}
                             disabled={preElect.isPending || s.swapState === "invitee_keeps_full"}
                             className={`px-2.5 py-1 rounded-md font-semibold ${
                               s.swapState === "invitee_keeps_full"
-                                ? "bg-emerald-50 text-emerald-700"
-                                : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                ? "bg-[color:var(--apple-ready-wash)] text-[color:var(--apple-ready)]"
+                                : "bg-[color:var(--apple-tile)] hover:bg-[color:var(--apple-track)] text-[color:var(--apple-ink)]"
                             }`}
                             data-testid={`button-swap-keep-${s.id}`}
                           >
@@ -1884,7 +1881,7 @@ function ReferralsTab() {
                             type="button"
                             onClick={() => preElect.mutate({ id: s.id, state: "referrer_keeps_full" })}
                             disabled={preElect.isPending || s.swapState !== "invitee_keeps_full"}
-                            className="px-2.5 py-1 rounded-md font-semibold bg-slate-100 hover:bg-slate-200 text-slate-600"
+                            className="px-2.5 py-1 rounded-md font-semibold bg-[color:var(--apple-tile)] hover:bg-[color:var(--apple-track)] text-[color:var(--apple-subink)]"
                             data-testid={`button-swap-default-${s.id}`}
                           >
                             Let them keep it
@@ -1892,15 +1889,15 @@ function ReferralsTab() {
                         </>
                       ) : (
                         <>
-                          <span className="text-slate-500">Pre-elect this artist for a project of yours:</span>
+                          <span className="text-[color:var(--apple-subink)]">Pre-elect this artist for a project of yours:</span>
                           <button
                             type="button"
                             onClick={() => preElect.mutate({ id: s.id, state: "invitee_keeps_full" })}
                             disabled={preElect.isPending || s.swapState === "invitee_keeps_full"}
                             className={`px-2.5 py-1 rounded-md font-semibold ${
                               s.swapState === "invitee_keeps_full"
-                                ? "bg-blue-50 text-blue-700"
-                                : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                ? "bg-[color:var(--apple-chip)] text-[color:var(--apple-ink)]"
+                                : "bg-[color:var(--apple-tile)] hover:bg-[color:var(--apple-track)] text-[color:var(--apple-ink)]"
                             }`}
                             data-testid={`button-swap-pre-elect-${s.id}`}
                           >
@@ -1918,16 +1915,16 @@ function ReferralsTab() {
       )}
       {d.nonProfits.length > 0 && (
         <Card title="Non-profits you've referred" testId="table-referred-npos">
-          <ul className="divide-y divide-slate-100" data-testid="list-referred-npos">
+          <ul className="divide-y divide-[color:var(--apple-hairline)]" data-testid="list-referred-npos">
             {d.nonProfits.map((o) => (
               <li key={o.id} className="flex items-center gap-3 py-3" data-testid={`row-referred-npo-${o.id}`}>
                 {o.logoUrl ? (
-                  <img src={o.logoUrl} alt="" className="w-10 h-10 rounded object-cover bg-slate-100" />
+                  <img src={o.logoUrl} alt="" className="w-10 h-10 rounded object-cover bg-[color:var(--apple-tile)]" />
                 ) : (
-                  <div className="w-10 h-10 rounded bg-slate-100" />
+                  <div className="w-10 h-10 rounded bg-[color:var(--apple-tile)]" />
                 )}
                 <p className="flex-1 min-w-0 font-semibold truncate">{o.name}</p>
-                <span className="text-[11px] text-slate-500 uppercase tracking-wider">Non-profit</span>
+                <span className="text-[11px] text-[color:var(--apple-subink)] uppercase tracking-wider">Non-profit</span>
               </li>
             ))}
           </ul>

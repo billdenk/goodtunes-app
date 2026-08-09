@@ -13582,37 +13582,42 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/operator/ArtistShopifyTab.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-2\">Connected stores</h2>"
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-[color:var(--apple-ink)] mb-2\">Connected stores</h2>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/operator/ArtistShopifyTab.tsx",
-    "snippet": "className=\"rounded-lg border border-slate-200 bg-white px-4 py-6 text-center text-slate-400 text-[13px]\""
+    "snippet": "className=\"rounded-lg border border-[color:var(--apple-hairline)] bg-white px-4 py-6 text-center text-[color:var(--apple-faint)] text-[13px]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/operator/ArtistShopifyTab.tsx",
-    "snippet": "<div className=\"text-[13.5px] font-medium text-slate-900 truncate\">{s.storeName ?? s.shopDomain}</div>"
+    "snippet": "<div className=\"text-[13.5px] font-medium text-[color:var(--apple-ink)] truncate\">{s.storeName ?? s.shopDomain}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/operator/ArtistShopifyTab.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-500 truncate\">"
+    "snippet": "<div className=\"text-[12px] text-[color:var(--apple-subink)] truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/operator/ArtistShopifyTab.tsx",
-    "snippet": "<span className=\"text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded shrink-0\">"
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--apple-subink)] shrink-0\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/operator/ArtistShopifyTab.tsx",
-    "snippet": "<div className=\"text-[13.5px] font-medium text-slate-700 truncate\">{l.shopDomain}</div>"
+    "snippet": "<div className=\"text-[13.5px] font-medium text-[color:var(--apple-ink)] truncate\">{l.shopDomain}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/operator/ArtistShopifyTab.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-500\">Waiting for install — link generated {new Date(l.lastGeneratedAt).toLocaleDateString()}</div>"
+    "snippet": "<div className=\"text-[12px] text-[color:var(--apple-subink)]\">Waiting for install — link generated {new Date(l.lastGeneratedAt).toLocaleDateString()}</div>"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/components/operator/ArtistShopifyTab.tsx",
+    "snippet": "<span className=\"w-1.5 h-1.5 rounded-full bg-[color:var(--apple-ready)]\" aria-hidden />"
   },
   {
     "rule": "hardcoded-font-size",
@@ -13637,42 +13642,42 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
-    "snippet": "<p className=\"text-slate-500 text-[12px] uppercase tracking-wider font-semibold\">Dashboard</p>"
+    "snippet": "<p className=\"text-[color:var(--apple-subink)] text-[12px] uppercase tracking-wider font-semibold\">Dashboard</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
-    "snippet": "{subtitle && <p className=\"text-slate-500 text-[13px] mt-0.5\">{subtitle}</p>}"
+    "snippet": "{subtitle && <p className=\"text-[color:var(--apple-subink)] text-[13px] mt-0.5\">{subtitle}</p>}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
-    "snippet": "<p className=\"text-[11px] text-slate-400\">Daily activity over the selected window</p>"
+    "snippet": "<p className=\"text-[11px] text-[color:var(--apple-faint)]\">Daily activity over the selected window</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[13px] py-2\" data-testid=\"activity-empty\">"
+    "snippet": "<p className=\"text-[color:var(--apple-faint)] text-[13px] py-2\" data-testid=\"activity-empty\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
-    "snippet": "<a href={it.href} className=\"text-[13px] font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline truncate block\">"
+    "snippet": "<a href={it.href} className=\"text-[13px] font-semibold text-[color:var(--apple-ink)] hover:text-[color:var(--brand-blue)] hover:underline truncate block\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
-    "snippet": "<p className=\"text-[13px] font-semibold text-slate-900 truncate\">{it.title}</p>"
+    "snippet": "<p className=\"text-[13px] font-semibold text-[color:var(--apple-ink)] truncate\">{it.title}</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
-    "snippet": "{it.detail && <p className=\"text-[11px] text-slate-500 truncate\">{it.detail}</p>}"
+    "snippet": "{it.detail && <p className=\"text-[11px] text-[color:var(--apple-subink)] truncate\">{it.detail}</p>}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
-    "snippet": "<time className=\"text-[11px] text-slate-400 tabular-nums shrink-0\">"
+    "snippet": "<time className=\"text-[11px] text-[color:var(--apple-faint)] tabular-nums shrink-0\">"
   },
   {
     "rule": "fan-text-tone",
@@ -20372,12 +20377,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<div className=\"mt-3 flex items-center gap-1.5 text-[13px] min-w-0\">"
+    "snippet": "<div className=\"mt-3 flex items-start flex-wrap gap-x-1.5 gap-y-0.5 text-[13px] min-w-0\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<span className=\"text-[12px] truncate\" style={{ color: SUBINK }} title={t.note}>"
+    "snippet": "<span className=\"text-[12px] min-w-0 [overflow-wrap:anywhere]\" style={{ color: SUBINK }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -20432,7 +20437,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<h3 className=\"text-[20px] font-semibold\" style={{ color: INK, letterSpacing: \"-0.01em\" }}>"
+    "snippet": "<h3 className=\"text-[20px]\" style={{ letterSpacing: \"-0.01em\" }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -20492,6 +20497,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<h3 className=\"text-[20px] font-semibold\" style={{ color: INK, letterSpacing: \"-0.01em\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
     "snippet": "className=\"px-3 h-7 text-[12.5px] rounded-full transition-all\""
   },
   {
@@ -20502,42 +20512,52 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<thead className=\"text-slate-400 text-[11px] uppercase tracking-wider\">"
+    "snippet": "<thead className=\"text-[color:var(--apple-faint)] text-[11px] uppercase tracking-wider\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<p className=\"truncate text-slate-400 text-[11px]\">{a.artist}</p>"
+    "snippet": "<p className=\"truncate text-[color:var(--apple-faint)] text-[11px]\">{a.artist}</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[11px] truncate\">{t.albumTitle}</p>"
+    "snippet": "<p className=\"text-[color:var(--apple-faint)] text-[11px] truncate\">{t.albumTitle}</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-bold\">{title}</h2>"
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-[color:var(--apple-ink)]\">{title}</h2>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "{subtitle && <p className=\"text-slate-400 text-[12px] mt-0.5\">{subtitle}</p>}"
+    "snippet": "{subtitle && <p className=\"text-[color:var(--apple-faint)] text-[12px] mt-0.5\">{subtitle}</p>}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "return <p className=\"py-10 text-center text-slate-400 text-[13px]\">Loading…</p>;"
+    "snippet": "<p className=\"py-10 text-center text-[13px] text-[color:var(--apple-faint)]\" data-testid=\"empty-team\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "return <p className=\"py-10 text-center text-slate-400 text-[13px]\">Couldn't load referrals.</p>;"
+    "snippet": "return <p className=\"py-10 text-center text-[color:var(--apple-faint)] text-[13px]\">Loading…</p>;"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<span className=\"text-[11px] text-slate-500 uppercase tracking-wider\">Non-profit</span>"
+    "snippet": "return <p className=\"py-10 text-center text-[color:var(--apple-faint)] text-[13px]\">Couldn't load referrals.</p>;"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<span className=\"text-[11px] text-[color:var(--apple-subink)] uppercase tracking-wider\">Non-profit</span>"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<span className=\"w-1.5 h-1.5 rounded-full\" style={{ backgroundColor: INVITE_STATUS_DOT[status] }} aria-hidden />"
   },
   {
     "rule": "brand-hex-literal",
@@ -21672,12 +21692,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/LabelDashboard.tsx",
-    "snippet": "<thead className=\"text-slate-400 text-[11px] uppercase tracking-wider\">"
+    "snippet": "<thead className=\"text-[color:var(--apple-faint)] text-[11px] uppercase tracking-wider\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/LabelDashboard.tsx",
-    "snippet": "<p className=\"truncate text-slate-400 text-[11px]\">{a.albumCount} album{a.albumCount === 1 ? \"\" : \"s\"}</p>"
+    "snippet": "<p className=\"truncate text-[color:var(--apple-faint)] text-[11px]\">{a.albumCount} album{a.albumCount === 1 ? \"\" : \"s\"}</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -21687,12 +21707,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/LabelDashboard.tsx",
-    "snippet": "<p className=\"truncate text-slate-400 text-[11px]\">{a.artist}</p>"
+    "snippet": "<p className=\"truncate text-[color:var(--apple-faint)] text-[11px]\">{a.artist}</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/LabelDashboard.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[11px] truncate\">{t.albumTitle} · {t.albumArtist}</p>"
+    "snippet": "<p className=\"text-[color:var(--apple-faint)] text-[11px] truncate\">{t.albumTitle} · {t.albumArtist}</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -21702,17 +21722,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/LabelDashboard.tsx",
-    "snippet": "{subtitle && <p className=\"text-slate-400 text-[12px] mt-0.5\">{subtitle}</p>}"
+    "snippet": "{subtitle && <p className=\"text-[color:var(--apple-faint)] text-[12px] mt-0.5\">{subtitle}</p>}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/LabelDashboard.tsx",
-    "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-slate-400 text-[13px]\">No revenue in this window.</p>;"
+    "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-[color:var(--apple-faint)] text-[13px]\">No revenue in this window.</p>;"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/LabelDashboard.tsx",
-    "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-slate-400 text-[13px]\">No plays in this window.</p>;"
+    "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-[color:var(--apple-faint)] text-[13px]\">No plays in this window.</p>;"
   },
   {
     "rule": "fan-text-tone",
@@ -21832,12 +21852,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ManagerDashboard.tsx",
-    "snippet": "<thead className=\"text-slate-400 text-[11px] uppercase tracking-wider\">"
+    "snippet": "<thead className=\"text-[color:var(--apple-faint)] text-[11px] uppercase tracking-wider\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ManagerDashboard.tsx",
-    "snippet": "<p className=\"truncate text-slate-400 text-[11px]\">{a.albumCount} album{a.albumCount === 1 ? \"\" : \"s\"}</p>"
+    "snippet": "<p className=\"truncate text-[color:var(--apple-faint)] text-[11px]\">{a.albumCount} album{a.albumCount === 1 ? \"\" : \"s\"}</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -21847,12 +21867,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ManagerDashboard.tsx",
-    "snippet": "<p className=\"truncate text-slate-400 text-[11px]\">{a.artist}</p>"
+    "snippet": "<p className=\"truncate text-[color:var(--apple-faint)] text-[11px]\">{a.artist}</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ManagerDashboard.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[11px] truncate\">{t.albumTitle} · {t.albumArtist}</p>"
+    "snippet": "<p className=\"text-[color:var(--apple-faint)] text-[11px] truncate\">{t.albumTitle} · {t.albumArtist}</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -21862,17 +21882,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ManagerDashboard.tsx",
-    "snippet": "{subtitle && <p className=\"text-slate-400 text-[12px] mt-0.5\">{subtitle}</p>}"
+    "snippet": "{subtitle && <p className=\"text-[color:var(--apple-faint)] text-[12px] mt-0.5\">{subtitle}</p>}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ManagerDashboard.tsx",
-    "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-slate-400 text-[13px]\">No revenue in this window.</p>;"
+    "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-[color:var(--apple-faint)] text-[13px]\">No revenue in this window.</p>;"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ManagerDashboard.tsx",
-    "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-slate-400 text-[13px]\">No plays in this window.</p>;"
+    "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-[color:var(--apple-faint)] text-[13px]\">No plays in this window.</p>;"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -23472,27 +23492,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "className=\"w-48 bg-transparent text-[12.5px] text-slate-700 placeholder-slate-400 focus:outline-none\""
+    "snippet": "className=\"w-48 bg-transparent text-[12.5px] text-[color:var(--apple-ink)] placeholder:text-[color:var(--apple-faint)] focus:outline-none\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "<div className=\"flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium\">"
+    "snippet": "<div className=\"flex items-center gap-1.5 text-[11.5px] text-[color:var(--apple-faint)] font-medium\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[11px] font-semibold uppercase tracking-wider\">"
+    "snippet": "<div className=\"text-[color:var(--apple-faint)] text-[11px] font-semibold uppercase tracking-wider\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "<h1 className=\"text-slate-900 text-[24px] font-bold tracking-tight mt-0.5 truncate\" data-testid=\"heading-person-name\">"
+    "snippet": "<h1 className=\"text-[color:var(--apple-ink)] text-[24px] font-bold tracking-tight mt-0.5 truncate\" data-testid=\"heading-person-name\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "<p className=\"text-slate-500 text-[13px] mt-1 line-clamp-2 max-w-xl\">{person.bio}</p>"
+    "snippet": "<p className=\"text-[color:var(--apple-subink)] text-[13px] mt-1 line-clamp-2 max-w-xl\">{person.bio}</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23502,12 +23522,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "<h2 className=\"text-slate-900 text-[14px] font-bold inline-flex items-center gap-2\">"
+    "snippet": "<h2 className=\"text-[color:var(--apple-ink)] text-[14px] font-bold inline-flex items-center gap-2\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[11.5px]\">"
+    "snippet": "<p className=\"text-[color:var(--apple-faint)] text-[11.5px]\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23707,7 +23727,17 @@
   {
     "rule": "naked-icon-button",
     "file": "client/src/pages/PressPortal.tsx",
-    "snippet": "<button type=\"button\" onClick={closeSearch} className=\"text-slate-400 hover:text-slate-700\" data-testid=\"button-close-search-press-albums\" aria-label=\"Close search\" > <XIcon className=\"w-3.5 h-3.5\" />"
+    "snippet": "<button type=\"button\" onClick={closeSearch} className=\"text-[color:var(--apple-faint)] hover:text-[color:var(--apple-ink)]\" data-testid=\"button-close-search-press-albums\" aria-label=\"Close search\" > <"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<span className=\"w-1.5 h-1.5 rounded-full bg-[color:var(--apple-warning)]\" aria-hidden />"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<span className=\"w-1.5 h-1.5 rounded-full bg-[color:var(--apple-ready)]\" aria-hidden />"
   },
   {
     "rule": "player-touch-target-too-small",
@@ -23922,7 +23952,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<p className=\"text-slate-500 text-[13px] mb-5\">"
+    "snippet": "<p className=\"text-[color:var(--apple-subink)] text-[13px] mb-5\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23932,47 +23962,47 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<label className=\"flex items-center gap-2 text-[12px] text-slate-600 cursor-pointer\">"
+    "snippet": "<label className=\"flex items-center gap-2 text-[12px] text-[color:var(--apple-subink)] cursor-pointer\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40\""
+    "snippet": "className=\"px-3 py-1.5 rounded-full border border-[color:var(--apple-hairline)] bg-white text-[color:var(--apple-ink)] text-[12px] font-semibold hover:bg-[color:var(--apple-tile)] disabled:opacity-40\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-full bg-slate-900 text-white text-[12px] font-semibold hover:bg-slate-800 disabled:opacity-40\""
+    "snippet": "className=\"px-3 py-1.5 rounded-full bg-[color:var(--apple-ink)] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-40\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${STATUS_PILL[r.nameStatus]}`}>"
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--apple-subink)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<span className=\"text-[11px] text-slate-500\" data-testid={`gooddeed-${r.id}`}>#{r.goodDeedNumber}</span>"
+    "snippet": "<span className=\"text-[11px] text-[color:var(--apple-subink)]\" data-testid={`gooddeed-${r.id}`}>#{r.goodDeedNumber}</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<span className=\"text-[11px] text-slate-400\">{r.shippingCountry ?? \"?\"}</span>"
+    "snippet": "<span className=\"text-[11px] text-[color:var(--apple-faint)]\">{r.shippingCountry ?? \"?\"}</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"text-[14px] font-medium text-slate-900 truncate mt-0.5\">"
+    "snippet": "<div className=\"text-[14px] font-medium text-[color:var(--apple-ink)] truncate mt-0.5\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-500 truncate\">"
+    "snippet": "<div className=\"text-[12px] text-[color:var(--apple-subink)] truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "className=\"bg-white border border-slate-200 text-slate-700 text-[11px] rounded px-2 py-1\""
+    "snippet": "className=\"bg-white border border-[color:var(--apple-hairline)] text-[color:var(--apple-ink)] text-[11px] rounded px-2 py-1\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -23982,12 +24012,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "className=\"text-[11px] text-slate-600 hover:text-slate-900 active:opacity-70\""
+    "snippet": "className=\"text-[11px] text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)] active:opacity-70\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PrinterPortal.tsx",
-    "snippet": "<div className=\"text-[11px] text-slate-400 mt-4\" data-testid=\"ready-summary\">"
+    "snippet": "<div className=\"text-[11px] text-[color:var(--apple-faint)] mt-4\" data-testid=\"ready-summary\">"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/PrinterPortal.tsx",
+    "snippet": "<span className=\"w-1.5 h-1.5 rounded-full shrink-0\" style={{ backgroundColor: STATUS_DOT[r.nameStatus] }} aria-hidden />"
   },
   {
     "rule": "brand-hex-literal",

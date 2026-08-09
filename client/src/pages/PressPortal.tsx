@@ -250,7 +250,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <main className="min-h-screen bg-[color:var(--apple-tile)] flex items-center justify-center">
         <Loader2 className="w-6 h-6 text-[color:var(--brand-blue)] animate-spin" />
       </main>
     );
@@ -517,11 +517,11 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
         actions={
           <>
             {searchOpen ? (
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-white border border-slate-200 shadow-sm">
-                <SearchIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-white border border-[color:var(--apple-hairline)] shadow-sm">
+                <SearchIcon className="w-3.5 h-3.5 text-[color:var(--apple-faint)] flex-shrink-0" />
                 <input
                   ref={searchInputRef}
-                  className="w-48 bg-transparent text-[12.5px] text-slate-700 placeholder-slate-400 focus:outline-none"
+                  className="w-48 bg-transparent text-[12.5px] text-[color:var(--apple-ink)] placeholder:text-[color:var(--apple-faint)] focus:outline-none"
                   placeholder="Find an album or artist…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -533,7 +533,7 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
                 <button
                   type="button"
                   onClick={closeSearch}
-                  className="text-slate-400 hover:text-slate-700"
+                  className="text-[color:var(--apple-faint)] hover:text-[color:var(--apple-ink)]"
                   data-testid="button-close-search-press-albums"
                   aria-label="Close search"
                 >
@@ -544,7 +544,7 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
               <button
                 type="button"
                 onClick={() => setSearchOpen(true)}
-                className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)] hover:bg-[color:var(--apple-tile)] transition-colors"
                 data-testid="button-open-search-press-albums"
                 aria-label="Search albums"
               >
@@ -555,7 +555,7 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
           </>
         }
         belowHeader={
-          <div className="border-b border-slate-200 flex items-center gap-6 overflow-x-auto">
+          <div className="border-b border-[color:var(--apple-hairline)] flex items-center gap-6 overflow-x-auto">
             {PRESS_ALBUM_STAGE_TABS.map((t) => (
               <TabBtn
                 key={t.key}
@@ -572,7 +572,7 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
       />
 
       {visible.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-400 text-sm" data-testid="empty-press-albums">
+        <div className="rounded-2xl border border-[color:var(--apple-hairline)] bg-white p-8 text-center text-[color:var(--apple-faint)] text-sm" data-testid="empty-press-albums">
           {emptyLabel}
         </div>
       ) : view === "grid" ? (
@@ -582,23 +582,23 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
               key={a.id}
               href={pressAlbumHref(a.id)}
               data-testid={`card-press-album-${a.id}`}
-              className="group rounded-2xl border border-slate-200 bg-white overflow-hidden hover:border-slate-300 hover:shadow-sm transition-all"
+              className="group rounded-2xl border border-[color:var(--apple-hairline)] bg-white overflow-hidden hover:border-[color:var(--apple-hairline)] hover:shadow-sm transition-all"
             >
-              <div className="aspect-square bg-slate-100 overflow-hidden relative">
+              <div className="aspect-square bg-[color:var(--apple-tile)] overflow-hidden relative">
                 {a.artwork ? (
                   <img src={a.artwork} alt={a.title} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
-                    <Disc3 className="w-8 h-8 text-slate-300" />
+                    <Disc3 className="w-8 h-8 text-[color:var(--apple-faint)]" />
                   </div>
                 )}
               </div>
               <div className="p-2.5">
-                <div className="text-slate-900 text-xs font-semibold truncate">{a.title}</div>
-                {a.artist && <div className="text-slate-400 text-xs truncate mt-0.5">{a.artist}</div>}
+                <div className="text-[color:var(--apple-ink)] text-xs font-semibold truncate">{a.title}</div>
+                {a.artist && <div className="text-[color:var(--apple-faint)] text-xs truncate mt-0.5">{a.artist}</div>}
                 {a.awaitingPressingOrder && (
                   <div
-                    className="mt-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                    className="mt-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-[color:var(--apple-warning-wash)] text-[color:var(--apple-warning)]"
                     data-testid={`badge-awaiting-pressing-${a.id}`}
                   >
                     Awaiting pressing order
@@ -609,37 +609,37 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden" data-testid="list-press-albums">
-          <ul className="divide-y divide-slate-100">
+        <div className="rounded-2xl border border-[color:var(--apple-hairline)] bg-white overflow-hidden" data-testid="list-press-albums">
+          <ul className="divide-y divide-[color:var(--apple-hairline)]">
             {visible.map((a) => (
               <li key={a.id}>
                 <Link
                   href={pressAlbumHref(a.id)}
                   data-testid={`row-press-album-${a.id}`}
-                  className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors"
+                  className="flex items-center gap-3 px-5 py-3 hover:bg-[color:var(--apple-tile)] transition-colors"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
+                  <div className="w-10 h-10 rounded-lg bg-[color:var(--apple-tile)] overflow-hidden flex-shrink-0">
                     {a.artwork ? (
                       <img src={a.artwork} alt={a.title} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <Disc3 className="w-4 h-4 text-slate-300" />
+                        <Disc3 className="w-4 h-4 text-[color:var(--apple-faint)]" />
                       </div>
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-slate-900 text-sm font-semibold truncate">{a.title}</div>
-                    {a.artist && <div className="text-slate-400 text-xs truncate">{a.artist}</div>}
+                    <div className="text-[color:var(--apple-ink)] text-sm font-semibold truncate">{a.title}</div>
+                    {a.artist && <div className="text-[color:var(--apple-faint)] text-xs truncate">{a.artist}</div>}
                     {a.awaitingPressingOrder && (
                       <div
-                        className="mt-0.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                        className="mt-0.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-[color:var(--apple-warning-wash)] text-[color:var(--apple-warning)]"
                         data-testid={`badge-awaiting-pressing-${a.id}`}
                       >
                         Awaiting pressing order
                       </div>
                     )}
                   </div>
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
+                  <ExternalLink className="w-3.5 h-3.5 text-[color:var(--apple-faint)] flex-shrink-0" />
                 </Link>
               </li>
             ))}
@@ -736,15 +736,15 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
         actions={
           <>
             {searchOpen ? (
-              <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
-                <SearchIcon className="w-4 h-4 text-slate-400" />
+              <div className="flex items-center gap-1.5 bg-white border border-[color:var(--apple-hairline)] rounded-md px-2.5 h-9">
+                <SearchIcon className="w-4 h-4 text-[color:var(--apple-faint)]" />
                 <input
                   type="text"
                   autoFocus
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search people"
-                  className="w-44 text-sm bg-transparent outline-none placeholder:text-slate-400"
+                  className="w-44 text-sm bg-transparent outline-none placeholder:text-[color:var(--apple-faint)]"
                   data-testid="input-search-press-people"
                 />
                 <button
@@ -753,7 +753,7 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
                     setSearch("");
                     setSearchOpen(false);
                   }}
-                  className="text-slate-400 hover:text-slate-700"
+                  className="text-[color:var(--apple-faint)] hover:text-[color:var(--apple-ink)]"
                   aria-label="Close search"
                 >
                   <XIcon className="w-4 h-4" />
@@ -763,7 +763,7 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
               <button
                 type="button"
                 onClick={() => setSearchOpen(true)}
-                className="h-9 w-9 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+                className="h-9 w-9 rounded-md text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)] hover:bg-[color:var(--apple-tile)] inline-flex items-center justify-center transition-colors"
                 aria-label="Search"
                 data-testid="button-open-search-press-people"
               >
@@ -777,7 +777,7 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
                   type="button"
                   variant="outline"
                   onClick={() => setLabelInviteOpen(true)}
-                  className="h-9 rounded-full border-slate-300 text-slate-700 hover:bg-slate-100 font-semibold text-sm px-4"
+                  className="h-9 rounded-full border-[color:var(--apple-hairline)] text-[color:var(--apple-ink)] hover:bg-[color:var(--apple-tile)] font-semibold text-sm px-4"
                   data-testid="button-invite-label"
                 >
                   <Mail className="w-4 h-4 mr-2" /> Invite a label
@@ -785,7 +785,7 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
                 <Button
                   type="button"
                   onClick={() => setAddOpen(true)}
-                  className="h-9 rounded-full bg-slate-900 text-white hover:bg-slate-800 font-semibold text-sm px-4"
+                  className="h-9 rounded-full bg-[color:var(--apple-ink)] text-white hover:opacity-90 font-semibold text-sm px-4"
                   data-testid="button-add-press-person"
                 >
                   <Sparkles className="w-4 h-4 mr-2" /> Add an artist
@@ -829,7 +829,7 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
         </div>
       ) : (
         <div
-          className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+          className="rounded-lg border border-[color:var(--apple-hairline)] bg-white overflow-hidden divide-y divide-[color:var(--apple-hairline)]"
           data-testid="list-press-people"
         >
           {filtered.map((p) => (
@@ -923,7 +923,7 @@ export function PressScopedPersonDetail({
   if (error || !person) {
     return (
       <div className="py-16 text-center space-y-3" data-testid="press-person-not-found">
-        <p className="text-slate-500 text-sm">Person not found or not in your press scope.</p>
+        <p className="text-[color:var(--apple-subink)] text-sm">Person not found or not in your press scope.</p>
         <button
           type="button"
           onClick={onBack}
@@ -960,7 +960,7 @@ export function PressScopedPersonDetail({
   return (
     <div className="space-y-5" data-testid={`press-person-detail-${personId}`}>
       {/* Breadcrumb / back */}
-      <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
+      <div className="flex items-center gap-1.5 text-[11.5px] text-[color:var(--apple-faint)] font-medium">
         <button
           type="button"
           onClick={onBack}
@@ -970,13 +970,13 @@ export function PressScopedPersonDetail({
           People
         </button>
         <ChevronLeft className="w-3 h-3 rotate-180 flex-shrink-0" />
-        <span className="text-slate-700 font-semibold truncate max-w-[420px]">{person.name}</span>
+        <span className="text-[color:var(--apple-ink)] font-semibold truncate max-w-[420px]">{person.name}</span>
       </div>
 
       {/* Header */}
       <div className="flex items-start gap-5">
         <div
-          className="rounded-full overflow-hidden flex-shrink-0 bg-[color:var(--brand-blue)] ring-1 ring-slate-200"
+          className="rounded-full overflow-hidden flex-shrink-0 bg-[color:var(--brand-blue)] ring-1 ring-[color:var(--apple-hairline)]"
           style={{ width: 80, height: 80 }}
           data-testid="img-person-photo"
         >
@@ -989,14 +989,14 @@ export function PressScopedPersonDetail({
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
+          <div className="text-[color:var(--apple-faint)] text-[11px] font-semibold uppercase tracking-wider">
             {person.shape === "artist" ? "Artist" : "Contact"}
           </div>
-          <h1 className="text-slate-900 text-[24px] font-bold tracking-tight mt-0.5 truncate" data-testid="heading-person-name">
+          <h1 className="text-[color:var(--apple-ink)] text-[24px] font-bold tracking-tight mt-0.5 truncate" data-testid="heading-person-name">
             {person.name}
           </h1>
           {person.bio && (
-            <p className="text-slate-500 text-[13px] mt-1 line-clamp-2 max-w-xl">{person.bio}</p>
+            <p className="text-[color:var(--apple-subink)] text-[13px] mt-1 line-clamp-2 max-w-xl">{person.bio}</p>
           )}
         </div>
         {/* Invite affordance — pending state shows a status chip + resend/
@@ -1005,8 +1005,8 @@ export function PressScopedPersonDetail({
         <div className="flex-shrink-0 self-center">
           {person.pendingInvite ? (
             <div className="flex items-center gap-2" data-testid="press-person-invite-pending">
-              <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200 text-xs font-semibold">
-                <Clock3 className="w-3.5 h-3.5" />
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--apple-subink)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--apple-warning)]" aria-hidden />
                 {person.pendingInvite.reviewStatus === "pending_review" ? "Pending review" : "Invited"}
               </span>
               {canEdit && (
@@ -1019,8 +1019,8 @@ export function PressScopedPersonDetail({
               )}
             </div>
           ) : person.accepted ? (
-            <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 text-xs font-semibold" data-testid="press-person-invite-accepted">
-              <CheckCircle2 className="w-3.5 h-3.5" />
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--apple-subink)]" data-testid="press-person-invite-accepted">
+              <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--apple-ready)]" aria-hidden />
               On GoodTunes
             </span>
           ) : canEdit ? (
@@ -1037,7 +1037,7 @@ export function PressScopedPersonDetail({
       </div>
 
       {/* Tabs + Remove action */}
-      <div className="flex items-end justify-between gap-5 border-b border-slate-200" data-testid="tabs-press-person">
+      <div className="flex items-end justify-between gap-5 border-b border-[color:var(--apple-hairline)]" data-testid="tabs-press-person">
         <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
           {PERSON_DETAIL_TABS.map((t) => (
             <button
@@ -1046,7 +1046,7 @@ export function PressScopedPersonDetail({
               onClick={() => setTab(t.key)}
               className={[
                 "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
-                tab === t.key ? "text-slate-900" : "text-slate-400 hover:text-slate-700",
+                tab === t.key ? "text-[color:var(--apple-ink)]" : "text-[color:var(--apple-faint)] hover:text-[color:var(--apple-ink)]",
               ].join(" ")}
               data-testid={`tab-person-${t.key}`}
             >
@@ -1062,7 +1062,7 @@ export function PressScopedPersonDetail({
             type="button"
             onClick={() => setRemoveConfirmOpen(true)}
             disabled={removeFromPress.isPending}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 mb-1 rounded-md text-xs font-medium text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-800 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 mb-1 rounded-md text-xs font-medium text-[color:var(--apple-subink)] border border-[color:var(--apple-hairline)] bg-white hover:bg-[color:var(--apple-tile)] hover:text-[color:var(--apple-ink)] disabled:opacity-50"
             data-testid="button-remove-from-press"
           >
             Remove from press
@@ -1073,28 +1073,28 @@ export function PressScopedPersonDetail({
       {/* Tab content */}
       {tab === "overview" && (
         <div className="space-y-4" data-testid="panel-press-person-overview">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <div className="rounded-2xl border border-[color:var(--apple-hairline)] bg-white p-5 space-y-4">
             {person.bio && (
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Bio</div>
-                <p className="text-slate-600 text-sm mt-1 whitespace-pre-line">{person.bio}</p>
+                <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--apple-faint)]">Bio</div>
+                <p className="text-[color:var(--apple-subink)] text-sm mt-1 whitespace-pre-line">{person.bio}</p>
               </div>
             )}
             {credits.length > 0 && (
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Credits</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--apple-faint)]">Credits</div>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {credits.map((c) => (
-                    <span key={c} className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium">{c}</span>
+                    <span key={c} className="px-2 py-0.5 rounded-full bg-[color:var(--apple-tile)] text-[color:var(--apple-subink)] text-xs font-medium">{c}</span>
                   ))}
                 </div>
               </div>
             )}
             {!person.bio && credits.length === 0 && (
-              <p className="text-slate-500 text-sm">No profile details on file.</p>
+              <p className="text-[color:var(--apple-subink)] text-sm">No profile details on file.</p>
             )}
           </div>
-          <p className="text-slate-400 text-xs px-1">
+          <p className="text-[color:var(--apple-faint)] text-xs px-1">
             Artist profile details are managed by GoodTunes. Use the Releases tab to manage the albums associated with your press.
           </p>
         </div>
@@ -1102,28 +1102,28 @@ export function PressScopedPersonDetail({
 
       {tab === "cover" && (
         <div className="space-y-3" data-testid="panel-press-person-cover">
-          <div className="aspect-[3/1] w-full rounded-2xl overflow-hidden bg-slate-100 ring-1 ring-slate-200">
+          <div className="aspect-[3/1] w-full rounded-2xl overflow-hidden bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)]">
             {person.coverUrl ? (
               <img src={person.coverUrl} alt={`${person.name} cover`} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">
+              <div className="w-full h-full flex items-center justify-center text-[color:var(--apple-faint)] text-xs">
                 No cover image
               </div>
             )}
           </div>
-          <p className="text-slate-400 text-xs px-1">The artist's cover image is managed by GoodTunes.</p>
+          <p className="text-[color:var(--apple-faint)] text-xs px-1">The artist's cover image is managed by GoodTunes.</p>
         </div>
       )}
 
       {tab === "releases" && (
-        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden" data-testid="panel-press-person-releases">
-          <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
+        <div className="rounded-2xl border border-[color:var(--apple-hairline)] bg-white overflow-hidden" data-testid="panel-press-person-releases">
+          <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-[color:var(--apple-hairline)]">
             <div className="min-w-0">
-              <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
-                <Disc3 className="w-4 h-4 text-slate-400" />
+              <h2 className="text-[color:var(--apple-ink)] text-[14px] font-bold inline-flex items-center gap-2">
+                <Disc3 className="w-4 h-4 text-[color:var(--apple-faint)]" />
                 GoodTunes® Releases
               </h2>
-              <p className="text-slate-400 text-[11.5px]">
+              <p className="text-[color:var(--apple-faint)] text-[11.5px]">
                 {gtReleases.length === 0
                   ? "No GoodTunes® releases for this artist yet."
                   : `${gtReleases.length - hiddenCount} release${gtReleases.length - hiddenCount === 1 ? "" : "s"} fans can play in-app${hiddenCount ? ` · ${hiddenCount} hidden` : ""}`}
@@ -1132,12 +1132,12 @@ export function PressScopedPersonDetail({
           </div>
           {albumsLoading ? (
             <div className="p-8 flex items-center justify-center">
-              <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+              <Loader2 className="w-5 h-5 text-[color:var(--apple-faint)] animate-spin" />
             </div>
           ) : gtReleases.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 text-sm">No GoodTunes® releases yet.</div>
+            <div className="p-8 text-center text-[color:var(--apple-faint)] text-sm">No GoodTunes® releases yet.</div>
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-[color:var(--apple-hairline)]">
               {gtReleases.map((a) => (
                 <li
                   key={a.id}
@@ -1148,14 +1148,14 @@ export function PressScopedPersonDetail({
                   data-testid={`row-release-${a.id}`}
                   title={!a.editableByThisPress ? "Homed to another press" : undefined}
                 >
-                  <div className="w-10 h-10 rounded bg-slate-100 overflow-hidden flex-shrink-0">
+                  <div className="w-10 h-10 rounded bg-[color:var(--apple-tile)] overflow-hidden flex-shrink-0">
                     {a.artwork && (
                       <img src={a.artwork} alt={a.title} className="w-full h-full object-cover" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-slate-900 text-sm font-semibold truncate">{a.title}</div>
-                    <div className="text-slate-400 text-xs">
+                    <div className="text-[color:var(--apple-ink)] text-sm font-semibold truncate">{a.title}</div>
+                    <div className="text-[color:var(--apple-faint)] text-xs">
                       {a.type}{a.year ? ` · ${a.year}` : ""}
                       {a.isHidden ? " · Hidden" : ""}
                       {!a.editableByThisPress ? " · Another press" : ""}
@@ -1178,10 +1178,10 @@ export function PressScopedPersonDetail({
       )}
 
       {tab === "streaming" && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-press-person-streaming">
-          <h2 className="text-slate-900 text-sm font-bold">Streaming</h2>
+        <div className="rounded-2xl border border-[color:var(--apple-hairline)] bg-white p-5 space-y-3" data-testid="panel-press-person-streaming">
+          <h2 className="text-[color:var(--apple-ink)] text-sm font-bold">Streaming</h2>
           {streamingLinks.length === 0 ? (
-            <p className="text-slate-500 text-xs">No streaming links on file.</p>
+            <p className="text-[color:var(--apple-subink)] text-xs">No streaming links on file.</p>
           ) : (
             <ul className="space-y-1.5">
               {streamingLinks.map((l) => (
@@ -1205,11 +1205,11 @@ export function PressScopedPersonDetail({
       {/* Remove confirm dialog */}
       {removeConfirmOpen && (
         <Dialog open={true} onOpenChange={(o) => !o && setRemoveConfirmOpen(false)}>
-          <DialogContent className="bg-white text-slate-900 border border-slate-200 max-w-sm" data-testid="dialog-remove-from-press">
+          <DialogContent className="bg-white text-[color:var(--apple-ink)] border border-[color:var(--apple-hairline)] max-w-sm" data-testid="dialog-remove-from-press">
             <DialogHeader>
               <DialogTitle>Remove {person.name} from your press?</DialogTitle>
             </DialogHeader>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-[color:var(--apple-subink)]">
               This unhomes the artist from your press. Their profile and releases remain on GoodTunes — they can be re-invited later.
             </p>
             <DialogFooter className="flex gap-2 justify-end pt-2">
@@ -1226,7 +1226,7 @@ export function PressScopedPersonDetail({
                 type="button"
                 onClick={() => removeFromPress.mutate()}
                 disabled={removeFromPress.isPending}
-                className="bg-rose-600 text-white hover:bg-rose-700"
+                className="bg-[color:var(--apple-critical)] text-white hover:opacity-90"
                 data-testid="button-confirm-remove"
               >
                 {removeFromPress.isPending ? "Removing…" : "Remove from press"}
@@ -1352,8 +1352,8 @@ function PdKpiStrip({ summary, loading }: { summary?: PressSummary; loading: boo
       {loading || !summary
         ? Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="rounded-2xl bg-white p-5 animate-pulse" style={{ border: `1px solid ${PD_HAIRLINE}` }} data-testid={`kpi-skeleton-${i}`}>
-              <div className="h-3 w-24 rounded bg-slate-100" />
-              <div className="mt-4 h-8 w-20 rounded bg-slate-100" />
+              <div className="h-3 w-24 rounded bg-[color:var(--apple-tile)]" />
+              <div className="mt-4 h-8 w-20 rounded bg-[color:var(--apple-tile)]" />
             </div>
           ))
         : tiles.map((t) => (
@@ -1397,7 +1397,7 @@ function PdActivityFeed({ items, loading }: { items: ActivityItem[]; loading: bo
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-9 rounded-xl bg-slate-100 animate-pulse" />
+            <div key={i} className="h-9 rounded-xl bg-[color:var(--apple-tile)] animate-pulse" />
           ))}
         </div>
       ) : rows.length === 0 ? (
@@ -1409,7 +1409,7 @@ function PdActivityFeed({ items, loading }: { items: ActivityItem[]; loading: bo
         <ul className="space-y-0.5 flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
           {rows.map((it, i) => {
             const body = (
-              <div className="flex items-start gap-2.5 -mx-1.5 px-1.5 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+              <div className="flex items-start gap-2.5 -mx-1.5 px-1.5 py-2 rounded-xl hover:bg-[color:var(--apple-tile)] transition-colors">
                 <PdActivityIcon kind={it.kind} />
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] truncate" style={{ color: PD_INK }}>{it.title}</div>
@@ -1599,11 +1599,11 @@ function PdWelcomeActivity({ items, loading, pressName, client, teammate }: { it
       </div>
       <ul className="space-y-0.5 flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
         {loading && rows.length === 0 && (
-          <li className="py-1"><div className="h-9 rounded-xl bg-slate-100 animate-pulse" /></li>
+          <li className="py-1"><div className="h-9 rounded-xl bg-[color:var(--apple-tile)] animate-pulse" /></li>
         )}
         {rows.map((it, i) => {
           const body = (
-            <div className="flex items-start gap-2.5 -mx-1.5 px-1.5 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+            <div className="flex items-start gap-2.5 -mx-1.5 px-1.5 py-2 rounded-xl hover:bg-[color:var(--apple-tile)] transition-colors">
               <PdActivityIcon kind={it.kind} />
               <div className="flex-1 min-w-0">
                 <div className="text-[13px] truncate" style={{ color: PD_INK }}>{it.title}</div>
@@ -2211,10 +2211,10 @@ function LabelInviteDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (invite.isPending && !o) return; onOpenChange(o); if (!o) reset(); }}>
-      <DialogContent className="bg-white text-slate-900 sm:max-w-md" data-testid="dialog-invite-label">
+      <DialogContent className="bg-white text-[color:var(--apple-ink)] sm:max-w-md" data-testid="dialog-invite-label">
         <DialogHeader>
           <DialogTitle>Invite a label</DialogTitle>
-          <DialogDescription className="text-slate-500">
+          <DialogDescription className="text-[color:var(--apple-subink)]">
             Send a label an invite to join your press. They'll appear in your labels directory once they accept.
           </DialogDescription>
         </DialogHeader>
@@ -2229,7 +2229,7 @@ function LabelInviteDialog({
               className={scrapedDomain ? "pr-8" : ""}
             />
             {isScraping && (
-              <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />
+              <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[color:var(--apple-faint)] animate-spin" />
             )}
           </div>
           {scrapedLogoUrl && (
@@ -2237,15 +2237,15 @@ function LabelInviteDialog({
               <img
                 src={scrapedLogoUrl}
                 alt=""
-                className="w-8 h-8 rounded object-cover border border-slate-200 bg-slate-50"
+                className="w-8 h-8 rounded object-cover border border-[color:var(--apple-hairline)] bg-[color:var(--apple-tile)]"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 data-testid="img-scraped-label-logo"
               />
-              <span className="text-xs text-slate-500">Logo found from {scrapedDomain}</span>
+              <span className="text-xs text-[color:var(--apple-subink)]">Logo found from {scrapedDomain}</span>
             </div>
           )}
           {scrapeNote && !scrapedLogoUrl && (
-            <p className="text-xs text-slate-400 px-1" data-testid="text-scrape-note">{scrapeNote}</p>
+            <p className="text-xs text-[color:var(--apple-faint)] px-1" data-testid="text-scrape-note">{scrapeNote}</p>
           )}
           <Input placeholder="Label name" value={name} onChange={(e) => setName(e.target.value)} data-testid="input-invite-label-name" />
           <Input placeholder="email@example.com" type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="input-invite-label-email" />
@@ -2256,7 +2256,7 @@ function LabelInviteDialog({
           <Button
             onClick={() => invite.mutate()}
             disabled={invite.isPending || !email || !name}
-            className="h-9 bg-slate-900 text-white hover:bg-slate-800"
+            className="h-9 bg-[color:var(--apple-ink)] text-white hover:opacity-90"
             data-testid="button-send-label-invite"
           >
             {invite.isPending ? "Sending…" : "Send invite"}
@@ -2310,10 +2310,10 @@ function InvitePersonDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (invite.isPending && !o) return; onOpenChange(o); if (!o) reset(); }}>
-      <DialogContent className="bg-white text-slate-900 sm:max-w-md" data-testid="dialog-invite-person">
+      <DialogContent className="bg-white text-[color:var(--apple-ink)] sm:max-w-md" data-testid="dialog-invite-person">
         <DialogHeader>
           <DialogTitle>Invite {personName}</DialogTitle>
-          <DialogDescription className="text-slate-500">
+          <DialogDescription className="text-[color:var(--apple-subink)]">
             Send {personName} a private link to claim their profile and manage their releases with your press.
           </DialogDescription>
         </DialogHeader>
@@ -2459,7 +2459,7 @@ function InviteActions({
           if (window.confirm("Revoke this invite? The link will stop working.")) revoke.mutate();
         }}
         disabled={revoke.isPending}
-        className="text-rose-600"
+        className="text-[color:var(--apple-critical)]"
         data-testid={`button-revoke-invite-${inviteId}`}
       >
         {revoke.isPending ? <Loader2 className="animate-spin" /> : <XIcon />}
@@ -2494,8 +2494,8 @@ function PipelineTab({ pressId }: { pressId: string }) {
           return (
             <div key={s.id} data-testid={`pipeline-stage-${s.id}`}>
               <div className="flex items-center justify-between mb-2 px-1">
-                <h3 className="text-slate-700 text-sm font-semibold uppercase tracking-wide">{s.label}</h3>
-                <span className="text-slate-400 text-xs font-mono" data-testid={`text-stage-count-${s.id}`}>
+                <h3 className="text-[color:var(--apple-ink)] text-sm font-semibold uppercase tracking-wide">{s.label}</h3>
+                <span className="text-[color:var(--apple-faint)] text-xs font-mono" data-testid={`text-stage-count-${s.id}`}>
                   {rows.length + extraCount}
                 </span>
               </div>
@@ -2505,7 +2505,7 @@ function PipelineTab({ pressId }: { pressId: string }) {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-semibold truncate" data-testid={`card-invite-${iv.id}`}>{iv.email}</div>
-                        <div className="text-slate-500 text-xs mt-1">Pending {iv.role}</div>
+                        <div className="text-[color:var(--apple-subink)] text-xs mt-1">Pending {iv.role}</div>
                       </div>
                       <InviteActions pressId={pressId} inviteId={iv.id} acceptUrl={iv.acceptUrl} />
                     </div>
@@ -2514,14 +2514,14 @@ function PipelineTab({ pressId }: { pressId: string }) {
                 {s.id === "accepted" && accepted.map((c) => (
                   <DashboardPanel key={`${c.kind}-${c.id}`} padding="sm">
                     <div className="text-sm font-semibold truncate" data-testid={`card-accepted-${c.kind}-${c.id}`}>{c.name}</div>
-                    <div className="text-slate-500 text-xs mt-1 capitalize">{c.kind} · no album yet</div>
+                    <div className="text-[color:var(--apple-subink)] text-xs mt-1 capitalize">{c.kind} · no album yet</div>
                   </DashboardPanel>
                 ))}
                 {rows.map((a) => (
                   <PipelineCard key={a.id} a={a} pressId={pressId} />
                 ))}
                 {rows.length + extraCount === 0 && (
-                  <div className="text-slate-400 text-xs italic px-2 py-4 text-center">No albums</div>
+                  <div className="text-[color:var(--apple-faint)] text-xs italic px-2 py-4 text-center">No albums</div>
                 )}
               </div>
             </div>
@@ -2583,16 +2583,16 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
         data-testid={`button-open-pipeline-${a.id}`}
       >
         <div className="flex gap-2">
-          <div className="w-10 h-10 rounded bg-slate-100 ring-1 ring-slate-200 overflow-hidden flex-shrink-0">
+          <div className="w-10 h-10 rounded bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)] overflow-hidden flex-shrink-0">
             {a.coverUrl && <img src={a.coverUrl} alt="" className="w-full h-full object-cover" />}
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold truncate" title={a.title}>{a.title}</div>
-            <div className="text-slate-500 text-xs truncate">{a.ownerName} · {a.format}</div>
+            <div className="text-[color:var(--apple-subink)] text-xs truncate">{a.ownerName} · {a.format}</div>
           </div>
         </div>
       </button>
-      <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs text-slate-500">
+      <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs text-[color:var(--apple-subink)]">
         {a.stageEnteredAt && (
           <div data-testid={`text-stage-entered-${a.id}`}>Stage: {timeAgo(a.stageEnteredAt)}</div>
         )}
@@ -2636,7 +2636,7 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
           means the money's there but a consent is still missing. */}
       {a.earlyCutEligible ? (
         <div
-          className="mt-2 flex items-center gap-1.5 rounded-md bg-emerald-50 ring-1 ring-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700"
+          className="mt-2 flex items-center gap-1.5 rounded-md bg-emerald-50 ring-1 ring-emerald-200 px-2 py-1 text-xs font-semibold text-[color:var(--apple-ready)]"
           data-testid={`chip-early-cut-eligible-${a.id}`}
         >
           <Zap className="w-3 h-3" />
@@ -2644,7 +2644,7 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
         </div>
       ) : a.earlyCutPoolReady ? (
         <div
-          className="mt-2 flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600"
+          className="mt-2 flex items-center gap-1.5 rounded-md bg-[color:var(--apple-tile)] px-2 py-1 text-xs text-[color:var(--apple-subink)]"
           data-testid={`chip-early-cut-pool-ready-${a.id}`}
         >
           <Zap className="w-3 h-3" />
@@ -2663,7 +2663,7 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
           >Trigger masters</Button>
         )}
         {a.stage === "masters_triggered" && (
-          <div className="text-xs text-emerald-700 font-semibold">Artist approved — cut masters</div>
+          <div className="text-xs text-[color:var(--apple-ready)] font-semibold">Artist approved — cut masters</div>
         )}
         {/* Invoice capture is Locked-only per spec: an invoice marks
             the transition INTO In production, so it can't be uploaded
@@ -2674,7 +2674,7 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
             size="sm"
             variant="outline"
             onClick={() => setInvoiceOpen(true)}
-            className="w-full h-8 text-xs bg-transparent text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 border-0"
+            className="w-full h-8 text-xs bg-transparent text-[color:var(--apple-ink)] ring-1 ring-[color:var(--apple-hairline)] hover:bg-[color:var(--apple-tile)] border-0"
             data-testid={`button-upload-invoice-${a.id}`}
           >
             <Upload className="w-3 h-3 mr-1.5" />
@@ -2692,10 +2692,10 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
                 className={
                   "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold " +
                   (a.invoiceVarianceTier === "flag"
-                    ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+                    ? "bg-[color:var(--apple-critical-wash)] text-[color:var(--apple-critical)]"
                     : a.invoiceVarianceTier === "warn"
-                      ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                      : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200")
+                      ? "bg-[color:var(--apple-warning-wash)] text-[color:var(--apple-warning)]"
+                      : "bg-[color:var(--apple-ready-wash)] text-[color:var(--apple-ready)]")
                 }
                 data-testid={`badge-variance-${a.id}`}
                 title={`Variance vs locked quote: ${a.invoiceVarianceCents! >= 0 ? "+" : ""}$${(a.invoiceVarianceCents! / 100).toFixed(2)}`}
@@ -2707,17 +2707,17 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
           </div>
         )}
         {a.pressInvoiceOutsideSystem && (
-          <div className="text-xs text-slate-500 italic">Billed outside the system</div>
+          <div className="text-xs text-[color:var(--apple-subink)] italic">Billed outside the system</div>
         )}
         {/* Task #527 — Stripe transfer status. Mint happens on invoice
             POST; chip reflects last-known state from the pipeline read. */}
         {a.pressInvoiceTransferId && a.pressInvoiceTransferAmountCents != null && (
-          <div className="text-xs text-emerald-700" data-testid={`text-transfer-status-${a.id}`}>
+          <div className="text-xs text-[color:var(--apple-ready)]" data-testid={`text-transfer-status-${a.id}`}>
             ✓ Earmarked ${(a.pressInvoiceTransferAmountCents / 100).toFixed(2)} to your Stripe
           </div>
         )}
         {!a.pressInvoiceTransferId && a.pressInvoiceTransferError && !a.pressInvoiceOutsideSystem && (
-          <div className="text-xs text-rose-600" data-testid={`text-transfer-error-${a.id}`}>
+          <div className="text-xs text-[color:var(--apple-critical)]" data-testid={`text-transfer-error-${a.id}`}>
             Transfer pending: {a.pressInvoiceTransferError}
           </div>
         )}
@@ -2728,7 +2728,7 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
               placeholder="Qty"
               value={headsUpQty}
               onChange={(e) => setHeadsUpQty(e.target.value)}
-              className="h-8 bg-white border-slate-200 text-slate-900 text-xs"
+              className="h-8 bg-white border-[color:var(--apple-hairline)] text-[color:var(--apple-ink)] text-xs"
               data-testid={`input-heads-up-qty-${a.id}`}
             />
             <Button
@@ -2736,18 +2736,18 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
               size="sm"
               onClick={() => sendHeadsUp.mutate()}
               disabled={!headsUpQty || sendHeadsUp.isPending}
-              className="h-8 bg-slate-900 text-white hover:bg-slate-800 text-xs"
+              className="h-8 bg-[color:var(--apple-ink)] text-white hover:opacity-90 text-xs"
               data-testid={`button-heads-up-${a.id}`}
             ><BellRing className="w-3 h-3" /></Button>
           </div>
         )}
         {a.fulfillmentHeadsUpSentAt && (
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-[color:var(--apple-subink)]">
             Heads-up sent · {a.fulfillmentHeadsUpQty ?? "?"} units
           </div>
         )}
         {a.lastNotifiedAt && (
-          <div className="text-xs text-slate-500" data-testid={`text-last-notified-${a.id}`}>
+          <div className="text-xs text-[color:var(--apple-subink)]" data-testid={`text-last-notified-${a.id}`}>
             Last notified {timeAgo(a.lastNotifiedAt)}
           </div>
         )}
@@ -2772,37 +2772,37 @@ function PipelineDetailDialog({ album, onClose }: { album: PipelineAlbum; onClos
   });
   return (
     <Dialog open={true} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="bg-white text-slate-900 max-w-2xl max-h-[85vh] overflow-y-auto" data-testid={`dialog-pipeline-detail-${album.id}`}>
+      <DialogContent className="bg-white text-[color:var(--apple-ink)] max-w-2xl max-h-[85vh] overflow-y-auto" data-testid={`dialog-pipeline-detail-${album.id}`}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded bg-slate-100 overflow-hidden">
+            <div className="w-10 h-10 rounded bg-[color:var(--apple-tile)] overflow-hidden">
               {album.coverUrl && <img src={album.coverUrl} alt="" className="w-full h-full object-cover" />}
             </div>
             <div className="min-w-0">
               <div className="truncate">{album.title}</div>
-              <div className="text-xs text-slate-500 font-normal truncate">{album.ownerName} · {album.format}</div>
+              <div className="text-xs text-[color:var(--apple-subink)] font-normal truncate">{album.ownerName} · {album.format}</div>
             </div>
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="rounded-lg bg-slate-50 p-3">
-              <div className="text-xs text-slate-500 font-semibold uppercase">Stage</div>
+            <div className="rounded-lg bg-[color:var(--apple-tile)] p-3">
+              <div className="text-xs text-[color:var(--apple-subink)] font-semibold uppercase">Stage</div>
               <div className="font-semibold">{STAGE_LABEL[album.stage] ?? album.stage}</div>
               {album.stageEnteredAt && (
-                <div className="text-xs text-slate-500 mt-0.5">Entered {timeAgo(album.stageEnteredAt)}</div>
+                <div className="text-xs text-[color:var(--apple-subink)] mt-0.5">Entered {timeAgo(album.stageEnteredAt)}</div>
               )}
             </div>
-            <div className="rounded-lg bg-slate-50 p-3">
-              <div className="text-xs text-slate-500 font-semibold uppercase">Sunrise</div>
+            <div className="rounded-lg bg-[color:var(--apple-tile)] p-3">
+              <div className="text-xs text-[color:var(--apple-subink)] font-semibold uppercase">Sunrise</div>
               <div className="font-semibold">{album.sunriseDate ? new Date(album.sunriseDate).toLocaleDateString() : "—"}</div>
             </div>
-            <div className="rounded-lg bg-slate-50 p-3">
-              <div className="text-xs text-slate-500 font-semibold uppercase">Units sold</div>
+            <div className="rounded-lg bg-[color:var(--apple-tile)] p-3">
+              <div className="text-xs text-[color:var(--apple-subink)] font-semibold uppercase">Units sold</div>
               <div className="font-semibold">{album.unitsSoldToDate}</div>
             </div>
-            <div className="rounded-lg bg-slate-50 p-3">
-              <div className="text-xs text-slate-500 font-semibold uppercase">Locked qty</div>
+            <div className="rounded-lg bg-[color:var(--apple-tile)] p-3">
+              <div className="text-xs text-[color:var(--apple-subink)] font-semibold uppercase">Locked qty</div>
               <div className="font-semibold">{album.lockedQuantity ?? "—"}</div>
             </div>
           </div>
@@ -2887,7 +2887,7 @@ function InvoiceDialog({ open, onOpenChange, pressId, albumId }: { open: boolean
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-white text-slate-900">
+      <DialogContent className="bg-white text-[color:var(--apple-ink)]">
         <DialogHeader><DialogTitle>Capture press invoice</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <label className="flex items-center gap-2 text-sm">
@@ -2897,15 +2897,15 @@ function InvoiceDialog({ open, onOpenChange, pressId, albumId }: { open: boolean
           {!outside && (
             <>
               <div className="space-y-1">
-                <label className="text-xs text-slate-500 font-semibold uppercase tracking-wide">Invoice PDF</label>
+                <label className="text-xs text-[color:var(--apple-subink)] font-semibold uppercase tracking-wide">Invoice PDF</label>
                 <input
                   type="file"
                   accept="application/pdf,.pdf"
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  className="block w-full text-sm text-slate-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-slate-900 file:text-white file:text-sm file:font-semibold"
+                  className="block w-full text-sm text-[color:var(--apple-ink)] file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-[color:var(--apple-ink)] file:text-white file:text-sm file:font-semibold"
                   data-testid="input-invoice-file"
                 />
-                {file && <p className="text-xs text-slate-500">{file.name} · {(file.size / 1024).toFixed(0)} KB</p>}
+                {file && <p className="text-xs text-[color:var(--apple-subink)]">{file.name} · {(file.size / 1024).toFixed(0)} KB</p>}
               </div>
               <Input placeholder="Invoice total in dollars" type="number" step="0.01" value={totalDollars} onChange={(e) => setTotalDollars(e.target.value)} data-testid="input-invoice-total" />
             </>
@@ -2914,7 +2914,7 @@ function InvoiceDialog({ open, onOpenChange, pressId, albumId }: { open: boolean
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="h-9">Cancel</Button>
-          <Button onClick={submit} disabled={uploading} className="h-9 bg-slate-900 text-white hover:bg-slate-800" data-testid="button-save-invoice">
+          <Button onClick={submit} disabled={uploading} className="h-9 bg-[color:var(--apple-ink)] text-white hover:opacity-90" data-testid="button-save-invoice">
             {uploading ? "Uploading…" : "Save"}
           </Button>
         </DialogFooter>
@@ -2960,13 +2960,13 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
   ];
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-200">
+      <div className="flex gap-1 overflow-x-auto border-b border-[color:var(--apple-hairline)]">
         {subTabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setSub(t.id)}
-            className={`h-10 px-3 text-sm font-semibold whitespace-nowrap border-b-2 ${sub === t.id ? "border-[color:var(--brand-blue)] text-slate-900" : "border-transparent text-slate-500 hover:text-slate-900"}`}
+            className={`h-10 px-3 text-sm font-semibold whitespace-nowrap border-b-2 ${sub === t.id ? "border-[color:var(--brand-blue)] text-[color:var(--apple-ink)]" : "border-transparent text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)]"}`}
             data-testid={`tab-settings-${t.id}`}
           >{t.label}</button>
         ))}
@@ -3148,25 +3148,25 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
       />
       <DashboardPanel padding="md">
       <h3 className="text-base font-semibold mb-3">Press profile</h3>
-      <p className="text-xs text-slate-500 mb-4">Public-facing details artists and labels see when picking a press, plus the contact info platform notifications route to.</p>
+      <p className="text-xs text-[color:var(--apple-subink)] mb-4">Public-facing details artists and labels see when picking a press, plus the contact info platform notifications route to.</p>
       {!canEdit && (
-        <p className="text-xs text-amber-700 mb-4" data-testid="text-profile-readonly">
+        <p className="text-xs text-[color:var(--apple-warning)] mb-4" data-testid="text-profile-readonly">
           You have Staff access — you can view this press and invite artists, but only an Owner/Admin can change these settings.
         </p>
       )}
       <div className="space-y-4 max-w-xl">
         {/* Task #2750 — Three logo formats, each with a dark-bg and light-bg slot.
-            Pencil circle on dark-bg thumbnails uses bg-slate-200 (solid) for
+            Pencil circle on dark-bg thumbnails uses bg-[color:var(--apple-track)] (solid) for
             visibility; light-bg thumbnails keep bg-white/90. */}
 
         {/* ── Icon ── */}
         <div>
-          <label className="text-xs text-slate-500 uppercase tracking-wide">Icon</label>
-          <p className="text-xs text-slate-400 mt-0.5 mb-2">Square logo used in press lists, credits, and as the rail fallback. Upload both a version for dark and light backgrounds.</p>
+          <label className="text-xs text-[color:var(--apple-subink)] uppercase tracking-wide">Icon</label>
+          <p className="text-xs text-[color:var(--apple-faint)] mt-0.5 mb-2">Square logo used in press lists, credits, and as the rail fallback. Upload both a version for dark and light backgrounds.</p>
           <div className="flex gap-3 flex-wrap">
             {/* Dark-bg icon */}
             <div className="flex flex-col items-start gap-1">
-              <span className="text-xs text-slate-400">Dark backgrounds</span>
+              <span className="text-xs text-[color:var(--apple-faint)]">Dark backgrounds</span>
               <button
                 type="button"
                 onClick={() => canEdit && setLogoEditorOpen(true)}
@@ -3182,13 +3182,13 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
                 {logoUrl ? (
                   <img src={logoUrl} alt="" className="w-full h-full object-contain p-1" data-testid="img-profile-logo" />
                 ) : (
-                  <Factory className="w-6 h-6 text-slate-500" strokeWidth={1.5} />
+                  <Factory className="w-6 h-6 text-[color:var(--apple-subink)]" strokeWidth={1.5} />
                 )}
                 {canEdit && (
                   <>
                     <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
                     <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                      <span className="w-11 h-11 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
+                      <span className="w-11 h-11 rounded-full bg-[color:var(--apple-track)] text-[color:var(--apple-ink)] inline-flex items-center justify-center shadow ring-1 ring-black/10">
                         <Pencil className="w-4 h-4" />
                       </span>
                     </span>
@@ -3198,14 +3198,14 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
             </div>
             {/* Light-bg icon */}
             <div className="flex flex-col items-start gap-1">
-              <span className="text-xs text-slate-400">Light backgrounds</span>
+              <span className="text-xs text-[color:var(--apple-faint)]">Light backgrounds</span>
               <button
                 type="button"
                 onClick={() => canEdit && setLightLogoEditorOpen(true)}
                 disabled={!canEdit}
                 className={[
                   "relative w-16 h-16 rounded-xl overflow-hidden flex items-center justify-center group",
-                  lightLogoUrl ? "bg-white ring-1 ring-slate-200" : "bg-slate-50 ring-1 ring-dashed ring-slate-300",
+                  lightLogoUrl ? "bg-white ring-1 ring-[color:var(--apple-hairline)]" : "bg-[color:var(--apple-tile)] ring-1 ring-dashed ring-[color:var(--apple-faint)]",
                   !canEdit && "cursor-default",
                 ].filter(Boolean).join(" ")}
                 data-testid="button-edit-light-logo"
@@ -3214,13 +3214,13 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
                 {lightLogoUrl ? (
                   <img src={lightLogoUrl} alt="" className="w-full h-full object-contain p-1" data-testid="img-profile-light-logo" />
                 ) : (
-                  <Factory className="w-6 h-6 text-slate-300" strokeWidth={1.5} />
+                  <Factory className="w-6 h-6 text-[color:var(--apple-faint)]" strokeWidth={1.5} />
                 )}
                 {canEdit && (
                   <>
                     <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
                     <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                      <span className="w-11 h-11 rounded-full bg-white/90 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
+                      <span className="w-11 h-11 rounded-full bg-white/90 text-[color:var(--apple-ink)] inline-flex items-center justify-center shadow ring-1 ring-black/10">
                         <Pencil className="w-4 h-4" />
                       </span>
                     </span>
@@ -3263,12 +3263,12 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
 
         {/* ── Wide Logo ── */}
         <div>
-          <label className="text-xs text-slate-500 uppercase tracking-wide">Wide Logo</label>
-          <p className="text-xs text-slate-400 mt-0.5 mb-2">Full-size wordmark shown in the portal nav header. Wide images work best.</p>
+          <label className="text-xs text-[color:var(--apple-subink)] uppercase tracking-wide">Wide Logo</label>
+          <p className="text-xs text-[color:var(--apple-faint)] mt-0.5 mb-2">Full-size wordmark shown in the portal nav header. Wide images work best.</p>
           <div className="flex gap-3 flex-col sm:flex-row flex-wrap">
             {/* Dark-bg wide */}
             <div className="flex flex-col items-start gap-1">
-              <span className="text-xs text-slate-400">Dark backgrounds</span>
+              <span className="text-xs text-[color:var(--apple-faint)]">Dark backgrounds</span>
               <button
                 type="button"
                 onClick={() => canEdit && setNavLogoEditorOpen(true)}
@@ -3284,13 +3284,13 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
                 {navLogoUrl ? (
                   <img src={navLogoUrl} alt="" className="max-h-10 w-auto object-contain px-3" data-testid="img-profile-nav-logo" />
                 ) : (
-                  <span className="text-xs text-slate-500">Wide Logo</span>
+                  <span className="text-xs text-[color:var(--apple-subink)]">Wide Logo</span>
                 )}
                 {canEdit && (
                   <>
                     <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
                     <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                      <span className="w-11 h-11 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
+                      <span className="w-11 h-11 rounded-full bg-[color:var(--apple-track)] text-[color:var(--apple-ink)] inline-flex items-center justify-center shadow ring-1 ring-black/10">
                         <Pencil className="w-4 h-4" />
                       </span>
                     </span>
@@ -3300,14 +3300,14 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
             </div>
             {/* Light-bg wide */}
             <div className="flex flex-col items-start gap-1">
-              <span className="text-xs text-slate-400">Light backgrounds</span>
+              <span className="text-xs text-[color:var(--apple-faint)]">Light backgrounds</span>
               <button
                 type="button"
                 onClick={() => canEdit && setLightNavLogoEditorOpen(true)}
                 disabled={!canEdit}
                 className={[
                   "relative w-full max-w-[220px] h-14 rounded-xl overflow-hidden flex items-center justify-center group",
-                  lightNavLogoUrl ? "bg-white ring-1 ring-slate-200" : "bg-slate-50 ring-1 ring-dashed ring-slate-300",
+                  lightNavLogoUrl ? "bg-white ring-1 ring-[color:var(--apple-hairline)]" : "bg-[color:var(--apple-tile)] ring-1 ring-dashed ring-[color:var(--apple-faint)]",
                   !canEdit && "cursor-default",
                 ].filter(Boolean).join(" ")}
                 data-testid="button-edit-light-nav-logo"
@@ -3316,13 +3316,13 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
                 {lightNavLogoUrl ? (
                   <img src={lightNavLogoUrl} alt="" className="max-h-10 w-auto object-contain px-3" data-testid="img-profile-light-nav-logo" />
                 ) : (
-                  <span className="text-xs text-slate-400">Wide Logo</span>
+                  <span className="text-xs text-[color:var(--apple-faint)]">Wide Logo</span>
                 )}
                 {canEdit && (
                   <>
                     <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
                     <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                      <span className="w-11 h-11 rounded-full bg-white/90 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
+                      <span className="w-11 h-11 rounded-full bg-white/90 text-[color:var(--apple-ink)] inline-flex items-center justify-center shadow ring-1 ring-black/10">
                         <Pencil className="w-4 h-4" />
                       </span>
                     </span>
@@ -3365,12 +3365,12 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
 
         {/* ── Square/Tall Logo ── */}
         <div>
-          <label className="text-xs text-slate-500 uppercase tracking-wide">Square / Tall Logo</label>
-          <p className="text-xs text-slate-400 mt-0.5 mb-2">Portrait-format or square stacked logo — used on share cards and printed certificates.</p>
+          <label className="text-xs text-[color:var(--apple-subink)] uppercase tracking-wide">Square / Tall Logo</label>
+          <p className="text-xs text-[color:var(--apple-faint)] mt-0.5 mb-2">Portrait-format or square stacked logo — used on share cards and printed certificates.</p>
           <div className="flex gap-3 flex-wrap">
             {/* Dark-bg square */}
             <div className="flex flex-col items-start gap-1">
-              <span className="text-xs text-slate-400">Dark backgrounds</span>
+              <span className="text-xs text-[color:var(--apple-faint)]">Dark backgrounds</span>
               <button
                 type="button"
                 onClick={() => canEdit && setSquareLogoEditorOpen(true)}
@@ -3386,13 +3386,13 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
                 {squareLogoUrl ? (
                   <img src={squareLogoUrl} alt="" className="w-full h-full object-contain p-1" data-testid="img-profile-square-logo" />
                 ) : (
-                  <Factory className="w-6 h-6 text-slate-500" strokeWidth={1.5} />
+                  <Factory className="w-6 h-6 text-[color:var(--apple-subink)]" strokeWidth={1.5} />
                 )}
                 {canEdit && (
                   <>
                     <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
                     <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                      <span className="w-11 h-11 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
+                      <span className="w-11 h-11 rounded-full bg-[color:var(--apple-track)] text-[color:var(--apple-ink)] inline-flex items-center justify-center shadow ring-1 ring-black/10">
                         <Pencil className="w-4 h-4" />
                       </span>
                     </span>
@@ -3402,14 +3402,14 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
             </div>
             {/* Light-bg square */}
             <div className="flex flex-col items-start gap-1">
-              <span className="text-xs text-slate-400">Light backgrounds</span>
+              <span className="text-xs text-[color:var(--apple-faint)]">Light backgrounds</span>
               <button
                 type="button"
                 onClick={() => canEdit && setLightSquareLogoEditorOpen(true)}
                 disabled={!canEdit}
                 className={[
                   "relative w-16 h-24 rounded-xl overflow-hidden flex items-center justify-center group",
-                  lightSquareLogoUrl ? "bg-white ring-1 ring-slate-200" : "bg-slate-50 ring-1 ring-dashed ring-slate-300",
+                  lightSquareLogoUrl ? "bg-white ring-1 ring-[color:var(--apple-hairline)]" : "bg-[color:var(--apple-tile)] ring-1 ring-dashed ring-[color:var(--apple-faint)]",
                   !canEdit && "cursor-default",
                 ].filter(Boolean).join(" ")}
                 data-testid="button-edit-light-square-logo"
@@ -3418,13 +3418,13 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
                 {lightSquareLogoUrl ? (
                   <img src={lightSquareLogoUrl} alt="" className="w-full h-full object-contain p-1" data-testid="img-profile-light-square-logo" />
                 ) : (
-                  <Factory className="w-6 h-6 text-slate-300" strokeWidth={1.5} />
+                  <Factory className="w-6 h-6 text-[color:var(--apple-faint)]" strokeWidth={1.5} />
                 )}
                 {canEdit && (
                   <>
                     <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-visible:bg-black/30 transition-colors rounded-xl" />
                     <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                      <span className="w-11 h-11 rounded-full bg-white/90 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/10">
+                      <span className="w-11 h-11 rounded-full bg-white/90 text-[color:var(--apple-ink)] inline-flex items-center justify-center shadow ring-1 ring-black/10">
                         <Pencil className="w-4 h-4" />
                       </span>
                     </span>
@@ -3466,36 +3466,36 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
         </div>
 
         <div>
-          <label className="text-xs text-slate-500 uppercase tracking-wide">Press name</label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!canEdit} className="bg-white border-slate-200 text-slate-900 mt-1" data-testid="input-profile-name" />
+          <label className="text-xs text-[color:var(--apple-subink)] uppercase tracking-wide">Press name</label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!canEdit} className="bg-white border-[color:var(--apple-hairline)] text-[color:var(--apple-ink)] mt-1" data-testid="input-profile-name" />
         </div>
         <div>
-          <label className="text-xs text-slate-500 uppercase tracking-wide">Public bio</label>
-          <Textarea value={bio} onChange={(e) => setBio(e.target.value)} disabled={!canEdit} rows={3} placeholder="What artists and labels should know about your plant…" className="bg-white border-slate-200 text-slate-900 mt-1" data-testid="input-profile-bio" />
+          <label className="text-xs text-[color:var(--apple-subink)] uppercase tracking-wide">Public bio</label>
+          <Textarea value={bio} onChange={(e) => setBio(e.target.value)} disabled={!canEdit} rows={3} placeholder="What artists and labels should know about your plant…" className="bg-white border-[color:var(--apple-hairline)] text-[color:var(--apple-ink)] mt-1" data-testid="input-profile-bio" />
         </div>
         <div>
-          <label className="text-xs text-slate-500 uppercase tracking-wide">Shipping address</label>
-          <Textarea value={location} onChange={(e) => setLocation(e.target.value)} disabled={!canEdit} rows={2} placeholder="Street, city, state, ZIP — where masters & artwork get sent" className="bg-white border-slate-200 text-slate-900 mt-1" data-testid="input-profile-address" />
+          <label className="text-xs text-[color:var(--apple-subink)] uppercase tracking-wide">Shipping address</label>
+          <Textarea value={location} onChange={(e) => setLocation(e.target.value)} disabled={!canEdit} rows={2} placeholder="Street, city, state, ZIP — where masters & artwork get sent" className="bg-white border-[color:var(--apple-hairline)] text-[color:var(--apple-ink)] mt-1" data-testid="input-profile-address" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-slate-500 uppercase tracking-wide">Website</label>
-            <Input value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} disabled={!canEdit} placeholder="https://…" className="bg-white border-slate-200 text-slate-900 mt-1" data-testid="input-profile-website" />
+            <label className="text-xs text-[color:var(--apple-subink)] uppercase tracking-wide">Website</label>
+            <Input value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} disabled={!canEdit} placeholder="https://…" className="bg-white border-[color:var(--apple-hairline)] text-[color:var(--apple-ink)] mt-1" data-testid="input-profile-website" />
           </div>
           <div>
-            <label className="text-xs text-slate-500 uppercase tracking-wide">Contact email</label>
-            <Input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} type="email" disabled={!canEdit} placeholder="orders@press.com" className="bg-white border-slate-200 text-slate-900 mt-1" data-testid="input-profile-email" />
+            <label className="text-xs text-[color:var(--apple-subink)] uppercase tracking-wide">Contact email</label>
+            <Input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} type="email" disabled={!canEdit} placeholder="orders@press.com" className="bg-white border-[color:var(--apple-hairline)] text-[color:var(--apple-ink)] mt-1" data-testid="input-profile-email" />
           </div>
           <div>
-            <label className="text-xs text-slate-500 uppercase tracking-wide">Contact phone</label>
-            <Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} disabled={!canEdit} placeholder="(555) 555-1234" className="bg-white border-slate-200 text-slate-900 mt-1" data-testid="input-profile-phone" />
+            <label className="text-xs text-[color:var(--apple-subink)] uppercase tracking-wide">Contact phone</label>
+            <Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} disabled={!canEdit} placeholder="(555) 555-1234" className="bg-white border-[color:var(--apple-hairline)] text-[color:var(--apple-ink)] mt-1" data-testid="input-profile-phone" />
           </div>
         </div>
         {canEdit && (
           <Button
             onClick={() => save.mutate({ name, websiteUrl, contactEmail, contactPhone, location, bio })}
             disabled={save.isPending}
-            className="h-9 bg-slate-900 text-white hover:bg-slate-800 font-semibold"
+            className="h-9 bg-[color:var(--apple-ink)] text-white hover:opacity-90 font-semibold"
             data-testid="button-save-profile"
           >{save.isPending ? "Saving…" : "Save profile"}</Button>
         )}
@@ -3549,15 +3549,15 @@ function PayoutsSubTab({ pressId, pressName }: { pressId: string; pressName: str
       <DashboardPanel padding="md">
         <h3 className="text-base font-semibold mb-3">Recent invoice captures</h3>
         {invoices.length === 0 ? (
-          <p className="text-sm text-slate-500">No invoices captured yet.</p>
+          <p className="text-sm text-[color:var(--apple-subink)]">No invoices captured yet.</p>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-[color:var(--apple-hairline)]">
             {invoices.map((inv) => (
               <div key={inv.albumId} className="py-2 flex items-start gap-3" data-testid={`row-payout-invoice-${inv.albumId}`}>
                 {inv.coverUrl && <img src={inv.coverUrl} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />}
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold truncate">{inv.title}</div>
-                  <div className="text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                  <div className="text-xs text-[color:var(--apple-subink)] flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
                     {inv.outsideSystem ? (
                       <span className="italic">Billed outside the system</span>
                     ) : (
@@ -3578,10 +3578,10 @@ function PayoutsSubTab({ pressId, pressName }: { pressId: string; pressName: str
                       className={
                         "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold " +
                         (inv.varianceTier === "flag"
-                          ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+                          ? "bg-[color:var(--apple-critical-wash)] text-[color:var(--apple-critical)]"
                           : inv.varianceTier === "warn"
-                            ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                            : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200")
+                            ? "bg-[color:var(--apple-warning-wash)] text-[color:var(--apple-warning)]"
+                            : "bg-[color:var(--apple-ready-wash)] text-[color:var(--apple-ready)]")
                       }
                       data-testid={`badge-payout-variance-${inv.albumId}`}
                       title={`Variance vs locked quote: ${(inv.varianceCents ?? 0) >= 0 ? "+" : ""}$${((inv.varianceCents ?? 0) / 100).toFixed(2)}`}
@@ -3590,15 +3590,15 @@ function PayoutsSubTab({ pressId, pressName }: { pressId: string; pressName: str
                     </span>
                   )}
                   {inv.transferId && inv.transferAmountCents != null ? (
-                    <span className="text-xs text-emerald-700" data-testid={`text-payout-transferred-${inv.albumId}`}>
+                    <span className="text-xs text-[color:var(--apple-ready)]" data-testid={`text-payout-transferred-${inv.albumId}`}>
                       ✓ ${(inv.transferAmountCents / 100).toFixed(2)} earmarked
                     </span>
                   ) : inv.outsideSystem ? (
-                    <span className="text-xs text-slate-500">No transfer</span>
+                    <span className="text-xs text-[color:var(--apple-subink)]">No transfer</span>
                   ) : inv.transferError ? (
-                    <span className="text-xs text-rose-600" data-testid={`text-payout-error-${inv.albumId}`}>{inv.transferError}</span>
+                    <span className="text-xs text-[color:var(--apple-critical)]" data-testid={`text-payout-error-${inv.albumId}`}>{inv.transferError}</span>
                   ) : (
-                    <span className="text-xs text-slate-500">Pending</span>
+                    <span className="text-xs text-[color:var(--apple-subink)]">Pending</span>
                   )}
                 </div>
               </div>
@@ -3629,26 +3629,26 @@ function NotificationsSubTab({ pressId }: { pressId: string }) {
       <h3 className="text-base font-semibold mb-3">Notifications</h3>
       <div className="space-y-4 max-w-md">
         <div>
-          <label className="text-xs text-slate-500 uppercase tracking-wide">Notification recipient</label>
+          <label className="text-xs text-[color:var(--apple-subink)] uppercase tracking-wide">Notification recipient</label>
           <Input
             value={recipient}
             onChange={(e) => setRecipient(e.target.value)}
             type="email"
             placeholder="ops@press.com"
-            className="bg-white border-slate-200 text-slate-900 mt-1"
+            className="bg-white border-[color:var(--apple-hairline)] text-[color:var(--apple-ink)] mt-1"
             data-testid="input-notifications-recipient"
           />
-          <p className="text-xs text-slate-500 mt-1.5">Where GoodTunes emails your plant as the releases you press move through the pipeline. This is also your profile's contact email.</p>
+          <p className="text-xs text-[color:var(--apple-subink)] mt-1.5">Where GoodTunes emails your plant as the releases you press move through the pipeline. This is also your profile's contact email.</p>
         </div>
         <Button
           onClick={() => save.mutate()}
           disabled={save.isPending}
-          className="h-9 bg-slate-900 text-white hover:bg-slate-800 font-semibold"
+          className="h-9 bg-[color:var(--apple-ink)] text-white hover:opacity-90 font-semibold"
           data-testid="button-save-notifications"
         >{save.isPending ? "Saving…" : "Save"}</Button>
-        <div className="pt-3 border-t border-slate-200">
+        <div className="pt-3 border-t border-[color:var(--apple-hairline)]">
           <h4 className="text-sm font-semibold mb-1">What we send you</h4>
-          <ul className="text-xs text-slate-600 space-y-1 list-disc pl-4">
+          <ul className="text-xs text-[color:var(--apple-subink)] space-y-1 list-disc pl-4">
             <li>When an artist or label accepts your invite and joins your roster.</li>
             <li>When a release you press is ready for its next step on your machines — masters to cut, or a preorder run to lock.</li>
             <li>When a release you're pressing moves into production or ships.</li>
@@ -3664,18 +3664,18 @@ function NotificationsSubTab({ pressId }: { pressId: string }) {
 function PanelLoading() {
   return (
     <DashboardPanel padding="md" className="grid place-items-center min-h-[200px]">
-      <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+      <Loader2 className="w-5 h-5 text-[color:var(--apple-faint)] animate-spin" />
     </DashboardPanel>
   );
 }
 function EmptyHint({ text }: { text: string }) {
-  return <div className="text-slate-400 text-sm italic mt-4">{text}</div>;
+  return <div className="text-[color:var(--apple-faint)] text-sm italic mt-4">{text}</div>;
 }
 function Avatar({ src, fallback }: { src: string | null; fallback: string }) {
   return (
-    <div className="w-11 h-11 rounded-full bg-slate-100 ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+    <div className="w-11 h-11 rounded-full bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)] overflow-hidden flex items-center justify-center flex-shrink-0">
       {src ? <img src={src} alt="" className="w-full h-full object-cover" /> : (
-        <span className="text-slate-500 text-sm font-semibold">{fallback.slice(0, 1).toUpperCase()}</span>
+        <span className="text-[color:var(--apple-subink)] text-sm font-semibold">{fallback.slice(0, 1).toUpperCase()}</span>
       )}
     </div>
   );

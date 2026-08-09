@@ -144,10 +144,10 @@ export function ManagerDashboard() {
   if (me.error) {
     const msg = (me.error as any)?.message ?? "";
     return (
-      <main className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[color:var(--apple-tile)] text-[color:var(--apple-ink)] flex items-center justify-center p-6">
         <div className="max-w-md text-center" data-testid="manager-dashboard-gate">
           <h1 className="text-2xl font-bold mb-2">Manager dashboard</h1>
-          <p className="text-slate-500 text-sm">
+          <p className="text-[color:var(--apple-subink)] text-sm">
             {msg.includes("Super-admin") ? "Pass ?managerId= to inspect a specific manager."
               : msg.includes("Insufficient") ? "This dashboard is for manager accounts. Ask a super-admin to invite you."
               : msg.includes("Unauthorized") ? "Sign in with your manager account to continue."
@@ -274,7 +274,7 @@ function OverviewTab({ qs }: { qs: string }) {
             <Kpi label="Grant plays" value={cur ? compact(cur.grantPlays ?? 0) : "—"} sub={cur ? `${compact(cur.grantListeners ?? 0)} grant listener${(cur.grantListeners ?? 0) === 1 ? "" : "s"} · comped copies & previews` : undefined} prev={cur ? { cur: cur.grantPlays ?? 0, prev: prev ? (prev.grantPlays ?? 0) : null } : null} testId="kpi-grant-plays" />
             <Kpi label="Unique listeners" value={cur ? compact(cur.listeners) : "—"} prev={cur ? { cur: cur.listeners, prev: prev?.listeners ?? null } : null} spark={dailyListeners(series.data)} testId="kpi-listeners" />
             <Kpi label="New fans" value={cur ? compact(cur.newFans) : "—"} sub="First-ever play in window" prev={cur ? { cur: cur.newFans, prev: prev?.newFans ?? null } : null} testId="kpi-new-fans" />
-            <Kpi label="Roster" labelIcon={<Star className="w-3 h-3 -mt-0.5 text-emerald-600 fill-emerald-600" />} value={cur ? compact(cur.rosterSize) : "—"} sub={cur ? `${cur.albumCount} album${cur.albumCount === 1 ? "" : "s"}` : undefined} testId="kpi-roster" />
+            <Kpi label="Roster" labelIcon={<Star className="w-3 h-3 -mt-0.5 text-[color:var(--apple-ready)] fill-[color:var(--apple-ready)]" />} value={cur ? compact(cur.rosterSize) : "—"} sub={cur ? `${cur.albumCount} album${cur.albumCount === 1 ? "" : "s"}` : undefined} testId="kpi-roster" />
             <Kpi label="Completion rate" value={cur ? pct(cur.completionRate) : "—"} sub={cur ? `${compact(cur.completions)} completions` : undefined} testId="kpi-completion" />
             <Kpi label="Avg. revenue / artist" value={cur && cur.rosterSize ? dollars(cur.grossCents / cur.rosterSize) : "—"} testId="kpi-arpa" />
           </>
@@ -290,7 +290,7 @@ function OverviewTab({ qs }: { qs: string }) {
         </Card>
       </section>
 
-      <section className="rounded-2xl bg-white ring-1 ring-slate-200 p-4" data-testid="chart-geo">
+      <section className="rounded-2xl bg-white ring-1 ring-[color:var(--apple-hairline)] p-4" data-testid="chart-geo">
         <SalesMap data={geo.data?.sales} loading={geo.isLoading} />
       </section>
 
@@ -349,7 +349,7 @@ function RosterTab({ qs, managerIdParam }: { qs: string; managerIdParam: string 
     >
       <div className="overflow-x-auto">
         <table className="w-full text-[13px]">
-          <thead className="text-slate-400 text-[11px] uppercase tracking-wider">
+          <thead className="text-[color:var(--apple-faint)] text-[11px] uppercase tracking-wider">
             <tr>
               <SortableTh label="Artist" k="name" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="text-left pr-3" />
               <SortableTh label="Albums" k="albumCount" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="text-right px-2" />
@@ -361,26 +361,26 @@ function RosterTab({ qs, managerIdParam }: { qs: string; managerIdParam: string 
             </tr>
           </thead>
           <tbody>
-            {roster.isLoading && <tr><td colSpan={7} className="py-6 text-center text-slate-400">Loading…</td></tr>}
-            {!roster.isLoading && rows.length === 0 && <tr><td colSpan={7} className="py-6 text-center text-slate-400">No artists on the roster yet.</td></tr>}
+            {roster.isLoading && <tr><td colSpan={7} className="py-6 text-center text-[color:var(--apple-faint)]">Loading…</td></tr>}
+            {!roster.isLoading && rows.length === 0 && <tr><td colSpan={7} className="py-6 text-center text-[color:var(--apple-faint)]">No artists on the roster yet.</td></tr>}
             {rows.map((a) => (
-              <tr key={a.personId} className="border-t border-slate-100 hover:bg-slate-50 transition" data-testid={`row-artist-${a.personId}`}>
+              <tr key={a.personId} className="border-t border-[color:var(--apple-hairline)] hover:bg-[color:var(--apple-tile)] transition" data-testid={`row-artist-${a.personId}`}>
                 <td className="py-2 pr-3">
                   <Link href={drillHref(a.personId)}>
                     <a className="flex items-center gap-2 min-w-0 group" data-testid={`link-artist-${a.personId}`}>
                       {a.photoUrl ? (
                         <img src={a.photoUrl} alt="" className="w-11 h-11 rounded-full object-cover" />
                       ) : (
-                        <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">{a.name.slice(0, 1).toUpperCase()}</div>
+                        <div className="w-11 h-11 rounded-full bg-[color:var(--apple-chip)] text-[color:var(--apple-ink)] flex items-center justify-center text-xs font-bold">{a.name.slice(0, 1).toUpperCase()}</div>
                       )}
                       <div className="min-w-0">
                         <p className="truncate font-semibold transition-colors group-hover:text-[color:var(--brand-blue)] group-hover:underline underline-offset-2">{a.name}</p>
-                        <p className="truncate text-slate-400 text-[11px]">{a.albumCount} album{a.albumCount === 1 ? "" : "s"}</p>
+                        <p className="truncate text-[color:var(--apple-faint)] text-[11px]">{a.albumCount} album{a.albumCount === 1 ? "" : "s"}</p>
                       </div>
                     </a>
                   </Link>
                 </td>
-                <td className="px-2 text-right tabular-nums text-slate-600">{a.albumCount}</td>
+                <td className="px-2 text-right tabular-nums text-[color:var(--apple-subink)]">{a.albumCount}</td>
                 <td className="px-2 text-right tabular-nums font-semibold">{dollars(a.revenueCents)}</td>
                 <td className="px-2 text-right tabular-nums">{a.units}</td>
                 <td className="px-2 text-right tabular-nums">{a.buyers}</td>
@@ -404,7 +404,7 @@ function SortableTh({ label, k, sortKey, sortDir, onSort, className }: {
       <button
         type="button"
         onClick={() => onSort(k)}
-        className={`inline-flex items-center gap-1 uppercase tracking-wider ${active ? "text-slate-900" : "text-slate-400 hover:text-slate-600"}`}
+        className={`inline-flex items-center gap-1 uppercase tracking-wider ${active ? "text-[color:var(--apple-ink)]" : "text-[color:var(--apple-faint)] hover:text-[color:var(--apple-subink)]"}`}
         data-testid={`sort-${k}`}
       >
         {label}
@@ -431,7 +431,7 @@ function CatalogTab({ qs }: { qs: string }) {
       >
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
-            <thead className="text-slate-400 text-[11px] uppercase tracking-wider">
+            <thead className="text-[color:var(--apple-faint)] text-[11px] uppercase tracking-wider">
               <tr>
                 <th className="text-left font-medium py-2 pr-3">Album</th>
                 <th className="text-right font-medium px-2">Revenue</th>
@@ -443,17 +443,17 @@ function CatalogTab({ qs }: { qs: string }) {
               </tr>
             </thead>
             <tbody>
-              {albums.isLoading && <tr><td colSpan={7} className="py-6 text-center text-slate-400">Loading…</td></tr>}
-              {!albums.isLoading && (albums.data?.albums.length ?? 0) === 0 && <tr><td colSpan={7} className="py-6 text-center text-slate-400">No albums in scope.</td></tr>}
+              {albums.isLoading && <tr><td colSpan={7} className="py-6 text-center text-[color:var(--apple-faint)]">Loading…</td></tr>}
+              {!albums.isLoading && (albums.data?.albums.length ?? 0) === 0 && <tr><td colSpan={7} className="py-6 text-center text-[color:var(--apple-faint)]">No albums in scope.</td></tr>}
               {albums.data?.albums.map((a) => (
-                <tr key={a.albumId} className="border-t border-slate-100" data-testid={`row-album-${a.albumId}`}>
+                <tr key={a.albumId} className="border-t border-[color:var(--apple-hairline)]" data-testid={`row-album-${a.albumId}`}>
                   <td className="py-2 pr-3">
                     <Link href={`/album/${a.albumId}`}>
                       <a className="flex items-center gap-2 min-w-0 group" data-testid={`link-album-${a.albumId}`}>
                         {a.artwork && <img src={a.artwork} alt="" className="w-9 h-9 rounded object-cover" />}
                         <div className="min-w-0">
                           <p className="truncate font-semibold transition-colors group-hover:text-[color:var(--brand-blue)] group-hover:underline underline-offset-2">{a.title}</p>
-                          <p className="truncate text-slate-400 text-[11px]">{a.artist}</p>
+                          <p className="truncate text-[color:var(--apple-faint)] text-[11px]">{a.artist}</p>
                         </div>
                       </a>
                     </Link>
@@ -462,7 +462,7 @@ function CatalogTab({ qs }: { qs: string }) {
                   <td className="px-2 text-right tabular-nums">{a.units}</td>
                   <td className="px-2 text-right tabular-nums">{a.buyers}</td>
                   <td className="px-2 text-right tabular-nums">{compact(a.plays)}</td>
-                  <td className="px-2 text-right tabular-nums text-slate-500" data-testid={`text-grant-plays-${a.albumId}`}>{compact(a.grantPlays ?? 0)}</td>
+                  <td className="px-2 text-right tabular-nums text-[color:var(--apple-subink)]" data-testid={`text-grant-plays-${a.albumId}`}>{compact(a.grantPlays ?? 0)}</td>
                   <td className="pl-2 text-right tabular-nums">{compact(a.listeners)}</td>
                 </tr>
               ))}
@@ -479,7 +479,7 @@ function CatalogTab({ qs }: { qs: string }) {
       >
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
-            <thead className="text-slate-400 text-[11px] uppercase tracking-wider">
+            <thead className="text-[color:var(--apple-faint)] text-[11px] uppercase tracking-wider">
               <tr>
                 <th className="text-left font-medium py-2 pr-3">Track</th>
                 <th className="text-right font-medium px-2">Fan plays</th>
@@ -496,23 +496,23 @@ function CatalogTab({ qs }: { qs: string }) {
               </tr>
             </thead>
             <tbody>
-              {tracks.isLoading && <tr><td colSpan={hasStaff ? 8 : 7} className="py-6 text-center text-slate-400">Loading…</td></tr>}
-              {!tracks.isLoading && (tracks.data?.tracks.length ?? 0) === 0 && <tr><td colSpan={hasStaff ? 8 : 7} className="py-6 text-center text-slate-400">No plays yet in this window.</td></tr>}
+              {tracks.isLoading && <tr><td colSpan={hasStaff ? 8 : 7} className="py-6 text-center text-[color:var(--apple-faint)]">Loading…</td></tr>}
+              {!tracks.isLoading && (tracks.data?.tracks.length ?? 0) === 0 && <tr><td colSpan={hasStaff ? 8 : 7} className="py-6 text-center text-[color:var(--apple-faint)]">No plays yet in this window.</td></tr>}
               {tracks.data?.tracks.map((t) => (
-                <tr key={t.songId} className="border-t border-slate-100" data-testid={`row-track-${t.songId}`}>
+                <tr key={t.songId} className="border-t border-[color:var(--apple-hairline)]" data-testid={`row-track-${t.songId}`}>
                   <td className="py-2 pr-3">
                     <p className="font-semibold truncate">{t.title}</p>
-                    <p className="text-slate-400 text-[11px] truncate">{t.albumTitle} · {t.albumArtist}</p>
+                    <p className="text-[color:var(--apple-faint)] text-[11px] truncate">{t.albumTitle} · {t.albumArtist}</p>
                   </td>
                   <td className="px-2 text-right tabular-nums">{compact(t.plays)}</td>
-                  <td className="px-2 text-right tabular-nums text-slate-500" data-testid={`text-grant-plays-track-${t.songId}`}>{compact(t.grantPlays ?? 0)}</td>
+                  <td className="px-2 text-right tabular-nums text-[color:var(--apple-subink)]" data-testid={`text-grant-plays-track-${t.songId}`}>{compact(t.grantPlays ?? 0)}</td>
                   {hasStaff && (
-                    <td className="px-2 text-right tabular-nums text-slate-400" title={`${t.staffCompletes ?? 0} full listens`} data-testid={`text-staff-plays-track-${t.songId}`}>
+                    <td className="px-2 text-right tabular-nums text-[color:var(--apple-faint)]" title={`${t.staffCompletes ?? 0} full listens`} data-testid={`text-staff-plays-track-${t.songId}`}>
                       {compact(t.staffPlays ?? 0)}
                     </td>
                   )}
                   <td className="px-2 text-right tabular-nums">{compact(t.completes)}</td>
-                  <td className="px-2 text-right tabular-nums text-rose-600">{compact(t.favorites)}</td>
+                  <td className="px-2 text-right tabular-nums text-[color:var(--apple-critical)]">{compact(t.favorites)}</td>
                   <td className="px-2 text-right tabular-nums">{compact(t.playlistAdds)}</td>
                   <td className="pl-2 text-right tabular-nums">{compact(t.shares)}</td>
                 </tr>
@@ -521,7 +521,7 @@ function CatalogTab({ qs }: { qs: string }) {
           </table>
         </div>
         {hasStaff && (
-          <p className="mt-2 text-xs text-slate-400" data-testid="text-staff-note">
+          <p className="mt-2 text-xs text-[color:var(--apple-faint)]" data-testid="text-staff-note">
             Staff/internal listening is visible to operators only — partners never see this column, and it is never added to fan or grant totals.
           </p>
         )}
@@ -556,11 +556,11 @@ const tooltipStyle = CHART_TOOLTIP_STYLE;
 
 function Card({ title, subtitle, children, testId, action }: { title: string; subtitle?: string; children: React.ReactNode; testId: string; action?: React.ReactNode }) {
   return (
-    <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4" data-testid={testId}>
+    <div className="rounded-2xl bg-white ring-1 ring-[color:var(--apple-hairline)] p-4" data-testid={testId}>
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0">
           <h2 className="text-[15px] font-bold">{title}</h2>
-          {subtitle && <p className="text-slate-400 text-[12px] mt-0.5">{subtitle}</p>}
+          {subtitle && <p className="text-[color:var(--apple-faint)] text-[12px] mt-0.5">{subtitle}</p>}
         </div>
         {action}
       </div>
@@ -578,7 +578,7 @@ function CsvButton({ href, label, testId }: { href: string; label: string; testI
 }
 
 function SkeletonBlock() {
-  return <div className="h-48 rounded-2xl bg-slate-100 ring-1 ring-slate-200 animate-pulse" />;
+  return <div className="h-48 rounded-2xl bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)] animate-pulse" />;
 }
 
 function RevenueChart({ data, loading }: { data: Timeseries["revenue"]; loading: boolean }) {
@@ -588,14 +588,14 @@ function RevenueChart({ data, loading }: { data: Timeseries["revenue"]; loading:
     return Array.from(byDay.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([day, total]) => ({ day: day.slice(5), total }));
   }, [data]);
   if (loading) return <SkeletonBlock />;
-  if (rows.length === 0) return <p className="py-10 text-center text-slate-400 text-[13px]">No revenue in this window.</p>;
+  if (rows.length === 0) return <p className="py-10 text-center text-[color:var(--apple-faint)] text-[13px]">No revenue in this window.</p>;
   return (
     <div style={{ width: "100%", height: 260 }}>
       <ResponsiveContainer>
         <BarChart data={rows}>
-          <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
-          <XAxis dataKey="day" stroke="rgba(15,23,42,0.45)" tick={{ fontSize: 11 }} />
-          <YAxis stroke="rgba(15,23,42,0.45)" tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+          <CartesianGrid stroke="var(--apple-grid)" vertical={false} />
+          <XAxis dataKey="day" stroke="var(--apple-axis)" tick={{ fontSize: 11 }} />
+          <YAxis stroke="var(--apple-axis)" tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
           <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => formatUsd(Number(v), { maximumFractionDigits: 0 })} />
           <Bar dataKey="total" fill={C.blue} radius={[4, 4, 0, 0]} />
         </BarChart>
@@ -607,7 +607,7 @@ function RevenueChart({ data, loading }: { data: Timeseries["revenue"]; loading:
 function PlaysChart({ data, loading }: { data: Timeseries["plays"]; loading: boolean }) {
   const rows = useMemo(() => data.map((r) => ({ day: r.day.slice(5), plays: r.starts, listeners: r.listeners })), [data]);
   if (loading) return <SkeletonBlock />;
-  if (rows.length === 0) return <p className="py-10 text-center text-slate-400 text-[13px]">No plays in this window.</p>;
+  if (rows.length === 0) return <p className="py-10 text-center text-[color:var(--apple-faint)] text-[13px]">No plays in this window.</p>;
   return (
     <div style={{ width: "100%", height: 260 }}>
       <ResponsiveContainer>
@@ -618,9 +618,9 @@ function PlaysChart({ data, loading }: { data: Timeseries["plays"]; loading: boo
               <stop offset="100%" stopColor={C.blue} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
-          <XAxis dataKey="day" stroke="rgba(15,23,42,0.45)" tick={{ fontSize: 11 }} />
-          <YAxis stroke="rgba(15,23,42,0.45)" tick={{ fontSize: 11 }} />
+          <CartesianGrid stroke="var(--apple-grid)" vertical={false} />
+          <XAxis dataKey="day" stroke="var(--apple-axis)" tick={{ fontSize: 11 }} />
+          <YAxis stroke="var(--apple-axis)" tick={{ fontSize: 11 }} />
           <Tooltip contentStyle={tooltipStyle} />
           <Legend wrapperStyle={{ fontSize: 11, color: "rgba(15,23,42,0.55)" }} />
           <Area type="monotone" dataKey="plays" stroke={C.blue} fill="url(#playsFillLabel)" strokeWidth={2} />
@@ -658,16 +658,16 @@ function RevByArtistChart({ data, loading }: { data: RevByArtist | undefined; lo
   }, [data]);
 
   if (loading) return <SkeletonBlock />;
-  if (rows.length === 0) return <p className="py-10 text-center text-slate-400 text-[13px]">No revenue in this window.</p>;
+  if (rows.length === 0) return <p className="py-10 text-center text-[color:var(--apple-faint)] text-[13px]">No revenue in this window.</p>;
   const nameById = new Map(top.map((a) => [a.personId, a.name] as const));
 
   return (
     <div style={{ width: "100%", height: 320 }}>
       <ResponsiveContainer>
         <BarChart data={rows}>
-          <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
-          <XAxis dataKey="day" stroke="rgba(15,23,42,0.45)" tick={{ fontSize: 11 }} />
-          <YAxis stroke="rgba(15,23,42,0.45)" tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+          <CartesianGrid stroke="var(--apple-grid)" vertical={false} />
+          <XAxis dataKey="day" stroke="var(--apple-axis)" tick={{ fontSize: 11 }} />
+          <YAxis stroke="var(--apple-axis)" tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
           <Tooltip
             contentStyle={tooltipStyle}
             formatter={(v: any, key: any) => [formatUsd(Number(v), { maximumFractionDigits: 0 }), key === "_others" ? "Others" : (nameById.get(String(key)) ?? key)]}

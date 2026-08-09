@@ -62,7 +62,7 @@ export function PrinterPortal({ vendorId, isSuperAdminView }: { vendorId: string
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <main className="min-h-screen bg-[color:var(--apple-tile)] flex items-center justify-center">
         <Loader2 className="w-6 h-6 text-[color:var(--brand-blue)] animate-spin" />
       </main>
     );
@@ -96,7 +96,7 @@ export function PrinterPortal({ vendorId, isSuperAdminView }: { vendorId: string
       {tab === "dashboard" && <DashboardTab vendorId={vendorId} onGoToQueue={() => setTab("print-queue")} />}
       {tab === "print-queue" && <PrintQueueTab vendorId={vendorId} />}
       {tab === "catalog" && (
-        <div className="bg-white text-slate-900 rounded-2xl p-4 sm:p-6 ring-1 ring-slate-200" data-testid="printer-catalog-panel">
+        <div className="bg-white text-[color:var(--apple-ink)] rounded-2xl p-4 sm:p-6 ring-1 ring-[color:var(--apple-hairline)]" data-testid="printer-catalog-panel">
           <GoodDeedServicesTab vendorId={vendorId} />
         </div>
       )}
@@ -130,16 +130,16 @@ function DashboardTab({ vendorId, onGoToQueue }: { vendorId: string; onGoToQueue
   if (isLoading) return <PanelLoading />;
   const counts = data?.counts ?? { awaiting: 0, confirmed: 0, locked_for_print: 0, printed: 0 };
   const cards = [
-    { label: "Ready to print", value: counts.confirmed, accent: "text-emerald-600" },
-    { label: "Awaiting fan", value: counts.awaiting, accent: "text-amber-600" },
-    { label: "Locked", value: counts.locked_for_print, accent: "text-indigo-600" },
-    { label: "Printed", value: counts.printed, accent: "text-slate-700" },
+    { label: "Ready to print", value: counts.confirmed, accent: "text-[color:var(--apple-ink)]" },
+    { label: "Awaiting fan", value: counts.awaiting, accent: "text-[color:var(--apple-ink)]" },
+    { label: "Locked", value: counts.locked_for_print, accent: "text-[color:var(--apple-ink)]" },
+    { label: "Printed", value: counts.printed, accent: "text-[color:var(--apple-ink)]" },
   ];
   return (
     <div className="space-y-4" data-testid="printer-dashboard">
       {!data?.isDefaultPrinter && data?.totalInScope === 0 && (
         <DashboardPanel padding="md">
-          <p className="text-sm text-slate-600" data-testid="text-no-routing">
+          <p className="text-sm text-[color:var(--apple-subink)]" data-testid="text-no-routing">
             No GoodDeed certificates route to your shop yet. When GoodTunes assigns print jobs to you,
             they'll appear here and in your Print Queue automatically.
           </p>
@@ -148,16 +148,16 @@ function DashboardTab({ vendorId, onGoToQueue }: { vendorId: string; onGoToQueue
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {cards.map((c) => (
           <DashboardPanel key={c.label} padding="md">
-            <div className={`text-3xl font-bold ${c.accent}`} data-testid={`stat-${c.label.replace(/\s+/g, "-").toLowerCase()}`}>{c.value}</div>
-            <div className="text-xs text-slate-500 mt-1">{c.label}</div>
+            <div className={`text-3xl font-semibold tabular-nums tracking-tight ${c.accent}`} data-testid={`stat-${c.label.replace(/\s+/g, "-").toLowerCase()}`}>{c.value}</div>
+            <div className="text-xs text-[color:var(--apple-subink)] mt-1">{c.label}</div>
           </DashboardPanel>
         ))}
       </div>
       {counts.confirmed > 0 && (
         <DashboardPanel padding="md">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-slate-700">
-              <strong className="text-slate-900">{counts.confirmed}</strong> certificate(s) are ready to print right now.
+            <p className="text-sm text-[color:var(--apple-ink)]">
+              <strong className="text-[color:var(--apple-ink)]">{counts.confirmed}</strong> certificate(s) are ready to print right now.
             </p>
             <Button onClick={onGoToQueue} className="rounded-full" data-testid="button-go-to-queue">
               Open Print Queue
@@ -168,16 +168,16 @@ function DashboardTab({ vendorId, onGoToQueue }: { vendorId: string; onGoToQueue
       <DashboardPanel padding="md">
         <h3 className="text-base font-semibold mb-3">Recently printed</h3>
         {(data?.recentPrinted?.length ?? 0) === 0 ? (
-          <p className="text-sm text-slate-500" data-testid="text-no-recent-printed">Nothing printed yet.</p>
+          <p className="text-sm text-[color:var(--apple-subink)]" data-testid="text-no-recent-printed">Nothing printed yet.</p>
         ) : (
           <div className="flex flex-col gap-2">
             {data!.recentPrinted.map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-3 text-sm" data-testid={`recent-printed-${r.id}`}>
                 <div className="min-w-0">
-                  <div className="text-slate-900 truncate">{r.confirmedName ?? "—"}</div>
-                  <div className="text-slate-500 text-xs truncate">{r.albumTitle} — {r.albumArtist}</div>
+                  <div className="text-[color:var(--apple-ink)] truncate">{r.confirmedName ?? "—"}</div>
+                  <div className="text-[color:var(--apple-subink)] text-xs truncate">{r.albumTitle} — {r.albumArtist}</div>
                 </div>
-                <div className="text-slate-400 text-xs whitespace-nowrap">
+                <div className="text-[color:var(--apple-faint)] text-xs whitespace-nowrap">
                   {r.goodDeedNumber !== null ? `#${r.goodDeedNumber}` : ""}
                 </div>
               </div>
@@ -215,11 +215,12 @@ const QUEUE_TABS: { key: QueueRow["nameStatus"]; label: string }[] = [
   { key: "printed", label: "Printed" },
 ];
 
-const STATUS_PILL: Record<QueueRow["nameStatus"], string> = {
-  awaiting: "bg-amber-100 text-amber-700",
-  confirmed: "bg-emerald-100 text-emerald-700",
-  locked_for_print: "bg-indigo-100 text-indigo-700",
-  printed: "bg-slate-100 text-slate-500",
+// Apple-canon status: small colored dot + quiet label (no colored pills).
+const STATUS_DOT: Record<QueueRow["nameStatus"], string> = {
+  awaiting: "var(--apple-warning)",
+  confirmed: "var(--apple-ready)",
+  locked_for_print: "var(--apple-blue)",
+  printed: "var(--apple-faint)",
 };
 
 function PrintQueueTab({ vendorId }: { vendorId: string }) {
@@ -355,13 +356,13 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
   );
 
   return (
-    <div className="bg-white text-slate-900 rounded-2xl p-4 sm:p-6 ring-1 ring-slate-200" data-testid="printer-print-queue">
+    <div className="bg-white text-[color:var(--apple-ink)] rounded-2xl p-4 sm:p-6 ring-1 ring-[color:var(--apple-hairline)]" data-testid="printer-print-queue">
       {/* Section H1 ("Print Queue") comes from the shell's pageTitle band —
           no duplicate heading inside the card. */}
-      <p className="text-slate-500 text-[13px] mb-5">
+      <p className="text-[color:var(--apple-subink)] text-[13px] mb-5">
         GoodDeed certificates routed to your shop. Confirmed rows are ready to print — batch them into a ZIP of single-page PDFs,
-        one merged PDF, or split into single-stock <span className="text-slate-900">US Letter</span> / <span className="text-slate-900">A4</span> files,
-        then download. Downloading the batch flips those rows to <span className="text-slate-900">printed</span>.
+        one merged PDF, or split into single-stock <span className="text-[color:var(--apple-ink)]">US Letter</span> / <span className="text-[color:var(--apple-ink)]">A4</span> files,
+        then download. Downloading the batch flips those rows to <span className="text-[color:var(--apple-ink)]">printed</span>.
       </p>
 
       {/* Tabs */}
@@ -372,7 +373,7 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
             type="button"
             onClick={() => { setTab(t.key); setSelected(new Set()); }}
             className={`px-3 py-1.5 rounded-full text-[12px] font-semibold ${
-              tab === t.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              tab === t.key ? "bg-[color:var(--apple-ink)] text-white" : "bg-[color:var(--apple-tile)] text-[color:var(--apple-subink)] hover:bg-[color:var(--apple-track)]"
             }`}
             data-testid={`tab-queue-${t.key}`}
           >
@@ -384,7 +385,7 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
       {/* Batch toolbar */}
       {tab === "confirmed" && (
         <div className="flex items-center gap-2 mb-3 flex-wrap" data-testid="batch-toolbar">
-          <label className="flex items-center gap-2 text-[12px] text-slate-600 cursor-pointer">
+          <label className="flex items-center gap-2 text-[12px] text-[color:var(--apple-subink)] cursor-pointer">
             <input
               type="checkbox"
               checked={allSelected}
@@ -396,29 +397,29 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
           </label>
           <div className="flex-1" />
           <button type="button" onClick={() => batchDownload("zip")} disabled={selected.size === 0}
-            className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
+            className="px-3 py-1.5 rounded-full border border-[color:var(--apple-hairline)] bg-white text-[color:var(--apple-ink)] text-[12px] font-semibold hover:bg-[color:var(--apple-tile)] disabled:opacity-40"
             data-testid="button-batch-zip">Download ZIP ({selected.size})</button>
           <button type="button" onClick={() => batchDownload("merged_pdf")} disabled={selected.size === 0}
-            className="px-3 py-1.5 rounded-full bg-slate-900 text-white text-[12px] font-semibold hover:bg-slate-800 disabled:opacity-40"
+            className="px-3 py-1.5 rounded-full bg-[color:var(--apple-ink)] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-40"
             data-testid="button-batch-pdf">Download merged PDF ({selected.size})</button>
           <button type="button" onClick={() => batchDownload("merged_pdf", "letter")} disabled={letterCount === 0}
-            className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
+            className="px-3 py-1.5 rounded-full border border-[color:var(--apple-hairline)] bg-white text-[color:var(--apple-ink)] text-[12px] font-semibold hover:bg-[color:var(--apple-tile)] disabled:opacity-40"
             data-testid="button-batch-pdf-letter">US Letter PDF ({letterCount})</button>
           <button type="button" onClick={() => batchDownload("merged_pdf", "a4")} disabled={a4Count === 0}
-            className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
+            className="px-3 py-1.5 rounded-full border border-[color:var(--apple-hairline)] bg-white text-[color:var(--apple-ink)] text-[12px] font-semibold hover:bg-[color:var(--apple-tile)] disabled:opacity-40"
             data-testid="button-batch-pdf-a4">A4 PDF ({a4Count})</button>
           <button type="button" onClick={() => batchDownload("zip", "letter")} disabled={letterCount === 0}
-            className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
+            className="px-3 py-1.5 rounded-full border border-[color:var(--apple-hairline)] bg-white text-[color:var(--apple-ink)] text-[12px] font-semibold hover:bg-[color:var(--apple-tile)] disabled:opacity-40"
             data-testid="button-batch-zip-letter">US Letter ZIP ({letterCount})</button>
           <button type="button" onClick={() => batchDownload("zip", "a4")} disabled={a4Count === 0}
-            className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
+            className="px-3 py-1.5 rounded-full border border-[color:var(--apple-hairline)] bg-white text-[color:var(--apple-ink)] text-[12px] font-semibold hover:bg-[color:var(--apple-tile)] disabled:opacity-40"
             data-testid="button-batch-zip-a4">A4 ZIP ({a4Count})</button>
         </div>
       )}
 
-      {isLoading && <div className="text-slate-500 text-sm" data-testid="loading">Loading…</div>}
+      {isLoading && <div className="text-[color:var(--apple-subink)] text-sm" data-testid="loading">Loading…</div>}
       {!isLoading && visible.length === 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-500" data-testid="empty">
+        <div className="rounded-2xl border border-[color:var(--apple-hairline)] bg-white p-6 text-center text-[color:var(--apple-subink)]" data-testid="empty">
           {tab === "confirmed"
             ? "No certificates are ready to print right now."
             : "Nothing here."}
@@ -433,7 +434,7 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
             <div
               key={r.id}
               className={`rounded-2xl border p-3 flex items-center gap-3 ${
-                sel ? "border-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)]" : "border-slate-200 bg-white"
+                sel ? "border-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)]" : "border-[color:var(--apple-hairline)] bg-white"
               }`}
               data-testid={`row-cert-${r.id}`}
             >
@@ -451,16 +452,17 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${STATUS_PILL[r.nameStatus]}`}>
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--apple-subink)]">
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: STATUS_DOT[r.nameStatus] }} aria-hidden />
                     {r.nameStatus.replace("_", " ")}
                   </span>
                   {r.goodDeedNumber !== null && (
-                    <span className="text-[11px] text-slate-500" data-testid={`gooddeed-${r.id}`}>#{r.goodDeedNumber}</span>
+                    <span className="text-[11px] text-[color:var(--apple-subink)]" data-testid={`gooddeed-${r.id}`}>#{r.goodDeedNumber}</span>
                   )}
-                  <span className="text-[11px] text-slate-400">{r.shippingCountry ?? "?"}</span>
+                  <span className="text-[11px] text-[color:var(--apple-faint)]">{r.shippingCountry ?? "?"}</span>
                   {r.origin === "legacy:gogoods" && (
                     <span
-                      className="px-2 py-0.5 rounded-full text-xs font-semibold uppercase bg-amber-100 text-amber-700"
+                      className="px-2 py-0.5 rounded-full text-xs font-medium bg-[color:var(--apple-warning-wash)] text-[color:var(--apple-ink)]"
                       title="Imported from gogoods.com — fan already has the original physical certificate; don't re-print unless asked."
                       data-testid={`badge-legacy-${r.id}`}
                     >
@@ -468,10 +470,10 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
                     </span>
                   )}
                 </div>
-                <div className="text-[14px] font-medium text-slate-900 truncate mt-0.5">
-                  {r.confirmedName ?? <span className="text-slate-400 italic">No name yet</span>}
+                <div className="text-[14px] font-medium text-[color:var(--apple-ink)] truncate mt-0.5">
+                  {r.confirmedName ?? <span className="text-[color:var(--apple-faint)] italic">No name yet</span>}
                 </div>
-                <div className="text-[12px] text-slate-500 truncate">
+                <div className="text-[12px] text-[color:var(--apple-subink)] truncate">
                   {r.albumTitle} — {r.albumArtist} · {r.customerEmail}
                 </div>
               </div>
@@ -479,7 +481,7 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
                 <select
                   value={r.paperSize}
                   onChange={(e) => setPaper.mutate({ certId: r.id, paperSize: e.target.value as "letter" | "a4" })}
-                  className="bg-white border border-slate-200 text-slate-700 text-[11px] rounded px-2 py-1"
+                  className="bg-white border border-[color:var(--apple-hairline)] text-[color:var(--apple-ink)] text-[11px] rounded px-2 py-1"
                   data-testid={`select-paper-${r.id}`}
                 >
                   <option value="letter">Letter</option>
@@ -497,11 +499,11 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
                   </a>
                   {editable && (
                     <>
-                      <span className="text-slate-300">·</span>
+                      <span className="text-[color:var(--apple-faint)]">·</span>
                       <button
                         type="button"
                         onClick={() => promptOverrideName(r)}
-                        className="text-[11px] text-slate-600 hover:text-slate-900 active:opacity-70"
+                        className="text-[11px] text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)] active:opacity-70"
                         data-testid={`button-override-name-${r.id}`}
                       >
                         Override name
@@ -515,7 +517,7 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
         })}
       </div>
       {tab === "confirmed" && readyCount > 0 && (
-        <div className="text-[11px] text-slate-400 mt-4" data-testid="ready-summary">
+        <div className="text-[11px] text-[color:var(--apple-faint)] mt-4" data-testid="ready-summary">
           {readyCount} ready certificate(s).
         </div>
       )}
@@ -542,23 +544,23 @@ function AlbumsTab({ vendorId }: { vendorId: string }) {
   return (
     <DashboardPanel padding="md">
       <h3 className="text-base font-semibold mb-1">Albums you print for</h3>
-      <p className="text-xs text-slate-500 mb-4">Read-only. Every release with GoodDeed certificates routed to your shop.</p>
+      <p className="text-xs text-[color:var(--apple-subink)] mb-4">Read-only. Every release with GoodDeed certificates routed to your shop.</p>
       {albums.length === 0 ? (
-        <p className="text-sm text-slate-500" data-testid="text-no-albums">No albums route their GoodDeed prints to you yet.</p>
+        <p className="text-sm text-[color:var(--apple-subink)]" data-testid="text-no-albums">No albums route their GoodDeed prints to you yet.</p>
       ) : (
         <div className="flex flex-col gap-2">
           {albums.map((a, i) => (
             <div key={`${a.title}-${i}`} className="flex items-center gap-3" data-testid={`album-row-${i}`}>
-              <div className="w-11 h-11 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 grid place-items-center flex-shrink-0">
-                {a.artwork ? <img src={a.artwork} alt="" className="w-full h-full object-cover" /> : <Disc3 className="w-5 h-5 text-slate-400" />}
+              <div className="w-11 h-11 rounded-md overflow-hidden bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)] grid place-items-center flex-shrink-0">
+                {a.artwork ? <img src={a.artwork} alt="" className="w-full h-full object-cover" /> : <Disc3 className="w-5 h-5 text-[color:var(--apple-faint)]" />}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-sm text-slate-900 truncate">{a.title}</div>
-                <div className="text-xs text-slate-500 truncate">{a.artist}</div>
+                <div className="text-sm text-[color:var(--apple-ink)] truncate">{a.title}</div>
+                <div className="text-xs text-[color:var(--apple-subink)] truncate">{a.artist}</div>
               </div>
-              <div className="text-xs text-slate-500 whitespace-nowrap text-right">
+              <div className="text-xs text-[color:var(--apple-subink)] whitespace-nowrap text-right">
                 <div>{a.certCount} cert(s)</div>
-                <div className="text-slate-400">{a.printedCount} printed</div>
+                <div className="text-[color:var(--apple-faint)]">{a.printedCount} printed</div>
               </div>
             </div>
           ))}
@@ -586,21 +588,21 @@ function PeopleTab({ vendorId }: { vendorId: string }) {
   return (
     <DashboardPanel padding="md">
       <h3 className="text-base font-semibold mb-1">Who you print for</h3>
-      <p className="text-xs text-slate-500 mb-4">Read-only reference of the artists and labels behind your print jobs.</p>
+      <p className="text-xs text-[color:var(--apple-subink)] mb-4">Read-only reference of the artists and labels behind your print jobs.</p>
       {empty ? (
-        <p className="text-sm text-slate-500" data-testid="text-no-people">No artists or labels route prints to you yet.</p>
+        <p className="text-sm text-[color:var(--apple-subink)]" data-testid="text-no-people">No artists or labels route prints to you yet.</p>
       ) : (
         <div className="space-y-5">
           {people.length > 0 && (
             <div>
-              <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Artists</div>
+              <div className="text-xs uppercase tracking-wide text-[color:var(--apple-faint)] mb-2">Artists</div>
               <div className="flex flex-col gap-2">
                 {people.map((p, i) => (
                   <div key={p.id ?? `loose-${i}`} className="flex items-center gap-3" data-testid={`artist-row-${i}`}>
-                    <div className="w-11 h-11 rounded-full overflow-hidden bg-slate-100 ring-1 ring-slate-200 grid place-items-center flex-shrink-0">
-                      {p.photoUrl ? <img src={p.photoUrl} alt="" className="w-full h-full object-cover" /> : <Users className="w-4 h-4 text-slate-400" />}
+                    <div className="w-11 h-11 rounded-full overflow-hidden bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)] grid place-items-center flex-shrink-0">
+                      {p.photoUrl ? <img src={p.photoUrl} alt="" className="w-full h-full object-cover" /> : <Users className="w-4 h-4 text-[color:var(--apple-faint)]" />}
                     </div>
-                    <div className="text-sm text-slate-900 truncate">{p.name}</div>
+                    <div className="text-sm text-[color:var(--apple-ink)] truncate">{p.name}</div>
                   </div>
                 ))}
               </div>
@@ -608,14 +610,14 @@ function PeopleTab({ vendorId }: { vendorId: string }) {
           )}
           {labels.length > 0 && (
             <div>
-              <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Labels</div>
+              <div className="text-xs uppercase tracking-wide text-[color:var(--apple-faint)] mb-2">Labels</div>
               <div className="flex flex-col gap-2">
                 {labels.map((l) => (
                   <div key={l.id} className="flex items-center gap-3" data-testid={`label-row-${l.id}`}>
-                    <div className="w-9 h-9 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 grid place-items-center flex-shrink-0">
-                      {l.logoUrl ? <img src={l.logoUrl} alt="" className="w-full h-full object-cover" /> : <Users className="w-4 h-4 text-slate-400" />}
+                    <div className="w-9 h-9 rounded-md overflow-hidden bg-[color:var(--apple-tile)] ring-1 ring-[color:var(--apple-hairline)] grid place-items-center flex-shrink-0">
+                      {l.logoUrl ? <img src={l.logoUrl} alt="" className="w-full h-full object-cover" /> : <Users className="w-4 h-4 text-[color:var(--apple-faint)]" />}
                     </div>
-                    <div className="text-sm text-slate-900 truncate">{l.name}</div>
+                    <div className="text-sm text-[color:var(--apple-ink)] truncate">{l.name}</div>
                   </div>
                 ))}
               </div>
@@ -639,13 +641,13 @@ function SettingsTab({ vendorId, printerName }: { vendorId: string; printerName:
   ];
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-200">
+      <div className="flex gap-1 overflow-x-auto border-b border-[color:var(--apple-hairline)]">
         {subTabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setSub(t.id)}
-            className={`h-10 px-3 text-sm font-semibold whitespace-nowrap border-b-2 ${sub === t.id ? "border-[color:var(--brand-blue)] text-slate-900" : "border-transparent text-slate-500 hover:text-slate-900"}`}
+            className={`h-10 px-3 text-sm font-semibold whitespace-nowrap border-b-2 ${sub === t.id ? "border-[color:var(--brand-blue)] text-[color:var(--apple-ink)]" : "border-transparent text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)]"}`}
             data-testid={`tab-settings-${t.id}`}
           >{t.label}</button>
         ))}
@@ -707,7 +709,7 @@ function ProfileSubTab({ vendorId }: { vendorId: string }) {
   return (
     <DashboardPanel padding="md">
       <h3 className="text-base font-semibold mb-3">Print shop profile</h3>
-      <p className="text-xs text-slate-500 mb-4">Details GoodTunes shows internally and uses for contact. Paste a logo image URL if you'd like one shown.</p>
+      <p className="text-xs text-[color:var(--apple-subink)] mb-4">Details GoodTunes shows internally and uses for contact. Paste a logo image URL if you'd like one shown.</p>
       <div className="space-y-4 max-w-xl">
         <Field label="Name">
           <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!canEdit} data-testid="input-name" />
@@ -758,11 +760,11 @@ function PayoutsSubTab({ vendorId }: { vendorId: string }) {
       <h3 className="text-base font-semibold mb-3">Payouts</h3>
       {data?.connected ? (
         <div className="space-y-2 text-sm" data-testid="payouts-connected">
-          <p className="text-slate-700">Stripe payout account connected (••••{data.stripeAccountIdLast4}).</p>
-          <p className="text-slate-500 text-xs">Payouts {data.payoutsEnabled ? "enabled" : "pending"} · Charges {data.chargesEnabled ? "enabled" : "pending"}</p>
+          <p className="text-[color:var(--apple-ink)]">Stripe payout account connected (••••{data.stripeAccountIdLast4}).</p>
+          <p className="text-[color:var(--apple-subink)] text-xs">Payouts {data.payoutsEnabled ? "enabled" : "pending"} · Charges {data.chargesEnabled ? "enabled" : "pending"}</p>
         </div>
       ) : (
-        <p className="text-sm text-slate-600" data-testid="payouts-not-connected">{data?.note ?? "No payout account connected."}</p>
+        <p className="text-sm text-[color:var(--apple-subink)]" data-testid="payouts-not-connected">{data?.note ?? "No payout account connected."}</p>
       )}
     </DashboardPanel>
   );
@@ -772,9 +774,9 @@ function NotificationsSubTab({ vendorId }: { vendorId: string }) {
   return (
     <DashboardPanel padding="md">
       <h3 className="text-base font-semibold mb-3">Notifications</h3>
-      <p className="text-sm text-slate-600" data-testid="text-notifications">
+      <p className="text-sm text-[color:var(--apple-subink)]" data-testid="text-notifications">
         GoodTunes emails your print-shop contact when new GoodDeed certificates are routed to you and ready to print.
-        To change which address gets these, update the contact email on your <span className="text-slate-900">Profile</span> tab.
+        To change which address gets these, update the contact email on your <span className="text-[color:var(--apple-ink)]">Profile</span> tab.
       </p>
     </DashboardPanel>
   );
@@ -785,7 +787,7 @@ function NotificationsSubTab({ vendorId }: { vendorId: string }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-xs font-semibold text-slate-600 mb-1">{label}</span>
+      <span className="block text-xs font-semibold text-[color:var(--apple-subink)] mb-1">{label}</span>
       {children}
     </label>
   );
@@ -794,7 +796,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function PanelLoading() {
   return (
     <DashboardPanel padding="md">
-      <div className="flex items-center gap-2 text-slate-500 text-sm">
+      <div className="flex items-center gap-2 text-[color:var(--apple-subink)] text-sm">
         <Loader2 className="w-4 h-4 animate-spin" /> Loading…
       </div>
     </DashboardPanel>

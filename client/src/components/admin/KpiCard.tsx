@@ -372,7 +372,7 @@ export function KpiCard({
             <span className="text-slate-400">vs prior: —</span>
           )}
           {model.note && !model.comingSoon && (
-            <span className="text-slate-400 truncate">{model.note}</span>
+            <span className="text-slate-400 min-w-0 [overflow-wrap:anywhere]">{model.note}</span>
           )}
         </div>
         {showSpark && <Sparkline points={spark as number[]} color={color} />}

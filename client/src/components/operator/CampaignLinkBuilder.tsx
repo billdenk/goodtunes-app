@@ -77,15 +77,15 @@ function CopyLinkButton({ url, testId }: { url: string; testId: string }) {
         }
       }}
       data-testid={testId}
-      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-slate-300 bg-white text-xs font-medium text-slate-700 hover:border-slate-400 hover:bg-slate-50 transition-colors flex-shrink-0"
+      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-[color:var(--apple-hairline)] bg-white text-xs font-medium text-[color:var(--apple-ink)] hover:border-[color:var(--apple-faint)] hover:bg-[color:var(--apple-tile)] transition-colors flex-shrink-0"
     >
       {copied ? (
         <>
-          <Check className="w-3.5 h-3.5 text-emerald-600" /> Copied
+          <Check className="w-3.5 h-3.5 text-[color:var(--apple-ready)]" /> Copied
         </>
       ) : (
         <>
-          <Copy className="w-3.5 h-3.5 text-slate-400" /> Copy
+          <Copy className="w-3.5 h-3.5 text-[color:var(--apple-faint)]" /> Copy
         </>
       )}
     </button>
@@ -110,14 +110,14 @@ export function CampaignLinkBuilder({ release }: { release: LinkBuilderRelease }
 
   return (
     <div
-      className="rounded-xl border border-slate-200 bg-white p-5"
+      className="rounded-xl border border-[color:var(--apple-hairline)] bg-white p-5"
       data-testid="link-builder"
     >
       <div className="flex items-start gap-2 mb-4">
         <Megaphone className="w-4 h-4 text-[var(--brand-blue)] mt-0.5 flex-shrink-0" />
         <div>
-          <h3 className="text-sm font-semibold text-slate-700">Campaign link builder</h3>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h3 className="text-sm font-semibold text-[color:var(--apple-ink)]">Campaign link builder</h3>
+          <p className="text-xs text-[color:var(--apple-subink)] mt-0.5">
             Share these links instead of the plain release URL. Each one tags the
             channel so clicks show up by source in the funnel above.
           </p>
@@ -127,7 +127,7 @@ export function CampaignLinkBuilder({ release }: { release: LinkBuilderRelease }
       <div className="flex flex-col gap-1.5 mb-4 max-w-xs">
         <Label
           htmlFor="campaign-name"
-          className="text-xs uppercase tracking-wider text-slate-500 font-semibold"
+          className="text-xs uppercase tracking-wider text-[color:var(--apple-subink)] font-semibold"
         >
           Campaign name
         </Label>
@@ -136,11 +136,11 @@ export function CampaignLinkBuilder({ release }: { release: LinkBuilderRelease }
           value={campaign}
           onChange={(e) => setCampaign(e.target.value)}
           data-testid="input-campaign-name"
-          className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
+          className="h-9 rounded-md border border-[color:var(--apple-hairline)] bg-white px-3 text-sm text-[color:var(--apple-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
           placeholder="launch"
         />
-        <span className="text-xs text-slate-400">
-          Tagged as <code className="text-slate-500">{slugifyTag(campaign) || "launch"}</code>
+        <span className="text-xs text-[color:var(--apple-faint)]">
+          Tagged as <code className="text-[color:var(--apple-subink)]">{slugifyTag(campaign) || "launch"}</code>
         </span>
       </div>
 
@@ -153,26 +153,26 @@ export function CampaignLinkBuilder({ release }: { release: LinkBuilderRelease }
               className="flex items-center gap-3"
               data-testid={`channel-link-${ch.source}`}
             >
-              <span className="w-24 flex-shrink-0 text-sm font-medium text-slate-700">{ch.label}</span>
+              <span className="w-24 flex-shrink-0 text-sm font-medium text-[color:var(--apple-ink)]">{ch.label}</span>
               <input
                 readOnly
                 value={url}
                 onFocus={(e) => e.currentTarget.select()}
                 data-testid={`text-channel-url-${ch.source}`}
-                className="flex-1 min-w-0 h-8 rounded-md border border-slate-200 bg-slate-50 px-2.5 text-xs text-slate-600 font-mono focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]"
+                className="flex-1 min-w-0 h-8 rounded-md border border-[color:var(--apple-hairline)] bg-[color:var(--apple-tile)] px-2.5 text-xs text-[color:var(--apple-subink)] font-mono focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]"
               />
               <CopyLinkButton url={url} testId={`button-copy-${ch.source}`} />
             </div>
           );
         })}
 
-        <div className="flex items-center gap-3 pt-2 border-t border-slate-100 mt-3">
+        <div className="flex items-center gap-3 pt-2 border-t border-[color:var(--apple-hairline)] mt-3">
           <input
             value={customSource}
             onChange={(e) => setCustomSource(e.target.value)}
             data-testid="input-custom-source"
             placeholder="Other channel…"
-            className="w-24 flex-shrink-0 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
+            className="w-24 flex-shrink-0 h-8 rounded-md border border-[color:var(--apple-hairline)] bg-white px-2.5 text-sm text-[color:var(--apple-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
           />
           <input
             readOnly
@@ -180,7 +180,7 @@ export function CampaignLinkBuilder({ release }: { release: LinkBuilderRelease }
             onFocus={(e) => e.currentTarget.select()}
             data-testid="text-custom-url"
             placeholder="Type a channel name to generate a link"
-            className="flex-1 min-w-0 h-8 rounded-md border border-slate-200 bg-slate-50 px-2.5 text-xs text-slate-600 font-mono focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]"
+            className="flex-1 min-w-0 h-8 rounded-md border border-[color:var(--apple-hairline)] bg-[color:var(--apple-tile)] px-2.5 text-xs text-[color:var(--apple-subink)] font-mono focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]"
           />
           {customUrl ? (
             <CopyLinkButton url={customUrl} testId="button-copy-custom" />
