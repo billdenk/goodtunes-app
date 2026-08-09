@@ -23,6 +23,7 @@
     ## 4. Data wiring — dropped, must be restored
     - MRP's real catalog (20+ colors, priced runs) existed before this change. "Black · 0 colors · 0 of 6 runs priced", every run "Not offered", and an empty "Pick a color" are regressions. Re-wire the live types/colors/prices into the new page. Do not reset merchant data.
     - Type tiles read "N colors · M of 6 runs priced" from real data.
+    - **This applies to EVERY press, not just MRP**: Memphis Record Pressing, Physical Music Products, Viryl, and Hellbender all keep their existing colors, types, and pricing wired into the new page. Verify each portal.
     - Print template filenames: show the stored filename, middle-truncated ("MRP-12in-jack…template.pdf") — not raw storage keys with query strings ("7-JKTSGNS-101…maif1vr&dl=0").
 
     ## 5. Copy drift — revert to reference copy exactly
@@ -30,7 +31,10 @@
     - Audio spec: "Audio spec. What the lathe can cut." (not "What your lathe needs.")
     - Turnaround: no "Using press default: 12–14 weeks" caption; the reference has "Weeks from confirmed order to finished records on the truck." only.
 
-    ## 6. Responsive — the record disappears
+    ## 6. Color tiles — old components leaked in
+    - Color tiles still use the OLD card: pencil-icon edit button, oversized box, different border/padding. Rebuild them from the reference: swatch ball + name, blue selected outline, reference sizing/spacing, and the reference's edit/reorder affordances. No pencil icon — no old tile markup at all (this is the same rule-zero violation).
+
+    ## 7. Responsive — the record disappears
     - At narrower widths the layout collapses to one column and the disc/jacket preview is REMOVED entirely. Wrong. When the two-column grid can't fit, **stack**: the preview (disc + caption + "One package. Everything included." card) moves ABOVE the working column, scaled down — it never disappears. The record is the product; it stays on screen at every breakpoint.
 
     ## Acceptance
