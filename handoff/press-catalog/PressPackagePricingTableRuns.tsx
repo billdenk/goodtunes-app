@@ -1155,7 +1155,9 @@ function ColorGroupCard({
       <div className="flex justify-center" style={{ marginBottom: 10 }}>
         <VinylDisc size={90} swatch={group.swatch} />
       </div>
-      <div className="text-[13.5px] font-semibold leading-tight" style={{ color: active ? BLUE : INK }}>
+      {/* One line, always — long names truncate and hover reveals the full
+          name, so every tile in a row keeps the same height. */}
+      <div className="text-[13.5px] font-semibold leading-tight truncate" title={group.name} style={{ color: active ? BLUE : INK }}>
         {group.name}
       </div>
       <div className="text-[11.5px]" style={{ marginTop: 2, color: '#a1a1a6' }}>
