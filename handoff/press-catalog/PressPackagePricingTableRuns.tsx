@@ -967,11 +967,17 @@ function PressShell({ children }: { children: ReactNode }) {
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: '#a1a1a6' }} />
               <input
-                className="w-full h-9 pl-8 pr-2 rounded-full bg-white text-[12.5px] placeholder:text-slate-400 focus:outline-none"
+                className="w-full h-9 pl-8 pr-10 rounded-full bg-white text-[12.5px] placeholder:text-slate-400 focus:outline-none"
                 style={{ border: `1px solid ${HAIRLINE}`, color: INK }}
-                placeholder="Search…  ⌘K"
+                placeholder="Search…"
                 readOnly
               />
+              <span
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] pointer-events-none"
+                style={{ color: '#a1a1a6' }}
+              >
+                ⌘K
+              </span>
             </div>
           </div>
           <nav className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 overflow-y-auto">
