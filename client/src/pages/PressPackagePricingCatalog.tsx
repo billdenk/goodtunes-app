@@ -2312,13 +2312,14 @@ export function PressPackagePricingCatalog({
             {/* ── LEFT: sticky stage (vinyl only) ──
                 Sticky (never absolute) so it can't overlap the header, the
                 rail, or the white-label "Powered by GoodTunes" footer. The
-                column is viewport-height at two-col widths and centers the
-                jacket vertically; `safe center` keeps it fully visible
-                (top-aligned instead of cropped) on short viewports. The
-                left padding guarantees ≥48px of gutter between the rail
-                and the art edge (page padding + this). */}
+                column top-anchors at two-col widths (aligned with the top
+                of the right-hand sections) and stays pinned via sticky as
+                the right column scrolls; no fixed height, so the art is
+                never cropped on short viewports. The left padding
+                guarantees ≥48px of gutter between the rail and the art
+                edge (page padding + this). */}
             {isVinyl && (
-              <div className="flex flex-col items-center pt-6 min-[900px]:pt-0 min-[900px]:pl-6 min-[900px]:sticky min-[900px]:top-[72px] min-[900px]:self-start min-[900px]:h-[calc(100dvh-96px)] min-[900px]:[justify-content:safe_center]">
+              <div className="flex flex-col items-center pt-6 min-[900px]:pt-0 min-[900px]:pl-6 min-[900px]:sticky min-[900px]:top-[72px] min-[900px]:self-start">
                 <div>
                   <JacketStage
                     format={fmt}
