@@ -23017,17 +23017,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[12px] tabular-nums\" style={{ color: \"#a1a1a6\" }}>"
+    "snippet": "<span className=\"text-[12px] tabular-nums\" style={{ color: FAINT }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"w-full h-8 pl-9 pr-8 rounded-full text-[12.5px] placeholder:text-slate-400 focus:outline-none focus:border-slate-400 transition-colors\""
+    "snippet": "\"w-full h-8 pl-9 pr-8 rounded-full text-[12.5px] focus:outline-none transition-colors\","
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<p className=\"text-[12.5px]\" style={{ color: \"#a1a1a6\" }}>"
+    "snippet": "<p className=\"text-[12.5px]\" style={{ color: FAINT }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23057,7 +23057,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<div className=\"text-[12px] text-center\" style={{ marginTop: 8, marginBottom: 16, color: \"#a1a1a6\", lineHeight: 1.4 }}>"
+    "snippet": "<div className=\"text-[12px] text-center\" style={{ marginTop: 8, marginBottom: 16, color: FAINT, lineHeight: 1.4 }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23097,12 +23097,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<div className=\"text-[13.5px] font-semibold leading-tight\" style={{ color: active ? BLUE : INK }}>"
+    "snippet": "<div className=\"text-[13.5px] font-semibold leading-tight truncate\" title={tier.name} style={{ color: active ? BLUE : INK }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 2, color: \"#a1a1a6\" }}>"
+    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 2, color: FAINT }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23117,7 +23117,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"text-[13.5px] focus:outline-none focus:border-slate-400 transition-colors\""
+    "snippet": "\"text-[13.5px] focus:outline-none transition-colors\","
   },
   {
     "rule": "hardcoded-font-size",
@@ -23152,7 +23152,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"w-full bg-white text-[13.5px] tabular-nums focus:outline-none focus:border-slate-400\""
+    "snippet": "\"w-full text-[13.5px] tabular-nums focus:outline-none\","
   },
   {
     "rule": "hardcoded-font-size",
@@ -23207,7 +23207,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<div className=\"text-[11px]\" style={{ marginTop: 3, color: \"#a1a1a6\" }}>{VINYL_SIZE_BLURB[f]}</div>"
+    "snippet": "<div className=\"text-[11px]\" style={{ marginTop: 3, color: FAINT }}>{VINYL_SIZE_BLURB[f]}</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23247,12 +23247,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[10px] font-semibold uppercase tracking-wider\" style={{ color: \"#a1a1a6\" }}>units</span>"
+    "snippet": "<span className=\"text-[10px] font-semibold uppercase tracking-wider\" style={{ color: FAINT }}>units</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[13px] font-semibold\" style={{ color: \"#a1a1a6\", marginRight: 1 }}>$</span>"
+    "snippet": "<span className=\"text-[13px] font-semibold\" style={{ color: FAINT, marginRight: 1 }}>$</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23262,12 +23262,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"h-9 rounded-lg flex items-center justify-center text-[12px]\" style={{ border: `1px dashed ${HAIRLINE}`, color: \"#a1a1a6\", background: mode === \"off\" ? \"#fff\" : \"var(--apple-canvas, #f"
+    "snippet": "<span className=\"h-9 rounded-lg flex items-center justify-center text-[12px]\" style={{ border: `1px dashed ${HAIRLINE}`, color: FAINT, background: mode === \"off\" ? (dark ? CARD : \"#fff\") : (dark ? \"rg"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[11.5px]\" style={{ color: \"#a1a1a6\" }}>Prices are per unit, per finished package.</span>"
+    "snippet": "<span className=\"text-[11.5px]\" style={{ color: FAINT }}>Prices are per unit, per finished package.</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23297,7 +23297,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"text-[14px] text-center tabular-nums focus:outline-none focus:border-slate-400 transition-colors\""
+    "snippet": "className={cn(\"text-[14px] text-center tabular-nums focus:outline-none transition-colors\", dark ? \"focus:border-white/30\" : \"focus:border-slate-400\")}"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23312,7 +23312,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[12px]\" style={{ color: CRITICAL }}>"
+    "snippet": "<span className=\"text-[12px]\" style={{ color: criticalColor(dark) }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23332,7 +23332,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"min-w-0 flex-1 text-[13px] focus:outline-none focus:border-slate-400\""
+    "snippet": "className={cn(\"min-w-0 flex-1 text-[13px] focus:outline-none\", dark ? \"focus:border-white/30\" : \"focus:border-slate-400\")}"
   },
   {
     "rule": "hardcoded-font-size",

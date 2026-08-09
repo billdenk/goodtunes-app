@@ -133,28 +133,6 @@ disc art in tiles, small disc chips in captions or search lists:
 Reference implementation: the dark Catalog mockup
 (`PressPackagePricingTableRunsDark.tsx` in the Playground sandbox).
 
-## Dark-mode amendment — initials avatars (ratified 2026-08-08)
-
-- **Initials-avatar circles (people with no photo) must NOT be brand blue in
-  dark mode.** A wall of blue circles overwhelms the charcoal canvas (seen on
-  admin People). Dark mode: fill with the track gray (`--apple-track`,
-  #26262a) and set the initials in subink (`--apple-subink`) so they recede.
-  Light mode keeps brand blue with white initials.
-- This does not change the accent rule elsewhere — the one-blue-pill-per-screen
-  primary CTA stays blue in both modes. Photo avatars are untouched.
-- GoodTunes applies this via a `.gt-avatar-initials` hook + a
-  `body.gt-admin.gt-admin-dark` override in `client/src/index.css`; any sweep
-  should carry the same rule to every initials-avatar surface.
-- Related (same ratification): **no credit/role pill rows under tiles in grid
-  views** — rows of equal-weight labeled pills under every tile read as noise
-  (per the button weight rule). Roles stay in list rows and detail sheets.
-- **Dark mode: the one primary pill rests quiet, hovers blue.** On the
-  charcoal canvas a filled blue pill shouts, so in dark mode the screen's one
-  primary CTA rests as a chip-gray pill (`--apple-chip`, ink text) and fills
-  brand blue on hover/focus. Light mode keeps the filled blue pill at rest.
-  (GoodTunes: blanket `body.gt-admin.gt-admin-dark` remap of
-  `bg-[var(--apple-blue)]` in `client/src/index.css`.)
-
 ## Non-negotiables
 
 - No emojis anywhere. Use the real `®` character (GoodTunes®, GoodDeed®,

@@ -34,9 +34,14 @@ import {
   X,
   Loader2,
 } from "lucide-react";
+import { useAdminDark } from "@/lib/adminAppearance";
 
 // ─── Apple-canon tokens (shared with PressPortal dashboard) ──────────
 const BLUE = "#319ED8";
+
+// Subtle light rim that separates a dark disc silhouette from the dark page —
+// a hairline of reflected light around the edge, NOT a glow (dark canon).
+const DISC_RIM = "0 0 0 0.5px rgba(255,255,255,0.14), 0 1px 3px rgba(0,0,0,0.5)";
 const INK = "var(--apple-ink)";
 const SUBINK = "var(--apple-subink)";
 const HAIRLINE = "var(--apple-hairline)";
@@ -154,6 +159,7 @@ export function VinylDisc({
   const LABEL_RATIO = 368 / 1104;
   const photo = color?.swatchImageUrl || color?.swatchThumbUrl || color?.thumbnailUrl || null;
   const hex = color?.swatchHex || "#111114";
+  const dark = useAdminDark();
   return (
     <div
       className={spin ? "gt-vinyl" : undefined}
@@ -197,6 +203,24 @@ export function VinylDisc({
             "linear-gradient(135deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.06) 28%, rgba(255,255,255,0) 46%, rgba(255,255,255,0) 60%, rgba(255,255,255,0.10) 82%, rgba(255,255,255,0.02) 100%)",
         }}
       />
+
+      {/* Dark canon (apple-canon.md) — a hairline of reflected light around the
+          edge so a dark disc silhouette separates from the near-black page.
+          Inset ring (clipped by overflow:hidden), brighter up top, NOT a glow.
+          Light mode is untouched. */}
+      {dark && (
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: "50%",
+            pointerEvents: "none",
+            boxShadow:
+              "inset 0 0 0 1px rgba(255,255,255,0.16), inset 0 1px 1.5px rgba(255,255,255,0.22)",
+          }}
+        />
+      )}
 
       {/* Spindle hole — a hole, so it shows the page canvas behind it. */}
       <div
@@ -266,10 +290,11 @@ function DiscStage({
 // Glossy round color ball — photo swatches show the photo, hex a gradient ball.
 export function ColorBall({ color, size = 40 }: { color: CatalogColor; size?: number }) {
   const photo = color.swatchThumbUrl || color.swatchImageUrl;
+  const dark = useAdminDark();
   return (
     <span
       className="relative block rounded-full overflow-hidden"
-      style={{ width: size, height: size, boxShadow: "0 0 0 1px rgba(15,23,42,0.10)" }}
+      style={{ width: size, height: size, boxShadow: dark ? DISC_RIM : "0 0 0 1px rgba(15,23,42,0.10)" }}
     >
       {photo ? (
         <img src={photo} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover rounded-full" />

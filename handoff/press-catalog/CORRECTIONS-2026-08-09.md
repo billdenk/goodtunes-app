@@ -128,5 +128,22 @@ Live dashboard shows the empty work queue as a large centered card. Wrong hierar
 ## 24. Type tile names never wrap — one line, truncate, hover reveals full name
 Long type names ("Splatter — 2 Colors", "Black Splatter — 2 Colors") were wrapping to two lines, making tiles in the same row different heights. Canon: the tile name is always ONE line — truncate with an ellipsis and put the full name in the element's title attribute so hover reveals it. Every tile in a row keeps the same height. Reference file updated on this branch — re-copy verbatim.
 
+## 25. Dark mode: re-copy the dark Catalog reference + adopt the style guide
+The dark Catalog implementation has drifted: the Vinyl/CD/Cassette segmented control still uses a LIGHT (white) track on the dark page; the Memphis/press logo on the jacket is not inverted to white and sits on a black circle instead of reading against the artwork; selection highlights are missing; the black jacket dissolves into the page.
+Fix: copy handoff/press-catalog/PressPackagePricingTableRunsDark.tsx VERBATIM (character-for-character, only MOCK_ data swapped) — it is the blessed dark reference and already solves all of the above (dark inset segmented track, CSS-inverted white logo, blue selection states, hairline + lift shadow around the black jacket, rim-lit black vinyl).
+Also adopt handoff/style-guide/apple-canon.md as the standing style guide for ALL admin pages (light and dark) — see its "Dark controls & surfaces" and "Vinyl artwork on dark surfaces" sections. Known system-wide violations to audit against it: table header rows with wrong gray fills, corner radii that are not fully rounded where the guide says pill/rounded, gray-initial avatar circles for people without photos (use the guide's avatar rules), light-mode leftovers on dark surfaces, inconsistent fonts and spacing.
+
+### Item 25 addendum — specific light-mode leftovers spotted in the current dark build (2026-08-09 screenshots)
+These are all symptoms of re-implementing instead of copying the reference verbatim. Every one is already correct in handoff/press-catalog/PressPackagePricingTableRunsDark.tsx:
+- Vinyl/CD/Cassette segmented control: WHITE pill track on the dark page (must be the dark inset track).
+- Search and Reorder buttons next to "Pick a type.": white pills (must be dark surfaces with white-alpha hairlines).
+- The entire "Name your price" run-size table: white card, white rows, white "On request" buttons, light gray disabled input.
+- Audio spec rows (bit depth, sample rate, longest side) and the Notes card: white surfaces.
+- GoodDeed printing pricing table: white/light-gray table and inputs.
+- Print template tiles: white cards with light dashed borders.
+- Section spacing collapsed: "Pick a type." is jammed against the size tiles and "Name your price." against the color grid — the reference's vertical rhythm between sections must be preserved exactly.
+- Jacket/logo: Memphis logo on the black jacket not inverted to white (jacket art unreadable).
+Rule of thumb for acceptance: on the dark Catalog page, NO white or light-gray rectangle may remain anywhere. If a surface is white, it was not copied from the reference.
+
 ## Acceptance for this pass
     FULL-PAGE diff, not above-the-fold. Render the reference component (handoff/press-catalog/PressPackagePricingTableRuns.tsx) and the live page at 1440px, scroll both to the bottom, and compare EVERY section top to bottom: top bar, sidebar, header block, size cards, type tiles, color rail, jacket/vinyl preview + caption, package card, price rows, print-template tiles (filled + empty states, die-line icons), floating save bar, GoodDeeds section, and the page footer (which must be empty of parked buttons). Diff the rendered page against the reference side by side at 1440px. Any card width, copy string, or preview geometry that differs from the reference is a failure. Do not report complete until a screenshot of the live page is visually indistinguishable from the reference (data values aside).

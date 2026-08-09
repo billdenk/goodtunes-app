@@ -13,6 +13,8 @@
 // The choice persists in localStorage and "system" tracks the OS
 // `prefers-color-scheme` live.
 
+import { useSyncExternalStore } from "react";
+
 export type AdminAppearance = "light" | "dark" | "system";
 
 const STORAGE_KEY = "gt:admin-appearance";
@@ -65,6 +67,14 @@ export function isAdminDark(): boolean {
 export function onAdminAppearanceChange(fn: () => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
+}
+
+/** React hook — re-renders when the operator toggles Light/Dark/System.
+ * Reads the painted dark state via `isAdminDark()`, subscribing to the same
+ * listeners `applyAdminAppearance()` notifies. Use in pages that need to pick
+ * dark-only token values inline (e.g. frosted popover shadows, disc rims). */
+export function useAdminDark(): boolean {
+  return useSyncExternalStore(onAdminAppearanceChange, isAdminDark, () => false);
 }
 
 // Track the OS setting live while "system" is selected. Installed once at
