@@ -19,7 +19,7 @@ export function RangePicker<T extends string>({
 }) {
   return (
     <div
-      className="inline-flex items-center bg-slate-100 rounded-md p-0.5"
+      className="inline-flex items-center bg-[var(--apple-track)] rounded-md p-0.5"
       role="group"
       aria-label="Date range"
       data-testid={testId}
@@ -35,8 +35,8 @@ export function RangePicker<T extends string>({
             className={cn(
               "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
               active
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-900",
+                ? "bg-[var(--apple-chip)] text-[color:var(--apple-ink)] shadow-sm"
+                : "text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)]",
             )}
             data-testid={`button-range-${p.id}`}
           >
@@ -58,7 +58,7 @@ export function CompareToggle({
   label?: string;
 }) {
   return (
-    <div className="ml-auto inline-flex items-center bg-slate-100 rounded-md p-0.5">
+    <div className="ml-auto inline-flex items-center bg-[var(--apple-track)] rounded-md p-0.5">
       <button
         type="button"
         onClick={() => onToggle(!active)}
@@ -66,8 +66,8 @@ export function CompareToggle({
         className={cn(
           "h-8 px-3 inline-flex items-center gap-1.5 rounded text-xs font-semibold transition-colors",
           active
-            ? "bg-white text-slate-900 shadow-sm"
-            : "text-slate-500 hover:text-slate-900",
+            ? "bg-[var(--apple-chip)] text-[color:var(--apple-ink)] shadow-sm"
+            : "text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)]",
         )}
         data-testid="button-toggle-compare"
       >

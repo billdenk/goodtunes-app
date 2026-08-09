@@ -249,7 +249,14 @@ export function OrganizationPeople({
                   className="w-9 h-9 rounded-full object-cover bg-slate-100"
                 />
               ) : (
-                <div className="w-9 h-9 rounded-full bg-slate-100" />
+                /* Canonical initials avatar (AdminPeople pattern) — the
+                   gt-avatar-initials class lets the dark theme remap the
+                   blue fill to the charcoal track + subink initial. */
+                <div className="gt-avatar-initials w-9 h-9 rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-sm font-bold">
+                    {(c.name?.trim()?.[0] ?? "?").toUpperCase()}
+                  </span>
+                </div>
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">

@@ -105,7 +105,7 @@ export function ViewAsPartnerButton({
       size="sm"
       onClick={handleViewAs}
       disabled={loading}
-      className="flex items-center gap-1.5 text-xs h-7 px-2.5 border-slate-200 text-slate-600 hover:text-[var(--brand-blue)] hover:border-[var(--brand-blue)]"
+      className="flex items-center gap-1.5 text-xs h-7 px-2.5 border-[var(--apple-hairline)] text-[var(--apple-subink)] hover:text-[var(--brand-blue)] hover:border-[var(--brand-blue)]"
       data-testid={testId}
     >
       <Eye className="w-3.5 h-3.5" />

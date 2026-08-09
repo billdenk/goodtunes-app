@@ -24,7 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
-import { NotificationsCard, NotificationsBadge } from "@/components/admin/NotificationsCard";
+import { NotificationsCard } from "@/components/admin/NotificationsCard";
 import { VendorPreviewCard } from "@/components/admin/previews/VendorPreviewCard";
 import { GoodDeedServicesTab } from "@/components/admin/GoodDeedServicesTab";
 import { EditablePanel } from "@/components/admin/EditablePanel";
@@ -456,9 +456,6 @@ export function AdminVendor() {
             >
               {vendor.name}
             </h1>
-            <div className="mt-1.5">
-              <NotificationsBadge partnerKind="vendor" partnerId={vendor.id} onActivate={() => setTab("overview")} />
-            </div>
             <div className="flex items-center gap-3 text-slate-500 text-[12.5px] mt-1">
               <span className="inline-flex items-center gap-1.5">
                 <Guitar className="w-3.5 h-3.5 text-slate-400" />

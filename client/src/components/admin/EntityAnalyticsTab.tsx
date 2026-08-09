@@ -85,7 +85,7 @@ export function EntityAnalyticsTab({
         </div>
       ) : allEmpty ? (
         <div
-          className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500"
+          className="rounded-2xl border border-dashed border-[var(--apple-hairline)] bg-[var(--apple-card)] p-8 text-center text-sm text-[color:var(--apple-subink)]"
           data-testid={`empty-${testIdPrefix}-analytics`}
         >
           No events captured in this window for this partner's connections.
@@ -145,7 +145,7 @@ function RangePicker({
   testIdPrefix: string;
 }) {
   return (
-    <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5" data-testid={`range-${testIdPrefix}`}>
+    <div className="inline-flex items-center bg-[var(--apple-track)] rounded-md p-0.5" data-testid={`range-${testIdPrefix}`}>
       {RANGE_OPTIONS.map((opt) => (
         <button
           key={opt.value}
@@ -154,8 +154,8 @@ function RangePicker({
           className={[
             "px-2.5 h-7 text-xs font-medium rounded transition-colors",
             value === opt.value
-              ? "bg-slate-900 text-white"
-              : "text-slate-500 hover:text-slate-900",
+              ? "bg-[var(--apple-chip)] text-[color:var(--apple-ink)] shadow-sm"
+              : "text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)]",
           ].join(" ")}
           data-testid={`range-${testIdPrefix}-${opt.value}`}
         >

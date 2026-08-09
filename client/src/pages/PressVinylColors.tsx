@@ -106,10 +106,11 @@ function PressDiscLabel({
   bgColor: string | null;
 }) {
   // Blessed reference (CORRECTIONS item 27): a plain BLACK label carrying the
-  // press's logo in white. The dark logo asset is rendered white with
-  // `invert(1) brightness(1.7)`. bgColor is still threaded (kept in the
-  // signature so call sites compile) but the fill is UNCONDITIONALLY the
-  // reference's PRESS_LABEL_BG, never overridden.
+  // press's logo in white. Assets arrive in any ink (MRP's is already white,
+  // others near-black), so the mark is forced to a white silhouette with
+  // `brightness(0) invert(1)` — deterministic for every source color. bgColor
+  // is still threaded (kept in the signature so call sites compile) but the
+  // fill is UNCONDITIONALLY the reference's PRESS_LABEL_BG, never overridden.
   void bgColor;
   return (
     <div
@@ -138,7 +139,7 @@ function PressDiscLabel({
             width: size * 0.9,
             height: size * 0.9,
             objectFit: "contain",
-            filter: "invert(1) brightness(1.7)",
+            filter: "brightness(0) invert(1)",
           }}
         />
       )}
@@ -660,7 +661,7 @@ export function MoreTypesPopover({ onAdd, adding }: { onAdd: (name: string) => v
           data-testid="button-more-types"
           className="flex items-center gap-1.5 text-[12.5px] font-semibold rounded-full px-3 h-8 transition-colors"
           style={{ color: BLUE, marginTop: 10 }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f0f7fc")}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(49,158,216,0.12)")}
           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
         >
           <Plus className="w-3.5 h-3.5" />

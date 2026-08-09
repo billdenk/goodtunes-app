@@ -479,6 +479,10 @@ body.gt-admin::before {
   --apple-glass: rgba(255, 255, 255, 0.72);
   --apple-grid: #eeeef0;
   --apple-axis: #c7c7cc;
+  /* Frosted popover/panel fill — several press-catalog surfaces reference
+     var(--apple-frost, <light fallback>); without this token the light
+     fallback leaked into dark mode. */
+  --apple-frost: rgba(255, 255, 255, 0.82);
 }
 .gt-admin-dark {
   --apple-canvas: #161617;
@@ -497,6 +501,7 @@ body.gt-admin::before {
   --apple-ready-wash: rgba(28,138,91,.14);
   --apple-pill: #3a3a3e;
   --apple-glass: rgba(22, 22, 23, 0.72);
+  --apple-frost: rgba(28, 28, 30, 0.86);
   --apple-grid: #26262a;
   --apple-axis: #6e6e73;
   /* Brighten severity/accent inks for contrast on charcoal. */
@@ -539,6 +544,12 @@ body.gt-admin.gt-admin-dark .bg-white { background-color: var(--apple-card); }
 body.gt-admin.gt-admin-dark .bg-slate-50 { background-color: var(--apple-canvas); }
 body.gt-admin.gt-admin-dark .bg-slate-100 { background-color: var(--apple-track); }
 body.gt-admin.gt-admin-dark .bg-slate-200 { background-color: var(--apple-chip); }
+/* Opacity-modified slate washes escape the exact-class remaps above (the
+   selector is `.bg-slate-50\/60`, not `.bg-slate-50`) — the GoodDeed
+   printing ladder's off rows leaked a light wash into dark this way. Keep
+   the "quieter than the card" read with a subtle darker tint. */
+body.gt-admin.gt-admin-dark .bg-slate-50\/60,
+body.gt-admin.gt-admin-dark .bg-slate-50\/50 { background-color: rgba(0, 0, 0, 0.2); }
 /* Initials-avatar fills: brand blue in light mode, quiet chip gray in dark
    (a wall of blue circles overwhelms the charcoal canvas — Bill, 2026-08-08).
    Photo avatars are untouched (the img covers the fill). */

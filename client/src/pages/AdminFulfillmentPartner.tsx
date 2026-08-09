@@ -6,7 +6,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
-import { NotificationsCard, NotificationsBadge } from "@/components/admin/NotificationsCard";
+import { NotificationsCard } from "@/components/admin/NotificationsCard";
 import { AddressAutocompleteField } from "@/components/admin/AddressAutocompleteField";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
@@ -217,9 +217,6 @@ export function AdminFulfillmentPartner() {
             >
               {f.name}
             </h1>
-            <div className="mt-1.5">
-              <NotificationsBadge partnerKind="fulfillment" partnerId={f.id} onActivate={() => setTab("overview")} />
-            </div>
             {f.websiteUrl && (
               <a
                 href={f.websiteUrl}

@@ -85,6 +85,11 @@ const DISC_RIM = "0 0 0 0.5px rgba(255,255,255,0.14), 0 1px 3px rgba(0,0,0,0.5)"
 // Reference-verbatim frosted pill shadow + label-logo recolor filter (Item 28).
 const PILL_SHADOW = "0 1px 2px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.06)";
 const PRESS_LABEL_LOGO_FILTER = "invert(1) brightness(1.7)";
+// The jacket / center label / brand dialog render the press mark as a WHITE
+// silhouette on black. Assets arrive in any ink (MRP's is already white,
+// others are near-black) — brightness(0) flattens every opaque pixel to
+// black, invert(1) lifts it to pure white, deterministically.
+const FORCE_WHITE_MARK = "brightness(0) invert(1)";
 
 // ─── Frosted editor popovers (same feel as Add Your Vinyl / handoff ref) ──
 function frostedPanel(dark: boolean): React.CSSProperties {
@@ -661,7 +666,7 @@ function BrandDialog({
               style={{ width: 150, height: 150, background: "#0a0a0a", border: "1px solid rgba(255,255,255,0.1)" }}
             >
               {logoUrl ? (
-                <img src={logoUrl} alt="" style={{ width: 104, height: 104, objectFit: "contain", filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.94 }} />
+                <img src={logoUrl} alt="" style={{ width: 104, height: 104, objectFit: "contain", filter: FORCE_WHITE_MARK, opacity: 0.94 }} />
               ) : (
                 <span className="text-[12px]" style={{ color: "rgba(245,245,247,0.4)" }}>No logo yet</span>
               )}
@@ -901,7 +906,7 @@ export function JacketStage({
           ) : placeholderIconUrl ? (
             <img src={placeholderIconUrl} alt="" aria-hidden data-testid="jacket-placeholder-icon" style={{ width: "45%", opacity: 0.95 }} />
           ) : labelLogoUrl ? (
-            <img src={labelLogoUrl} alt="" aria-hidden style={{ width: jacketPx * 0.42, height: jacketPx * 0.42, objectFit: "contain", filter: "invert(1)", opacity: 0.92 }} />
+            <img src={labelLogoUrl} alt="" aria-hidden style={{ width: jacketPx * 0.42, height: jacketPx * 0.42, objectFit: "contain", filter: FORCE_WHITE_MARK, opacity: 0.92 }} />
           ) : null}
           {/* spine hint */}
           <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 7, background: "linear-gradient(90deg, rgba(0,0,0,0.5), transparent)" }} />
@@ -2192,7 +2197,10 @@ export function PressPackagePricingCatalog({
         </div>
       ) : !fmt ? null : (
         <fieldset disabled={!canEdit} className="mt-8 min-w-0">
-          <div className="grid gap-16" style={{ gridTemplateColumns: "minmax(0, 1fr) 620px" }}>
+          {/* Two columns only when the 420px jacket + 620px sections truly fit
+              (xl); below that, stack — a fixed 620px track forced the whole
+              page into horizontal scroll on laptop widths. */}
+          <div className="grid gap-10 grid-cols-1 min-[1440px]:gap-16 min-[1440px]:grid-cols-[minmax(0,1fr)_620px]">
             {/* ── LEFT: sticky stage (vinyl only) ── */}
             {isVinyl && (
               <div className="flex flex-col items-center justify-center" style={{ position: "sticky", top: 24, alignSelf: "start", minHeight: 560, paddingTop: 24 }}>
@@ -2599,7 +2607,7 @@ export function PressPackagePricingCatalog({
                             <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: FAINT }}>units</span>
                           </div>
                           <div className="flex items-center gap-3">
-                            {canEdit && <div className={mode === "priced" ? "opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity" : undefined}><ModePicker mode={mode} onChange={(m) => setMode(q, m)} qty={q} visible /></div>}
+                            {canEdit && <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"><ModePicker mode={mode} onChange={(m) => setMode(q, m)} qty={q} visible /></div>}
                             {mode === "priced" ? (
                               <label className={cn("flex items-center justify-center h-9 rounded-lg transition-shadow focus-within:ring-1", dark ? "focus-within:ring-white/25" : "focus-within:ring-slate-300")} style={{ border: `1px solid ${HAIRLINE}`, background: dark ? CARD_SOFT : "#fff", cursor: "text", padding: "0 12px", minWidth: 92 }}>
                                 <span className="text-[13px] font-semibold" style={{ color: FAINT, marginRight: 1 }}>$</span>

@@ -32,6 +32,7 @@ import { VinylPreview } from "@/components/VinylPreview";
 import { resolveVinylColor, DEFAULT_JACKET_UPGRADE, type VinylColorOption } from "@shared/pressing";
 import { resolvePressPlaceholderArt as _resolvePressPlaceholderArt } from "@/lib/pressPlaceholderArt";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAdminDark, useDarkMarkLogo } from "@/lib/adminAppearance";
 import { postAdminImage } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
@@ -41,7 +42,7 @@ import { AddressAutocompleteField } from "@/components/admin/AddressAutocomplete
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { StatusDot } from "@/components/admin/StatusDot";
-import { NotificationsCard, NotificationsBadge } from "@/components/admin/NotificationsCard";
+import { NotificationsCard } from "@/components/admin/NotificationsCard";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
@@ -239,6 +240,11 @@ export function AdminManufacturer() {
   const id = params?.id ?? "";
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [logoEditorOpen, setLogoEditorOpen] = useState(false);
+  // Dark-mode header logo: black marks (SVGs or black-on-transparent PNGs
+  // like the Memphis badge) vanish on the charcoal backdrop — flip them
+  // white and ring the tile dark gray. Colored logos/photos are left alone
+  // (pixel-sampled darkness gate, not extension-based — Memphis is a PNG).
+  const adminDark = useAdminDark();
   // Task #2044 — operator "Add album" two-step flow, mirroring AdminAlbums.
   const [artistDialogOpen, setArtistDialogOpen] = useState(false);
   const [titleDialogOpen, setTitleDialogOpen] = useState(false);
@@ -274,6 +280,8 @@ export function AdminManufacturer() {
     queryKey: ["/api/fulfillment-partners"],
     enabled: !!user?.isAdmin,
   });
+  const logoIsDarkMark = useDarkMarkLogo(m?.logoUrl ?? null);
+  const invertHeaderLogo = adminDark && logoIsDarkMark;
 
   const save = useMutation({
     mutationFn: async (patch: Partial<Manufacturer>) => {
@@ -419,7 +427,7 @@ export function AdminManufacturer() {
             onClick={() => setLogoEditorOpen(true)}
             className={[
               "group relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden shadow-sm flex-shrink-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2",
-              m.logoUrl ? "" : "bg-white ring-1 ring-slate-200",
+              m.logoUrl ? (invertHeaderLogo ? "ring-1 ring-slate-700" : "") : "bg-white ring-1 ring-slate-200",
             ].join(" ")}
             aria-label="Edit press logo"
             data-testid="button-edit-press-logo"
@@ -429,6 +437,7 @@ export function AdminManufacturer() {
                 src={m.logoUrl}
                 alt={m.name}
                 className="w-full h-full object-cover transition-transform group-hover:scale-[1.03]"
+                style={invertHeaderLogo ? { filter: "invert(1) brightness(1.7)" } : undefined}
                 data-testid="img-press-logo"
               />
             ) : (
@@ -460,9 +469,6 @@ export function AdminManufacturer() {
             >
               {m.name}
             </h1>
-            <div className="mt-1.5">
-              <NotificationsBadge partnerKind="manufacturer" partnerId={m.id} onActivate={() => setTab("overview")} />
-            </div>
             {(m.websiteUrl || m.domain) && (
               <a
                 href={m.websiteUrl || `https://${m.domain}`}

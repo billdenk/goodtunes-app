@@ -66,3 +66,9 @@ The press Catalog (portal Vinyl catalog tab + god-view `?tab=catalog`) is `clien
 - 140 g and 180 g price books SHARE run sizes by design: any save to one book appends missing qtys to the other as unconfirmed "on request" rungs (never deletes) — keep this union invariant if the ladder write path changes.
 - Hidden template tiles: NULL means "default set" (Booklet hidden) — an explicit empty array means "show everything"; don't collapse the two.
 - The catalog page footer must stay EMPTY of parked buttons (Add-your-vinyl / CSV / Hellbender sync were removed per Bill's correction 12); CSV import/export belongs on a separate operator surface if revived.
+
+**Press mark on black surfaces = FORCE white silhouette, never invert heuristics.** Jacket cover, disc center label, and BrandDialog preview render the press label logo with `filter: brightness(0) invert(1)` (const FORCE_WHITE_MARK) — deterministic for any source ink (MRP's asset is already white, others near-black; a blanket `invert(1)` or a sampled dark-mark gate both left mixed/white assets un-white, per Bill). `useDarkMarkLogo()` (adminAppearance.ts, pixel-samples incl. SVGs) remains for header tiles where a white silhouette would be wrong.
+
+**`--apple-frost` token exists now** (light rgba(255,255,255,.82) / dark rgba(28,28,30,.86) in index.css) — several catalog popovers referenced `var(--apple-frost, <light fallback>)` before the token existed, so dark mode leaked the light frosted fallback (e.g. "New pressing type" popover).
+
+**Catalog build grid must stay viewport-safe.** The stage+sections layout is `grid-cols-1` stacking below `min-[1440px]`, two columns (`minmax(0,1fr) 620px`) only above it — the fixed 620px sections track plus the 420px jacket stage has a hard minimum of ~1104px, which forced whole-page horizontal scroll on laptop widths. Don't reintroduce a fixed-width track without a stacking breakpoint.
