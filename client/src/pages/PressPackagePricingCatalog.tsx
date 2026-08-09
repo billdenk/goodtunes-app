@@ -26,7 +26,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ALBUM_FORMAT_LABEL, type AlbumFormat } from "@shared/schema";
-import { FileText, Loader2, MoreHorizontal, Plus, Trash2, X } from "lucide-react";
+import { Check, FileText, Loader2, MoreHorizontal, Plus, Trash2, X } from "lucide-react";
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -133,16 +133,17 @@ export function JacketStage({
   typeName?: string | null;
 }) {
   const isDouble = format === "12_double";
-  const DISC = 264;
+  const jacketPx = format === "7_inch" ? 175 : 300;
+  const DISC = Math.round(jacketPx * 0.96);
   return (
     <div data-testid="jacket-stage">
       <style dangerouslySetInnerHTML={{ __html: DISC_SPIN_CSS }} />
-      <div className="group relative" style={{ width: 300, height: 300 }}>
+      <div className="group relative" style={{ width: jacketPx + jacketPx * 0.5, height: jacketPx + 24 }}>
         {/* Discs peek out to the right; slide further on hover. */}
         {isDouble && (
           <div
             className="absolute transition-transform duration-500 ease-out group-hover:translate-x-6"
-            style={{ top: 26, left: 96, opacity: 0.55, transitionDelay: "60ms" }}
+            style={{ top: (jacketPx - DISC) / 2, left: jacketPx - DISC + jacketPx * 0.27, opacity: 0.55, transitionDelay: "60ms" }}
             aria-hidden
           >
             <VinylDisc size={DISC - 16} color={color} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
@@ -150,7 +151,7 @@ export function JacketStage({
         )}
         <div
           className="absolute transition-transform duration-500 ease-out group-hover:translate-x-10"
-          style={{ top: 18, left: 76 }}
+            style={{ top: (jacketPx - DISC) / 2, left: jacketPx - DISC + jacketPx * 0.22 }}
         >
           <div className="gt-vinyl" style={{ borderRadius: "50%" }}>
             <VinylDisc size={DISC} color={color} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} spin />
@@ -160,8 +161,8 @@ export function JacketStage({
         <div
           className="absolute left-0 top-0 overflow-hidden rounded-[10px]"
           style={{
-            width: 264,
-            height: 264,
+            width: jacketPx,
+            height: jacketPx,
             boxShadow: "0 18px 40px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.12)",
             backgroundColor: "#22242a",
             border: `1px solid ${HAIRLINE}`,
@@ -186,7 +187,7 @@ export function JacketStage({
               }}
             >
               {labelLogoUrl ? (
-                <img src={labelLogoUrl} alt="" aria-hidden style={{ width: 96, opacity: 0.8 }} />
+                <img src={labelLogoUrl} alt="" aria-hidden style={{ width: jacketPx * 0.42, opacity: 0.8 }} />
               ) : (
                 <span className="text-[12px] font-semibold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.4)" }}>
                   Printed jacket
@@ -196,19 +197,19 @@ export function JacketStage({
           )}
         </div>
       </div>
-      {/* Caption — centered under the jacket, not the full stage. */}
-      <div className="mt-6 flex -translate-x-[33px] items-center gap-2.5" data-testid="stage-caption">
-        {color && <ColorBall color={color} size={22} />}
-        <span className="text-[13px]" style={{ color: SUBINK }}>
+      {/* Captions — shifted left so they center under the jacket, not the whole stage. */}
+      <div className="flex flex-col items-center" style={{ transform: `translateX(-${Math.round(jacketPx * 0.25)}px)` }} data-testid="stage-caption">
+        <div className="flex items-center gap-2.5 text-[13px]" style={{ marginTop: 28, color: SUBINK }}>
+          {color && <ColorBall color={color} size={18} />}
           <span>{format === "7_inch" ? '7"' : '12"'}</span>
-          <span style={{ color: "#d1d1d6" }}> · </span>
+          <span style={{ color: "#d1d1d6" }}>·</span>
           <span>{typeName ?? ALBUM_FORMAT_LABEL[format] ?? format}</span>
-          {color ? <><span style={{ color: "#d1d1d6" }}> · </span><span className="font-semibold" style={{ color: INK }}>{color.name}</span></> : null}
-        </span>
+          {color ? <><span style={{ color: "#d1d1d6" }}>·</span><span className="font-semibold" style={{ color: INK }}>{color.name}</span></> : null}
+        </div>
+        <div className="text-[12px] text-center" style={{ marginTop: 8, marginBottom: 16, color: "#a1a1a6", lineHeight: 1.4 }}>
+          Printed jacket{format.startsWith("12") ? " and inner sleeve" : ""} included.
+        </div>
       </div>
-      <p className="mt-1 text-[12px]" style={{ color: FAINT, marginBottom: 16 }}>
-        Printed jacket{format.startsWith("12") ? " and inner sleeve" : ""} included.
-      </p>
     </div>
   );
 }
@@ -369,26 +370,31 @@ function GroupCard({
   const [confirming, setConfirming] = useState(false);
   const preview = tier.colors[0] ?? null;
   return (
-    <div className="group/type relative">
-      <button
-        type="button"
-        onClick={onPick}
-        data-testid={`card-type-${tier.id}`}
-        className="flex w-full flex-col items-center rounded-2xl bg-white pb-3 pt-4 transition-all focus:outline-none"
-        style={{
-          border: `1.5px solid ${active ? BLUE : HAIRLINE}`,
-          boxShadow: active ? "0 6px 18px rgba(49,158,216,0.16)" : undefined,
-        }}
-      >
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onPick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onPick();
+        }
+      }}
+      aria-pressed={active}
+      data-testid={`card-type-${tier.id}`}
+      className="group/type relative rounded-2xl bg-white text-left transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
+      style={{ padding: 14, border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
+    >
+      <div className="flex justify-center" style={{ marginBottom: 10 }}>
         <VinylDisc size={90} color={preview} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
-        <span className="mt-2.5 max-w-full truncate px-3 text-[13px] font-semibold" style={{ color: active ? BLUE : INK }}>
-          {tier.name}
-        </span>
-        <span className="text-[11.5px]" style={{ color: SUBINK }}>
-          {tier.colors.length} {tier.colors.length === 1 ? "color" : "colors"}
-        </span>
-      </button>
-      {canEdit && !active && (
+      </div>
+      <div className="text-[13.5px] font-semibold leading-tight" style={{ color: active ? BLUE : INK }}>
+        {tier.name}
+      </div>
+      <div className="text-[11.5px]" style={{ marginTop: 2, color: "#a1a1a6" }}>
+        {tier.colors.length} {tier.colors.length === 1 ? "color" : "colors"}
+      </div>
+      {canEdit && (
         <Popover
           open={menuOpen}
           onOpenChange={(v) => {
@@ -402,15 +408,28 @@ function GroupCard({
           <PopoverTrigger asChild>
             <button
               type="button"
+              onClick={(e) => e.stopPropagation()}
               aria-label={`Edit ${tier.name}`}
               data-testid={`button-type-menu-${tier.id}`}
               className={cn(
-                "absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white transition-opacity hover:bg-slate-100",
-                menuOpen ? "opacity-100" : "opacity-0 group-hover/type:opacity-100",
+                "absolute inline-flex items-center justify-center rounded-full transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300",
+                menuOpen ? "opacity-100" : "opacity-0 group-hover/type:opacity-100 group-focus-within/type:opacity-100",
               )}
-              style={{ color: SUBINK, border: `1px solid ${HAIRLINE}` }}
+              style={{
+                top: 8,
+                right: 8,
+                zIndex: 2,
+                width: 26,
+                height: 26,
+                backgroundColor: "rgba(255,255,255,0.88)",
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
+                border: `1px solid ${HAIRLINE}`,
+                boxShadow: "0 1px 3px rgba(0,0,0,0.10)",
+                color: SUBINK,
+              }}
             >
-              <MoreHorizontal className="h-3.5 w-3.5" />
+              <MoreHorizontal className="w-4 h-4" />
             </button>
           </PopoverTrigger>
           <PopoverContent
@@ -1086,15 +1105,15 @@ export function PressPackagePricingCatalog({
   const missingVinyl = VINYL_FORMATS.filter((f) => !offered.has(f));
 
   return (
-    <div className="max-w-[1400px]" data-testid="panel-press-catalog">
+    <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: "32px 40px 96px" }} data-testid="panel-press-catalog">
       {/* ── Catalog header ── */}
-      <div className="flex flex-wrap items-start justify-between gap-5">
+      <div className="flex items-start justify-between gap-6">
         <div>
           <div>
-            <h1 className="tracking-tight" style={{ fontSize: 30, fontWeight: 700, lineHeight: 1.08, color: INK }}>
+            <h1 className="tracking-tight" style={{ color: INK, fontSize: 32, lineHeight: 1.1, fontWeight: 700 }}>
               Catalog
             </h1>
-            <div className="inline-flex items-center rounded-full p-1" style={{ backgroundColor: "var(--apple-track, #f0f0f2)" }} role="tablist" aria-label="Catalog format">
+            <div className="inline-flex items-center rounded-full" style={{ marginTop: 16, padding: 3, backgroundColor: "#ececf0" }} role="tablist" aria-label="Catalog format">
               {(() => {
                 const vinylActive = !!fmt && VINYL_FORMATS.includes(fmt);
                 const pill = (active: boolean) =>
@@ -1121,11 +1140,10 @@ export function PressPackagePricingCatalog({
               })()}
             </div>
           </div>
-          <div className="mt-7">
+          <div style={{ marginTop: 24 }}>
             <SectionLabel>Vinyl · Package pricing</SectionLabel>
-          </div>
           {!hideHeading ? (
-            <h1 className="tracking-tight" style={{ fontSize: 34, fontWeight: 700, lineHeight: 1.08, marginTop: 8 }}>
+              <h1 className="tracking-tight" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.05, marginTop: 10 }}>
               <span style={{ color: INK }}>Build your vinyl catalog. </span>
               <span style={{ color: FAINT, fontWeight: 600 }}>From scratch.</span>
             </h1>
@@ -1135,9 +1153,10 @@ export function PressPackagePricingCatalog({
               <span style={{ color: FAINT, fontWeight: 600 }}>From scratch.</span>
             </h2>
           )}
-          <p className="mt-1.5 max-w-[680px] text-[13px]" style={{ color: SUBINK }}>
+           <p className="text-[15px]" style={{ color: SUBINK, marginTop: 12, maxWidth: 560, lineHeight: 1.5 }}>
             Quote the way you already do — a single cost per finished package, per run size. Record, jacket, inner sleeve, and labels are all in it. No per-piece math.
           </p>
+          </div>
         </div>
       </div>
 
@@ -1170,11 +1189,11 @@ export function PressPackagePricingCatalog({
         </div>
       ) : !fmt ? null : (
         <fieldset disabled={!canEdit} className="mt-8 min-w-0">
-          <div className="flex flex-col gap-12 xl:flex-row">
+          <div className="grid gap-16" style={{ gridTemplateColumns: "minmax(0, 1fr) 620px" }}>
             {/* ── LEFT: sticky stage (vinyl only) ── */}
             {isVinyl && (
-              <div className="flex-shrink-0 w-full xl:w-[320px]" style={{ width: 320, maxWidth: "100%" }}>
-                <div className="sticky top-8">
+              <div className="flex flex-col items-center justify-center" style={{ position: "sticky", top: 24, alignSelf: "start", minHeight: 560, paddingTop: 24 }}>
+                <div>
                   <JacketStage
                     format={fmt}
                     jacketUrl={jacketUrl}
@@ -1188,7 +1207,7 @@ export function PressPackagePricingCatalog({
             )}
 
             {/* ── RIGHT: sections ── */}
-            <div className="min-w-0 flex-1 space-y-10">
+            <div className="min-w-0" style={{ position: "relative", zIndex: 2, backgroundColor: "var(--apple-canvas, #f5f5f7)" }}>
               {/* Pick a size */}
               {isVinyl && (
                 <section id="section-pick-size" data-testid="section-pick-size">
@@ -1225,7 +1244,7 @@ export function PressPackagePricingCatalog({
                     No pressing types yet — add one to start your {ALBUM_FORMAT_LABEL[fmt]} catalog.
                   </p>
                 ) : (
-                  <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                  <div className="grid grid-cols-4 gap-3" style={{ marginTop: 12 }}>
                     {tiers.map((t) => (
                       <GroupCard
                         key={t.id}
@@ -1248,13 +1267,12 @@ export function PressPackagePricingCatalog({
               {/* Pick a color (vinyl only — CD/cassette skip swatches) */}
               {isVinyl && selectedTier && (
                 <section id="section-pick-color" data-testid="section-pick-color">
-                  <TwoTone lead="Pick a color." rest={`${selectedTier.name}.`} />
-                  {canEdit && colors.length > 1 && (
-                    <p className="mt-1.5 text-[12.5px]" style={{ color: FAINT }} data-testid="hint-color-reorder">
-                      {colors.length} colors · drag to reorder — artists see this order
-                    </p>
-                  )}
-                  <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4 xl:grid-cols-5">
+                  <TwoTone lead="Pick a color." rest="Or add a new one." />
+                  <p className="text-[12.5px]" style={{ marginTop: 6 }} data-testid="hint-color-reorder">
+                    <span className="font-semibold" style={{ color: INK }}>{selectedTier.name}</span>
+                    <span style={{ color: "#a1a1a6" }}> · {colors.length} {colors.length === 1 ? "color" : "colors"}{canEdit && colors.length > 1 ? " · drag to reorder — artists see this order" : ""}</span>
+                  </p>
+                  <div className="grid grid-cols-4 gap-3" style={{ marginTop: 12 }}>
                     {(colorOrderDraft
                       ? colorOrderDraft
                           .map((id) => colors.find((c) => c.id === id))
@@ -1296,29 +1314,38 @@ export function PressPackagePricingCatalog({
                               return null;
                             });
                           }}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setSelectedColorId(c.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setSelectedColorId(c.id);
+                            }
+                          }}
+                          aria-pressed={on}
+                          data-testid={`card-color-${c.id}`}
                           style={{
+                            padding: "16px 10px 12px",
+                            border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
                             opacity: dragColorId === c.id ? 0.45 : 1,
                             cursor: dragColorId ? "grabbing" : undefined,
                           }}
                         >
-                          <button
-                            type="button"
-                            onClick={() => setSelectedColorId(c.id)}
-                            data-testid={`card-color-${c.id}`}
-                            className="flex w-full flex-col items-center rounded-2xl bg-white pb-2.5 pt-3.5 transition-all focus:outline-none"
-                            style={{
-                              border: `1.5px solid ${on ? BLUE : HAIRLINE}`,
-                              boxShadow: on ? "0 6px 18px rgba(49,158,216,0.16)" : undefined,
-                            }}
-                          >
-                            <ColorBall color={c} size={44} />
-                            <span
-                              className="mt-2 max-w-full truncate px-2 text-[12px] font-semibold"
-                              style={{ color: on ? BLUE : INK }}
-                            >
-                              {c.name}
-                            </span>
-                          </button>
+                          <div className="relative flex justify-center" style={{ marginBottom: 8 }}>
+                            <ColorBall color={c} size={48} />
+                            {on && (
+                              <span
+                                className="absolute flex items-center justify-center rounded-full"
+                                style={{ width: 18, height: 18, backgroundColor: "rgba(255,255,255,0.85)", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
+                              >
+                                <Check className="w-3 h-3" style={{ color: BLUE }} strokeWidth={3} />
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[12.5px] font-semibold leading-tight" style={{ color: on ? BLUE : INK }}>
+                            {c.name}
+                          </div>
                           {canEdit && (
                             <SwatchEditorPopover
                               open={editColorId === c.id}
@@ -1332,6 +1359,8 @@ export function PressPackagePricingCatalog({
                               trigger={
                                 <button
                                   type="button"
+                                  onClick={(e) => e.stopPropagation()}
+                                  onKeyDown={(e) => e.stopPropagation()}
                                   aria-label={`Edit ${c.name}`}
                                   data-testid={`button-color-menu-${c.id}`}
                                   className={cn(
@@ -1359,22 +1388,27 @@ export function PressPackagePricingCatalog({
                         labelLogoUrl={labelLogoUrl}
                         labelBgColor={labelBgColor}
                         trigger={
-                          <button
-                            type="button"
-                            className="flex min-h-[104px] w-full flex-col items-center justify-center rounded-2xl transition-colors hover:bg-slate-50 focus:outline-none"
-                            style={{ border: `1.5px dashed ${FAINT}` }}
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setAddColorOpen(true);
+                              }
+                            }}
                             data-testid="button-add-color"
+                            className="rounded-2xl text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer flex flex-col items-center justify-center"
+                            style={{ padding: "16px 10px 12px", border: `1.5px dashed #c7c7cc`, minHeight: 104 }}
                           >
-                            <span
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border"
-                              style={{ borderColor: BLUE, color: BLUE }}
-                            >
-                              <Plus className="h-4 w-4" strokeWidth={2.5} />
+                            <span className="flex items-center justify-center rounded-full" style={{ width: 32, height: 32, border: `1.5px solid ${BLUE}` }}>
+                              <Plus className="w-4 h-4" style={{ color: BLUE }} />
                             </span>
-                            <span className="mt-1.5 text-[12px] font-semibold" style={{ color: BLUE }}>
+                            <span className="text-[12.5px] font-semibold" style={{ color: INK, marginTop: 8 }}>
                               Add color
                             </span>
-                          </button>
+                          </div>
                         }
                       />
                     )}

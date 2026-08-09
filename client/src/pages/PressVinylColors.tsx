@@ -603,16 +603,16 @@ export function MoreTypesPopover({ onAdd, adding }: { onAdd: (name: string) => v
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" className="group flex items-center gap-2 focus:outline-none" data-testid="button-more-types">
-          <span
-            className="inline-flex items-center justify-center rounded-full border flex-shrink-0"
-            style={{ width: 20, height: 20, borderColor: BLUE, color: BLUE }}
-          >
-            <Plus className="w-3 h-3" strokeWidth={2.5} />
-          </span>
-          <span className="text-[13px] font-semibold" style={{ color: BLUE }}>
-            More types
-          </span>
+        <button
+          type="button"
+          data-testid="button-more-types"
+          className="flex items-center gap-1.5 text-[12.5px] font-semibold rounded-full px-3 h-8 transition-colors"
+          style={{ color: BLUE, marginTop: 10 }}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f0f7fc")}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+        >
+          <Plus className="w-3.5 h-3.5" />
+          More types
         </button>
       </PopoverTrigger>
       <PopoverContent

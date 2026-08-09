@@ -37,3 +37,8 @@ The press Catalog (portal Vinyl catalog tab + god-view `?tab=catalog`) is `clien
 - Disc preview: real per-color art (swatchImageUrl/thumbnailUrl) as base + the reference's gloss overlay layer on top; synthetic swatch only when no art.
 - Verification trick: render the reference file in the mockup sandbox (copy to artifacts/mockup-sandbox/src/components/mockups/<dir>/, swap @workspace design-system imports to ../../ui/*, stub asset imports as data-URIs) and screenshot via externalUrl on $REPLIT_DEV_DOMAIN/__mockup/preview/... — appPreview path hits the main app, not the sandbox.
 - Screenshot tool has no viewport param (1280×720); shoot reference + live with the same tool for a fair diff.
+
+## Handoff-fidelity rule (durable)
+- "Character-identical" applies at EVERY level: section layout, grid specs, AND tile/popover/caption internals. Re-derived markup (responsive grids, different borders/shadows/text sizes) is a rejection even if a screenshot looks close.
+- Acceptance check = grep-diff of className + inline style sets between handoff and live files, component by component. Screenshot diffing at 1280px is NOT sufficient — responsive grids collapse to the reference's fixed column count at that width and hide the drift.
+- design-lint will flag the handoff's raw sizes/hexes; re-snapshot the baseline rather than converting them to vars.
