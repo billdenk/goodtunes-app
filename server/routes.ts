@@ -19281,7 +19281,45 @@ export async function registerRoutes(
   app.get("/api/manufacturers/:id", requireAdmin, denyScopedVendorFulfillment, async (req, res) => {
     const m = await storage.getManufacturerById(String(req.params.id));
     if (!m) return res.status(404).json({ message: "Manufacturer not found" });
-    return res.json(m);
+    // IDOR hardening — this row carries operational + PII fields (broker
+    // discount, operational note, contact email/phone, capability flags…).
+    // Operators see everything; the press's OWN users (resolved via the same
+    // manufacturer-membership check used by requirePressScope) see everything.
+    // Every OTHER admin-role caller that legitimately reaches this row — the
+    // artist package builder pulls an INVITED press's row purely for its
+    // center-label branding — gets a narrowed, non-sensitive subset only.
+    // (Vendor/fulfillment are already 403'd by denyScopedVendorFulfillment,
+    // label/manager/non_profit + a press reading ANOTHER press by the prefix
+    // guards above; this narrows the one remaining legitimate cross-scope read.)
+    const userId = await getUserIdFromRequest(req);
+    let full = false;
+    if (userId) {
+      const { getUserRole, findMembershipForScope } = await import("./auth/roles");
+      const info = await getUserRole(userId);
+      if (info?.role === "super_admin" || info?.role === "admin") {
+        full = true;
+      } else if (await findMembershipForScope(userId, "manufacturer", m.id)) {
+        full = true;
+      }
+    }
+    if (full) return res.json(m);
+    // Safe branding/public subset — everything the artist builder + any
+    // whitelabel branding surface needs, nothing operational or PII.
+    return res.json({
+      id: m.id,
+      name: m.name,
+      logoUrl: (m as any).logoUrl ?? null,
+      navLogoUrl: (m as any).navLogoUrl ?? null,
+      lightLogoUrl: (m as any).lightLogoUrl ?? null,
+      lightNavLogoUrl: (m as any).lightNavLogoUrl ?? null,
+      squareLogoUrl: (m as any).squareLogoUrl ?? null,
+      lightSquareLogoUrl: (m as any).lightSquareLogoUrl ?? null,
+      coverUrl: (m as any).coverUrl ?? null,
+      vinylPlaceholderUrl: (m as any).vinylPlaceholderUrl ?? null,
+      labelLogoUrl: (m as any).labelLogoUrl ?? null,
+      labelBgColor: (m as any).labelBgColor ?? null,
+      websiteUrl: (m as any).websiteUrl ?? null,
+    });
   });
   // Task #635 — lightweight `(pressId, format)` index used by the
   // SellPanel collapsed-header press-switcher popover to filter

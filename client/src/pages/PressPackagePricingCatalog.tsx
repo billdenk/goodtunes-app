@@ -47,7 +47,6 @@ import {
 } from "./AdminManufacturer";
 import {
   ColorBall,
-  DISC_SPIN_CSS,
   MoreTypesPopover,
   SwatchEditorPopover,
   VinylDisc,
@@ -442,27 +441,69 @@ export function JacketStage({
   const isDouble = format === "12_double";
   const jacketPx = format === "7_inch" ? 175 : 300;
   const DISC = Math.round(jacketPx * 0.96);
+  // Blessed reference: label/hole ratios derived from the product size. 7"
+  // formats use labelInches 3.3; 12" formats use 3.94.
+  const inches = format === "7_inch" ? 7 : 12;
+  const labelInches = format === "7_inch" ? 3.3 : 3.94;
+  const labelRatio = labelInches / inches;
+  const holeRatio = 0.3 / inches;
+  // Reference hover mechanics — the record slides right while its body rotates.
+  // The specular highlight lives outside the body in VinylDisc, so it stays
+  // fixed like a real light source. Everything glides back on pointer-leave.
+  const [hover, setHover] = useState(false);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    el.style.transition = "transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)";
+    el.style.transform = hover ? "rotate(32deg)" : "rotate(0deg)";
+  }, [hover]);
+  const bodyRef2 = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = bodyRef2.current;
+    if (!el) return;
+    el.style.transition = "transform 0.75s cubic-bezier(0.32, 0.72, 0.28, 1) 0.1s";
+    el.style.transform = hover ? "rotate(18deg)" : "rotate(0deg)";
+  }, [hover]);
   return (
     <div data-testid="jacket-stage">
-      <style dangerouslySetInnerHTML={{ __html: DISC_SPIN_CSS }} />
-      <div className="group relative" style={{ width: jacketPx + jacketPx * 0.5, height: jacketPx + 24 }}>
-        {/* Discs peek out to the right; slide further on hover. */}
+      <div
+        className="relative"
+        onPointerEnter={() => setHover(true)}
+        onPointerLeave={() => setHover(false)}
+        style={{ width: jacketPx + jacketPx * 0.5, height: jacketPx + 24, cursor: "pointer" }}
+      >
+        {/* Second record (Double LP) — peeks a touch further, on a slight delay */}
         {isDouble && (
           <div
-            className="absolute transition-transform duration-500 ease-out group-hover:translate-x-6"
-            style={{ top: (jacketPx - DISC) / 2, left: jacketPx - DISC + jacketPx * 0.27, opacity: 0.55, transitionDelay: "60ms" }}
             aria-hidden
+            style={{
+              position: "absolute",
+              top: (jacketPx - DISC) / 2,
+              left: jacketPx - DISC + jacketPx * 0.27,
+              transition: "transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1) 0.1s",
+              transform: hover ? `translateX(${jacketPx * 0.3}px)` : "translateX(0)",
+              willChange: "transform",
+              zIndex: 0,
+              filter: "brightness(0.88)",
+            }}
           >
-            <VinylDisc size={DISC - 16} color={color} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
+            <VinylDisc size={DISC} color={color} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} bodyRef={bodyRef2} labelRatio={labelRatio} holeRatio={holeRatio} />
           </div>
         )}
+        {/* Record — behind the jacket, slides right on hover (transform only) */}
         <div
-          className="absolute transition-transform duration-500 ease-out group-hover:translate-x-10"
-            style={{ top: (jacketPx - DISC) / 2, left: jacketPx - DISC + jacketPx * 0.22 }}
+          style={{
+            position: "absolute",
+            top: (jacketPx - DISC) / 2,
+            left: jacketPx - DISC + jacketPx * 0.22,
+            transition: "transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)",
+            transform: hover ? `translateX(${jacketPx * 0.24}px)` : "translateX(0)",
+            willChange: "transform",
+            zIndex: 1,
+          }}
         >
-          <div className="gt-vinyl" style={{ borderRadius: "50%" }}>
-            <VinylDisc size={DISC} color={color} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} spin />
-          </div>
+          <VinylDisc size={DISC} color={color} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} bodyRef={bodyRef} labelRatio={labelRatio} holeRatio={holeRatio} />
         </div>
         {/* Jacket in front — handoff-verbatim: black, square (radius 3), spine hint */}
         <div
@@ -493,18 +534,14 @@ export function JacketStage({
             <img src={placeholderIconUrl} alt="" aria-hidden data-testid="jacket-placeholder-icon" style={{ width: "45%", opacity: 0.95 }} />
           ) : labelLogoUrl ? (
             <img src={labelLogoUrl} alt="" aria-hidden style={{ width: jacketPx * 0.42, height: jacketPx * 0.42, objectFit: "contain", filter: "invert(1)", opacity: 0.92 }} />
-          ) : (
-            <span className="text-[12px] font-semibold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.4)" }}>
-              Printed jacket
-            </span>
-          )}
+          ) : null}
           {/* spine hint */}
           <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 7, background: "linear-gradient(90deg, rgba(0,0,0,0.5), transparent)" }} />
         </div>
         {/* floor shadow — fixed size, stretched with a transform so it never repaints mid-hover */}
         <div
           aria-hidden
-          className="pointer-events-none absolute transition-transform duration-500 ease-out group-hover:scale-x-[1.18]"
+          className="pointer-events-none absolute"
           style={{
             bottom: -6,
             left: jacketPx * 0.1,
@@ -513,7 +550,10 @@ export function JacketStage({
             borderRadius: "50%",
             background: "rgba(0,0,0,0.28)",
             filter: "blur(9px)",
+            transform: hover ? "scaleX(1.18)" : "scaleX(1)",
             transformOrigin: "30% center",
+            transition: "transform 0.55s cubic-bezier(0.32, 0.72, 0.28, 1)",
+            willChange: "transform",
           }}
         />
       </div>
@@ -1003,11 +1043,13 @@ export function PressPackagePricingCatalog({
   const catalog = ((catalogRaw as { data?: Catalog } | undefined)?.data ?? catalogRaw) as Catalog | undefined;
   const canEdit = catalog?.canEdit !== false;
   // Press branding for the disc center label (portal + god-view).
-  const { data: pressRow } = useQuery<{ labelLogoUrl?: string | null; labelBgColor?: string | null }>({
+  const { data: pressRow } = useQuery<{ labelLogoUrl?: string | null; labelBgColor?: string | null; logoUrl?: string | null }>({
     queryKey: ["/api/manufacturers", pressId],
     enabled: !!pressId && !!canView,
   });
-  const labelLogoUrl = pressRow?.labelLogoUrl ?? null;
+  // Fall back to the press's square logo so white-label instances (Viryl / PMP /
+  // Hellbender) show their own mark on the jacket instead of nothing.
+  const labelLogoUrl = pressRow?.labelLogoUrl ?? pressRow?.logoUrl ?? null;
   const labelBgColor = pressRow?.labelBgColor ?? null;
 
   const invalidate = () =>

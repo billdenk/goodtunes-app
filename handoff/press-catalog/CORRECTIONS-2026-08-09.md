@@ -145,5 +145,66 @@ These are all symptoms of re-implementing instead of copying the reference verba
 - Jacket/logo: Memphis logo on the black jacket not inverted to white (jacket art unreadable).
 Rule of thumb for acceptance: on the dark Catalog page, NO white or light-gray rectangle may remain anywhere. If a surface is white, it was not copied from the reference.
 
+    ## 26. Jacket placeholder must show the press logo — never the words "PRINTED JACKET"
+
+    Screenshot evidence (Viryl instance, dark Catalog): the jacket preview is a plain black
+    square with the literal text "PRINTED JACKET" printed on the cover, and no logo anywhere.
+
+    The blessed reference (`handoff/press-catalog/PressPackagePricingTableRunsDark.tsx`,
+    `JacketStage`) never renders text on the artwork. Copy its behavior exactly:
+
+    - Center the **press's own logo** on the black jacket: white (dark logo asset with
+    `filter: invert(1)`), `opacity: 0.92`, sized to **42% of the jacket width/height**.
+    On a white-label instance this is that press's logo (Viryl here), not GoodTunes'.
+    - Remove the "PRINTED JACKET" text from the cover entirely. That phrase belongs only in
+    the small caption **below** the stage: "Printed jacket and inner sleeve included."
+    (or "Printed jacket included." when there's no inner sleeve).
+    - Keep the dark-on-dark separation from the reference: jacket stays truly black
+    (`#141416` + the 135° highlight gradient), with the hairline + lift shadow
+    `0 0 0 1px rgba(255,255,255,0.12), 0 22px 48px rgba(0,0,0,0.55), inset -1px 0 0 rgba(255,255,255,0.06)`
+    and the 7px spine gradient on the left edge.
+
+    Acceptance: on the dark Catalog, the jacket shows the press logo white-on-black, no text
+    on the artwork, and the caption below reads exactly as in the reference.
+    
+    ## 27. Vinyl disc animation & center label — copy VinylDisc/JacketStage verbatim
+
+    Screenshot evidence (PMP + Viryl instances): the record that peeks out of the jacket has
+    none of the reference behavior. Item 26 (jacket logo) applies to ALL press instances —
+    PMP shows the same "PRINTED JACKET" text; fix everywhere, not per-instance.
+
+    Copy `VinylDisc` and `JacketStage` from
+    `handoff/press-catalog/PressPackagePricingTableRunsDark.tsx` **verbatim**. Specifically:
+
+    1. **Specular highlight**: the disc has a fixed light-source highlight that does NOT
+     rotate with the record. In the reference the highlight layer lives OUTSIDE the
+     rotating body (only grooves + label sit inside the `bodyRef` wrapper that rotates).
+     The current build has no highlight at all.
+
+    2. **Hover motion**: on hover the disc SLIDES right (`translateX`, 0.55s
+     `cubic-bezier(0.32, 0.72, 0.28, 1)`) while the disc body ROTATES 32°. It must not
+     jump vertically. Double LP: second disc slides further on a 0.1s delay and rotates
+     18° over 0.75s. On pointer-leave both transforms return to zero — the label
+     straightens itself automatically. No rewind control is needed or wanted.
+
+    3. **Center label**: black label carrying the press's logo in white
+     (`filter: invert(1) brightness(1.7)` on the dark logo asset), sized from the
+     product's label ratio. The label rotates with the disc body. Each white-label
+     instance shows its own press logo (Viryl, PMP, MRP, Hellbender).
+
+    Acceptance: hovering the jacket on any press instance slides the record out with a 32°
+    spin, the highlight stays fixed while grooves/label turn, the center label shows that
+    press's logo, and everything glides back straight on mouse-out.
+    
+    ### 27a. Shine asset + slide distance (addendum)
+
+    - The specular shine is driven by a mask PNG, now provided at
+    `handoff/press-catalog/assets/vinyl-highlights.png` (1097×1098 RGBA). Overlay: a white
+    fill (`opacity: 0.6`, no blend mode) masked by this PNG, positioned over the whole disc,
+    OUTSIDE the rotating body so the light stays fixed while grooves/label rotate.
+    - Hover slide distance: keep the reference values — main disc `translateX(jacketPx * 0.24)`,
+    Double LP second disc `translateX(jacketPx * 0.3)` on its 0.1s delay. Do NOT slide
+    further; the label peeking partially is intentional.
+    
 ## Acceptance for this pass
     FULL-PAGE diff, not above-the-fold. Render the reference component (handoff/press-catalog/PressPackagePricingTableRuns.tsx) and the live page at 1440px, scroll both to the bottom, and compare EVERY section top to bottom: top bar, sidebar, header block, size cards, type tiles, color rail, jacket/vinyl preview + caption, package card, price rows, print-template tiles (filled + empty states, die-line icons), floating save bar, GoodDeeds section, and the page footer (which must be empty of parked buttons). Diff the rendered page against the reference side by side at 1440px. Any card width, copy string, or preview geometry that differs from the reference is a failure. Do not report complete until a screenshot of the live page is visually indistinguishable from the reference (data values aside).

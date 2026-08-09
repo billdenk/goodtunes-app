@@ -54,3 +54,10 @@ The press Catalog (portal Vinyl catalog tab + god-view `?tab=catalog`) is `clien
 - Dark FAINT is #8e8e93 (app AA canon) not the ref's #6e6e73; status greens/ambers use app's brightened values — vars supersede ref raw hexes.
 - Screenshot dark: `?gtappearance=dark` deep-link exists (main.tsx, persists + scrubs URL) — use that, not localStorage hacks.
 - Section rhythm: 7 h-px dividers margin '28px 0' — count must match both refs (7).
+
+## Jacket/disc hover animation (items 26/27/27a, 2026-08-09)
+- JacketStage hover: disc slides translateX(jacketPx*0.24) (2nd disc 0.3, 0.1s delay, brightness(0.88)) with cubic-bezier(0.32,0.72,0.28,1); body rotates 32°/18° via bodyRef refs; NO vertical movement, NO continuous spin, NO rewind button; everything glides back on pointer-leave.
+- Disc shine = white fill opacity 0.6 masked by /vinyl-highlights.png (client/public), OUTSIDE the rotating body, zIndex 1; rim overlay zIndex 2, spindle hole zIndex 3 (gloss must never paint over them).
+- Center label is UNCONDITIONALLY black #0a0a0a with press logo white via invert(1) brightness(1.7); label art renders only at size >= 70 (small 40/44px previews = plain black label). labelBgColor prop still threaded but unused for fill.
+- Jacket placeholder: press logo (labelLogoUrl ?? logoUrl fallback) at 42% invert(1) opacity .92; NO "Printed jacket" text on the cover ever (caption below the stage keeps the phrase).
+- SECURITY: GET /api/manufacturers/:id now returns only a branding/public subset (id, name, logo variants, labelLogoUrl/Bg, coverUrl, vinylPlaceholderUrl, websiteUrl) to non-operator, non-own-press partners (artist package builder needs it); full row only for operators + the press's own users.

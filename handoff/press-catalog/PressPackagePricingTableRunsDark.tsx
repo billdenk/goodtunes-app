@@ -345,7 +345,7 @@ function VinylDisc({
           position: 'absolute',
           inset: 0,
           backgroundColor: '#ffffff',
-          opacity: 0.72,
+          opacity: 0.6,
           mixBlendMode: 'normal',
           maskImage: `url(${LAYERS.highlights})`,
           WebkitMaskImage: `url(${LAYERS.highlights})`,

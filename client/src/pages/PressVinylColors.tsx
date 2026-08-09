@@ -13,7 +13,7 @@
 // format-scoped group in the real model, so the format context sits above the
 // group cards instead. The ONE filled blue pill is "Save color" in the editor.
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode, type MutableRefObject } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { postAdminImage } from "@/lib/adminUpload";
@@ -105,9 +105,12 @@ function PressDiscLabel({
   logoUrl: string | null;
   bgColor: string | null;
 }) {
-  // No logo = plain generic label: quiet neutral (or the press's bg color)
-  // with a subtle ring; nothing invented.
-  const bg = bgColor || "#e8e6df";
+  // Blessed reference (CORRECTIONS item 27): a plain BLACK label carrying the
+  // press's logo in white. The dark logo asset is rendered white with
+  // `invert(1) brightness(1.7)`. bgColor is still threaded (kept in the
+  // signature so call sites compile) but the fill is UNCONDITIONALLY the
+  // reference's PRESS_LABEL_BG, never overridden.
+  void bgColor;
   return (
     <div
       style={{
@@ -118,12 +121,11 @@ function PressDiscLabel({
         width: size,
         height: size,
         borderRadius: "50%",
-        backgroundColor: bg,
+        backgroundColor: "#0a0a0a",
         overflow: "hidden",
-        boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.18)",
       }}
     >
-      {logoUrl && size >= 24 && (
+      {logoUrl && size >= 70 && (
         <img
           src={logoUrl}
           alt=""
@@ -136,6 +138,7 @@ function PressDiscLabel({
             width: size * 0.9,
             height: size * 0.9,
             objectFit: "contain",
+            filter: "invert(1) brightness(1.7)",
           }}
         />
       )}
@@ -149,17 +152,29 @@ export function VinylDisc({
   labelLogoUrl,
   labelBgColor,
   spin = false,
+  bodyRef,
+  labelRatio,
+  holeRatio = 0.018,
 }: {
   size: number;
   color: CatalogColor | null;
   labelLogoUrl: string | null;
   labelBgColor: string | null;
   spin?: boolean;
+  // Blessed reference: when the caller wants to drive rotation imperatively
+  // (JacketStage), it passes a bodyRef attached to the rotating body div. The
+  // className-based `spin` prop is kept working for the add-your-vinyl stage.
+  bodyRef?: MutableRefObject<HTMLDivElement | null>;
+  labelRatio?: number;
+  holeRatio?: number;
 }) {
-  const LABEL_RATIO = 368 / 1104;
+  const LABEL_RATIO = labelRatio ?? 368 / 1104;
   const photo = color?.swatchImageUrl || color?.swatchThumbUrl || color?.thumbnailUrl || null;
   const hex = color?.swatchHex || "#111114";
   const dark = useAdminDark();
+  // A ref-driven body is spin-capable (willChange transform) just like the
+  // className spin path.
+  const spinning = spin || !!bodyRef;
   return (
     <div
       className={spin ? "gt-vinyl" : undefined}
@@ -174,8 +189,9 @@ export function VinylDisc({
       }}
     >
       <div
+        ref={bodyRef}
         className={spin ? "gt-vinyl-body" : undefined}
-        style={{ position: "absolute", inset: 0, borderRadius: "50%", willChange: spin ? "transform" : undefined }}
+        style={{ position: "absolute", inset: 0, borderRadius: "50%", willChange: spinning ? "transform" : undefined }}
       >
         {photo ? (
           <img
@@ -191,16 +207,25 @@ export function VinylDisc({
         <PressDiscLabel size={size * LABEL_RATIO} logoUrl={labelLogoUrl} bgColor={labelBgColor} />
       </div>
 
-      {/* Fixed sheen — never rotates (light stays put over a spinning record). */}
+      {/* Gloss overlay — blessed reference: a fixed white fill masked by the
+          vinyl-highlights PNG. Sits OUTSIDE the rotating body so the light
+          stays put while grooves/label rotate. */}
       <div
         aria-hidden
         style={{
           position: "absolute",
           inset: 0,
-          borderRadius: "50%",
+          backgroundColor: "#ffffff",
+          opacity: 0.6,
+          mixBlendMode: "normal",
+          maskImage: "url(/vinyl-highlights.png)",
+          WebkitMaskImage: "url(/vinyl-highlights.png)",
+          maskSize: "100% 100%",
+          WebkitMaskSize: "100% 100%",
+          maskRepeat: "no-repeat",
+          WebkitMaskRepeat: "no-repeat",
           pointerEvents: "none",
-          background:
-            "linear-gradient(135deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.06) 28%, rgba(255,255,255,0) 46%, rgba(255,255,255,0) 60%, rgba(255,255,255,0.10) 82%, rgba(255,255,255,0.02) 100%)",
+          zIndex: 1,
         }}
       />
 
@@ -216,6 +241,7 @@ export function VinylDisc({
             inset: 0,
             borderRadius: "50%",
             pointerEvents: "none",
+            zIndex: 2,
             boxShadow:
               "inset 0 0 0 1px rgba(255,255,255,0.16), inset 0 1px 1.5px rgba(255,255,255,0.22)",
           }}
@@ -230,9 +256,10 @@ export function VinylDisc({
           top: "50%",
           left: "50%",
           transform: "translate(-50%, -50%)",
-          width: Math.max(3, size * 0.018),
-          height: Math.max(3, size * 0.018),
+          width: Math.max(3, size * holeRatio),
+          height: Math.max(3, size * holeRatio),
           borderRadius: "50%",
+          zIndex: 3,
           backgroundColor: "var(--apple-canvas, #f5f5f7)",
           boxShadow: "inset 0 0.5px 1px rgba(0,0,0,0.5)",
           pointerEvents: "none",
