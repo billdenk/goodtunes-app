@@ -30,6 +30,9 @@
     - Audio spec: "Audio spec. What the lathe can cut." (not "What your lathe needs.")
     - Turnaround: no "Using press default: 12–14 weeks" caption; the reference has "Weeks from confirmed order to finished records on the truck." only.
 
+    ## 6. Responsive — the record disappears
+    - At narrower widths the layout collapses to one column and the disc/jacket preview is REMOVED entirely. Wrong. When the two-column grid can't fit, **stack**: the preview (disc + caption + "One package. Everything included." card) moves ABOVE the working column, scaled down — it never disappears. The record is the product; it stays on screen at every breakpoint.
+
     ## Acceptance
-    Screenshot the rebuilt page at 7" and 12" for MRP with real data and compare against the reference component pixel-flow-for-pixel-flow. If any section's structure or copy differs from the reference, it is not done.
+    Screenshot the rebuilt page at 7" and 12" for MRP with real data and compare against the reference component pixel-flow-for-pixel-flow. Also verify a narrow (~1024px) viewport: preview stacked above, never missing. If any section's structure or copy differs from the reference, it is not done.
     
