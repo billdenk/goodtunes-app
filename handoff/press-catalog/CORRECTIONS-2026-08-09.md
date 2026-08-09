@@ -196,5 +196,16 @@ Rule of thumb for acceptance: on the dark Catalog page, NO white or light-gray r
     spin, the highlight stays fixed while grooves/label turn, the center label shows that
     press's logo, and everything glides back straight on mouse-out.
     
+    ### 27a. Shine asset + slide distance (addendum)
+
+    - The specular shine is driven by a mask PNG, now provided at
+    `handoff/press-catalog/assets/vinyl-highlights.png` (1097×1098 RGBA). Overlay: a white
+    fill (`opacity: 0.6`, no blend mode) masked by this PNG, positioned over the whole disc,
+    OUTSIDE the rotating body so the light stays fixed while grooves/label rotate.
+    - Hover slide distance: the record must come out far enough to fully reveal the center
+    label — main disc `translateX(jacketPx * 0.5)`, Double LP second disc
+    `translateX(jacketPx * 0.58)` on its 0.1s delay. (The blessed reference file is updated
+    with these values; re-copy JacketStage/VinylDisc if you copied an earlier version.)
+    
 ## Acceptance for this pass
     FULL-PAGE diff, not above-the-fold. Render the reference component (handoff/press-catalog/PressPackagePricingTableRuns.tsx) and the live page at 1440px, scroll both to the bottom, and compare EVERY section top to bottom: top bar, sidebar, header block, size cards, type tiles, color rail, jacket/vinyl preview + caption, package card, price rows, print-template tiles (filled + empty states, die-line icons), floating save bar, GoodDeeds section, and the page footer (which must be empty of parked buttons). Diff the rendered page against the reference side by side at 1440px. Any card width, copy string, or preview geometry that differs from the reference is a failure. Do not report complete until a screenshot of the live page is visually indistinguishable from the reference (data values aside).
