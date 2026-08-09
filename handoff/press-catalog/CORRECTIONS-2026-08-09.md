@@ -92,5 +92,8 @@ Live tiles read "Black / 0 colors · 3 of 6 runs priced" etc. The reference tile
 ## 17. Vinyl preview: still wrong, and new art direction
 Item 8 stands: copy the reference JacketStage geometry verbatim — jacket front-left, disc peeking out to the RIGHT from behind, never past the jacket's top/bottom edges, hero scale. New direction on the disc art itself: use each press's REAL disc/label art (MRP, PMP, Viryl, Hellbender) as the base image, with the SAME gloss/highlight overlay layer from the reference rendered on top of all of them. The highlight is a separate absolutely-positioned layer above the artwork — identical for every press — so real art + canonical sheen.
 
+## 18. Format switcher placement + header typography wrong
+Live renders the Vinyl / CD / Cassette pill BESIDE the "Catalog" H1, inline on the same row. The reference places it on its own row UNDER the H1: "Catalog" first, then the segmented pill below it, then the VINYL · PACKAGE PRICING eyebrow and the two-tone heading. Font sizes and colors in this header block have also drifted (H1 weight/size, pill text size, eyebrow letter-spacing, gray tones). Do not eyeball it — copy the reference header block markup and styles verbatim per #14.
+
 ## Acceptance for this pass
 Diff the rendered page against the reference component side by side at 1440px. Any card width, copy string, or preview geometry that differs from the reference is a failure. Do not report complete until a screenshot of the live page is visually indistinguishable from the reference (data values aside).
