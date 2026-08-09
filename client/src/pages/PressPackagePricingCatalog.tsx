@@ -202,7 +202,7 @@ function ReorderControls({
         className="text-[12px] font-semibold rounded-full transition-colors hover:bg-slate-100 focus:outline-none"
         style={{ padding: "5px 12px", color: SUBINK, border: `1px solid ${HAIRLINE}`, background: dark ? CARD : "#fff" }}
       >
-        Reorder
+        Rearrange
       </button>
     );
   }
