@@ -157,45 +157,51 @@ export function JacketStage({
             <VinylDisc size={DISC} color={color} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} spin />
           </div>
         </div>
-        {/* Jacket in front */}
+        {/* Jacket in front — handoff-verbatim: black, square (radius 3), spine hint */}
         <div
-          className="absolute left-0 top-0 overflow-hidden rounded-[10px]"
+          className="absolute left-0 top-0 overflow-hidden"
           style={{
             width: jacketPx,
             height: jacketPx,
-            boxShadow: "0 18px 40px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.12)",
-            backgroundColor: "#22242a",
-            border: `1px solid ${HAIRLINE}`,
+            borderRadius: 3,
+            backgroundColor: "#141416",
+            backgroundImage: "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 45%)",
+            boxShadow: "0 18px 40px rgba(0,0,0,0.25), inset -1px 0 0 rgba(255,255,255,0.06)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 2,
           }}
         >
           {jacketUrl ? (
             <img src={jacketUrl} alt="" aria-hidden className="h-full w-full object-cover" />
           ) : placeholderIconUrl ? (
-            <div
-              className="flex h-full w-full items-center justify-center"
-              style={{ backgroundColor: "#1d1d1f" }}
-              data-testid="jacket-placeholder-icon"
-            >
-              <img src={placeholderIconUrl} alt="" aria-hidden style={{ width: "45%", opacity: 0.95 }} />
-            </div>
+            <img src={placeholderIconUrl} alt="" aria-hidden data-testid="jacket-placeholder-icon" style={{ width: "45%", opacity: 0.95 }} />
+          ) : labelLogoUrl ? (
+            <img src={labelLogoUrl} alt="" aria-hidden style={{ width: jacketPx * 0.42, height: jacketPx * 0.42, objectFit: "contain", filter: "invert(1)", opacity: 0.92 }} />
           ) : (
-            <div
-              className="flex h-full w-full items-center justify-center"
-              style={{
-                background:
-                  "linear-gradient(150deg, #2b2e36 0%, #1c1e24 60%, #14161b 100%)",
-              }}
-            >
-              {labelLogoUrl ? (
-                <img src={labelLogoUrl} alt="" aria-hidden style={{ width: jacketPx * 0.42, opacity: 0.8 }} />
-              ) : (
-                <span className="text-[12px] font-semibold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.4)" }}>
-                  Printed jacket
-                </span>
-              )}
-            </div>
+            <span className="text-[12px] font-semibold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.4)" }}>
+              Printed jacket
+            </span>
           )}
+          {/* spine hint */}
+          <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 7, background: "linear-gradient(90deg, rgba(0,0,0,0.5), transparent)" }} />
         </div>
+        {/* floor shadow — fixed size, stretched with a transform so it never repaints mid-hover */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute transition-transform duration-500 ease-out group-hover:scale-x-[1.18]"
+          style={{
+            bottom: -6,
+            left: jacketPx * 0.1,
+            width: jacketPx * 0.9 + jacketPx * 0.22 * 0.6,
+            height: 14,
+            borderRadius: "50%",
+            background: "rgba(0,0,0,0.28)",
+            filter: "blur(9px)",
+            transformOrigin: "30% center",
+          }}
+        />
       </div>
       {/* Captions — shifted left so they center under the jacket, not the whole stage. */}
       <div className="flex flex-col items-center" style={{ transform: `translateX(-${Math.round(jacketPx * 0.25)}px)` }} data-testid="stage-caption">
@@ -683,11 +689,20 @@ export function PressPackagePricingCatalog({
         setActiveTab(wanted as AlbumFormat);
         return;
       }
-      setActiveTab(VINYL_FORMATS.find((f) => offeredList.includes(f)) ?? VINYL_FORMATS[0]);
+      // 12" LP is the default when the press offers it (Bill: not 7").
+      setActiveTab(
+        offeredList.includes("12_lp")
+          ? "12_lp"
+          : VINYL_FORMATS.find((f) => offeredList.includes(f)) ?? "12_lp",
+      );
       return;
     }
     if (!offeredList.includes(activeTab as AlbumFormat)) {
-      setActiveTab(VINYL_FORMATS.find((f) => offeredList.includes(f)) ?? VINYL_FORMATS[0]);
+      setActiveTab(
+        offeredList.includes("12_lp")
+          ? "12_lp"
+          : VINYL_FORMATS.find((f) => offeredList.includes(f)) ?? "12_lp",
+      );
     }
   }, [catalog, activeTab]);
 
@@ -1080,7 +1095,10 @@ export function PressPackagePricingCatalog({
 
   if (roleInfo && !canView) return null;
 
-  const jacketUrl = placeholderUrl || pressPlaceholderArt(pressDomain);
+  // Handoff mock: the catalog stage always shows the black printed jacket with
+  // the press's label logo inverted — never the white placeholder art (that
+  // stays for real albums in the package builder).
+  const jacketUrl = null;
   const offeredVinyl = VINYL_FORMATS.filter((f) => offered.has(f));
   const missingVinyl = VINYL_FORMATS.filter((f) => !offered.has(f));
 

@@ -42,3 +42,5 @@ The press Catalog (portal Vinyl catalog tab + god-view `?tab=catalog`) is `clien
 - "Character-identical" applies at EVERY level: section layout, grid specs, AND tile/popover/caption internals. Re-derived markup (responsive grids, different borders/shadows/text sizes) is a rejection even if a screenshot looks close.
 - Acceptance check = grep-diff of className + inline style sets between handoff and live files, component by component. Screenshot diffing at 1280px is NOT sufficient — responsive grids collapse to the reference's fixed column count at that width and hide the drift.
 - design-lint will flag the handoff's raw sizes/hexes; re-snapshot the baseline rather than converting them to vars.
+
+**Catalog stage jacket (Bill, Aug 2026):** the press-catalog stage always renders the handoff's BLACK square jacket (radius 3, #141416, spine hint, inverted label logo at 0.42) — `jacketUrl` is hard-nulled on the catalog page; the white `vinyl_placeholder_url` art is only for real albums in the package builder. Default size tab is 12" LP when offered, never 7".
