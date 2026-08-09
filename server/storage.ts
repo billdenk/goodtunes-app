@@ -164,6 +164,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, lte, or, sql } from
 import { db } from "./db";
 import { pgArray } from "./lib/pgArray";
 import { softDeleteEntity, restoreEntity, purgeEntity } from "./softDelete";
+import { nextPressChartColor } from "@shared/pressChartPalette";
 import { todayISODate } from "@shared/albumStage";
 import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
 
@@ -5031,7 +5032,25 @@ export class DbStorage implements IStorage {
     return m;
   }
   async createManufacturer(data: InsertManufacturer & { id?: string }): Promise<Manufacturer> {
-    const [m] = await db.insert(manufacturers).values(data as any).returning();
+    // Stamp a stable per-press chart color at onboarding (next unused
+    // palette slot) so cross-press charts stay consistent across visits.
+    // Never re-derived later; see shared/pressChartPalette.ts.
+    let chartColor = (data as any).chartColor as string | undefined;
+    if (!chartColor) {
+      try {
+        const existing = await db
+          .select({ c: manufacturers.chartColor })
+          .from(manufacturers)
+          .where(isNull(manufacturers.deletedAt));
+        chartColor = nextPressChartColor(existing.map((r) => r.c));
+      } catch {
+        chartColor = undefined; // drifted clone without the column — create without
+      }
+    }
+    const [m] = await db
+      .insert(manufacturers)
+      .values({ ...(data as any), ...(chartColor ? { chartColor } : {}) })
+      .returning();
     return m;
   }
   async updateManufacturer(id: string, data: Partial<Manufacturer>): Promise<Manufacturer | undefined> {

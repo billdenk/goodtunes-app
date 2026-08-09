@@ -523,6 +523,14 @@ export function AdminFrame({
       );
     } catch {}
   }, [openSection]);
+  // Bill (Aug 2026): navigation wins over the stored preference — landing on
+  // a page whose section is collapsed left the rail pointing nowhere (no
+  // highlighted item visible). When the active entity's section changes,
+  // expand that section; manual toggles still persist between navigations.
+  useEffect(() => {
+    if (activeSection) setOpenSection(activeSection);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection]);
   const toggleSection = (id: SidebarSectionId) =>
     setOpenSection((prev) => (prev === id ? null : id));
   const isSectionOpen = (id: SidebarSectionId) => openSection === id;

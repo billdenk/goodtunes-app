@@ -4,13 +4,14 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Search, Factory, Clock, Loader2, X, Disc3, BadgeCheck, Truck } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
+import { useAdminDark, useDarkMarkLogo } from "@/lib/adminAppearance";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
-import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
+import { AdminPressesDashboard } from "@/components/admin/AdminPressesDashboard";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
 import {
@@ -262,7 +263,7 @@ export function AdminManufacturers() {
           </button>
         </div>
 
-        {pageTab === "dashboard" && <AdminSectionDashboard section="presses" />}
+        {pageTab === "dashboard" && <AdminPressesDashboard />}
 
         {pageTab === "list" && (<>
         <AdminPageHeader
@@ -533,7 +534,18 @@ function CapabilityChips({ press, className = "" }: { press: Manufacturer; class
   );
 }
 
+/** Dark-mode logo treatment shared by the card + row tiles: a near-black
+ * mark on the charcoal card is invisible, so invert it to white (same
+ * pixel-sampled heuristic the press detail header uses). Colored/light
+ * logos are left untouched. */
+function usePressLogoInvert(logoUrl: string | null): boolean {
+  const dark = useAdminDark();
+  const darkMark = useDarkMarkLogo(logoUrl);
+  return dark && darkMark;
+}
+
 function PressCard({ press }: { press: Manufacturer }) {
+  const invertLogo = usePressLogoInvert(press.logoUrl);
   // Task #1962 — every grid card reserves the same footprint regardless of
   // how much optional metadata it carries (location, turnaround label,
   // capability chips). The richest case (logo + name + location + turnaround
@@ -548,7 +560,12 @@ function PressCard({ press }: { press: Manufacturer }) {
     >
       <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {press.logoUrl ? (
-          <img src={press.logoUrl} alt={press.name} className="w-full h-full object-cover" />
+          <img
+            src={press.logoUrl}
+            alt={press.name}
+            className="w-full h-full object-cover"
+            style={invertLogo ? { filter: "invert(1) brightness(1.7)" } : undefined}
+          />
         ) : (
           <Factory className="w-6 h-6 text-slate-300" strokeWidth={1.5} />
         )}
@@ -580,6 +597,7 @@ function PressCard({ press }: { press: Manufacturer }) {
 }
 
 function PressRow({ press }: { press: Manufacturer }) {
+  const invertLogo = usePressLogoInvert(press.logoUrl);
   return (
     <Link
       href={`/admin/manufacturers/${press.id}`}
@@ -589,7 +607,12 @@ function PressRow({ press }: { press: Manufacturer }) {
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-md bg-[var(--apple-track)] flex items-center justify-center overflow-hidden flex-shrink-0">
           {press.logoUrl ? (
-            <img src={press.logoUrl} alt="" className="w-full h-full object-cover" />
+            <img
+              src={press.logoUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              style={invertLogo ? { filter: "invert(1) brightness(1.7)" } : undefined}
+            />
           ) : (
             <Factory className="w-5 h-5 text-slate-400" strokeWidth={1.5} />
           )}

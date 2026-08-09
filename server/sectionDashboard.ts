@@ -21,6 +21,7 @@ import type { Express, Request, Response } from "express";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { storage } from "./storage";
+import { pgArray } from "./lib/pgArray";
 
 type Section =
   | "labels"
@@ -52,6 +53,8 @@ type Kpi = {
   format: KpiFormat;
   note?: string;
   comingSoon?: boolean;
+  /** Suppress the "vs prior" row for point-in-time metrics (no comparison). */
+  hideDelta?: boolean;
 };
 type ChartMetric = { id: string; label: string; format: KpiFormat };
 type SeriesPoint = { date: string; [metric: string]: number | string };
@@ -61,6 +64,30 @@ type ActivityItem = {
   title: string;
   detail?: string;
   href?: string;
+  // Presses rollup only — press attribution for the "As it happens" feed
+  // (logo badge on the activity icon + per-press filter chips).
+  pressId?: string;
+  pressName?: string;
+  pressLogoUrl?: string | null;
+};
+
+// Presses rollup only — per-press leaderboard row (Task: combined Press
+// Dashboard). Values are for the selected window; deltaGrossPct is vs the
+// prior window (null when there's no prior, e.g. "All").
+type PressRow = {
+  id: string;
+  name: string;
+  city: string | null;
+  logoUrl: string | null;
+  /** Stable onboard-assigned series color (manufacturers.chart_color). */
+  color: string | null;
+  grossCents: number;
+  orders: number;
+  unitsPressed: number | null;
+  openJobs: number;
+  inProduction: number;
+  turnDays: number | null;
+  deltaGrossPct: number | null;
 };
 
 type SectionPayload = {
@@ -71,6 +98,9 @@ type SectionPayload = {
   chartMetrics: ChartMetric[];
   series: SeriesPoint[];
   activity: ActivityItem[];
+  // Presses only — leaderboard + per-press stacked series (keys = press ids).
+  presses?: PressRow[];
+  pressSeries?: SeriesPoint[];
 };
 
 function parsePreset(raw: unknown): RangePreset {
@@ -405,6 +435,16 @@ async function buildNposRollup(
 
 // ─── Presses rollup ──────────────────────────────────────────────────
 
+// Rebuilt per Bill's PressDashboardAllDark handoff — the combined page now
+// mirrors the per-press dashboard's REAL metric set (gross / orders / units
+// via the same press-attribution CTE in partnerDashboard.ts), summed across
+// every live vinyl press, plus:
+//   • per-press stacked daily-gross series (`pressSeries`, keys = press ids)
+//   • press-attributed activity feed (sales + pressing-run events)
+//   • a leaderboard row per press (`presses`) linking to its own dashboard.
+// Jobs come from pressing_order_requests (pending|approved|rejected|
+// cancelled) — the real pipeline table. There is no run-completion event
+// yet, so Completed / Avg turn-time stay honest coming-soon tiles.
 async function buildPressesRollup(
   r: RangeWindow,
   prior: RangeWindow | null,
@@ -413,105 +453,243 @@ async function buildPressesRollup(
   chartMetrics: ChartMetric[];
   series: SeriesPoint[];
   activity: ActivityItem[];
+  presses: PressRow[];
+  pressSeries: SeriesPoint[];
 }> {
-  // pressing_orders may not be present in every env; wrap each query in
-  // try/catch so the dashboard still renders Coming-soon tiles instead
-  // of 500'ing the section page.
-  let open: number | null = null;
-  let inProd: number | null = null;
-  let completed: number | null = null;
-  let completedPrev: number | null = null;
-  try {
-    const o = await db.execute<any>(sql`
-      SELECT COUNT(*)::bigint AS n FROM pressing_orders
-      WHERE status NOT IN ('completed','cancelled','rejected')
-    `);
-    open = Number(rows(o)[0]?.n ?? 0);
-    const ip = await db.execute<any>(sql`
-      SELECT COUNT(*)::bigint AS n FROM pressing_orders
-      WHERE status = 'in_production'
-    `).catch(() => ({ rows: [{ n: 0 }] }) as any);
-    inProd = Number(rows(ip)[0]?.n ?? 0);
-    const c = await db.execute<any>(sql`
-      SELECT COUNT(*)::bigint AS n FROM pressing_orders
-      WHERE status = 'completed'
-        AND COALESCE(updated_at, created_at) >= ${r.from}
-        AND COALESCE(updated_at, created_at) < ${r.to}
-    `);
-    completed = Number(rows(c)[0]?.n ?? 0);
-    if (prior) {
-      const cp = await db.execute<any>(sql`
-        SELECT COUNT(*)::bigint AS n FROM pressing_orders
-        WHERE status = 'completed'
-          AND COALESCE(updated_at, created_at) >= ${prior.from}
-          AND COALESCE(updated_at, created_at) < ${prior.to}
-      `);
-      completedPrev = Number(rows(cp)[0]?.n ?? 0);
-    }
-  } catch {
-    open = inProd = completed = completedPrev = null;
+  const { pressAlbumIds, pressUnits } = await import("./partnerDashboard");
+
+  const pressRows = await db.execute<any>(sql`
+    SELECT id, name, logo_url, location, chart_color FROM manufacturers
+    WHERE deleted_at IS NULL AND does_vinyl = TRUE
+    ORDER BY name ASC
+  `).catch(() => ({ rows: [] }) as any);
+
+  type Acc = {
+    id: string;
+    name: string;
+    city: string | null;
+    logoUrl: string | null;
+    color: string | null;
+    albumIds: string[];
+    grossCents: number;
+    grossPriorCents: number | null;
+    orders: number;
+    ordersPrior: number | null;
+    unitsSold: number;
+    unitsSoldPrior: number | null;
+    unitsPressed: number | null;
+    openJobs: number;
+    inProduction: number;
+    daily: Array<{ day: string; gross: number }>;
+  };
+
+  const accs: Acc[] = [];
+  for (const m of rows(pressRows)) {
+    const albumIds = await pressAlbumIds(String(m.id));
+    const sales = async (w: RangeWindow | null) => {
+      if (!w || !albumIds.length) return w ? { gross: 0, orders: 0 } : null;
+      const row = await db.execute<any>(sql`
+        SELECT
+          COALESCE(SUM(CASE WHEN status <> 'refunded' THEN total_cents ELSE 0 END), 0)::bigint AS gross,
+          COUNT(*) FILTER (WHERE status <> 'refunded')::bigint AS orders
+        FROM orders
+        WHERE status IN ('paid','shipped','refunded')
+          AND COALESCE(origin, 'direct') <> 'qa:test'
+          AND album_id = ANY(${pgArray(albumIds)})
+          AND created_at >= ${w.from} AND created_at < ${w.to}
+      `).catch(() => ({ rows: [] }) as any);
+      const x = rows(row)[0] ?? {};
+      return { gross: Number(x.gross ?? 0), orders: Number(x.orders ?? 0) };
+    };
+    // Jobs — pressing_order_requests scoped by the package snapshot's pressId
+    // (the same attribution the press portal uses). Open = awaiting decision
+    // or approved-and-running; there's no completion status yet.
+    const jobs = await db.execute<any>(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE status IN ('pending','approved'))::bigint AS open,
+        COUNT(*) FILTER (WHERE status = 'approved')::bigint AS in_prod,
+        COALESCE(SUM(quantity) FILTER (
+          WHERE status = 'approved'
+            AND COALESCE(decided_at, submitted_at) >= ${r.from}
+            AND COALESCE(decided_at, submitted_at) < ${r.to}
+        ), 0)::bigint AS units_pressed
+      FROM pressing_order_requests
+      WHERE package_snapshot ->> 'pressId' = ${String(m.id)}
+    `).catch(() => ({ rows: [] }) as any);
+    const j = rows(jobs)[0] ?? {};
+    const dailyRes = albumIds.length
+      ? await db.execute<any>(sql`
+          SELECT date_trunc('day', created_at)::date::text AS day,
+            COALESCE(SUM(CASE WHEN status <> 'refunded' THEN total_cents ELSE 0 END), 0)::bigint AS gross
+          FROM orders
+          WHERE status IN ('paid','shipped','refunded')
+            AND COALESCE(origin, 'direct') <> 'qa:test'
+            AND album_id = ANY(${pgArray(albumIds)})
+            AND created_at >= ${r.from} AND created_at < ${r.to}
+          GROUP BY 1 ORDER BY 1 ASC
+        `).catch(() => ({ rows: [] }) as any)
+      : ({ rows: [] } as any);
+    const [cur, prv, unitsCur, unitsPrv] = await Promise.all([
+      sales(r),
+      sales(prior),
+      pressUnits(String(m.id), r),
+      prior ? pressUnits(String(m.id), prior) : Promise.resolve(null),
+    ]);
+    accs.push({
+      id: String(m.id),
+      name: String(m.name),
+      city: m.location ? String(m.location) : null,
+      logoUrl: m.logo_url ? String(m.logo_url) : null,
+      color: m.chart_color ? String(m.chart_color) : null,
+      albumIds,
+      grossCents: cur?.gross ?? 0,
+      grossPriorCents: prv ? prv.gross : null,
+      orders: cur?.orders ?? 0,
+      ordersPrior: prv ? prv.orders : null,
+      unitsSold: unitsCur ?? 0,
+      unitsSoldPrior: unitsPrv,
+      unitsPressed: Number(j.units_pressed ?? 0),
+      openJobs: Number(j.open ?? 0),
+      inProduction: Number(j.in_prod ?? 0),
+      daily: rows(dailyRes).map((x: any) => ({ day: String(x.day), gross: Number(x.gross ?? 0) })),
+    });
   }
+
+  // Leaderboard keeps every press that has anything to report — attributed
+  // releases, live jobs, or sales — so blank test rows don't pad the list.
+  const reporting = accs.filter(
+    (a) => a.albumIds.length > 0 || a.openJobs > 0 || a.grossCents > 0 || (a.unitsPressed ?? 0) > 0,
+  );
+  const roster = reporting.length ? reporting : accs;
+
+  const sum = (f: (a: Acc) => number) => roster.reduce((t, a) => t + f(a), 0);
+  const sumPrior = (f: (a: Acc) => number | null): number | null => {
+    if (!prior) return null;
+    return roster.reduce((t, a) => t + (f(a) ?? 0), 0);
+  };
 
   const kpis: Kpi[] = [
-    open === null
-      ? { id: "open", label: "Open jobs", value: null, format: "number", comingSoon: true }
-      : { id: "open", label: "Open jobs", value: open, format: "number" },
-    inProd === null
-      ? { id: "inProd", label: "In production", value: null, format: "number", comingSoon: true }
-      : { id: "inProd", label: "In production", value: inProd, format: "number" },
-    completed === null
-      ? { id: "completed", label: "Completed", value: null, format: "number", comingSoon: true }
-      : { id: "completed", label: "Completed", value: completed, prior: completedPrev, format: "number" },
-    { id: "units", label: "Units pressed", value: null, format: "number", comingSoon: true, note: "Lands with per-run unit-count rollup" },
-    { id: "turn", label: "Avg turn-time", value: null, format: "duration", comingSoon: true },
+    { id: "gross", label: "Gross sales", value: sum((a) => a.grossCents), prior: sumPrior((a) => a.grossPriorCents), format: "currency", note: "Across all presses' releases" },
+    { id: "orders", label: "Orders", value: sum((a) => a.orders), prior: sumPrior((a) => a.ordersPrior), format: "number" },
+    { id: "units", label: "Units pressed", value: sum((a) => a.unitsPressed ?? 0), format: "number", note: "Approved run quantities this window", hideDelta: !prior },
+    { id: "open", label: "Open jobs", value: sum((a) => a.openJobs), format: "number", note: `${sum((a) => a.inProduction)} in production now`, hideDelta: true },
+    { id: "completed", label: "Completed", value: null, format: "number", comingSoon: true, note: "Lands with run-completion events" },
+    { id: "turn", label: "Avg turn-time", value: null, format: "duration", comingSoon: true, note: "Order to out the door, averaged" },
   ];
 
-  let series: SeriesPoint[] = [];
-  const chartMetrics: ChartMetric[] = [
-    { id: "completed", label: "Completed per day", format: "number" },
-  ];
-  try {
-    const daily = await db.execute<any>(sql`
-      SELECT date_trunc('day', COALESCE(updated_at, created_at))::date::text AS day,
-        COUNT(*) FILTER (WHERE status = 'completed')::bigint AS completed,
-        COUNT(*) FILTER (WHERE status NOT IN ('cancelled','rejected'))::bigint AS opened
-      FROM pressing_orders
-      WHERE COALESCE(updated_at, created_at) >= ${r.from}
-        AND COALESCE(updated_at, created_at) < ${r.to}
-      GROUP BY 1 ORDER BY 1 ASC
-    `);
-    series = mergeDaily([
-      { rows: rows(daily), completed: (x: any) => Number(x.completed ?? 0), opened: (x: any) => Number(x.opened ?? 0) },
-    ]);
-  } catch {
-    series = [];
+  // Combined trend (kept for payload compatibility) + per-press stacked series.
+  const series = mergeDaily(
+    roster.map((a) => ({
+      rows: a.daily,
+      gross: (x: any) => Number(x.gross ?? 0),
+    })),
+  );
+  const byDay = new Map<string, SeriesPoint>();
+  for (const a of roster) {
+    for (const d of a.daily) {
+      let p = byDay.get(d.day);
+      if (!p) {
+        p = { date: d.day };
+        byDay.set(d.day, p);
+      }
+      p[a.id] = (Number(p[a.id] ?? 0) || 0) + d.gross;
+    }
   }
+  const pressSeries = Array.from(byDay.values()).sort((x, y) => (x.date < y.date ? -1 : 1));
 
+  const deltaPct = (cur: number, prv: number | null): number | null => {
+    if (prv === null) return null;
+    if (prv === 0) return cur > 0 ? null : 0;
+    return ((cur - prv) / prv) * 100;
+  };
+
+  const presses: PressRow[] = roster
+    .slice()
+    .sort((x, y) => y.grossCents - x.grossCents)
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      city: a.city,
+      logoUrl: a.logoUrl,
+      color: a.color,
+      grossCents: a.grossCents,
+      orders: a.orders,
+      unitsPressed: a.unitsPressed,
+      openJobs: a.openJobs,
+      inProduction: a.inProduction,
+      turnDays: null,
+      deltaGrossPct: deltaPct(a.grossCents, a.grossPriorCents),
+    }));
+
+  // Activity — sales + pressing-run events, press-attributed.
   const activity: ActivityItem[] = [];
-  try {
-    const jobs = await db.execute<any>(sql`
-      SELECT po.id, po.status, COALESCE(po.updated_at, po.created_at) AS ts,
-        m.id AS press_id, m.name AS press_name
-      FROM pressing_orders po
-      LEFT JOIN manufacturers m ON m.id = po.manufacturer_id AND m.deleted_at IS NULL
-      WHERE COALESCE(po.updated_at, po.created_at) >= ${r.from}
-        AND COALESCE(po.updated_at, po.created_at) < ${r.to}
-      ORDER BY ts DESC LIMIT 15
+  const pressMeta = new Map(roster.map((a) => [a.id, a]));
+  const albumToPress = new Map<string, string>();
+  for (const a of roster) for (const id of a.albumIds) if (!albumToPress.has(id)) albumToPress.set(id, a.id);
+  const allAlbumIds = Array.from(albumToPress.keys());
+  if (allAlbumIds.length) {
+    const orderRows = await db.execute<any>(sql`
+      SELECT o.id, o.created_at, o.total_cents, o.album_id, a.title AS album_title
+      FROM orders o JOIN albums a ON a.id = o.album_id
+      WHERE o.status IN ('paid','shipped')
+        AND COALESCE(o.origin, 'direct') <> 'qa:test'
+        AND o.album_id = ANY(${pgArray(allAlbumIds)})
+        AND o.created_at >= ${r.from} AND o.created_at < ${r.to}
+      ORDER BY o.created_at DESC LIMIT 15
     `).catch(() => ({ rows: [] }) as any);
-    for (const j of rows(jobs)) {
+    for (const o of rows(orderRows)) {
+      const pid = albumToPress.get(String(o.album_id));
+      const p = pid ? pressMeta.get(pid) : undefined;
       activity.push({
-        kind: "job",
-        ts: new Date(j.ts).toISOString(),
-        title: `Job ${j.status} — ${j.press_name ?? "—"}`,
-        detail: `#${String(j.id).slice(0, 8)}`,
-        href: j.press_id ? `/admin/manufacturers/${j.press_id}` : undefined,
+        kind: "sale",
+        ts: new Date(o.created_at).toISOString(),
+        title: `Order — ${o.album_title}`,
+        detail: `$${(Number(o.total_cents) / 100).toFixed(2)}`,
+        href: `/admin/albums/${o.album_id}`,
+        pressId: p?.id,
+        pressName: p?.name,
+        pressLogoUrl: p?.logoUrl ?? null,
       });
     }
-  } catch {
-    /* no pressing_orders in this env */
   }
+  const porRows = await db.execute<any>(sql`
+    SELECT por.id, por.status, por.quantity,
+      COALESCE(por.decided_at, por.submitted_at) AS ts,
+      por.package_snapshot ->> 'pressId' AS press_id,
+      a.title AS album_title
+    FROM pressing_order_requests por
+    JOIN albums a ON a.id = por.album_id
+    WHERE COALESCE(por.decided_at, por.submitted_at) >= ${r.from}
+      AND COALESCE(por.decided_at, por.submitted_at) < ${r.to}
+    ORDER BY ts DESC LIMIT 15
+  `).catch(() => ({ rows: [] }) as any);
+  for (const jr of rows(porRows)) {
+    const p = jr.press_id ? pressMeta.get(String(jr.press_id)) : undefined;
+    const verb =
+      jr.status === "approved" ? "approved" :
+      jr.status === "pending" ? "submitted" :
+      String(jr.status);
+    activity.push({
+      kind: jr.status === "approved" ? "job" : "job_pending",
+      ts: new Date(jr.ts).toISOString(),
+      title: `Press run ${verb} — ${jr.album_title}`,
+      detail: `${Number(jr.quantity).toLocaleString()} units`,
+      href: p ? `/admin/manufacturers/${p.id}` : undefined,
+      pressId: p?.id,
+      pressName: p?.name,
+      pressLogoUrl: p?.logoUrl ?? null,
+    });
+  }
+  activity.sort((x, y) => (y.ts < x.ts ? -1 : 1));
 
-  return { kpis, chartMetrics, series, activity };
+  return {
+    kpis,
+    chartMetrics: [{ id: "gross", label: "Gross per day", format: "currency" }],
+    series,
+    activity: activity.slice(0, 15),
+    presses,
+    pressSeries,
+  };
 }
 
 // ─── Makers rollup ───────────────────────────────────────────────────
@@ -760,7 +938,15 @@ export async function registerSectionDashboardRoutes(app: Express) {
         return res.status(400).json({ message: "Unknown section" });
       }
       const section = raw as Section;
-      const userId = (req as any).session?.userId;
+      // Session OR bearer — operator logins are frequently bearer-only
+      // (#token-hash logins), and a session-only read here rendered the
+      // whole dashboard as empty states for them.
+      let userId = (req as any).session?.userId as string | undefined;
+      if (!userId) {
+        const { getAuthFromRequest } = await import("./auth/host");
+        const auth = await getAuthFromRequest(req);
+        if (auth?.kind === "admin") userId = auth.userId;
+      }
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
       const user = await storage.getUser(userId);
       if (!user?.isAdmin)

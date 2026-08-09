@@ -18,6 +18,7 @@
 // rounded, overflow-hidden wrapper plus any overlays (play button, badges).
 import { useEffect, useState } from "react";
 import { resolvePressPlaceholderArt } from "@/lib/pressPlaceholderArt";
+import { useAdminDark, useDarkMarkLogo } from "@/lib/adminAppearance";
 
 export interface AlbumCoverProps {
   /** The album's chosen artwork URL. Empty/null/dead → placeholder. */
@@ -120,6 +121,16 @@ export function AlbumCover({
   useEffect(() => setPressLogoFailed(false), [pressLogoUrl]);
   useEffect(() => setPhotoFailed(false), [artistPhoto]);
 
+  // Dark-mode treatment for the two admin-only WHITE placeholder tiles
+  // (press logo + GoodTunes brand fallback). Under the dark admin theme the
+  // white tile flips to the charcoal track tone, and a near-black mark is
+  // inverted to read white — same mechanism as the Presses list/detail. On
+  // fan surfaces these tiers never render (props unset), and useAdminDark is
+  // false, so nothing changes there.
+  const adminDark = useAdminDark();
+  const pressLogoIsDarkMark = useDarkMarkLogo(pressLogoUrl);
+  const tileBg = adminDark ? "var(--apple-track)" : "#ffffff";
+
   // Resolve the bundled per-domain jacket art (same lookup the press Catalog
   // editor uses). This fills the gap between a stored vinyl_placeholder_url
   // and the press profile logo, so album covers don't drop to the small logo
@@ -190,7 +201,8 @@ export function AlbumCover({
   if (hasPressLogo) {
     return (
       <div
-        className={`relative w-full h-full overflow-hidden bg-white ${className}`}
+        className={`relative w-full h-full overflow-hidden ${className}`}
+        style={{ background: tileBg }}
         data-testid="album-cover-press-logo"
       >
         <div className="absolute inset-0 flex items-center justify-center p-[16%]">
@@ -203,6 +215,11 @@ export function AlbumCover({
             decoding="async"
             onError={() => setPressLogoFailed(true)}
             className="max-w-full max-h-full object-contain grayscale opacity-80"
+            style={
+              adminDark && pressLogoIsDarkMark
+                ? { filter: "grayscale(1) invert(1) brightness(1.7)" }
+                : undefined
+            }
           />
         </div>
       </div>
@@ -217,7 +234,8 @@ export function AlbumCover({
   if (brandFallback) {
     return (
       <div
-        className={`relative w-full h-full overflow-hidden bg-white ${className}`}
+        className={`relative w-full h-full overflow-hidden ${className}`}
+        style={{ background: tileBg }}
         data-testid="album-cover-brand-fallback"
       >
         <div className="absolute inset-0 flex items-center justify-center p-[16%]">
@@ -228,6 +246,11 @@ export function AlbumCover({
             loading={loading}
             decoding="async"
             className="max-w-full max-h-full object-contain grayscale opacity-80"
+            style={
+              // The GoodTunes mark is navy — grayscale leaves it near-black,
+              // so in dark mode invert it to read as a light ghost mark.
+              adminDark ? { filter: "grayscale(1) invert(1) brightness(1.6)" } : undefined
+            }
           />
         </div>
       </div>

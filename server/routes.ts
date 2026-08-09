@@ -4197,6 +4197,7 @@ export async function registerRoutes(
         // download, which is the desired behavior for a template file.
         ".pdf": "application/pdf",
         ".zip": "application/zip",
+        ".svg": "image/svg+xml",
       };
       let contentType = storedCt;
       if (!contentType || contentType === "application/octet-stream") {
@@ -4205,6 +4206,14 @@ export async function registerRoutes(
         if (derived) contentType = derived;
       }
       if (!contentType) contentType = "application/octet-stream";
+      // SVG is an ACTIVE document when navigated to directly (scripts run in
+      // our origin) — press label logos upload as SVG, so serve any SVG with
+      // a script-dead CSP + nosniff. <img> embedding (the only intended use)
+      // is unaffected; direct navigation gets an inert image.
+      if (contentType === "image/svg+xml") {
+        res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+      }
       const totalSize = Number(metadata.size || 0);
       const range = req.headers.range;
       // Cap bytes served per response. The deployment edge proxy (Google
@@ -4339,6 +4348,21 @@ export async function registerRoutes(
     "image/webp": ".webp",
     "image/avif": ".avif",
   };
+  // SVG is an ACTIVE document, so it is deliberately NOT in IMAGE_MIME_TO_EXT
+  // (URL-rehost/sniff paths stay raster-only). The two routes that accept it
+  // (/api/admin/upload multipart + /api/admin/upload-doc/finalize) must run
+  // this content check first, and /objects serves SVG with a script-dead CSP.
+  function svgIsDangerous(text: string): boolean {
+    return (
+      /<\s*script/i.test(text) ||
+      /\son[a-z]+\s*=/i.test(text) ||
+      /javascript\s*:/i.test(text) ||
+      /<\s*foreignObject/i.test(text) ||
+      /<\s*(iframe|embed|object)\b/i.test(text) ||
+      /data:text\/html/i.test(text) ||
+      !/<\s*svg[\s>]/i.test(text)
+    );
+  }
   // Combined lookup used only inside `uploadBufferToObjectStorage`,
   // which is called from both image and audio paths. Validation of
   // what each route accepts happens at the route level (image routes
@@ -4371,13 +4395,17 @@ export async function registerRoutes(
     "video/mp4": ".mp4",
     "video/quicktime": ".mov",
     "video/webm": ".webm",
+    // Press logo marks (validated by svgIsDangerous before storage).
+    "image/svg+xml": ".svg",
   };
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 8 * 1024 * 1024 }, // 8MB cap — matches the photo route
     fileFilter: (_req, file, cb) => {
-      if (!(file.mimetype in IMAGE_MIME_TO_EXT)) {
-        return cb(new Error("Only PNG, JPEG, GIF, WebP, or AVIF images are allowed"));
+      // SVG rides this route too (press logo marks); its content is checked
+      // by svgIsDangerous in the handler before anything is stored.
+      if (!(file.mimetype in IMAGE_MIME_TO_EXT) && file.mimetype !== "image/svg+xml") {
+        return cb(new Error("Only PNG, JPEG, GIF, WebP, AVIF, or SVG images are allowed"));
       }
       cb(null, true);
     },
@@ -4989,6 +5017,9 @@ export async function registerRoutes(
     "image/png": ".png",
     "image/jpeg": ".jpg",
     "image/tiff": ".tiff",
+    // Press label-logo dropzone is SVG-only (recolorable vector marks).
+    // Admin-bearer-gated route, same trust level as the other doc types.
+    "image/svg+xml": ".svg",
   };
   const DOC_MIME_BY_EXT: Record<string, string> = {
     ".pdf": "application/pdf",
@@ -4998,6 +5029,7 @@ export async function registerRoutes(
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".tiff": "image/tiff",
+    ".svg": "image/svg+xml",
   };
   app.post("/api/admin/upload-doc/sign", requireAdminBearer, async (req, res) => {
     try {
@@ -5029,6 +5061,23 @@ export async function registerRoutes(
       const file = await objectStorage.getObjectEntityFile(finalPath);
       const extMatch = finalPath.toLowerCase().match(/\.([a-z0-9]+)$/);
       const ext = extMatch ? `.${extMatch[1]}` : "";
+      // SVG defense-in-depth: before flipping the object public, reject any
+      // SVG carrying active content (script/event handlers/foreignObject/
+      // javascript: URLs). Serving already applies a script-dead CSP, but a
+      // scripty "logo" has no legitimate use, so fail closed here too.
+      if (ext === ".svg") {
+        const [meta] = await file.getMetadata();
+        if (Number(meta.size || 0) > 2 * 1024 * 1024) {
+          return res.status(400).json({ message: "SVG too large (max 2MB)" });
+        }
+        const [buf] = await file.download();
+        if (svgIsDangerous(buf.toString("utf8"))) {
+          try { await file.delete(); } catch {}
+          return res.status(400).json({
+            message: "This SVG contains scripts or embedded content and can't be used. Export a plain vector SVG.",
+          });
+        }
+      }
       const desiredCt = DOC_MIME_BY_EXT[ext];
       if (desiredCt) {
         try {
@@ -6155,6 +6204,16 @@ export async function registerRoutes(
         const wantMask = String(req.query.mask || "") === "disc";
         let buffer = f.buffer;
         let mime = f.mimetype;
+        if (mime === "image/svg+xml") {
+          if (buffer.length > 2 * 1024 * 1024) {
+            return res.status(400).json({ message: "SVG too large (max 2MB)" });
+          }
+          if (svgIsDangerous(buffer.toString("utf8"))) {
+            return res.status(400).json({
+              message: "This SVG contains scripts or embedded content and can't be used. Export a plain vector SVG.",
+            });
+          }
+        }
         let maskApplied: boolean | undefined;
         if (wantMask) {
           const masked = await maskToVinylDisc(f.buffer).catch((e) => {

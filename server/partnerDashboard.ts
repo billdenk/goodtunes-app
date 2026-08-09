@@ -190,7 +190,7 @@ export async function salesStack(
 // albums are resolved the same way the Sell panel resolves the invited
 // press: the SKU's press_id snapshot, the sale-time press_invited_albums
 // stamp, or the artist/label invited_by_press_id provenance column.
-async function pressUnits(
+export async function pressUnits(
   pressId: string,
   window: RangeWindow | null,
 ): Promise<number | null> {
@@ -212,6 +212,7 @@ async function pressUnits(
     WHERE o.album_id IN (SELECT id FROM press_albums)
       AND c.format = ANY(${pgArray(PHYSICAL_FORMATS)})
       AND o.status IN ('paid','shipped')
+      AND COALESCE(o.origin, 'direct') <> 'qa:test'
       AND o.created_at >= ${window.from} AND o.created_at < ${window.to}
   `).catch(() => ({ rows: [] }) as any);
   return Number(((row as any).rows ?? [{}])[0]?.units ?? 0);
@@ -221,7 +222,7 @@ async function pressUnits(
 // scopes its CTE (SKU press_id snapshot, sale-time press_invited_albums
 // stamp, or artist/label invited_by_press_id provenance). Used by the
 // press dashboard to roll up gross sales + orders across those releases.
-async function pressAlbumIds(pressId: string): Promise<string[]> {
+export async function pressAlbumIds(pressId: string): Promise<string[]> {
   const row = await db.execute<any>(sql`
     SELECT DISTINCT a.id
     FROM albums a

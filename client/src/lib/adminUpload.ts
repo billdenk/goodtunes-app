@@ -90,6 +90,10 @@ const DOC_CONTENT_TYPES: Record<string, string> = {
   jpeg: "image/jpeg",
   tif: "image/tiff",
   tiff: "image/tiff",
+  // Press label-logo dropzone (SVG-only so the mark can be recolored for
+  // any surface). Some OSes leave file.type empty for .svg — the ext
+  // fallback below covers that.
+  svg: "image/svg+xml",
 };
 
 export const DOC_UPLOAD_ACCEPT = ".pdf,.zip,.ai,.png,.jpg,.jpeg,.tif,.tiff";

@@ -11415,3 +11415,69 @@ SQL
 }
 seed_press_logos_20260809 dev  "${DATABASE_URL:-}"
 seed_press_logos_20260809 prod "${PROD_DATABASE_URL:-}"
+
+# ── PMP official icon repoint (Aug 09, 2026) ─────────────────────────────
+# Bill shipped the official Physical Music Products icon (round pressed-
+# record mark, handoff/press-dashboard/assets/pmp-icon.svg). It was mirrored
+# ONCE into the shared Object Storage bucket by scripts/mirror-pmp-icon.ts;
+# this marker-guarded block repoints PMP's logo everywhere (dev + prod) at
+# the mirrored SVG, replacing the old photo upload seeded above.
+seed_pmp_icon_20260809() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then echo "post-merge: pmp-icon-seed skip ($label; no URL)"; return 0; fi
+  local out rc
+  out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS one_shot_markers (name text PRIMARY KEY, created_at timestamptz DEFAULT now());
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM one_shot_markers WHERE name = 'pmp-icon-seed-20260809') THEN
+    RAISE NOTICE 'pmp-icon-seed already applied';
+  ELSE
+    UPDATE manufacturers SET logo_url = '/objects/uploads/76a6366f-c3c1-4323-8115-8a8296959a7a.svg'
+      WHERE name ILIKE 'Physical Music Products%';
+    INSERT INTO one_shot_markers (name) VALUES ('pmp-icon-seed-20260809');
+  END IF;
+END $$;
+COMMIT;
+SQL
+  )
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    echo "post-merge: pmp-icon-seed ok on $label"
+  else
+    echo "post-merge: ERROR — pmp-icon-seed FAILED on $label"
+    echo "$out" | tail -5
+    return 1
+  fi
+}
+seed_pmp_icon_20260809 dev  "${DATABASE_URL:-}"
+seed_pmp_icon_20260809 prod "${PROD_DATABASE_URL:-}"
+
+# ── manufacturers.chart_color (Aug 09, 2026) ─────────────────────────────
+# Stable per-press series color for the combined Press Dashboard charts.
+# Assigned once at onboarding (shared/pressChartPalette.ts); founding
+# presses pinned to the approved handoff colors. Idempotent on both DBs.
+press_chart_color_20260809() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then echo "post-merge: press-chart-color skip ($label; no URL)"; return 0; fi
+  local out rc
+  out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS chart_color text;
+UPDATE manufacturers SET chart_color='#319ED8' WHERE name ILIKE 'Memphis Record Pressing%' AND chart_color IS NULL;
+UPDATE manufacturers SET chart_color='#8B5CF6' WHERE name ILIKE 'Hellbender%' AND chart_color IS NULL;
+UPDATE manufacturers SET chart_color='#4cc98a' WHERE name ILIKE 'Physical Music Products%' AND chart_color IS NULL;
+UPDATE manufacturers SET chart_color='#e8b04b' WHERE name ILIKE 'Viryl%' AND chart_color IS NULL;
+SQL
+  )
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    echo "post-merge: press-chart-color ok on $label"
+  else
+    echo "post-merge: ERROR — press-chart-color FAILED on $label"
+    echo "$out" | tail -5
+    return 1
+  fi
+}
+press_chart_color_20260809 dev  "${DATABASE_URL:-}"
+press_chart_color_20260809 prod "${PROD_DATABASE_URL:-}"

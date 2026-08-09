@@ -2291,13 +2291,34 @@ export function PressPackagePricingCatalog({
         </div>
       ) : !fmt ? null : (
         <fieldset disabled={!canEdit} className="mt-8 min-w-0">
-          {/* Two columns only when the 420px jacket + 620px sections truly fit
-              (xl); below that, stack — a fixed 620px track forced the whole
-              page into horizontal scroll on laptop widths. */}
-          <div className="grid gap-10 grid-cols-1 min-[1440px]:gap-16 min-[1440px]:grid-cols-[minmax(0,1fr)_620px]">
-            {/* ── LEFT: sticky stage (vinyl only) ── */}
+          {/* Layout (Bill, Aug 09 2026):
+              - Tablet (≥900px) and up: TWO columns — jacket pinned (sticky)
+                on the LEFT, size/type sections scrolling on the RIGHT. The
+                scroll content must never slide over/under the album.
+              - ≥1440px keeps the original wide split (1fr jacket / 620px
+                sections) so nothing changes on desktop.
+              - Below 900px (phones / iPad portrait): stack, album on top
+                scrolling WITH the page (not sticky), sections below.
+              CD/cassette tabs have no stage, so they stay single-column at
+              every width. Shared by the GoodTunes admin catalog and the
+              white-label press portal (both render this component). */}
+          <div
+            className={cn(
+              "grid gap-10 grid-cols-1",
+              isVinyl &&
+                "min-[900px]:grid-cols-[minmax(340px,460px)_minmax(0,1fr)] min-[1440px]:gap-16 min-[1440px]:grid-cols-[minmax(0,1fr)_620px]",
+            )}
+          >
+            {/* ── LEFT: sticky stage (vinyl only) ──
+                Sticky (never absolute) so it can't overlap the header, the
+                rail, or the white-label "Powered by GoodTunes" footer. The
+                column is viewport-height at two-col widths and centers the
+                jacket vertically; `safe center` keeps it fully visible
+                (top-aligned instead of cropped) on short viewports. The
+                left padding guarantees ≥48px of gutter between the rail
+                and the art edge (page padding + this). */}
             {isVinyl && (
-              <div className="flex flex-col items-center justify-center" style={{ position: "sticky", top: 24, alignSelf: "start", minHeight: 560, paddingTop: 24 }}>
+              <div className="flex flex-col items-center pt-6 min-[900px]:pt-0 min-[900px]:pl-6 min-[900px]:sticky min-[900px]:top-[72px] min-[900px]:self-start min-[900px]:h-[calc(100dvh-96px)] min-[900px]:[justify-content:safe_center]">
                 <div>
                   <JacketStage
                     format={fmt}
@@ -2320,7 +2341,11 @@ export function PressPackagePricingCatalog({
             )}
 
             {/* ── RIGHT: sections ── */}
-            <div className="min-w-0" style={{ position: "relative", zIndex: 2, backgroundColor: "var(--apple-canvas, #f5f5f7)" }}>
+            {/* ── RIGHT: sections ── (plain flow — the old zIndex/background
+                slab masked the stacked-sticky overlap, which no longer
+                exists: two-col widths pin the stage in its own column and
+                phone widths scroll it with the page) */}
+            <div className="min-w-0">
               {/* Pick a size */}
               {isVinyl && (
                 <section id="section-pick-size" data-testid="section-pick-size">

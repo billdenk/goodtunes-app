@@ -4438,6 +4438,12 @@ export const manufacturers = pgTable("manufacturers", {
   // labelBgColor (or a neutral default when that's null too).
   labelLogoUrl: text("label_logo_url"),
   labelBgColor: text("label_bg_color"),
+  // Stable per-press series color for cross-press charts (combined Press
+  // Dashboard stacked trend, legends, leaderboard bars). Assigned ONCE when
+  // the press is onboarded (next unused slot in PRESS_CHART_PALETTE) so a
+  // press keeps the same color across visits — never re-derived per page
+  // load. Null on legacy rows until the post-merge backfill stamps them.
+  chartColor: text("chart_color"),
   bio: text("bio"),
   location: text("location"),
   // Task #489 — structured snapshot of the Places-picked Location.

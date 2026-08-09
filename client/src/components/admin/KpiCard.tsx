@@ -344,6 +344,18 @@ export function KpiCard({
             {value}
           </p>
         )}
+
+        {/* Note gets its own quiet line under the value (Bill, Aug 2026) —
+            it used to share the footer flex row with the delta pill, where
+            anything longer than a few words clipped. */}
+        {model.note && (
+          <p
+            className="mt-1 text-[11px] text-slate-400 leading-snug"
+            data-testid={`${testId}-note`}
+          >
+            {model.note}
+          </p>
+        )}
       </div>
 
       <div
@@ -370,9 +382,6 @@ export function KpiCard({
             </>
           ) : (
             <span className="text-slate-400">vs prior: —</span>
-          )}
-          {model.note && !model.comingSoon && (
-            <span className="text-slate-400 min-w-0 [overflow-wrap:anywhere]">{model.note}</span>
           )}
         </div>
         {showSpark && <Sparkline points={spark as number[]} color={color} />}

@@ -166,14 +166,17 @@ export function PressLogoEditorDialog({
     "image/gif",
     "image/webp",
     "image/avif",
+    // SVG is allowed for logo marks — the server rejects any SVG carrying
+    // scripts/embeds before storing, and /objects serves SVG script-dead.
+    "image/svg+xml",
   ]);
 
   const acceptFile = (file: File | undefined | null) => {
     if (!file) return;
-    // SVG is intentionally excluded — it can carry executable script.
-    // Check the explicit allow-list rather than the broad image/* prefix.
-    if (!ALLOWED_LOGO_TYPES.has(file.type)) {
-      toast({ title: "That format isn't supported", description: "Use a JPG, PNG, WebP, GIF, or AVIF file.", variant: "destructive" });
+    // Some OSes leave file.type empty for .svg — fall back to the extension.
+    const type = file.type || (/\.svg$/i.test(file.name) ? "image/svg+xml" : "");
+    if (!ALLOWED_LOGO_TYPES.has(type)) {
+      toast({ title: "That format isn't supported", description: "Use an SVG, JPG, PNG, WebP, GIF, or AVIF file.", variant: "destructive" });
       return;
     }
     if (file.size > 8 * 1024 * 1024) {
@@ -288,7 +291,7 @@ export function PressLogoEditorDialog({
               <div className="text-slate-700 text-sm font-semibold">
                 {dragging ? "Drop to upload" : "Drag an image here, or click to pick"}
               </div>
-              <div className="text-slate-400 text-xs">JPG, PNG, or WebP · up to 8 MB</div>
+              <div className="text-slate-400 text-xs">SVG, JPG, PNG, or WebP · up to 8 MB</div>
             </button>
             <input
               ref={fileInputRef}
