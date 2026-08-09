@@ -95,5 +95,14 @@ Item 8 stands: copy the reference JacketStage geometry verbatim — jacket front
 ## 18. Format switcher placement + header typography wrong
 Live renders the Vinyl / CD / Cassette pill BESIDE the "Catalog" H1, inline on the same row. The reference places it on its own row UNDER the H1: "Catalog" first, then the segmented pill below it, then the VINYL · PACKAGE PRICING eyebrow and the two-tone heading. Font sizes and colors in this header block have also drifted (H1 weight/size, pill text size, eyebrow letter-spacing, gray tones). Do not eyeball it — copy the reference header block markup and styles verbatim per #14.
 
+## 19. Full-audit deltas (caught in side-by-side review — fix ALL of these)
+a) Top bar: reference has a full-width white top bar with the press logo + name on the left and Feedback / bell / avatar on the right. Live moved the press name into the sidebar and lost the top bar structure. Restore the reference top bar.
+b) Sidebar search: reference is "Search…" with a ⌘K hint chip. Live reads "Search portal…" with no shortcut chip. Copy the reference.
+c) "Pick a type" subtitle: reference is "Each keeps its own package prices." Live invented "How the vinyl is made." Revert — copy strings are not editable.
+d) Selected type tile: live renders a "···" overflow menu on the tile. The reference tile has no overflow menu. Remove it.
+e) Preview caption: reference caption under the jacket is: globe glyph · size ("12\"") · type ("Black") · color name ("Classic Black"), then "Printed jacket and inner sleeve included." on the second line. Live shows only "12\" LP" + the included line. Copy the reference caption block, and the "One package. Everything included." card belongs where the reference puts it — not stacked in the left column under the preview.
+
+Reminder: per #14 none of these should require individual fixes — replacing the presentational layer verbatim with the reference file resolves a–e automatically. If any of a–e is still visible, the verbatim copy was not actually done.
+
 ## Acceptance for this pass
 Diff the rendered page against the reference component side by side at 1440px. Any card width, copy string, or preview geometry that differs from the reference is a failure. Do not report complete until a screenshot of the live page is visually indistinguishable from the reference (data values aside).
