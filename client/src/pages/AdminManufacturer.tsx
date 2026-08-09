@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { formatUsdCents } from "@shared/money";
-import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -650,35 +649,6 @@ export function AdminManufacturer() {
         )}
         {tab === "catalog" && (
           <>
-            {/* Task #631 — bio + turnaround surfaced above the catalog
-                matrix so the operator can see at a glance what this
-                press is for + how long it takes, before diving into
-                the per-format ladders. */}
-            {(stripAppleMusicBoilerplate(m.bio) || m.turnaroundWeeksMin != null || m.turnaroundWeeksMax != null) && (
-              <div
-                className="mb-4 rounded-lg border border-white/10 bg-white/[0.03] p-4"
-                data-testid="press-catalog-summary"
-              >
-                {stripAppleMusicBoilerplate(m.bio) && (
-                  <p className="text-sm text-white/80" data-testid="text-press-bio">
-                    {stripAppleMusicBoilerplate(m.bio)}
-                  </p>
-                )}
-                {(m.turnaroundWeeksMin != null || m.turnaroundWeeksMax != null) && (
-                  <p
-                    className="mt-2 text-xs uppercase tracking-wide text-white/50"
-                    data-testid="text-press-turnaround"
-                  >
-                    Turnaround:{" "}
-                    {m.turnaroundWeeksMin != null && m.turnaroundWeeksMax != null
-                      ? `${m.turnaroundWeeksMin}–${m.turnaroundWeeksMax} weeks`
-                      : m.turnaroundWeeksMin != null
-                      ? `${m.turnaroundWeeksMin}+ weeks`
-                      : `up to ${m.turnaroundWeeksMax} weeks`}
-                  </p>
-                )}
-              </div>
-            )}
             <PressPackagePricingCatalog
               pressId={id}
               pressDomain={m?.domain ?? null}
