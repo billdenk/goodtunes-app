@@ -593,6 +593,26 @@ export function Login() {
       // to the stashed deep-link target (gift claim, buy resume, …) or
       // /home as a fallback.
       let dest = isAdmin ? "/admin" : "/home";
+      // OAuth admin trusted-device bypass: the callback completed sign-in and
+      // bounced here with ?oauth=…&next=<role-landing>#token=… so the bearer
+      // gets stashed (this /login route is the only consumer of a plain
+      // #token= handoff). `next` is a server-issued, fixed internal literal
+      // from landingPathForUser — but we still allowlist it here so a
+      // hand-crafted URL can't redirect us to an arbitrary path. This lets a
+      // partner (label/vendor/…) land on their portal instead of the
+      // host-based /admin default.
+      const OAUTH_ADMIN_LANDINGS = new Set([
+        "/admin",
+        "/admin/albums",
+        "/non-profit",
+        "/label",
+        "/manager",
+        "/vendor",
+        "/publisher",
+      ]);
+      if (oauth && next && OAUTH_ADMIN_LANDINGS.has(next)) {
+        dest = next;
+      }
       try {
         const stashed = sessionStorage.getItem("gt:postAuthNext");
         if (stashed && stashed.startsWith("/")) {

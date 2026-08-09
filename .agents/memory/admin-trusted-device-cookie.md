@@ -44,3 +44,8 @@ causing a confusing 401 on the verify call.
 runs in its own child process, but the shared drizzle `db` + `pool` export is
 module-local to that process; closing it in `after()` kills all DB access for
 the rest of that file's teardown. `--test-force-exit` handles the process exit.
+
+## OAuth (Google/Apple) sign-in parity (2026-08-09)
+- The OAuth admin callback (handleProviderCallback) must NEVER pre-mint an email OTP: Login.tsx auto-POSTs /api/auth/email-otp/start on landing (the single mint+send site); a callback pre-mint gets replaced (user sees "first code never arrives") or its lastSentAt trips the 60s-cooldown 429 (no code at all). Same trap existed on the invite-accept branch.
+- Trusted-device bypass is shared via trustedDeviceBypassAllowed(req,userId) — password path AND OAuth callback both run it before the emailOtp/TOTP/enroll split (parity: bypasses enrollment too).
+- Bypass completion must redirect to /login?oauth=<p>&next=<landing>#token=… — Login.tsx is the ONLY plain #token= consumer (main.tsx handles only gtwelcome/previewpass fragments); redirecting straight to a portal path drops the bearer. `next` allowlisted to landingPathForUser literals in Login.tsx.

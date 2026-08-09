@@ -1306,6 +1306,36 @@ export async function registerRoutes(
     }
   }
 
+  // Task #2172 — shared "Remember this device" trusted-device bypass
+  // check. Both the password leg of /api/login AND the OAuth admin
+  // callback route through here so the two entry points stay in lockstep:
+  // a valid, live, right-user gt_trusted_device cookie skips 2FA. Only the
+  // SHA-256 hash is ever stored server-side; the raw token lives in the
+  // httpOnly cookie. Returns true when the bypass should fire. When a
+  // cookie was present but rejected, logs a diagnostic warning (production
+  // auth issues are otherwise invisible — we can't tell the browser didn't
+  // send the cookie from the row being expired/pruned/wrong-user).
+  async function trustedDeviceBypassAllowed(req: Request, userId: string): Promise<boolean> {
+    const rawDeviceToken = (() => {
+      const header = req.headers.cookie;
+      if (!header) return undefined;
+      const pair = header.split(";").map((c) => c.trim()).find((c) => c.startsWith("gt_trusted_device="));
+      return pair ? decodeURIComponent(pair.slice("gt_trusted_device=".length)) : undefined;
+    })();
+    if (!rawDeviceToken) return false;
+    const deviceHash = createHash("sha256").update(rawDeviceToken).digest("hex");
+    const trusted = await storage.getAdminTrustedDevice(deviceHash);
+    if (trusted && trusted.userId === userId) return true;
+    // Cookie was present but the bypass did not fire. Log a warning so
+    // production auth issues can be diagnosed without guessing whether the
+    // browser actually sent the cookie (it did — we saw it above).
+    const bypassReason = !trusted
+      ? "no-db-row (expired, pruned, or never stored)"
+      : "user-id-mismatch";
+    console.warn(`[auth] gt_trusted_device cookie present but bypass rejected (${bypassReason}) for user ${userId}`);
+    return false;
+  }
+
   // ─── Auth (kind-aware) ─────────────────────────────────────────────
   // Every /api/register · /api/login · /api/me · /api/logout call uses
   // the host-derived `req.authKind` to pick the table. On the admin host
@@ -1494,32 +1524,15 @@ export async function registerRoutes(
       // gt_trusted_device cookie. If its SHA-256 hash matches a live DB
       // row bound to this user, skip 2FA entirely and issue a session +
       // bearer token — same shape as the verify endpoints return.
-      const rawDeviceToken = (() => {
-        const header = req.headers.cookie;
-        if (!header) return undefined;
-        const pair = header.split(";").map((c) => c.trim()).find((c) => c.startsWith("gt_trusted_device="));
-        return pair ? decodeURIComponent(pair.slice("gt_trusted_device=".length)) : undefined;
-      })();
-      if (rawDeviceToken) {
-        const deviceHash = createHash("sha256").update(rawDeviceToken).digest("hex");
-        const trusted = await storage.getAdminTrustedDevice(deviceHash);
-        if (trusted && trusted.userId === user.id) {
-          req.session.userId = user.id;
-          req.session.kind = "admin";
-          const token = generateToken();
-          await storage.createAuthToken(token, user.id, "admin");
-          const u = await storage.getUser(user.id);
-          const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
-          const landingPath = await landingPathForUser(user.id);
-          return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath, kind: "admin" });
-        }
-        // Cookie was present but the bypass did not fire. Log a warning so
-        // production auth issues can be diagnosed without guessing whether the
-        // browser actually sent the cookie (it did — we saw it above).
-        const bypassReason = !trusted
-          ? "no-db-row (expired, pruned, or never stored)"
-          : "user-id-mismatch";
-        console.warn(`[auth] gt_trusted_device cookie present but bypass rejected (${bypassReason}) for user ${user.id}`);
+      if (await trustedDeviceBypassAllowed(req, user.id)) {
+        req.session.userId = user.id;
+        req.session.kind = "admin";
+        const token = generateToken();
+        await storage.createAuthToken(token, user.id, "admin");
+        const u = await storage.getUser(user.id);
+        const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
+        const landingPath = await landingPathForUser(user.id);
+        return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath, kind: "admin" });
       }
       // Task #2795 — reviewer/demo account bypass. Accounts provisioned
       // by post-merge (appreview@goodtunes.music) set skip_second_factor=true
@@ -2492,13 +2505,13 @@ export async function registerRoutes(
         const params = new URLSearchParams({ oauth: provider, next: totp ? "totp" : "enroll", invite: "1" });
         return res.redirect(`/login?${params.toString()}`);
       }
-      const code = gen6();
-      const codeHash = await hashOtp(code);
-      const expiresAt = new Date(Date.now() + EMAIL_OTP_TTL_MS);
-      await storage.setAdminEmailOtp(userIdInv, codeHash, expiresAt);
-      if (process.env.NODE_ENV !== "production" && user) {
-        console.log(`[admin-otp] code for ${user.email}: ${code} (expires ${expiresAt.toISOString()})`);
-      }
+      // Email-pref path: redirect into the emailOtp UI phase WITHOUT
+      // pre-minting a code here. The login page's auto /api/auth/email-otp/start
+      // is the single mint site (generates the code, stamps lastSentAt, sends
+      // the one true email). Pre-minting here left a code that was never mailed
+      // and either got replaced (double-issue) or tripped the /start 60s resend
+      // cooldown on its stale lastSentAt (429 → no email). See the sign-in
+      // branch below for the matching note.
       const params = new URLSearchParams({ oauth: provider, next: "emailOtp", invite: "1" });
       return res.redirect(`/login?${params.toString()}`);
     }
@@ -2675,6 +2688,35 @@ export async function registerRoutes(
     if (kind === "admin") {
       req.session.pendingTotpUserId = userId;
       const user = await storage.getUser(userId);
+      // Task #2172 — "Remember this device" trusted-device bypass. Mirror
+      // the password leg exactly: BEFORE routing into any 2FA challenge
+      // (email OR TOTP) or the enrollment step, honor a valid gt_trusted_device
+      // cookie bound to this user. The password path runs this check before
+      // its factorPref split, so it bypasses email codes, TOTP verification,
+      // AND enrollment alike — we match that here so the OAuth entry point
+      // stays in lockstep. On a hit, complete the sign-in and redirect with
+      // the token in the URL fragment. The fragment MUST land on the /login
+      // route: Login.tsx is the ONLY consumer of a plain `#token=` handoff (it
+      // stashes the bearer via setAuthToken, then navigates). Redirecting
+      // straight to a partner landing (e.g. /label) would drop the token —
+      // main.tsx only handles `#token=` combined with gtwelcome/previewpass.
+      // We pass the role landing as a validated `next` query param (only the
+      // fixed internal literals landingPathForUser returns — never a raw
+      // client value) so Login.tsx can navigate a partner to /label etc.
+      // instead of its host-based /admin default.
+      if (await trustedDeviceBypassAllowed(req, userId)) {
+        const token = generateToken();
+        await storage.createAuthToken(token, userId, "admin");
+        req.session.userId = userId;
+        req.session.kind = "admin";
+        req.session.pendingTotpUserId = undefined;
+        const landingPath = await landingPathForUser(userId);
+        const params = new URLSearchParams({ oauth: provider, next: landingPath });
+        return res.redirect(`/login?${params.toString()}#token=${encodeURIComponent(token)}`);
+      }
+      // Honor `factorPref` (Task #57) so an OAuth-signin doesn't override
+      // the admin's chosen channel — TOTP-pref admins still see the
+      // authenticator screen, email-pref admins get a code mailed.
       const totp = await storage.getAdminTotp(userId);
       const usesEmail = user?.factorPref === "email";
       if (!usesEmail) {
@@ -2684,17 +2726,15 @@ export async function registerRoutes(
         });
         return res.redirect(`/login?${params.toString()}`);
       }
-      // Email-pref path: issue a code now, then redirect into the
-      // emailOtp UI phase. The login page reads `oauth=…&next=emailOtp`
-      // and switches its adminPhase, then calls /api/auth/email-otp/start
-      // to fetch the masked email (and devCode off-prod) into view.
-      const code = gen6();
-      const codeHash = await hashOtp(code);
-      const expiresAt = new Date(Date.now() + EMAIL_OTP_TTL_MS);
-      await storage.setAdminEmailOtp(userId, codeHash, expiresAt);
-      if (process.env.NODE_ENV !== "production" && user) {
-        console.log(`[admin-otp] code for ${user.email}: ${code} (expires ${expiresAt.toISOString()})`);
-      }
+      // Email-pref path: redirect into the emailOtp UI phase WITHOUT
+      // pre-minting a code here. The login page reads `oauth=…&next=emailOtp`,
+      // switches its adminPhase, then calls /api/auth/email-otp/start — which
+      // is now the single mint site: it generates the code, stamps lastSentAt,
+      // and sends the one true email. (Historically this branch minted +
+      // stored a code that was never mailed, so the client's auto-/start
+      // either replaced it — double-issue — or tripped the 60s resend
+      // cooldown on the stale lastSentAt, 429ing the only send. Removing the
+      // pre-mint fixes both: no prior lastSentAt ⇒ no cooldown, one code sent.)
       const params = new URLSearchParams({ oauth: provider, next: "emailOtp" });
       return res.redirect(`/login?${params.toString()}`);
     }
