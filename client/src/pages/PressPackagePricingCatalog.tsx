@@ -550,30 +550,35 @@ function RewindButton({ show, onClick, size = 28 }: { show: boolean; onClick: ()
   );
 }
 
-// ─── "Make it yours" branding dialog (Item 28, reference-verbatim) ───
+// ─── "Make it yours" branding dialog (Item 28 + Apple-ified header/footer) ───
 // Centered modal opened from the jacket ⋯ — brand color chip-as-picker,
-// SVG-only logo replace, Reset to default. Color and logo flow to the
-// cover and center label (persisted via PUT /catalog/branding).
+// SVG-only logo replace. Edits are DRAFTS: Save commits (PUT
+// /catalog/branding); Cancel and the X discard and restore what was there
+// when the dialog opened — closing never silently keeps half-made changes.
 function BrandDialog({
   color,
   logoUrl,
   onColor,
   onLogoFile,
   onReset,
-  onClose,
+  onCancel,
+  onSave,
   uploading,
+  saving,
 }: {
   color: string;
   logoUrl: string | null;
   onColor: (v: string) => void;
   onLogoFile: (file: File) => void;
   onReset: () => void;
-  onClose: () => void;
+  onCancel: () => void;
+  onSave: () => void;
   uploading: boolean;
+  saving: boolean;
 }) {
   return createPortal(
     <div
-      onClick={onClose}
+      onClick={onCancel}
       style={{
         position: "fixed",
         inset: 0,
@@ -601,8 +606,11 @@ function BrandDialog({
           cursor: "default",
         }}
       >
-        <div className="flex items-start justify-between" style={{ marginBottom: 16 }}>
-          <span className="text-[17px] font-semibold tracking-tight" style={{ lineHeight: 1.25, paddingRight: 8 }}>
+        {/* Header air — title never crowds the close button (lh 1.3 + 28px
+            right pad); close is a 28px round target with a faint white wash,
+            tucked into the top-right corner. */}
+        <div style={{ position: "relative", marginBottom: 16 }}>
+          <span className="block text-[17px] font-semibold tracking-tight" style={{ lineHeight: 1.3, paddingRight: 28 }}>
             <span style={{ color: "#f5f5f7" }}>Make it yours. </span>
             <span style={{ color: "rgba(245,245,247,0.45)" }}>Color and logo flow to the cover and center label.</span>
           </span>
@@ -610,9 +618,27 @@ function BrandDialog({
             type="button"
             aria-label="Close"
             data-testid="button-brand-close"
-            onClick={onClose}
+            onClick={onCancel}
             className="rounded-full flex items-center justify-center transition-colors"
-            style={{ width: 24, height: 24, background: "none", border: "none", color: "rgba(245,245,247,0.5)", cursor: "pointer" }}
+            style={{
+              position: "absolute",
+              top: -6,
+              right: -6,
+              width: 28,
+              height: 28,
+              background: "rgba(255,255,255,0.08)",
+              border: "none",
+              color: "rgba(245,245,247,0.55)",
+              cursor: "pointer",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(255,255,255,0.14)";
+              e.currentTarget.style.color = "#f5f5f7";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+              e.currentTarget.style.color = "rgba(245,245,247,0.55)";
+            }}
           >
             <X style={{ width: 14, height: 14 }} />
           </button>
@@ -730,19 +756,50 @@ function BrandDialog({
           </div>
         </div>
 
-        <div className="flex items-center justify-between" style={{ marginTop: 16 }}>
-          <span className="text-[11.5px]" style={{ color: "rgba(245,245,247,0.4)" }}>
-            Square works best — shown on the cover and center label.
-          </span>
+        {/* Helper text on its own quiet line under the logo section */}
+        <div className="text-[11.5px]" style={{ marginTop: 12, color: "rgba(245,245,247,0.4)" }}>
+          Square works best — shown on the cover and center label.
+        </div>
+
+        {/* Hairline divider + footer: quiet Reset on the left; Cancel pill +
+            filled blue Save pill on the right. */}
+        <div style={{ height: 1, background: "rgba(255,255,255,0.1)", margin: "14px -20px 0" }} />
+        <div className="flex items-center justify-between" style={{ paddingTop: 14 }}>
           <button
             type="button"
             onClick={onReset}
             data-testid="button-brand-reset"
-            className="text-[12px] font-medium transition-colors flex-shrink-0"
-            style={{ color: "rgba(245,245,247,0.6)", background: "none", border: "none", padding: 0, cursor: "pointer", marginLeft: 12 }}
+            className="text-[12px] font-medium transition-colors"
+            style={{ color: "rgba(245,245,247,0.6)", background: "none", border: "none", padding: 0, cursor: "pointer" }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#f5f5f7")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(245,245,247,0.6)")}
           >
             Reset to default
           </button>
+          <div className="flex items-center" style={{ gap: 8 }}>
+            <button
+              type="button"
+              onClick={onCancel}
+              data-testid="button-brand-cancel"
+              className="rounded-full text-[13px] font-semibold transition-colors"
+              style={{ height: 32, padding: "0 14px", background: "rgba(255,255,255,0.08)", border: "none", color: "rgba(245,245,247,0.75)", cursor: "pointer" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.14)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving || uploading}
+              data-testid="button-brand-save"
+              className="rounded-full text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50 flex items-center"
+              style={{ height: 32, padding: "0 18px", backgroundColor: BLUE, border: "none", cursor: "pointer", gap: 6 }}
+            >
+              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Save
+            </button>
+          </div>
         </div>
       </div>
     </div>,
@@ -768,7 +825,10 @@ export function JacketStage({
   onBrandColor,
   onBrandLogoFile,
   onBrandReset,
+  onBrandSave,
+  onBrandCancel,
   brandUploading,
+  brandSaving,
 }: {
   format: AlbumFormat;
   jacketUrl: string | null;
@@ -782,7 +842,12 @@ export function JacketStage({
   onBrandColor?: (hex: string) => void;
   onBrandLogoFile?: (file: File) => void;
   onBrandReset?: () => void;
+  /** Commits staged brand edits; returns false when validation blocks the save. */
+  onBrandSave?: () => boolean;
+  /** Discards staged brand edits (Cancel / X / backdrop). */
+  onBrandCancel?: () => void;
   brandUploading?: boolean;
+  brandSaving?: boolean;
   // Bill's rule 2 (handoff v2) — when the album has no uploaded art AND the
   // press has no default jacket, the jacket face is the white product-mark
   // icon at ~45% width on a `#1d1d1f` ink jacket. Passed only by the artist
@@ -984,8 +1049,16 @@ export function JacketStage({
           onColor={(v) => onBrandColor?.(v)}
           onLogoFile={(f) => onBrandLogoFile?.(f)}
           onReset={() => onBrandReset?.()}
-          onClose={() => setMenuOpen(false)}
+          onCancel={() => {
+            onBrandCancel?.();
+            setMenuOpen(false);
+          }}
+          onSave={() => {
+            const ok = onBrandSave?.() ?? true;
+            if (ok) setMenuOpen(false);
+          }}
           uploading={!!brandUploading}
+          saving={!!brandSaving}
         />
       )}
       {/* Captions — shifted left so they center under the jacket, not the whole stage. */}
@@ -1499,13 +1572,10 @@ export function PressPackagePricingCatalog({
     onError: (e: Error) =>
       toast({ title: "Couldn't save branding", description: e.message, variant: "destructive" }),
   });
-  const brandColorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const onBrandColor = (hex: string) => {
-    setBrandColorDraft(hex);
-    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return; // mid-typing hex — preview only
-    if (brandColorTimer.current) clearTimeout(brandColorTimer.current);
-    brandColorTimer.current = setTimeout(() => saveBranding.mutate({ labelBgColor: hex }), 400);
-  };
+  // Draft-until-Save: every edit only stages a draft (the jacket/label
+  // preview updates live). Save commits the drafts in one PUT; Cancel and
+  // the X drop them, restoring what was there when the dialog opened.
+  const onBrandColor = (hex: string) => setBrandColorDraft(hex);
   const onBrandLogoFile = async (file: File) => {
     const isSvg = file.type === "image/svg+xml" || /\.svg$/i.test(file.name);
     if (!isSvg) {
@@ -1515,8 +1585,7 @@ export function PressPackagePricingCatalog({
     setBrandUploading(true);
     try {
       const url = await uploadAdminDoc(file);
-      setBrandLogoDraft(url);
-      saveBranding.mutate({ labelLogoUrl: url });
+      setBrandLogoDraft(url); // staged — persists only on Save
     } catch (e: any) {
       toast({ title: "Couldn't upload logo", description: e?.message, variant: "destructive" });
     } finally {
@@ -1524,9 +1593,34 @@ export function PressPackagePricingCatalog({
     }
   };
   const onBrandReset = () => {
+    // Stage the platform default; commits on Save like any other edit.
     setBrandColorDraft(null);
     setBrandLogoDraft(null);
-    saveBranding.mutate({ labelBgColor: null, labelLogoUrl: null });
+  };
+  const onBrandCancel = () => {
+    setBrandColorDraft(undefined);
+    setBrandLogoDraft(undefined);
+  };
+  const onBrandSave = () => {
+    const body: { labelBgColor?: string | null; labelLogoUrl?: string | null } = {};
+    if (brandColorDraft !== undefined) {
+      // Guard mid-typing hex — commit only a full #rrggbb (or a reset).
+      if (brandColorDraft !== null && !/^#[0-9a-fA-F]{6}$/.test(brandColorDraft)) {
+        toast({ title: "Check the color", description: "Use a full hex value like #e40a13.", variant: "destructive" });
+        return false;
+      }
+      body.labelBgColor = brandColorDraft;
+    }
+    if (brandLogoDraft !== undefined) body.labelLogoUrl = brandLogoDraft;
+    if (Object.keys(body).length > 0) {
+      saveBranding.mutate(body, {
+        onSuccess: () => {
+          setBrandColorDraft(undefined);
+          setBrandLogoDraft(undefined);
+        },
+      });
+    }
+    return true;
   };
 
   const invalidate = () =>
@@ -2216,7 +2310,10 @@ export function PressPackagePricingCatalog({
                     onBrandColor={onBrandColor}
                     onBrandLogoFile={onBrandLogoFile}
                     onBrandReset={onBrandReset}
+                    onBrandSave={onBrandSave}
+                    onBrandCancel={onBrandCancel}
                     brandUploading={brandUploading}
+                    brandSaving={saveBranding.isPending}
                   />
                 </div>
               </div>
