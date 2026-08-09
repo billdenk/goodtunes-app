@@ -26,7 +26,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ALBUM_FORMAT_LABEL, type AlbumFormat } from "@shared/schema";
-import { FileText, Loader2, MoreHorizontal, Pencil, Plus, Trash2, X } from "lucide-react";
+import { FileText, Loader2, MoreHorizontal, Plus, Trash2, X } from "lucide-react";
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -36,9 +36,8 @@ import {
   CatalogTab,
   CatalogTier,
   CatalogCsvButtons,
-  DEFAULT_QTY_COLUMNS,
-  FormatDropdown,
   GoodDeedPrintingEditor,
+  DEFAULT_QTY_COLUMNS,
   HellbenderImportButton,
   HellbenderPricingSyncButton,
   VINYL_FORMATS,
@@ -382,7 +381,10 @@ function GroupCard({
           {tier.name}
         </span>
         <span className="text-[11.5px]" style={{ color: SUBINK }}>
-          {tier.colors.length} {tier.colors.length === 1 ? "color" : "colors"} · {new Set((tier.priceLadder ?? []).map((r) => r.qty)).size} of 6 runs priced
+          {tier.colors.length} {tier.colors.length === 1 ? "color" : "colors"} · {new Set([
+            ...(tier.priceLadder ?? []),
+            ...Object.values(tier.laddersByJacket ?? {}).flat(),
+          ].filter((r) => r.confirmed !== false).map((r) => r.qty)).size} of 6 runs priced
         </span>
       </button>
       {canEdit && (
@@ -650,10 +652,13 @@ export function PressPackagePricingCatalog({
     roleInfo?.role === "super_admin" ||
     roleInfo?.role === "admin" ||
     (roleInfo?.role === "manufacturer" && roleInfo?.roleScopeId === pressId);
-  const { data: catalog, isLoading } = useQuery<Catalog>({
+  const { data: catalogRaw, isLoading } = useQuery<Catalog | { data: Catalog }>({
     queryKey: ["/api/admin/manufacturers", pressId, "catalog"],
     enabled: !!pressId && !!canView,
   });
+  // Older admin query clients sometimes return the JSON envelope; normalize it
+  // once so every press reads the same live formats/tiers payload.
+  const catalog = ((catalogRaw as { data?: Catalog } | undefined)?.data ?? catalogRaw) as Catalog | undefined;
   const canEdit = catalog?.canEdit !== false;
   // Press branding for the disc center label (portal + god-view).
   const { data: pressRow } = useQuery<{ labelLogoUrl?: string | null; labelBgColor?: string | null }>({
@@ -666,51 +671,28 @@ export function PressPackagePricingCatalog({
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["/api/admin/manufacturers", pressId, "catalog"] });
 
-  // ── Format selection (vinyl size cards + dropdown for CD/cassette/GoodDeeds)
+  // ── Format selection (vinyl sizes only; CD and cassette are coming)
   const [activeTab, setActiveTab] = useState<CatalogTab | null>(null);
   useEffect(() => {
     if (!catalog) return;
     const offeredList = catalog.formats.map((f) => f.format);
     if (activeTab === null) {
-      if (offeredList.length === 0) setActiveTab("gooddeeds");
-      else setActiveTab(VINYL_FORMATS.find((f) => offeredList.includes(f)) ?? offeredList[0]);
+      // Deep-link: ?catalogFormat=vinyl_12 preselects a size (parity screenshots)
+      const wanted = new URLSearchParams(window.location.search).get("catalogFormat");
+      if (wanted && VINYL_FORMATS.includes(wanted as AlbumFormat) && offeredList.includes(wanted as AlbumFormat)) {
+        setActiveTab(wanted as AlbumFormat);
+        return;
+      }
+      setActiveTab(VINYL_FORMATS.find((f) => offeredList.includes(f)) ?? VINYL_FORMATS[0]);
       return;
     }
-    if (activeTab !== "gooddeeds" && !offeredList.includes(activeTab as AlbumFormat)) {
-      if (offeredList.length === 0) setActiveTab("gooddeeds");
-      else setActiveTab(VINYL_FORMATS.find((f) => offeredList.includes(f)) ?? offeredList[0]);
+    if (!offeredList.includes(activeTab as AlbumFormat)) {
+      setActiveTab(VINYL_FORMATS.find((f) => offeredList.includes(f)) ?? VINYL_FORMATS[0]);
     }
   }, [catalog, activeTab]);
 
-  const toggleFormat = useMutation({
-    mutationFn: async (args: { format: AlbumFormat; enabled: boolean }) => {
-      const r = await apiRequest(
-        "PUT",
-        `/api/admin/manufacturers/${pressId}/catalog/formats/${args.format}`,
-        { enabled: args.enabled },
-      );
-      return r.json();
-    },
-    onSuccess: invalidate,
-    onError: (e: any) =>
-      toast({ title: "Couldn't update formats", description: e?.message, variant: "destructive" }),
-  });
-  const hideFormat = useMutation({
-    mutationFn: async (args: { format: AlbumFormat; hidden: boolean }) => {
-      const r = await apiRequest(
-        "PUT",
-        `/api/admin/manufacturers/${pressId}/catalog/formats/${args.format}`,
-        { hidden: args.hidden },
-      );
-      return r.json();
-    },
-    onSuccess: invalidate,
-    onError: (e: any) =>
-      toast({ title: "Couldn't update format", description: e?.message, variant: "destructive" }),
-  });
-
   const offered = new Set((catalog?.formats ?? []).map((f) => f.format));
-  const fmt = activeTab && activeTab !== "gooddeeds" ? (activeTab as AlbumFormat) : null;
+  const fmt = activeTab as AlbumFormat | null;
   const fmtRow: CatalogFormat | null =
     (fmt && catalog?.formats.find((f) => f.format === fmt)) || null;
   const isVinyl = !!fmt && VINYL_FORMATS.includes(fmt);
@@ -730,7 +712,12 @@ export function PressPackagePricingCatalog({
       if (tiers.some((t) => t.id === pendingTierIdRef.current)) pendingTierIdRef.current = null;
       else return;
     }
-    if (!tiers.some((t) => t.id === selectedTierId)) setSelectedTierId(tiers[0].id);
+    if (!tiers.some((t) => t.id === selectedTierId)) {
+      // Deep-link: ?catalogTier=<name> preselects a type (parity screenshots)
+      const wantedTier = new URLSearchParams(window.location.search).get("catalogTier");
+      const match = wantedTier ? tiers.find((t) => t.name.toLowerCase() === wantedTier.toLowerCase()) : null;
+      setSelectedTierId((match ?? tiers[0]).id);
+    }
   }, [tiers, selectedTierId]);
   const selectedTier = tiers.find((t) => t.id === selectedTierId) ?? null;
 
@@ -1114,10 +1101,6 @@ export function PressPackagePricingCatalog({
                   active
                     ? { color: BLUE, backgroundColor: "var(--apple-pill, #fff)", boxShadow: "0 1px 3px rgba(0,0,0,.08)" }
                     : { color: INK };
-                const nonVinyl: { key: AlbumFormat; label: string }[] = [
-                  { key: "cd" as AlbumFormat, label: "CD" },
-                  { key: "cassette" as AlbumFormat, label: "Cassette" },
-                ];
                 return (
                   <>
                     <button
@@ -1131,44 +1114,8 @@ export function PressPackagePricingCatalog({
                     >
                       Vinyl
                     </button>
-                    {nonVinyl.map(({ key, label }) => {
-                      const isOffered = offered.has(key);
-                      const enabled = isOffered || canEdit;
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          role="tab"
-                          aria-selected={activeTab === key}
-                          disabled={!enabled}
-                          title={enabled ? undefined : "Not offered"}
-                          className={`rounded-full px-4 py-1.5 text-[12.5px] font-semibold ${enabled ? "" : "opacity-40 cursor-not-allowed"}`}
-                          style={pill(activeTab === key)}
-                          onClick={() => {
-                            if (isOffered) setActiveTab(key);
-                            else if (canEdit)
-                              toggleFormat.mutate(
-                                { format: key, enabled: true },
-                                { onSuccess: () => { invalidate(); setActiveTab(key); } },
-                              );
-                          }}
-                          data-testid={`format-pill-${key}`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={activeTab === "gooddeeds"}
-                      className="rounded-full px-4 py-1.5 text-[12.5px] font-semibold"
-                      style={pill(activeTab === "gooddeeds")}
-                      onClick={() => setActiveTab("gooddeeds")}
-                      data-testid="format-pill-gooddeeds"
-                    >
-                      GoodDeeds
-                    </button>
+                    <button type="button" disabled title="Coming" className="rounded-full px-4 py-1.5 text-[12.5px] font-semibold opacity-40 cursor-default" style={{ color: INK }} data-testid="format-pill-cd">CD</button>
+                    <button type="button" disabled title="Coming" className="rounded-full px-4 py-1.5 text-[12.5px] font-semibold opacity-40 cursor-default" style={{ color: INK }} data-testid="format-pill-cassette">Cassette</button>
                   </>
                 );
               })()}
@@ -1188,37 +1135,17 @@ export function PressPackagePricingCatalog({
               <span style={{ color: FAINT, fontWeight: 600 }}>From scratch.</span>
             </h2>
           )}
-          <p className="mt-1.5 text-[13px]" style={{ color: SUBINK }}>
-            Every price covers the finished package — pressing, printed jacket and sleeves.
+          <p className="mt-1.5 max-w-[680px] text-[13px]" style={{ color: SUBINK }}>
+            Quote the way you already do — a single cost per finished package, per run size. Record, jacket, inner sleeve, and labels are all in it. No per-piece math.
           </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {onOpenColors && canEdit && (
-            <button
-              type="button"
-              onClick={onOpenColors}
-              className="inline-flex items-center h-9 px-4 rounded-full text-[13px] font-medium bg-white transition-colors hover:bg-slate-50"
-              style={{ color: INK, border: `1px solid ${HAIRLINE}` }}
-              data-testid="button-open-vinyl-colors"
-            >
-              Add your vinyl
-            </button>
-          )}
-          <CatalogCsvButtons pressId={pressId} pressName={pressDomain} onApplied={invalidate} canEdit={canEdit} />
-          {canEdit && pressDomain === "hellbendervinyl.com" && (
-            <>
-              <HellbenderImportButton pressId={pressId} catalog={catalog ?? null} onImported={invalidate} />
-              <HellbenderPricingSyncButton pressId={pressId} onSynced={invalidate} />
-            </>
-          )}
         </div>
       </div>
 
       {canEdit && anyDirty && (
         <div className="fixed bottom-6 left-1/2 z-30 -translate-x-1/2 flex items-center gap-4 rounded-full px-4 py-2.5"
           style={{ color: INK, background: "var(--apple-glass, rgba(255,255,255,.78))", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: `1px solid ${HAIRLINE}`, boxShadow: "0 12px 32px rgba(0,0,0,.12)" }}
-          data-testid="floating-save-catalog">
-          <span className="text-[13px] font-medium">Edited</span>
+          data-testid="save-bar">
+          <span className="text-[13px] font-medium">Edited · Save catalog</span>
           <button type="button" onClick={() => saveCatalog.mutate()} disabled={saveCatalog.isPending}
             className="rounded-full px-4 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50" style={{ backgroundColor: BLUE }} data-testid="button-save-catalog">
             {saveCatalog.isPending ? "Saving…" : "Save catalog"}
@@ -1241,48 +1168,12 @@ export function PressPackagePricingCatalog({
         <div className="py-10 text-[13.5px]" style={{ color: SUBINK }}>
           Loading…
         </div>
-      ) : activeTab === "gooddeeds" ? (
-        <fieldset disabled={!canEdit} className="mt-6 min-w-0">
-          <GoodDeedPrintingEditor pressId={pressId} />
-        </fieldset>
       ) : !fmt ? null : (
         <fieldset disabled={!canEdit} className="mt-8 min-w-0">
-          {!isVinyl && fmtRow && (
-            <div className="mb-6 flex flex-wrap items-center gap-4" data-testid={`row-nonvinyl-controls-${fmt}`}>
-              <span className="text-[13px] font-semibold" style={{ color: INK }}>{ALBUM_FORMAT_LABEL[fmt]}</span>
-              {canEdit && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => hideFormat.mutate({ format: fmt, hidden: !fmtRow.hidden })}
-                    disabled={hideFormat.isPending}
-                    className="rounded-full px-3 py-1 text-[12.5px] font-medium"
-                    style={{ border: `1px solid ${HAIRLINE}`, color: SUBINK }}
-                    data-testid={`button-toggle-hidden-${fmt}`}
-                  >
-                    {fmtRow.hidden ? "Hidden from artists — show" : "Hide from artists"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm(`Remove ${ALBUM_FORMAT_LABEL[fmt]} from your catalog? Its tiers and pricing stay saved server-side until removal completes.`))
-                        toggleFormat.mutate({ format: fmt, enabled: false });
-                    }}
-                    disabled={toggleFormat.isPending}
-                    className="rounded-full px-3 py-1 text-[12.5px] font-medium"
-                    style={{ border: `1px solid ${HAIRLINE}`, color: "var(--apple-red, #d70015)" }}
-                    data-testid={`button-remove-format-${fmt}`}
-                  >
-                    Remove format
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-          <div className="flex flex-col gap-12 lg:flex-row">
+          <div className="flex flex-col gap-12 xl:flex-row">
             {/* ── LEFT: sticky stage (vinyl only) ── */}
             {isVinyl && (
-              <div className="hidden flex-shrink-0 lg:block" style={{ width: 320 }}>
+              <div className="flex-shrink-0 w-full xl:w-[320px]" style={{ width: 320, maxWidth: "100%" }}>
                 <div className="sticky top-8">
                   <JacketStage
                     format={fmt}
@@ -1294,7 +1185,7 @@ export function PressPackagePricingCatalog({
                   <div className="mt-8 rounded-2xl bg-white p-5" style={{ border: `1px solid ${HAIRLINE}` }} data-testid="package-contents-card">
                     <div className="text-[15px] font-semibold tracking-tight" style={{ color: INK }}>One package. <span style={{ color: FAINT }}>Everything included.</span></div>
                     <div className="mt-4 space-y-2.5 text-[12.5px]" style={{ color: SUBINK }}>
-                      {["Pressed vinyl record", "Printed jacket", "Center labels", fmt === "7_inch" ? "Printed jacket included." : "Printed inner sleeve"].map((item) => (
+                      {["Pressed vinyl record", "Printed jacket", "Center labels", ...(fmt.startsWith("12") ? ["Inner sleeve"] : [])].map((item) => (
                         <div key={item} className="flex items-center justify-between" style={{ borderBottom: `1px solid ${HAIRLINE}`, paddingBottom: 8 }}>
                           <span>{item}</span><span style={{ color: BLUE }}>Included</span>
                         </div>
@@ -1310,15 +1201,20 @@ export function PressPackagePricingCatalog({
               {/* Pick a size */}
               {isVinyl && (
                 <section id="section-pick-size" data-testid="section-pick-size">
-                  <div className="flex items-end justify-between gap-4">
-                    <div>
-                      <SectionLabel>Product type</SectionLabel>
-                      <div className="mt-1 text-[12px]" style={{ color: SUBINK }}>12&quot; · 33 1/3 RPM</div>
-                    </div>
-                    <div className="inline-flex max-w-full overflow-x-auto rounded-full p-1" style={{ backgroundColor: "var(--apple-track, #f0f0f2)" }}>
-                    {offeredVinyl.map((f) => (
-                      <button key={f} type="button" onClick={() => setActiveTab(f)} className="whitespace-nowrap rounded-full px-4 py-2 text-[12.5px] font-semibold" style={activeTab === f ? { color: BLUE, backgroundColor: "var(--apple-pill, #fff)", boxShadow: "0 1px 3px rgba(0,0,0,.08)" } : { color: SUBINK }} data-testid={`segment-size-${f}`}>{ALBUM_FORMAT_LABEL[f]}</button>
-                    ))}
+                  <div>
+                    <TwoTone lead="Pick a size." rest="Prices follow the record." />
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      {VINYL_FORMATS.map((f) => {
+                        const available = offered.has(f);
+                        return (
+                          <button key={f} type="button" disabled={!available} onClick={() => available && setActiveTab(f)}
+                            className="rounded-2xl bg-white p-4 text-left transition-colors disabled:opacity-40"
+                            style={{ border: `2px solid ${activeTab === f ? BLUE : HAIRLINE}` }} data-testid={`card-size-${f}`}>
+                            <div className="text-[14px] font-semibold" style={{ color: activeTab === f ? BLUE : INK }}>{ALBUM_FORMAT_LABEL[f]}</div>
+                            <div className="mt-1 text-[12px]" style={{ color: SUBINK }}>{VINYL_SIZE_BLURB[f]}</div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </section>
@@ -1459,7 +1355,7 @@ export function PressPackagePricingCatalog({
                                   )}
                                   style={{ color: SUBINK, border: `1px solid ${HAIRLINE}` }}
                                 >
-                                  <Pencil className="h-3 w-3" />
+                                  <MoreHorizontal className="h-3.5 w-3.5" />
                                 </button>
                               }
                             />
@@ -1595,19 +1491,35 @@ export function PressPackagePricingCatalog({
               {isVinyl && (
                 <>
                   <section id="section-templates" data-testid="section-templates">
-                    <TwoTone lead="Print templates." rest="What artists design against." />
+                    <TwoTone lead="Print templates." rest="Artwork specs for artists." />
+                    <p className="mt-1 text-[12.5px]" style={{ color: SUBINK }}>Attach a file or paste a link. Optional and quiet.</p>
                     <TemplateTilesGrid pressId={pressId} fmt={fmt} canEdit={canEdit} />
                   </section>
                   <section id="section-audio" data-testid="section-audio">
-                    <TwoTone lead="Audio spec." rest="What your lathe needs." />
+                    <TwoTone lead="Audio spec." rest="What the lathe can cut." />
                     <AudioSpecEditorCard pressId={pressId} canEdit={canEdit} />
                   </section>
                 </>
               )}
+              <section className="pt-2" data-testid="section-gooddeeds">
+                <TwoTone lead="GoodDeeds." rest="Printing options." />
+                <p className="mt-1 text-[12.5px]" style={{ color: SUBINK }}>Keep the signed GoodDeed® printing ladder separate from vinyl package pricing.</p>
+                <fieldset disabled={!canEdit} className="mt-3"><GoodDeedPrintingEditor pressId={pressId} /></fieldset>
+              </section>
             </div>
           </div>
         </fieldset>
       )}
+      <div className="mt-12 flex flex-wrap items-center justify-end gap-4 border-t pt-4" style={{ borderColor: HAIRLINE }}>
+        <button type="button" onClick={() => onOpenColors?.()} disabled={!onOpenColors || !canEdit} className="text-[12.5px] font-semibold disabled:opacity-40" style={{ color: BLUE }} data-testid="button-open-vinyl-colors">Add your vinyl</button>
+        <CatalogCsvButtons pressId={pressId} pressName={pressDomain} onApplied={invalidate} canEdit={canEdit} />
+        {canEdit && pressDomain === "hellbendervinyl.com" && (
+          <>
+            <HellbenderImportButton pressId={pressId} catalog={catalog ?? null} onImported={invalidate} />
+            <HellbenderPricingSyncButton pressId={pressId} onSynced={invalidate} />
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -1746,11 +1658,7 @@ function TurnaroundRow({
           </span>
         )}
         <span className="text-[12px]" style={{ color: SUBINK }} data-testid={`text-format-turnaround-resolved-${format}`}>
-          {hasOverride
-            ? `This product: ${resolvedLabel ?? "—"}`
-            : pressLabel
-            ? `Using press default: ${pressLabel}`
-            : "No turnaround set yet — blank inherits the press default."}
+          {hasOverride ? `This product: ${resolvedLabel ?? "—"}` : "Blank inherits the press default."}
         </span>
         {hasOverride && canEdit && (
           <button

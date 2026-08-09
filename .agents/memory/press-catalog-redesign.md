@@ -20,10 +20,13 @@ The press Catalog (portal Vinyl catalog tab + god-view `?tab=catalog`) is `clien
 - Jacket fill chain: real art (treat `/album-placeholder.svg` as none) → press `vinylPlaceholderUrl` → `/pmp-icon.png` at 45% on `#1d1d1f` via JacketStage's `placeholderIconUrl` prop (exported from PressPackagePricingCatalog).
 - The invited press resolves from `people.invited_by_press_id` (or label), NOT `press_invited_albums` — dev verification fixture = stamp that column on the artist person (Memphis has real ladders in dev; appreview sampler artist works).
 
-**Handoff v3 (2026-08 addendum) gotchas:**
-- The design's header Vinyl/CD/Cassette pill must be FUNCTIONAL, not decorative: disabled "Coming" pills hide real offered CD/cassette tiers + the GoodDeeds editor (architect flagged as data-loss). The pill switches activeTab, enables an unoffered format on click (canEdit), and a GoodDeeds pill reaches GoodDeedPrintingEditor; non-vinyl active formats get a quiet hide/remove control row.
-- A "replace presentation wholesale" delegation to a design subagent tends to retrofit shallowly AND drop legacy affordances (tiers.slice hiding real tiers, FormatDropdown removed). Review the diff specifically for data made unreachable, not just data deleted.
-- The portal duplicate catalog header (AdminPageHeader + "Add your vinyl" button in PressPortal) was removed; the colors sub-view stays reachable via an `onOpenColors` prop rendered as a quiet button in the page's action cluster.
+**Corrections pass (2026-08-09, first pass REJECTED) — the binding rules now:**
+- CD/Cassette are DISABLED "Coming" placeholders BY DESIGN-OWNER DECREE (CORRECTIONS-2026-08-09.md): no format-management UI, no GoodDeeds format tab (GoodDeeds is its own bottom section), no live CD/cassette catalogs. Verified: the only non-vinyl press_color_tiers row is one empty MRP Cassette shell — no merchant data hidden. Don't "fix" this back per generic zero-data-loss instincts; the corrections doc wins over the architect on this point.
+- Header = H1 + switcher + eyebrow + two-tone heading + exact subcopy ONLY. "Add your vinyl" + CSV buttons live in a quiet utility row at the page bottom (testids kept).
+- Rule zero lesson: a "replace wholesale" job that quietly blends old components back in (pencil-icon color tiles, format chips, header buttons) gets REJECTED even when functional. Match the reference's affordances too (color-tile edit = hover dots trigger, not pencil).
+- Responsive: preview column stacks ABOVE the working column below xl (flex-col → xl:flex-row, preview first in DOM) — never display:none.
+- Parity-screenshot deep-links: `?catalogFormat=<7_inch|12_lp|12_double>` + `?catalogTier=<name>` + `?catalogSection=...` (format param only honors offered formats). AlbumFormat ids are 7_inch/12_lp/12_double, NOT vinyl_12.
+- Data-wiring regression root cause: read path only used tiers[].priceLadder — MRP's priced runs live in laddersByJacket, so counts showed 0; count "priced runs" across BOTH.
 - Press logos are seeded via the NORMAL mechanism (PNG upload → /api/admin/upload → PUT manufacturers logoUrl), never hardcoded paths; prod parity by marker-guarded UPDATE in post-merge.sh (shared object-storage bucket = same /objects URLs in both DBs); SVG/webp are rejected by the upload MIME allowlist — convert to PNG first.
 
 **Why:** Bill required zero data loss + exact interaction parity verified on live data (Riverside empty catalog, Memphis real ladders) before the legacy page was removed.

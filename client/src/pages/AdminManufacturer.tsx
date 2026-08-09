@@ -2992,11 +2992,12 @@ export function GoodDeedPrintingEditor({ pressId }: { pressId: string }) {
   useEffect(() => {
     if (!data || initialized) return;
     setInitialized(true);
-    setActive(data.active);
-    const offered = new Set(data.tiers.map((t) => t.qty));
+    setActive(data.active ?? false);
+    const tiers = Array.isArray(data.tiers) ? data.tiers : [];
+    const offered = new Set(tiers.map((t) => t.qty));
     setOfferedQtys(offered);
     const p: Record<number, string> = {};
-    for (const t of data.tiers) {
+    for (const t of tiers) {
       p[t.qty] = String((t.perUnitCents / 100).toFixed(2));
     }
     setPrices(p);

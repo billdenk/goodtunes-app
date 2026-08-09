@@ -22757,22 +22757,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className={`rounded-full px-4 py-1.5 text-[12.5px] font-semibold ${enabled ? \"\" : \"opacity-40 cursor-not-allowed\"}`}"
+    "snippet": "<button type=\"button\" disabled title=\"Coming\" className=\"rounded-full px-4 py-1.5 text-[12.5px] font-semibold opacity-40 cursor-default\" style={{ color: INK }} data-testid=\"format-pill-cd\">CD</button>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<p className=\"mt-1.5 text-[13px]\" style={{ color: SUBINK }}>"
+    "snippet": "<button type=\"button\" disabled title=\"Coming\" className=\"rounded-full px-4 py-1.5 text-[12.5px] font-semibold opacity-40 cursor-default\" style={{ color: INK }} data-testid=\"format-pill-cassette\">Casse"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"inline-flex items-center h-9 px-4 rounded-full text-[13px] font-medium bg-white transition-colors hover:bg-slate-50\""
+    "snippet": "<p className=\"mt-1.5 max-w-[680px] text-[13px]\" style={{ color: SUBINK }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[13px] font-medium\">Edited</span>"
+    "snippet": "<span className=\"text-[13px] font-medium\">Edited · Save catalog</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -22792,16 +22792,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<span className=\"text-[13px] font-semibold\" style={{ color: INK }}>{ALBUM_FORMAT_LABEL[fmt]}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"rounded-full px-3 py-1 text-[12.5px] font-medium\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "<div className=\"text-[15px] font-semibold tracking-tight\" style={{ color: INK }}>One package. <span style={{ color: FAINT }}>Everything included.</span></div>"
   },
   {
@@ -22812,12 +22802,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<div className=\"mt-1 text-[12px]\" style={{ color: SUBINK }}>12&quot; · 33 1/3 RPM</div>"
+    "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: activeTab === f ? BLUE : INK }}>{ALBUM_FORMAT_LABEL[f]}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<button key={f} type=\"button\" onClick={() => setActiveTab(f)} className=\"whitespace-nowrap rounded-full px-4 py-2 text-[12.5px] font-semibold\" style={activeTab === f ? { color: BLUE, backgroundColor: "
+    "snippet": "<div className=\"mt-1 text-[12px]\" style={{ color: SUBINK }}>{VINYL_SIZE_BLURB[f]}</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -22878,6 +22868,21 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "<span className=\"text-[12px]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<p className=\"mt-1 text-[12.5px]\" style={{ color: SUBINK }}>Attach a file or paste a link. Optional and quiet.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<p className=\"mt-1 text-[12.5px]\" style={{ color: SUBINK }}>Keep the signed GoodDeed® printing ladder separate from vinyl package pricing.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<button type=\"button\" onClick={() => onOpenColors?.()} disabled={!onOpenColors || !canEdit} className=\"text-[12.5px] font-semibold disabled:opacity-40\" style={{ color: BLUE }} data-testid=\"button-open"
   },
   {
     "rule": "hardcoded-font-size",
