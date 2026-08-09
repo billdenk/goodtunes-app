@@ -560,7 +560,10 @@ function ModePicker({
             type="button"
             role="radio"
             aria-checked={on}
-            onClick={() => onChange(m)}
+            onClick={(e) => {
+              onChange(m);
+              e.currentTarget.blur(); // release focus-within so the pills fade back out
+            }}
             data-testid={`mode-${m}-${qty}`}
             className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-colors"
             style={
