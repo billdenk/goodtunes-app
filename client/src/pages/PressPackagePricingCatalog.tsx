@@ -31,6 +31,14 @@ import { Check, ChevronDown, DollarSign, FileText, HelpCircle, Loader2, MinusCir
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT, postAdminImage } from "@/lib/adminUpload";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Catalog,
   CatalogColor,
   CatalogFormat,
@@ -1310,11 +1318,19 @@ function GroupCard({
   // Task #2998 — the "…" opens a two-item menu (Edit… / Archive) first;
   // Edit… swaps the popover content to the editor, Archive to an inline
   // confirm. Never more than one popover level.
-  const [view, setView] = useState<"menu" | "edit" | "confirm">("menu");
+  // Per Bill (2026-08-10) — the type-level archive cascade gets a real
+  // dialog (it takes every color with it), so "confirm" left the popover
+  // views; colors keep their lighter inline confirm.
+  const [view, setView] = useState<"menu" | "edit">("menu");
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [name, setName] = useState(tier.name);
   const [sizes, setSizes] = useState<string[]>(offeredSizes);
   const [previewUrl, setPreviewUrl] = useState<string | null>(tier.previewImageUrl ?? null);
   const [uploading, setUploading] = useState(false);
+  // Re-seed ONLY when the popover opens. Keying this effect on the
+  // offeredSizes array (fresh identity every parent render) made it refire
+  // on every re-render while open — snapping the view back to "menu", so
+  // "Edit…" appeared to do nothing.
   useEffect(() => {
     if (menuOpen) {
       setView("menu");
@@ -1323,7 +1339,8 @@ function GroupCard({
       setPreviewUrl(tier.previewImageUrl ?? null);
       setUploading(false);
     }
-  }, [menuOpen, tier.name, offeredSizes, tier.previewImageUrl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuOpen]);
   const canSave = name.trim().length > 0 && sizes.length > 0 && !uploading;
   const toggleSize = (s: string) =>
     setSizes((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
@@ -1422,7 +1439,11 @@ function GroupCard({
           <PopoverContent
             align="end"
             sideOffset={8}
-            className="w-80 p-0 rounded-2xl overflow-hidden"
+            className={cn(
+              "p-0 rounded-2xl overflow-hidden",
+              // Content-sized: compact two-item menu, full editor.
+              view === "menu" ? "w-44" : "w-80",
+            )}
             style={frostedPanel(dark)}
             data-testid={`popover-edit-group-${tier.id}`}
           >
@@ -1440,45 +1461,18 @@ function GroupCard({
                 <button
                   type="button"
                   disabled={!canRemove}
-                  onClick={() => setView("confirm")}
-                  className="w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors hover:bg-rose-50 disabled:opacity-40"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setConfirmOpen(true);
+                  }}
+                  className="w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors disabled:opacity-40"
                   style={{ color: criticalColor(dark) }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = dark ? CRITICAL_WASH : "#fdeef2")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                   data-testid={`menu-type-archive-${tier.id}`}
                 >
                   Archive
                 </button>
-              </div>
-            ) : view === "confirm" ? (
-              <div style={{ padding: "16px 18px 14px" }}>
-                <div className="text-[13.5px] font-semibold" style={{ color: INK }}>
-                  Archive {tier.name}?
-                </div>
-                <div className="text-[12.5px]" style={{ color: SUBINK, marginTop: 2, lineHeight: 1.4 }}>
-                  Artists won't see it for new projects. Its colors retire with it; pressed records keep their history.
-                </div>
-                <div className="flex items-center justify-end gap-2" style={{ marginTop: 12 }}>
-                  <button
-                    type="button"
-                    onClick={() => setView("menu")}
-                    className="text-[12.5px] font-semibold rounded-full px-2.5 py-1 transition-colors hover:bg-slate-100"
-                    style={{ color: SUBINK }}
-                    data-testid={`button-archive-cancel-${tier.id}`}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onArchive();
-                      setMenuOpen(false);
-                    }}
-                    className="text-[12.5px] font-semibold rounded-full px-3 py-1 text-white transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: criticalColor(dark) }}
-                    data-testid={`button-archive-confirm-${tier.id}`}
-                  >
-                    Archive
-                  </button>
-                </div>
               </div>
             ) : (
             <>
@@ -1580,7 +1574,10 @@ function GroupCard({
             <button
               type="button"
               disabled={!canRemove}
-              onClick={() => setView("confirm")}
+              onClick={() => {
+                setMenuOpen(false);
+                setConfirmOpen(true);
+              }}
               className="w-full text-[13px] font-semibold transition-colors disabled:opacity-40"
               style={{ padding: "12px 18px", borderTop: `1px solid ${HAIRLINE}`, color: criticalColor(dark), textAlign: "center", background: "transparent" }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = dark ? CRITICAL_WASH : "#fdeef2")}
@@ -1593,6 +1590,50 @@ function GroupCard({
             )}
           </PopoverContent>
         </Popover>
+      )}
+      {/* Type archive = cascade (every color goes with it), so it gets a real
+          dialog rather than the colors' lighter inline confirm. */}
+      {canEdit && (
+        <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <AlertDialogContent
+            className="max-w-sm rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+            data-testid={`dialog-archive-type-${tier.id}`}
+          >
+            <AlertDialogHeader>
+              <AlertDialogTitle>Archive {tier.name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This archives the type and{" "}
+                {tier.colors.length === 1 ? "the 1 color" : `all ${tier.colors.length} colors`} under
+                it. Artists won't see them for new projects — anything already in a project keeps
+                working. To restore it later, contact GoodTunes.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-slate-100"
+                style={{ color: SUBINK }}
+                data-testid={`button-archive-cancel-${tier.id}`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmOpen(false);
+                  onArchive();
+                }}
+                className="text-[13px] font-semibold rounded-full px-4 py-1.5 text-white transition-opacity hover:opacity-90"
+                style={{ backgroundColor: criticalColor(dark) }}
+                data-testid={`button-archive-confirm-${tier.id}`}
+              >
+                Archive
+              </button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </div>
   );

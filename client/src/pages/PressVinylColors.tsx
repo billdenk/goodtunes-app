@@ -46,6 +46,11 @@ const SUBINK = "var(--apple-subink)";
 const HAIRLINE = "var(--apple-hairline)";
 const FAINT = "var(--apple-faint)";
 const CRITICAL = "#e0245e";
+/** Destructive red — brightened to rose on charcoal for legibility (dark canon). */
+function criticalColor(dark: boolean): string {
+  return dark ? "#ff6b8a" : CRITICAL;
+}
+const CRITICAL_WASH_DARK = "rgba(255,107,138,0.14)"; // dark destructive hover (light #fdeef2)
 
 function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
@@ -435,12 +440,18 @@ export function SwatchEditorPopover({
   onArchive?: () => void;
 }) {
   const { toast } = useToast();
+  const dark = useAdminDark();
   const [name, setName] = useState(edit?.name ?? "");
   const [hex, setHex] = useState(edit?.swatchHex ?? "#C81E38");
   const [photoUrl, setPhotoUrl] = useState<string | null>(edit?.swatchImageUrl ?? null);
   const [uploading, setUploading] = useState(false);
   const menuEnabled = !!startInMenu && !!edit && !!onArchive;
+  // Archive is reachable from the two-item menu AND from the editor's
+  // bottom row (Bill 2026-08-10) — the confirm's Cancel returns wherever
+  // the operator came from.
+  const canArchive = !!edit && !!onArchive;
   const [view, setView] = useState<"menu" | "confirm" | "edit">(menuEnabled ? "menu" : "edit");
+  const [confirmFrom, setConfirmFrom] = useState<"menu" | "edit">("menu");
 
   const seed = () => {
     setName(edit?.name ?? "");
@@ -496,7 +507,11 @@ export function SwatchEditorPopover({
         sideOffset={10}
         avoidCollisions
         collisionPadding={16}
-        className="w-[360px] p-0 rounded-2xl overflow-hidden flex flex-col"
+        className={cn(
+          "p-0 rounded-2xl overflow-hidden flex flex-col",
+          // Content-sized: compact two-item menu, mid confirm, full editor.
+          canArchive && view === "menu" ? "w-44" : canArchive && view === "confirm" ? "w-72" : "w-[360px]",
+        )}
         style={{
           border: `1px solid ${HAIRLINE}`,
           backgroundColor: "var(--apple-frost, rgba(255,255,255,0.82))",
@@ -507,7 +522,7 @@ export function SwatchEditorPopover({
         }}
         data-testid={edit ? "popover-edit-color" : "popover-add-color"}
       >
-        {menuEnabled && view !== "edit" ? (
+        {canArchive && view !== "edit" ? (
           /* Task #2998 — two-item menu (Edit… / Archive) + inline confirm */
           <div style={{ padding: 8 }}>
             {view === "menu" ? (
@@ -523,9 +538,14 @@ export function SwatchEditorPopover({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setView("confirm")}
-                  className="w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors hover:bg-rose-50"
-                  style={{ color: CRITICAL }}
+                  onClick={() => {
+                    setConfirmFrom("menu");
+                    setView("confirm");
+                  }}
+                  className="w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors"
+                  style={{ color: criticalColor(dark) }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = dark ? CRITICAL_WASH_DARK : "#fdeef2")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                   data-testid="menu-color-archive"
                 >
                   Archive
@@ -542,7 +562,7 @@ export function SwatchEditorPopover({
                 <div className="flex items-center justify-end gap-2" style={{ marginTop: 10 }}>
                   <button
                     type="button"
-                    onClick={() => setView("menu")}
+                    onClick={() => setView(confirmFrom === "menu" && menuEnabled ? "menu" : "edit")}
                     className="text-[12.5px] font-semibold rounded-full px-2.5 py-1 transition-colors hover:bg-slate-100"
                     style={{ color: SUBINK }}
                     data-testid="button-archive-color-cancel"
@@ -556,7 +576,7 @@ export function SwatchEditorPopover({
                       onOpenChange(false);
                     }}
                     className="text-[12.5px] font-semibold rounded-full px-3 py-1 text-white transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: CRITICAL }}
+                    style={{ backgroundColor: criticalColor(dark) }}
                     data-testid="button-archive-color-confirm"
                   >
                     Archive
@@ -690,6 +710,25 @@ export function SwatchEditorPopover({
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : edit ? "Save" : "Save color"}
           </button>
         </div>
+        {/* Archive — Apple convention (matches the type editor): quiet red
+            full-width row under its own hairline. Archive flags, never
+            deletes — restore/delete UI can come later. */}
+        {canArchive && (
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmFrom("edit");
+              setView("confirm");
+            }}
+            className="w-full flex-shrink-0 text-[13px] font-semibold transition-colors"
+            style={{ padding: "12px 18px", borderTop: `1px solid ${HAIRLINE}`, color: criticalColor(dark), textAlign: "center", background: "transparent" }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = dark ? CRITICAL_WASH_DARK : "#fdeef2")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+            data-testid="button-archive-color"
+          >
+            Archive color
+          </button>
+        )}
         </>
         )}
       </PopoverContent>
