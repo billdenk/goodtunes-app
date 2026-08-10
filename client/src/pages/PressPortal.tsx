@@ -317,6 +317,8 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       name={me?.name ?? "Your press"}
       logoUrl={me?.logoUrl ?? null}
       navLogoUrl={me?.navLogoUrl ?? null}
+      lightLogoUrl={me?.lightLogoUrl ?? null}
+      lightNavLogoUrl={me?.lightNavLogoUrl ?? null}
       // The press wordmark already sits in the rail header (top-left), so the
       // content page header would just repeat the press name — always hide it.
       // Super-admin mode is signalled by the "Super-admin view" badge in the

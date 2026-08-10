@@ -575,6 +575,16 @@ body.gt-admin.gt-admin-dark .bg-\[var\(--apple-blue\)\]:focus-visible {
   color: #fff;
 }
 body.gt-admin.gt-admin-dark .gt-avatar-initials .text-white { color: var(--apple-subink); }
+/* Ink-filled primary pills (`bg-[color:var(--apple-ink)] text-white`): the
+   ink token flips to near-white in dark, so hardcoded white text vanishes
+   (press portal "Add an artist", Bill 2026-08). Pair the pill with dark
+   canvas text instead — the 3-class body selector outranks `.text-white`. */
+body.gt-admin.gt-admin-dark .bg-\[color\:var\(--apple-ink\)\],
+body.gt-admin.gt-admin-dark .bg-\[var\(--apple-ink\)\] { color: var(--apple-canvas); }
+body.gt-admin.gt-admin-dark .hover\:bg-\[color\:var\(--apple-ink\)\]:hover,
+body.gt-admin.gt-admin-dark .hover\:bg-\[var\(--apple-ink\)\]:hover { color: var(--apple-canvas); }
+/* Same fix for the file-input button variant (press invoice upload). */
+body.gt-admin.gt-admin-dark .file\:bg-\[color\:var\(--apple-ink\)\]::file-selector-button { color: var(--apple-canvas); }
 body.gt-admin.gt-admin-dark .hover\:bg-slate-50:hover,
 body.gt-admin.gt-admin-dark .hover\:bg-slate-100:hover { background-color: rgba(255, 255, 255, 0.06); }
 body.gt-admin.gt-admin-dark .hover\:bg-slate-200:hover { background-color: rgba(255, 255, 255, 0.09); }

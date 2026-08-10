@@ -36,6 +36,7 @@ import { AdminSearchBar } from "@/components/admin/AdminSearchBar";
 import { FeedbackLauncher } from "@/components/operator/FeedbackLauncher";
 import { ViewAsBanner, ViewAsRestoreButton } from "@/components/admin/ViewAsBanner";
 import { cn } from "@/lib/utils";
+import { useAdminDark, useDarkMarkLogo } from "@/lib/adminAppearance";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 
 /** Extra left-nav destinations that aren't in-page tabs — e.g. label /
@@ -59,6 +60,14 @@ export type OperatorShellProps<TabId extends string> = {
    * header renders this image constrained to the existing band height
    * instead of the small square icon + name text. Null = default layout. */
   navLogoUrl?: string | null;
+  /** Task #2996 — light-background variants (Task #2750 schema slots). The
+   * base `logoUrl`/`navLogoUrl` slots hold the dark-background versions; when
+   * the portal renders LIGHT the shell prefers these, and when DARK it prefers
+   * the base slots — each falling back to the other so a single upload still
+   * shows everywhere (a dark-on-light mark shown in dark mode gets a white
+   * chip behind it so it never disappears). */
+  lightLogoUrl?: string | null;
+  lightNavLogoUrl?: string | null;
   /** Fallback glyph when there's no logo yet. */
   fallbackIcon: LucideIcon;
   /** People get circles; orgs/vendors get rounded squares. */
@@ -121,6 +130,8 @@ export function OperatorShell<TabId extends string>({
   name,
   logoUrl,
   navLogoUrl,
+  lightLogoUrl,
+  lightNavLogoUrl,
   fallbackIcon: FallbackIcon,
   logoShape = "square",
   subtitle,
@@ -180,6 +191,22 @@ export function OperatorShell<TabId extends string>({
   const maxW = maxWidth === "5xl" ? "max-w-5xl" : "max-w-6xl";
   const radius = logoShape === "circle" ? "rounded-full" : "rounded-2xl";
 
+  // Task #2996 — theme-aware logo selection. Base slots are the dark-bg
+  // variants; `light*` the light-bg ones. Prefer the variant matching the
+  // resolved admin appearance, falling back to whichever exists. When the
+  // resulting mark is near-black and the chrome is dark, keep a white chip
+  // behind it so it never disappears (dark-mark sampling handles legacy
+  // single-slot uploads too).
+  const adminDark = useAdminDark();
+  const resolvedLogoUrl = (adminDark ? logoUrl ?? lightLogoUrl : lightLogoUrl ?? logoUrl) ?? null;
+  const resolvedNavLogoUrl = (adminDark ? navLogoUrl ?? lightNavLogoUrl : lightNavLogoUrl ?? navLogoUrl) ?? null;
+  const logoIsDarkMark = useDarkMarkLogo(resolvedLogoUrl);
+  const navLogoIsDarkMark = useDarkMarkLogo(resolvedNavLogoUrl);
+  // Force-white chip: the blanket `.bg-white` dark remap would repaint a
+  // Tailwind class, so these use an inline style that the remap can't touch.
+  const logoChipStyle = adminDark && logoIsDarkMark ? { backgroundColor: "#fff" } : undefined;
+  const navLogoChipStyle = adminDark && navLogoIsDarkMark ? { backgroundColor: "#fff" } : undefined;
+
   // Task #2566 — collapsible rail sections, mirroring AdminFrame's
   // Stripe-style accordion (at most one section open at a time, choice
   // persisted to localStorage). The section holding the active tab is
@@ -234,10 +261,11 @@ export function OperatorShell<TabId extends string>({
           "w-14 h-14 overflow-hidden flex items-center justify-center bg-slate-100 ring-1 ring-slate-200",
           radius,
         )}
+        style={logoChipStyle}
         data-testid="operator-shell-logo"
       >
-        {logoUrl ? (
-          <img src={logoUrl} alt="" className="w-full h-full object-cover" />
+        {resolvedLogoUrl ? (
+          <img src={resolvedLogoUrl} alt="" className="w-full h-full object-cover" />
         ) : (
           <FallbackIcon className="w-5 h-5 text-slate-400" />
         )}
@@ -278,9 +306,19 @@ export function OperatorShell<TabId extends string>({
           data-testid="operator-shell-topbar"
         >
           <div className="flex min-w-0 items-center gap-2.5">
-            {navLogoUrl ? <img src={navLogoUrl} alt={name} className="max-h-8 w-auto object-contain" /> : (
-              <span className="h-9 w-9 rounded-full bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0 overflow-hidden p-1">
-                {logoUrl ? <img src={logoUrl} alt="" className="w-full h-full object-contain" /> : <FallbackIcon className="h-4 w-4 text-slate-400" />}
+            {resolvedNavLogoUrl ? (
+              <span
+                className={cn("inline-flex items-center flex-shrink-0", navLogoChipStyle && "rounded-lg px-2 py-1")}
+                style={navLogoChipStyle}
+              >
+                <img src={resolvedNavLogoUrl} alt={name} className="max-h-8 w-auto object-contain" />
+              </span>
+            ) : (
+              <span
+                className="h-9 w-9 rounded-full bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0 overflow-hidden p-1"
+                style={logoChipStyle}
+              >
+                {resolvedLogoUrl ? <img src={resolvedLogoUrl} alt="" className="w-full h-full object-contain" /> : <FallbackIcon className="h-4 w-4 text-slate-400" />}
               </span>
             )}
             <span className="text-[15px] font-semibold text-slate-800 truncate" data-testid="text-operator-topbar-name">{name}</span>
