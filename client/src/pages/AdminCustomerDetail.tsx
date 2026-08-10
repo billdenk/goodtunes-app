@@ -10,7 +10,6 @@ import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { OrderDetailSheet, originBadge } from "@/components/admin/OrderDetailSheet";
-import { PromoteCustomerDialog } from "@/components/admin/PromoteCustomerDialog";
 import { AdminEditCustomerDialog } from "@/components/admin/AdminEditCustomerDialog";
 import type { CustomerUser, StripeAddressSnapshot } from "@shared/schema";
 import { checkoutFailureReasonLabel } from "@shared/checkoutFailures";
@@ -206,7 +205,12 @@ export function AdminCustomerDetail() {
     enabled: !!user?.isAdmin,
   });
   const isSuperAdmin = meRole?.role === "super_admin";
-  const [promoteOpen, setPromoteOpen] = useState(false);
+  // Per Bill (2026-08-10) — customers are never promoted to admin from this
+  // page, so the "Make admin…" action is hidden (server route kept for the
+  // rare deliberate operator flow via API).
+  // Per Bill (2026-08-10) — operators can correct a fan's mailing address
+  // when they move. Which card is being edited ('shipping' | 'billing').
+  const [addressEdit, setAddressEdit] = useState<"shipping" | "billing" | null>(null);
   // Task #2218 — edit a fan's core identity (super_admin only). The trigger
   // is a hover-revealed pencil beside the name in the header, matching the
   // other admin edit affordances (AdminLabel / AdminPerson), not a standalone
@@ -482,19 +486,6 @@ export function AdminCustomerDetail() {
                   {signInLinkMutation.isPending ? "Generating…" : "Sign-in link"}
                 </button>
               )}
-              {/* Task #1342 (#5) — quiet, super_admin-only promote action.
-                  Light text, not a loud button, so it stays out of the way
-                  for the common read-only case. */}
-              {isSuperAdmin && (
-                <button
-                  type="button"
-                  onClick={() => setPromoteOpen(true)}
-                  className="text-sm text-slate-400 hover:text-[var(--brand-blue)] transition-colors"
-                  data-testid="button-make-admin"
-                >
-                  Make admin…
-                </button>
-              )}
               {c.stripeCustomerId ? (
                 <a
                   href={`https://dashboard.stripe.com/customers/${c.stripeCustomerId}`}
@@ -564,12 +555,14 @@ export function AdminCustomerDetail() {
               snapshot={shippingResolved}
               fromOrder={shippingFromOrder}
               testId="card-shipping-address"
+              onEdit={isSuperAdmin ? () => setAddressEdit("shipping") : undefined}
             />
             <AddressCard
               kind="Billing"
               snapshot={billingResolved}
               fromOrder={billingFromOrder}
               testId="card-billing-address"
+              onEdit={isSuperAdmin ? () => setAddressEdit("billing") : undefined}
             />
           </div>
         </Section>
@@ -894,16 +887,13 @@ export function AdminCustomerDetail() {
         <AdminEditCustomerDialog open={editOpen} onOpenChange={setEditOpen} customer={c} />
       )}
 
-      {/* Task #1342 (#5) — promote-to-admin dialog (super_admin only). */}
-      {promoteOpen && (
-        <PromoteCustomerDialog
-          customer={{ id: c.id, name, email: c.email }}
-          onClose={() => setPromoteOpen(false)}
-          onPromoted={() => {
-            toast({ title: `${name} promoted`, description: "Admin access granted." });
-            setPromoteOpen(false);
-            queryClient.invalidateQueries({ queryKey: ["/api/admin/customers", id] });
-          }}
+      {/* Per Bill (2026-08-10) — edit a mailing address (super_admin only). */}
+      {isSuperAdmin && addressEdit && (
+        <EditAddressDialog
+          kind={addressEdit}
+          customerId={c.id}
+          initial={addressEdit === "shipping" ? shippingResolved : billingResolved}
+          onClose={() => setAddressEdit(null)}
         />
       )}
     </AdminFrame>
@@ -1928,11 +1918,13 @@ function AddressCard({
   snapshot,
   fromOrder,
   testId,
+  onEdit,
 }: {
   kind: string;
   snapshot: StripeAddressSnapshot | null | undefined;
   fromOrder?: boolean;
   testId?: string;
+  onEdit?: () => void;
 }) {
   // Task #1342 (#2) — render whatever address we resolved (customer snapshot,
   // or the latest order's address as a fallback). A row is "present" when any
@@ -1956,6 +1948,17 @@ function AddressCard({
     <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid={testId}>
       <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
         <MapPin className="w-3.5 h-3.5" /> {kind}
+        {onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="ml-auto inline-flex items-center gap-1 normal-case tracking-normal font-medium text-slate-400 hover:text-[var(--brand-blue)] transition-colors"
+            data-testid={`${testId}-edit`}
+            title={`Edit ${kind.toLowerCase()} address`}
+          >
+            <Pencil className="w-3 h-3" /> Edit
+          </button>
+        )}
       </div>
       {hasAddress ? (
         <div className="text-slate-700 text-sm leading-snug">
@@ -1972,6 +1975,148 @@ function AddressCard({
       ) : (
         <div className="text-slate-400 text-sm">No {kind.toLowerCase()} address on file.</div>
       )}
+    </div>
+  );
+}
+
+// Per Bill (2026-08-10) — edit a fan's shipping/billing address (they moved).
+// Writes the customer-level snapshot; for shipping, optionally re-points OPEN
+// orders (paid, not yet shipped or handed to fulfillment) so the next label
+// uses the new address.
+function EditAddressDialog({
+  kind,
+  customerId,
+  initial,
+  onClose,
+}: {
+  kind: "shipping" | "billing";
+  customerId: string;
+  initial: StripeAddressSnapshot | null | undefined;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [form, setForm] = useState({
+    name: initial?.name ?? "",
+    line1: initial?.line1 ?? "",
+    line2: initial?.line2 ?? "",
+    city: initial?.city ?? "",
+    state: initial?.state ?? "",
+    postalCode: initial?.postalCode ?? "",
+    country: initial?.country ?? "",
+  });
+  // Off by default — rewriting existing orders' shipping snapshots is an
+  // explicit opt-in, not a side effect of correcting the on-file address.
+  const [applyToOpenOrders, setApplyToOpenOrders] = useState(false);
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("PATCH", `/api/admin/customers/${customerId}/address`, {
+        kind,
+        address: form,
+        applyToOpenOrders: kind === "shipping" ? applyToOpenOrders : false,
+      });
+      return (await r.json()) as { updatedOrders?: number };
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/customers/${customerId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/customers", customerId] });
+      const n = res.updatedOrders ?? 0;
+      toast({
+        title: "Address updated",
+        description:
+          kind === "shipping"
+            ? n > 0
+              ? `Also applied to ${n} open order${n === 1 ? "" : "s"}.`
+              : "No open orders needed updating."
+            : undefined,
+      });
+      onClose();
+    },
+    onError: (e: Error) =>
+      toast({ title: "Couldn't update the address", description: e.message, variant: "destructive" }),
+  });
+
+  const field = (label: string, key: keyof typeof form, span2 = false) => (
+    <label className={`block ${span2 ? "sm:col-span-2" : ""}`}>
+      <span className="block text-xs font-medium text-slate-500 mb-1">{label}</span>
+      <input
+        value={form[key]}
+        onChange={set(key)}
+        className="w-full h-9 px-3 rounded-md border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30 focus:border-[var(--brand-blue)]"
+        data-testid={`input-address-${key}`}
+      />
+    </label>
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      data-testid="dialog-edit-address"
+    >
+      <div
+        className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">
+            Edit {kind} address
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Updates the address on file for this customer.
+          </p>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {field("Full name", "name", true)}
+          {field("Street address", "line1", true)}
+          {field("Apt / suite / unit", "line2", true)}
+          {field("City", "city")}
+          {field("State / region", "state")}
+          {field("ZIP / postal code", "postalCode")}
+          {field("Country", "country")}
+        </div>
+        {kind === "shipping" && (
+          <label className="flex items-start gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={applyToOpenOrders}
+              onChange={(e) => setApplyToOpenOrders(e.target.checked)}
+              className="mt-0.5"
+              data-testid="checkbox-apply-open-orders"
+            />
+            <span>
+              Also update open orders
+              <span className="block text-xs text-slate-500">
+                Applies to paid orders not yet shipped or sent to fulfillment, so the
+                next shipping label uses the new address.
+              </span>
+            </span>
+          </label>
+        )}
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-9 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:bg-slate-50"
+            data-testid="button-cancel-address"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || (!form.line1.trim() && !form.city.trim())}
+            className="h-9 px-4 rounded-md bg-[var(--brand-blue)] text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+            data-testid="button-save-address"
+          >
+            {mutation.isPending ? "Saving…" : "Save address"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

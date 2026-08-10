@@ -31744,6 +31744,112 @@ export async function registerRoutes(
     updateAdminCustomerIdentity,
   );
 
+  // Per Bill (2026-08-10) — operators need to correct a fan's mailing address
+  // when they move (the historical stance was "addresses are append-only
+  // Stripe snapshots"; that stays true for ORDER snapshots, but the
+  // customer-level card is now operator-editable). Editing the shipping
+  // address can optionally also re-point OPEN orders — paid rows not yet
+  // shipped, not yet handed to fulfillment, not cancelled/refunded — because
+  // shipping labels read the ORDER snapshot, not the customer row. Orders
+  // already pushed to Order Desk / shipped are left alone (the label is out
+  // of our hands); those need a fulfillment-side fix.
+  app.patch(
+    "/api/admin/customers/:id/address",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      try {
+        const customerId = String(req.params.id);
+        const customer = await storage.getCustomer(customerId);
+        if (!customer) return res.status(404).json({ message: "Customer not found" });
+        if ((customer as any).mergedIntoId) {
+          return res
+            .status(409)
+            .json({ message: "This account was merged into another and can no longer be edited." });
+        }
+
+        const optionalLine = (max: number) =>
+          z
+            .string()
+            .optional()
+            .nullable()
+            .transform((v) => {
+              const t = String(v ?? "").trim().slice(0, max);
+              return t.length ? t : null;
+            });
+        const addressEditSchema = z.object({
+          kind: z.enum(["shipping", "billing"]),
+          address: z.object({
+            name: optionalLine(120),
+            line1: optionalLine(200),
+            line2: optionalLine(200),
+            city: optionalLine(120),
+            state: optionalLine(120),
+            postalCode: optionalLine(40),
+            country: optionalLine(60),
+          }),
+          applyToOpenOrders: z.boolean().optional().default(false),
+        });
+        const parsed = addressEditSchema.safeParse(req.body ?? {});
+        if (!parsed.success) {
+          const issue = parsed.error.issues[0];
+          return res.status(400).json({
+            field: issue?.path?.join(".") ?? "",
+            message: issue?.message ?? "Please check the highlighted field.",
+          });
+        }
+        const { kind, address, applyToOpenOrders } = parsed.data;
+
+        // Require at least a street line or city — an all-empty submit is
+        // almost certainly a mistake, and we don't support clearing to null
+        // from this surface (the card falls back to order snapshots anyway).
+        if (!address.line1 && !address.city) {
+          return res.status(400).json({
+            field: "address.line1",
+            message: "Please enter at least a street address or city.",
+          });
+        }
+
+        // Both writes in one transaction — if the open-order re-point fails,
+        // the customer snapshot rolls back too (no partially-applied edit).
+        let updatedOrders = 0;
+        await db.transaction(async (tx) => {
+          await tx
+            .update(customerUsers)
+            .set(kind === "shipping" ? { shippingAddress: address } : { billingAddress: address })
+            .where(eq(customerUsers.id, customerId));
+
+          // Optionally re-point open (unshipped, not-yet-in-fulfillment)
+          // orders so the next shipping label uses the new address.
+          if (kind === "shipping" && applyToOpenOrders) {
+            const updated = await tx
+              .update(orders)
+              .set({ shippingAddress: address })
+              .where(
+                and(
+                  eq(orders.customerId, customerId),
+                  isNull(orders.shippedAt),
+                  isNull(orders.submittedToFulfillmentAt),
+                  isNull(orders.cancelledAt),
+                  isNull(orders.refundedAt),
+                  inArray(orders.status, ["paid", "pending"]),
+                ),
+              )
+              .returning({ id: orders.id });
+            updatedOrders = updated.length;
+          }
+        });
+
+        const profile = await storage.getAdminCustomerProfile(customerId);
+        if (!profile) return res.status(404).json({ message: "Customer not found" });
+        return res.json({ ...profile, updatedOrders });
+      } catch (err) {
+        console.error("[admin-customer-address] failed", err);
+        return res.status(500).json({ message: "Couldn't update the address." });
+      }
+    },
+  );
+
   // Operator escape hatch — mint a fresh single-use sign-in link for a fan
   // when transactional email fails to reach them (Gmail spam-filtering, a
   // dead/typo'd address, an already-consumed welcome-back link). It's the
