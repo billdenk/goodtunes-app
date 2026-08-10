@@ -17,13 +17,14 @@ Checkout line item.
   successfully and returns `next_action.display_bank_transfer_instructions`
   with full ABA details (bank name, routing, account number, reference) plus
   a SWIFT block. Verified live against the sandbox on 2026-08-10.
-- **Live mode: NOT YET.** Every payment-method configuration on the live
-  account reports `customer_balance: { available: false }` (checked
-  read-only 2026-08-10). Bank transfers must be enabled for the live account
-  in the Stripe Dashboard (Settings → Payments → Payment methods → "Bank
-  transfer", may require a short Stripe review) before the first production
-  bank-transfer invoice. Until then the pay route surfaces Stripe's error
-  and the step falls back to `unpaid`; card still works.
+- **Live mode: YES (enabled 2026-08-10).** Bill enabled "Bank Transfers"
+  on the live Default payment configuration via the Dashboard wizard
+  (verification docs submitted; Stripe flipped `customer_balance:
+  { available: true }` immediately). Verified with a live smoke the same
+  day: a $0.50 `customer_balance` / `us_bank_transfer` PI on a throwaway
+  customer confirmed to `requires_action` and returned full
+  `display_bank_transfer_instructions` (ABA + SWIFT financial addresses,
+  reference); PI canceled + customer deleted afterward.
 - Note: our code passes `payment_method_types: ["customer_balance"]`
   explicitly, so the Dashboard *display preference* toggles don't gate us —
   only account-level availability does.
@@ -41,6 +42,16 @@ matched on PI metadata `gt_kind=shopify_plus_step` + `gt_step_id`:
 | `checkout.session.completed` / `checkout.session.async_payment_succeeded` / `checkout.session.expired` | Card-fallback lifecycle (unchanged from the ACH era, now card-only). |
 
 State flips off webhooks only — no polling.
+
+The production webhook endpoint (`https://get.goodtunes.music/api/webhooks/stripe`,
+`we_1TgDELJ2hCFJLdgeJOQleg7p`) originally only subscribed to
+`checkout.session.completed` + `charge.refunded`. On 2026-08-10 it was updated
+to the full set the server consumes: the two above plus
+`checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`,
+`checkout.session.expired`, `payment_intent.succeeded`,
+`payment_intent.partially_funded`, `payment_intent.payment_failed`, and
+`customer_cash_balance_transaction.created`. (Same endpoint/secret — only
+`enabled_events` changed.)
 
 ## Overpayments / leftover funds
 
