@@ -17,12 +17,18 @@ import {
   Bell,
   Clock,
   ArrowRight,
+  Copy,
+  Landmark,
+  Printer,
+  X,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { IconButton } from "@/components/ui/IconButton";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient, apiErrorStatus } from "@/lib/queryClient";
 import { formatUsdCents } from "@shared/money";
+import { cardFeeCents } from "@shared/breakEven";
 
 // Task #2428 — GoodTunes Shopify+ (prepaid manufacturing). This panel is the
 // "Payments" tab for a shopify_plus album: the customer sells on their own
@@ -307,12 +313,30 @@ interface LedgerStep {
   amountCents: number;
   marginCents: number;
   fundingSource: "goodtunes_sales" | "artist_direct";
-  status: "unpaid" | "processing" | "paid" | "failed";
+  status: "unpaid" | "processing" | "awaiting_transfer" | "paid" | "failed";
   sortOrder: number;
   paidAt: string | null;
   lastError: string | null;
   // Task #2785 — earmark status joined server-side.
   earmark?: { id: string; status: string } | null;
+  // Task #3004 — bank-transfer (push) payments.
+  paymentMethod?: "bank_transfer" | "card" | null;
+  fundingInstructions?: FundingInstructions | null;
+  amountReceivedCents?: number;
+  cardFeeCents?: number | null;
+}
+
+// Task #3004 — persisted snapshot of Stripe's virtual-account details.
+interface FundingInstructions {
+  bankName: string | null;
+  routingNumber: string | null;
+  accountNumber: string | null;
+  accountHolderName: string | null;
+  accountType: string | null;
+  swiftCode: string | null;
+  reference: string | null;
+  amountCents: number;
+  currency: string;
 }
 
 interface LedgerData {
@@ -328,21 +352,27 @@ interface LedgerData {
     outstandingCents: number;
   };
   runClosedAt: string | null;
+  // Task #3004 — operator-only: nonzero Stripe customer cash balances from
+  // bank-transfer payers (overpayments / unapplied funds). Null for partners.
+  cashBalances?: { stripeCustomerId: string; availableUsdCents: number }[] | null;
 }
 
 const STATUS_STYLES: Record<LedgerStep["status"], string> = {
   paid: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
   processing: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+  awaiting_transfer: "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
   failed: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
   unpaid: "bg-slate-100 text-slate-600 ring-1 ring-slate-200",
 };
 
 // Task #2697 — the ledger reads as customer-facing "payment requests":
-// a request starts out Requested, moves to Paying while the ACH clears,
-// and lands on Paid (or Needs retry when the debit fails).
+// a request starts out Requested, moves to Paying while a card payment
+// clears (or Awaiting transfer while we wait for a pushed bank transfer),
+// and lands on Paid (or Needs retry when the payment fails).
 const STATUS_LABELS: Record<LedgerStep["status"], string> = {
   paid: "Paid",
   processing: "Paying",
+  awaiting_transfer: "Awaiting transfer",
   failed: "Needs retry",
   unpaid: "Requested",
 };
@@ -352,6 +382,180 @@ const QUOTED_SOURCE_CAPTION: Record<LedgerData["totals"]["quotedSource"], string
   system: "System-computed manufacturing cost (no active quote total)",
   steps: "Sum of payment requests (no quote or system cost yet)",
 };
+
+// Task #3004 — copyable field row inside the bank-transfer instructions
+// modal. One-tap copy per field.
+function CopyField({
+  label,
+  value,
+  testId,
+}: {
+  label: string;
+  value: string | null | undefined;
+  testId: string;
+}) {
+  const { toast } = useToast();
+  if (!value) return null;
+  return (
+    <div className="flex items-center justify-between gap-3 py-2 border-b border-slate-100 last:border-b-0">
+      <div className="min-w-0">
+        <div className="text-xs uppercase tracking-wide text-slate-400">
+          {label}
+        </div>
+        <div
+          className="text-sm font-medium text-slate-900 break-all"
+          data-testid={`text-${testId}`}
+        >
+          {value}
+        </div>
+      </div>
+      <button
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(value);
+            toast({ title: `${label} copied` });
+          } catch {
+            toast({ title: "Couldn't copy — select and copy manually", variant: "destructive" });
+          }
+        }}
+        className="shrink-0 h-8 inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+        data-testid={`button-copy-${testId}`}
+        aria-label={`Copy ${label}`}
+      >
+        <Copy className="w-3.5 h-3.5" />
+        Copy
+      </button>
+    </div>
+  );
+}
+
+// Task #3004 — the in-app bank-transfer instructions screen: Stripe's
+// virtual account details with per-field copy buttons, the exact amount,
+// the reference line, and plain-language guidance. Print button doubles
+// as "download PDF" via the browser's save-as-PDF.
+function TransferInstructionsModal({
+  step,
+  onClose,
+}: {
+  step: LedgerStep;
+  onClose: () => void;
+}) {
+  const ins = step.fundingInstructions;
+  if (!ins) return null;
+  const total = ins.amountCents || step.amountCents + step.marginCents;
+  const received = step.amountReceivedCents ?? 0;
+  const remaining = Math.max(total - received, 0);
+
+  function printInstructions() {
+    const w = window.open("", "_blank", "width=600,height=800");
+    if (!w || !ins) return;
+    const esc = (s: string | null | undefined) =>
+      String(s ?? "").replace(/</g, "&lt;");
+    w.document.write(`<!doctype html><html><head><title>Bank transfer instructions</title>
+      <style>body{font-family:system-ui,sans-serif;padding:32px;color:#0f172a}h1{font-size:18px}
+      table{border-collapse:collapse;margin-top:16px}td{padding:6px 16px 6px 0;font-size:14px}
+      td:first-child{color:#64748b}p{font-size:13px;color:#475569}</style></head><body>
+      <h1>Bank transfer instructions — ${esc(step.description)}</h1>
+      <table>
+        <tr><td>Amount</td><td><b>${formatUsdCents(remaining || total)}</b></td></tr>
+        <tr><td>Bank name</td><td>${esc(ins.bankName)}</td></tr>
+        <tr><td>Routing number</td><td>${esc(ins.routingNumber)}</td></tr>
+        <tr><td>Account number</td><td>${esc(ins.accountNumber)}</td></tr>
+        <tr><td>Account holder</td><td>${esc(ins.accountHolderName)}</td></tr>
+        ${ins.reference ? `<tr><td>Reference</td><td>${esc(ins.reference)}</td></tr>` : ""}
+      </table>
+      <p>Send a domestic USD wire or bank transfer (push) from your bank to the account above.
+      Include the reference if your bank offers a memo/reference field. The invoice updates
+      automatically when the funds arrive — usually the same business day for wires.</p>
+      </body></html>`);
+    w.document.close();
+    w.print();
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      onClick={onClose}
+      data-testid="modal-transfer-instructions"
+    >
+      <div
+        className="w-full max-w-md rounded-2xl bg-white shadow-xl p-5 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-slate-900">
+              Pay by bank transfer
+            </div>
+            <div className="text-xs text-slate-500 mt-0.5">{step.description}</div>
+          </div>
+          <IconButton
+            onClick={onClose}
+            label="Close"
+            variant="ghost"
+            size="md"
+            className="shrink-0 text-slate-400"
+            data-testid="button-close-instructions"
+          >
+            <X className="w-4 h-4" />
+          </IconButton>
+        </div>
+
+        <div className="mt-3 rounded-xl bg-sky-50 ring-1 ring-sky-100 px-3 py-2.5 text-xs text-sky-800">
+          Send a <b>{formatUsdCents(remaining || total)}</b> USD bank transfer
+          (wire or ACH credit) from your bank to the account below. This is a
+          push payment — we never debit your account. The invoice flips to Paid
+          automatically when the funds arrive.
+        </div>
+
+        {received > 0 && (
+          <div
+            className="mt-2 rounded-xl bg-amber-50 ring-1 ring-amber-100 px-3 py-2.5 text-xs text-amber-800"
+            data-testid="text-partial-received"
+          >
+            Received so far: <b>{formatUsdCents(received)}</b> · Remaining:{" "}
+            <b>{formatUsdCents(remaining)}</b>. Send the remaining amount to the
+            same account details below.
+          </div>
+        )}
+
+        <div className="mt-3">
+          <CopyField label="Amount" value={formatUsdCents(remaining || total)} testId="ins-amount" />
+          <CopyField label="Bank name" value={ins.bankName} testId="ins-bank" />
+          <CopyField label="Routing number" value={ins.routingNumber} testId="ins-routing" />
+          <CopyField label="Account number" value={ins.accountNumber} testId="ins-account" />
+          <CopyField label="Account holder" value={ins.accountHolderName} testId="ins-holder" />
+          <CopyField label="Reference (add to your transfer memo)" value={ins.reference} testId="ins-reference" />
+        </div>
+
+        <p className="mt-3 text-xs text-slate-500">
+          Wires usually land the same business day; ACH credits can take 1–2
+          business days. Small bank fees deducted in transit are okay — we
+          absorb minor shortfalls automatically.
+        </p>
+
+        <div className="mt-4 flex items-center justify-between">
+          <button
+            onClick={printInstructions}
+            className="h-9 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            data-testid="button-print-instructions"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            Print / save PDF
+          </button>
+          <Button
+            onClick={onClose}
+            size="sm"
+            className="h-9 px-3 text-xs font-semibold"
+            data-testid="button-done-instructions"
+          >
+            Done
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Task #2785 — earmark status chip for paid steps.
 function EarmarkChip({
@@ -496,16 +700,39 @@ function ManufacturingLedger({
     }
   }
 
-  async function pay(step: LedgerStep) {
+  // Task #3004 — the instructions modal (step id being shown, or null).
+  const [instructionsFor, setInstructionsFor] = useState<string | null>(null);
+
+  // Task #3004 — bank transfer (push) is the default; card is the fallback
+  // with the processing fee added and disclosed BEFORE confirming.
+  async function pay(step: LedgerStep, method: "bank_transfer" | "card") {
+    if (method === "card") {
+      const total = step.amountCents + step.marginCents;
+      const fee = cardFeeCents(total);
+      const ok = window.confirm(
+        `Paying by card adds a ${formatUsdCents(fee)} card-processing fee.\n\n` +
+          `Invoice: ${formatUsdCents(total)}\nCard fee: ${formatUsdCents(fee)}\n` +
+          `Total charged: ${formatUsdCents(total + fee)}\n\n` +
+          `Pay by bank transfer instead to avoid the fee. Continue with card?`,
+      );
+      if (!ok) return;
+    }
     setBusy(`pay-${step.id}`);
     try {
       const res = await apiRequest(
         "POST",
         `/api/admin/albums/${albumId}/manufacturing-ledger/steps/${step.id}/pay`,
+        { method },
       );
-      const { url } = await res.json();
-      if (!url) throw new Error("No checkout URL returned");
-      window.location.href = url;
+      const data = await res.json();
+      if (data?.status === "awaiting_transfer") {
+        await refresh();
+        setInstructionsFor(step.id);
+        setBusy(null);
+        return;
+      }
+      if (!data?.url) throw new Error("No checkout URL returned");
+      window.location.href = data.url;
     } catch (e: any) {
       toast({
         title: "Couldn't start the payment",
@@ -733,11 +960,45 @@ function ManufacturingLedger({
     };
   const runClosed = Boolean(data?.runClosedAt);
 
+  // Task #3004 — resolve the step whose transfer instructions are open.
+  const instructionsStep =
+    (instructionsFor && steps.find((s) => s.id === instructionsFor)) || null;
+
   return (
     <div
       className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
       data-testid="panel-manufacturing-ledger"
     >
+      {instructionsStep && instructionsStep.fundingInstructions && (
+        <TransferInstructionsModal
+          step={instructionsStep}
+          onClose={() => setInstructionsFor(null)}
+        />
+      )}
+
+      {/* Task #3004 — operator-only: leftover customer cash balances from
+          bank transfers (overpayments). Stripe auto-returns unreconciled
+          funds after 75 days, so don't let these sit. */}
+      {isOperatorView &&
+        Array.isArray(data?.cashBalances) &&
+        (data?.cashBalances?.length ?? 0) > 0 && (
+          <div
+            className="mb-4 rounded-xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2.5 text-xs text-amber-800"
+            data-testid="banner-cash-balance"
+          >
+            <div className="font-semibold">Unapplied bank-transfer funds</div>
+            {data!.cashBalances!.map((b) => (
+              <div key={b.stripeCustomerId} className="mt-0.5">
+                Customer{" "}
+                <span className="font-mono">{b.stripeCustomerId}</span> holds{" "}
+                <b>{formatUsdCents(b.availableUsdCents)}</b> in Stripe cash
+                balance (overpayment or unreconciled transfer). Apply it to the
+                next invoice or refund it from the Stripe Dashboard — Stripe
+                auto-returns unapplied funds after 75 days.
+              </div>
+            ))}
+          </div>
+        )}
       <div className="flex items-start gap-3">
         <Factory className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
         <div className="min-w-0">
@@ -745,9 +1006,9 @@ function ManufacturingLedger({
             Manufacturing payments
           </h3>
           <p className="text-slate-500 text-xs mt-0.5">
-            Pay the plant for this run in stages by US bank transfer. Each
-            payment takes a few business days to clear; once it settles it's
-            queued for release to the plant.
+            Pay the plant for this run in stages by pushing a bank transfer
+            from your bank (no processing fee), or by card with a card fee
+            added. Once a payment lands it's queued for release to the plant.
           </p>
           <p className="text-xs mt-1 text-slate-600" data-testid="text-ledger-manufacturer">
             Manufacturer:{" "}
@@ -968,6 +1229,28 @@ function ManufacturingLedger({
                               {step.lastError}
                             </div>
                           )}
+                          {/* Task #3004 — partial-payment progress on an
+                              awaiting-transfer step. */}
+                          {step.status === "awaiting_transfer" &&
+                            (step.amountReceivedCents ?? 0) > 0 && (
+                              <div
+                                className="text-xs text-amber-700 mt-0.5"
+                                data-testid={`text-partial-${step.id}`}
+                              >
+                                Received{" "}
+                                {formatUsdCents(step.amountReceivedCents ?? 0)} of{" "}
+                                {formatUsdCents(step.amountCents + step.marginCents)}{" "}
+                                — remaining{" "}
+                                {formatUsdCents(
+                                  Math.max(
+                                    step.amountCents +
+                                      step.marginCents -
+                                      (step.amountReceivedCents ?? 0),
+                                    0,
+                                  ),
+                                )}
+                              </div>
+                            )}
                           {/* Task #2785 — earmark status chip for paid steps. */}
                           {step.status === "paid" && step.earmark && (
                             <div className="mt-1">
@@ -1052,21 +1335,54 @@ function ManufacturingLedger({
                               </button>
                             )}
 
-                          {/* Pay button — shown only to the right party. */}
+                          {/* Task #3004 — Pay buttons, shown only to the right
+                              party. Bank transfer (push, no fee) is primary;
+                              card is the fallback with the fee disclosed. */}
                           {canPayThisStep &&
                             (step.status === "unpaid" || step.status === "failed") && (
-                              <button
-                                onClick={() => pay(step)}
-                                disabled={busy === `pay-${step.id}` || !manufacturer}
-                                className="h-9 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                                data-testid={`button-pay-step-${step.id}`}
-                              >
-                                {busy === `pay-${step.id}` ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
+                              <>
+                                <button
+                                  onClick={() => pay(step, "bank_transfer")}
+                                  disabled={busy === `pay-${step.id}` || !manufacturer}
+                                  className="h-9 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                                  data-testid={`button-pay-step-${step.id}`}
+                                  title="Push a wire or bank transfer from your bank — no processing fee"
+                                >
+                                  {busy === `pay-${step.id}` ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <Landmark className="w-3.5 h-3.5" />
+                                  )}
+                                  Pay by bank transfer
+                                </button>
+                                <button
+                                  onClick={() => pay(step, "card")}
+                                  disabled={busy === `pay-${step.id}` || !manufacturer}
+                                  className="h-9 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                  data-testid={`button-pay-card-step-${step.id}`}
+                                  title={`Card adds a ${formatUsdCents(cardFeeCents(step.amountCents + step.marginCents))} processing fee`}
+                                >
                                   <CreditCard className="w-3.5 h-3.5" />
-                                )}
-                                Pay
+                                  Card
+                                  <span className="text-slate-400 font-normal">
+                                    +{formatUsdCents(cardFeeCents(step.amountCents + step.marginCents))} fee
+                                  </span>
+                                </button>
+                              </>
+                            )}
+
+                          {/* Task #3004 — awaiting-transfer: re-open the saved
+                              instructions (same virtual account also accepts a
+                              follow-up transfer on a partial payment). */}
+                          {step.status === "awaiting_transfer" &&
+                            step.fundingInstructions && (
+                              <button
+                                onClick={() => setInstructionsFor(step.id)}
+                                className="h-9 inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-2.5 text-xs font-semibold text-sky-700 hover:bg-sky-100"
+                                data-testid={`button-view-instructions-${step.id}`}
+                              >
+                                <Landmark className="w-3.5 h-3.5" />
+                                View transfer instructions
                               </button>
                             )}
 

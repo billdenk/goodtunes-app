@@ -9035,6 +9035,12 @@ CREATE TABLE IF NOT EXISTS manufacturer_payment_steps (
   status                     text    NOT NULL DEFAULT 'unpaid',
   stripe_checkout_session_id text,
   stripe_payment_intent_id   text,
+  payment_method             text,
+  stripe_customer_id         text,
+  funding_instructions       jsonb,
+  amount_received_cents      integer NOT NULL DEFAULT 0,
+  card_fee_cents             integer,
+  payer_details              jsonb,
   earmark_id                 varchar,
   paid_at                    timestamp,
   paid_by_user_id            varchar,
@@ -9055,6 +9061,39 @@ SQL
 }
 migrate_shopify_plus_ledger dev  "${DATABASE_URL:-}"
 migrate_shopify_plus_ledger prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #3004 — inbound bank-transfer (push) payments on the ledger ──
+# Adds the bank-transfer columns to manufacturer_payment_steps: payment
+# method chosen, the Stripe Customer holding the virtual bank account,
+# the persisted funding instructions, partial-funding tally, card fee,
+# and logged payer details. Idempotent on both DBs.
+migrate_shopify_plus_bank_transfer() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-3004 bank-transfer migration on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+BEGIN;
+ALTER TABLE manufacturer_payment_steps
+  ADD COLUMN IF NOT EXISTS payment_method        text,
+  ADD COLUMN IF NOT EXISTS stripe_customer_id    text,
+  ADD COLUMN IF NOT EXISTS funding_instructions  jsonb,
+  ADD COLUMN IF NOT EXISTS amount_received_cents integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS card_fee_cents        integer,
+  ADD COLUMN IF NOT EXISTS payer_details         jsonb;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-3004 bank-transfer migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-3004 bank-transfer migration failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+migrate_shopify_plus_bank_transfer dev  "${DATABASE_URL:-}"
+migrate_shopify_plus_bank_transfer prod "${PROD_DATABASE_URL:-}"
 
 # ─── Task #2428 — Shopify+ per-mapping "offer digital unlock" flag ─────
 # For a shopify_plus album the fulfillment-only feed is the baseline; the

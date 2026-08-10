@@ -23797,27 +23797,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors hover:bg-rose-50 disabled:opacity-40\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<div className=\"text-[13.5px] font-semibold\" style={{ color: INK }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<div className=\"text-[12.5px]\" style={{ color: SUBINK, marginTop: 2, lineHeight: 1.4 }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"text-[12.5px] font-semibold rounded-full px-2.5 py-1 transition-colors hover:bg-slate-100\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"text-[12.5px] font-semibold rounded-full px-3 py-1 text-white transition-opacity hover:opacity-90\""
+    "snippet": "className=\"w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors disabled:opacity-40\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -23858,6 +23838,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "className=\"w-full text-[13px] font-semibold transition-colors disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"text-[13px] font-semibold rounded-full px-4 py-1.5 text-white transition-opacity hover:opacity-90\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -24193,6 +24178,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "<span className=\"text-[11px] font-semibold\" style={{ color: FAINT, marginLeft: 5 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-semibold\" style={{ color: INK }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -24547,7 +24537,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressVinylColors.tsx",
-    "snippet": "className=\"w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors hover:bg-rose-50\""
+    "snippet": "className=\"w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -24608,6 +24598,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressVinylColors.tsx",
     "snippet": "className=\"inline-flex items-center h-8 rounded-full text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressVinylColors.tsx",
+    "snippet": "className=\"w-full flex-shrink-0 text-[13px] font-semibold transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",

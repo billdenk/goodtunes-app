@@ -4339,9 +4339,32 @@ export const manufacturerPaymentSteps = pgTable(
     // then Bill releases to MRP. Default 'artist_direct' matches the original
     // Shopify+ pre-pay model (artist pays GoodTunes before any GoodTunes sales).
     fundingSource: text("funding_source").notNull().default("artist_direct"),
+    // unpaid | processing | awaiting_transfer | paid | failed
+    // Task #3004 — awaiting_transfer: bank-transfer (customer_balance)
+    // instructions have been issued; we're waiting for the pushed funds
+    // to reconcile via webhook.
     status: text("status").notNull().default("unpaid"),
     stripeCheckoutSessionId: text("stripe_checkout_session_id"),
     stripePaymentIntentId: text("stripe_payment_intent_id"),
+    // Task #3004 — inbound bank-transfer (push) payments.
+    // How the payer chose to pay this step: 'bank_transfer' | 'card'.
+    // Null for legacy ACH-era rows.
+    paymentMethod: text("payment_method"),
+    // The Stripe Customer the virtual bank account belongs to (bank
+    // transfers require a customer whose cash balance receives funds).
+    stripeCustomerId: text("stripe_customer_id"),
+    // Snapshot of Stripe's display_bank_transfer_instructions (bank name,
+    // routing, account number, reference…) so the UI can re-render the
+    // instructions without a Stripe round-trip.
+    fundingInstructions: jsonb("funding_instructions"),
+    // Partial funding received so far (cents), recorded off
+    // payment_intent.partially_funded. 0 until funds arrive.
+    amountReceivedCents: integer("amount_received_cents").notNull().default(0),
+    // Card fee charged on top when the payer picks card (cents).
+    cardFeeCents: integer("card_fee_cents"),
+    // Payer details Stripe reports on the incoming transfer(s) — logged
+    // even when the sender's account name differs from the expected one.
+    payerDetails: jsonb("payer_details"),
     // The held payout_earmarks row minted when the ACH debit settles.
     earmarkId: varchar("earmark_id"),
     paidAt: timestamp("paid_at"),

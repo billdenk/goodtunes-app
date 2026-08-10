@@ -4,17 +4,22 @@
 // / GoodDeed / optional fulfillment) but the customer sells on their own
 // Shopify store, so there is NO GoodTunes fan checkout or fan-sale pool.
 // Instead the customer PREPAYS the manufacturing run through a staged
-// ACH ledger on the album's Payments tab:
+// payment ledger on the album's Payments tab:
 //
 //   album_manufacturer_quotes   — the plant's quote PDF(s), for records.
 //   manufacturer_payment_steps  — an open-ended series of hand-keyed
 //                                 steps (setup/test pressing, vinyl run,
 //                                 overage & freight, fulfillment, the
-//                                 GoodDeed legs). Each step is paid via a
-//                                 hosted Stripe Checkout using a US bank
-//                                 debit (us_bank_account / ACH).
+//                                 GoodDeed legs). Each step is paid by a
+//                                 PUSHED bank transfer (Stripe
+//                                 customer_balance / us_bank_transfer —
+//                                 virtual account details shown in-app,
+//                                 Task #3004) or, as a fallback, a card
+//                                 Checkout with the card fee added as a
+//                                 disclosed line item. ACH debit
+//                                 (us_bank_account) was removed.
 //
-// When an ACH debit SETTLES into the platform balance we mint a HELD
+// When a payment SETTLES into the platform balance we mint a HELD
 // `payout_earmarks` row owed to the manufacturer for the step's cost
 // (never the optional GoodTunes margin line). Bill releases that earmark
 // from the existing /admin/payouts-release queue, which fires the real
@@ -38,6 +43,7 @@ import {
   fulfillmentPartners,
   manufacturerPaymentSteps,
   payoutEarmarks,
+  users,
   type ManufacturerPaymentStep,
 } from "@shared/schema";
 import { storage } from "./storage";
@@ -53,6 +59,74 @@ import { getUserRole, listSuperAdminEmails } from "./auth/roles";
 import { sendPartnerNotificationEmail, notifySuperAdmins } from "./mail";
 import { partnerEmailHtml } from "./partnerNotifications";
 import { formatUsdCents } from "@shared/money";
+import { cardFeeCents } from "@shared/breakEven";
+
+// ── Task #3004 — inbound bank-transfer (push) payments ────────────────
+// A transfer that lands a few dollars short (sender bank fees deducted
+// in transit) still auto-closes the step when the shortfall is within
+// this threshold. Config value; default $15 per the Otis brief.
+export function getBankTransferUnderpaymentThresholdCents(): number {
+  const raw = Number(process.env.BANK_TRANSFER_UNDERPAYMENT_THRESHOLD_CENTS);
+  return Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : 1500;
+}
+
+// Shape we persist from Stripe's display_bank_transfer_instructions so
+// the UI re-renders the virtual account details without a Stripe call.
+export type FundingInstructions = {
+  bankName: string | null;
+  routingNumber: string | null;
+  accountNumber: string | null;
+  accountHolderName: string | null;
+  accountType: string | null;
+  swiftCode: string | null;
+  reference: string | null;
+  amountCents: number;
+  currency: string;
+};
+
+export function extractFundingInstructions(
+  pi: any,
+  amountCents: number,
+): FundingInstructions | null {
+  const d = pi?.next_action?.display_bank_transfer_instructions;
+  if (!d) return null;
+  const addrs: any[] = Array.isArray(d.financial_addresses)
+    ? d.financial_addresses
+    : [];
+  const aba = addrs.find((a) => a?.type === "aba")?.aba ?? null;
+  const swift = addrs.find((a) => a?.type === "swift")?.swift ?? null;
+  return {
+    bankName: aba?.bank_name ?? swift?.bank_name ?? null,
+    routingNumber: aba?.routing_number ?? null,
+    accountNumber: aba?.account_number ?? swift?.account_number ?? null,
+    accountHolderName:
+      aba?.account_holder_name ?? swift?.account_holder_name ?? null,
+    accountType: aba?.account_type ?? null,
+    // Note for a later SWIFT build: Stripe already returns a swift_code
+    // on the same virtual account; international wires would only need
+    // the UI + non-USD presentment work, not a new Stripe mechanism.
+    swiftCode: swift?.swift_code ?? null,
+    reference: d.reference ?? null,
+    amountCents,
+    currency: String(d.currency ?? "usd"),
+  };
+}
+
+// Minimal Stripe surface the bank-transfer webhook logic needs —
+// injected so tests drive reconciliation hermetically (mirrors the
+// StepResetStripe seam below).
+export type BankTransferStripe = {
+  customers: {
+    retrieve: (
+      id: string,
+      params?: any,
+    ) => Promise<{ cash_balance?: { available?: Record<string, number> | null } | null }>;
+  };
+  paymentIntents: {
+    update: (id: string, params: any) => Promise<any>;
+    confirm: (id: string) => Promise<{ status?: string | null }>;
+  };
+};
 
 // ── Quote-PDF total extraction (Task #2697) ───────────────────────────
 // Best-effort: pull the dollar total out of an uploaded quote PDF's text.
@@ -310,7 +384,73 @@ export async function resolveAlbumManufacturer(
 // by the step id, callable from both checkout.session.async_payment_succeeded
 // and payment_intent.succeeded (belt-and-suspenders — either can arrive
 // first, and both carry gt_kind metadata).
-async function markStepPaid(stepId: string, paymentIntentId: string | null) {
+// Task #3004 — artist-facing confirmation when their bank transfer (or
+// card payment) reconciles. Best-effort; mirrors notifyScopeOfPaymentRequest
+// but without a request context (webhook), so no CTA link is included.
+async function notifyScopeOfPaymentReceived(opts: {
+  albumId: string;
+  description: string;
+  totalCents: number;
+}): Promise<void> {
+  try {
+    const resolved = await resolveAlbumScope(opts.albumId);
+    const scope = resolved?.scope ?? null;
+    if (!scope) return;
+    const [album] = await db
+      .select({ title: albums.title })
+      .from(albums)
+      .where(eq(albums.id, opts.albumId));
+    const albumTitle = (album as any)?.title ?? "your release";
+    const r = await db.execute<{ email: string }>(sql`
+      SELECT DISTINCT u.email
+      FROM memberships m
+      JOIN users u ON u.id = m.user_id
+      LEFT JOIN partner_permissions pp
+             ON pp.scope_kind = m.scope_kind AND pp.scope_id = m.scope_id
+      LEFT JOIN partner_permission_overrides ppo
+             ON ppo.scope_kind = m.scope_kind AND ppo.scope_id = m.scope_id
+            AND ppo.user_id = m.user_id AND ppo.verb = 'manage_payouts'
+      WHERE m.scope_kind = ${scope.kind} AND m.scope_id = ${scope.id}
+        AND u.email IS NOT NULL AND u.email <> ''
+        AND (
+          m.sub_role IS NULL
+          OR COALESCE(ppo.granted, pp.manage_payouts, false) = true
+        )
+    `);
+    const rows = ((r as any).rows ?? []) as { email: string }[];
+    if (rows.length === 0) return;
+    const amount = formatUsdCents(opts.totalCents);
+    const subject = `Payment received: ${amount} for ${albumTitle}`;
+    const bodyLines = [
+      `We received your payment of ${amount} for "${opts.description}" on ${albumTitle}.`,
+      `The payment step is now marked Paid on the release's Payments tab. Nothing else is needed from you.`,
+    ];
+    const html = partnerEmailHtml({
+      heading: "Payment received",
+      bodyLines,
+      partnerName: albumTitle,
+    });
+    const text = bodyLines.join("\n\n");
+    const seen = new Set<string>();
+    for (const row of rows) {
+      const addr = row.email.trim().toLowerCase();
+      if (!addr || seen.has(addr)) continue;
+      seen.add(addr);
+      await sendPartnerNotificationEmail(row.email.trim(), subject, html, text);
+    }
+  } catch (e) {
+    console.error(
+      "[shopify-plus] payment-received notification failed:",
+      (e as Error)?.message ?? e,
+    );
+  }
+}
+
+async function markStepPaid(
+  stepId: string,
+  paymentIntentId: string | null,
+  opts?: { amountReceivedCents?: number },
+) {
   const [step] = await db
     .select()
     .from(manufacturerPaymentSteps)
@@ -347,6 +487,15 @@ async function markStepPaid(stepId: string, paymentIntentId: string | null) {
     }
   }
 
+  // Task #3004 — record what actually arrived. A full payment records the
+  // step total; an under-threshold short transfer records the (smaller)
+  // received amount so operators can see the shortfall on the row.
+  const receivedCents =
+    opts?.amountReceivedCents ??
+    (step.amountReceivedCents > 0
+      ? step.amountReceivedCents
+      : step.amountCents + step.marginCents);
+
   await db
     .update(manufacturerPaymentSteps)
     .set({
@@ -354,20 +503,27 @@ async function markStepPaid(stepId: string, paymentIntentId: string | null) {
       paidAt: new Date(),
       stripePaymentIntentId: paymentIntentId ?? step.stripePaymentIntentId,
       manufacturerId: manufacturerId ?? step.manufacturerId,
+      amountReceivedCents: receivedCents,
       earmarkId,
       lastError: null,
     })
     .where(eq(manufacturerPaymentSteps.id, step.id));
   console.log(`[shopify-plus] step ${step.id} → paid (earmark ${earmarkId ?? "none"})`);
 
-  // Task #2785 — notify Bill when an artist_direct ACH settles so he knows
-  // funds are held and ready to release to the plant. Best-effort.
+  // Task #2785 — notify Bill when an artist_direct payment settles so he
+  // knows funds are held and ready to release to the plant. Best-effort.
   if ((step as any).fundingSource === "artist_direct") {
     void notifyOperatorOfArtistPayment({
       stepId: step.id,
       albumId: step.albumId,
       description: step.description,
       amountCents: step.amountCents,
+    });
+    // Task #3004 — and confirm to the artist that we received their funds.
+    void notifyScopeOfPaymentReceived({
+      albumId: step.albumId,
+      description: step.description,
+      totalCents: receivedCents,
     });
   }
 }
@@ -666,15 +822,156 @@ export async function resetStuckPaymentStep(opts: {
 // (so the caller skips the fan-order materialization path). ACH is always
 // async: checkout.session.completed lands with payment_status "processing",
 // then funds settle via async_payment_succeeded / payment_intent.succeeded.
-export async function handleShopifyPlusWebhookEvent(event: {
-  type: string;
-  data: { object: any };
-}): Promise<boolean> {
+export async function handleShopifyPlusWebhookEvent(
+  event: {
+    type: string;
+    data: { object: any };
+  },
+  // Task #3004 — injectable Stripe surface for hermetic tests. Production
+  // callers omit it; the partial-funding path lazily builds the real client.
+  deps?: { stripe?: BankTransferStripe },
+): Promise<boolean> {
   const obj = event.data?.object ?? {};
   const meta = obj?.metadata ?? {};
   const isStep = meta?.gt_kind === "shopify_plus_step";
 
   switch (event.type) {
+    // Task #3004 — a pushed bank transfer arrived but didn't fully fund
+    // the PaymentIntent (bank fees deducted in transit, or a deliberate
+    // partial payment). Record what arrived; when the shortfall is within
+    // the configured underpayment threshold, shrink the PI to the funds
+    // on hand and confirm it so the step still auto-closes.
+    case "payment_intent.partially_funded": {
+      if (!isStep) return false;
+      const stepId = String(meta.gt_step_id ?? "");
+      if (!stepId) return true;
+      const [step] = await db
+        .select()
+        .from(manufacturerPaymentSteps)
+        .where(eq(manufacturerPaymentSteps.id, stepId));
+      if (!step || step.status === "paid") return true;
+
+      const piId = String(obj.id ?? "") || null;
+      const dueCents = Number(obj.amount ?? step.amountCents + step.marginCents);
+      const customerId =
+        (typeof obj.customer === "string" ? obj.customer : obj.customer?.id) ??
+        step.stripeCustomerId ??
+        null;
+
+      let stripe = deps?.stripe ?? null;
+      if (!stripe) {
+        try {
+          stripe = (await getStripe()) as unknown as BankTransferStripe;
+        } catch (e) {
+          console.error(
+            "[shopify-plus] partial funding: Stripe client unavailable:",
+            (e as Error)?.message ?? e,
+          );
+        }
+      }
+
+      // How much has actually landed = the customer's USD cash balance.
+      let availableCents: number | null = null;
+      if (stripe && customerId) {
+        try {
+          const cust = await stripe.customers.retrieve(customerId, {
+            expand: ["cash_balance"],
+          });
+          const usd = cust?.cash_balance?.available?.usd;
+          if (typeof usd === "number") availableCents = usd;
+        } catch (e) {
+          console.error(
+            "[shopify-plus] partial funding: cash balance read failed:",
+            (e as Error)?.message ?? e,
+          );
+        }
+      }
+      const receivedCents = availableCents ?? step.amountReceivedCents;
+
+      await db
+        .update(manufacturerPaymentSteps)
+        .set({
+          amountReceivedCents: Math.max(receivedCents, step.amountReceivedCents),
+          stripePaymentIntentId: piId ?? step.stripePaymentIntentId,
+        })
+        .where(eq(manufacturerPaymentSteps.id, step.id));
+      console.log(
+        `[shopify-plus] step ${step.id} partial funding: ${receivedCents}¢ of ${dueCents}¢`,
+      );
+
+      const shortfall = dueCents - receivedCents;
+      const threshold = getBankTransferUnderpaymentThresholdCents();
+      if (
+        stripe &&
+        piId &&
+        receivedCents > 0 &&
+        shortfall > 0 &&
+        shortfall <= threshold
+      ) {
+        // Within the underpayment threshold — accept what arrived: shrink
+        // the PI to the funds on hand and confirm so it succeeds from the
+        // cash balance. payment_intent.succeeded then flips the step Paid
+        // (markStepPaid is idempotent, so a direct flip here is also safe).
+        try {
+          await stripe.paymentIntents.update(piId, { amount: receivedCents });
+          const confirmed = await stripe.paymentIntents.confirm(piId);
+          console.log(
+            `[shopify-plus] step ${step.id} under-threshold shortfall ${shortfall}¢ (≤${threshold}¢) — PI shrunk to ${receivedCents}¢, confirm → ${confirmed?.status}`,
+          );
+          if (confirmed?.status === "succeeded") {
+            await markStepPaid(step.id, piId, {
+              amountReceivedCents: receivedCents,
+            });
+          }
+        } catch (e) {
+          console.error(
+            `[shopify-plus] step ${step.id} under-threshold auto-close failed:`,
+            (e as Error)?.message ?? e,
+          );
+        }
+      }
+      return true;
+    }
+    // Task #3004 — an incoming bank transfer credited a customer's cash
+    // balance. This event has no PI metadata, so match by the Stripe
+    // customer on an awaiting-transfer step and LOG the payer details we
+    // received — even when the sender's account name differs from the
+    // expected one, Stripe reconciles by virtual account number.
+    case "customer_cash_balance_transaction.created": {
+      const customerId =
+        typeof obj.customer === "string" ? obj.customer : obj.customer?.id;
+      if (!customerId || obj.type !== "funded") return false;
+      const [step] = await db
+        .select()
+        .from(manufacturerPaymentSteps)
+        .where(
+          and(
+            eq(manufacturerPaymentSteps.stripeCustomerId, customerId),
+            eq(manufacturerPaymentSteps.status, "awaiting_transfer"),
+          ),
+        )
+        .orderBy(desc(manufacturerPaymentSteps.createdAt));
+      if (!step) return false;
+      const funded = obj.funded?.bank_transfer ?? null;
+      const entry = {
+        at: new Date().toISOString(),
+        amountCents: Number(obj.net_amount ?? obj.amount ?? 0) || null,
+        currency: obj.currency ?? "usd",
+        bankTransfer: funded,
+      };
+      const existing = Array.isArray(step.payerDetails)
+        ? (step.payerDetails as any[])
+        : [];
+      await db
+        .update(manufacturerPaymentSteps)
+        .set({ payerDetails: [...existing, entry] })
+        .where(eq(manufacturerPaymentSteps.id, step.id));
+      console.log(
+        `[shopify-plus] step ${step.id} incoming transfer logged (payer details recorded):`,
+        JSON.stringify(entry.bankTransfer ?? {}),
+      );
+      return true;
+    }
     case "checkout.session.completed": {
       if (!isStep) return false;
       const stepId = String(meta.gt_step_id ?? "");
@@ -913,9 +1210,50 @@ export function registerShopifyPlusRoutes(app: Express) {
         .filter((r) => r.status === "paid")
         .reduce((s, r) => s + r.amountCents + r.marginCents, 0);
       const processingCents = steps
-        .filter((r) => r.status === "processing")
+        .filter((r) => r.status === "processing" || r.status === "awaiting_transfer")
         .reduce((s, r) => s + r.amountCents + r.marginCents, 0);
       const outstandingCents = quotedCents - paidCents;
+
+      // Task #3004 — surface nonzero Stripe customer cash balances to
+      // OPERATORS so leftover/over-paid transfer funds don't sit silently
+      // (Stripe auto-returns unreconciled funds after 75 days). Best-effort:
+      // a Stripe hiccup must never break the ledger read.
+      let cashBalances:
+        | { stripeCustomerId: string; availableUsdCents: number }[]
+        | null = null;
+      try {
+        const callerRole = await getUserRole(userId);
+        const callerIsOperator =
+          callerRole?.role === "admin" || callerRole?.role === "super_admin";
+        const customerIds = Array.from(
+          new Set(
+            steps
+              .map((s) => (s as any).stripeCustomerId as string | null)
+              .filter((c): c is string => !!c),
+          ),
+        );
+        if (callerIsOperator && customerIds.length > 0) {
+          const stripe = await getStripe();
+          const found: { stripeCustomerId: string; availableUsdCents: number }[] =
+            [];
+          for (const cid of customerIds.slice(0, 10)) {
+            try {
+              const cust: any = await stripe.customers.retrieve(cid, {
+                expand: ["cash_balance"],
+              });
+              const usd = cust?.cash_balance?.available?.usd;
+              if (typeof usd === "number" && usd > 0) {
+                found.push({ stripeCustomerId: cid, availableUsdCents: usd });
+              }
+            } catch {
+              // skip unknown/deleted customers
+            }
+          }
+          cashBalances = found;
+        }
+      } catch {
+        cashBalances = null;
+      }
 
       res.json({
         manufacturer,
@@ -930,6 +1268,10 @@ export function registerShopifyPlusRoutes(app: Express) {
           outstandingCents,
         },
         runClosedAt: albumRow?.runClosedAt ?? null,
+        // Operator-only (null for partners): nonzero customer cash balances
+        // from bank-transfer payers — apply to the next invoice via Stripe
+        // Dashboard or refund; don't let them sit (75-day auto-return).
+        cashBalances,
       });
     },
   );
@@ -1499,6 +1841,24 @@ export function registerShopifyPlusRoutes(app: Express) {
           .status(409)
           .json({ message: `This step is already ${step.status}.` });
       }
+      // Task #3004 — once bank-transfer instructions are issued, the same
+      // virtual account keeps working (including for a second transfer on a
+      // partial payment); re-open the saved instructions instead of minting
+      // a new PaymentIntent.
+      if (step.status === "awaiting_transfer") {
+        return res.status(409).json({
+          message:
+            "Bank transfer instructions were already issued for this step. Re-open them from the step row — a follow-up transfer to the same account details also works.",
+        });
+      }
+
+      // Task #3004 — payment method choice. ACH debit (us_bank_account) is
+      // REMOVED from this flow entirely: bank transfer (push) is the default,
+      // card remains the fallback with the card fee added and disclosed.
+      const method =
+        String((req.body as any)?.method ?? "bank_transfer") === "card"
+          ? "card"
+          : "bank_transfer";
 
       // Task #2785 — enforce funding-source authorization server-side.
       // goodtunes_sales steps are operator-funded (only admin/super_admin may pay).
@@ -1576,13 +1936,121 @@ export function registerShopifyPlusRoutes(app: Express) {
         gt_manufacturer_id: manufacturer.id,
         gt_amount_owed: String(step.amountCents),
         gt_margin: String(step.marginCents),
+        gt_payment_method: method,
       };
 
+      if (method === "bank_transfer") {
+        // ── Task #3004 — push bank transfer via Stripe customer balance ──
+        // Mint a customer_balance PaymentIntent and persist Stripe's
+        // virtual-account funding instructions on the step; the artist
+        // pushes a wire/ACH-credit from their bank and the webhook
+        // reconciles it. No Checkout Session is involved.
+        try {
+          const stripe = await getStripe();
+
+          // Reuse the payer's Stripe customer when a prior bank-transfer
+          // step already created one (same virtual account details);
+          // otherwise create one keyed to the payer.
+          let customerId: string | null = null;
+          const [prior] = await db
+            .select({ cid: manufacturerPaymentSteps.stripeCustomerId })
+            .from(manufacturerPaymentSteps)
+            .where(
+              and(
+                eq(manufacturerPaymentSteps.paidByUserId, userId),
+                sql`${manufacturerPaymentSteps.stripeCustomerId} IS NOT NULL`,
+              ),
+            )
+            .orderBy(desc(manufacturerPaymentSteps.createdAt))
+            .limit(1);
+          customerId = (prior?.cid as string | null) ?? null;
+          if (customerId) {
+            // Make sure the customer still exists in THIS Stripe mode.
+            try {
+              const c: any = await stripe.customers.retrieve(customerId);
+              if (c?.deleted) customerId = null;
+            } catch {
+              customerId = null;
+            }
+          }
+          if (!customerId) {
+            const [payer] = await db
+              .select({ email: users.email, username: users.username })
+              .from(users)
+              .where(eq(users.id, userId));
+            const customer = await stripe.customers.create({
+              email: (payer as any)?.email ?? undefined,
+              name: (payer as any)?.username ?? undefined,
+              metadata: { gt_user_id: userId, gt_kind: "shopify_plus_payer" },
+            });
+            customerId = customer.id;
+          }
+
+          const pi = await stripe.paymentIntents.create({
+            amount: totalCents,
+            currency: "usd",
+            customer: customerId,
+            payment_method_types: ["customer_balance"],
+            payment_method_data: { type: "customer_balance" } as any,
+            payment_method_options: {
+              customer_balance: {
+                funding_type: "bank_transfer",
+                bank_transfer: { type: "us_bank_transfer" },
+              },
+            } as any,
+            confirm: true,
+            description: `${step.description} — ${(album as any)?.title ?? albumId}`,
+            metadata,
+          });
+
+          const instructions = extractFundingInstructions(pi, totalCents);
+          if (!instructions) {
+            throw new Error(
+              "Stripe did not return bank transfer instructions for this payment.",
+            );
+          }
+
+          await db
+            .update(manufacturerPaymentSteps)
+            .set({
+              status: "awaiting_transfer",
+              paymentMethod: "bank_transfer",
+              stripeCustomerId: customerId,
+              stripePaymentIntentId: pi.id,
+              stripeCheckoutSessionId: null,
+              fundingInstructions: instructions,
+              cardFeeCents: null,
+            })
+            .where(eq(manufacturerPaymentSteps.id, step.id));
+
+          return res.json({ status: "awaiting_transfer", instructions });
+        } catch (e: any) {
+          await db
+            .update(manufacturerPaymentSteps)
+            .set({
+              status: "unpaid",
+              lastError: e?.message?.slice(0, 500) ?? "Stripe error",
+            })
+            .where(eq(manufacturerPaymentSteps.id, step.id));
+          console.error(
+            `[shopify-plus] bank-transfer PI create failed: ${e?.message}`,
+          );
+          return res.status(502).json({
+            message:
+              e?.message ??
+              "Failed to set up the bank transfer. Try again or pay by card.",
+          });
+        }
+      }
+
+      // ── Card fallback — hosted Checkout with the card fee added on top,
+      // disclosed as its own line item (the client shows it before confirm).
+      const feeCents = cardFeeCents(totalCents);
       try {
         const stripe = await getStripe();
         const session = await stripe.checkout.sessions.create({
           mode: "payment",
-          payment_method_types: ["us_bank_account"],
+          payment_method_types: ["card"],
           line_items: [
             {
               price_data: {
@@ -1595,13 +2063,24 @@ export function registerShopifyPlusRoutes(app: Express) {
               },
               quantity: 1,
             },
+            {
+              price_data: {
+                currency: "usd",
+                unit_amount: feeCents,
+                product_data: {
+                  name: "Card processing fee",
+                  description:
+                    "Added when paying by card. Pay by bank transfer to avoid this fee.",
+                },
+              },
+              quantity: 1,
+            },
           ],
           payment_intent_data: { metadata },
           metadata,
           success_url: `${returnBase}&payment=success`,
           cancel_url: `${returnBase}&payment=cancelled`,
-          // 30-minute session window — plenty of time for the customer to
-          // add/verify a bank account; the step is reset by session.expired.
+          // 30-minute session window; the step is reset by session.expired.
           expires_at: Math.floor(Date.now() / 1000) + 1800,
         });
 
@@ -1610,7 +2089,11 @@ export function registerShopifyPlusRoutes(app: Express) {
         // reset ANY processing step for this album, not just the right one.
         await db
           .update(manufacturerPaymentSteps)
-          .set({ stripeCheckoutSessionId: session.id })
+          .set({
+            stripeCheckoutSessionId: session.id,
+            paymentMethod: "card",
+            cardFeeCents: feeCents,
+          })
           .where(eq(manufacturerPaymentSteps.id, step.id));
 
         res.json({ url: session.url });
