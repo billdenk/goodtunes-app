@@ -817,39 +817,18 @@ function ShellImprint({ shell, imprint, w }: { shell: Shell; imprint: string; w:
             boxShadow: '0 1px 2px rgba(0,0,0,0.28), inset 0 0 0 0.5px rgba(0,0,0,0.12)',
           }}
         >
-          <div style={{ fontSize: w * 0.026, fontWeight: 700, letterSpacing: '0.03em', color: '#1c1a18', lineHeight: 1.15 }}>
-            GOODTUNES · DEMO ALBUM
-          </div>
-          <div style={{ fontSize: w * 0.015, fontWeight: 600, letterSpacing: '0.02em', color: '#6a6a6a', lineHeight: 1.3, marginTop: w * 0.004 }}>
-            OPENING TRACK · SECOND CUT · THIRD SONG
-          </div>
+          {/* Bill 2026-08-10: no sample album text on the shell — the blank
+              sticker strip alone shows where a paper label sits. */}
+          <div style={{ height: w * 0.041 }} />
         </div>
       </div>
     );
   }
 
-  // On-shell print: silkscreened text directly on the plastic above the hubs.
-  return (
-    <div
-      className="absolute"
-      style={{
-        left: '20%',
-        width: '58%',
-        top: '27%',
-        transform: 'translateY(-50%)',
-        textAlign: 'center',
-        fontFamily: 'Arial, Helvetica, sans-serif',
-        textShadow: shell.light ? 'none' : '0 0.5px 0 rgba(0,0,0,0.35)',
-      }}
-    >
-      <div style={{ fontSize: w * 0.03, fontWeight: 700, letterSpacing: '0.05em', color: ink.strong, lineHeight: 1.1 }}>
-        GOODTUNES · DEMO ALBUM
-      </div>
-      <div style={{ fontSize: w * 0.017, fontWeight: 600, letterSpacing: '0.03em', color: ink.faint, lineHeight: 1.3, marginTop: w * 0.006 }}>
-        OPENING TRACK · SECOND CUT · THIRD SONG
-      </div>
-    </div>
-  );
+  // On-shell print: Bill 2026-08-10 — no sample album text on the plastic;
+  // the shell photo reads clean until real album art/print flows exist.
+  void ink;
+  return null;
 }
 
 // The tape itself — the real product photo for the selected shell, with the
