@@ -538,8 +538,13 @@ export function AdminFrame({
     setOpenSection((prev) => (prev === id ? null : id));
   const isSectionOpen = (id: SidebarSectionId) => openSection === id;
 
+  // Task #2987 — overflow-x-CLIP (not hidden) on the shell root: `hidden`
+  // still makes the box programmatically scrollable, so a focus/scrollIntoView
+  // on a descendant hanging past the right edge could slide the WHOLE shell
+  // (header + rail) sideways with no scrollbar to bring it back. `clip`
+  // forbids all horizontal scrolling of the shell.
   return (
-    <div className="h-[100dvh] w-full overflow-x-hidden bg-[var(--apple-canvas)] font-sans antialiased flex flex-col">
+    <div className="h-[100dvh] w-full overflow-x-clip bg-[var(--apple-canvas)] font-sans antialiased flex flex-col">
       {/* Apple-canon shell — ONE white top bar across the entire window:
           logo left, bell + avatar right, single hairline beneath. It sits
           above the sidebar/main/preview row so nothing can break it. */}
@@ -1239,7 +1244,10 @@ export function AdminFrame({
           </nav>
         </aside>
 
-      <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto relative flex flex-col">
+      {/* Task #2987 — overflow-x-clip (not hidden): hidden leaves <main>
+          horizontally scrollable via focus/scrollIntoView, which slid page
+          content sideways when a fixed-px descendant escaped its column. */}
+      <main className="flex-1 min-w-0 overflow-x-clip overflow-y-auto relative flex flex-col">
         {/* The per-column top strip is gone — the single full-width
             <header> above the sidebar/main row owns the logo, bell and
             avatar (Apple-canon shell). */}

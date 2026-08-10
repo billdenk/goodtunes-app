@@ -808,12 +808,27 @@ function BrandDialog({
   );
 }
 
-// ─── Left column: jacket + disc stage ────────────────────────────────
-// The album jacket with the vinyl peeking out to the right. Hovering
-// slides the disc further out and spins the disc body continuously
-// (360°/8 s — Item 28); leaving freezes it and surfaces a rewind button
-// that slides the record out while it turns back, then tucks it in.
-// Double LP shows a second, dimmer disc behind the first.
+function FitScale({ naturalWidth, children }: { naturalWidth: number; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth;
+      setScale(w > 0 ? Math.min(1, w / naturalWidth) : 1);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [naturalWidth]);
+  return (
+    <div ref={ref} className="w-full min-w-0 flex justify-center">
+      <div style={scale < 1 ? ({ zoom: scale } as React.CSSProperties) : undefined}>{children}</div>
+    </div>
+  );
+}
 export function JacketStage({
   format,
   jacketUrl,
@@ -2387,8 +2402,10 @@ export function PressPackagePricingCatalog({
                 guarantees ≥48px of gutter between the rail and the art
                 edge (page padding + this). */}
             {isVinyl && (
-              <div className="flex flex-col items-center pt-6 min-[1200px]:pt-0 min-[1200px]:pl-6 min-[1200px]:sticky min-[1200px]:top-[72px] min-[1200px]:self-start">
-                <div>
+              <div className="flex flex-col items-center min-w-0 pt-6 min-[1200px]:pt-0 min-[1200px]:pl-6 min-[1200px]:sticky min-[1200px]:top-[72px] min-[1200px]:self-start">
+                {/* Task #2987 — FitScale keeps the fixed-px stage inside the
+                    column at every width (see comment on FitScale). */}
+                <FitScale naturalWidth={(fmt === "7_inch" ? 175 : 300) * 1.5}>
                   <JacketStage
                     format={fmt}
                     jacketUrl={jacketUrl}
@@ -2405,7 +2422,7 @@ export function PressPackagePricingCatalog({
                     brandUploading={brandUploading}
                     brandSaving={saveBranding.isPending}
                   />
-                </div>
+                </FitScale>
               </div>
             )}
 

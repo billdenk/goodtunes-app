@@ -267,6 +267,14 @@ body {
      keeps `position: fixed` children (e.g. PlayerDock) anchored to
      the visible viewport instead of drifting with a trackpad swipe. */
   overflow-x: hidden;
+  /* Task #2987 — upgrade hidden → clip where supported. `hidden` still
+     leaves the document programmatically scrollable sideways: a
+     focus/scrollIntoView on a descendant hanging past the viewport edge
+     could slide the whole page (admin shell incl. header/rail) with no
+     scrollbar to bring it back. `clip` forbids horizontal scrolling
+     entirely; the `hidden` line above stays as the older-browser
+     fallback. */
+  overflow-x: clip;
   overscroll-behavior-x: none;
   /* Pin the document background to brand navy. The body below paints the
      gradient, but `body` is a finite box — the safe-area strips behind a
