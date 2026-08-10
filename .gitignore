@@ -25,3 +25,4 @@ android/app/release/
 *.keystore
 *.jks
 
+PASTE-INTO-SECRET-then-delete.txt
