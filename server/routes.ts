@@ -2749,6 +2749,15 @@ export async function registerRoutes(
       // authenticator screen, email-pref admins get a code mailed.
       const totp = await storage.getAdminTotp(userId);
       const usesEmail = user?.factorPref === "email";
+      // Persist pendingTotpUserId BEFORE redirecting. express-session's
+      // end-patch save can race the login page's immediate auto-POST to
+      // /api/auth/email-otp/start (or /totp/verify) — the follow-up request
+      // occasionally loads the store before the row lands and 401s with
+      // "Sign in with your password first". An explicit awaited save closes
+      // the window.
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve())),
+      );
       if (!usesEmail) {
         const params = new URLSearchParams({
           oauth: provider,

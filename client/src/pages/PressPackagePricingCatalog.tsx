@@ -2024,6 +2024,39 @@ export function PressPackagePricingCatalog({
     onError: (e: any) =>
       toast({ title: "Couldn't archive color", description: e?.message, variant: "destructive" }),
   });
+  // Task #2999 — Archived view + restore. Lists archived types (their colors
+  // ride back with them) and individually-archived colors on active types;
+  // Restore clears archived_at server-side with the same 12"-mirror /
+  // colorGroupId propagation the archive cascade used.
+  const { data: archived } = useQuery<{
+    tiers: { id: string; name: string; format: string; archivedAt: string; previewImageUrl: string | null }[];
+    colors: { id: string; name: string; swatchHex: string | null; swatchImageUrl: string | null; swatchThumbUrl: string | null; tierId: string; tierName: string; format: string; archivedAt: string }[];
+  }>({
+    queryKey: ["/api/admin/manufacturers", pressId, "catalog", "archived"],
+    enabled: !!pressId,
+  });
+  const unarchiveTier = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/tiers/${id}/unarchive`);
+    },
+    onSuccess: () => {
+      toast({ title: "Type restored", description: "It's back in the catalog and artist picks." });
+      invalidate();
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't restore type", description: e?.message, variant: "destructive" }),
+  });
+  const unarchiveColor = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/colors/${id}/unarchive`);
+    },
+    onSuccess: () => {
+      toast({ title: "Color restored", description: "It's back in the catalog and artist picks." });
+      invalidate();
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't restore color", description: e?.message, variant: "destructive" }),
+  });
   const deleteTier = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/tiers/${id}`);
@@ -2122,6 +2155,8 @@ export function PressPackagePricingCatalog({
   // drag, then Done commits (through the existing reorder endpoints) or
   // Cancel restores the order captured when the mode was entered.
   const [reorderTypesOn, setReorderTypesOn] = useState(false);
+  // Task #2999 — Archived types/colors disclosure (collapsed by default).
+  const [archivedOpen, setArchivedOpen] = useState(false);
   const [reorderColorsOn, setReorderColorsOn] = useState(false);
   const [tierOrderDraft, setTierOrderDraft] = useState<string[] | null>(null);
   const [dragTierId, setDragTierId] = useState<string | null>(null);
@@ -2921,6 +2956,96 @@ export function PressPackagePricingCatalog({
                   </div>
                 )}
                 {canEdit && <MoreTypesPopover onAdd={(name) => addTier.mutate(name)} adding={addTier.isPending} />}
+                {/* Task #2999 — Archived types & colors for this size, with Restore. */}
+                {(() => {
+                  const archTiers = (archived?.tiers ?? []).filter((t) => t.format === fmt);
+                  const archColors = (archived?.colors ?? []).filter((c) => c.format === fmt);
+                  const count = archTiers.length + archColors.length;
+                  if (count === 0) return null;
+                  return (
+                    <div style={{ marginTop: 16 }} data-testid="section-archived">
+                      <button
+                        type="button"
+                        onClick={() => setArchivedOpen((v) => !v)}
+                        data-testid="button-archived-toggle"
+                        className="flex items-center gap-1.5 text-xs font-semibold rounded-full transition-colors hover:bg-slate-100 focus:outline-none"
+                        style={{ padding: "5px 12px", color: SUBINK, border: `1px solid ${HAIRLINE}`, background: dark ? CARD : "#fff" }}
+                      >
+                        <ChevronDown
+                          className="w-3.5 h-3.5 transition-transform"
+                          style={{ transform: archivedOpen ? "rotate(180deg)" : undefined }}
+                        />
+                        Archived
+                        <span className="tabular-nums" style={{ color: FAINT }}>{count}</span>
+                      </button>
+                      {archivedOpen && (
+                        <div
+                          className="rounded-2xl overflow-hidden"
+                          style={{ marginTop: 10, border: `1px solid ${HAIRLINE}`, background: dark ? CARD : "#fff" }}
+                        >
+                          {archTiers.map((t, i) => (
+                            <div
+                              key={t.id}
+                              className="flex items-center gap-3"
+                              data-testid={`archived-tier-${t.id}`}
+                              style={{ padding: "11px 16px", borderTop: i > 0 ? `1px solid ${HAIRLINE}` : undefined }}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-semibold truncate" style={{ color: INK }}>{t.name}</div>
+                                <div className="text-[11.5px]" style={{ color: SUBINK }}>
+                                  Type · archived {new Date(t.archivedAt).toLocaleDateString()} · its colors restore with it
+                                </div>
+                              </div>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => unarchiveTier.mutate(t.id)}
+                                  disabled={unarchiveTier.isPending}
+                                  data-testid={`button-unarchive-tier-${t.id}`}
+                                  className="text-xs font-semibold rounded-full transition-colors focus:outline-none disabled:opacity-60"
+                                  style={{ padding: "5px 14px", color: BLUE, border: `1px solid ${HAIRLINE}`, background: dark ? CARD_SOFT : "#fff" }}
+                                >
+                                  Restore
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          {archColors.map((c, i) => (
+                            <div
+                              key={c.id}
+                              className="flex items-center gap-3"
+                              data-testid={`archived-color-${c.id}`}
+                              style={{ padding: "11px 16px", borderTop: archTiers.length + i > 0 ? `1px solid ${HAIRLINE}` : undefined }}
+                            >
+                              <ColorBall
+                                color={{ id: c.id, name: c.name, swatchHex: c.swatchHex, swatchImageUrl: c.swatchImageUrl, swatchThumbUrl: c.swatchThumbUrl, position: 0 }}
+                                size={28}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-semibold truncate" style={{ color: INK }}>{c.name}</div>
+                                <div className="text-[11.5px]" style={{ color: SUBINK }}>
+                                  Color in {c.tierName} · archived {new Date(c.archivedAt).toLocaleDateString()}
+                                </div>
+                              </div>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => unarchiveColor.mutate(c.id)}
+                                  disabled={unarchiveColor.isPending}
+                                  data-testid={`button-unarchive-color-${c.id}`}
+                                  className="text-xs font-semibold rounded-full transition-colors focus:outline-none disabled:opacity-60"
+                                  style={{ padding: "5px 14px", color: BLUE, border: `1px solid ${HAIRLINE}`, background: dark ? CARD_SOFT : "#fff" }}
+                                >
+                                  Restore
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 </>
                 )}
               </section>

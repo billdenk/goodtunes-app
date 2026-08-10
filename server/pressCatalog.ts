@@ -2693,6 +2693,208 @@ export function registerPressCatalogRoutes(
     res.json({ ok: true, archivedAt: now.toISOString() });
   });
 
+  // Task #2999 — Archived view: list everything archived on this press so an
+  // operator can undo an accidental archive without a DB edit. Two buckets:
+  //   tiers  — archived types (their colors retired with them; those colors
+  //            aren't listed separately, they ride back on tier unarchive)
+  //   colors — individually-archived colors whose PARENT TIER is still active
+  app.get("/api/admin/manufacturers/:id/catalog/archived", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const tRows = await db
+      .select()
+      .from(pressColorTiers)
+      .where(eq(pressColorTiers.pressId, pressId))
+      .orderBy(asc(pressColorTiers.position));
+    const activeTierIds = tRows.filter((t) => !(t as any).archivedAt).map((t) => t.id);
+    const archivedTiers = tRows.filter((t) => (t as any).archivedAt);
+    const cRows = activeTierIds.length
+      ? await db
+          .select()
+          .from(pressColors)
+          .where(and(inArray(pressColors.tierId, activeTierIds), sql`${pressColors.archivedAt} IS NOT NULL`))
+          .orderBy(asc(pressColors.position))
+      : [];
+    const tierById = new Map(tRows.map((t) => [t.id, t]));
+    res.json({
+      tiers: archivedTiers.map((t) => ({
+        id: t.id,
+        name: t.name,
+        format: t.format,
+        archivedAt: ((t as any).archivedAt as Date).toISOString(),
+        previewImageUrl: (t as any).previewImageUrl ?? null,
+      })),
+      colors: cRows.map((c) => ({
+        id: c.id,
+        name: c.name,
+        swatchHex: c.swatchHex,
+        swatchImageUrl: c.swatchImageUrl,
+        swatchThumbUrl: (c as any).swatchThumbUrl ?? null,
+        tierId: c.tierId,
+        tierName: tierById.get(c.tierId)?.name ?? "",
+        format: tierById.get(c.tierId)?.format ?? "",
+        archivedAt: ((c as any).archivedAt as Date).toISOString(),
+      })),
+    });
+  });
+
+  // Task #2999 — Unarchive a type. Restores the tier, its same-named 12"
+  // sibling archived in the same cascade, and the colors that were archived
+  // AT THE SAME MOMENT (same archived_at stamp) — colors an operator archived
+  // individually BEFORE the type was archived stay archived, mirroring
+  // exactly what the archive cascade took away.
+  app.post("/api/admin/manufacturers/:id/catalog/tiers/:tierId/unarchive", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const tierId = String(req.params.tierId);
+    const [tier] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
+    if (!tier) return res.status(404).json({ message: "Type not found" });
+    const stamp = (tier as any).archivedAt as Date | null;
+    if (!stamp) return res.json({ ok: true }); // already active — idempotent
+    // A fresh replacement type with the same name may have been created since;
+    // restoring on top of it would leave two same-named types artists can't
+    // tell apart. Refuse with a clear message instead.
+    const [clash] = await db
+      .select({ id: pressColorTiers.id })
+      .from(pressColorTiers)
+      .where(
+        and(
+          eq(pressColorTiers.pressId, pressId),
+          eq(pressColorTiers.format, tier.format),
+          sql`lower(trim(${pressColorTiers.name})) = ${tier.name.trim().toLowerCase()}`,
+          sql`${pressColorTiers.archivedAt} IS NULL`,
+        ),
+      );
+    if (clash) {
+      return res.status(409).json({ message: `An active "${tier.name}" type already exists — rename or archive it first.` });
+    }
+    // The sibling 12" tier archived in the same cascade (same name, same stamp).
+    const sibFormat = TWELVE_INCH_SIBLING[tier.format];
+    let sibId: string | null = null;
+    if (sibFormat) {
+      const [sib] = await db
+        .select()
+        .from(pressColorTiers)
+        .where(
+          and(
+            eq(pressColorTiers.pressId, pressId),
+            eq(pressColorTiers.format, sibFormat),
+            sql`lower(trim(${pressColorTiers.name})) = ${tier.name.trim().toLowerCase()}`,
+            sql`${pressColorTiers.archivedAt} = ${stamp}`,
+          ),
+        );
+      sibId = sib?.id ?? null;
+      // The sibling format may have gained an ACTIVE same-named replacement
+      // since the archive — restoring the archived sibling next to it would
+      // leave two same-named types artists (and SKU name-resolution) can't
+      // tell apart. Refuse the whole restore without changing anything.
+      if (sibId) {
+        const [sibClash] = await db
+          .select({ id: pressColorTiers.id })
+          .from(pressColorTiers)
+          .where(
+            and(
+              eq(pressColorTiers.pressId, pressId),
+              eq(pressColorTiers.format, sibFormat),
+              sql`lower(trim(${pressColorTiers.name})) = ${tier.name.trim().toLowerCase()}`,
+              sql`${pressColorTiers.archivedAt} IS NULL`,
+            ),
+          );
+        if (sibClash) {
+          return res.status(409).json({
+            message: `An active "${tier.name}" type already exists on the sibling 12" format — rename or archive it first.`,
+          });
+        }
+      }
+    }
+    await db.transaction(async (tx) => {
+      const ids = [tierId, ...(sibId ? [sibId] : [])];
+      await tx.update(pressColorTiers).set({ archivedAt: null } as any).where(inArray(pressColorTiers.id, ids));
+      await tx
+        .update(pressColors)
+        .set({ archivedAt: null } as any)
+        .where(and(inArray(pressColors.tierId, ids), sql`${pressColors.archivedAt} = ${stamp}`));
+    });
+    res.json({ ok: true });
+  });
+
+  // Task #2999 — Unarchive a single color. Restores the color plus its
+  // colorGroupId group-mates (or same-named sibling-12" colors) that were
+  // archived in the same cascade — the exact inverse of the archive route.
+  app.post("/api/admin/manufacturers/:id/catalog/colors/:colorId/unarchive", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const colorId = String(req.params.colorId);
+    const [color] = await db.select().from(pressColors).where(eq(pressColors.id, colorId));
+    if (!color) return res.status(404).json({ message: "Color not found" });
+    const [tier] = await db.select().from(pressColorTiers).where(eq(pressColorTiers.id, color.tierId));
+    if (!tier || tier.pressId !== pressId) return res.status(403).json({ message: "Forbidden" });
+    const stamp = (color as any).archivedAt as Date | null;
+    if (!stamp) return res.json({ ok: true }); // already active — idempotent
+    if ((tier as any).archivedAt) {
+      return res.status(409).json({ message: `This color belongs to the archived "${tier.name}" type — restore the type instead.` });
+    }
+    // An active replacement color with the same name in the same type would
+    // collide (SKU snapshots resolve colors by name) — refuse clearly.
+    const activeSiblings = await db
+      .select()
+      .from(pressColors)
+      .where(and(eq(pressColors.tierId, tier.id), sql`${pressColors.archivedAt} IS NULL`));
+    if (activeSiblings.some((c) => c.name.trim().toLowerCase() === color.name.trim().toLowerCase())) {
+      return res.status(409).json({ message: `An active "${color.name}" color already exists in ${tier.name} — rename or archive it first.` });
+    }
+    const groupId = (color as any).colorGroupId as string | null | undefined;
+    const sib = await siblingTwelveInchTier(tier);
+    // Compute every color this restore will reactivate UP FRONT (the picked
+    // color plus its same-stamp colorGroupId group-mates, or same-named
+    // sibling-12" colors), then validate the destination tier of EACH ONE
+    // for an active same-named replacement. SKU snapshots resolve colors by
+    // display name, so restoring next to a replacement would create an
+    // ambiguous duplicate — refuse the whole restore without changing
+    // anything.
+    let mates: (typeof color)[] = [];
+    if (groupId) {
+      mates = await db
+        .select()
+        .from(pressColors)
+        .where(
+          and(
+            sql`${pressColors.colorGroupId} = ${groupId}`,
+            sql`${pressColors.id} != ${colorId}`,
+            sql`${pressColors.archivedAt} = ${stamp}`,
+          ),
+        );
+    } else if (sib) {
+      const sibColors = await db
+        .select()
+        .from(pressColors)
+        .where(and(eq(pressColors.tierId, sib.id), sql`${pressColors.archivedAt} = ${stamp}`));
+      mates = sibColors.filter((c) => c.name.trim().toLowerCase() === color.name.trim().toLowerCase());
+    }
+    const restoreIds = [colorId, ...mates.map((m) => m.id)];
+    const destTierIds = Array.from(new Set(mates.map((m) => m.tierId)));
+    if (destTierIds.length) {
+      const destTiers = await db.select().from(pressColorTiers).where(inArray(pressColorTiers.id, destTierIds));
+      const destTierById = new Map(destTiers.map((t) => [t.id, t]));
+      const activeInDest = await db
+        .select()
+        .from(pressColors)
+        .where(and(inArray(pressColors.tierId, destTierIds), sql`${pressColors.archivedAt} IS NULL`));
+      for (const m of mates) {
+        const clash = activeInDest.find(
+          (c) => c.tierId === m.tierId && c.name.trim().toLowerCase() === m.name.trim().toLowerCase(),
+        );
+        if (clash) {
+          const destName = destTierById.get(m.tierId)?.name ?? "another type";
+          return res.status(409).json({
+            message: `An active "${m.name}" color already exists in ${destName} — rename or archive it first.`,
+          });
+        }
+      }
+    }
+    await db.transaction(async (tx) => {
+      await tx.update(pressColors).set({ archivedAt: null } as any).where(inArray(pressColors.id, restoreIds));
+    });
+    res.json({ ok: true });
+  });
+
   // Delete tier.
   app.delete("/api/admin/manufacturers/:id/catalog/tiers/:tierId", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
