@@ -1278,6 +1278,10 @@ export type Catalog = {
   // press "Staff" teammates get `false`; absent/undefined is treated as
   // editable (operators + Owner/Admin) so older payloads don't lock out.
   canEdit?: boolean;
+  // handoff/cd-cassette-catalog — fixed-structure CD/cassette catalogs
+  // (custom spot inks, run price ladder, turnaround), resolved server-side.
+  cdCatalog?: { customSpotColors: { name: string; hex: string }[]; prices: { qty: number; unitCents: number }[]; turnaroundWeeksMin: number; turnaroundWeeksMax: number };
+  cassetteCatalog?: { customSpotColors: { name: string; hex: string }[]; prices: { qty: number; unitCents: number }[]; turnaroundWeeksMin: number; turnaroundWeeksMax: number };
 };
 
 export const parseDollars = (v: string): number | null => {

@@ -11481,3 +11481,28 @@ SQL
 }
 press_chart_color_20260809 dev  "${DATABASE_URL:-}"
 press_chart_color_20260809 prod "${PROD_DATABASE_URL:-}"
+
+# ── manufacturers.cd_catalog / cassette_catalog (Aug 10, 2026) ───────────
+# handoff/cd-cassette-catalog — per-press CD + cassette catalog blobs
+# (custom spot inks, run price ladder, turnaround override). Columns only;
+# NULL resolves to handoff defaults server-side. Idempotent on both DBs.
+media_catalog_cols_20260810() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then echo "post-merge: media-catalog-cols skip ($label; no URL)"; return 0; fi
+  local out rc
+  out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS cd_catalog jsonb;
+ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS cassette_catalog jsonb;
+SQL
+  )
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    echo "post-merge: media-catalog-cols ok on $label"
+  else
+    echo "post-merge: ERROR — media-catalog-cols FAILED on $label"
+    echo "$out" | tail -5
+    return 1
+  fi
+}
+media_catalog_cols_20260810 dev  "${DATABASE_URL:-}"
+media_catalog_cols_20260810 prod "${PROD_DATABASE_URL:-}"

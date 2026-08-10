@@ -4403,6 +4403,20 @@ export type PlatformWholesaleLedgerEntry = typeof platformWholesaleLedger.$infer
 // specialties, or fulfillment FK. Conflating the two would force every
 // vendor read path to filter on a `kind` column and would muddy fan-side
 // surfaces that should never see B2B operations data.
+// handoff/cd-cassette-catalog — what a press can vary on its CD / cassette
+// catalog. The product structure itself (cases, prints, booklet panel counts,
+// the 8 stock shells, imprints) is fixed by the handoff contract and lives in
+// code, not the DB.
+export type PressMediaCatalogData = {
+  // CD only — custom silkscreen spot inks the press added ("Add color").
+  customSpotColors?: { name: string; hex: string }[];
+  // Per-quantity run price ladder (per unit, per finished package).
+  prices?: { qty: number; unitCents: number }[];
+  // Turnaround override in weeks. Null/absent = press default.
+  turnaroundWeeksMin?: number | null;
+  turnaroundWeeksMax?: number | null;
+};
+
 export const manufacturers = pgTable("manufacturers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -4438,6 +4452,15 @@ export const manufacturers = pgTable("manufacturers", {
   // labelBgColor (or a neutral default when that's null too).
   labelLogoUrl: text("label_logo_url"),
   labelBgColor: text("label_bg_color"),
+  // handoff/cd-cassette-catalog — per-press CD and cassette catalogs. CD and
+  // cassette have a FIXED product structure (CD: case → print → booklet →
+  // run pricing; cassette: case → shell → imprint → run pricing), so unlike
+  // vinyl (press_formats/tiers/colors tables) each is one jsonb blob holding
+  // only what a press can vary: custom silkscreen spot inks (CD only), the
+  // per-quantity run price ladder, and a turnaround override. Null = the
+  // press hasn't customized anything; the server resolves handoff defaults.
+  cdCatalog: jsonb("cd_catalog").$type<PressMediaCatalogData>(),
+  cassetteCatalog: jsonb("cassette_catalog").$type<PressMediaCatalogData>(),
   // Stable per-press series color for cross-press charts (combined Press
   // Dashboard stacked trend, legends, leaderboard bars). Assigned ONCE when
   // the press is onboarded (next unused slot in PRESS_CHART_PALETTE) so a

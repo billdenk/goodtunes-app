@@ -46,10 +46,12 @@ import {
   pressColors,
   pressJackets,
   pressTierJacketLadders,
+  manufacturers,
   ALBUM_FORMATS,
   type AlbumFormat,
   type PressColorTier,
   type PressColor,
+  type PressMediaCatalogData,
 } from "@shared/schema";
 import {
   HELLBENDER_MATRIX,
@@ -2221,6 +2223,109 @@ const ladderBodySchema = z.object({
   weight: z.enum(["140", "180"]).optional(),
 });
 
+// ─── handoff/cd-cassette-catalog — per-press CD / cassette catalogs ──────
+// Fixed product structure (contract = the handoff MOCK_ consts); the press
+// varies only custom spot inks (CD), the run price ladder, and turnaround.
+// Stored as one jsonb blob per format on manufacturers; null resolves to
+// these handoff defaults so every press has a sane catalog immediately.
+const CD_DEFAULT_PRICES = [
+  { qty: 100, unitCents: 240 },
+  { qty: 300, unitCents: 185 },
+  { qty: 500, unitCents: 155 },
+  { qty: 1000, unitCents: 135 },
+  { qty: 2000, unitCents: 110 },
+  { qty: 3000, unitCents: 95 },
+];
+const CASSETTE_DEFAULT_PRICES = [
+  { qty: 50, unitCents: 310 },
+  { qty: 100, unitCents: 245 },
+  { qty: 250, unitCents: 195 },
+  { qty: 500, unitCents: 168 },
+  { qty: 1000, unitCents: 148 },
+];
+
+export type ResolvedMediaCatalog = {
+  customSpotColors: { name: string; hex: string }[];
+  prices: { qty: number; unitCents: number }[];
+  turnaroundWeeksMin: number;
+  turnaroundWeeksMax: number;
+};
+
+export function resolveMediaCatalog(
+  format: "cd" | "cassette",
+  press: {
+    cdCatalog?: PressMediaCatalogData | null;
+    cassetteCatalog?: PressMediaCatalogData | null;
+    turnaroundWeeksMin?: number | null;
+    turnaroundWeeksMax?: number | null;
+  },
+): ResolvedMediaCatalog {
+  const stored = (format === "cd" ? press.cdCatalog : press.cassetteCatalog) ?? {};
+  const defaults =
+    format === "cd"
+      ? { prices: CD_DEFAULT_PRICES, min: 3, max: 5 }
+      : { prices: CASSETTE_DEFAULT_PRICES, min: 4, max: 6 };
+  return {
+    customSpotColors: format === "cd" ? stored.customSpotColors ?? [] : [],
+    prices: stored.prices?.length ? stored.prices : defaults.prices,
+    // Override → press-level default → handoff default.
+    turnaroundWeeksMin:
+      stored.turnaroundWeeksMin ?? press.turnaroundWeeksMin ?? defaults.min,
+    turnaroundWeeksMax:
+      stored.turnaroundWeeksMax ?? press.turnaroundWeeksMax ?? defaults.max,
+  };
+}
+
+export const mediaCatalogPatchSchema = z
+  .object({
+    customSpotColors: z
+      .array(
+        z.object({
+          name: z.string().trim().min(1).max(40),
+          hex: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+        }),
+      )
+      .max(60)
+      .optional(),
+    prices: z
+      .array(
+        z.object({
+          qty: z.number().int().min(1).max(1_000_000),
+          unitCents: z.number().int().min(0).max(1_000_000),
+        }),
+      )
+      .max(30)
+      .optional(),
+    turnaroundWeeksMin: z.number().int().min(1).max(52).nullable().optional(),
+    turnaroundWeeksMax: z.number().int().min(1).max(52).nullable().optional(),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    // Semantic guards: no duplicate ink names (case-insensitive), no
+    // duplicate run quantities, and a sane turnaround range when both
+    // bounds arrive in the same patch (they always do — the UI writes the
+    // pair together).
+    if (v.customSpotColors) {
+      const names = v.customSpotColors.map((c) => c.name.toLowerCase());
+      if (new Set(names).size !== names.length) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["customSpotColors"], message: "Duplicate ink name" });
+      }
+    }
+    if (v.prices) {
+      const qtys = v.prices.map((p) => p.qty);
+      if (new Set(qtys).size !== qtys.length) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["prices"], message: "Duplicate run quantity" });
+      }
+    }
+    if (
+      typeof v.turnaroundWeeksMin === "number" &&
+      typeof v.turnaroundWeeksMax === "number" &&
+      v.turnaroundWeeksMin > v.turnaroundWeeksMax
+    ) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["turnaroundWeeksMin"], message: "Turnaround minimum exceeds maximum" });
+    }
+  });
+
 export function registerPressCatalogRoutes(
   app: Express,
   requireAdmin: any,
@@ -2250,8 +2355,52 @@ export function registerPressCatalogRoutes(
       const { pressUserCanEdit } = await import("./auth/partnerPermissions");
       canEdit = await pressUserCanEdit(userId, pressId);
     }
-    res.json({ ...(await getPressCatalog(pressId)), canEdit });
+    res.json({
+      ...(await getPressCatalog(pressId)),
+      // handoff/cd-cassette-catalog — fixed-structure CD/cassette catalogs,
+      // resolved with handoff defaults when the press hasn't customized.
+      cdCatalog: resolveMediaCatalog("cd", press as any),
+      cassetteCatalog: resolveMediaCatalog("cassette", press as any),
+      canEdit,
+    });
   });
+
+  // handoff/cd-cassette-catalog — patch the press's CD or cassette catalog
+  // (custom spot inks, run price ladder, turnaround override). Merge-patch:
+  // only the provided keys change; the rest of the stored blob is kept.
+  app.put(
+    "/api/admin/manufacturers/:id/catalog/media/:format",
+    requireAdmin,
+    requirePressScope,
+    requirePressEditor,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const format = String(req.params.format);
+      if (format !== "cd" && format !== "cassette") {
+        return res.status(400).json({ message: "Unknown media format" });
+      }
+      const press = await storage.getManufacturerById(pressId);
+      if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+      const parsed = mediaCatalogPatchSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid catalog data", errors: parsed.error.flatten() });
+      }
+      if (format === "cassette" && parsed.data.customSpotColors) {
+        return res.status(400).json({ message: "Cassettes have no spot colors" });
+      }
+      // Atomic per-key JSONB merge (COALESCE(col,'{}') || patch) so two
+      // concurrent patches touching DIFFERENT keys can't clobber each other
+      // with a stale read/merge/write of the whole blob.
+      const colName = format === "cd" ? sql.raw("cd_catalog") : sql.raw("cassette_catalog");
+      await db.execute(sql`
+        UPDATE manufacturers
+           SET ${colName} = COALESCE(${colName}, '{}'::jsonb) || ${JSON.stringify(parsed.data)}::jsonb
+         WHERE id = ${pressId}
+      `);
+      const updated = await storage.getManufacturerById(pressId);
+      res.json(resolveMediaCatalog(format, updated as any));
+    },
+  );
 
   // ─── Task #2116 — Catalog CSV: Upload & Export ─────────────────────
 

@@ -53,6 +53,7 @@ import {
   VinylDisc,
 } from "./PressVinylColors";
 import { useAdminDark } from "@/lib/adminAppearance";
+import { CdCatalogBody, CassetteCatalogBody } from "./PressMediaCatalog";
 
 // ─── Design tokens (Apple canon; vars flip under gt-admin-dark) ──────
 const BLUE = "var(--brand-blue)";
@@ -1672,6 +1673,15 @@ export function PressPackagePricingCatalog({
     onError: (e: Error) => toast({ title: "Couldn't update size", description: e.message, variant: "destructive" }),
   });
   const fmt = activeTab as AlbumFormat | null;
+  // handoff/cd-cassette-catalog — which media family the pill row shows.
+  // CD/cassette have a fixed product structure and render their own bodies;
+  // vinyl keeps everything below untouched.
+  const [mediaTab, setMediaTab] = useState<"vinyl" | "cd" | "cassette">(() => {
+    // Deep-linkable (?media=cd|cassette) so portal/feedback links land on the
+    // right family (partner-portal tab-in-URL convention).
+    const m = new URLSearchParams(window.location.search).get("media");
+    return m === "cd" || m === "cassette" ? m : "vinyl";
+  });
   // Item 28 — hide/restore print-prep template tiles (per-format; server
   // default when never touched is ["booklet"]).
   const setHiddenTemplates = useMutation({
@@ -2208,7 +2218,7 @@ export function PressPackagePricingCatalog({
             </h1>
             <div className="inline-flex items-center rounded-full" style={{ marginTop: 16, padding: 3, backgroundColor: dark ? CARD_SOFT : "#ececf0" }} role="tablist" aria-label="Catalog format">
               {(() => {
-                const vinylActive = !!fmt && VINYL_FORMATS.includes(fmt);
+                const vinylActive = mediaTab === "vinyl" && !!fmt && VINYL_FORMATS.includes(fmt);
                 const pill = (active: boolean) =>
                   active
                     ? { color: BLUE, backgroundColor: dark ? PILL_ACTIVE : "var(--apple-pill, #fff)", boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.4)" : "0 1px 3px rgba(0,0,0,.08)" }
@@ -2221,20 +2231,42 @@ export function PressPackagePricingCatalog({
                       aria-selected={vinylActive}
                       className="rounded-full px-4 py-1.5 text-[12.5px] font-semibold"
                       style={pill(vinylActive)}
-                      onClick={() => { if (offeredVinyl[0]) setActiveTab(offeredVinyl[0]); }}
+                      onClick={() => { setMediaTab("vinyl"); if (offeredVinyl[0]) setActiveTab(offeredVinyl[0]); }}
                       data-testid="format-pill-vinyl"
                     >
                       Vinyl
                     </button>
-                    <button type="button" disabled title="Coming" className="rounded-full px-4 py-1.5 text-[12.5px] font-semibold opacity-40 cursor-default" style={{ color: INK }} data-testid="format-pill-cd">CD</button>
-                    <button type="button" disabled title="Coming" className="rounded-full px-4 py-1.5 text-[12.5px] font-semibold opacity-40 cursor-default" style={{ color: INK }} data-testid="format-pill-cassette">Cassette</button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={mediaTab === "cd"}
+                      className="rounded-full px-4 py-1.5 text-[12.5px] font-semibold"
+                      style={pill(mediaTab === "cd")}
+                      onClick={() => setMediaTab("cd")}
+                      data-testid="format-pill-cd"
+                    >
+                      CD
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={mediaTab === "cassette"}
+                      className="rounded-full px-4 py-1.5 text-[12.5px] font-semibold"
+                      style={pill(mediaTab === "cassette")}
+                      onClick={() => setMediaTab("cassette")}
+                      data-testid="format-pill-cassette"
+                    >
+                      Cassette
+                    </button>
                   </>
                 );
               })()}
             </div>
           </div>
           <div style={{ marginTop: 24 }}>
-            <SectionLabel>Vinyl · Package pricing</SectionLabel>
+            <SectionLabel>
+              {mediaTab === "cd" ? "CD · Package pricing" : mediaTab === "cassette" ? "Cassette · Package pricing" : "Vinyl · Package pricing"}
+            </SectionLabel>
           {!hideHeading ? (
               <h1 className="tracking-tight" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.05, marginTop: 10 }}>
               <span style={{ color: INK }}>
@@ -2243,7 +2275,7 @@ export function PressPackagePricingCatalog({
                 {" packages."}
                 {" "}
               </span>
-              <span style={{ color: FAINT, fontWeight: 600 }}>For the record.</span>
+              <span style={{ color: FAINT, fontWeight: 600 }}>{mediaTab === "cd" ? "On disc." : mediaTab === "cassette" ? "On tape." : "For the record."}</span>
             </h1>
           ) : (
             <h2 className="tracking-tight" style={{ fontSize: 22, fontWeight: 700, marginTop: 6 }}>
@@ -2253,11 +2285,15 @@ export function PressPackagePricingCatalog({
                 {" packages."}
                 {" "}
               </span>
-              <span style={{ color: FAINT, fontWeight: 600 }}>For the record.</span>
+              <span style={{ color: FAINT, fontWeight: 600 }}>{mediaTab === "cd" ? "On disc." : mediaTab === "cassette" ? "On tape." : "For the record."}</span>
             </h2>
           )}
            <p className="text-[15px]" style={{ color: SUBINK, marginTop: 12, maxWidth: 560, lineHeight: 1.5 }}>
-            Quote the way you already do — a single cost per finished package, per run size. Record, jacket, inner sleeve, and labels are all in it. No per-piece math.
+            {mediaTab === "cd"
+              ? "Every CD is a 12 cm silver disc. What you choose here is how it's printed, what it lives in, and what the booklet holds."
+              : mediaTab === "cassette"
+                ? "One shell, one speed. What you choose here is the shell color, how the shell gets its ink, and what wraps it."
+                : "Quote the way you already do — a single cost per finished package, per run size. Record, jacket, inner sleeve, and labels are all in it. No per-piece math."}
           </p>
           </div>
         </div>
@@ -2290,6 +2326,20 @@ export function PressPackagePricingCatalog({
         <div className="py-10 text-[13.5px]" style={{ color: SUBINK }}>
           Loading…
         </div>
+      ) : mediaTab === "cd" && catalog.cdCatalog ? (
+        <CdCatalogBody
+          pressId={pressId}
+          canEdit={canEdit}
+          logoUrl={pressRow?.labelLogoUrl ?? pressRow?.logoUrl ?? pressLogoUrl}
+          data={catalog.cdCatalog}
+        />
+      ) : mediaTab === "cassette" && catalog.cassetteCatalog ? (
+        <CassetteCatalogBody
+          pressId={pressId}
+          canEdit={canEdit}
+          logoUrl={pressRow?.labelLogoUrl ?? pressRow?.logoUrl ?? pressLogoUrl}
+          data={catalog.cassetteCatalog}
+        />
       ) : !fmt ? null : (
         <fieldset disabled={!canEdit} className="mt-8 min-w-0">
           {/* Layout (Bill, Aug 09 2026):
