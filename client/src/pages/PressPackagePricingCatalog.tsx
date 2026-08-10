@@ -2930,12 +2930,17 @@ export function PressPackagePricingCatalog({
                           // Task #2998 — Archive soft-retires via the new
                           // /tiers/:id/archive route (pressed-record history kept).
                           canRemove={canEdit}
-                          // Per Bill (2026-08-10) — clicking the ALREADY-selected
-                          // tile collapses the grid back to the summary row;
-                          // clicking a different tile just switches selection.
+                          // Per Bill (2026-08-10) — choosing ANY type (a
+                          // different one or re-clicking the current one)
+                          // collapses the grid back to the summary row, and
+                          // the colors section below updates in the same
+                          // motion. Rule for all collapsible pickers built
+                          // this way: open to choose, choice closes it.
+                          // (Reorder mode is the exception — selection
+                          // changes but the grid stays open for dragging.)
                           onPick={() => {
-                            if (t.id === selectedTierId) setTypeSectionOpen(false);
-                            else setSelectedTierId(t.id);
+                            if (t.id !== selectedTierId) setSelectedTierId(t.id);
+                            if (!reorderTypesOn) setTypeSectionOpen(false);
                           }}
                           onSave={(name, _sizes, previewImageUrl) => {
                             // Name + preview image persist via the tier PATCH route.
