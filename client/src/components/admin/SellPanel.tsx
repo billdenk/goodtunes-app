@@ -137,6 +137,10 @@ type Manufacturer = {
   // logo the Albums list shows. Operator-only; never on a fan cover.
   domain?: string | null;
   logoUrl: string | null;
+  // Logo policy (Aug 10 2026) — optional raster identity icon, used ONLY
+  // for identification chips/avatars (falls back to the SVG logoUrl).
+  // Never used on product surfaces (placeholder covers, center labels).
+  identityIconUrl?: string | null;
   // Task #2261 — the press's uploaded default jacket image
   // (`manufacturers.vinyl_placeholder_url`). Drives the admin package
   // designer's no-art placeholder so it matches the press catalog editor.
@@ -217,7 +221,7 @@ type InvitedPressResponse = {
   // Task #2369 — vinylPlaceholderUrl added so the package designer and
   // album list can show the effective press's jacket/logo placeholder when
   // no invited press is stamped.
-  effectivePress?: { id: string; name: string; domain?: string | null; logoUrl?: string | null; vinylPlaceholderUrl?: string | null } | null;
+  effectivePress?: { id: string; name: string; domain?: string | null; logoUrl?: string | null; identityIconUrl?: string | null; vinylPlaceholderUrl?: string | null } | null;
   // Task #2115 — the invited press's uploaded print templates, embedded
   // here so the artist-readable Package tab can offer template downloads.
   templates?: PressTemplate[];
@@ -1872,9 +1876,9 @@ function PressInfoPopover({ press }: { press: Manufacturer }) {
       >
         <div className="flex flex-col gap-3">
           <div className="flex items-start gap-3">
-            {press.logoUrl ? (
+            {(press.identityIconUrl ?? press.logoUrl) ? (
               <img
-                src={press.logoUrl}
+                src={press.identityIconUrl ?? press.logoUrl ?? undefined}
                 alt=""
                 className="w-10 h-10 rounded-md object-cover border border-slate-200 shrink-0"
                 data-testid={`img-press-logo-${press.id}`}
@@ -2631,7 +2635,7 @@ function SkuRow({
   // from the first saved SKU's press_id) is threaded here so the jacket
   // placeholder and thumb can fall back to it. Only the logo + jacket
   // fields are used; all other Manufacturer members default to null.
-  effectivePressItself?: { id: string; name: string; logoUrl?: string | null; vinylPlaceholderUrl?: string | null } | null;
+  effectivePressItself?: { id: string; name: string; logoUrl?: string | null; identityIconUrl?: string | null; vinylPlaceholderUrl?: string | null } | null;
   // Task #2314 — true while the album's invited-press query is still
   // loading, so the jacket preview tiles can show a pulsing skeleton and
   // crossfade the branded placeholder in once it resolves (instead of the
@@ -4954,14 +4958,14 @@ function SkuRow({
                       aria-label={`Quoting press: ${invitedPressItself.name}. Click to see other qualified presses.`}
                       data-testid={`button-press-switcher-${format}`}
                     >
-                      {invitedPressItself.logoUrl ? (
+                      {(invitedPressItself.identityIconUrl ?? invitedPressItself.logoUrl) ? (
                         // Task #673 — presses sit in a rounded-rect tile;
                         // circles are reserved for people/bands, so a
                         // round logo (e.g. Hellbender) no longer reads
                         // as an avatar.
                         <span className="w-5 h-5 rounded-[4px] overflow-hidden bg-white border border-slate-200 flex-shrink-0">
                           <img
-                            src={invitedPressItself.logoUrl}
+                            src={invitedPressItself.identityIconUrl ?? invitedPressItself.logoUrl ?? undefined}
                             alt=""
                             className="w-full h-full object-cover"
                           />
@@ -4985,10 +4989,10 @@ function SkuRow({
                         // tile (people/bands keep circles). object-cover
                         // crops a round logo to the square so Hellbender
                         // stops reading as an avatar.
-                        const logo = p.logoUrl ? (
+                        const logo = (p.identityIconUrl ?? p.logoUrl) ? (
                           <span className="w-5 h-5 rounded-[4px] overflow-hidden bg-white border border-slate-200 flex-shrink-0">
                             <img
-                              src={p.logoUrl}
+                              src={p.identityIconUrl ?? p.logoUrl ?? undefined}
                               alt=""
                               className="w-full h-full object-cover"
                             />

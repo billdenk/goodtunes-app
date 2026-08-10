@@ -308,4 +308,6 @@ local project main (HEAD):
 mirror was behind would block EVERY task (task HEAD is always ahead of the mirror pre-merge).
 Diverged is the only genuinely-actionable-and-never-false state, so it's the only hard fail.
 
+**Secret DROPPED from the whole environment (observed 2026-08-10):** `GITHUB_MIRROR_DEPLOY_KEY` no longer appears in the repl's secret list at all (likely the same Enterprise migration that dropped the prod Stripe connector) — not just hidden from the main-agent shell. Consequence: `mirror-freshness` SKIPs and every merge's `sync_github_build_mirror` silently self-skips, so the mirror goes stale until Bill re-adds the private deploy key as the secret or pushes manually from the Git panel. Republish never touches GitHub.
+
 **Main-agent env lacks the deploy key (observed 2026-08-08):** `GITHUB_MIRROR_DEPLOY_KEY` is NOT exposed in the main-agent shell (empty env var → "error in libcrypto" with a zero-byte key file). The FF-push recipe above only works where the secret is present (post-merge/task env). From the main agent, land doc/canon notes on project main and let the next merge mirror them; a push to a non-main mirror branch needs a task agent.

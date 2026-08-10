@@ -1713,7 +1713,7 @@ export function registerCommerceRoutes(app: Express) {
       // (mirrors batchEnrichWithPressPlaceholders in routes.ts), so albums
       // homed to a press but with no saved SKU still show the press placeholder
       // in the Package designer jacket thumb and VinylPreview.
-      let effectivePress: { id: string; name: string; domain: string | null; logoUrl: string | null; vinylPlaceholderUrl: string | null } | null = null;
+      let effectivePress: { id: string; name: string; domain: string | null; logoUrl: string | null; identityIconUrl: string | null; vinylPlaceholderUrl: string | null } | null = null;
       // Track where the effective press came from so the album Press panel
       // can surface an accurate origin label rather than the misleading
       // "Set on the artist's page" note.
@@ -1785,7 +1785,7 @@ export function registerCommerceRoutes(app: Express) {
         if (resolvedPressId) {
           const p = await storage.getManufacturerById(resolvedPressId);
           if (p) {
-            effectivePress = { id: p.id, name: p.name, domain: (p as any).domain ?? null, logoUrl: (p as any).logoUrl ?? null, vinylPlaceholderUrl: (p as any).vinylPlaceholderUrl ?? null };
+            effectivePress = { id: p.id, name: p.name, domain: (p as any).domain ?? null, logoUrl: (p as any).logoUrl ?? null, identityIconUrl: (p as any).identityIconUrl ?? null, vinylPlaceholderUrl: (p as any).vinylPlaceholderUrl ?? null };
           }
         }
       } catch {}
@@ -1874,6 +1874,10 @@ export function registerCommerceRoutes(app: Express) {
         // list shows. Operator-only payload; never reaches a fan cover.
         domain: (press as any).domain ?? null,
         logoUrl: (press as any).logoUrl ?? null,
+        // Logo policy (Aug 10 2026) — optional raster identity icon for
+        // in-app identification chips/avatars only. Product surfaces
+        // (placeholder covers, center labels) keep using the SVG logoUrl.
+        identityIconUrl: (press as any).identityIconUrl ?? null,
         // Task #2261 — the press's uploaded default jacket image, so the
         // admin package designer can show the same branded jacket art the
         // press catalog editor shows on an art-less album (logo is the

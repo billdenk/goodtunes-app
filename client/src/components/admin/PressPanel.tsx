@@ -279,9 +279,9 @@ export function PressPanel({
   // `defaultPreflightVendor()` (MRP) — the same platform-wide default —
   // so the two panels cannot diverge in either the set or unset case.
   const { data: invitedPress } = useQuery<{
-    press: { name: string | null; logoUrl?: string | null } | null;
+    press: { name: string | null; logoUrl?: string | null; identityIconUrl?: string | null } | null;
     // Task #1837 — effective plant from saved SKUs when no invited-by-press stamp.
-    effectivePress?: { id: string; name: string; logoUrl?: string | null } | null;
+    effectivePress?: { id: string; name: string; logoUrl?: string | null; identityIconUrl?: string | null } | null;
     // Origin of the resolved plant: "invited" = invitedByPressId explicitly set
     // on the artist/label; "artist_default" / "label_default" = homed via
     // default_press_id; "sku_derived" = derived from this album's vinyl SKUs.
@@ -468,8 +468,14 @@ export function PressPanel({
   // Task #2701 — right-aligned "Press:" readout on the sub-tab row.
   const pressReadoutName =
     resolvedPressName ?? VENDOR_SPECS[vendorId]?.label ?? vendorId;
+  // Identity readout — prefer the raster identity icon (logo policy
+  // Aug 10 2026), fall back to the SVG logo.
   const pressLogoUrl =
-    invitedPress?.press?.logoUrl ?? invitedPress?.effectivePress?.logoUrl ?? null;
+    invitedPress?.press?.identityIconUrl ??
+    invitedPress?.press?.logoUrl ??
+    invitedPress?.effectivePress?.identityIconUrl ??
+    invitedPress?.effectivePress?.logoUrl ??
+    null;
 
   const preflightChip =
     preflightState === "pass" ? (

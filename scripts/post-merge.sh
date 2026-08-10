@@ -397,6 +397,30 @@ SQL
 migrate_album_presave_streaming_dates dev  "${DATABASE_URL:-}"
 migrate_album_presave_streaming_dates prod "${PROD_DATABASE_URL:-}"
 
+# Logo format policy (Aug 10 2026) — optional press "identity icon"
+# (PNG/JPG/SVG) used only for in-app identification surfaces (avatar circle
+# by the press name, activity feeds); product surfaces keep the SVG logo.
+migrate_manufacturers_identity_icon() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping manufacturers identity_icon_url migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE manufacturers
+  ADD COLUMN IF NOT EXISTS identity_icon_url text;
+COMMIT;
+SQL
+  then
+    echo "post-merge: manufacturers identity_icon_url migration ok on $label"
+  else
+    echo "post-merge: WARNING — manufacturers identity_icon_url migration failed on $label (continuing)"
+  fi
+}
+migrate_manufacturers_identity_icon dev  "${DATABASE_URL:-}"
+migrate_manufacturers_identity_icon prod "${PROD_DATABASE_URL:-}"
+
 # Task #2785 — Manufacturing ledger funding source. Adds `funding_source` to
 # manufacturer_payment_steps so each step tracks whether Bill pays from platform
 # sales ('goodtunes_sales') or the artist pays GoodTunes first ('artist_direct').

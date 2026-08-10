@@ -347,7 +347,13 @@ async function resolveScope(kind: ScopeKind, req: Request): Promise<ResolvedScop
     table === "manufacturers" ? sql`manufacturers` :
     table === "fulfillment_partners" ? sql`fulfillment_partners` :
     sql`vendors`;
-  const r = await db.execute<any>(sql`SELECT id, name, logo_url FROM ${tableSql} WHERE id = ${id} LIMIT 1`);
+  // Logo policy (Aug 10 2026) — presses may carry a raster identity icon
+  // preferred on identification surfaces like this dashboard scope chip.
+  const logoExpr =
+    table === "manufacturers"
+      ? sql`COALESCE(identity_icon_url, logo_url) AS logo_url`
+      : sql`logo_url`;
+  const r = await db.execute<any>(sql`SELECT id, name, ${logoExpr} FROM ${tableSql} WHERE id = ${id} LIMIT 1`);
   const row = ((r as any).rows ?? [])[0];
   if (!row) return { error: "Scope not found", status: 404 };
   const subKind = table === "manufacturers" ? "manufacturer" : table === "fulfillment_partners" ? "fulfillment" : "vendor";

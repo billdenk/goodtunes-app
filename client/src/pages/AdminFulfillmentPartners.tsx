@@ -566,8 +566,8 @@ function PressFulfillmentCard({ press }: { press: Manufacturer }) {
       data-testid={`card-fulfillment-press-${press.id}`}
     >
       <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
-        {press.logoUrl ? (
-          <img src={press.logoUrl} alt={press.name} className="w-full h-full object-cover" />
+        {(press.identityIconUrl ?? press.logoUrl) ? (
+          <img src={press.identityIconUrl ?? press.logoUrl ?? undefined} alt={press.name} className="w-full h-full object-cover" />
         ) : (
           <Factory className="w-6 h-6 text-slate-300" />
         )}
@@ -599,8 +599,8 @@ function PressFulfillmentRow({ press }: { press: Manufacturer }) {
     >
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-md bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center overflow-hidden flex-shrink-0">
-          {press.logoUrl ? (
-            <img src={press.logoUrl} alt="" className="w-full h-full object-cover" />
+          {(press.identityIconUrl ?? press.logoUrl) ? (
+            <img src={press.identityIconUrl ?? press.logoUrl ?? undefined} alt="" className="w-full h-full object-cover" />
           ) : (
             <Factory className="w-5 h-5 text-slate-400" strokeWidth={1.5} />
           )}

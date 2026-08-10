@@ -4428,6 +4428,13 @@ export const manufacturers = pgTable("manufacturers", {
   // whitelabel header. Distinct from the square `logoUrl` (lists/credits).
   // When set, the press portal's top-left rail shows this instead of the
   // small square icon + name text. Null = fall back to today's layout.
+  // Logo format policy (ratified Aug 10 2026) — optional "identity icon"
+  // (PNG/JPG/SVG) used ONLY for in-app identification: the avatar circle
+  // next to the press name, activity feeds, lists, and similar spots.
+  // Null = those surfaces fall back to the SVG `logoUrl`. This icon must
+  // NEVER be used on product surfaces (placeholder covers, vinyl center
+  // labels, configurator) — those keep rendering from the SVG logo fields.
+  identityIconUrl: text("identity_icon_url"),
   navLogoUrl: text("nav_logo_url"),
   // Task #2750 — light-background variants + Square/Tall format.
   // Each of the three logo formats has a dark-bg and light-bg slot so

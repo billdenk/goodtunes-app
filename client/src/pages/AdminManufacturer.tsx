@@ -239,6 +239,10 @@ export function AdminManufacturer() {
   const id = params?.id ?? "";
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [logoEditorOpen, setLogoEditorOpen] = useState(false);
+  // Logo policy (Aug 10 2026) — optional raster "identity icon" used only
+  // for in-app identification (avatar chips, activity feeds). Product
+  // surfaces (covers/center labels) keep rendering from the SVG logo.
+  const [identityIconEditorOpen, setIdentityIconEditorOpen] = useState(false);
   // Dark-mode header logo: black marks (SVGs or black-on-transparent PNGs
   // like the Memphis badge) vanish on the charcoal backdrop — flip them
   // white and ring the tile dark gray. Colored logos/photos are left alone
@@ -448,6 +452,29 @@ export function AdminManufacturer() {
                 <Pencil className="w-4 h-4" />
               </span>
             </span>
+            {/* Identity icon chip (logo policy Aug 10 2026) — small avatar
+                circle overlaid on the logo tile's corner. Click opens its own
+                editor; stops propagation so it doesn't open the logo dialog. */}
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); setIdentityIconEditorOpen(true); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault(); e.stopPropagation(); setIdentityIconEditorOpen(true);
+                }
+              }}
+              className="absolute bottom-1 right-1 w-7 h-7 rounded-full bg-white border border-slate-200 shadow-sm overflow-hidden flex items-center justify-center hover:ring-2 hover:ring-[var(--brand-blue)]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]"
+              aria-label="Edit identity icon"
+              title="Identity icon — shown next to the press name in lists and feeds"
+              data-testid="button-edit-press-identity-icon"
+            >
+              {(m as any).identityIconUrl ? (
+                <img src={(m as any).identityIconUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <Pencil className="w-3 h-3 text-slate-400" />
+              )}
+            </span>
           </button>
           <PressLogoEditorDialog
             name={m.name}
@@ -460,6 +487,23 @@ export function AdminManufacturer() {
             }}
             FallbackIcon={Factory}
             testIdPrefix="press"
+          />
+          {/* Identity icon (logo policy Aug 10 2026) — optional PNG/JPG used
+              only for identification chips/avatars; never covers or labels. */}
+          <PressLogoEditorDialog
+            name={m.name}
+            logoUrl={(m as any).identityIconUrl ?? null}
+            apiPath={`/api/admin/manufacturers/${m.id}`}
+            fieldName="identityIconUrl"
+            title="Identity icon"
+            hint="Optional PNG or JPG shown next to the press name in lists and activity feeds. Product surfaces (covers, center labels) always use the SVG logo. Remove it to fall back to the SVG here too."
+            open={identityIconEditorOpen}
+            onOpenChange={setIdentityIconEditorOpen}
+            onInvalidate={() => {
+              void invalidateAdminEntity(queryClient, "manufacturer", m.id);
+            }}
+            FallbackIcon={Factory}
+            testIdPrefix="press-identity-icon"
           />
           <div className="flex-1 min-w-0">
             <h1

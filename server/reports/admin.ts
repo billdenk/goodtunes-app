@@ -638,7 +638,7 @@ export async function dashboardWinning(ctx: AdminReportContext) {
   const pressIds = Array.from(new Set(Array.from(pressByAlbum.values())));
   const pressRows = pressIds.length
     ? await db
-        .select({ id: manufacturers.id, name: manufacturers.name, location: manufacturers.location, logoUrl: manufacturers.logoUrl, squareLogoUrl: manufacturers.squareLogoUrl, lightSquareLogoUrl: manufacturers.lightSquareLogoUrl })
+        .select({ id: manufacturers.id, name: manufacturers.name, location: manufacturers.location, logoUrl: manufacturers.logoUrl, identityIconUrl: manufacturers.identityIconUrl, squareLogoUrl: manufacturers.squareLogoUrl, lightSquareLogoUrl: manufacturers.lightSquareLogoUrl })
         .from(manufacturers)
         .where(and(inArray(manufacturers.id, pressIds), isNull(manufacturers.deletedAt)))
     : [];
@@ -698,7 +698,9 @@ export async function dashboardWinning(ctx: AdminReportContext) {
         id,
         name: p?.name ?? "Unknown press",
         location: p?.location ?? null,
-        logoUrl: p?.lightSquareLogoUrl ?? p?.squareLogoUrl ?? p?.logoUrl ?? null,
+        // Identity-only surface — prefer the raster identity icon (logo
+        // policy Aug 10 2026), then the square/light variants, then SVG.
+        logoUrl: p?.identityIconUrl ?? p?.lightSquareLogoUrl ?? p?.squareLogoUrl ?? p?.logoUrl ?? null,
         cents: v.cents,
         units: v.units,
         deltaPct: deltaPct(v.cents, pressPrior.get(id)?.cents ?? 0),

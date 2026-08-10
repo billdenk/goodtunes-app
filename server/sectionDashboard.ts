@@ -459,7 +459,7 @@ async function buildPressesRollup(
   const { pressAlbumIds, pressUnits } = await import("./partnerDashboard");
 
   const pressRows = await db.execute<any>(sql`
-    SELECT id, name, logo_url, location, chart_color FROM manufacturers
+    SELECT id, name, COALESCE(identity_icon_url, logo_url) AS logo_url, location, chart_color FROM manufacturers
     WHERE deleted_at IS NULL AND does_vinyl = TRUE
     ORDER BY name ASC
   `).catch(() => ({ rows: [] }) as any);

@@ -19438,6 +19438,7 @@ export async function registerRoutes(
       id: m.id,
       name: m.name,
       logoUrl: (m as any).logoUrl ?? null,
+      identityIconUrl: (m as any).identityIconUrl ?? null,
       navLogoUrl: (m as any).navLogoUrl ?? null,
       lightLogoUrl: (m as any).lightLogoUrl ?? null,
       lightNavLogoUrl: (m as any).lightNavLogoUrl ?? null,
@@ -19671,6 +19672,9 @@ export async function registerRoutes(
     if (b.name !== undefined) u.name = String(b.name);
     if (b.domain !== undefined) u.domain = normDomain(b.domain);
     if (b.logoUrl !== undefined) u.logoUrl = strOrNull(b.logoUrl);
+    // Logo policy (Aug 10 2026) — optional raster identity icon for in-app
+    // identification surfaces only; never product surfaces (covers/labels).
+    if (b.identityIconUrl !== undefined) u.identityIconUrl = strOrNull(b.identityIconUrl);
     if (b.coverUrl !== undefined) u.coverUrl = strOrNull(b.coverUrl);
     // Operator/press-editable override for the catalog VinylPreview jacket
     // art. Null clears it back to the hard-coded per-domain placeholder.
@@ -28857,7 +28861,9 @@ export async function registerRoutes(
           return {
             pressId: m.id,
             name: m.name,
-            logoUrl: m.logoUrl ?? null,
+            // Identity-only surface (press-match picker/quote chips) —
+            // prefer the raster identity icon, fall back to the SVG logo.
+            logoUrl: m.identityIconUrl ?? m.logoUrl ?? null,
             location: m.location ?? null,
             turnaroundWeeksMin: m.turnaroundWeeksMin ?? null,
             turnaroundWeeksMax: m.turnaroundWeeksMax ?? null,

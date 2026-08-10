@@ -15,6 +15,9 @@ type Manufacturer = {
   id: string;
   name: string;
   logoUrl: string | null;
+  // Optional raster identity icon (logo policy Aug 10 2026) — preferred on
+  // identification chips; falls back to the SVG logoUrl.
+  identityIconUrl?: string | null;
 };
 
 type RoleInfo = { role: string; roleScopeId: string | null };
@@ -146,8 +149,8 @@ export function InvitedByPressPanel({
       </div>
       {current ? (
         <div className="flex items-center gap-3" data-testid="row-current-invited-press">
-          {current.logoUrl ? (
-            <img src={current.logoUrl} alt="" className="w-9 h-9 rounded-md object-cover border border-slate-200" />
+          {(current.identityIconUrl ?? current.logoUrl) ? (
+            <img src={current.identityIconUrl ?? current.logoUrl ?? undefined} alt="" className="w-9 h-9 rounded-md object-cover border border-slate-200" />
           ) : (
             <div
               className="w-9 h-9 rounded-md bg-slate-100 border border-slate-200 flex items-center justify-center"
@@ -265,8 +268,8 @@ export function InvitedByPressPanel({
                         className="w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 disabled:opacity-50"
                         data-testid={`option-press-${p.id}`}
                       >
-                        {p.logoUrl ? (
-                          <img src={p.logoUrl} alt="" className="w-6 h-6 rounded object-cover" />
+                        {(p.identityIconUrl ?? p.logoUrl) ? (
+                          <img src={p.identityIconUrl ?? p.logoUrl ?? undefined} alt="" className="w-6 h-6 rounded object-cover" />
                         ) : (
                           <div className="w-6 h-6 rounded bg-slate-100" />
                         )}
