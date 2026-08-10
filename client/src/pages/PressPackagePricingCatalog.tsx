@@ -3035,7 +3035,9 @@ function TurnaroundRow({
 type PressTemplateSpecRow = {
   id: string;
   format: AlbumFormat;
-  componentKey: "jacket" | "labels" | "inner_sleeve" | "booklet";
+  // Vinyl pieces plus cassette pieces (shell / j_card / o_card / sticker) —
+  // the table stores a plain string; the per-surface tile lists constrain it.
+  componentKey: string;
   variantKey: string;
   discCount: number;
   artboardWInches: number | null;
@@ -3114,12 +3116,14 @@ function middleTruncate(s: string, max = 26): string {
   return `${s.slice(0, max - 1 - keep)}…${s.slice(-keep)}`;
 }
 
-function TemplateTilesGrid({
+export function TemplateTilesGrid({
   pressId,
   fmt,
   canEdit,
   hiddenTemplates,
   onSetHidden,
+  tiles = TEMPLATE_TILES,
+  allowHide = true,
 }: {
   pressId: string;
   fmt: AlbumFormat;
@@ -3128,6 +3132,10 @@ function TemplateTilesGrid({
   // untouched: ["booklet"]).
   hiddenTemplates: string[];
   onSetHidden: (keys: string[]) => void;
+  // Cassette/CD reuse: per-format piece list; hide is vinyl-only (its
+  // persistence rides the vinyl formats PUT).
+  tiles?: { key: string; componentKey: string; label: string; sub: string }[];
+  allowHide?: boolean;
 }) {
   const { toast } = useToast();
   const qk = ["/api/admin/manufacturers", pressId, "template-specs"];
@@ -3140,8 +3148,8 @@ function TemplateTilesGrid({
   const [menuKey, setMenuKey] = useState<string | null>(null);
   const [dialogKey, setDialogKey] = useState<string | null>(null);
   const hiddenSet = new Set(hiddenTemplates);
-  const visibleTiles = TEMPLATE_TILES.filter((t) => !hiddenSet.has(t.componentKey));
-  const hiddenTiles = TEMPLATE_TILES.filter((t) => hiddenSet.has(t.componentKey));
+  const visibleTiles = tiles.filter((t) => !hiddenSet.has(t.componentKey));
+  const hiddenTiles = tiles.filter((t) => hiddenSet.has(t.componentKey));
 
   const save = useMutation({
     mutationFn: async (body: Partial<PressTemplateSpecRow> & { componentKey: string }) => {
@@ -3175,7 +3183,7 @@ function TemplateTilesGrid({
     onError: (e: any) => toast({ title: e?.message || "Couldn't remove template", variant: "destructive" }),
   });
 
-  const dialogTile = TEMPLATE_TILES.find((t) => t.key === dialogKey) ?? null;
+  const dialogTile = tiles.find((t) => t.key === dialogKey) ?? null;
 
   return (
     <>
@@ -3217,18 +3225,20 @@ function TemplateTilesGrid({
                   >
                     {byComponent(tile.componentKey)?.templateFileUrl ? "Replace…" : "Add file…"}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuKey(null);
-                      onSetHidden(Array.from(new Set([...hiddenTemplates, tile.componentKey])));
-                    }}
-                    className="w-full rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-black/5"
-                    style={{ color: INK }}
-                    data-testid={`template-hide-${tile.key}`}
-                  >
-                    Hide for now
-                  </button>
+                  {allowHide && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuKey(null);
+                        onSetHidden(Array.from(new Set([...hiddenTemplates, tile.componentKey])));
+                      }}
+                      className="w-full rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-black/5"
+                      style={{ color: INK }}
+                      data-testid={`template-hide-${tile.key}`}
+                    >
+                      Hide for now
+                    </button>
+                  )}
                 </PopoverContent>
               </Popover>
             )}

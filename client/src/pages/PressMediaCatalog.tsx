@@ -19,6 +19,8 @@ import { Check, Paperclip } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { TemplateTilesGrid } from "./PressPackagePricingCatalog";
+import type { AlbumFormat } from "@shared/schema";
 import cdShiny from "@/assets/cd-cassette/cd-shiny.png";
 import cdWhite from "@/assets/cd-cassette/cd-white.png";
 import shellBlack from "@/assets/cd-cassette/shell-black.png";
@@ -1168,21 +1170,34 @@ export function CassetteCatalogBody({
             </div>
           </section>
 
-          {/* Print prep */}
+          {/* Print prep — same per-piece template slots as vinyl (Bill
+              2026-08-10): on-shell print, J-card, O-card, paper label. */}
           <section>
             <TwoTone a="Print prep." b="The template for your templates." />
-            <div className="mt-5 rounded-2xl flex items-center gap-3 px-5" style={{ height: 64, backgroundColor: CARD, border: `1px dashed rgba(255,255,255,0.2)` }}>
-              <Paperclip className="w-4 h-4 flex-shrink-0" style={{ color: SUBINK }} />
-              <span className="text-[13px]" style={{ color: SUBINK }}>
-                Attach a file or paste a link to your print template…
-              </span>
-            </div>
+            <TemplateTilesGrid
+              pressId={pressId}
+              fmt={"cassette" as AlbumFormat}
+              canEdit={canEdit}
+              hiddenTemplates={[]}
+              onSetHidden={() => {}}
+              allowHide={false}
+              tiles={CASSETTE_TEMPLATE_TILES}
+            />
           </section>
         </div>
       </div>
     </fieldset>
   );
 }
+
+// Cassette print pieces — every printable part of the package gets its own
+// template slot, mirroring vinyl's jacket/labels/inner-sleeve/booklet grid.
+const CASSETTE_TEMPLATE_TILES = [
+  { key: "shell", componentKey: "shell", label: "On-shell print", sub: "Direct-to-shell imprint template" },
+  { key: "j_card", componentKey: "j_card", label: "J-card", sub: "Folded insert template" },
+  { key: "o_card", componentKey: "o_card", label: "O-card", sub: "Slide-over sleeve template" },
+  { key: "sticker", componentKey: "sticker", label: "Paper label", sub: "Shell sticker template" },
+];
 
 // The dark canvas the handoff pages sit on (the pages are dark-canon even
 // when the surrounding admin shell is light).

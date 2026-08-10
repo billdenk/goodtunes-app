@@ -33875,7 +33875,10 @@ export async function registerRoutes(
   // NEVER fetched server-side (no SSRF surface).
   const templateSpecBodySchema = z.object({
     format: z.enum(["7_inch", "12_lp", "12_double", "cassette", "cd"]),
-    componentKey: z.enum(["jacket", "labels", "inner_sleeve", "booklet"]),
+    // Vinyl pieces + cassette pieces (Bill 2026-08-10: cassette gets the
+    // same template slots as vinyl — on-shell print, J-card, O-card, paper
+    // label sticker).
+    componentKey: z.enum(["jacket", "labels", "inner_sleeve", "booklet", "shell", "j_card", "o_card", "sticker"]),
     variantKey: z.string().trim().max(40).optional().default(""),
     discCount: z.number().int().min(0).max(12).optional().default(0),
     artboardWInches: z.number().positive().max(120).nullable().optional(),
