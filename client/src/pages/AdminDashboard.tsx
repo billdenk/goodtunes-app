@@ -36,6 +36,7 @@ import {
   Truck,
   CreditCard,
   Clock3,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   ArrowRight,
@@ -541,10 +542,25 @@ function AttentionSection({ ops, pending }: { ops?: OpsData; pending?: ReferralP
     ops?.stuckPayoutCount ? { Icon: Clock3, title: `${ops.stuckPayoutCount} payouts stuck in transit`, detail: "Transfer created but not confirmed by Stripe. Retry or inspect.", action: "Review", href: "/admin/reports", tone: "warning", link: true } : null,
     pending?.payableCount ? { Icon: Banknote, title: `${fmtUsd(pending.totalCents)} in referral payouts ready to run`, detail: `${pending.payableCount} payees clear${pending.blockedCount ? `, ${pending.blockedCount} blocked on Stripe setup` : ""}.`, action: "Run payouts", href: "#", tone: "ready", link: false } : null,
   ].filter(Boolean) as Array<any>;
-  // Zero items → the header subtitle already says "Nothing needs you
-  // before anything else." — the bar would just be noise. The section
-  // reappears (bar + collapsible cards) the moment anything qualifies.
-  if (cards.length === 0) return null;
+  // Zero items → the caught-up state is the SAME slim bar in its second
+  // state (Bill's empty-state rule, 2026-08-10) — same height, typography,
+  // and radius as the attention bar; never a large box, never nothing.
+  if (cards.length === 0) {
+    return (
+      <section
+        className="w-full flex items-center justify-between rounded-2xl bg-white border border-[var(--apple-hairline)] px-5 py-3.5"
+        data-testid="work-queue-empty"
+      >
+        <span className="flex items-center gap-2.5 text-[13px] font-semibold text-[var(--apple-ink)]">
+          <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "var(--apple-ready)" }} aria-hidden />
+          You're all caught up.
+        </span>
+        <span className="text-[12.5px] truncate text-[var(--apple-subink)]">
+          New work appears here the moment it needs you.
+        </span>
+      </section>
+    );
+  }
   return <section data-testid="ops-health-strip">
     <button
       type="button"

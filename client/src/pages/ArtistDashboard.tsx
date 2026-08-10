@@ -562,22 +562,22 @@ function RangeSwitcher({ value, onChange }: { value: PresetId; onChange: (v: Pre
 // yet, so this renders the honest empty state — the component is wired so a
 // future feed can drop straight in. ─────────────────────────────────────
 function WorkQueueEmpty() {
+  // Empty-state rule (Bill, 2026-08-10): the caught-up state is the SAME slim
+  // bar as "Needs your attention" — never a large centered box. Good news
+  // takes less room than problems.
   return (
     <section
-      className="rounded-2xl bg-white p-12 flex flex-col items-center text-center"
+      className="w-full flex items-center justify-between rounded-2xl bg-white px-5 py-3.5"
       style={{ border: `1px solid ${HAIRLINE}` }}
       data-testid="work-queue-empty"
     >
-      <span className="w-14 h-14 rounded-full inline-flex items-center justify-center" style={{ backgroundColor: "var(--apple-ready-wash)" }}>
-        <CheckCircle2 className="w-7 h-7" style={{ color: "var(--apple-ready)" }} />
-      </span>
-      <h3 className="mt-4 text-[22px] font-semibold" style={{ color: INK }}>
+      <span className="flex items-center gap-2.5 text-[13px] font-semibold" style={{ color: INK }}>
+        <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "var(--apple-ready)" }} aria-hidden />
         You're all caught up.
-      </h3>
-      <p className="mt-2 text-[15px] max-w-md leading-relaxed" style={{ color: SUBINK }}>
-        No approvals due, offers to review, or payouts to collect. New work
-        will appear here the moment it needs you.
-      </p>
+      </span>
+      <span className="text-[12.5px] truncate" style={{ color: SUBINK }}>
+        New work appears here the moment it needs you.
+      </span>
     </section>
   );
 }

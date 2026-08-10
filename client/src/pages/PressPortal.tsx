@@ -2079,21 +2079,16 @@ function PressDashboardTab({
           collapsed "Needs your attention" row. Good news takes LESS room than
           problems, not a hero card. One quiet line, nothing to open. */}
       <section
-        className="rounded-2xl bg-white flex items-center gap-2.5 px-5 py-3.5"
+        className="flex items-center justify-between rounded-2xl bg-white px-5 py-3.5"
         style={{ border: `1px solid ${PD_HAIRLINE}` }}
         data-testid="work-queue-empty"
       >
-        <span
-          className="w-6 h-6 rounded-full inline-flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: '#eaf7f0' }}
-        >
-          <CheckCircle2 className="w-3.5 h-3.5" style={{ color: '#1c8a5b' }} />
+        <span className="flex items-center gap-2.5 text-[13px] font-semibold" style={{ color: PD_INK }}>
+          <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: '#1c8a5b' }} aria-hidden />
+          You're all caught up.
         </span>
-        <h2 className="text-[13px] font-semibold" style={{ color: PD_INK, letterSpacing: '-0.01em' }}>
-          You're all caught up
-        </h2>
-        <p className="text-[13px] truncate" style={{ color: PD_SUBINK }}>
-          &mdash; no offers to accept, approvals due, or orders to ship. New work appears here the moment it needs you.
+        <p className="text-[12.5px] truncate" style={{ color: PD_SUBINK }}>
+          New work appears here the moment it needs you.
         </p>
       </section>
 
