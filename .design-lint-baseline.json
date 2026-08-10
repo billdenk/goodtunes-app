@@ -23882,6 +23882,21 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"text-[15px] font-semibold leading-tight truncate\" style={{ color: INK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"text-[12px]\" style={{ marginTop: 2, color: FAINT }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "className=\"text-[13px] font-semibold flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 6, color: BLUE }}>"
   },
   {

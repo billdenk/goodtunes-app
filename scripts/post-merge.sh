@@ -11506,3 +11506,43 @@ SQL
 }
 media_catalog_cols_20260810 dev  "${DATABASE_URL:-}"
 media_catalog_cols_20260810 prod "${PROD_DATABASE_URL:-}"
+
+# Handoff v2 press catalog: the Black type must carry its own colors (Classic
+# Black / Midnight / Jet) — the imported catalog left Black tiers empty, so the
+# page opened with "Black · 0 colors" and no black default disc. Seed the three
+# canonical black shades into every Black tier that currently has zero colors.
+# Idempotent: only fills genuinely-empty Black tiers, matched by tier NAME.
+black_colors_backfill_20260810() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then echo "post-merge: black-colors skip ($label; no URL)"; return 0; fi
+  local out rc
+  out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+WITH empty_black AS (
+  SELECT t.id AS tier_id
+  FROM press_color_tiers t
+  LEFT JOIN press_colors c ON c.tier_id = t.id
+  WHERE lower(btrim(t.name)) = 'black'
+  GROUP BY t.id
+  HAVING count(c.id) = 0
+),
+seed(name, hex, pos) AS (
+  VALUES ('Classic Black', '#111114', 0),
+         ('Midnight',      '#1a1a22', 1),
+         ('Jet',           '#0a0a0c', 2)
+)
+INSERT INTO press_colors (id, tier_id, name, swatch_hex, position)
+SELECT gen_random_uuid(), eb.tier_id, s.name, s.hex, s.pos
+FROM empty_black eb CROSS JOIN seed s;
+SQL
+  )
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    echo "post-merge: black-colors ok on $label"
+  else
+    echo "post-merge: ERROR — black-colors FAILED on $label"
+    echo "$out" | tail -5
+    return 1
+  fi
+}
+black_colors_backfill_20260810 dev  "${DATABASE_URL:-}"
+black_colors_backfill_20260810 prod "${PROD_DATABASE_URL:-}"

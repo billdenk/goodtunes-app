@@ -1714,10 +1714,19 @@ export function PressPackagePricingCatalog({
       // Deep-link: ?catalogTier=<name> preselects a type (parity screenshots)
       const wantedTier = new URLSearchParams(window.location.search).get("catalogTier");
       const match = wantedTier ? tiers.find((t) => t.name.toLowerCase() === wantedTier.toLowerCase()) : null;
-      setSelectedTierId((match ?? tiers[0]).id);
+      // Handoff default: the page opens on the Black type (Classic Black), not
+      // whichever tier happens to sort first. Prefer the Black tier by name;
+      // fall back to the first tier only when a press has no Black type.
+      const blackDefault = tiers.find((t) => t.name.trim().toLowerCase() === "black");
+      setSelectedTierId((match ?? blackDefault ?? tiers[0]).id);
     }
   }, [tiers, selectedTierId]);
   const selectedTier = tiers.find((t) => t.id === selectedTierId) ?? null;
+
+  // Handoff v2 — the "Pick a type" step collapses to a one-line summary once a
+  // type is chosen (and on first load, since Black is pre-picked). "Change"
+  // re-expands the grid; picking a type collapses it again.
+  const [typeSectionOpen, setTypeSectionOpen] = useState(false);
 
   // ── Color selection (drives the stage)
   const colors = selectedTier?.colors ?? [];
@@ -2475,6 +2484,39 @@ export function PressPackagePricingCatalog({
 
               {/* Pick a type */}
               <section id="section-pick-type" data-testid="section-pick-type">
+                {!typeSectionOpen && selectedTier ? (
+                  // Collapsed summary row — disc chip + type name + "Type · n
+                  // colors" + a blue Change link that re-expands the grid.
+                  <div
+                    className="flex items-center gap-3.5"
+                    data-testid="row-type-summary"
+                  >
+                    <VinylDisc
+                      size={40}
+                      color={selectedTier.colors[0] ?? null}
+                      labelLogoUrl={labelLogoUrl}
+                      labelBgColor={labelBgColor}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[15px] font-semibold leading-tight truncate" style={{ color: INK }}>
+                        {selectedTier.name}
+                      </div>
+                      <div className="text-[12px]" style={{ marginTop: 2, color: FAINT }}>
+                        Type · {selectedTier.colors.length} {selectedTier.colors.length === 1 ? "color" : "colors"}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="button-change-type"
+                      onClick={() => setTypeSectionOpen(true)}
+                      className="text-[13px] font-semibold flex-shrink-0"
+                      style={{ color: BLUE }}
+                    >
+                      Change
+                    </button>
+                  </div>
+                ) : (
+                <>
                 <div className="flex items-start justify-between gap-3">
                   <TwoTone lead="Pick a type." rest="Grow your offering." />
                   <div className="flex items-center gap-2.5 flex-shrink-0">
@@ -2574,6 +2616,8 @@ export function PressPackagePricingCatalog({
                   </div>
                 )}
                 {canEdit && <MoreTypesPopover onAdd={(name) => addTier.mutate(name)} adding={addTier.isPending} />}
+                </>
+                )}
               </section>
 
               {/* Pick a color (vinyl only — CD/cassette skip swatches) */}
