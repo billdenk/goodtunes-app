@@ -1697,6 +1697,25 @@ export function PressPackagePricingCatalog({
     const m = new URLSearchParams(window.location.search).get("media");
     return m === "cd" || m === "cassette" ? m : "vinyl";
   });
+  // Per Bill (2026-08-10) — switching format pills must never reset the other
+  // tabs' build state. All three panels stay mounted (CD/cassette after first
+  // visit) and toggle visibility, and each tab's scroll position is saved on
+  // leave and restored on return. No confirmation dialog — state simply holds.
+  const [visitedMedia, setVisitedMedia] = useState<{ cd: boolean; cassette: boolean }>(() => ({
+    cd: mediaTab === "cd",
+    cassette: mediaTab === "cassette",
+  }));
+  const mediaScrollRef = useRef<Record<string, number>>({});
+  const switchMedia = (next: "vinyl" | "cd" | "cassette") => {
+    if (next === mediaTab) return;
+    mediaScrollRef.current[mediaTab] = window.scrollY;
+    if (next !== "vinyl") setVisitedMedia((v) => ({ ...v, [next]: true }));
+    setMediaTab(next);
+    // Restore after the panel re-shows (double rAF so layout has settled).
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => window.scrollTo(0, mediaScrollRef.current[next] ?? 0)),
+    );
+  };
   // Item 28 — hide/restore print-prep template tiles (per-format; server
   // default when never touched is ["booklet"]).
   const setHiddenTemplates = useMutation({
@@ -2228,7 +2247,6 @@ export function PressPackagePricingCatalog({
   // the press's label logo inverted — never the white placeholder art (that
   // stays for real albums in the package builder).
   const jacketUrl = null;
-  const offeredVinyl = VINYL_FORMATS.filter((f) => offered.has(f));
   const missingVinyl = VINYL_FORMATS.filter((f) => !offered.has(f));
 
   return (
@@ -2255,7 +2273,7 @@ export function PressPackagePricingCatalog({
                       aria-selected={vinylActive}
                       className="rounded-full px-4 py-1.5 text-[12.5px] font-semibold"
                       style={pill(vinylActive)}
-                      onClick={() => { setMediaTab("vinyl"); if (offeredVinyl[0]) setActiveTab(offeredVinyl[0]); }}
+                      onClick={() => switchMedia("vinyl")}
                       data-testid="format-pill-vinyl"
                     >
                       Vinyl
@@ -2266,7 +2284,7 @@ export function PressPackagePricingCatalog({
                       aria-selected={mediaTab === "cd"}
                       className="rounded-full px-4 py-1.5 text-[12.5px] font-semibold"
                       style={pill(mediaTab === "cd")}
-                      onClick={() => setMediaTab("cd")}
+                      onClick={() => switchMedia("cd")}
                       data-testid="format-pill-cd"
                     >
                       CD
@@ -2277,7 +2295,7 @@ export function PressPackagePricingCatalog({
                       aria-selected={mediaTab === "cassette"}
                       className="rounded-full px-4 py-1.5 text-[12.5px] font-semibold"
                       style={pill(mediaTab === "cassette")}
-                      onClick={() => setMediaTab("cassette")}
+                      onClick={() => switchMedia("cassette")}
                       data-testid="format-pill-cassette"
                     >
                       Cassette
@@ -2350,22 +2368,33 @@ export function PressPackagePricingCatalog({
         <div className="py-10 text-[13.5px]" style={{ color: SUBINK }}>
           Loading…
         </div>
-      ) : mediaTab === "cd" && catalog.cdCatalog ? (
-        <CdCatalogBody
-          pressId={pressId}
-          canEdit={canEdit}
-          logoUrl={pressRow?.labelLogoUrl ?? pressRow?.logoUrl ?? pressLogoUrl}
-          data={catalog.cdCatalog}
-        />
-      ) : mediaTab === "cassette" && catalog.cassetteCatalog ? (
-        <CassetteCatalogBody
-          pressId={pressId}
-          canEdit={canEdit}
-          logoUrl={pressRow?.labelLogoUrl ?? pressRow?.logoUrl ?? pressLogoUrl}
-          data={catalog.cassetteCatalog}
-        />
-      ) : !fmt ? null : (
-        <fieldset disabled={!canEdit} className="mt-8 min-w-0">
+      ) : (
+        <>
+          {/* Per Bill (2026-08-10) — all three format panels stay mounted
+              (CD/cassette after first visit) and toggle visibility, so
+              switching pills never resets a tab's build state. */}
+          {visitedMedia.cd && catalog.cdCatalog && (
+            <div hidden={mediaTab !== "cd"}>
+              <CdCatalogBody
+                pressId={pressId}
+                canEdit={canEdit}
+                logoUrl={pressRow?.labelLogoUrl ?? pressRow?.logoUrl ?? pressLogoUrl}
+                data={catalog.cdCatalog}
+              />
+            </div>
+          )}
+          {visitedMedia.cassette && catalog.cassetteCatalog && (
+            <div hidden={mediaTab !== "cassette"}>
+              <CassetteCatalogBody
+                pressId={pressId}
+                canEdit={canEdit}
+                logoUrl={pressRow?.labelLogoUrl ?? pressRow?.logoUrl ?? pressLogoUrl}
+                data={catalog.cassetteCatalog}
+              />
+            </div>
+          )}
+          {!fmt ? null : (
+        <fieldset disabled={!canEdit} className="mt-8 min-w-0" hidden={mediaTab !== "vinyl"}>
           {/* Layout (Bill, Aug 09 2026):
               - Tablet (≥900px) and up: TWO columns — jacket pinned (sticky)
                 on the LEFT, size/type sections scrolling on the RIGHT. The
@@ -2610,7 +2639,13 @@ export function PressPackagePricingCatalog({
                           // Archive row stays disabled — deleting would destroy
                           // pressed-record history, which archive must not do.
                           canRemove={false}
-                          onPick={() => setSelectedTierId(t.id)}
+                          // Per Bill (2026-08-10) — clicking the ALREADY-selected
+                          // tile collapses the grid back to the summary row;
+                          // clicking a different tile just switches selection.
+                          onPick={() => {
+                            if (t.id === selectedTierId) setTypeSectionOpen(false);
+                            else setSelectedTierId(t.id);
+                          }}
                           onSave={(name, _sizes) => {
                             // Name persists via the real rename route. Sizes gate
                             // the type across formats, but no server route accepts
@@ -2924,6 +2959,8 @@ export function PressPackagePricingCatalog({
             </div>
           </div>
         </fieldset>
+          )}
+        </>
       )}
       {/* Item 28 (correction 12) — footer stays empty: "Add your vinyl" and
           the CSV options were removed from this page entirely. CSV import/

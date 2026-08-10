@@ -1,0 +1,36 @@
+Catalog screen — type tiles and color tiles: fix the "…" menu and add
+image editing to the editors. Applies to both "Pick a type" and
+"Build colors".
+
+1. Fix the "…" button first. On every tile — type tiles and color
+   tiles — clicking "…" must open its dropdown. Right now it does
+   nothing on some color tiles (e.g. "House Mix" under the Color
+   type). Make sure the click handler stops propagation so it never
+   gets swallowed by the tile's own select handler, and the menu
+   renders above the tile (no clipping by the card's overflow).
+
+2. Every "…" dropdown has exactly two items: "Edit…" and "Archive".
+   - Archive (not delete): the item disappears from the catalog and
+     from new artist picks, but existing projects that already use it
+     keep working and keep displaying it. Lightweight inline confirm
+     ("Archive House Mix? Artists won't see it for new projects.").
+     If the archived item was the selected one, selection falls back
+     to the first remaining item.
+   - Archiving a type archives it with all its colors; the popover's
+     existing quiet red "Archive type" action stays as-is.
+
+3. Edit opens the existing editor popover ("Edit type" for types, the
+   color editor for colors) and BOTH gain a PREVIEW IMAGE section at
+   the top, above the name field: current disc image as a ~64px
+   thumbnail (same disc treatment as the tile) with two quiet text
+   actions — "Change image…" and "Remove". Change image… opens the
+   same image picker/upload modal used elsewhere in the app (upload,
+   crop to square, preview on the disc before saving) — reuse that
+   component, do not invent a new one. Remove falls back to the
+   generated swatch disc. Nothing commits until Save; Cancel discards.
+
+4. Keep it Apple-quiet: no new buttons on the tiles themselves; no
+   modal stacking beyond one level (the image picker replaces the
+   popover content or presents as a sheet, then returns); popover
+   layout, spacing, and typography stay exactly as the current Edit
+   type popover.
