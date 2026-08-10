@@ -28,6 +28,8 @@ current, not appended to: stale lines are overwritten when things change.
 - Fix for artists getting "Out of scope" on label-attached albums.
 - Early-access 404 fix on prepping albums.
 
+- Playground handoff doc for the Project/Structure flows: `docs/playground-flows.md` (2026-08-10). Names the seven flows (Project flow first — Artist > New Project > Formats > Variants; Evergreen second, needed this week for Raynes), lists what's already built for Playground to pull from vs. greenfield, and voids the 08-09 brief's design advice — the existing apple-canon light + dark variants are the only design authority. Reaches GitHub via the normal mirror sync on the next merge.
+
 ### In progress
 - (none right now)
 
