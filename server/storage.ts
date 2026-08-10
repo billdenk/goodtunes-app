@@ -39,6 +39,7 @@ import {
   type InsertCreditRole,
   users,
   customerUsers,
+  checkoutFailureEvents,
   type CustomerUser,
   type InsertCustomerUser,
   type StripeAddressSnapshot,
@@ -4671,6 +4672,38 @@ export class DbStorage implements IStorage {
       .groupBy(playlists.id)
       .orderBy(desc(playlists.createdAt));
 
+    // Task #2993 — failed checkout attempts (card declines / expired
+    // sessions) ingested from the Stripe webhook, so support can confirm
+    // "my order didn't go through" right next to the fan's real orders.
+    // Matched by customer id OR buyer email (webhook rows may only carry
+    // one of the two). QA test events are excluded.
+    const emailLower = (c.email || "").trim().toLowerCase();
+    const failedCheckoutRows = await db
+      .select({
+        id: checkoutFailureEvents.id,
+        kind: checkoutFailureEvents.kind,
+        failureCode: checkoutFailureEvents.failureCode,
+        failureMessage: checkoutFailureEvents.failureMessage,
+        albumId: checkoutFailureEvents.albumId,
+        albumTitle: albums.title,
+        albumArtist: albums.artist,
+        skuFormat: checkoutFailureEvents.skuFormat,
+        quantity: checkoutFailureEvents.quantity,
+        amountCents: checkoutFailureEvents.amountCents,
+        buyerEmail: checkoutFailureEvents.buyerEmail,
+        occurredAt: checkoutFailureEvents.occurredAt,
+      })
+      .from(checkoutFailureEvents)
+      .leftJoin(albums, eq(checkoutFailureEvents.albumId, albums.id))
+      .where(and(
+        eq(checkoutFailureEvents.isQa, false),
+        emailLower
+          ? or(eq(checkoutFailureEvents.customerId, id), eq(checkoutFailureEvents.buyerEmail, emailLower))
+          : eq(checkoutFailureEvents.customerId, id),
+      ))
+      .orderBy(desc(checkoutFailureEvents.occurredAt))
+      .limit(50);
+
     // Task #1342 — address fallback. Imported/legacy fans have no
     // customer-level Stripe snapshot, but their most recent order usually
     // carries the shipping (and sometimes billing) address. Surface those
@@ -4684,6 +4717,7 @@ export class DbStorage implements IStorage {
       // Never ship the password hash to the admin client.
       customer: { ...c, password: undefined },
       orders: orderRows,
+      failedCheckouts: failedCheckoutRows,
       collection: collectionRows,
       playlists: playlistRows,
       fallbackShippingAddress,

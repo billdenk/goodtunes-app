@@ -31453,6 +31453,62 @@ export async function registerRoutes(
     const geo = await salesGeography(scopeFilter, from, to);
     res.json(geo);
   });
+  // Task #2993 — support lookup of failed/abandoned checkout attempts,
+  // searchable by buyer email. Operator-only: failure rows carry fan PII
+  // (email/name) and partner roles have no business reading them. Rows
+  // come from checkout_failure_events (ingested from the Stripe webhook);
+  // QA test events are excluded.
+  app.get("/api/admin/checkout-failures", requireAdmin, async (req, res) => {
+    const callerRole = await getUserRole(req.session.userId!);
+    if (callerRole?.role !== "super_admin" && callerRole?.role !== "admin") {
+      return res.status(403).json({ message: "Out of scope for this account" });
+    }
+    const { checkoutFailureEvents } = await import("@shared/schema");
+    const { checkoutFailureReasonLabel } = await import("@shared/checkoutFailures");
+    const email = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
+    const conditions = [eq(checkoutFailureEvents.isQa, false)];
+    if (email) {
+      // Match rows stamped with the email directly, plus rows resolved to
+      // a customer whose login email is the one searched (webhook rows may
+      // only carry one of the two).
+      const cust = await storage.getCustomerByEmail(email);
+      conditions.push(
+        cust
+          ? or(eq(checkoutFailureEvents.buyerEmail, email), eq(checkoutFailureEvents.customerId, cust.id))!
+          : eq(checkoutFailureEvents.buyerEmail, email),
+      );
+    }
+    const rows = await db
+      .select({
+        id: checkoutFailureEvents.id,
+        kind: checkoutFailureEvents.kind,
+        failureCode: checkoutFailureEvents.failureCode,
+        failureMessage: checkoutFailureEvents.failureMessage,
+        buyerEmail: checkoutFailureEvents.buyerEmail,
+        buyerName: checkoutFailureEvents.buyerName,
+        customerId: checkoutFailureEvents.customerId,
+        albumId: checkoutFailureEvents.albumId,
+        albumTitle: albums.title,
+        albumArtist: albums.artist,
+        skuFormat: checkoutFailureEvents.skuFormat,
+        quantity: checkoutFailureEvents.quantity,
+        amountCents: checkoutFailureEvents.amountCents,
+        stripeCheckoutSessionId: checkoutFailureEvents.stripeCheckoutSessionId,
+        stripePaymentIntentId: checkoutFailureEvents.stripePaymentIntentId,
+        occurredAt: checkoutFailureEvents.occurredAt,
+      })
+      .from(checkoutFailureEvents)
+      .leftJoin(albums, eq(checkoutFailureEvents.albumId, albums.id))
+      .where(and(...conditions))
+      .orderBy(desc(checkoutFailureEvents.occurredAt))
+      .limit(200);
+    res.json({
+      rows: rows.map((r) => ({
+        ...r,
+        reasonLabel: checkoutFailureReasonLabel(r.kind, r.failureCode, r.failureMessage),
+      })),
+    });
+  });
   app.get("/api/admin/customers/:id", requireAdmin, async (req, res) => {
     // Artist partners can only view profiles of customers who bought their albums.
     // Variables declared in outer scope so they're accessible after the guard block.
@@ -31494,6 +31550,9 @@ export async function registerRoutes(
         orders: profile.orders.filter((o) => albumIdSet.has(o.albumId)),
         collection: profile.collection.filter((c) => albumIdSet.has(c.albumId)),
         playlists: [],
+        // Task #2993 — failed-checkout attempts carry fan PII and decline
+        // detail; support-only, so artist-scoped callers never see them.
+        failedCheckouts: [],
       });
     } else {
       res.json(profile);

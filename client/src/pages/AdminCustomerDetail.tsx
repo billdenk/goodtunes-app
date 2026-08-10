@@ -13,6 +13,7 @@ import { OrderDetailSheet, originBadge } from "@/components/admin/OrderDetailShe
 import { PromoteCustomerDialog } from "@/components/admin/PromoteCustomerDialog";
 import { AdminEditCustomerDialog } from "@/components/admin/AdminEditCustomerDialog";
 import type { CustomerUser, StripeAddressSnapshot } from "@shared/schema";
+import { checkoutFailureReasonLabel } from "@shared/checkoutFailures";
 
 /**
  * Admin · Customer detail (Task #131).
@@ -74,6 +75,22 @@ type Profile = {
     paymentWalletType: string | null;
     receiptUrl: string | null;
     origin: string | null;
+  }>;
+  // Task #2993 — failed/abandoned checkout attempts from the Stripe
+  // webhook (checkout_failure_events). Never orders; audit trail only.
+  failedCheckouts: Array<{
+    id: string;
+    kind: string;
+    failureCode: string | null;
+    failureMessage: string | null;
+    albumId: string | null;
+    albumTitle: string | null;
+    albumArtist: string | null;
+    skuFormat: string | null;
+    quantity: number | null;
+    amountCents: number | null;
+    buyerEmail: string | null;
+    occurredAt: string | null;
   }>;
   collection: Array<{
     id: string;
@@ -278,6 +295,7 @@ export function AdminCustomerDetail() {
   }
 
   const { customer: c, orders, collection, playlists } = data;
+  const failedCheckouts = data.failedCheckouts ?? [];
   // Task #909 — a preview counts toward nothing, so the Collection stat and
   // section header count only real owned/comp rows. Previews still render in
   // the grid (flagged as Demo), just below the owned ones.
@@ -648,6 +666,71 @@ export function AdminCustomerDetail() {
             </div>
           )}
         </Section>
+
+        {/* Task #2993 — Failed checkout attempts (card declines / expired
+            sessions) from the Stripe webhook, so support can confirm a
+            fan's "my order didn't go through" story without opening the
+            Stripe dashboard. Hidden entirely when there are none. */}
+        {failedCheckouts.length > 0 && (
+          <Section
+            id="section-failed-checkouts"
+            title={`Failed checkout attempts (${failedCheckouts.length})`}
+          >
+            <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
+              {failedCheckouts.map((f) => (
+                <div
+                  key={f.id}
+                  className="flex items-center gap-3 px-4 py-3"
+                  data-testid={`row-failed-checkout-${f.id}`}
+                >
+                  <AlertTriangle className="w-4 h-4 text-[var(--apple-warning)] flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-slate-900 text-sm font-medium truncate">
+                      {f.albumTitle ? (
+                        <>
+                          {f.albumTitle}
+                          {f.albumArtist && (
+                            <>
+                              <span className="text-slate-400"> · </span>
+                              <span className="text-slate-600">{f.albumArtist}</span>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-slate-500">Unknown album</span>
+                      )}
+                    </div>
+                    <div className="text-slate-500 text-xs mt-0.5">
+                      {formatDate(f.occurredAt)}
+                      {f.skuFormat && <> · {f.skuFormat}</>}
+                      {f.quantity != null && f.quantity > 1 && <> · ×{f.quantity}</>}
+                      {f.buyerEmail && f.buyerEmail !== c.email?.toLowerCase() && <> · {f.buyerEmail}</>}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-slate-900 text-sm font-medium tabular-nums">
+                      {f.amountCents != null ? formatMoney(f.amountCents) : "—"}
+                    </div>
+                    <span
+                      className={`mt-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
+                        f.kind === "session_expired"
+                          ? "text-[var(--apple-subink)] bg-[var(--apple-chip)]"
+                          : "text-[var(--apple-warning)] bg-[var(--apple-warning-wash)]"
+                      }`}
+                      data-testid={`badge-failed-reason-${f.id}`}
+                    >
+                      {checkoutFailureReasonLabel(f.kind, f.failureCode, f.failureMessage)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-slate-400 mt-2">
+              These attempts never became orders — they're kept so support can confirm a
+              fan's payment story. A later successful purchase appears under Orders as usual.
+            </p>
+          </Section>
+        )}
 
         {/* Collection */}
         <Section

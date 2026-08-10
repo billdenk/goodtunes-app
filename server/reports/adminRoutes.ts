@@ -176,9 +176,30 @@ export function registerAdminReportRoutes(app: Express) {
     ));
   }));
   app.get("/api/admin/reports/ops/failed.csv", adminGuard, wrap(async (req, res) => {
+    // Task #2993 — real failure events (declines + expired sessions) from
+    // checkout_failure_events, with a human-readable reason per row.
     const data = await opsHealth(ctxFromReq(req));
     sendCsv(res, "failed-checkouts.csv", toCsv(
       data.failedCheckouts.rows.map((r: any) => ({
+        eventId: r.id,
+        kind: r.kind,
+        reason: r.reasonLabel ?? "",
+        buyer: r.buyerName || r.buyerEmail || "",
+        buyerEmail: r.buyerEmail ?? "",
+        amountDollars: dollarsFromCents(r.amountCents),
+        albumTitle: r.albumTitle ?? "",
+        albumId: r.albumId ?? "",
+        occurredAt: r.occurredAt ? new Date(r.occurredAt).toISOString() : "",
+      })),
+      ["eventId", "kind", "reason", "buyer", "buyerEmail", "amountDollars", "albumTitle", "albumId", "occurredAt"],
+    ));
+  }));
+  app.get("/api/admin/reports/ops/pending.csv", adminGuard, wrap(async (req, res) => {
+    // Task #2993 — the old pending-orders abandonment proxy, kept as its
+    // own export so the two signals never blur together.
+    const data = await opsHealth(ctxFromReq(req));
+    sendCsv(res, "pending-checkouts.csv", toCsv(
+      data.pendingCheckouts.rows.map((r: any) => ({
         orderId: r.id,
         buyerEmail: r.buyerEmail ?? "",
         amountDollars: dollarsFromCents(r.totalCents),

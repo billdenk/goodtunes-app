@@ -30,6 +30,7 @@ import {
   orderItems,
   orderCopies,
   signedCertReservations,
+  checkoutFailureEvents,
   customerUsers,
   emailVerifications,
   userAlbums,
@@ -3373,6 +3374,70 @@ export function registerCommerceRoutes(app: Express) {
     });
   });
 
+  // Task #2993 — Record a failed checkout attempt (card decline or
+  // expired/abandoned Checkout Session) so support can confirm a fan's
+  // "my order didn't go through" story from the admin. Best-effort and
+  // NEVER throws: a logging failure must not 500 the webhook (Stripe
+  // would retry a perfectly healthy event forever). Idempotent on the
+  // Stripe event id, so webhook retries can't duplicate rows. These
+  // rows are audit trail only — they are never orders and never feed
+  // sales KPIs.
+  async function recordCheckoutFailure(opts: {
+    eventId: string;
+    kind: "payment_failed" | "session_expired";
+    sessionId: string | null;
+    paymentIntentId: string | null;
+    metadata: Record<string, string | undefined>;
+    email: string | null;
+    name: string | null;
+    amountCents: number | null;
+    failureCode: string | null;
+    failureMessage: string | null;
+    occurredAt: Date;
+  }): Promise<void> {
+    try {
+      const md = opts.metadata || {};
+      let customerId: string | null = md.gt_customer_id || null;
+      let email = opts.email ? opts.email.trim().toLowerCase() : null;
+      // Resolve the fan best-effort: metadata gives the id directly;
+      // otherwise try the receipt email. Either direction may backfill
+      // the other so support lookup works by email OR by customer.
+      try {
+        if (customerId && !email) {
+          const c = await storage.getCustomer(customerId);
+          if (c?.email) email = c.email.toLowerCase();
+        } else if (!customerId && email) {
+          const c = await storage.getCustomerByEmail(email);
+          if (c) customerId = c.id;
+        }
+      } catch {
+        /* resolution is a nice-to-have, never a blocker */
+      }
+      await db
+        .insert(checkoutFailureEvents)
+        .values({
+          stripeEventId: opts.eventId,
+          kind: opts.kind,
+          stripeCheckoutSessionId: opts.sessionId,
+          stripePaymentIntentId: opts.paymentIntentId,
+          failureCode: opts.failureCode,
+          failureMessage: opts.failureMessage,
+          buyerEmail: email,
+          buyerName: opts.name,
+          customerId,
+          albumId: md.gt_album_id || null,
+          skuFormat: md.gt_sku_format || null,
+          quantity: md.gt_quantity ? Number(md.gt_quantity) || null : null,
+          amountCents: opts.amountCents,
+          isQa: md.gt_is_qa === "1",
+          occurredAt: opts.occurredAt,
+        })
+        .onConflictDoNothing({ target: checkoutFailureEvents.stripeEventId });
+    } catch (e: any) {
+      console.error("[stripe-webhook] failed to record checkout failure", e?.message);
+    }
+  }
+
   // ─── Stripe webhook handler ─────────────────────────────────────
   // Mounted with express.raw() in server/index.ts so `req.body` is a
   // Buffer here — DO NOT call any json middleware on this path.
@@ -3440,6 +3505,60 @@ export function registerCommerceRoutes(app: Express) {
             // Best-effort: find a checkout session linked to this PI.
             const sessions = await stripe.checkout.sessions.list({ payment_intent: pi.id, limit: 1 });
             if (sessions.data[0]) await materializeOrderFromSession(sessions.data[0]);
+          }
+          break;
+        }
+        case "checkout.session.expired": {
+          // Task #2993 — the fan opened checkout but never paid; the
+          // session lapsed (Stripe expires them after ~24h, ours after
+          // 30 min for signed-cert reservations). Only fan album
+          // checkouts are recorded: payment-link invoices and Shopify+
+          // prepaid steps (already short-circuited above) are not fan
+          // orders.
+          const session = event.data.object as Stripe.Checkout.Session;
+          if (!session.metadata?.payment_request_id && session.metadata?.gt_album_id) {
+            await recordCheckoutFailure({
+              eventId: event.id,
+              kind: "session_expired",
+              sessionId: session.id,
+              paymentIntentId:
+                typeof session.payment_intent === "string"
+                  ? session.payment_intent
+                  : session.payment_intent?.id ?? null,
+              metadata: (session.metadata ?? {}) as Record<string, string>,
+              email: session.customer_details?.email ?? session.customer_email ?? null,
+              name: session.customer_details?.name ?? null,
+              amountCents: session.amount_total ?? null,
+              failureCode: null,
+              failureMessage: null,
+              occurredAt: new Date(event.created * 1000),
+            });
+          }
+          break;
+        }
+        case "payment_intent.payment_failed": {
+          // Task #2993 — a real payment attempt failed (card declined,
+          // insufficient funds, …). The PI metadata mirrors the checkout
+          // session's gt_* keys, so no extra Stripe round-trip is needed.
+          const pi = event.data.object as Stripe.PaymentIntent;
+          if (pi.metadata?.gt_album_id) {
+            const lpe = pi.last_payment_error;
+            await recordCheckoutFailure({
+              eventId: event.id,
+              kind: "payment_failed",
+              sessionId: null,
+              paymentIntentId: pi.id,
+              metadata: (pi.metadata ?? {}) as Record<string, string>,
+              email:
+                pi.receipt_email ??
+                (lpe?.payment_method as any)?.billing_details?.email ??
+                null,
+              name: (lpe?.payment_method as any)?.billing_details?.name ?? null,
+              amountCents: typeof pi.amount === "number" ? pi.amount : null,
+              failureCode: (lpe as any)?.decline_code || lpe?.code || null,
+              failureMessage: lpe?.message ?? null,
+              occurredAt: new Date(event.created * 1000),
+            });
           }
           break;
         }

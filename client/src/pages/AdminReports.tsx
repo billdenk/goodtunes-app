@@ -1734,8 +1734,8 @@ function OpsTab({ qs }: { qs: string }) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card><Stat label="Failed pushes" value={data.stuckFulfillments.count.toLocaleString()} sub="push to fulfillment failed" /></Card>
-        <Card><Stat label="Failed checkouts · 24h" value={(data.failedCheckouts.last24hCount ?? 0).toLocaleString()} sub="abandoned / never paid" /></Card>
-        <Card><Stat label="Failed checkouts · 7d" value={(data.failedCheckouts.last7dCount ?? 0).toLocaleString()} sub="abandoned / never paid" /></Card>
+        <Card><Stat label="Failed checkouts · 24h" value={(data.failedCheckouts.last24hCount ?? 0).toLocaleString()} sub="declines + expired sessions" /></Card>
+        <Card><Stat label="Failed checkouts · 7d" value={(data.failedCheckouts.last7dCount ?? 0).toLocaleString()} sub="declines + expired sessions" /></Card>
         <Card><Stat label="Refund rate" value={fmtPct(data.refunds.rate)} sub={`${data.refunds.refundedInRange} of ${data.refunds.paidInRange}`} /></Card>
         <Card><Stat label="Chargeback rate" value={data.chargebackRate == null ? "—" : fmtPct(data.chargebackRate)} sub={data.chargebackRate == null ? "dispute webhook not ingested" : "from Stripe disputes"} /></Card>
         <Card><Stat label="Stuck payouts" value={data.stuckPayoutCount.toLocaleString()} sub="shipped, not transferred" /></Card>
@@ -1774,37 +1774,78 @@ function OpsTab({ qs }: { qs: string }) {
       </Card>
       <Card>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-[var(--apple-ink)]">Pending checkouts (never advanced)</h3>
+          <h3 className="text-sm font-semibold text-[var(--apple-ink)]">Failed checkouts (declines &amp; expired sessions)</h3>
           <ExportLink href={`/api/admin/reports/ops/failed.csv?${qs}`} label="CSV" />
         </div>
         {data.failedCheckouts.rows.length === 0 ? (
-          <EmptyState message="No abandoned checkouts in this range." />
+          <EmptyState message="No failed checkout attempts in this range." />
         ) : (
           <table className="w-full text-sm" data-testid="table-failed-checkouts">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wider text-[var(--apple-subink)] border-b border-[var(--apple-hairline)]">
-                <th className="py-2 font-bold">Order</th>
                 <th className="py-2 font-bold">Buyer</th>
+                <th className="py-2 font-bold">Album</th>
+                <th className="py-2 font-bold">Reason</th>
                 <th className="py-2 font-bold text-right">Amount</th>
-                <th className="py-2 font-bold text-right">Created</th>
+                <th className="py-2 font-bold text-right">When</th>
               </tr>
             </thead>
             <tbody>
               {data.failedCheckouts.rows.map((r: any) => (
                 <tr key={r.id} className="border-b border-[var(--apple-hairline)]" data-testid={`row-failed-${r.id}`}>
-                  <td className="py-2.5 text-[var(--apple-ink)] font-mono text-[12px]">{r.id.slice(0, 8)}</td>
-                  <td className="py-2.5 text-[var(--apple-ink)]">{r.buyerEmail || "—"}</td>
-                  <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums font-medium">{fmtUsd(r.totalCents)}</td>
-                  <td className="py-2.5 text-[var(--apple-subink)] text-right tabular-nums">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}</td>
+                  <td className="py-2.5 text-[var(--apple-ink)]">{r.buyerName || r.buyerEmail || "—"}</td>
+                  <td className="py-2.5 text-[var(--apple-ink)]">{r.albumTitle || (r.albumId ? r.albumId.slice(0, 8) : "—")}</td>
+                  <td className="py-2.5">
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${r.kind === "session_expired" ? "text-[var(--apple-subink)] bg-[var(--apple-chip)]" : "text-[var(--apple-warning)] bg-[var(--apple-warning-wash)]"}`}>
+                      {r.reasonLabel || (r.kind === "session_expired" ? "Checkout expired" : "Payment failed")}
+                    </span>
+                  </td>
+                  <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums font-medium">{r.amountCents != null ? fmtUsd(r.amountCents) : "—"}</td>
+                  <td className="py-2.5 text-[var(--apple-subink)] text-right tabular-nums">{r.occurredAt ? new Date(r.occurredAt).toLocaleDateString() : "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
         <p className="text-[11px] text-[var(--apple-faint)] mt-3">
-          {data.failedCheckouts.proxyNote || "Counts include abandoned Checkout Sessions that never advanced to paid."} Cross-check disputes at <code className="px-1 py-0.5 bg-[var(--apple-track)] border border-[var(--apple-hairline)] rounded">stripe.com/dashboard/payments/disputes</code>.
+          {data.failedCheckouts.note || "Real Stripe failure events — card declines and expired Checkout Sessions. Never counted as orders."}
         </p>
       </Card>
+      {data.pendingCheckouts && (
+        <Card>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-[var(--apple-ink)]">Pending checkouts (abandoned proxy)</h3>
+            <ExportLink href={`/api/admin/reports/ops/pending.csv?${qs}`} label="CSV" />
+          </div>
+          {data.pendingCheckouts.rows.length === 0 ? (
+            <EmptyState message="No abandoned checkouts in this range." />
+          ) : (
+            <table className="w-full text-sm" data-testid="table-pending-checkouts">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wider text-[var(--apple-subink)] border-b border-[var(--apple-hairline)]">
+                  <th className="py-2 font-bold">Order</th>
+                  <th className="py-2 font-bold">Buyer</th>
+                  <th className="py-2 font-bold text-right">Amount</th>
+                  <th className="py-2 font-bold text-right">Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.pendingCheckouts.rows.map((r: any) => (
+                  <tr key={r.id} className="border-b border-[var(--apple-hairline)]" data-testid={`row-pending-${r.id}`}>
+                    <td className="py-2.5 text-[var(--apple-ink)] font-mono text-[12px]">{r.id.slice(0, 8)}</td>
+                    <td className="py-2.5 text-[var(--apple-ink)]">{r.buyerEmail || "—"}</td>
+                    <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums font-medium">{fmtUsd(r.totalCents)}</td>
+                    <td className="py-2.5 text-[var(--apple-subink)] text-right tabular-nums">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <p className="text-[11px] text-[var(--apple-faint)] mt-3">
+            {data.pendingCheckouts.proxyNote || "Pending order rows whose Checkout Session never advanced to paid."} Cross-check disputes at <code className="px-1 py-0.5 bg-[var(--apple-track)] border border-[var(--apple-hairline)] rounded">stripe.com/dashboard/payments/disputes</code>.
+          </p>
+        </Card>
+      )}
     </div>
   );
 }

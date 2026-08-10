@@ -19,8 +19,10 @@ import {
   payoutAccounts,
   albumSkus,
   manufacturers,
+  checkoutFailureEvents,
 } from "@shared/schema";
 import { isFullAccessEmail } from "@shared/fullAccess";
+import { checkoutFailureReasonLabel } from "@shared/checkoutFailures";
 import { pgArray } from "../lib/pgArray";
 import { and, eq, ne, gte, lte, inArray, sql, desc, isNull, isNotNull, or, not } from "drizzle-orm";
 import { PLATFORM_MARGIN_CENTS, cardFeeCents } from "@shared/breakEven";
@@ -760,26 +762,64 @@ export async function opsHealth(ctx: AdminReportContext) {
     .from(orders)
     .where(and(gte(orders.refundedAt, ctx.from), lte(orders.refundedAt, ctx.to), isNotNull(orders.refundedAt), ne(orders.origin, "qa:test")));
 
-  // Failed Stripe payments — Stripe doesn't write a row to `orders` when
-  // a PaymentIntent fails (we only insert on session.completed). The
-  // best proxy we have today is orders with status='pending' that were
-  // created in-range and never advanced. Surface them in the selected
-  // window + explicit last-24h and last-7d cuts so the operator can
-  // spot a recent spike independent of the date filter. Full ingestion
-  // of `payment_intent.payment_failed` and `charge.dispute.*` webhooks
-  // is tracked as a follow-up (see ops Tab footer).
+  // Failed Stripe checkouts (Task #2993) — real failure events ingested
+  // from the Stripe webhook (`payment_intent.payment_failed` → decline,
+  // `checkout.session.expired` → abandoned session), persisted in
+  // checkout_failure_events. Surfaced in the selected window + explicit
+  // last-24h / last-7d cuts so the operator can spot a recent spike
+  // independent of the date filter. The old pending-orders proxy is kept
+  // SEPARATELY below as "pending checkouts" (pre-ingestion abandonment
+  // signal); it must never be summed with the real events.
   const now = new Date();
   const last24h = new Date(now.getTime() - 24 * 3600_000);
   const last7d = new Date(now.getTime() - 7 * 86400_000);
+  async function failureEventCount(from: Date, to: Date): Promise<number> {
+    const r = await db.execute<{ c: string }>(sql`SELECT COUNT(*) AS c FROM checkout_failure_events WHERE is_qa = false AND occurred_at >= ${from} AND occurred_at <= ${to}`);
+    return Number((r as any).rows?.[0]?.c ?? 0);
+  }
+  const [failed24h, failed7d] = await Promise.all([
+    failureEventCount(last24h, now),
+    failureEventCount(last7d, now),
+  ]);
+  const failureRows = await db
+    .select({
+      id: checkoutFailureEvents.id,
+      kind: checkoutFailureEvents.kind,
+      failureCode: checkoutFailureEvents.failureCode,
+      failureMessage: checkoutFailureEvents.failureMessage,
+      buyerEmail: checkoutFailureEvents.buyerEmail,
+      buyerName: checkoutFailureEvents.buyerName,
+      albumId: checkoutFailureEvents.albumId,
+      albumTitle: albums.title,
+      amountCents: checkoutFailureEvents.amountCents,
+      occurredAt: checkoutFailureEvents.occurredAt,
+    })
+    .from(checkoutFailureEvents)
+    .leftJoin(albums, eq(checkoutFailureEvents.albumId, albums.id))
+    .where(and(
+      eq(checkoutFailureEvents.isQa, false),
+      gte(checkoutFailureEvents.occurredAt, ctx.from),
+      lte(checkoutFailureEvents.occurredAt, ctx.to),
+    ))
+    .orderBy(desc(checkoutFailureEvents.occurredAt));
+  const failedRowsShaped = failureRows.map((r) => ({
+    ...r,
+    reasonLabel: checkoutFailureReasonLabel(r.kind, r.failureCode, r.failureMessage),
+  }));
+
+  // Pending-orders proxy — kept as a SEPARATE "abandoned" signal: orders
+  // with status='pending' that never advanced to paid (a session was
+  // minted but the fan never completed; predates event ingestion and
+  // still catches sessions Stripe hasn't expired yet).
   async function pendingCount(from: Date, to: Date): Promise<number> {
     const r = await db.execute<{ c: string }>(sql`SELECT COUNT(*) AS c FROM orders WHERE status = 'pending' AND origin IS DISTINCT FROM 'qa:test' AND created_at >= ${from} AND created_at <= ${to}`);
     return Number((r as any).rows?.[0]?.c ?? 0);
   }
-  const [failed24h, failed7d] = await Promise.all([
+  const [pending24h, pending7d] = await Promise.all([
     pendingCount(last24h, now),
     pendingCount(last7d, now),
   ]);
-  const failedRows = await db
+  const pendingRows = await db
     .select({ id: orders.id, createdAt: orders.createdAt, totalCents: orders.totalCents, albumId: orders.albumId, buyerEmail: orders.buyerEmail })
     .from(orders)
     .where(and(
@@ -810,11 +850,18 @@ export async function opsHealth(ctx: AdminReportContext) {
       rows: stuckRows.slice(0, 100),
     },
     failedCheckouts: {
-      count: failedRows.length,
+      count: failedRowsShaped.length,
       last24hCount: failed24h,
       last7dCount: failed7d,
-      rows: failedRows.slice(0, 100),
-      proxyNote: "Counts include abandoned Checkout Sessions that never advanced to paid. Real PaymentIntent failures and chargebacks require Stripe webhook ingestion (follow-up).",
+      rows: failedRowsShaped.slice(0, 100),
+      note: "Real Stripe failure events: card declines (payment_intent.payment_failed) and expired/abandoned Checkout Sessions (checkout.session.expired). Never counted as orders.",
+    },
+    pendingCheckouts: {
+      count: pendingRows.length,
+      last24hCount: pending24h,
+      last7dCount: pending7d,
+      rows: pendingRows.slice(0, 100),
+      proxyNote: "Pending order rows whose Checkout Session never advanced to paid — an abandonment proxy that predates failure-event ingestion (and catches sessions Stripe hasn't expired yet). Chargebacks still require dispute webhook ingestion (follow-up).",
     },
     refunds: {
       paidInRange: paidInRange.length,

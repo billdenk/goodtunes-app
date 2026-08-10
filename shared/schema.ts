@@ -6158,4 +6158,38 @@ export const insertPaymentRequestSchema = createInsertSchema(paymentRequests).om
   createdAt: true,
 });
 export type PaymentRequest = typeof paymentRequests.$inferSelect;
+
+// Task #2993 — Failed Stripe checkouts, ingested from the fan webhook so
+// support can confirm "my order didn't go through" without opening the
+// Stripe dashboard. One row per Stripe event (`payment_intent.payment_failed`
+// → kind 'payment_failed', `checkout.session.expired` → kind
+// 'session_expired'); the unique stripe_event_id makes webhook retries
+// no-ops. These are NEVER orders — they must never feed sales KPIs.
+// album/customer ids are intentionally loose (no FK) so a later album
+// delete can't break the audit trail or cause dev→prod FK drift.
+export const checkoutFailureEvents = pgTable("checkout_failure_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stripeEventId: text("stripe_event_id").notNull(),
+  kind: text("kind").notNull(), // "payment_failed" | "session_expired"
+  stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  failureCode: text("failure_code"),
+  failureMessage: text("failure_message"),
+  buyerEmail: text("buyer_email"),
+  buyerName: text("buyer_name"),
+  customerId: varchar("customer_id"),
+  albumId: varchar("album_id"),
+  skuFormat: text("sku_format"),
+  quantity: integer("quantity"),
+  amountCents: integer("amount_cents"),
+  isQa: boolean("is_qa").notNull().default(false),
+  occurredAt: timestamp("occurred_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  byEvent: uniqueIndex("checkout_failure_events_event_uniq").on(t.stripeEventId),
+  byEmail: index("checkout_failure_events_email_idx").on(t.buyerEmail),
+  byCustomer: index("checkout_failure_events_customer_idx").on(t.customerId),
+  byOccurred: index("checkout_failure_events_occurred_idx").on(t.occurredAt),
+}));
+export type CheckoutFailureEvent = typeof checkoutFailureEvents.$inferSelect;
 export type InsertPaymentRequest = z.infer<typeof insertPaymentRequestSchema>;

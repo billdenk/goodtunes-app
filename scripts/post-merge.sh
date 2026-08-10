@@ -11546,3 +11546,48 @@ SQL
 }
 black_colors_backfill_20260810 dev  "${DATABASE_URL:-}"
 black_colors_backfill_20260810 prod "${PROD_DATABASE_URL:-}"
+
+# Task #2993 — Failed Stripe checkouts audit table. One row per Stripe
+# failure event (payment_intent.payment_failed / checkout.session.expired)
+# ingested by the fan webhook; unique stripe_event_id makes retries no-ops.
+migrate_checkout_failure_events() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping checkout_failure_events migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS checkout_failure_events (
+  id                          varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  stripe_event_id             text    NOT NULL,
+  kind                        text    NOT NULL,
+  stripe_checkout_session_id  text,
+  stripe_payment_intent_id    text,
+  failure_code                text,
+  failure_message             text,
+  buyer_email                 text,
+  buyer_name                  text,
+  customer_id                 varchar,
+  album_id                    varchar,
+  sku_format                  text,
+  quantity                    integer,
+  amount_cents                integer,
+  is_qa                       boolean NOT NULL DEFAULT false,
+  occurred_at                 timestamp NOT NULL,
+  created_at                  timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS checkout_failure_events_event_uniq    ON checkout_failure_events (stripe_event_id);
+CREATE INDEX IF NOT EXISTS checkout_failure_events_email_idx    ON checkout_failure_events (buyer_email);
+CREATE INDEX IF NOT EXISTS checkout_failure_events_customer_idx ON checkout_failure_events (customer_id);
+CREATE INDEX IF NOT EXISTS checkout_failure_events_occurred_idx ON checkout_failure_events (occurred_at);
+COMMIT;
+SQL
+  then
+    echo "post-merge: checkout_failure_events migration ok on $label"
+  else
+    echo "post-merge: WARNING — checkout_failure_events migration failed on $label (continuing)"
+  fi
+}
+migrate_checkout_failure_events dev  "${DATABASE_URL:-}"
+migrate_checkout_failure_events prod "${PROD_DATABASE_URL:-}"
