@@ -126,6 +126,51 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** One-line color-card name (Bill, Aug 10 2026): long names never wrap to a
+ *  second line — every card stays the same height. Overflow ellipsizes, and
+ *  hovering the card slides the text across (Apple-style marquee) to reveal
+ *  the full name, easing back on mouse-out. Full name also rides on title. */
+function MarqueeName({ text, color }: { text: string; color: string }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const spanRef = useRef<HTMLSpanElement>(null);
+  const [shift, setShift] = useState(0); // px the text must travel to show its tail
+  const [hover, setHover] = useState(false);
+  useEffect(() => {
+    const measure = () => {
+      const box = boxRef.current, span = spanRef.current;
+      if (!box || !span) return;
+      setShift(Math.max(0, span.scrollWidth - box.clientWidth));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (boxRef.current) ro.observe(boxRef.current);
+    return () => ro.disconnect();
+  }, [text]);
+  const overflowing = shift > 0;
+  return (
+    <div
+      ref={boxRef}
+      title={overflowing ? text : undefined}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{ overflow: "hidden", whiteSpace: "nowrap", maskImage: overflowing && !hover ? "linear-gradient(to right, black 85%, transparent)" : undefined, WebkitMaskImage: overflowing && !hover ? "linear-gradient(to right, black 85%, transparent)" : undefined }}
+    >
+      <span
+        ref={spanRef}
+        style={{
+          display: "inline-block",
+          color,
+          transform: hover && overflowing ? `translateX(-${shift}px)` : "translateX(0)",
+          // Travel speed scales with distance so short overflows don't crawl.
+          transition: hover && overflowing ? `transform ${Math.max(0.6, shift / 40)}s linear 0.35s` : "transform 0.3s ease-out",
+        }}
+      >
+        {text}
+      </span>
+    </div>
+  );
+}
+
 /** Frosted ··· trigger button, revealed on hover / focus by the parent `.group`. */
 function DotsTrigger({ label, testId }: { label: string; testId: string }) {
   const dark = useAdminDark();
@@ -1679,6 +1724,8 @@ export function PressPackagePricingCatalog({
   // Item 28 — ⋯ on a size card toggles "Don't offer this size" (reversible
   // gray-out; the format PUT's non-destructive hidden flag).
   const [sizeMenuId, setSizeMenuId] = useState<AlbumFormat | null>(null);
+  // "+ More sizes" dropdown (re-offer a hidden size; Bill 2026-08-10).
+  const [moreSizesOpen, setMoreSizesOpen] = useState(false);
   const setSizeOffered = useMutation({
     mutationFn: async ({ format, hidden }: { format: AlbumFormat; hidden: boolean }) => {
       const r = await apiRequest("PUT", `/api/admin/manufacturers/${pressId}/catalog/formats/${format}`, { hidden });
@@ -2471,6 +2518,10 @@ export function PressPackagePricingCatalog({
                         const available = offered.has(f);
                         const row = catalog?.formats.find((x) => x.format === f);
                         const off = !!row?.hidden;
+                        // Per Bill (2026-08-10) — a hidden size leaves the row
+                        // entirely; it comes back via "+ More sizes" below with
+                        // pricing and colors intact (inverse of "Don't offer").
+                        if (off) return null;
                         const active = activeTab === f && !off;
                         const big = f === "7_inch" ? '7"' : '12"';
                         return (
@@ -2521,6 +2572,51 @@ export function PressPackagePricingCatalog({
                           </div>
                         );
                       })}
+                      {/* Per Bill (2026-08-10) — quiet "+ More sizes" affordance
+                          at the end of the row, only when something is hidden.
+                          Picking a size un-hides it (pricing + colors intact). */}
+                      {canEdit && (() => {
+                        const hiddenSizes = VINYL_FORMATS.filter(
+                          (f) => catalog?.formats.find((x) => x.format === f)?.hidden,
+                        );
+                        if (hiddenSizes.length === 0) return null;
+                        return (
+                          <Popover open={moreSizesOpen} onOpenChange={setMoreSizesOpen}>
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="self-center whitespace-nowrap rounded-full px-2 py-1 text-[13px] font-medium transition-colors hover:bg-black/5"
+                                style={{ color: BLUE }}
+                                data-testid="button-more-sizes"
+                              >
+                                + More sizes
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent align="end" sideOffset={6} className="w-60 rounded-2xl p-2" style={{ border: `1px solid ${HAIRLINE}` }}>
+                              {hiddenSizes.map((f) => (
+                                <button
+                                  key={f}
+                                  type="button"
+                                  onClick={() => {
+                                    setMoreSizesOpen(false);
+                                    setSizeOffered.mutate({ format: f, hidden: false });
+                                  }}
+                                  className="w-full rounded-lg px-3 py-2 text-left transition-colors hover:bg-black/5"
+                                  data-testid={`menu-offer-size-${f}`}
+                                >
+                                  <span className="text-[13px] font-medium" style={{ color: INK }}>
+                                    {f === "7_inch" ? '7"' : '12"'}
+                                    <span style={{ color: SUBINK }}> · {VINYL_SIZE_BLURB[f] ?? ALBUM_FORMAT_LABEL[f]}</span>
+                                  </span>
+                                  <span className="block text-[11.5px]" style={{ color: SUBINK }}>
+                                    Pricing and colors are kept.
+                                  </span>
+                                </button>
+                              ))}
+                            </PopoverContent>
+                          </Popover>
+                        );
+                      })()}
                     </div>
                   </div>
                 </section>
@@ -2777,8 +2873,8 @@ export function PressPackagePricingCatalog({
                               </span>
                             )}
                           </div>
-                          <div className="text-[12.5px] font-semibold leading-tight" style={{ color: on ? BLUE : INK }}>
-                            {c.name}
+                          <div className="text-[12.5px] font-semibold leading-tight" data-testid={`text-color-name-${c.id}`}>
+                            <MarqueeName text={c.name} color={on ? BLUE : INK} />
                           </div>
                         </div>
                       );
