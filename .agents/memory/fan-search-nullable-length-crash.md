@@ -29,6 +29,20 @@ VendorProfile.instruments sites.
 runtime with a real (partial) API response, and the blast radius is the whole
 app because the surface is global chrome.
 
+**Same trap via react-query:** the app's default queryFn is
+`getQueryFn({ on401: "returnNull" })`, so a momentarily-invalid token turns any
+query's data into **null** — and a destructured default (`data: rows = []`)
+only covers `undefined`, never null. `rows.length` then crashes at the global
+boundary (bit /account right after a fresh signup). Guard with
+`Array.isArray(raw) ? raw : []`, never rely on the `= []` default alone.
+
+**Bodyless 5xx = never reached the app:** the server's global error handler
+always returns a JSON `message`; a client error reading exactly
+"500: Request failed" (statusText fallback, no JSON body) means the platform
+edge answered during autoscale instance churn and the request never hit
+Express — server-side state (e.g. a verify code) was NOT consumed, so a single
+bounded client retry is safe and is the real fix (signup confirm does this).
+
 # Self-diagnosing prod error reports
 
 Prod ships **no source maps** and minifies names, so componentStacks read like

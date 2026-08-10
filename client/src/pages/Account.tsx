@@ -409,10 +409,17 @@ export function Account() {
   // plus a one-line current status (fulfillment first if it's a
   // physical order, otherwise the Stripe-side status) so the fan can
   // tell at a glance whether anything is moving.
-  const { data: orderSummaries = [] } = useQuery<AccountOrderSummary[]>({
+  // NOTE: the default queryFn returns `null` (not undefined) on a 401, and a
+  // destructured `= []` default only covers undefined — so `.length` on the
+  // raw data hard-crashed the whole page at the global boundary when the
+  // fan's token was momentarily invalid right after signup. Guard the parent
+  // AND the array (same rule as the fan-search crash): coalesce, and only
+  // trust it when it's actually an array.
+  const { data: orderSummariesRaw } = useQuery<AccountOrderSummary[] | null>({
     queryKey: ["/api/orders"],
     enabled: !!user,
   });
+  const orderSummaries = Array.isArray(orderSummariesRaw) ? orderSummariesRaw : [];
   const orderCount = orderSummaries.length;
   const latestOrder = orderSummaries[0];
   const latestStatusLine = (() => {

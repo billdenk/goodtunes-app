@@ -874,7 +874,27 @@ export function Login() {
   const submitCustomerVerify = async () => {
     setVerifyBusy(true); setVerifyError(null);
     try {
-      const r1 = await apiRequest("POST", "/api/email-verifications/confirm", { email: email.trim(), code: verifyCode });
+      // The confirm POST is safe to retry when the request never reached the
+      // app: a bodyless 5xx (no JSON message) is the platform edge answering
+      // during an instance swap, and on that path the code was NOT consumed
+      // server-side (a real app error always carries a JSON message). One
+      // bounded retry after a short beat turns that transient into a success
+      // instead of a scary "500: Request failed" (seen in prod 2026-08-10).
+      const confirmOnce = () =>
+        apiRequest("POST", "/api/email-verifications/confirm", { email: email.trim(), code: verifyCode });
+      let r1: Response;
+      try {
+        r1 = await confirmOnce();
+      } catch (e: any) {
+        const status = typeof e?.status === "number" ? e.status : undefined;
+        const hadServerBody = e && typeof e === "object" && "body" in e && e.body !== undefined;
+        if (status !== undefined && status >= 500 && !hadServerBody) {
+          await new Promise((res) => setTimeout(res, 1200));
+          r1 = await confirmOnce();
+        } else {
+          throw e;
+        }
+      }
       const j1 = await r1.json();
       const r2 = await apiRequest("POST", "/api/customer/signup-with-code", {
         email: email.trim(),

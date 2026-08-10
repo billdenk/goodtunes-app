@@ -14,7 +14,7 @@
 import type { Express, Request, Response } from "express";
 import { randomBytes, scrypt as _scrypt, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { db } from "./db";
+import { db, describeDbError } from "./db";
 import { quoteShipping, normalizeCountry, getAlbumShippingPartnerId } from "./shipping";
 import {
   albums,
@@ -865,6 +865,17 @@ async function viewerIsAdmin(req: Request): Promise<boolean> {
   if (req.hostKnown && found.kind !== req.authKind) return false;
   const u = await storage.getUser(found.userId);
   return !!u?.isAdmin;
+}
+
+// Atomically mark an email-verification code consumed and mint the signup
+// verify ticket. Exported for the regression test: if the ticket insert
+// fails, the transaction must roll back the consumption so the fan can
+// retry the SAME code (the confirm route advertises a retryable 503).
+export async function consumeCodeAndMintVerifyToken(rowId: string, email: string, verifyToken: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.update(emailVerifications).set({ consumedAt: new Date() }).where(eq(emailVerifications.id, rowId));
+    await tx.insert(signupVerifyTokens).values({ token: verifyToken, email });
+  });
 }
 
 export function registerCommerceRoutes(app: Express) {
@@ -2176,6 +2187,7 @@ export function registerCommerceRoutes(app: Express) {
     const email = normalizeEmail(req.body?.email ?? "");
     const code = String(req.body?.code ?? "").trim();
     if (!email || !/^\d{6}$/.test(code)) return res.status(400).json({ message: "Enter the 6-digit code from your email" });
+    try {
     const rows = await db
       .select()
       .from(emailVerifications)
@@ -2188,17 +2200,27 @@ export function registerCommerceRoutes(app: Express) {
       const match = await verifyCode(code, row.codeHash);
       await db.update(emailVerifications).set({ attempts: row.attempts + 1 }).where(eq(emailVerifications.id, row.id));
       if (match) {
-        await db.update(emailVerifications).set({ consumedAt: new Date() }).where(eq(emailVerifications.id, row.id));
         // Mint a short-lived verify ticket the signup endpoint will
         // trade in. Task #265 — lives in its own table so it never has
         // to write a sentinel userId into a column that carries a real
         // user FK; the signup endpoint deletes the ticket on use.
+        // Consume-the-code + mint-the-ticket are ATOMIC: if the ticket
+        // insert fails, the code is NOT consumed, so the retryable 503
+        // below is honest — retrying the same code can still succeed.
         const verifyToken = `vt_${generateToken()}`;
-        await db.insert(signupVerifyTokens).values({ token: verifyToken, email });
+        await consumeCodeAndMintVerifyToken(row.id, email, verifyToken);
         return res.json({ ok: true, verifyToken });
       }
     }
     res.status(400).json({ message: "That code didn't match — check the latest email and try again" });
+    } catch (err) {
+      // A transient DB failure here must never surface as a bare 500 with a
+      // drizzle "Failed query: …" message. The code was NOT consumed on this
+      // path, so tell the fan to retry the SAME code with a friendly,
+      // retryable message. Real details go to the server log/ops alert.
+      console.error(`[verify] confirm failed for ${email}:`, err);
+      res.status(503).json({ message: "We couldn't check that code right now — please try again in a moment" });
+    }
   });
 
   // ─── Customer minimal signup (email + password, after code verify) ──
@@ -2254,19 +2276,49 @@ export function registerCommerceRoutes(app: Express) {
     if (existing) return res.status(409).json({ message: "An account with that email already exists — sign in instead" });
 
     // Pick a placeholder username from the email; the fan can rename on /welcome.
-    const username = await pickUniqueUsername(suggestUsernameFromEmail(email));
     // Inline scrypt hash to match server/routes.ts (no shared module yet).
     const _salt = randomBytes(16).toString("hex");
     const _scryptFn = promisify(_scrypt);
     const _buf = (await _scryptFn(password, _salt, 64)) as Buffer;
     const hashed = `${_buf.toString("hex")}.${_salt}`;
-    const c = await storage.createCustomer({
-      username,
-      email,
-      displayName: username,
-      realName: null,
-      password: hashed,
-    });
+    // pickUniqueUsername check-then-insert can still race another signup (or
+    // a legacy-import squat) into the customer_users_username_unique index,
+    // and two tabs can race the email unique. Neither should be a generic
+    // 500: retry the username once with a fresh pick; turn an email
+    // collision into the same friendly 409 the pre-check gives.
+    let c: Awaited<ReturnType<typeof storage.createCustomer>> | undefined;
+    const MAX_CREATE_ATTEMPTS = 2; // one fresh-username retry on a username race
+    for (let attempt = 1; attempt <= MAX_CREATE_ATTEMPTS && !c; attempt++) {
+      const username = await pickUniqueUsername(suggestUsernameFromEmail(email));
+      try {
+        c = await storage.createCustomer({
+          username,
+          email,
+          displayName: username,
+          realName: null,
+          password: hashed,
+        });
+      } catch (err) {
+        const info = describeDbError(err);
+        if (info?.code === "23505" && (info.constraint ?? "").includes("email")) {
+          // Two tabs raced the email unique — same friendly 409 as the pre-check.
+          return res.status(409).json({ message: "An account with that email already exists — sign in instead" });
+        }
+        if (info?.code === "23505" && (info.constraint ?? "").includes("username") && attempt < MAX_CREATE_ATTEMPTS) {
+          continue; // pick a fresh username and try once more
+        }
+        if (info?.code === "23505" && (info.constraint ?? "").includes("username")) {
+          // Retry also collided (extremely unlikely) — friendly + retryable,
+          // never a generic 500. The verify token was already consumed above,
+          // but re-requesting a code restarts cleanly.
+          return res.status(503).json({ message: "We couldn't finish creating your account — please try again in a moment" });
+        }
+        throw err;
+      }
+    }
+    if (!c) {
+      return res.status(503).json({ message: "We couldn't finish creating your account — please try again in a moment" });
+    }
     // Task #860 — record Terms acceptance at account creation. The fan
     // consented via the inline microcopy under the signup CTA; stamp the
     // moment + the version of Terms in force.
