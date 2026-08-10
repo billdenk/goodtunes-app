@@ -3439,11 +3439,39 @@ export const payoutAccounts = pgTable(
     disabledReason: text("disabled_reason"),
     lastSyncedAt: timestamp("last_synced_at"),
     createdAt: timestamp("created_at").defaultNow(),
+    // Task #3005 — vendor onboarding lifecycle. When we last emailed the
+    // Stripe Express onboarding link, and how many times (resends).
+    onboardingEmailSentAt: timestamp("onboarding_email_sent_at"),
+    onboardingEmailCount: integer("onboarding_email_count").notNull().default(0),
   },
   (t) => ({
     ownerUnique: unique("payout_accounts_owner_unique").on(t.ownerKind, t.ownerId),
   }),
 );
+
+// Task #3005 — audit log of EVERY vendor (press) transfer attempt,
+// success or failure, with the acting admin. Successes also live on
+// payout_earmarks (status released); this table is the immutable
+// attempt-by-attempt trail the Otis brief asks for.
+export const vendorTransferAttempts = pgTable(
+  "vendor_transfer_attempts",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    albumId: varchar("album_id").notNull(),
+    manufacturerId: varchar("manufacturer_id").notNull(),
+    earmarkId: varchar("earmark_id"),
+    amountCents: integer("amount_cents").notNull(),
+    status: text("status").notNull(), // 'succeeded' | 'failed'
+    stripeTransferId: text("stripe_transfer_id"),
+    errorMessage: text("error_message"),
+    actingUserId: varchar("acting_user_id").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    albumIdx: index("vendor_transfer_attempts_album_idx").on(t.albumId),
+  }),
+);
+export type VendorTransferAttempt = typeof vendorTransferAttempts.$inferSelect;
 
 // Singleton settings row (id = 'default'). Platform fee + per-order
 // certificate cost are global defaults; per-album overrides live on
@@ -4250,6 +4278,12 @@ export const payoutEarmarks = pgTable(
     transferError: text("transfer_error"),
     // Free-text operator note (e.g. "Hold-longer until tour kickoff").
     notes: text("notes"),
+    // Task #3005 — vendor (press) payouts. Admin who initiated a manual
+    // vendor payout (Pay Vendor flow). NULL for system-minted earmarks.
+    createdByUserId: varchar("created_by_user_id"),
+    // Inbound payments this outbound transfer draws from — array of
+    // manufacturer_payment_steps ids (paid steps for the same album).
+    inboundRefs: jsonb("inbound_refs").$type<string[]>(),
   },
   (t) => ({
     statusIdx: index("payout_earmarks_status_idx").on(t.status),

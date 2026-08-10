@@ -125,6 +125,7 @@ import { AdminPlatformPricing } from "@/pages/AdminPlatformPricing";
 import { AdminPublishing } from "@/pages/AdminPublishing";
 import { AdminGoodDeedPricing } from "@/pages/AdminGoodDeedPricing";
 import AdminPayoutsRelease from "@/pages/AdminPayoutsRelease";
+import AdminVendorPayees from "@/pages/AdminVendorPayees";
 import AdminPaymentRequests from "@/pages/AdminPaymentRequests";
 import { AdminDashboard } from "@/pages/AdminDashboard";
 import { VendorPortal } from "@/pages/VendorPortal";
@@ -1156,6 +1157,10 @@ function Router() {
         </Route>
         <Route path="/admin/payouts-release">
           <ProtectedRoute component={AdminPayoutsRelease} />
+        </Route>
+        {/* Task #3005 — press payout onboarding + Pay Vendor (super-admin only). */}
+        <Route path="/admin/vendor-payees">
+          <ProtectedRoute component={AdminVendorPayees} />
         </Route>
         {/* Task #475 — Soft-delete trash. Page self-gates on super_admin
             via /api/admin/trash returning 403 for everyone else. */}

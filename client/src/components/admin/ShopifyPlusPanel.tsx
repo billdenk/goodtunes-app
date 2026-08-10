@@ -1533,7 +1533,256 @@ function ManufacturingLedger({
               </div>
             )}
           </div>
+
+          {/* Task #3005 — money out: manual press payouts via Stripe
+              Connect. Super-admin only (routes 403 everyone else). */}
+          {isSuperAdmin && <VendorMoneyOut albumId={albumId} />}
         </>
+      )}
+    </div>
+  );
+}
+
+// Task #3005 — per-project money-out ledger + Pay Vendor action.
+// Renders released/failed vendor transfers with vendor, amount, date,
+// transfer ID and initiating admin, plus the attempt audit trail, and
+// the explicit named confirmation before any money moves.
+function VendorMoneyOut({ albumId }: { albumId: string }) {
+  const { toast } = useToast();
+  const ledgerKey = ["/api/admin/albums", albumId, "vendor-ledger"];
+  const { data: ledger } = useQuery<{
+    moneyIn: { id: string; description: string; amountCents: number; marginCents: number }[];
+    moneyInTotalCents: number;
+    moneyOut: {
+      id: string;
+      vendorName: string;
+      manufacturerId: string;
+      amountCents: number;
+      status: string;
+      stripeTransferId: string | null;
+      transferError: string | null;
+      date: string;
+      initiatedBy: string | null;
+    }[];
+    moneyOutTotalCents: number;
+    attempts: {
+      id: string;
+      vendorName: string;
+      amountCents: number;
+      status: string;
+      stripeTransferId: string | null;
+      errorMessage: string | null;
+      actingAdmin: string;
+      createdAt: string;
+    }[];
+  }>({ queryKey: ledgerKey });
+
+  const { data: payees } = useQuery<
+    { manufacturerId: string; name: string; onboardingStatus: string }[]
+  >({ queryKey: ["/api/admin/vendor-payees"] });
+  const activePayees = (payees ?? []).filter((p) => p.onboardingStatus === "active");
+
+  const [vendorId, setVendorId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [lastTransferId, setLastTransferId] = useState<string | null>(null);
+  const [showAttempts, setShowAttempts] = useState(false);
+
+  const selected = activePayees.find((p) => p.manufacturerId === vendorId) ?? null;
+  const amountCents = Math.round(parseFloat(amount || "0") * 100);
+  const canConfirm = !!selected && Number.isFinite(amountCents) && amountCents > 0;
+
+  async function firePayment() {
+    if (!selected) return;
+    setPaying(true);
+    try {
+      const res = await apiRequest("POST", `/api/admin/albums/${albumId}/pay-vendor`, {
+        manufacturerId: selected.manufacturerId,
+        amountCents,
+        requestId: crypto.randomUUID(),
+      });
+      const body = await res.json();
+      setLastTransferId(body.transferId ?? null);
+      setConfirming(false);
+      setVendorId("");
+      setAmount("");
+      toast({
+        title: "Payment sent",
+        description: `Stripe transfer ${body.transferId} to ${selected.name}.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ledgerKey });
+    } catch (e: any) {
+      setConfirming(false);
+      toast({
+        title: "Transfer failed",
+        description: e?.message ?? "Stripe rejected the transfer.",
+        variant: "destructive",
+      });
+      queryClient.invalidateQueries({ queryKey: ledgerKey });
+    } finally {
+      setPaying(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="panel-vendor-money-out">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">Money out — vendor payouts</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Manual Stripe Connect transfers to the press for this project. Money in (paid steps):{" "}
+            <strong>{formatUsdCents(ledger?.moneyInTotalCents ?? 0)}</strong> · paid out:{" "}
+            <strong>{formatUsdCents(ledger?.moneyOutTotalCents ?? 0)}</strong>
+          </p>
+        </div>
+      </div>
+
+      {(ledger?.moneyOut ?? []).length > 0 && (
+        <div className="mt-3 divide-y divide-slate-100 border border-slate-100 rounded-lg">
+          {ledger!.moneyOut.map((r) => (
+            <div key={r.id} className="px-3 py-2 flex items-center justify-between gap-3 text-xs" data-testid={`row-money-out-${r.id}`}>
+              <div className="min-w-0">
+                <span className="font-semibold text-slate-800">{formatUsdCents(r.amountCents)}</span>
+                {" "}to <span className="font-medium">{r.vendorName}</span>
+                {" "}· {new Date(r.date).toLocaleDateString()}
+                {r.initiatedBy && <span className="text-slate-400"> · by {r.initiatedBy}</span>}
+                {r.stripeTransferId && (
+                  <span className="text-slate-400"> · <code>{r.stripeTransferId}</code></span>
+                )}
+                {r.transferError && (
+                  <span className="text-rose-600"> · {r.transferError}</span>
+                )}
+              </div>
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 font-semibold ${
+                  r.status === "released"
+                    ? "bg-emerald-50 text-emerald-700"
+                    : r.status === "failed"
+                      ? "bg-rose-50 text-rose-700"
+                      : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                {r.status === "released" ? "paid" : r.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pay Vendor form */}
+      <div className="mt-3 flex items-end gap-2 flex-wrap">
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">Vendor (press)</label>
+          <select
+            value={vendorId}
+            onChange={(e) => setVendorId(e.target.value)}
+            className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-900"
+            data-testid="select-pay-vendor"
+          >
+            <option value="">Choose…</option>
+            {activePayees.map((p) => (
+              <option key={p.manufacturerId} value={p.manufacturerId}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          {activePayees.length === 0 && (
+            <p className="text-xs text-slate-400 mt-1">
+              No Active presses yet — onboard one under System → Vendor payees.
+            </p>
+          )}
+        </div>
+        <div className="w-28">
+          <label className="block text-xs text-slate-500 mb-1">Amount $</label>
+          <input
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+            data-testid="input-pay-vendor-amount"
+          />
+        </div>
+        <Button
+          size="sm"
+          onClick={() => setConfirming(true)}
+          disabled={!canConfirm || paying}
+          data-testid="button-pay-vendor"
+        >
+          <Landmark className="w-3.5 h-3.5 mr-1.5" /> Pay vendor
+        </Button>
+      </div>
+      {lastTransferId && (
+        <p className="text-xs text-emerald-700 mt-2" data-testid="text-last-transfer-id">
+          Last transfer: <code>{lastTransferId}</code>
+        </p>
+      )}
+
+      {(ledger?.attempts ?? []).length > 0 && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setShowAttempts((v) => !v)}
+            className="text-xs text-slate-500 underline"
+            data-testid="button-toggle-attempts"
+          >
+            {showAttempts ? "Hide" : "Show"} transfer attempt log ({ledger!.attempts.length})
+          </button>
+          {showAttempts && (
+            <div className="mt-2 divide-y divide-slate-100 border border-slate-100 rounded-lg">
+              {ledger!.attempts.map((a) => (
+                <div key={a.id} className="px-3 py-1.5 text-xs text-slate-600" data-testid={`row-attempt-${a.id}`}>
+                  {new Date(a.createdAt).toLocaleString()} · {formatUsdCents(a.amountCents)} to {a.vendorName} ·{" "}
+                  <span className={a.status === "succeeded" ? "text-emerald-700" : "text-rose-700"}>{a.status}</span>
+                  {" "}· by {a.actingAdmin}
+                  {a.stripeTransferId && <> · <code>{a.stripeTransferId}</code></>}
+                  {a.errorMessage && <> · {a.errorMessage}</>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Explicit named confirmation — never a generic "Confirm" on a
+          money movement. Names vendor, amount, and project. */}
+      {confirming && selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" data-testid="dialog-pay-vendor-confirm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h4 className="text-sm font-semibold text-slate-900">Send this payment?</h4>
+            <p className="text-sm text-slate-600 mt-2">
+              You are about to transfer <strong>{formatUsdCents(amountCents)}</strong> from the GoodTunes Stripe
+              balance to <strong>{selected.name}</strong> for this project. This fires immediately and cannot be
+              undone from here.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setConfirming(false)}
+                disabled={paying}
+                className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                data-testid="button-pay-vendor-cancel"
+              >
+                Cancel
+              </button>
+              <Button
+                size="sm"
+                onClick={firePayment}
+                disabled={paying}
+                data-testid="button-pay-vendor-confirm"
+              >
+                {paying ? (
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Check className="w-3.5 h-3.5 mr-1.5" />
+                )}
+                Pay {selected.name} {formatUsdCents(amountCents)}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -832,6 +832,40 @@ export async function sendOpsAlertEmail(
   return sendViaResend("ops-alert", toEmail, subject, html, bodyText);
 }
 
+// Task #3005 — email a press/plant their Stripe Express onboarding link
+// so they can receive payouts. Sent (and re-sent) by super admins from
+// the Vendor payees page.
+export async function sendVendorOnboardingEmail(
+  toEmail: string,
+  vendorName: string,
+  onboardingUrl: string,
+): Promise<SendResult> {
+  const subject = `Set up payouts with GoodTunes`;
+  const text = [
+    `Hi ${vendorName},`,
+    ``,
+    `GoodTunes pays its manufacturing partners directly through Stripe. To receive payouts, please complete your Stripe onboarding using the link below:`,
+    onboardingUrl,
+    ``,
+    `The link expires after a short time — if it has expired, reply to this email and we'll send a fresh one.`,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Payouts</div>
+      <h1 style="font-size: 22px; margin: 12px 0 12px; font-weight: 700;">Set up payouts</h1>
+      <p style="font-size: 15px; line-height: 1.5; color: #333;">
+        Hi <strong>${escapeHtml(vendorName)}</strong>, GoodTunes pays its manufacturing partners directly through Stripe. Complete your Stripe onboarding to receive payouts:
+      </p>
+      <div style="margin: 24px 0;">
+        ${bulletproofButton(onboardingUrl, "Complete Stripe onboarding", { bgColor: "#319ED8", paddingV: 12, paddingH: 20, borderRadius: 8, fontSize: 14 })}
+      </div>
+      <p style="font-size: 13px; color: #888; line-height: 1.5;">The link expires after a short time. If it has expired, reply to this email and we&rsquo;ll send a fresh one.</p>
+    </div>
+  `;
+  return sendViaResend("vendor-onboarding", toEmail, subject, html, text);
+}
+
 // Task #256 — Notify super-admins that a customer landed on the admin
 // shell and is asking to be promoted. One email per (customer, day) is
 // enforced by the caller via admin_access_requests.last_notified_at;

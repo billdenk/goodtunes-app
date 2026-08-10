@@ -11676,3 +11676,39 @@ SQL
 }
 migrate_press_catalog_archive dev  "${DATABASE_URL:-}"
 migrate_press_catalog_archive prod "${PROD_DATABASE_URL:-}"
+
+# Task #3005 — press payouts via Stripe Connect: vendor-ledger columns +
+# vendor_transfer_attempts audit table. Idempotent for dev/prod drift.
+migrate_vendor_payouts() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping vendor-payouts migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE payout_earmarks ADD COLUMN IF NOT EXISTS created_by_user_id varchar;
+ALTER TABLE payout_earmarks ADD COLUMN IF NOT EXISTS inbound_refs jsonb;
+ALTER TABLE payout_accounts ADD COLUMN IF NOT EXISTS onboarding_email_sent_at timestamp;
+ALTER TABLE payout_accounts ADD COLUMN IF NOT EXISTS onboarding_email_count integer NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS vendor_transfer_attempts (
+  id                 varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id           varchar NOT NULL,
+  manufacturer_id    varchar NOT NULL,
+  earmark_id         varchar,
+  amount_cents       integer NOT NULL,
+  status             text    NOT NULL,
+  stripe_transfer_id text,
+  error_message      text,
+  acting_user_id     varchar NOT NULL,
+  created_at         timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS vendor_transfer_attempts_album_idx ON vendor_transfer_attempts (album_id);
+SQL
+  then
+    echo "post-merge: vendor-payouts migration ok on $label"
+  else
+    echo "post-merge: WARNING — vendor-payouts migration failed on $label (continuing)"
+  fi
+}
+migrate_vendor_payouts dev  "${DATABASE_URL:-}"
+migrate_vendor_payouts prod "${PROD_DATABASE_URL:-}"

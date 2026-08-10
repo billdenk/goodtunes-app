@@ -93,6 +93,7 @@ const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   customers: "audience",
   "platform-pricing": "system",
   "payouts-release": "system",
+  "vendor-payees": "system",
   "payment-requests": "system",
   invites: "system",
   "invite-directory": "system",
@@ -134,6 +135,7 @@ export type EntityKey =
   | "makers"
   | "vendors"
   | "payouts-release"
+  | "vendor-payees"
   | "labels"
   | "managers"
   | "shopify"
@@ -1196,6 +1198,16 @@ export function AdminFrame({
                   active={active === "payouts-release"}
                   onClick={() => navigate("/admin/payouts-release")}
                   testId="nav-payouts-release"
+                />
+                {/* Task #3005 — press payout onboarding + Pay Vendor.
+                    Super-admin-only money-movement surface. */}
+                <SidebarLink
+                  icon={Factory}
+                  label="Vendor payees"
+                  count={-1}
+                  active={active === "vendor-payees"}
+                  onClick={() => navigate("/admin/vendor-payees")}
+                  testId="nav-vendor-payees"
                 />
                 {/* One-off invoices billed to artists / people via Stripe
                     Payment Links. Status auto-updates via webhook. */}

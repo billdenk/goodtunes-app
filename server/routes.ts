@@ -25122,6 +25122,9 @@ export async function registerRoutes(
   registerPayoutEarmarkRoutes(app);
   const { registerPaymentRequestRoutes } = await import("./paymentRequests");
   registerPaymentRequestRoutes(app, requireAdmin);
+  // Task #3005 — press payouts via Stripe Connect (super-admin only).
+  const { registerVendorPayoutRoutes } = await import("./vendorPayouts");
+  registerVendorPayoutRoutes(app);
 
   // Task #2428 — GoodTunes Shopify+ prepaid-manufacturing payment ledger.
   const { registerShopifyPlusRoutes } = await import("./shopifyPlus");
