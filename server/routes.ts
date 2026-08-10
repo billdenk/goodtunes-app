@@ -6455,13 +6455,15 @@ export async function registerRoutes(
 
         // Load this press's existing tiers + colors so we can suggest a
         // target tier per row and flag idempotent state.
+        // Task #2998 — archived (soft-retired) tiers/colors are historical
+        // only; they never take import suggestions or count as existing.
         const tierRows = await db
           .select()
           .from(pressColorTiers)
-          .where(eq(pressColorTiers.pressId, scope.pressId));
+          .where(and(eq(pressColorTiers.pressId, scope.pressId), isNull(pressColorTiers.archivedAt)));
         const tierIds = tierRows.map((t) => t.id);
         const colorRows = tierIds.length
-          ? await db.select().from(pressColors).where(inArray(pressColors.tierId, tierIds))
+          ? await db.select().from(pressColors).where(and(inArray(pressColors.tierId, tierIds), isNull(pressColors.archivedAt)))
           : [];
         const tiersFlat = tierRows.map((t) => ({
           id: t.id,
@@ -6590,6 +6592,8 @@ export async function registerRoutes(
               and(
                 inArray(pressColorTiers.id, tierIds),
                 eq(pressColorTiers.pressId, scope.pressId),
+                // Task #2998 — archived tiers can't take imported colors.
+                isNull(pressColorTiers.archivedAt),
               ),
             )
         : [];
@@ -6659,7 +6663,9 @@ export async function registerRoutes(
           const existing = await db
             .select()
             .from(pressColors)
-            .where(eq(pressColors.tierId, row.targetTierId));
+            // Task #2998 — never update an archived color; a same-named
+            // re-import creates a fresh active row instead.
+            .where(and(eq(pressColors.tierId, row.targetTierId), isNull(pressColors.archivedAt)));
           const norm = normalizeColorName(row.name);
           const match = existing.find((c) => normalizeColorName(c.name) === norm);
           if (match) {
@@ -8342,7 +8348,8 @@ export async function registerRoutes(
     // to this press (defense in depth — the importer UI only sends
     // tier ids it received from preview).
     const tierIds = Array.from(new Set(parsed.data.items.map((i) => i.tierId)));
-    const tierRows = await db.select().from(pressColorTiers).where(inArray(pressColorTiers.id, tierIds));
+    // Task #2998 — archived tiers are rejected as import targets.
+    const tierRows = await db.select().from(pressColorTiers).where(and(inArray(pressColorTiers.id, tierIds), isNull(pressColorTiers.archivedAt)));
     const tiersById = new Map(tierRows.map((t) => [t.id, t]));
     for (const tid of tierIds) {
       const t = tiersById.get(tid);
@@ -8354,7 +8361,8 @@ export async function registerRoutes(
     // Existing color index per tier for create-vs-update decisions.
     const existingPerTier = new Map<string, any[]>();
     for (const tid of tierIds) {
-      const rows = await db.select().from(pressColors).where(eq(pressColors.tierId, tid));
+      // Task #2998 — archived colors never count as existing matches.
+      const rows = await db.select().from(pressColors).where(and(eq(pressColors.tierId, tid), isNull(pressColors.archivedAt)));
       existingPerTier.set(tid, rows);
     }
     const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");

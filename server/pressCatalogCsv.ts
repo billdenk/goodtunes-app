@@ -24,7 +24,7 @@
 // a partial upload can't silently wipe data it didn't address. The
 // preview the operator confirms always names exactly what will be removed.
 
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   pressColorTiers,
@@ -660,11 +660,14 @@ export async function applyCatalogCsv(
   await db.transaction(async (tx) => {
     // Re-read live state INSIDE the transaction so the diff we apply
     // reflects the catalog as it is at write time.
-    const tiers = await tx.select().from(pressColorTiers).where(eq(pressColorTiers.pressId, pressId));
+    // Task #2998 — archived (soft-retired) tiers/colors are historical only:
+    // the CSV never updates, deletes, or matches against them, so a
+    // same-named import creates a fresh active row instead.
+    const tiers = await tx.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), sql`${pressColorTiers.archivedAt} IS NULL`));
     const jackets = await tx.select().from(pressJackets).where(eq(pressJackets.pressId, pressId));
     const tierIds = tiers.map((t) => t.id);
     const colors = tierIds.length
-      ? await tx.select().from(pressColors).where(inArray(pressColors.tierId, tierIds))
+      ? await tx.select().from(pressColors).where(and(inArray(pressColors.tierId, tierIds), sql`${pressColors.archivedAt} IS NULL`))
       : [];
 
     // (format, group) → tier row. Mutable as we create new tiers.

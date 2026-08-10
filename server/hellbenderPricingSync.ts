@@ -27,7 +27,7 @@
 // rolls up into the Color tier. Unmapped handles are surfaced to the
 // admin in the preview/commit response.
 
-import { and, eq, inArray, desc } from "drizzle-orm";
+import { and, eq, inArray, isNull, desc } from "drizzle-orm";
 import { db } from "./db";
 import {
   pressColorTiers,
@@ -386,10 +386,12 @@ export async function applyHellbenderPricingProposal(
     if (!defaultJacket) {
       throw new Error("Press has no default jacket — set one before syncing pricing.");
     }
+    // Task #2998 — archived tiers are retained history; the pricing sync
+    // must never index or rewrite their ladders.
     const tiers = await db
       .select()
       .from(pressColorTiers)
-      .where(eq(pressColorTiers.pressId, pressId));
+      .where(and(eq(pressColorTiers.pressId, pressId), isNull(pressColorTiers.archivedAt)));
     const tierKey = (format: string, name: string) => `${format}|${name}`;
     const tierByKey = new Map<string, (typeof tiers)[number]>();
     for (const t of tiers) tierByKey.set(tierKey(t.format, t.name), t);

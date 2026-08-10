@@ -2540,6 +2540,15 @@ export const pressColorTiers = pgTable("press_color_tiers", {
   // offered an early-start approval (so the press can begin cutting
   // masters before the preorder window closes). 0 disables the offer.
   mastersPrepCostCents: integer("masters_prep_cost_cents").notNull().default(0),
+  // Task #2998 — soft-retire (archive). Archived types disappear from the
+  // catalog editor grid and from new artist/SellPanel picks, but existing
+  // SKU snapshots (which resolve by name/id) keep working. Never hard-delete
+  // a tier that pressed records reference.
+  archivedAt: timestamp("archived_at"),
+  // Task #2998 — optional operator-uploaded preview image for the type tile
+  // disc (disc-masked upload). Null = the tile falls back to the type's
+  // first color swatch.
+  previewImageUrl: text("preview_image_url"),
 });
 export type PressColorTier = typeof pressColorTiers.$inferSelect;
 
@@ -2571,6 +2580,10 @@ export const pressColors = pgTable("press_colors", {
   // breaks on rename). Stamped at create/copy time; null on pre-existing
   // rows until the post-merge backfill runs.
   colorGroupId: varchar("color_group_id"),
+  // Task #2998 — soft-retire (archive). Mirrors press_color_tiers.archived_at;
+  // archiving a tier cascades onto its colors. Existing SKU snapshots keep
+  // resolving archived colors by name.
+  archivedAt: timestamp("archived_at"),
 });
 export type PressColor = typeof pressColors.$inferSelect;
 

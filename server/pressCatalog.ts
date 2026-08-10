@@ -120,6 +120,9 @@ export type CatalogTier = {
   // Item 28 — 180 g heavyweight price book (shares run sizes with 140 g).
   laddersByJacket180: Record<string, CatalogLadderRung[]>;
   colors: CatalogColor[];
+  // Task #2998 — operator-uploaded type-tile disc image. Null = the tile
+  // falls back to the type's first color swatch.
+  previewImageUrl: string | null;
 };
 export type CatalogFormat = {
   format: AlbumFormat;
@@ -229,6 +232,12 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
   ]);
   const colorsByTier = new Map<string, CatalogColor[]>();
   for (const c of cRows) {
+    // Task #2998 — archived colors are soft-retired: hidden from the
+    // catalog editor and every new-pick surface (this shape feeds both).
+    // Existing SKU snapshots resolve by name via resolveCatalogIdentity /
+    // lookupCatalogUnitCents, which query the tables directly and stay
+    // unfiltered on purpose.
+    if ((c as any).archivedAt) continue;
     const arr = colorsByTier.get(c.tierId) ?? [];
     arr.push({
       id: c.id,
@@ -257,6 +266,8 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
   }
   const tiersByFormat = new Map<string, CatalogTier[]>();
   for (const t of tRows) {
+    // Task #2998 — archived types are soft-retired (see the color note above).
+    if ((t as any).archivedAt) continue;
     const arr = tiersByFormat.get(t.format) ?? [];
     const ladders = laddersByTier.get(t.id) ?? {};
     // Task #1998 — use the format-specific default jacket for the back-compat
@@ -275,6 +286,7 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
       laddersByJacket: ladders,
       laddersByJacket180: ladders180ByTier.get(t.id) ?? {},
       colors: colorsByTier.get(t.id) ?? [],
+      previewImageUrl: (t as any).previewImageUrl ?? null,
     });
     tiersByFormat.set(t.format, arr);
   }
@@ -2173,10 +2185,6 @@ async function _doSeedPmp(): Promise<void> {
 
 // ─── Routes ──────────────────────────────────────────────────────────
 
-const tierBodySchema = z.object({
-  name: z.string().min(1).max(80),
-  position: z.number().int().min(0).optional(),
-});
 // Accept either an absolute http(s) URL or the app's relative upload path
 // (`/objects/uploads/<id>`). The shared `/api/admin/upload` endpoint returns
 // the relative path, so a stricter `z.string().url()` validator 400s every
@@ -2189,6 +2197,13 @@ const swatchImageUrlString = z
     (s) => /^https?:\/\/\S+$/i.test(s) || /^\/objects\/uploads\/[A-Za-z0-9._-]+$/.test(s),
     { message: "Must be an absolute http(s) URL or /objects/uploads/<id>" },
   );
+const tierBodySchema = z.object({
+  name: z.string().min(1).max(80),
+  position: z.number().int().min(0).optional(),
+  // Task #2998 — type-tile preview image (disc-masked upload); null clears
+  // back to the generated first-color swatch disc.
+  previewImageUrl: swatchImageUrlString.nullable().optional(),
+});
 const colorBodySchema = z.object({
   name: z.string().min(1).max(80),
   swatchHex: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
@@ -2506,8 +2521,31 @@ export function registerPressCatalogRoutes(
     if (enabled) {
       await db.insert(pressFormats).values({ pressId, format }).onConflictDoNothing();
     } else {
+      // Task #2998 — disabling a format must not destroy archived history:
+      // hard-delete only clean tiers (not archived, no archived colors);
+      // archive the rest in place so SKU snapshots keep resolving.
       const tiers = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, format)));
-      if (tiers.length) await db.delete(pressColorTiers).where(inArray(pressColorTiers.id, tiers.map((t) => t.id)));
+      if (tiers.length) {
+        const tierIds = tiers.map((t) => t.id);
+        const archivedColorRows = await db
+          .select({ tierId: pressColors.tierId })
+          .from(pressColors)
+          .where(and(inArray(pressColors.tierId, tierIds), sql`${pressColors.archivedAt} IS NOT NULL`));
+        const hasArchivedColors = new Set(archivedColorRows.map((r) => r.tierId));
+        const deletable = tiers.filter((t) => !(t as any).archivedAt && !hasArchivedColors.has(t.id)).map((t) => t.id);
+        const retire = tiers.filter((t) => !(t as any).archivedAt && hasArchivedColors.has(t.id)).map((t) => t.id);
+        const now = new Date();
+        await db.transaction(async (tx) => {
+          if (deletable.length) await tx.delete(pressColorTiers).where(inArray(pressColorTiers.id, deletable));
+          if (retire.length) {
+            await tx.update(pressColorTiers).set({ archivedAt: now } as any).where(inArray(pressColorTiers.id, retire));
+            await tx
+              .update(pressColors)
+              .set({ archivedAt: now } as any)
+              .where(and(inArray(pressColors.tierId, retire), sql`${pressColors.archivedAt} IS NULL`));
+          }
+        });
+      }
       await db.delete(pressFormats).where(and(eq(pressFormats.pressId, pressId), eq(pressFormats.format, format)));
     }
     res.json(await getPressCatalog(pressId));
@@ -2520,7 +2558,8 @@ export function registerPressCatalogRoutes(
     if (!ALBUM_FORMATS.includes(format as AlbumFormat)) return res.status(400).json({ message: "Unknown format" });
     const parsed = tierBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid tier" });
-    const siblings = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, format)));
+    // Task #2998 — archived tiers don't count toward positions or name checks.
+    const siblings = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, format), sql`${pressColorTiers.archivedAt} IS NULL`));
     const position = parsed.data.position ?? siblings.length;
     // Mirror the new color group onto the sibling 12" format too (if that
     // format is enabled for this press and doesn't already have a group
@@ -2530,7 +2569,7 @@ export function registerPressCatalogRoutes(
     if (sibFormat) {
       const [sibEnabled] = await db.select().from(pressFormats).where(and(eq(pressFormats.pressId, pressId), eq(pressFormats.format, sibFormat)));
       if (sibEnabled) {
-        const sibTiers = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, sibFormat)));
+        const sibTiers = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, sibFormat), sql`${pressColorTiers.archivedAt} IS NULL`));
         const exists = sibTiers.some((t) => t.name.trim().toLowerCase() === parsed.data.name.trim().toLowerCase());
         if (!exists) mirrorTo = sibFormat;
       }
@@ -2541,7 +2580,7 @@ export function registerPressCatalogRoutes(
         .values({ pressId, format, name: parsed.data.name, position, priceLadder: [] })
         .returning();
       if (mirrorTo) {
-        const sibTiers = await tx.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, mirrorTo)));
+        const sibTiers = await tx.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, mirrorTo), sql`${pressColorTiers.archivedAt} IS NULL`));
         await tx.insert(pressColorTiers).values({ pressId, format: mirrorTo, name: parsed.data.name, position: sibTiers.length, priceLadder: [] });
       }
       return created;
@@ -2558,20 +2597,24 @@ export function registerPressCatalogRoutes(
     const patch: Partial<PressColorTier> = {};
     if (parsed.data.name !== undefined) (patch as any).name = parsed.data.name;
     if (parsed.data.position !== undefined) (patch as any).position = parsed.data.position;
+    if (parsed.data.previewImageUrl !== undefined) (patch as any).previewImageUrl = parsed.data.previewImageUrl;
     if (Object.keys(patch).length === 0) {
       const [row] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
       return res.json(row);
     }
-    const [tier] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
+    const [tier] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId), sql`${pressColorTiers.archivedAt} IS NULL`));
     if (!tier) return res.status(404).json({ message: "Tier not found" });
     // Mirror a group rename to the same-named group on the sibling 12"
     // format (position stays per-format). Reject up front if the rename
     // would collide with a different group's name over there.
-    const sib = parsed.data.name !== undefined ? await siblingTwelveInchTier(tier) : null;
+    const sib =
+      parsed.data.name !== undefined || parsed.data.previewImageUrl !== undefined
+        ? await siblingTwelveInchTier(tier)
+        : null;
     if (sib && parsed.data.name !== undefined) {
       const target = parsed.data.name.trim().toLowerCase();
       if (target !== tier.name.trim().toLowerCase()) {
-        const sibTiers = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, sib.format)));
+        const sibTiers = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, sib.format), sql`${pressColorTiers.archivedAt} IS NULL`));
         if (sibTiers.some((t) => t.id !== sib.id && t.name.trim().toLowerCase() === target)) {
           return res.status(409).json({
             message: `The ${sib.format === "12_double" ? '12" Double LP' : '12" LP'} already has a group named "${parsed.data.name}" — rename or remove it there first.`,
@@ -2585,12 +2628,69 @@ export function registerPressCatalogRoutes(
         .set(patch as any)
         .where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)))
         .returning();
-      if (sib && parsed.data.name !== undefined) {
-        await tx.update(pressColorTiers).set({ name: parsed.data.name }).where(eq(pressColorTiers.id, sib.id));
+      if (sib) {
+        const sibPatch: Record<string, unknown> = {};
+        if (parsed.data.name !== undefined) sibPatch.name = parsed.data.name;
+        if (parsed.data.previewImageUrl !== undefined) sibPatch.previewImageUrl = parsed.data.previewImageUrl;
+        if (Object.keys(sibPatch).length > 0) {
+          await tx.update(pressColorTiers).set(sibPatch as any).where(eq(pressColorTiers.id, sib.id));
+        }
       }
       return updated;
     });
     res.json(row);
+  });
+
+  // Task #2998 — Archive (soft-retire) a type. Sets archived_at on the tier
+  // and cascades onto its colors; mirrored to the same-named sibling 12"
+  // tier like every other tier mutation. Archived rows disappear from the
+  // catalog editor + new artist/SellPanel picks (getPressCatalog filters
+  // them) while existing SKU snapshots keep resolving by id/name.
+  app.post("/api/admin/manufacturers/:id/catalog/tiers/:tierId/archive", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const tierId = String(req.params.tierId);
+    const [tier] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
+    if (!tier) return res.status(404).json({ message: "Type not found" });
+    const sib = await siblingTwelveInchTier(tier);
+    const now = new Date();
+    await db.transaction(async (tx) => {
+      const ids = [tierId, ...(sib ? [sib.id] : [])];
+      await tx.update(pressColorTiers).set({ archivedAt: now } as any).where(inArray(pressColorTiers.id, ids));
+      await tx
+        .update(pressColors)
+        .set({ archivedAt: now } as any)
+        .where(and(inArray(pressColors.tierId, ids), sql`${pressColors.archivedAt} IS NULL`));
+    });
+    res.json({ ok: true, archivedAt: now.toISOString() });
+  });
+
+  // Task #2998 — Archive (soft-retire) a single color. Mirrors onto the
+  // colorGroupId group when present, else the same-named color on the
+  // sibling 12" tier — the same propagation shape as color PATCH/DELETE.
+  app.post("/api/admin/manufacturers/:id/catalog/colors/:colorId/archive", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const colorId = String(req.params.colorId);
+    const [color] = await db.select().from(pressColors).where(eq(pressColors.id, colorId));
+    if (!color) return res.status(404).json({ message: "Color not found" });
+    const [tier] = await db.select().from(pressColorTiers).where(eq(pressColorTiers.id, color.tierId));
+    if (!tier || tier.pressId !== pressId) return res.status(403).json({ message: "Forbidden" });
+    const sib = await siblingTwelveInchTier(tier);
+    const groupId = (color as any).colorGroupId as string | null | undefined;
+    const now = new Date();
+    await db.transaction(async (tx) => {
+      await tx.update(pressColors).set({ archivedAt: now } as any).where(eq(pressColors.id, colorId));
+      if (groupId) {
+        await tx
+          .update(pressColors)
+          .set({ archivedAt: now } as any)
+          .where(and(sql`(${pressColors}.color_group_id) = ${groupId}`, sql`${pressColors}.id != ${colorId}`));
+      } else if (sib) {
+        const sibColors = await tx.select().from(pressColors).where(eq(pressColors.tierId, sib.id));
+        const matches = sibColors.filter((c) => c.name.trim().toLowerCase() === color.name.trim().toLowerCase());
+        for (const m of matches) await tx.update(pressColors).set({ archivedAt: now } as any).where(eq(pressColors.id, m.id));
+      }
+    });
+    res.json({ ok: true, archivedAt: now.toISOString() });
   });
 
   // Delete tier.
@@ -2599,6 +2699,19 @@ export function registerPressCatalogRoutes(
     const tierId = String(req.params.tierId);
     const [tier] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
     if (!tier) return res.json({ ok: true });
+    // Task #2998 — archived rows are retained history for SKU snapshot
+    // resolution and must never be hard-deleted; likewise an active tier
+    // that still carries archived colors can't cascade them away.
+    if ((tier as any).archivedAt) {
+      return res.status(409).json({ message: "This type is archived and kept for pressed-record history — it can't be deleted." });
+    }
+    const archivedColors = await db
+      .select({ id: pressColors.id })
+      .from(pressColors)
+      .where(and(eq(pressColors.tierId, tierId), sql`${pressColors.archivedAt} IS NOT NULL`));
+    if (archivedColors.length > 0) {
+      return res.status(409).json({ message: "This type has archived colors kept for pressed-record history — archive the type instead of deleting it." });
+    }
     // Mirror the group removal onto the sibling 12" format's same-named
     // group; both deletes commit together.
     const sib = await siblingTwelveInchTier(tier);
@@ -2628,6 +2741,9 @@ export function registerPressCatalogRoutes(
           eq(pressColorTiers.pressId, tier.pressId),
           eq(pressColorTiers.format, sibFormat),
           sql`lower(trim(${pressColorTiers.name})) = ${tier.name.trim().toLowerCase()}`,
+          // Task #2998 — archived (soft-retired) tiers never participate in
+          // mirroring; a fresh replacement with the same name must win.
+          sql`${pressColorTiers.archivedAt} IS NULL`,
         ),
       );
     return sib ?? null;
@@ -2651,13 +2767,15 @@ export function registerPressCatalogRoutes(
     if (!hasLp || !hasDbl) {
       return res.status(400).json({ message: 'This press needs both 12" LP and 12" Double LP enabled to sync them.' });
     }
+    // Task #2998 — archived tiers/colors sit outside the active catalog and
+    // must never be union-merged back onto the live side.
     const tiers = await db
       .select()
       .from(pressColorTiers)
-      .where(and(eq(pressColorTiers.pressId, pressId), inArray(pressColorTiers.format, ["12_lp", "12_double"])));
+      .where(and(eq(pressColorTiers.pressId, pressId), inArray(pressColorTiers.format, ["12_lp", "12_double"]), sql`${pressColorTiers.archivedAt} IS NULL`));
     const tierIds = tiers.map((t) => t.id);
     const colors = tierIds.length
-      ? await db.select().from(pressColors).where(inArray(pressColors.tierId, tierIds))
+      ? await db.select().from(pressColors).where(and(inArray(pressColors.tierId, tierIds), sql`${pressColors.archivedAt} IS NULL`))
       : [];
     const colorsByTier = new Map<string, PressColor[]>();
     for (const c of colors) {
@@ -2711,7 +2829,7 @@ export function registerPressCatalogRoutes(
     await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"sync12:" + pressId}))`);
       for (const g of groupCreates) {
-        const sibTiers = await tx.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, g.toFormat)));
+        const sibTiers = await tx.select().from(pressColorTiers).where(and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, g.toFormat), sql`${pressColorTiers.archivedAt} IS NULL`));
         if (sibTiers.some((t) => norm(t.name) === norm(g.name))) continue; // created meanwhile
         const [created] = await tx
           .insert(pressColorTiers)
@@ -2731,7 +2849,7 @@ export function registerPressCatalogRoutes(
       }
       for (const c of colorCopies) {
         const src = colorById.get(c.fromColorId)!;
-        const existing = await tx.select().from(pressColors).where(eq(pressColors.tierId, c.toTierId));
+        const existing = await tx.select().from(pressColors).where(and(eq(pressColors.tierId, c.toTierId), sql`${pressColors.archivedAt} IS NULL`));
         if (existing.some((e) => norm(e.name) === norm(src.name))) continue; // added meanwhile
         await tx.insert(pressColors).values({
           tierId: c.toTierId,
@@ -2755,11 +2873,12 @@ export function registerPressCatalogRoutes(
   app.post("/api/admin/manufacturers/:id/catalog/tiers/:tierId/colors", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const tierId = String(req.params.tierId);
-    const [tier] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
+    // Task #2998 — an archived tier can't take new colors (404, not silent write).
+    const [tier] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId), sql`${pressColorTiers.archivedAt} IS NULL`));
     if (!tier) return res.status(404).json({ message: "Tier not found" });
     const parsed = colorBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid color" });
-    const siblings = await db.select().from(pressColors).where(eq(pressColors.tierId, tierId));
+    const siblings = await db.select().from(pressColors).where(and(eq(pressColors.tierId, tierId), sql`${pressColors.archivedAt} IS NULL`));
     const position = parsed.data.position ?? siblings.length;
     const sib = await siblingTwelveInchTier(tier);
     // Task #2872 — stamp a new colorGroupId on every new color so later
@@ -2781,7 +2900,8 @@ export function registerPressCatalogRoutes(
         .returning();
       if (sib) {
         // Skip if a color with this name already exists on the sibling.
-        const sibColors = await tx.select().from(pressColors).where(eq(pressColors.tierId, sib.id));
+        // Task #2998 — archived colors don't block a same-named replacement.
+        const sibColors = await tx.select().from(pressColors).where(and(eq(pressColors.tierId, sib.id), sql`${pressColors.archivedAt} IS NULL`));
         const exists = sibColors.some((c) => c.name.trim().toLowerCase() === parsed.data.name.trim().toLowerCase());
         if (!exists) {
           await tx.insert(pressColors).values({
@@ -2811,23 +2931,27 @@ export function registerPressCatalogRoutes(
     if (!targetFormat || typeof targetFormat !== "string") {
       return res.status(400).json({ message: "targetFormat is required" });
     }
-    // Fresh read of source color — never trust the client snapshot
-    const [color] = await db.select().from(pressColors).where(eq(pressColors.id, colorId));
+    // Fresh read of source color — never trust the client snapshot.
+    // Task #2998 — archived source rows can't seed new copies (404).
+    const [color] = await db.select().from(pressColors).where(and(eq(pressColors.id, colorId), sql`${pressColors.archivedAt} IS NULL`));
     if (!color) return res.status(404).json({ message: "Color not found" });
-    const [tier] = await db.select().from(pressColorTiers).where(eq(pressColorTiers.id, color.tierId));
+    const [tier] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, color.tierId), sql`${pressColorTiers.archivedAt} IS NULL`));
     if (!tier || tier.pressId !== pressId) return res.status(403).json({ message: "Forbidden" });
     const resolvedGroupName = groupName ?? tier.name;
-    // Find or create the target format's tier with the same name
+    // Find or create the target format's tier with the same name.
+    // Task #2998 — an archived same-named tier is NOT a target; create a
+    // fresh active tier instead of resurrecting/writing into the retired one.
     let [targetTier] = await db.select().from(pressColorTiers).where(
       and(
         eq(pressColorTiers.pressId, pressId),
         eq(pressColorTiers.format, targetFormat),
         sql`lower(trim(${pressColorTiers.name})) = ${resolvedGroupName.trim().toLowerCase()}`,
+        sql`${pressColorTiers.archivedAt} IS NULL`,
       ),
     );
     if (!targetTier) {
       const existingFmtTiers = await db.select().from(pressColorTiers).where(
-        and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, targetFormat)),
+        and(eq(pressColorTiers.pressId, pressId), eq(pressColorTiers.format, targetFormat), sql`${pressColorTiers.archivedAt} IS NULL`),
       );
       const [created] = await db.insert(pressColorTiers).values({
         pressId,
@@ -2839,10 +2963,12 @@ export function registerPressCatalogRoutes(
       targetTier = created;
     }
     // Check if a color with this name already exists in the target tier.
+    // Task #2998 — archived colors never count as an existing match.
     const existingInTarget = await db.select().from(pressColors).where(
       and(
         eq(pressColors.tierId, targetTier.id),
         sql`lower(trim(${pressColors.name})) = ${color.name.trim().toLowerCase()}`,
+        sql`${pressColors.archivedAt} IS NULL`,
       ),
     );
     // Resolve the canonical group id for these two rows.
@@ -2867,6 +2993,7 @@ export function registerPressCatalogRoutes(
         AND pct.press_id = ${pressId}
         AND lower(trim(pct.name)) = ${tierGroupNorm}
         AND lower(trim(press_colors.name)) = ${color.name.trim().toLowerCase()}
+        AND press_colors.archived_at IS NULL
         AND (press_colors.color_group_id IS NULL OR press_colors.color_group_id != ${groupId})
     `);
     if (existingInTarget.length > 0) {
@@ -2875,7 +3002,7 @@ export function registerPressCatalogRoutes(
       return res.json(reconciled);
     }
     // Insert the copy in the target tier (fresh data from DB)
-    const targetColors = await db.select().from(pressColors).where(eq(pressColors.tierId, targetTier.id));
+    const targetColors = await db.select().from(pressColors).where(and(eq(pressColors.tierId, targetTier.id), sql`${pressColors.archivedAt} IS NULL`));
     const [copy] = await db.insert(pressColors).values({
       tierId: targetTier.id,
       name: color.name,
@@ -2895,7 +3022,8 @@ export function registerPressCatalogRoutes(
   app.patch("/api/admin/manufacturers/:id/catalog/colors/:colorId", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const colorId = String(req.params.colorId);
-    const [color] = await db.select().from(pressColors).where(eq(pressColors.id, colorId));
+    // Task #2998 — archived colors are read-only history; edits 404.
+    const [color] = await db.select().from(pressColors).where(and(eq(pressColors.id, colorId), sql`${pressColors.archivedAt} IS NULL`));
     if (!color) return res.status(404).json({ message: "Color not found" });
     const [tier] = await db.select().from(pressColorTiers).where(eq(pressColorTiers.id, color.tierId));
     if (!tier || tier.pressId !== pressId) return res.status(403).json({ message: "Forbidden" });
@@ -2915,7 +3043,7 @@ export function registerPressCatalogRoutes(
       const target = parsed.data.name.trim().toLowerCase();
       const current = color.name.trim().toLowerCase();
       if (target !== current) {
-        const sibColors = await db.select().from(pressColors).where(eq(pressColors.tierId, sib.id));
+        const sibColors = await db.select().from(pressColors).where(and(eq(pressColors.tierId, sib.id), sql`${pressColors.archivedAt} IS NULL`));
         if (sibColors.some((c) => c.name.trim().toLowerCase() === target)) {
           return res.status(409).json({
             message: `The ${sib.format === "12_double" ? '12" Double LP' : '12" LP'} ${sib.name} group already has a color named "${parsed.data.name}" — rename or remove it there first.`,
@@ -2947,7 +3075,7 @@ export function registerPressCatalogRoutes(
           ));
       } else if (sib) {
         // Legacy fallback: mirror to the same-named color on the sibling 12" tier
-        const sibColors = await tx.select().from(pressColors).where(eq(pressColors.tierId, sib.id));
+        const sibColors = await tx.select().from(pressColors).where(and(eq(pressColors.tierId, sib.id), sql`${pressColors.archivedAt} IS NULL`));
         const match = sibColors
           .filter((c) => c.name.trim().toLowerCase() === color.name.trim().toLowerCase())
           .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))[0];
@@ -2970,13 +3098,16 @@ export function registerPressCatalogRoutes(
   app.post("/api/admin/manufacturers/:id/catalog/tiers/:tierId/colors/reorder", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const tierId = String(req.params.tierId);
-    const [tier] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId)));
+    // Task #2998 — archived tiers are read-only history; reorders 404.
+    const [tier] = await db.select().from(pressColorTiers).where(and(eq(pressColorTiers.id, tierId), eq(pressColorTiers.pressId, pressId), sql`${pressColorTiers.archivedAt} IS NULL`));
     if (!tier) return res.status(404).json({ message: "Tier not found" });
     const { colorIds } = req.body ?? {};
     if (!Array.isArray(colorIds) || colorIds.length === 0 || colorIds.some((x) => typeof x !== "string")) {
       return res.status(400).json({ message: "colorIds must be a non-empty array of strings" });
     }
-    const tierColors = await db.select().from(pressColors).where(eq(pressColors.tierId, tierId));
+    // Task #2998 — the reorder modal only ever sees active colors, so the
+    // "exactly this group's colors" validation must ignore archived rows.
+    const tierColors = await db.select().from(pressColors).where(and(eq(pressColors.tierId, tierId), sql`${pressColors.archivedAt} IS NULL`));
     const tierIdSet = new Set(tierColors.map((c) => c.id));
     const submitted = new Set(colorIds);
     if (submitted.size !== colorIds.length) {
@@ -2999,7 +3130,7 @@ export function registerPressCatalogRoutes(
           const nm = colorById.get(id)!.name.trim().toLowerCase();
           if (!nameOrder.has(nm)) nameOrder.set(nm, i);
         });
-        const sibColors = await tx.select().from(pressColors).where(eq(pressColors.tierId, sib.id));
+        const sibColors = await tx.select().from(pressColors).where(and(eq(pressColors.tierId, sib.id), sql`${pressColors.archivedAt} IS NULL`));
         const sorted = sibColors
           .slice()
           .sort((a, b) => {
@@ -3026,6 +3157,11 @@ export function registerPressCatalogRoutes(
     const colorId = String(req.params.colorId);
     const [color] = await db.select().from(pressColors).where(eq(pressColors.id, colorId));
     if (!color) return res.json({ ok: true });
+    // Task #2998 — archived colors are retained history for SKU snapshot
+    // resolution and must never be hard-deleted.
+    if ((color as any).archivedAt) {
+      return res.status(409).json({ message: "This color is archived and kept for pressed-record history — it can't be deleted." });
+    }
     const [tier] = await db.select().from(pressColorTiers).where(eq(pressColorTiers.id, color.tierId));
     if (!tier || tier.pressId !== pressId) return res.status(403).json({ message: "Forbidden" });
     const sib = await siblingTwelveInchTier(tier);
@@ -3035,7 +3171,8 @@ export function registerPressCatalogRoutes(
       if (sib) {
         // Delete every same-named sibling color (handles pre-existing
         // duplicate names deterministically — removal means removal).
-        const sibColors = await tx.select().from(pressColors).where(eq(pressColors.tierId, sib.id));
+        // Task #2998 — archived colors are history and stay untouched.
+        const sibColors = await tx.select().from(pressColors).where(and(eq(pressColors.tierId, sib.id), sql`${pressColors.archivedAt} IS NULL`));
         const matches = sibColors.filter((c) => c.name.trim().toLowerCase() === color.name.trim().toLowerCase());
         for (const m of matches) await tx.delete(pressColors).where(eq(pressColors.id, m.id));
       }

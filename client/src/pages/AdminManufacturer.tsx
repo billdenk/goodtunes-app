@@ -1288,6 +1288,9 @@ export type CatalogTier = {
   // saved 180 g ladder appear here.
   laddersByJacket180?: Record<string, { qty: number; unitCents: number; confirmed?: boolean }[]>;
   colors: CatalogColor[];
+  // Task #2998 — operator-uploaded type-tile disc image (disc-masked upload).
+  // Null = the tile falls back to the type's first color swatch.
+  previewImageUrl?: string | null;
 };
 export type CatalogFormat = {
   format: AlbumFormat;

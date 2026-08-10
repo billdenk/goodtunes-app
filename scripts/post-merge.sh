@@ -11615,3 +11615,25 @@ SQL
 }
 migrate_checkout_failure_events dev  "${DATABASE_URL:-}"
 migrate_checkout_failure_events prod "${PROD_DATABASE_URL:-}"
+
+# Task #2998 — press catalog soft-retire (archive) + type preview image.
+# Idempotent ADD COLUMN so schema-drift stays green on both DBs.
+migrate_press_catalog_archive() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press-catalog-archive migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE press_color_tiers ADD COLUMN IF NOT EXISTS archived_at timestamp;
+ALTER TABLE press_color_tiers ADD COLUMN IF NOT EXISTS preview_image_url text;
+ALTER TABLE press_colors      ADD COLUMN IF NOT EXISTS archived_at timestamp;
+SQL
+  then
+    echo "post-merge: press-catalog-archive migration ok on $label"
+  else
+    echo "post-merge: WARNING — press-catalog-archive migration failed on $label (continuing)"
+  fi
+}
+migrate_press_catalog_archive dev  "${DATABASE_URL:-}"
+migrate_press_catalog_archive prod "${PROD_DATABASE_URL:-}"

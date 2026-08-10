@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/popover";
 import {
   Check,
-  UploadCloud,
   Plus,
   MoreHorizontal,
   Trash2,
@@ -67,6 +66,8 @@ interface CatalogTier {
   name: string;
   position: number;
   colors: CatalogColor[];
+  // Task #2998 — operator-uploaded type-tile disc image; null = first color.
+  previewImageUrl?: string | null;
 }
 interface CatalogFormat {
   format: string;
@@ -415,6 +416,8 @@ export function SwatchEditorPopover({
   onRemove,
   labelLogoUrl,
   labelBgColor,
+  startInMenu,
+  onArchive,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -425,18 +428,26 @@ export function SwatchEditorPopover({
   onRemove?: () => void;
   labelLogoUrl: string | null;
   labelBgColor: string | null;
+  // Task #2998 — when true (edit mode only), the popover opens on a
+  // two-item menu (Edit… / Archive) before showing the editor; Archive
+  // shows a lightweight inline confirm and calls onArchive.
+  startInMenu?: boolean;
+  onArchive?: () => void;
 }) {
   const { toast } = useToast();
   const [name, setName] = useState(edit?.name ?? "");
   const [hex, setHex] = useState(edit?.swatchHex ?? "#C81E38");
   const [photoUrl, setPhotoUrl] = useState<string | null>(edit?.swatchImageUrl ?? null);
   const [uploading, setUploading] = useState(false);
+  const menuEnabled = !!startInMenu && !!edit && !!onArchive;
+  const [view, setView] = useState<"menu" | "confirm" | "edit">(menuEnabled ? "menu" : "edit");
 
   const seed = () => {
     setName(edit?.name ?? "");
     setHex(edit?.swatchHex ?? "#C81E38");
     setPhotoUrl(edit?.swatchImageUrl ?? null);
     setUploading(false);
+    setView(menuEnabled ? "menu" : "edit");
   };
 
   const canSave = name.trim().length > 0 && !uploading && !saving;
@@ -496,6 +507,66 @@ export function SwatchEditorPopover({
         }}
         data-testid={edit ? "popover-edit-color" : "popover-add-color"}
       >
+        {menuEnabled && view !== "edit" ? (
+          /* Task #2998 — two-item menu (Edit… / Archive) + inline confirm */
+          <div style={{ padding: 8 }}>
+            {view === "menu" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setView("edit")}
+                  className="w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors hover:bg-slate-100"
+                  style={{ color: INK }}
+                  data-testid="menu-color-edit"
+                >
+                  Edit…
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView("confirm")}
+                  className="w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors hover:bg-rose-50"
+                  style={{ color: CRITICAL }}
+                  data-testid="menu-color-archive"
+                >
+                  Archive
+                </button>
+              </>
+            ) : (
+              <div style={{ padding: "8px 10px 10px" }}>
+                <div className="text-[13px] font-semibold" style={{ color: INK }}>
+                  Archive {edit?.name}?
+                </div>
+                <div className="text-[12px]" style={{ color: SUBINK, marginTop: 2 }}>
+                  Artists won't see it for new projects.
+                </div>
+                <div className="flex items-center justify-end gap-2" style={{ marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => setView("menu")}
+                    className="text-[12.5px] font-semibold rounded-full px-2.5 py-1 transition-colors hover:bg-slate-100"
+                    style={{ color: SUBINK }}
+                    data-testid="button-archive-color-cancel"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onArchive?.();
+                      onOpenChange(false);
+                    }}
+                    className="text-[12.5px] font-semibold rounded-full px-3 py-1 text-white transition-opacity hover:opacity-90"
+                    style={{ backgroundColor: CRITICAL }}
+                    data-testid="button-archive-color-confirm"
+                  >
+                    Archive
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+        <>
         {/* Pinned header */}
         <div className="flex items-center gap-3 flex-shrink-0" style={{ padding: "18px 18px 14px 18px" }}>
           <VinylDisc size={44} color={previewColor} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
@@ -518,6 +589,40 @@ export function SwatchEditorPopover({
         {/* Scrollable body */}
         <div className="flex-1 min-h-0 overflow-y-auto" style={{ padding: "0 18px 18px 18px" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Task #2998 — PREVIEW IMAGE: 64px disc + quiet Change/Remove.
+                Staged locally (photoUrl); only Save commits. */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: SUBINK }}>
+                Preview image
+              </label>
+              <div className="flex items-center gap-3">
+                <VinylDisc size={64} color={previewColor} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
+                <div className="flex flex-col items-start" style={{ gap: 2 }}>
+                  <button
+                    type="button"
+                    onClick={pickPhoto}
+                    disabled={uploading}
+                    className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold rounded-full px-2.5 py-1 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                    style={{ color: BLUE }}
+                    data-testid="button-upload-swatch"
+                  >
+                    {uploading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    {uploading ? "Uploading…" : "Change image…"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoUrl(null)}
+                    disabled={!photoUrl || uploading}
+                    className="text-[12.5px] font-semibold rounded-full px-2.5 py-1 transition-colors hover:bg-slate-100 disabled:opacity-40"
+                    style={{ color: SUBINK }}
+                    data-testid="button-clear-photo"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: SUBINK }}>
                 Color name
@@ -536,56 +641,6 @@ export function SwatchEditorPopover({
             <div className="rounded-xl bg-white" style={{ border: `1px solid ${HAIRLINE}`, padding: 14 }}>
               <ColorField label="Vinyl color" value={hex} onChange={setHex} testId="color-base" />
             </div>
-
-            {/* photo swatch upload */}
-            <button
-              type="button"
-              onClick={pickPhoto}
-              disabled={uploading}
-              data-testid="button-upload-swatch"
-              className="w-full rounded-xl flex flex-col items-center justify-center text-center transition-colors hover:bg-slate-50 focus:outline-none bg-white"
-              style={{ padding: "16px 12px", border: `1px dashed ${photoUrl ? BLUE : "var(--apple-faint)"}` }}
-            >
-              {uploading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" style={{ color: BLUE }} />
-                  <span className="text-[12.5px] font-semibold" style={{ color: SUBINK, marginTop: 6 }}>
-                    Uploading…
-                  </span>
-                </>
-              ) : photoUrl ? (
-                <>
-                  <Check className="w-4 h-4" style={{ color: BLUE }} strokeWidth={2.5} />
-                  <span className="text-[12.5px] font-semibold" style={{ color: BLUE, marginTop: 6 }}>
-                    Photo swatch attached
-                  </span>
-                  <span className="text-[11.5px]" style={{ color: SUBINK, marginTop: 1 }}>
-                    Tap to replace — the photo wins over the hex
-                  </span>
-                </>
-              ) : (
-                <>
-                  <UploadCloud className="w-4 h-4" style={{ color: FAINT }} />
-                  <span className="text-[12.5px] font-semibold" style={{ color: INK, marginTop: 6 }}>
-                    Upload a swatch
-                  </span>
-                  <span className="text-[11.5px]" style={{ color: SUBINK, marginTop: 1 }}>
-                    PNG or JPG reference
-                  </span>
-                </>
-              )}
-            </button>
-            {photoUrl && (
-              <button
-                type="button"
-                onClick={() => setPhotoUrl(null)}
-                className="self-start text-[12px] font-semibold rounded-full px-2.5 py-1 transition-colors hover:bg-slate-100"
-                style={{ color: SUBINK }}
-                data-testid="button-clear-photo"
-              >
-                Remove photo — use the hex instead
-              </button>
-            )}
 
             {edit && onRemove && (
               <div style={{ paddingTop: 2 }}>
@@ -635,6 +690,8 @@ export function SwatchEditorPopover({
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : edit ? "Save" : "Save color"}
           </button>
         </div>
+        </>
+        )}
       </PopoverContent>
     </Popover>
   );
@@ -949,9 +1006,11 @@ export function PressVinylColors({
     onError: onErr,
   });
 
+  // Task #2998 — soft-retire (archive) instead of hard delete so pressed-
+  // record history keeps resolving the color by name.
   const removeColor = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/colors/${id}`);
+      await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/colors/${id}/archive`);
     },
     onSuccess: () => invalidate(),
     onError: onErr,
@@ -1086,7 +1145,11 @@ export function PressVinylColors({
               <div className="grid" style={{ marginTop: 18, gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
                 {tiers.map((t) => {
                   const on = t.id === activeTier?.id;
-                  const preview = t.colors[0] ?? null;
+                  // Task #2998 — operator-uploaded type image wins over first color.
+                  const firstColor = t.colors[0] ?? null;
+                  const preview = t.previewImageUrl
+                    ? ({ ...(firstColor ?? { id: "preview", name: t.name, swatchHex: null, swatchThumbUrl: null, position: 0 }), swatchImageUrl: t.previewImageUrl, swatchThumbUrl: null } as CatalogColor)
+                    : firstColor;
                   return (
                     <button
                       key={t.id}
@@ -1161,7 +1224,8 @@ export function PressVinylColors({
                               onOpenChange={(v) => setEditOpenId(v ? c.id : null)}
                               saving={patchColor.isPending}
                               onSave={(v) => patchColor.mutate({ id: c.id, ...v })}
-                              onRemove={() => removeColor.mutate(c.id)}
+                              startInMenu
+                              onArchive={() => removeColor.mutate(c.id)}
                               labelLogoUrl={labelLogoUrl}
                               labelBgColor={labelBgColor}
                               trigger={

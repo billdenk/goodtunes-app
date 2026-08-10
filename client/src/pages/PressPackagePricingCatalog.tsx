@@ -21,14 +21,14 @@
 // Ladder save semantics are copied verbatim from the legacy CatalogEditor
 // (same PUT, same rung encoding), so saved data round-trips identically.
 // ─────────────────────────────────────────────────────────────────────
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ALBUM_FORMAT_LABEL, type AlbumFormat } from "@shared/schema";
 import { Check, ChevronDown, DollarSign, FileText, HelpCircle, Loader2, MinusCircle, MoreHorizontal, Plus, RotateCcw, Search, UploadCloud, X } from "lucide-react";
-import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
+import { uploadAdminDoc, DOC_UPLOAD_ACCEPT, postAdminImage } from "@/lib/adminUpload";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Catalog,
@@ -126,6 +126,44 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+const DotsTrigger = forwardRef<
+  HTMLButtonElement,
+  { label: string; testId: string } & React.ButtonHTMLAttributes<HTMLButtonElement>
+>(function DotsTrigger({ label, testId, onClick, style, className, ...rest }, ref) {
+  const dark = useAdminDark();
+  return (
+    <button
+      {...rest}
+      ref={ref}
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.(e);
+      }}
+      aria-label={label}
+      data-testid={testId}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full transition-shadow focus:outline-none focus-visible:ring-2",
+        dark ? "focus-visible:ring-white/30" : "focus-visible:ring-slate-300",
+        className,
+      )}
+      style={{
+        width: 26,
+        height: 26,
+        backgroundColor: dark ? "rgba(38,38,42,0.88)" : "rgba(255,255,255,0.88)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        border: `1px solid ${HAIRLINE}`,
+        boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.45)" : "0 1px 3px rgba(0,0,0,0.10)",
+        color: SUBINK,
+        ...style,
+      }}
+    >
+      <MoreHorizontal className="w-4 h-4" />
+    </button>
+  );
+});
+
 /** One-line color-card name (Bill, Aug 10 2026): long names never wrap to a
  *  second line — every card stays the same height. Overflow ellipsizes, and
  *  hovering the card slides the text across (Apple-style marquee) to reveal
@@ -168,35 +206,6 @@ function MarqueeName({ text, color }: { text: string; color: string }) {
         {text}
       </span>
     </div>
-  );
-}
-
-/** Frosted ··· trigger button, revealed on hover / focus by the parent `.group`. */
-function DotsTrigger({ label, testId }: { label: string; testId: string }) {
-  const dark = useAdminDark();
-  return (
-    <button
-      type="button"
-      onClick={(e) => e.stopPropagation()}
-      aria-label={label}
-      data-testid={testId}
-      className={cn(
-        "inline-flex items-center justify-center rounded-full transition-shadow focus:outline-none focus-visible:ring-2",
-        dark ? "focus-visible:ring-white/30" : "focus-visible:ring-slate-300",
-      )}
-      style={{
-        width: 26,
-        height: 26,
-        backgroundColor: dark ? "rgba(38,38,42,0.88)" : "rgba(255,255,255,0.88)",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
-        border: `1px solid ${HAIRLINE}`,
-        boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.45)" : "0 1px 3px rgba(0,0,0,0.10)",
-        color: SUBINK,
-      }}
-    >
-      <MoreHorizontal className="w-4 h-4" />
-    </button>
   );
 }
 
@@ -1289,26 +1298,63 @@ function GroupCard({
   offeredSizes: string[];
   canRemove: boolean;
   onPick: () => void;
-  onSave: (name: string, sizes: string[]) => void;
+  onSave: (name: string, sizes: string[], previewImageUrl: string | null) => void;
   onArchive: () => void;
   canEdit: boolean;
   labelLogoUrl: string | null;
   labelBgColor: string | null;
 }) {
   const dark = useAdminDark();
+  const { toast } = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
+  // Task #2998 — the "…" opens a two-item menu (Edit… / Archive) first;
+  // Edit… swaps the popover content to the editor, Archive to an inline
+  // confirm. Never more than one popover level.
+  const [view, setView] = useState<"menu" | "edit" | "confirm">("menu");
   const [name, setName] = useState(tier.name);
   const [sizes, setSizes] = useState<string[]>(offeredSizes);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(tier.previewImageUrl ?? null);
+  const [uploading, setUploading] = useState(false);
   useEffect(() => {
     if (menuOpen) {
+      setView("menu");
       setName(tier.name);
       setSizes(offeredSizes);
+      setPreviewUrl(tier.previewImageUrl ?? null);
+      setUploading(false);
     }
-  }, [menuOpen, tier.name, offeredSizes]);
-  const canSave = name.trim().length > 0 && sizes.length > 0;
+  }, [menuOpen, tier.name, offeredSizes, tier.previewImageUrl]);
+  const canSave = name.trim().length > 0 && sizes.length > 0 && !uploading;
   const toggleSize = (s: string) =>
     setSizes((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
-  const preview = tier.colors[0] ?? null;
+  const pickImage = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setUploading(true);
+      try {
+        const r = await postAdminImage(file, { mask: "disc", noun: "type preview" });
+        setPreviewUrl(r.url);
+      } catch (err: any) {
+        toast({ title: "Upload failed", description: err?.message, variant: "destructive" });
+      } finally {
+        setUploading(false);
+      }
+    };
+    input.click();
+  };
+  // Tile disc: operator-uploaded type image wins; else first color swatch.
+  const firstColor = tier.colors[0] ?? null;
+  const preview = tier.previewImageUrl
+    ? ({ ...(firstColor ?? { id: "preview", name: tier.name, swatchHex: null, swatchThumbUrl: null, position: 0 }), swatchImageUrl: tier.previewImageUrl, swatchThumbUrl: null } as CatalogColor)
+    : firstColor;
+  // Editor disc preview reflects the STAGED image (nothing commits until Save).
+  const editorPreview = previewUrl
+    ? ({ ...(firstColor ?? { id: "preview", name: tier.name, swatchHex: null, swatchThumbUrl: null, position: 0 }), swatchImageUrl: previewUrl, swatchThumbUrl: null } as CatalogColor)
+    : firstColor;
   return (
     <div
       role="button"
@@ -1342,6 +1388,13 @@ function GroupCard({
             <button
               type="button"
               onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+              draggable={false}
+              onDragStart={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
               aria-label={`Edit ${tier.name}`}
               data-testid={`button-type-menu-${tier.id}`}
               className={cn(
@@ -1373,6 +1426,62 @@ function GroupCard({
             style={frostedPanel(dark)}
             data-testid={`popover-edit-group-${tier.id}`}
           >
+            {view === "menu" ? (
+              <div style={{ padding: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setView("edit")}
+                  className="w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors hover:bg-slate-100"
+                  style={{ color: INK }}
+                  data-testid={`menu-type-edit-${tier.id}`}
+                >
+                  Edit…
+                </button>
+                <button
+                  type="button"
+                  disabled={!canRemove}
+                  onClick={() => setView("confirm")}
+                  className="w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors hover:bg-rose-50 disabled:opacity-40"
+                  style={{ color: criticalColor(dark) }}
+                  data-testid={`menu-type-archive-${tier.id}`}
+                >
+                  Archive
+                </button>
+              </div>
+            ) : view === "confirm" ? (
+              <div style={{ padding: "16px 18px 14px" }}>
+                <div className="text-[13.5px] font-semibold" style={{ color: INK }}>
+                  Archive {tier.name}?
+                </div>
+                <div className="text-[12.5px]" style={{ color: SUBINK, marginTop: 2, lineHeight: 1.4 }}>
+                  Artists won't see it for new projects. Its colors retire with it; pressed records keep their history.
+                </div>
+                <div className="flex items-center justify-end gap-2" style={{ marginTop: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => setView("menu")}
+                    className="text-[12.5px] font-semibold rounded-full px-2.5 py-1 transition-colors hover:bg-slate-100"
+                    style={{ color: SUBINK }}
+                    data-testid={`button-archive-cancel-${tier.id}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onArchive();
+                      setMenuOpen(false);
+                    }}
+                    className="text-[12.5px] font-semibold rounded-full px-3 py-1 text-white transition-opacity hover:opacity-90"
+                    style={{ backgroundColor: criticalColor(dark) }}
+                    data-testid={`button-archive-confirm-${tier.id}`}
+                  >
+                    Archive
+                  </button>
+                </div>
+              </div>
+            ) : (
+            <>
             <div style={{ padding: 18 }}>
               <div className="text-[15px] font-semibold tracking-tight" style={{ color: INK }}>
                 Edit type. <span style={{ color: FAINT, fontWeight: 600 }}>{tier.name}.</span>
@@ -1381,6 +1490,36 @@ function GroupCard({
                 Sizes here gate the whole type &mdash; every color in it.
               </p>
               <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* Task #2998 — PREVIEW IMAGE: staged locally; Save commits. */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <FieldLabel>Preview image</FieldLabel>
+                  <div className="flex items-center gap-3">
+                    <VinylDisc size={64} color={editorPreview} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
+                    <div className="flex flex-col items-start" style={{ gap: 2 }}>
+                      <button
+                        type="button"
+                        onClick={pickImage}
+                        disabled={uploading}
+                        className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold rounded-full px-2.5 py-1 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                        style={{ color: BLUE }}
+                        data-testid={`button-type-image-${tier.id}`}
+                      >
+                        {uploading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                        {uploading ? "Uploading…" : "Change image…"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewUrl(null)}
+                        disabled={!previewUrl || uploading}
+                        className="text-[12.5px] font-semibold rounded-full px-2.5 py-1 transition-colors hover:bg-slate-100 disabled:opacity-40"
+                        style={{ color: SUBINK }}
+                        data-testid={`button-type-image-clear-${tier.id}`}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   <FieldLabel>Type name</FieldLabel>
                   <input
@@ -1425,7 +1564,7 @@ function GroupCard({
                 type="button"
                 disabled={!canSave}
                 onClick={() => {
-                  onSave(name.trim(), sizes);
+                  onSave(name.trim(), sizes, previewUrl);
                   setMenuOpen(false);
                 }}
                 className="text-[13px] font-semibold rounded-full px-4 py-1.5 text-white transition-opacity hover:opacity-90 disabled:opacity-40"
@@ -1441,10 +1580,7 @@ function GroupCard({
             <button
               type="button"
               disabled={!canRemove}
-              onClick={() => {
-                onArchive();
-                setMenuOpen(false);
-              }}
+              onClick={() => setView("confirm")}
               className="w-full text-[13px] font-semibold transition-colors disabled:opacity-40"
               style={{ padding: "12px 18px", borderTop: `1px solid ${HAIRLINE}`, color: criticalColor(dark), textAlign: "center", background: "transparent" }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = dark ? CRITICAL_WASH : "#fdeef2")}
@@ -1453,6 +1589,8 @@ function GroupCard({
             >
               Archive type
             </button>
+            </>
+            )}
           </PopoverContent>
         </Popover>
       )}
@@ -1852,6 +1990,40 @@ export function PressPackagePricingCatalog({
     onError: (e: any) =>
       toast({ title: "Couldn't rename type", description: e?.message, variant: "destructive" }),
   });
+  // Task #2998 — Save from the Edit type popover (name and/or preview image).
+  const patchTier = useMutation({
+    mutationFn: async (args: { id: string; body: { name?: string; previewImageUrl?: string | null } }) => {
+      const r = await apiRequest("PATCH", `/api/admin/manufacturers/${pressId}/catalog/tiers/${args.id}`, args.body);
+      return r.json();
+    },
+    onSuccess: invalidate,
+    onError: (e: any) =>
+      toast({ title: "Couldn't save type", description: e?.message, variant: "destructive" }),
+  });
+  // Task #2998 — Archive (soft-retire) a type; its colors retire with it.
+  // The catalog refetch drops the row, and the selection effect above falls
+  // back to the first remaining type automatically.
+  const archiveTier = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/tiers/${id}/archive`);
+    },
+    onSuccess: invalidate,
+    onError: (e: any) =>
+      toast({ title: "Couldn't archive type", description: e?.message, variant: "destructive" }),
+  });
+  // Task #2998 — Archive (soft-retire) a color. Selection falls back to the
+  // first remaining color via the selection effect once the refetch lands.
+  const archiveColor = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/colors/${id}/archive`);
+    },
+    onSuccess: () => {
+      setEditColorId(null);
+      invalidate();
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't archive color", description: e?.message, variant: "destructive" }),
+  });
   const deleteTier = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/tiers/${id}`);
@@ -1898,17 +2070,6 @@ export function PressPackagePricingCatalog({
     },
     onError: (e: any) =>
       toast({ title: "Couldn't save color", description: e?.message, variant: "destructive" }),
-  });
-  const deleteColor = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/colors/${id}`);
-    },
-    onSuccess: () => {
-      setEditColorId(null);
-      invalidate();
-    },
-    onError: (e: any) =>
-      toast({ title: "Couldn't remove color", description: e?.message, variant: "destructive" }),
   });
   // Handoff v2.1 — drag a tile onto another to reorder (replaces the
   // ManageColorsPanel modal). Order updates live in a local override while
@@ -2731,10 +2892,9 @@ export function PressPackagePricingCatalog({
                           tier={t}
                           active={t.id === selectedTierId}
                           offeredSizes={offeredSizesForTier(t.name)}
-                          // No soft-retire (archive) route exists yet, so the
-                          // Archive row stays disabled — deleting would destroy
-                          // pressed-record history, which archive must not do.
-                          canRemove={false}
+                          // Task #2998 — Archive soft-retires via the new
+                          // /tiers/:id/archive route (pressed-record history kept).
+                          canRemove={canEdit}
                           // Per Bill (2026-08-10) — clicking the ALREADY-selected
                           // tile collapses the grid back to the summary row;
                           // clicking a different tile just switches selection.
@@ -2742,19 +2902,16 @@ export function PressPackagePricingCatalog({
                             if (t.id === selectedTierId) setTypeSectionOpen(false);
                             else setSelectedTierId(t.id);
                           }}
-                          onSave={(name, _sizes) => {
-                            // Name persists via the real rename route. Sizes gate
-                            // the type across formats, but no server route accepts
-                            // per-tier size gating yet — wired to real offered sizes
-                            // for display; persistence lands with that endpoint.
-                            if (name && name !== t.name) renameTier.mutate({ id: t.id, name });
+                          onSave={(name, _sizes, previewImageUrl) => {
+                            // Name + preview image persist via the tier PATCH route.
+                            // Sizes gate the type across formats, but no server route
+                            // accepts per-tier size gating yet — display-only.
+                            const body: { name?: string; previewImageUrl?: string | null } = {};
+                            if (name && name !== t.name) body.name = name;
+                            if ((previewImageUrl ?? null) !== (t.previewImageUrl ?? null)) body.previewImageUrl = previewImageUrl;
+                            if (Object.keys(body).length > 0) patchTier.mutate({ id: t.id, body });
                           }}
-                          onArchive={() => {
-                            // Archive = retire (keep pressed-record history), NOT delete.
-                            // No soft-retire route exists server-side; deleting would
-                            // destroy history, so leave archive inert until the retire
-                            // endpoint ships. (Do not wire to DELETE — that's not archive.)
-                          }}
+                          onArchive={() => archiveTier.mutate(t.id)}
                           canEdit={canEdit}
                           labelLogoUrl={labelLogoUrl}
                           labelBgColor={labelBgColor}
@@ -2845,9 +3002,26 @@ export function PressPackagePricingCatalog({
                         >
                           {canEdit && (
                             <div
-                              className="absolute opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+                              // Task #2998 — menu reliability: stay fully visible
+                              // while the popover is open (the hover-only opacity
+                              // used to make the trigger flaky on some tiles), and
+                              // stop pointer/drag events so the tile's select/drag
+                              // handlers never swallow the click. The popover body
+                              // itself renders in a portal, so card/grid overflow
+                              // can't clip it.
+                              className={cn(
+                                "absolute transition-opacity",
+                                editColorId === c.id ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+                              )}
                               style={{ top: 6, right: 6, zIndex: 2 }}
                               onClick={(e) => e.stopPropagation()}
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                              draggable={false}
+                              onDragStart={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
                             >
                               <SwatchEditorPopover
                                 open={editColorId === c.id}
@@ -2855,7 +3029,8 @@ export function PressPackagePricingCatalog({
                                 edit={c}
                                 saving={patchColor.isPending}
                                 onSave={(v) => patchColor.mutate({ id: c.id, body: v })}
-                                onRemove={() => deleteColor.mutate(c.id)}
+                                startInMenu
+                                onArchive={() => archiveColor.mutate(c.id)}
                                 labelLogoUrl={labelLogoUrl}
                                 labelBgColor={labelBgColor}
                                 trigger={<DotsTrigger label={`Edit ${c.name}`} testId={`color-menu-${c.id}`} />}
