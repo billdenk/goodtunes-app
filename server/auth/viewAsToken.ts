@@ -12,7 +12,7 @@
 //  4. queryClient.ts sends X-View-As-Token on every API request from that tab
 //  5. activeMembershipContext verifies token + live super_admin check, sets
 //     synthetic hat via ALS so all downstream role gates see partner scope
-//  6. ViewAsBanner shows a persistent "Viewing as …" strip; Exit clears storage
+//  6. ViewAsPill shows a persistent "Viewing as …" header pill; exit (click or Esc) clears storage
 
 import { createHmac, timingSafeEqual } from "crypto";
 import { pool } from "../db";

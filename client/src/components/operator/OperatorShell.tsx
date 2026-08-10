@@ -34,7 +34,7 @@ import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminSearchBar } from "@/components/admin/AdminSearchBar";
 import { FeedbackLauncher } from "@/components/operator/FeedbackLauncher";
-import { ViewAsBanner, ViewAsRestoreButton } from "@/components/admin/ViewAsBanner";
+import { ViewAsPill } from "@/components/admin/ViewAsBanner";
 import { cn } from "@/lib/utils";
 import { useAdminDark, useDarkMarkLogo } from "@/lib/adminAppearance";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
@@ -294,7 +294,6 @@ export function OperatorShell<TabId extends string>({
       // The view-as banner sits ABOVE the h-screen shell so it doesn't
       // disturb the fixed-height layout (the shell shrinks to fill the rest).
       <div className="flex flex-col" style={{ height: "100dvh" }} data-testid={testId ?? "operator-shell"}>
-        <ViewAsBanner />
         {/* Top header strip — FULL-WIDTH, above the rail (press mock canon,
             Bill Aug 2026): the partner brand bar starts at the far left edge
             of the window, never to the right of the sidebar, so the logo +
@@ -325,7 +324,7 @@ export function OperatorShell<TabId extends string>({
           </div>
           {superAdminBadge}
           <div className="ml-auto flex items-center gap-3" data-testid="operator-shell-account">
-            <ViewAsRestoreButton />
+            <ViewAsPill />
             <FeedbackLauncher />
             <AdminUserMenu />
           </div>
@@ -535,7 +534,6 @@ export function OperatorShell<TabId extends string>({
 
   return (
     <>
-      <ViewAsBanner />
       <main
         className="min-h-screen bg-slate-50 text-slate-900 pb-20"
         data-testid={testId ?? "operator-shell"}
@@ -546,7 +544,7 @@ export function OperatorShell<TabId extends string>({
             {identity}
             {superAdminBadge}
             <div className="ml-auto shrink-0 self-start flex items-center gap-3" data-testid="operator-shell-account">
-              <ViewAsRestoreButton />
+              <ViewAsPill />
               <FeedbackLauncher />
               <AdminUserMenu />
             </div>

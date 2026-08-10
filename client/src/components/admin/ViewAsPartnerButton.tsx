@@ -76,7 +76,10 @@ export function ViewAsPartnerButton({
         scopeDivergentWarning?: string;
       };
       const portalPath = PORTAL_PATH[role];
-      const hash = `viewas=${encodeURIComponent(token)}&viewaslabel=${encodeURIComponent(label)}`;
+      // Capture where the operator is right now so "Exit view" in the new
+      // tab can land back exactly here.
+      const returnTo = window.location.pathname + window.location.search;
+      const hash = `viewas=${encodeURIComponent(token)}&viewaslabel=${encodeURIComponent(label)}&viewasreturn=${encodeURIComponent(returnTo)}`;
       window.open(`${portalPath}#${hash}`, "_blank", "noopener,noreferrer");
       // Warn the operator that the real account may look different from
       // what view-as is showing (scope-less account defect).

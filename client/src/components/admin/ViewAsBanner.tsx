@@ -1,126 +1,75 @@
-// Persistent banner shown in every partner-portal tab that was opened via
-// "View as this partner". Reads label from sessionStorage (tab-scoped).
-// Exit clears the session token, invalidates all queries (so the next
-// request goes without the impersonation header), and redirects back to
-// the god-view admin dashboard.
+// View-as indicator — a single compact pill in the portal header (left of
+// the Feedback launcher). Replaces the old full-width blue banner (Task
+// #2918 dismiss/restore logic is gone with it — the pill is always visible
+// while impersonating, and the header keeps its normal height).
 //
-// Task #2918 — the banner is dismissible (X) for the current view session.
-// Dismissal hides the banner ONLY: the impersonation token, attribution,
-// and Exit view all keep working. It's tab-scoped sessionStorage, cleared
-// alongside the view-as token, so it never survives to the next
-// impersonation. While dismissed, a small persistent eye icon in the
-// portal header (ViewAsRestoreButton) restores the banner — which is also
-// how "Exit view" stays reachable.
+// Clicking the pill — or its small X — exits the view-as session; Esc does
+// too. Exit clears the tab-scoped token, drops the query cache (so the next
+// request goes without the impersonation header), and lands the operator
+// back exactly where they were before entering view-as (the god-view path
+// captured at mint time), falling back to the admin dashboard.
 
-import { useSyncExternalStore } from "react";
+import { useEffect } from "react";
 import { X, Eye } from "lucide-react";
 import { useLocation } from "wouter";
-import { getViewAsLabel, clearViewAsSession } from "@/lib/queryClient";
-import { queryClient } from "@/lib/queryClient";
+import {
+  getViewAsLabel,
+  getViewAsReturnTo,
+  clearViewAsSession,
+  queryClient,
+} from "@/lib/queryClient";
 
-const DISMISS_KEY = "gt:viewAsBannerDismissed";
-const listeners = new Set<() => void>();
-
-function readDismissed(): boolean {
-  try {
-    return window.sessionStorage?.getItem(DISMISS_KEY) === "1";
-  } catch {
-    return false;
-  }
+export function exitViewAs(navigate: (to: string) => void) {
+  const returnTo = getViewAsReturnTo();
+  clearViewAsSession();
+  // Force-refetch all queries without the impersonation header.
+  queryClient.clear();
+  // getViewAsReturnTo() already re-validates the stored path (same-app
+  // relative only) — null means missing or unsafe.
+  navigate(returnTo ?? "/admin/dashboard");
 }
 
-function writeDismissed(dismissed: boolean) {
-  try {
-    if (dismissed) window.sessionStorage?.setItem(DISMISS_KEY, "1");
-    else window.sessionStorage?.removeItem(DISMISS_KEY);
-  } catch {
-    // sessionStorage unavailable — banner simply stays visible.
-  }
-  listeners.forEach((l) => l());
-}
-
-function subscribe(cb: () => void) {
-  listeners.add(cb);
-  return () => {
-    listeners.delete(cb);
-  };
-}
-
-function useBannerDismissed(): boolean {
-  return useSyncExternalStore(subscribe, readDismissed, () => false);
-}
-
-export function ViewAsBanner() {
+export function ViewAsPill() {
   const label = getViewAsLabel();
-  const dismissed = useBannerDismissed();
   const [, navigate] = useLocation();
 
-  if (!label || dismissed) return null;
+  // Esc exits view-as. Deliberate layering: when an open dialog/popover
+  // handles Esc first (defaultPrevented), that Esc closes it and the NEXT
+  // Esc exits view-as — exiting mid-dialog would be jarring. Typing in a
+  // field is also exempt.
+  useEffect(() => {
+    if (!label) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      exitViewAs(navigate);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [label, navigate]);
 
-  function handleExit() {
-    clearViewAsSession();
-    // Force-refetch all queries without the impersonation header.
-    queryClient.clear();
-    navigate("/admin/dashboard");
-  }
+  if (!label) return null;
 
-  return (
-    <div
-      className="w-full bg-[var(--brand-blue)] text-white flex items-center gap-3 px-4 py-2.5 text-sm font-medium z-50 flex-shrink-0"
-      data-testid="banner-view-as"
-      role="banner"
-    >
-      <Eye className="w-4 h-4 flex-shrink-0" />
-      <span className="flex-1">
-        Viewing as{" "}
-        <span className="font-semibold" data-testid="banner-view-as-label">
-          {label}
-        </span>
-        {" "}— changes you make are attributed to your super-admin account.
-      </span>
-      <button
-        type="button"
-        onClick={handleExit}
-        className="flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold bg-white/20 hover:bg-white/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-blue)]"
-        data-testid="button-exit-view-as"
-      >
-        <X className="w-3.5 h-3.5" />
-        Exit view
-      </button>
-      <button
-        type="button"
-        onClick={() => writeDismissed(true)}
-        aria-label="Hide this banner"
-        title="Hide this banner for this view session"
-        className="rounded-md p-1 hover:bg-white/20 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-blue)]"
-        data-testid="button-dismiss-view-as-banner"
-      >
-        <X className="w-4 h-4" />
-      </button>
-    </div>
-  );
-}
-
-/**
- * Small persistent eye icon shown in the portal header while the view-as
- * banner is dismissed. Clicking it restores the banner (and with it the
- * Exit view escape hatch). Renders nothing when not impersonating or when
- * the banner is visible.
- */
-export function ViewAsRestoreButton() {
-  const label = getViewAsLabel();
-  const dismissed = useBannerDismissed();
-  if (!label || !dismissed) return null;
   return (
     <button
       type="button"
-      onClick={() => writeDismissed(false)}
-      aria-label={`Show the "Viewing as ${label}" banner`}
-      title={`Viewing as ${label} — click to show the banner`}
-      className="rounded-md p-1.5 text-[var(--brand-blue)] bg-blue-50 hover:bg-blue-100 transition-colors shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]"
-      data-testid="button-restore-view-as-banner"
+      onClick={() => exitViewAs(navigate)}
+      title={`Viewing as ${label} — click to exit (Esc)`}
+      className="flex items-center gap-1.5 rounded-full bg-blue-50 text-blue-800 pl-2.5 pr-1.5 py-1 text-xs font-medium max-w-[260px] shrink-0 hover:bg-blue-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]"
+      data-testid="pill-view-as"
     >
-      <Eye className="w-4 h-4" />
+      <Eye className="w-3.5 h-3.5 shrink-0" />
+      <span className="truncate">
+        Viewing as <span className="font-semibold" data-testid="pill-view-as-label">{label}</span>
+      </span>
+      <span
+        aria-hidden="true"
+        className="rounded-full p-0.5 hover:bg-blue-200/70 transition-colors"
+        data-testid="button-exit-view-as"
+      >
+        <X className="w-3 h-3" />
+      </span>
     </button>
   );
 }

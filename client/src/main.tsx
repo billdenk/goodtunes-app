@@ -66,6 +66,13 @@ try {
     if (vat) {
       sessionStorage.setItem("gt:viewAsToken", vat);
       sessionStorage.setItem("gt:viewAsLabel", decodeURIComponent(val ?? "Partner portal"));
+      // Where the operator was when they entered view-as — Exit lands back
+      // there. Same-path-only (must start with "/") to stay open-redirect safe.
+      const ret = params.get("viewasreturn");
+      const decodedRet = ret ? decodeURIComponent(ret) : "";
+      if (decodedRet.startsWith("/") && !decodedRet.startsWith("//")) {
+        sessionStorage.setItem("gt:viewAsReturnTo", decodedRet);
+      }
       const url = new URL(window.location.href);
       url.hash = "";
       window.history.replaceState({}, "", url.toString());

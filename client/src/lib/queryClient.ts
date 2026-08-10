@@ -18,6 +18,7 @@ export function setAuthToken(token: string | null) {
 // consumed here on every request, cleared by ViewAsBanner "Exit view" button).
 const VIEW_AS_TOKEN_KEY = "gt:viewAsToken";
 const VIEW_AS_LABEL_KEY = "gt:viewAsLabel";
+const VIEW_AS_RETURN_KEY = "gt:viewAsReturnTo";
 
 export function getViewAsToken(): string | null {
   try {
@@ -42,12 +43,37 @@ export function setViewAsSession(token: string, label: string) {
   } catch {}
 }
 
+/** Same-app path check shared by the fragment pickup (main.tsx) and the
+ * exit sink — a relative path starting "/" but not "//" (protocol-relative
+ * cross-origin) and free of control characters/backslashes. */
+export function isSafeReturnPath(p: string | null | undefined): p is string {
+  return (
+    typeof p === "string" &&
+    p.startsWith("/") &&
+    !p.startsWith("//") &&
+    !/[\\\u0000-\u001f]/.test(p)
+  );
+}
+
+/** God-view path the operator was on when view-as was entered — exit lands
+ * back there. Set by main.tsx from the `viewasreturn` fragment param.
+ * Re-validated here because sessionStorage is mutable. */
+export function getViewAsReturnTo(): string | null {
+  try {
+    const v = window.sessionStorage?.getItem(VIEW_AS_RETURN_KEY) ?? null;
+    return isSafeReturnPath(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 export function clearViewAsSession() {
   try {
     window.sessionStorage?.removeItem(VIEW_AS_TOKEN_KEY);
     window.sessionStorage?.removeItem(VIEW_AS_LABEL_KEY);
-    // Task #2918 — the banner-dismissed flag dies with the impersonation,
-    // so the banner always comes back on the next view-as session.
+    window.sessionStorage?.removeItem(VIEW_AS_RETURN_KEY);
+    // Legacy (pre-pill) banner-dismissed flag — keep clearing so old tabs
+    // can't carry it forward.
     window.sessionStorage?.removeItem("gt:viewAsBannerDismissed");
   } catch {}
 }
