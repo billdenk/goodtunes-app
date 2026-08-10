@@ -1445,6 +1445,13 @@ function GroupCard({
               view === "menu" ? "w-44" : "w-80",
             )}
             style={frostedPanel(dark)}
+            // The popover portals out of the DOM but NOT out of the React
+            // tree — clicks inside it bubble to the tile's onPick, which
+            // selects the type and collapses the picker (looked like "Edit…
+            // opens the colors panel"). Stop everything at the boundary.
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
             data-testid={`popover-edit-group-${tier.id}`}
           >
             {view === "menu" ? (
