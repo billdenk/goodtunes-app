@@ -72,6 +72,39 @@ const CD_PRINTS: Print[] = [
   { name: 'Full-color offset', sub: 'Photo-quality artwork', art: true },
 ];
 
+// ─── Disc-render color helpers ───────────────────────────────────────────
+// Even concentric silkscreen bands: every ink gets an equal share of the
+// disc's RADIUS between the center hub and the outer edge (2 colors = two
+// equal rings, 3 = three). `bands` is inner→outer paint order; we render
+// the first PICK outermost (extra picks push earlier inks out), so callers
+// pass the picks reversed via silkBandGradient(spots).
+const SILK_HUB = 12; // % radius where the clear center hub ends
+const SILK_EDGE = 95.5; // % radius where the printed face ends
+function silkBandGradient(picks: string[]): string | undefined {
+  if (picks.length === 0) return undefined;
+  const innerToOuter = [...picks].reverse();
+  const step = (SILK_EDGE - SILK_HUB) / innerToOuter.length;
+  const stops = innerToOuter
+    .map((c, i) => {
+      const from = SILK_HUB + step * i;
+      const to = SILK_HUB + step * (i + 1);
+      return `${c} ${(from + 0.5).toFixed(1)}% ${to.toFixed(1)}%`;
+    })
+    .join(', ');
+  return `radial-gradient(circle, transparent ${SILK_HUB}%, ${stops}, transparent ${(SILK_EDGE + 0.5).toFixed(1)}%)`;
+}
+
+// Near-black inks disappear against the dark canvas — give them a subtle
+// 1px light ring so the disc edge still reads. Kicks in below ~0.25 luminance.
+const DARK_DISC_RING = 'rgba(255,255,255,0.18)';
+function isDarkInk(hex: string): boolean {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  const lum = (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+  return lum < 0.25;
+}
+
 const CD_CASES = [
   { name: 'Sleeve', sub: 'Printed cardboard wallet' },
   { name: 'Jewel case', sub: 'Standard clear case · booklet + tray card' },
