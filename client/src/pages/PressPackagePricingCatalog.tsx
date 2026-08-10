@@ -2268,6 +2268,10 @@ export function PressPackagePricingCatalog({
   const selectFromCatalog = (tierId: string, colorId: string) => {
     setSelectedTierId(tierId);
     setSelectedColorId(colorId);
+    // Standing rule (Bill): a choice closes the collapsible picker — same as
+    // tapping a type tile, a search pick collapses the type grid and reveals
+    // the colors. Reorder mode keeps it open for dragging.
+    if (!reorderTypesOn) setTypeSectionOpen(false);
   };
 
   // Reorder mode begin/commit/cancel — snapshot captured on entry so Cancel
