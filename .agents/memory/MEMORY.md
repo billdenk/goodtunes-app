@@ -1,3 +1,4 @@
+- [docs/STATUS.md living status](living-status-doc.md) — update with EVERY completed/merged change, same commit; current-state not changelog; design studio reads it from GitHub.
 - [Authed admin screenshots](admin-authed-screenshots.md) — Screenshot tool keeps cookies across calls: shoot /dev-login?email=<admin> once, then shoot the /admin page; isDev panels hide (host=127.0.0.1).
 - [Grant numbers GR sequence](grant-numbers-gr-sequence.md) — comped copies use user_albums.grant_number ("GR NN"), separate from paid certificate_number; no ??1 fallbacks; mint via assignNextGrantNumber + retry.
 - [Vendor → Maker/Reseller rename scope](vendor-maker-reseller-rename-scope.md) — gear-supplier `vendor` shows to operators as Maker/Reseller (UI copy ONLY, never identifiers/role value/table/routes/testids); GoodDeed printing/payout "vendor" is a DIFFERENT concept, left alone.
