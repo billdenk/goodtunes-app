@@ -7,6 +7,10 @@
 // GET /api/admin/manufacturers/:id/specs (handoff MOCK values are the
 // defaults until the press edits them — resolved server-side).
 //
+// Theme-aware: light + dark via the THEMES map copied verbatim from the
+// handoff; mode comes from the shell's active theme (useAdminDark()), never a
+// local toggle. The mock's floating "View light / View dark" pill is dropped.
+//
 // Apple canon: exactly one filled blue pill on the page — the Save button,
 // which sits gray-outline DISABLED at idle and only fills blue after a change.
 
@@ -14,6 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAdminDark } from "@/lib/adminAppearance";
 import {
   FileAudio,
   Clock,
@@ -24,17 +29,68 @@ import {
   Info,
 } from "lucide-react";
 
-// ─── Dark charcoal tokens (canon) — verbatim from the handoff ────────
-const BLUE = "#319ED8";
-const INK = "#f5f5f7";
-const SUBINK = "#98989d";
-const FAINT = "#6e6e73";
-const HAIRLINE = "rgba(255,255,255,0.10)";
-const CANVAS = "#161617";
-const CARD = "#1e1e20";
-const CARD_SOFT = "#26262a";
-const PILL_ACTIVE = "#3a3a3e"; // raised active pill on the charcoal track (canon)
-const PILL_SHADOW = "0 1px 2px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.06)";
+// ─── Themes — dark = canon charcoal (unchanged); light = apple-canon ──
+// Copied verbatim from handoff/press-specs/PressSpecsAudioDark.tsx. Some keys
+// (rail/headerBg/searchPlaceholder/avatarRing/hoverWash/logoFilter) are only
+// used by the mock shell; kept intact so the token set stays canonical.
+
+type Theme = {
+  blue: string;
+  ink: string;
+  subink: string;
+  faint: string;
+  hairline: string;
+  canvas: string;
+  rail: string;
+  card: string;
+  cardSoft: string;
+  pillActive: string;   // raised active pill on the segmented track
+  pillShadow: string;
+  headerBg: string;     // sticky translucent header
+  searchPlaceholder: string; // input placeholder class
+  avatarRing: string;   // logo/avatar carrier ring
+  hoverWash: string;    // rail/nav hover class
+  logoFilter?: string;  // CSS invert for the dark-only wordmark asset
+};
+
+const THEMES: Record<'light' | 'dark', Theme> = {
+  light: {
+    blue: '#319ED8',
+    ink: '#1d1d1f',
+    subink: 'rgba(0,0,0,0.62)',
+    faint: 'rgba(0,0,0,0.4)',
+    hairline: 'rgba(0,0,0,0.08)',
+    canvas: '#ffffff',
+    rail: '#f5f5f7',
+    card: '#ffffff',
+    cardSoft: '#f0f0f2',
+    pillActive: '#ffffff',
+    pillShadow: '0 1px 3px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)',
+    headerBg: 'rgba(255,255,255,0.72)',
+    searchPlaceholder: 'placeholder:text-black/30',
+    avatarRing: 'ring-black/10',
+    hoverWash: 'hover:bg-black/5',
+    logoFilter: undefined,
+  },
+  dark: {
+    blue: '#319ED8',
+    ink: '#f5f5f7',
+    subink: '#98989d',
+    faint: '#6e6e73',
+    hairline: 'rgba(255,255,255,0.10)',
+    canvas: '#161617',
+    rail: '#1c1c1e',
+    card: '#1e1e20',
+    cardSoft: '#26262a',
+    pillActive: '#3a3a3e',
+    pillShadow: '0 1px 2px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.06)',
+    headerBg: 'rgba(22,22,23,0.72)',
+    searchPlaceholder: 'placeholder:text-white/30',
+    avatarRing: 'ring-white/15',
+    hoverWash: 'hover:bg-white/5',
+    logoFilter: 'invert(1) brightness(1.8)',
+  },
+};
 
 function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
@@ -59,23 +115,23 @@ type SpecsPayload = {
 };
 
 // ─── Small form atoms — verbatim from the handoff, wired for edit ────
-function Field({ label, value, suffix, wide, onChange, disabled }: { label: string; value: string; suffix?: string; wide?: boolean; onChange: (v: string) => void; disabled?: boolean }) {
+function Field({ label, value, suffix, wide, onChange, disabled, t }: { label: string; value: string; suffix?: string; wide?: boolean; onChange: (v: string) => void; disabled?: boolean; t: Theme }) {
   return (
     <label className={cn("block", wide && "col-span-2")}>
-      <span className="block text-[12px] font-medium mb-1.5" style={{ color: SUBINK }}>
+      <span className="block text-[12px] font-medium mb-1.5" style={{ color: t.subink }}>
         {label}
       </span>
-      <span className="flex items-center h-9 rounded-lg px-3" style={{ backgroundColor: CARD_SOFT, border: `1px solid ${HAIRLINE}` }}>
+      <span className="flex items-center h-9 rounded-lg px-3" style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}>
         <input
           className="flex-1 bg-transparent text-[13.5px] focus:outline-none"
-          style={{ color: INK, minWidth: 0, width: "100%" }}
+          style={{ color: t.ink, minWidth: 0, width: "100%" }}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           readOnly={disabled}
           data-testid={`input-spec-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
         />
         {suffix && (
-          <span className="text-[12px] flex-shrink-0 pl-2" style={{ color: FAINT }}>
+          <span className="text-[12px] flex-shrink-0 pl-2" style={{ color: t.faint }}>
             {suffix}
           </span>
         )}
@@ -84,13 +140,13 @@ function Field({ label, value, suffix, wide, onChange, disabled }: { label: stri
   );
 }
 
-function ChoiceRow({ label, options, selected, onSelect, disabled }: { label: string; options: string[]; selected: string; onSelect: (v: string) => void; disabled?: boolean }) {
+function ChoiceRow({ label, options, selected, onSelect, disabled, t }: { label: string; options: string[]; selected: string; onSelect: (v: string) => void; disabled?: boolean; t: Theme }) {
   return (
     <div>
-      <span className="block text-[12px] font-medium mb-1.5" style={{ color: SUBINK }}>
+      <span className="block text-[12px] font-medium mb-1.5" style={{ color: t.subink }}>
         {label}
       </span>
-      <div className="inline-flex items-center p-0.5 rounded-full" style={{ backgroundColor: CARD_SOFT, border: `1px solid ${HAIRLINE}` }}>
+      <div className="inline-flex flex-wrap items-center p-0.5 rounded-full" style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}>
         {options.map((o) => {
           const on = o === selected;
           return (
@@ -99,7 +155,7 @@ function ChoiceRow({ label, options, selected, onSelect, disabled }: { label: st
               type="button"
               onClick={() => { if (!disabled) onSelect(o); }}
               className="h-7 px-3.5 rounded-full text-[12.5px] font-semibold transition-colors"
-              style={{ color: on ? INK : SUBINK, backgroundColor: on ? PILL_ACTIVE : undefined, boxShadow: on ? PILL_SHADOW : undefined }}
+              style={{ color: on ? t.ink : t.subink, backgroundColor: on ? t.pillActive : undefined, boxShadow: on ? t.pillShadow : undefined }}
               data-testid={`choice-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${o.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
             >
               {o}
@@ -111,18 +167,18 @@ function ChoiceRow({ label, options, selected, onSelect, disabled }: { label: st
   );
 }
 
-function SpecCard({ icon: Icon, title, sub, children }: { icon: typeof FileAudio; title: string; sub: string; children: React.ReactNode }) {
+function SpecCard({ icon: Icon, title, sub, children, t }: { icon: typeof FileAudio; title: string; sub: string; children: React.ReactNode; t: Theme }) {
   return (
-    <section className="rounded-2xl p-6" style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}>
+    <section className="rounded-2xl p-6" style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }}>
       <div className="flex items-center gap-3">
-        <span className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: CARD_SOFT, border: `1px solid ${HAIRLINE}` }}>
-          <Icon className="w-4 h-4" style={{ color: SUBINK }} />
+        <span className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}>
+          <Icon className="w-4 h-4" style={{ color: t.subink }} />
         </span>
         <div>
-          <h2 className="text-[15px] font-semibold" style={{ color: INK }}>
+          <h2 className="text-[15px] font-semibold" style={{ color: t.ink }}>
             {title}
           </h2>
-          <p className="text-[12px]" style={{ color: FAINT }}>
+          <p className="text-[12px]" style={{ color: t.faint }}>
             {sub}
           </p>
         </div>
@@ -133,81 +189,81 @@ function SpecCard({ icon: Icon, title, sub, children }: { icon: typeof FileAudio
 }
 
 // ─── Per-format field sets — verbatim structure, live values ─────────
-function VinylFields({ v, set, disabled }: { v: VinylAudio; set: (k: keyof VinylAudio, val: string) => void; disabled?: boolean }) {
+function VinylFields({ v, set, disabled, t }: { v: VinylAudio; set: (k: keyof VinylAudio, val: string) => void; disabled?: boolean; t: Theme }) {
   return (
     <div className="space-y-4">
-      <SpecCard icon={FileAudio} title="Master files" sub="What you accept from artists — the digital inputs for a physical run.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" }}>
-          <Field label="Accepted formats" value={v.formats} onChange={(x) => set("formats", x)} disabled={disabled} />
-          <Field label="Bit depth (minimum)" value={v.bitDepth} suffix="bit" onChange={(x) => set("bitDepth", x)} disabled={disabled} />
-          <Field label="Sample rate" value={v.sampleRate} suffix="kHz" onChange={(x) => set("sampleRate", x)} disabled={disabled} />
-          <Field label="One file per side" value={v.onePerSide} onChange={(x) => set("onePerSide", x)} disabled={disabled} />
+      <SpecCard icon={FileAudio} title="Master files" sub="What you accept from artists — the digital inputs for a physical run." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          <Field label="Accepted formats" value={v.formats} onChange={(x) => set("formats", x)} disabled={disabled} t={t} />
+          <Field label="Bit depth (minimum)" value={v.bitDepth} suffix="bit" onChange={(x) => set("bitDepth", x)} disabled={disabled} t={t} />
+          <Field label="Sample rate" value={v.sampleRate} suffix="kHz" onChange={(x) => set("sampleRate", x)} disabled={disabled} t={t} />
+          <Field label="One file per side" value={v.onePerSide} onChange={(x) => set("onePerSide", x)} disabled={disabled} t={t} />
         </div>
       </SpecCard>
 
-      <SpecCard icon={Clock} title="Side lengths" sub="Longer sides press quieter. These are your cutting limits per size and speed.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)" }}>
-          <Field label={"12″ · 33⅓ RPM"} value={v.side12_33} suffix="min/side" onChange={(x) => set("side12_33", x)} disabled={disabled} />
-          <Field label={"12″ · 45 RPM"} value={v.side12_45} suffix="min/side" onChange={(x) => set("side12_45", x)} disabled={disabled} />
-          <Field label={"10″ · 33⅓ RPM"} value={v.side10_33} suffix="min/side" onChange={(x) => set("side10_33", x)} disabled={disabled} />
-          <Field label={"10″ · 45 RPM"} value={v.side10_45} suffix="min/side" onChange={(x) => set("side10_45", x)} disabled={disabled} />
-          <Field label={"7″ · 45 RPM"} value={v.side7_45} suffix="min/side" onChange={(x) => set("side7_45", x)} disabled={disabled} />
+      <SpecCard icon={Clock} title="Side lengths" sub="Longer sides press quieter. These are your cutting limits per size and speed." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+          <Field label={"12″ · 33⅓ RPM"} value={v.side12_33} suffix="min/side" onChange={(x) => set("side12_33", x)} disabled={disabled} t={t} />
+          <Field label={"12″ · 45 RPM"} value={v.side12_45} suffix="min/side" onChange={(x) => set("side12_45", x)} disabled={disabled} t={t} />
+          <Field label={"10″ · 33⅓ RPM"} value={v.side10_33} suffix="min/side" onChange={(x) => set("side10_33", x)} disabled={disabled} t={t} />
+          <Field label={"10″ · 45 RPM"} value={v.side10_45} suffix="min/side" onChange={(x) => set("side10_45", x)} disabled={disabled} t={t} />
+          <Field label={"7″ · 45 RPM"} value={v.side7_45} suffix="min/side" onChange={(x) => set("side7_45", x)} disabled={disabled} t={t} />
         </div>
-        <p className="mt-3 text-[12px] flex items-start gap-1.5" style={{ color: FAINT }}>
+        <p className="mt-3 text-[12px] flex items-start gap-1.5" style={{ color: t.faint }}>
           <Info className="w-3.5 h-3.5 mt-[1px] flex-shrink-0" />
           Sides past these lengths get a heads-up at upload — artists can proceed, but we flag the level trade-off.
         </p>
       </SpecCard>
 
-      <SpecCard icon={Waves} title="Cutting guidance" sub="Advisories shown to artists before they submit.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" }}>
-          <Field label="Low end mono below" value={v.monoBelow} suffix="Hz" onChange={(x) => set("monoBelow", x)} disabled={disabled} />
-          <Field label="Sibilance / de-ess advisory" value={v.deEss} onChange={(x) => set("deEss", x)} disabled={disabled} />
-          <ChoiceRow label="Cutting method" options={["Lacquer", "DMM"]} selected={v.cuttingMethod} onSelect={(x) => set("cuttingMethod", x)} disabled={disabled} />
-          <ChoiceRow label="Test pressings" options={["Included", "Optional add-on"]} selected={v.testPressings} onSelect={(x) => set("testPressings", x)} disabled={disabled} />
+      <SpecCard icon={Waves} title="Cutting guidance" sub="Advisories shown to artists before they submit." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+          <Field label="Low end mono below" value={v.monoBelow} suffix="Hz" onChange={(x) => set("monoBelow", x)} disabled={disabled} t={t} />
+          <Field label="Sibilance / de-ess advisory" value={v.deEss} onChange={(x) => set("deEss", x)} disabled={disabled} t={t} />
+          <ChoiceRow label="Cutting method" options={["Lacquer", "DMM"]} selected={v.cuttingMethod} onSelect={(x) => set("cuttingMethod", x)} disabled={disabled} t={t} />
+          <ChoiceRow label="Test pressings" options={["Included", "Optional add-on"]} selected={v.testPressings} onSelect={(x) => set("testPressings", x)} disabled={disabled} t={t} />
         </div>
       </SpecCard>
     </div>
   );
 }
 
-function CDFields({ v, set, disabled }: { v: CdAudio; set: (k: keyof CdAudio, val: string) => void; disabled?: boolean }) {
+function CDFields({ v, set, disabled, t }: { v: CdAudio; set: (k: keyof CdAudio, val: string) => void; disabled?: boolean; t: Theme }) {
   return (
     <div className="space-y-4">
-      <SpecCard icon={FileAudio} title="Master files" sub="Red Book is the spec — CDs are less forgiving than vinyl about formats.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" }}>
-          <Field label="Accepted masters" value={v.masters} onChange={(x) => set("masters", x)} disabled={disabled} />
-          <Field label="Bit depth / sample rate" value={v.bitRate} suffix="Red Book" onChange={(x) => set("bitRate", x)} disabled={disabled} />
-          <Field label="Max disc length" value={v.maxLength} suffix="min" onChange={(x) => set("maxLength", x)} disabled={disabled} />
-          <Field label="ISRC / CD-Text" value={v.isrc} onChange={(x) => set("isrc", x)} disabled={disabled} />
+      <SpecCard icon={FileAudio} title="Master files" sub="Red Book is the spec — CDs are less forgiving than vinyl about formats." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          <Field label="Accepted masters" value={v.masters} onChange={(x) => set("masters", x)} disabled={disabled} t={t} />
+          <Field label="Bit depth / sample rate" value={v.bitRate} suffix="Red Book" onChange={(x) => set("bitRate", x)} disabled={disabled} t={t} />
+          <Field label="Max disc length" value={v.maxLength} suffix="min" onChange={(x) => set("maxLength", x)} disabled={disabled} t={t} />
+          <Field label="ISRC / CD-Text" value={v.isrc} onChange={(x) => set("isrc", x)} disabled={disabled} t={t} />
         </div>
       </SpecCard>
-      <SpecCard icon={Waves} title="Guidance" sub="Advisories shown to artists before they submit.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" }}>
-          <Field label="Gap between tracks" value={v.trackGap} onChange={(x) => set("trackGap", x)} disabled={disabled} />
-          <ChoiceRow label="Hidden / pregap tracks" options={["Allowed", "Not supported"]} selected={v.pregap} onSelect={(x) => set("pregap", x)} disabled={disabled} />
+      <SpecCard icon={Waves} title="Guidance" sub="Advisories shown to artists before they submit." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+          <Field label="Gap between tracks" value={v.trackGap} onChange={(x) => set("trackGap", x)} disabled={disabled} t={t} />
+          <ChoiceRow label="Hidden / pregap tracks" options={["Allowed", "Not supported"]} selected={v.pregap} onSelect={(x) => set("pregap", x)} disabled={disabled} t={t} />
         </div>
       </SpecCard>
     </div>
   );
 }
 
-function CassetteFields({ v, set, disabled }: { v: CassetteAudio; set: (k: keyof CassetteAudio, val: string) => void; disabled?: boolean }) {
+function CassetteFields({ v, set, disabled, t }: { v: CassetteAudio; set: (k: keyof CassetteAudio, val: string) => void; disabled?: boolean; t: Theme }) {
   return (
     <div className="space-y-4">
-      <SpecCard icon={FileAudio} title="Master files" sub="Same digital inputs — the shell length is the constraint.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" }}>
-          <Field label="Accepted formats" value={v.formats} onChange={(x) => set("formats", x)} disabled={disabled} />
-          <Field label="Bit depth (minimum)" value={v.bitDepth} suffix="bit" onChange={(x) => set("bitDepth", x)} disabled={disabled} />
+      <SpecCard icon={FileAudio} title="Master files" sub="Same digital inputs — the shell length is the constraint." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          <Field label="Accepted formats" value={v.formats} onChange={(x) => set("formats", x)} disabled={disabled} t={t} />
+          <Field label="Bit depth (minimum)" value={v.bitDepth} suffix="bit" onChange={(x) => set("bitDepth", x)} disabled={disabled} t={t} />
         </div>
       </SpecCard>
-      <SpecCard icon={Clock} title="Side lengths" sub="Program must balance across Side A and Side B of the shell.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)" }}>
-          <Field label="C-30" value={v.c30} suffix="min/side" onChange={(x) => set("c30", x)} disabled={disabled} />
-          <Field label="C-45" value={v.c45} suffix="min/side" onChange={(x) => set("c45", x)} disabled={disabled} />
-          <Field label="C-60" value={v.c60} suffix="min/side" onChange={(x) => set("c60", x)} disabled={disabled} />
+      <SpecCard icon={Clock} title="Side lengths" sub="Program must balance across Side A and Side B of the shell." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+          <Field label="C-30" value={v.c30} suffix="min/side" onChange={(x) => set("c30", x)} disabled={disabled} t={t} />
+          <Field label="C-45" value={v.c45} suffix="min/side" onChange={(x) => set("c45", x)} disabled={disabled} t={t} />
+          <Field label="C-60" value={v.c60} suffix="min/side" onChange={(x) => set("c60", x)} disabled={disabled} t={t} />
         </div>
-        <p className="mt-3 text-[12px] flex items-start gap-1.5" style={{ color: FAINT }}>
+        <p className="mt-3 text-[12px] flex items-start gap-1.5" style={{ color: t.faint }}>
           <Info className="w-3.5 h-3.5 mt-[1px] flex-shrink-0" />
           Sides more than 3 minutes apart get an advisory — the longer side sets the tape length.
         </p>
@@ -216,36 +272,36 @@ function CassetteFields({ v, set, disabled }: { v: CassetteAudio; set: (k: keyof
   );
 }
 
-function ArtFields({ v, set, disabled }: { v: ArtSpecs; set: (k: keyof ArtSpecs, val: string) => void; disabled?: boolean }) {
+function ArtFields({ v, set, disabled, t }: { v: ArtSpecs; set: (k: keyof ArtSpecs, val: string) => void; disabled?: boolean; t: Theme }) {
   return (
     <div className="mt-8 space-y-4">
-      <SpecCard icon={ImageIcon} title="Resolution" sub="Floors, not targets — anything below gets flagged at upload.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" }}>
-          <Field label="Minimum resolution" value={v.minResolution} suffix="PPI" onChange={(x) => set("minResolution", x)} disabled={disabled} />
-          <Field label="Bitmap / line art minimum" value={v.bitmapMin} suffix="PPI" onChange={(x) => set("bitmapMin", x)} disabled={disabled} />
+      <SpecCard icon={ImageIcon} title="Resolution" sub="Floors, not targets — anything below gets flagged at upload." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+          <Field label="Minimum resolution" value={v.minResolution} suffix="PPI" onChange={(x) => set("minResolution", x)} disabled={disabled} t={t} />
+          <Field label="Bitmap / line art minimum" value={v.bitmapMin} suffix="PPI" onChange={(x) => set("bitmapMin", x)} disabled={disabled} t={t} />
         </div>
       </SpecCard>
 
-      <SpecCard icon={Ruler} title="Geometry" sub="Measured against the template uploaded with each component.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)" }}>
-          <Field label="Bleed (minimum)" value={v.bleedMin} suffix="in" onChange={(x) => set("bleedMin", x)} disabled={disabled} />
-          <Field label="Bleed (recommended)" value={v.bleedRec} suffix="in" onChange={(x) => set("bleedRec", x)} disabled={disabled} />
-          <Field label="Safety margin" value={v.safetyMargin} suffix="in" onChange={(x) => set("safetyMargin", x)} disabled={disabled} />
+      <SpecCard icon={Ruler} title="Geometry" sub="Measured against the template uploaded with each component." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+          <Field label="Bleed (minimum)" value={v.bleedMin} suffix="in" onChange={(x) => set("bleedMin", x)} disabled={disabled} t={t} />
+          <Field label="Bleed (recommended)" value={v.bleedRec} suffix="in" onChange={(x) => set("bleedRec", x)} disabled={disabled} t={t} />
+          <Field label="Safety margin" value={v.safetyMargin} suffix="in" onChange={(x) => set("safetyMargin", x)} disabled={disabled} t={t} />
         </div>
-        <p className="mt-3 text-[12px] flex items-start gap-1.5" style={{ color: FAINT }}>
+        <p className="mt-3 text-[12px] flex items-start gap-1.5" style={{ color: t.faint }}>
           <Info className="w-3.5 h-3.5 mt-[1px] flex-shrink-0" />
           Keep type and logos inside the safety margin — spine folds wander up to 1/16″ on press.
         </p>
       </SpecCard>
 
-      <SpecCard icon={Palette} title="Color" sub="What your print line accepts.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" }}>
-          <ChoiceRow label="Color mode" options={["CMYK", "CMYK + PMS", "Grayscale"]} selected={v.colorMode} onSelect={(x) => set("colorMode", x)} disabled={disabled} />
-          <ChoiceRow label="Pantone names required" options={["Official only", "Any"]} selected={v.pantone} onSelect={(x) => set("pantone", x)} disabled={disabled} />
-          <Field label="Max spot colors" value={v.maxSpots} suffix="PMS" onChange={(x) => set("maxSpots", x)} disabled={disabled} />
-          <Field label="Placed images" value={v.placedImages} onChange={(x) => set("placedImages", x)} disabled={disabled} />
-          <Field label="Accepted formats" value={v.acceptedFormats} onChange={(x) => set("acceptedFormats", x)} disabled={disabled} />
-          <Field label="Fonts" value={v.fonts} onChange={(x) => set("fonts", x)} disabled={disabled} />
+      <SpecCard icon={Palette} title="Color" sub="What your print line accepts." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+          <ChoiceRow label="Color mode" options={["CMYK", "CMYK + PMS", "Grayscale"]} selected={v.colorMode} onSelect={(x) => set("colorMode", x)} disabled={disabled} t={t} />
+          <ChoiceRow label="Pantone names required" options={["Official only", "Any"]} selected={v.pantone} onSelect={(x) => set("pantone", x)} disabled={disabled} t={t} />
+          <Field label="Max spot colors" value={v.maxSpots} suffix="PMS" onChange={(x) => set("maxSpots", x)} disabled={disabled} t={t} />
+          <Field label="Placed images" value={v.placedImages} onChange={(x) => set("placedImages", x)} disabled={disabled} t={t} />
+          <Field label="Accepted formats" value={v.acceptedFormats} onChange={(x) => set("acceptedFormats", x)} disabled={disabled} t={t} />
+          <Field label="Fonts" value={v.fonts} onChange={(x) => set("fonts", x)} disabled={disabled} t={t} />
         </div>
       </SpecCard>
     </div>
@@ -272,6 +328,8 @@ export function PressSpecs({
   variant?: "press" | "admin";
 }) {
   const { toast } = useToast();
+  const dark = useAdminDark();
+  const t = THEMES[dark ? 'dark' : 'light'];
   const specsKey = ["/api/admin/manufacturers", pressId, "specs"] as const;
   const { data } = useQuery<SpecsPayload>({ queryKey: specsKey as unknown as unknown[] });
 
@@ -335,7 +393,7 @@ export function PressSpecs({
   const ar = art ?? data?.art ?? null;
   if (!a || !ar) {
     return (
-      <div className="w-full" style={{ backgroundColor: CANVAS, minHeight: 400 }} data-testid="panel-press-specs" />
+      <div className="w-full" style={{ backgroundColor: t.canvas, minHeight: 400 }} data-testid="panel-press-specs" />
     );
   }
 
@@ -347,18 +405,18 @@ export function PressSpecs({
   const saveEnabled = canEdit && dirty && !save.isPending;
 
   return (
-    <div className="w-full font-sans" style={{ backgroundColor: CANVAS, color: INK }} data-testid="panel-press-specs">
+    <div className="w-full font-sans" style={{ backgroundColor: t.canvas, color: t.ink }} data-testid="panel-press-specs">
       <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
         {/* Audio / Art left · Save (idle until changes) right — consistent header on both views */}
         <div className="flex items-center justify-between gap-4">
-          <div className="inline-flex items-center p-1 rounded-full" style={{ backgroundColor: CARD_SOFT, border: `1px solid ${HAIRLINE}` }} role="tablist" aria-label="Spec type">
+          <div className="inline-flex items-center p-1 rounded-full" style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }} role="tablist" aria-label="Spec type">
             <button
               type="button"
               role="tab"
               aria-selected={view === "audio"}
               onClick={() => setView("audio")}
               className="h-8 px-5 rounded-full text-[13px] font-semibold"
-              style={view === "audio" ? { color: INK, backgroundColor: PILL_ACTIVE, boxShadow: PILL_SHADOW } : { color: SUBINK }}
+              style={view === "audio" ? { color: t.ink, backgroundColor: t.pillActive, boxShadow: t.pillShadow } : { color: t.subink }}
               data-testid="tab-specs-audio"
             >
               Audio
@@ -369,7 +427,7 @@ export function PressSpecs({
               aria-selected={view === "art"}
               onClick={() => setView("art")}
               className="h-8 px-5 rounded-full text-[13px] font-semibold"
-              style={view === "art" ? { color: INK, backgroundColor: PILL_ACTIVE, boxShadow: PILL_SHADOW } : { color: SUBINK }}
+              style={view === "art" ? { color: t.ink, backgroundColor: t.pillActive, boxShadow: t.pillShadow } : { color: t.subink }}
               data-testid="tab-specs-art"
             >
               Art
@@ -382,18 +440,18 @@ export function PressSpecs({
             className="h-9 px-4 rounded-full text-[13px] font-semibold flex-shrink-0"
             style={
               saveEnabled
-                ? { backgroundColor: BLUE, color: "#fff", border: "1px solid transparent", cursor: "pointer" }
-                : { backgroundColor: "transparent", color: FAINT, border: `1px solid ${HAIRLINE}`, cursor: "default" }
+                ? { backgroundColor: t.blue, color: "#fff", border: "1px solid transparent", cursor: "pointer" }
+                : { backgroundColor: "transparent", color: t.faint, border: `1px solid ${t.hairline}`, cursor: "default" }
             }
             title={saveEnabled ? undefined : "Enabled once you change something"}
             data-testid={view === "audio" ? "button-save-audio-specs" : "button-save-art-specs"}
           >{save.isPending ? "Saving…" : "Save"}</button>
         </div>
 
-        <h1 className="mt-6 text-[30px] font-semibold" style={{ color: INK, letterSpacing: "-0.02em" }}>
-          Specs. <span style={{ color: SUBINK }}>The numbers artists press against.</span>
+        <h1 className="mt-6 text-[30px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.02em" }}>
+          Specs. <span style={{ color: t.subink }}>The numbers artists press against.</span>
         </h1>
-        <p className="mt-2 text-[13.5px]" style={{ color: SUBINK }}>
+        <p className="mt-2 text-[13.5px]" style={{ color: t.subink }}>
           {variant === "admin"
             ? "Artists see these at upload. Anything outside this press's numbers gets flagged before it reaches them."
             : "Artists see these at upload. Anything outside your numbers gets flagged before it reaches you."}
@@ -403,7 +461,7 @@ export function PressSpecs({
           <>
             {/* Format switcher — sits with the content it controls, below the shared header */}
             <div className="mt-8">
-              <div className="inline-flex items-center p-0.5 rounded-full" style={{ backgroundColor: CARD_SOFT, border: `1px solid ${HAIRLINE}` }} role="tablist" aria-label="Format">
+              <div className="inline-flex items-center p-0.5 rounded-full" style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }} role="tablist" aria-label="Format">
                 {(["vinyl", "cd", "cassette"] as const).map((f) => {
                   const on = format === f;
                   return (
@@ -414,7 +472,7 @@ export function PressSpecs({
                       aria-selected={on}
                       onClick={() => setFormat(f)}
                       className="h-7 px-3.5 rounded-full text-[12.5px] font-medium transition-colors"
-                      style={{ color: on ? INK : SUBINK, backgroundColor: on ? PILL_ACTIVE : undefined, boxShadow: on ? PILL_SHADOW : undefined }}
+                      style={{ color: on ? t.ink : t.subink, backgroundColor: on ? t.pillActive : undefined, boxShadow: on ? t.pillShadow : undefined }}
                       data-testid={`tab-format-${f}`}
                     >
                       {f === "vinyl" ? "Vinyl" : f === "cd" ? "CD" : "Cassette"}
@@ -425,13 +483,13 @@ export function PressSpecs({
             </div>
 
             <div className="mt-4">
-              {format === "vinyl" && <VinylFields v={a.vinyl} set={setVinyl} disabled={!canEdit} />}
-              {format === "cd" && <CDFields v={a.cd} set={setCd} disabled={!canEdit} />}
-              {format === "cassette" && <CassetteFields v={a.cassette} set={setCassette} disabled={!canEdit} />}
+              {format === "vinyl" && <VinylFields v={a.vinyl} set={setVinyl} disabled={!canEdit} t={t} />}
+              {format === "cd" && <CDFields v={a.cd} set={setCd} disabled={!canEdit} t={t} />}
+              {format === "cassette" && <CassetteFields v={a.cassette} set={setCassette} disabled={!canEdit} t={t} />}
             </div>
           </>
         ) : (
-          <ArtFields v={ar} set={setArtField} disabled={!canEdit} />
+          <ArtFields v={ar} set={setArtField} disabled={!canEdit} t={t} />
         )}
       </div>
     </div>

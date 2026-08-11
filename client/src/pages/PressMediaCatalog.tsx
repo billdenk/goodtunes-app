@@ -5,20 +5,25 @@
 // per the handoff README ("these files are the source, not a reference").
 // Only the handoff's standalone PressShell/top-bar/page-header wrappers are
 // omitted (the shipped Catalog page renders the real shell + header + pill
-// row), and the MOCK_ consts are swapped for live data:
+// row), the mock-only "View light / View dark" toggle pill is dropped, theme
+// mode comes from the shell's active theme (useAdminDark) instead of local
+// useState, and the MOCK_ consts are swapped for live data:
 //   • run prices / turnaround  → GET catalog payload (cdCatalog /
 //     cassetteCatalog, resolved server-side with handoff defaults)
 //   • custom spot inks (CD)    → persisted via
 //     PUT /api/admin/manufacturers/:id/catalog/media/cd
 //   • MRP logo in the renders  → the press's labelLogoUrl/logoUrl
 // Product photos are the handoff's real cut-outs (assets copied as-is) —
-// never rebuilt in CSS.
+// never rebuilt in CSS. The catalog bodies are theme-aware (the older
+// dark-only convention is superseded); realistic product renders keep their
+// own literals and read identically in both themes.
 // ─────────────────────────────────────────────────────────────────────
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Check, Paperclip } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAdminDark } from "@/lib/adminAppearance";
 import { TemplateTilesGrid } from "./PressPackagePricingCatalog";
 import type { AlbumFormat } from "@shared/schema";
 import cdShiny from "@/assets/cd-cassette/cd-shiny.png";
@@ -32,17 +37,75 @@ import shellRed from "@/assets/cd-cassette/shell-red.png";
 import shellCanary from "@/assets/cd-cassette/shell-canary.png";
 import shellGrape from "@/assets/cd-cassette/shell-grape.png";
 
-// Design tokens — handoff-verbatim (the CD/cassette pages are the dark
-// desktop canon; they do not theme-flip like the vinyl page).
-const BLUE = '#319ED8';
-const INK = '#f5f5f7';
-const SUBINK = '#98989d';
-const FAINT = '#6e6e73';
-const HAIRLINE = 'rgba(255,255,255,0.10)';
-const CANVAS = '#161617';
-const CARD = '#1e1e20';
-const CARD_SOFT = '#26262a';
-const PILL_ACTIVE = '#3a3a3e';
+// ─── Themes — handoff-verbatim (THEMES map copied from
+// CDCatalogBuildDesktop.tsx / CassetteCatalogBuildDesktop.tsx). Only page
+// SURFACES / ink / rail / cards / hairlines are theme tokens; the realistic
+// product renders (jewel case, disc, sleeve, shell photos, J/O-cards) are
+// their own dark-tinted literals and stay identical in both themes — a black
+// sleeve is black in light mode too. Theme mode comes from the shell's active
+// theme via useAdminDark(); the CD/cassette catalog bodies are now
+// theme-aware (superseding the older dark-only convention).
+type Theme = {
+  blue: string;
+  ink: string;
+  subink: string;
+  faint: string;
+  hairline: string;
+  canvas: string;
+  rail: string;
+  card: string;
+  cardSoft: string;
+  pillActive: string;
+  pillShadow: string;
+  dashed: string;        // dashed "add" cell borders
+  headerBg: string;      // sticky translucent header
+  navHoverClass: string; // hover wash utility class for nav/icon buttons
+  placeholderClass: string;
+  logoFilter: string;    // GoodTunes wordmark: invert on dark, none on light
+  railLogoRing: string;  // ring for avatar/logo carriers
+};
+
+const THEMES: Record<'light' | 'dark', Theme> = {
+  light: {
+    blue: '#319ED8',
+    ink: '#1d1d1f',
+    subink: 'rgba(0,0,0,0.62)',
+    faint: 'rgba(0,0,0,0.4)',
+    hairline: 'rgba(0,0,0,0.08)',
+    canvas: '#ffffff',
+    rail: '#f5f5f7',
+    card: '#ffffff',
+    cardSoft: '#f0f0f2',
+    pillActive: '#ffffff',
+    pillShadow: '0 1px 3px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)',
+    dashed: 'rgba(0,0,0,0.18)',
+    headerBg: 'rgba(255,255,255,0.72)',
+    navHoverClass: 'hover:bg-black/5',
+    placeholderClass: 'placeholder:text-black/30',
+    logoFilter: 'none',
+    railLogoRing: 'ring-black/10',
+  },
+  dark: {
+    blue: '#319ED8',
+    ink: '#f5f5f7',
+    subink: '#98989d',
+    faint: '#6e6e73',
+    hairline: 'rgba(255,255,255,0.10)',
+    canvas: '#161617',
+    rail: '#1c1c1e',
+    card: '#1e1e20',
+    cardSoft: '#26262a',
+    pillActive: '#3a3a3e',
+    pillShadow: '0 1px 2px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.06)',
+    dashed: 'rgba(255,255,255,0.18)',
+    headerBg: 'rgba(22,22,23,0.72)',
+    navHoverClass: 'hover:bg-white/5',
+    placeholderClass: 'placeholder:text-white/30',
+    logoFilter: 'invert(1) brightness(1.8)',
+    railLogoRing: 'ring-white/15',
+  },
+};
+
 const COVER_GREEN = '#8fbc7f';
 
 // ─── Shared live-data shape (GET catalog → cdCatalog / cassetteCatalog) ──
@@ -341,11 +404,11 @@ function CdRender({ caseName, print, spots, logoUrl }: { caseName: string; print
   );
 }
 
-function TwoTone({ a, b, size = 24 }: { a: string; b: string; size?: number }) {
+function TwoTone({ a, b, size = 24, t }: { a: string; b: string; size?: number; t: Theme }) {
   return (
     <h2 style={{ fontSize: size, letterSpacing: '-0.02em', fontWeight: 600, lineHeight: 1.15 }}>
-      <span style={{ color: INK }}>{a} </span>
-      <span style={{ color: SUBINK, fontWeight: 500 }}>{b}</span>
+      <span style={{ color: t.ink }}>{a} </span>
+      <span style={{ color: t.subink, fontWeight: 500 }}>{b}</span>
     </h2>
   );
 }
@@ -417,6 +480,8 @@ export function CdCatalogBody({
   logoUrl: string | null;
   data: MediaCatalogData;
 }) {
+  const dark = useAdminDark();
+  const t = THEMES[dark ? 'dark' : 'light'];
   const { toast } = useToast();
   const [cs, setCs] = useState('Sleeve');
   const [print, setPrint] = useState<Print>(CD_PRINTS[0]);
@@ -470,7 +535,7 @@ export function CdCatalogBody({
 
   return (
     <fieldset disabled={!canEdit} data-testid="panel-cd-catalog">
-      <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />
+      <div className="h-px w-full" style={{ backgroundColor: t.hairline, margin: '28px 0' }} />
 
       {/* Two-column body — everything below the rule is CD-specific */}
       <div className="grid gap-16" style={{ gridTemplateColumns: 'minmax(0, 1fr) 620px' }}>
@@ -482,14 +547,14 @@ export function CdCatalogBody({
           <CdRender caseName={cs} print={print} spots={spotHexes} logoUrl={logoUrl} />
           {/* Captions — shifted left so they center under the case, not the whole stage (vinyl canon) */}
           <div className="flex flex-col items-center" style={{ transform: 'translateX(-55px)' }}>
-          <div className="flex items-center gap-2 text-[13px]" style={{ color: SUBINK, marginTop: 28 }}>
+          <div className="flex items-center gap-2 text-[13px]" style={{ color: t.subink, marginTop: 28 }}>
             <span>CD</span>
-            <span style={{ color: FAINT }}>·</span>
+            <span style={{ color: t.faint }}>·</span>
             <span>{cs}</span>
-            <span style={{ color: FAINT }}>·</span>
-            <span style={{ color: INK, fontWeight: 600 }}>{print.name}</span>
+            <span style={{ color: t.faint }}>·</span>
+            <span style={{ color: t.ink, fontWeight: 600 }}>{print.name}</span>
           </div>
-          <p className="text-[12px]" style={{ color: FAINT, marginTop: 8, marginBottom: 16 }}>
+          <p className="text-[12px]" style={{ color: t.faint, marginTop: 8, marginBottom: 16 }}>
             {print.name === 'Silkscreen' ? 'Silkscreened disc' : 'Full-color printed disc'}, {jewel ? 'booklet and tray card' : 'wallet'} included.
           </p>
           </div>
@@ -499,7 +564,7 @@ export function CdCatalogBody({
         <div className="flex-1 min-w-0 flex flex-col" style={{ gap: 56, maxWidth: 620 }}>
           {/* Step 1: the case */}
           <section>
-            <TwoTone a="Pick a case." b="It sets the look of everything." />
+            <TwoTone a="Pick a case." b="It sets the look of everything." t={t} />
             <div className="grid gap-3 mt-5" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
               {CD_CASES.map((c) => {
                 const active = cs === c.name;
@@ -509,12 +574,12 @@ export function CdCatalogBody({
                     type="button"
                     onClick={() => setCs(c.name)}
                     className="rounded-2xl flex flex-col items-start justify-center px-5 transition-colors text-left"
-                    style={{ height: 84, backgroundColor: CARD, border: `1.5px solid ${active ? BLUE : HAIRLINE}` }}
+                    style={{ height: 84, backgroundColor: t.card, border: `1.5px solid ${active ? t.blue : t.hairline}` }}
                   >
-                    <span className="text-[14.5px] font-semibold" style={{ color: active ? BLUE : INK }}>
+                    <span className="text-[14.5px] font-semibold" style={{ color: active ? t.blue : t.ink }}>
                       {c.name}
                     </span>
-                    <span className="text-[12px] mt-0.5" style={{ color: SUBINK }}>
+                    <span className="text-[12px] mt-0.5" style={{ color: t.subink }}>
                       {c.sub}
                     </span>
                   </button>
@@ -525,18 +590,18 @@ export function CdCatalogBody({
 
           {/* Step 2: disc print */}
           <section>
-            <TwoTone a="Pick a print." b="The disc is the label." />
+            <TwoTone a="Pick a print." b="The disc is the label." t={t} />
             {!printOpen ? (
               // Collapsed — same summary-row pattern as the vinyl type pick
               <div
                 className="flex items-center gap-3.5 rounded-2xl"
-                style={{ marginTop: 14, padding: '12px 18px', backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}
+                style={{ marginTop: 14, padding: '12px 18px', backgroundColor: t.card, border: `1px solid ${t.hairline}` }}
                 data-testid="print-summary-row"
               >
                 <DiscChip size={44} art={print.art} bands={print.name === 'Silkscreen' ? spotHexes : undefined} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-semibold truncate" style={{ color: INK }}>{print.name}</div>
-                  <div className="text-[11.5px]" style={{ marginTop: 1, color: FAINT }}>
+                  <div className="text-[14px] font-semibold truncate" style={{ color: t.ink }}>{print.name}</div>
+                  <div className="text-[11.5px]" style={{ marginTop: 1, color: t.faint }}>
                     {print.name === 'Silkscreen' ? `Print · ${spots.length} of 3 colors` : `Print · ${print.sub.toLowerCase()}`}
                   </div>
                 </div>
@@ -544,7 +609,7 @@ export function CdCatalogBody({
                   type="button"
                   onClick={() => setPrintOpen(true)}
                   className="text-[13px] font-medium focus:outline-none"
-                  style={{ color: BLUE, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  style={{ color: t.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                   data-testid="button-change-print"
                 >
                   Change
@@ -563,14 +628,14 @@ export function CdCatalogBody({
                         setPrintOpen(false);
                       }}
                       className="rounded-2xl flex items-center gap-4 px-5 transition-colors text-left"
-                      style={{ height: 84, backgroundColor: CARD, border: `1.5px solid ${active ? BLUE : HAIRLINE}` }}
+                      style={{ height: 84, backgroundColor: t.card, border: `1.5px solid ${active ? t.blue : t.hairline}` }}
                     >
                       <DiscChip size={44} art={p.art} />
                       <span>
-                        <span className="block text-[14px] font-semibold" style={{ color: active ? BLUE : INK }}>
+                        <span className="block text-[14px] font-semibold" style={{ color: active ? t.blue : t.ink }}>
                           {p.name}
                         </span>
-                        <span className="block text-[12px] mt-0.5" style={{ color: SUBINK }}>
+                        <span className="block text-[12px] mt-0.5" style={{ color: t.subink }}>
                           {p.sub}
                         </span>
                       </span>
@@ -584,10 +649,10 @@ export function CdCatalogBody({
             {print.name === 'Silkscreen' && (
               <div style={{ marginTop: 16 }}>
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] font-semibold" style={{ color: SUBINK }}>
+                  <span className="text-[12px] font-semibold" style={{ color: t.subink }}>
                     Build colors · pick up to 3
                   </span>
-                  <span className="text-[12px]" style={{ color: FAINT }}>
+                  <span className="text-[12px]" style={{ color: t.faint }}>
                     {spots.length} of 3
                   </span>
                 </div>
@@ -602,8 +667,8 @@ export function CdCatalogBody({
                         className="rounded-2xl text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
                         style={{
                           padding: '16px 10px 12px',
-                          backgroundColor: CARD,
-                          border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
+                          backgroundColor: t.card,
+                          border: on ? `2px solid ${t.blue}` : `1px solid ${t.hairline}`,
                         }}
                       >
                         <span className="relative flex justify-center" style={{ marginBottom: 8 }}>
@@ -621,11 +686,11 @@ export function CdCatalogBody({
                               className="absolute flex items-center justify-center rounded-full"
                               style={{ width: 18, height: 18, backgroundColor: 'rgba(255,255,255,0.85)', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
                             >
-                              <Check className="w-3 h-3" style={{ color: BLUE }} strokeWidth={3} />
+                              <Check className="w-3 h-3" style={{ color: t.blue }} strokeWidth={3} />
                             </span>
                           )}
                         </span>
-                        <span className="block text-[12.5px] font-semibold leading-tight" style={{ color: on ? BLUE : INK }}>
+                        <span className="block text-[12.5px] font-semibold leading-tight" style={{ color: on ? t.blue : t.ink }}>
                           {c.name}
                         </span>
                       </button>
@@ -637,13 +702,13 @@ export function CdCatalogBody({
                       type="button"
                       onClick={() => setAddOpen((v) => !v)}
                       className="w-full h-full rounded-2xl text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer flex flex-col items-center justify-center"
-                      style={{ padding: '16px 10px 12px', border: '1.5px dashed rgba(255,255,255,0.18)', minHeight: 104 }}
+                      style={{ padding: '16px 10px 12px', border: `1.5px dashed ${t.dashed}`, minHeight: 104 }}
                       data-testid="button-add-spot-color"
                     >
-                      <span className="flex items-center justify-center rounded-full" style={{ width: 32, height: 32, border: `1.5px solid ${BLUE}` }}>
-                        <span className="text-[18px] leading-none" style={{ color: BLUE }}>+</span>
+                      <span className="flex items-center justify-center rounded-full" style={{ width: 32, height: 32, border: `1.5px solid ${t.blue}` }}>
+                        <span className="text-[18px] leading-none" style={{ color: t.blue }}>+</span>
                       </span>
-                      <span className="block text-[12.5px] font-semibold" style={{ marginTop: 8, color: BLUE }}>
+                      <span className="block text-[12.5px] font-semibold" style={{ marginTop: 8, color: t.blue }}>
                         Add color
                       </span>
                     </button>
@@ -655,8 +720,8 @@ export function CdCatalogBody({
                           right: 0,
                           width: 224,
                           padding: 14,
-                          backgroundColor: CARD_SOFT,
-                          border: `1px solid ${HAIRLINE}`,
+                          backgroundColor: t.cardSoft,
+                          border: `1px solid ${t.hairline}`,
                           boxShadow: '0 18px 44px rgba(0,0,0,0.55)',
                         }}
                       >
@@ -675,7 +740,7 @@ export function CdCatalogBody({
                             onKeyDown={(e) => e.key === 'Enter' && addCustomSpot()}
                             placeholder="Name the ink"
                             className="flex-1 min-w-0 rounded-lg text-[13px] focus:outline-none"
-                            style={{ padding: '7px 10px', backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, color: INK }}
+                            style={{ padding: '7px 10px', backgroundColor: t.card, border: `1px solid ${t.hairline}`, color: t.ink }}
                           />
                         </div>
                         <div className="flex justify-end gap-3" style={{ marginTop: 12 }}>
@@ -683,7 +748,7 @@ export function CdCatalogBody({
                             type="button"
                             onClick={() => setAddOpen(false)}
                             className="text-[13px] font-medium"
-                            style={{ color: FAINT, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                            style={{ color: t.faint, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                           >
                             Cancel
                           </button>
@@ -691,7 +756,7 @@ export function CdCatalogBody({
                             type="button"
                             onClick={addCustomSpot}
                             className="text-[13px] font-semibold"
-                            style={{ color: BLUE, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                            style={{ color: t.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                           >
                             Add
                           </button>
@@ -707,9 +772,9 @@ export function CdCatalogBody({
           {/* Step 3: booklet — jewel case only */}
           <section style={{ opacity: jewel ? 1 : 0.45, transition: 'opacity 0.25s ease' }}>
             <div className="flex items-end justify-between gap-3 flex-wrap">
-              <TwoTone a="Pick a booklet." b="Liner notes, lyrics, credits." />
+              <TwoTone a="Pick a booklet." b="Liner notes, lyrics, credits." t={t} />
               {!jewel && (
-                <span className="text-[12px]" style={{ color: FAINT }}>
+                <span className="text-[12px]" style={{ color: t.faint }}>
                   Sleeves print on the wallet itself
                 </span>
               )}
@@ -724,9 +789,9 @@ export function CdCatalogBody({
                     disabled={!jewel}
                     onClick={() => setBooklet(b)}
                     className="rounded-2xl flex items-center justify-center transition-colors"
-                    style={{ height: 60, backgroundColor: CARD, border: `1.5px solid ${active ? BLUE : HAIRLINE}` }}
+                    style={{ height: 60, backgroundColor: t.card, border: `1.5px solid ${active ? t.blue : t.hairline}` }}
                   >
-                    <span className="text-[13.5px] font-medium" style={{ color: active ? BLUE : INK }}>
+                    <span className="text-[13.5px] font-medium" style={{ color: active ? t.blue : t.ink }}>
                       {b}
                     </span>
                   </button>
@@ -737,53 +802,53 @@ export function CdCatalogBody({
 
           {/* Price */}
           <section>
-            <TwoTone a="Set your price." b="They’ll show you the money." />
-            <p className="text-[12.5px] mt-2" style={{ color: FAINT }}>
+            <TwoTone a="Set your price." b="They’ll show you the money." t={t} />
+            <p className="text-[12.5px] mt-2" style={{ color: t.faint }}>
               {cs} · one price covers disc, print and packaging.
             </p>
-            <div className="mt-5 rounded-2xl overflow-hidden" style={{ border: `1px solid ${HAIRLINE}` }}>
+            <div className="mt-5 rounded-2xl overflow-hidden" style={{ border: `1px solid ${t.hairline}` }}>
               {PRICES.map(([units, price], i) => (
                 <div
                   key={units}
                   className="flex items-center justify-between px-5"
-                  style={{ height: 56, backgroundColor: CARD, borderTop: i ? `1px solid ${HAIRLINE}` : 'none' }}
+                  style={{ height: 56, backgroundColor: t.card, borderTop: i ? `1px solid ${t.hairline}` : 'none' }}
                 >
-                  <span className="text-[14px] font-semibold tabular-nums" style={{ color: INK }}>
+                  <span className="text-[14px] font-semibold tabular-nums" style={{ color: t.ink }}>
                     {units.toLocaleString()}
-                    <span className="text-[10px] uppercase ml-2 font-normal" style={{ color: SUBINK, letterSpacing: '0.08em' }}>
+                    <span className="text-[10px] uppercase ml-2 font-normal" style={{ color: t.subink, letterSpacing: '0.08em' }}>
                       units
                     </span>
                   </span>
                   <span
                     className="inline-flex items-center justify-center rounded-lg tabular-nums text-[14px] font-semibold"
-                    style={{ width: 88, height: 36, backgroundColor: PILL_ACTIVE, color: INK }}
+                    style={{ width: 88, height: 36, backgroundColor: t.pillActive, color: t.ink }}
                   >
                     {price}
                   </span>
                 </div>
               ))}
             </div>
-            <p className="text-[12px] mt-3" style={{ color: FAINT }}>
+            <p className="text-[12px] mt-3" style={{ color: t.faint }}>
               Prices are per unit, per finished package.
             </p>
           </section>
 
           {/* Turnaround */}
           <section>
-            <TwoTone a="Turnaround time." b="From order, to out the door." />
+            <TwoTone a="Turnaround time." b="From order, to out the door." t={t} />
             <div className="flex items-center gap-3 mt-5 flex-wrap">
-              <span className="inline-flex items-center justify-center rounded-xl tabular-nums text-[16px] font-semibold" style={{ width: 64, height: 44, backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, color: INK }}>
+              <span className="inline-flex items-center justify-center rounded-xl tabular-nums text-[16px] font-semibold" style={{ width: 64, height: 44, backgroundColor: t.card, border: `1px solid ${t.hairline}`, color: t.ink }}>
                 {data.turnaroundWeeksMin}
               </span>
-              <span style={{ color: FAINT }}>–</span>
-              <span className="inline-flex items-center justify-center rounded-xl tabular-nums text-[16px] font-semibold" style={{ width: 64, height: 44, backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, color: INK }}>
+              <span style={{ color: t.faint }}>–</span>
+              <span className="inline-flex items-center justify-center rounded-xl tabular-nums text-[16px] font-semibold" style={{ width: 64, height: 44, backgroundColor: t.card, border: `1px solid ${t.hairline}`, color: t.ink }}>
                 {data.turnaroundWeeksMax}
               </span>
-              <span className="text-[13px]" style={{ color: SUBINK }}>
+              <span className="text-[13px]" style={{ color: t.subink }}>
                 weeks
               </span>
               <span className="flex-1" />
-              <button type="button" onClick={() => useDefaultTurnaround.mutate()} className="text-[12.5px] font-medium" style={{ color: BLUE }}>
+              <button type="button" onClick={() => useDefaultTurnaround.mutate()} className="text-[12.5px] font-medium" style={{ color: t.blue }}>
                 Use press default
               </button>
             </div>
@@ -791,10 +856,10 @@ export function CdCatalogBody({
 
           {/* Print prep */}
           <section>
-            <TwoTone a="Print prep." b="The template for your templates." />
-            <div className="mt-5 rounded-2xl flex items-center gap-3 px-5" style={{ height: 64, backgroundColor: CARD, border: `1px dashed rgba(255,255,255,0.2)` }}>
-              <Paperclip className="w-4 h-4 flex-shrink-0" style={{ color: SUBINK }} />
-              <span className="text-[13px]" style={{ color: SUBINK }}>
+            <TwoTone a="Print prep." b="The template for your templates." t={t} />
+            <div className="mt-5 rounded-2xl flex items-center gap-3 px-5" style={{ height: 64, backgroundColor: t.card, border: `1px dashed ${t.dashed}` }}>
+              <Paperclip className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} />
+              <span className="text-[13px]" style={{ color: t.subink }}>
                 Attach a file or paste a link to your print template…
               </span>
             </div>
@@ -1002,6 +1067,8 @@ export function CassetteCatalogBody({
   logoUrl: string | null;
   data: MediaCatalogData;
 }) {
+  const dark = useAdminDark();
+  const t = THEMES[dark ? 'dark' : 'light'];
   const [cs, setCs] = useState('J-card + case');
   const [shell, setShell] = useState<Shell>(CASSETTE_SHELLS[0]);
   const [imprint, setImprint] = useState('On-shell print');
@@ -1018,7 +1085,7 @@ export function CassetteCatalogBody({
 
   return (
     <fieldset disabled={!canEdit} data-testid="panel-cassette-catalog">
-      <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />
+      <div className="h-px w-full" style={{ backgroundColor: t.hairline, margin: '28px 0' }} />
 
       {/* Two-column body — everything below the rule is cassette-specific */}
       <div className="grid gap-16" style={{ gridTemplateColumns: 'minmax(0, 1fr) 620px' }}>
@@ -1028,22 +1095,22 @@ export function CassetteCatalogBody({
           style={{ position: 'sticky', top: 24, alignSelf: 'start', minHeight: 545, paddingBottom: 38 }}
         >
           <CassetteRender caseName={cs} shell={shell} imprint={imprint} logoUrl={logoUrl} />
-          <div className="flex items-center gap-2 text-[13px]" style={{ color: SUBINK, marginTop: 28 }}>
+          <div className="flex items-center gap-2 text-[13px]" style={{ color: t.subink, marginTop: 28 }}>
             <span
               className="w-3.5 h-3.5 rounded-full inline-block"
               style={{
                 background: `radial-gradient(circle at 35% 30%, rgba(255,255,255,0.3), ${shell.base} 68%)`,
-                border: `1px solid ${HAIRLINE}`,
+                border: `1px solid ${t.hairline}`,
                 transition: 'background 0.25s ease',
               }}
             />
             <span>Cassette</span>
-            <span style={{ color: FAINT }}>·</span>
+            <span style={{ color: t.faint }}>·</span>
             <span>{cs}</span>
-            <span style={{ color: FAINT }}>·</span>
-            <span style={{ color: INK, fontWeight: 600 }}>{shell.name} shell</span>
+            <span style={{ color: t.faint }}>·</span>
+            <span style={{ color: t.ink, fontWeight: 600 }}>{shell.name} shell</span>
           </div>
-          <p className="text-[12px]" style={{ color: FAINT, marginTop: 8, marginBottom: 16 }}>
+          <p className="text-[12px]" style={{ color: t.faint, marginTop: 8, marginBottom: 16 }}>
             Tape length is set by the album&rsquo;s runtime — C-30 up to C-90.
           </p>
         </div>
@@ -1052,7 +1119,7 @@ export function CassetteCatalogBody({
         <div className="flex-1 min-w-0 flex flex-col" style={{ gap: 56, maxWidth: 620 }}>
           {/* Step 1: the case */}
           <section>
-            <TwoTone a="Pick a case." b="It sets the look of everything." />
+            <TwoTone a="Pick a case." b="It sets the look of everything." t={t} />
             <div className="grid gap-3 mt-5" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
               {CASSETTE_CASES.map((c) => {
                 const active = cs === c.name;
@@ -1062,12 +1129,12 @@ export function CassetteCatalogBody({
                     type="button"
                     onClick={() => setCs(c.name)}
                     className="rounded-2xl flex flex-col items-start justify-center px-5 transition-colors text-left"
-                    style={{ height: 84, backgroundColor: CARD, border: `1.5px solid ${active ? BLUE : HAIRLINE}` }}
+                    style={{ height: 84, backgroundColor: t.card, border: `1.5px solid ${active ? t.blue : t.hairline}` }}
                   >
-                    <span className="text-[14.5px] font-semibold" style={{ color: active ? BLUE : INK }}>
+                    <span className="text-[14.5px] font-semibold" style={{ color: active ? t.blue : t.ink }}>
                       {c.name}
                     </span>
-                    <span className="text-[12px] mt-0.5" style={{ color: SUBINK }}>
+                    <span className="text-[12px] mt-0.5" style={{ color: t.subink }}>
                       {c.sub}
                     </span>
                   </button>
@@ -1079,8 +1146,8 @@ export function CassetteCatalogBody({
           {/* Step 2: shell color — the tape re-tints */}
           <section>
             <div className="flex items-end justify-between gap-3 flex-wrap">
-              <TwoTone a="Pick a shell." b="Watch the tape change." />
-              <span className="text-[12px]" style={{ color: FAINT }}>
+              <TwoTone a="Pick a shell." b="Watch the tape change." t={t} />
+              <span className="text-[12px]" style={{ color: t.faint }}>
                 {CASSETTE_SHELLS.length} shells
               </span>
             </div>
@@ -1093,10 +1160,10 @@ export function CassetteCatalogBody({
                     type="button"
                     onClick={() => setShell(s)}
                     className="rounded-2xl flex flex-col items-center pt-4 pb-3 px-2 transition-colors"
-                    style={{ backgroundColor: CARD, border: `1.5px solid ${active ? BLUE : HAIRLINE}` }}
+                    style={{ backgroundColor: t.card, border: `1.5px solid ${active ? t.blue : t.hairline}` }}
                   >
                     <MiniShell shell={s} />
-                    <span className="text-[12.5px] font-medium mt-2.5 truncate max-w-full" style={{ color: active ? BLUE : INK }}>
+                    <span className="text-[12.5px] font-medium mt-2.5 truncate max-w-full" style={{ color: active ? t.blue : t.ink }}>
                       {s.name}
                     </span>
                   </button>
@@ -1107,7 +1174,7 @@ export function CassetteCatalogBody({
 
           {/* Step 3: imprint */}
           <section>
-            <TwoTone a="Pick an imprint." b="How the shell gets its ink." />
+            <TwoTone a="Pick an imprint." b="How the shell gets its ink." t={t} />
             <div className="grid gap-3 mt-5" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
               {CASSETTE_IMPRINTS.map((l) => {
                 const active = imprint === l.name;
@@ -1117,12 +1184,12 @@ export function CassetteCatalogBody({
                     type="button"
                     onClick={() => setImprint(l.name)}
                     className="rounded-2xl flex flex-col items-start justify-center px-5 transition-colors text-left"
-                    style={{ height: 84, backgroundColor: CARD, border: `1.5px solid ${active ? BLUE : HAIRLINE}` }}
+                    style={{ height: 84, backgroundColor: t.card, border: `1.5px solid ${active ? t.blue : t.hairline}` }}
                   >
-                    <span className="text-[14.5px] font-semibold" style={{ color: active ? BLUE : INK }}>
+                    <span className="text-[14.5px] font-semibold" style={{ color: active ? t.blue : t.ink }}>
                       {l.name}
                     </span>
-                    <span className="text-[12px] mt-0.5" style={{ color: SUBINK }}>
+                    <span className="text-[12px] mt-0.5" style={{ color: t.subink }}>
                       {l.sub}
                     </span>
                   </button>
@@ -1134,9 +1201,9 @@ export function CassetteCatalogBody({
           {/* Step 4: J-card panels — only with the J-card case */}
           <section style={{ opacity: usesJcard ? 1 : 0.45, transition: 'opacity 0.25s ease' }}>
             <div className="flex items-end justify-between gap-3 flex-wrap">
-              <TwoTone a="Pick a J-card." b="More panels, more room." />
+              <TwoTone a="Pick a J-card." b="More panels, more room." t={t} />
               {!usesJcard && (
-                <span className="text-[12px]" style={{ color: FAINT }}>
+                <span className="text-[12px]" style={{ color: t.faint }}>
                   O-cards print on the wrap itself
                 </span>
               )}
@@ -1151,9 +1218,9 @@ export function CassetteCatalogBody({
                     disabled={!usesJcard}
                     onClick={() => setJcard(j)}
                     className="rounded-2xl flex items-center justify-center transition-colors"
-                    style={{ height: 60, backgroundColor: CARD, border: `1.5px solid ${active ? BLUE : HAIRLINE}` }}
+                    style={{ height: 60, backgroundColor: t.card, border: `1.5px solid ${active ? t.blue : t.hairline}` }}
                   >
-                    <span className="text-[13.5px] font-medium" style={{ color: active ? BLUE : INK }}>
+                    <span className="text-[13.5px] font-medium" style={{ color: active ? t.blue : t.ink }}>
                       {j}
                     </span>
                   </button>
@@ -1164,53 +1231,53 @@ export function CassetteCatalogBody({
 
           {/* Price */}
           <section>
-            <TwoTone a="Set your price." b="They’ll show you the money." />
-            <p className="text-[12.5px] mt-2" style={{ color: FAINT }}>
+            <TwoTone a="Set your price." b="They’ll show you the money." t={t} />
+            <p className="text-[12.5px] mt-2" style={{ color: t.faint }}>
               {cs} · one price covers all 8 shells.
             </p>
-            <div className="mt-5 rounded-2xl overflow-hidden" style={{ border: `1px solid ${HAIRLINE}` }}>
+            <div className="mt-5 rounded-2xl overflow-hidden" style={{ border: `1px solid ${t.hairline}` }}>
               {PRICES.map(([units, price], i) => (
                 <div
                   key={units}
                   className="flex items-center justify-between px-5"
-                  style={{ height: 56, backgroundColor: CARD, borderTop: i ? `1px solid ${HAIRLINE}` : 'none' }}
+                  style={{ height: 56, backgroundColor: t.card, borderTop: i ? `1px solid ${t.hairline}` : 'none' }}
                 >
-                  <span className="text-[14px] font-semibold tabular-nums" style={{ color: INK }}>
+                  <span className="text-[14px] font-semibold tabular-nums" style={{ color: t.ink }}>
                     {units.toLocaleString()}
-                    <span className="text-[10px] uppercase ml-2 font-normal" style={{ color: SUBINK, letterSpacing: '0.08em' }}>
+                    <span className="text-[10px] uppercase ml-2 font-normal" style={{ color: t.subink, letterSpacing: '0.08em' }}>
                       units
                     </span>
                   </span>
                   <span
                     className="inline-flex items-center justify-center rounded-lg tabular-nums text-[14px] font-semibold"
-                    style={{ width: 88, height: 36, backgroundColor: PILL_ACTIVE, color: INK }}
+                    style={{ width: 88, height: 36, backgroundColor: t.pillActive, color: t.ink }}
                   >
                     {price}
                   </span>
                 </div>
               ))}
             </div>
-            <p className="text-[12px] mt-3" style={{ color: FAINT }}>
+            <p className="text-[12px] mt-3" style={{ color: t.faint }}>
               Prices are per unit, per finished package — shell, imprint, {usesJcard ? 'J-card and case' : 'O-card'} included.
             </p>
           </section>
 
           {/* Turnaround */}
           <section>
-            <TwoTone a="Turnaround time." b="From order, to out the door." />
+            <TwoTone a="Turnaround time." b="From order, to out the door." t={t} />
             <div className="flex items-center gap-3 mt-5 flex-wrap">
-              <span className="inline-flex items-center justify-center rounded-xl tabular-nums text-[16px] font-semibold" style={{ width: 64, height: 44, backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, color: INK }}>
+              <span className="inline-flex items-center justify-center rounded-xl tabular-nums text-[16px] font-semibold" style={{ width: 64, height: 44, backgroundColor: t.card, border: `1px solid ${t.hairline}`, color: t.ink }}>
                 {data.turnaroundWeeksMin}
               </span>
-              <span style={{ color: FAINT }}>–</span>
-              <span className="inline-flex items-center justify-center rounded-xl tabular-nums text-[16px] font-semibold" style={{ width: 64, height: 44, backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, color: INK }}>
+              <span style={{ color: t.faint }}>–</span>
+              <span className="inline-flex items-center justify-center rounded-xl tabular-nums text-[16px] font-semibold" style={{ width: 64, height: 44, backgroundColor: t.card, border: `1px solid ${t.hairline}`, color: t.ink }}>
                 {data.turnaroundWeeksMax}
               </span>
-              <span className="text-[13px]" style={{ color: SUBINK }}>
+              <span className="text-[13px]" style={{ color: t.subink }}>
                 weeks
               </span>
               <span className="flex-1" />
-              <button type="button" onClick={() => useDefaultTurnaround.mutate()} className="text-[12.5px] font-medium" style={{ color: BLUE }}>
+              <button type="button" onClick={() => useDefaultTurnaround.mutate()} className="text-[12.5px] font-medium" style={{ color: t.blue }}>
                 Use press default
               </button>
             </div>
@@ -1219,7 +1286,7 @@ export function CassetteCatalogBody({
           {/* Print prep — same per-piece template slots as vinyl (Bill
               2026-08-10): on-shell print, J-card, O-card, paper label. */}
           <section>
-            <TwoTone a="Print prep." b="The template for your templates." />
+            <TwoTone a="Print prep." b="The template for your templates." t={t} />
             <TemplateTilesGrid
               pressId={pressId}
               fmt={"cassette" as AlbumFormat}
@@ -1245,6 +1312,8 @@ const CASSETTE_TEMPLATE_TILES = [
   { key: "sticker", componentKey: "sticker", label: "Paper label", sub: "Shell sticker template" },
 ];
 
-// The dark canvas the handoff pages sit on (the pages are dark-canon even
-// when the surrounding admin shell is light).
-export const MEDIA_CATALOG_CANVAS = CANVAS;
+// Kept for backwards compatibility with importers. The CD/cassette catalog
+// bodies are now theme-aware (they read the shell's active theme via
+// useAdminDark and no longer paint their own canvas), so this is simply the
+// dark-canon canvas value; consumers should prefer the active theme tokens.
+export const MEDIA_CATALOG_CANVAS = THEMES.dark.canvas;

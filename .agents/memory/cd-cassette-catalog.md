@@ -1,6 +1,6 @@
 ---
 name: CD/cassette catalog pages
-description: How the CD + cassette catalog build pages store data and why their bodies are dark-only verbatim handoff code.
+description: How the CD + cassette catalog build pages store data; bodies are theme-aware verbatim handoff code (dark-only rule superseded Aug 2026).
 ---
 
 # CD / Cassette catalog build pages (handoff/cd-cassette-catalog)
@@ -12,9 +12,13 @@ description: How the CD + cassette catalog build pages store data and why their 
   format on `manufacturers.cd_catalog` / `cassette_catalog`. Null resolves to
   handoff defaults server-side (`resolveMediaCatalog`).
 - **Why:** the handoff README is a binding contract — presentational code copied
-  character-for-character, dark-only body even inside the dual-theme shipped
-  Catalog page. Don't theme-flip or "fix" its raw hexes; design-lint baseline
-  was re-snapshotted to accept them.
+  character-for-character. As of the Aug 2026 theme-aware re-pull, the handoff
+  files carry a THEMES map (light + dark token sets) and the wired bodies pick
+  the set from the shell's active theme via `useAdminDark()` — the old
+  "dark-only, never theme-flip" rule is SUPERSEDED. The mock's floating
+  "View light / View dark" pill is mock-only chrome, never shipped. Don't
+  "fix" raw hexes inside the THEMES map; design-lint baseline is
+  re-snapshotted to accept handoff-verbatim patterns.
 - **How to apply:** any new editable knob goes INTO the jsonb blob via the merge
   PUT `/api/admin/manufacturers/:id/catalog/media/:format` (atomic
   `COALESCE(col,'{}') || patch` — never read/merge/write the whole blob).

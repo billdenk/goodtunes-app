@@ -64,52 +64,177 @@ import {
 import { useAdminDark } from "@/lib/adminAppearance";
 import { CdCatalogBody, CassetteCatalogBody } from "./PressMediaCatalog";
 
-// ─── Design tokens (Apple canon; vars flip under gt-admin-dark) ──────
-const BLUE = "var(--brand-blue)";
-const INK = "var(--apple-ink)";
-const SUBINK = "var(--apple-subink)";
-const HAIRLINE = "var(--apple-hairline)";
-const FAINT = "var(--apple-faint)";
-const CRITICAL = "#e0245e";
+// ─── Theme-aware brand tokens (Apple calm visual language) ───────────
+// Theme-aware: light = the ratified press-portal palette (apple-canon light);
+// dark = apple-canon "Dark controls & surfaces" (charcoal, never navy).
+//
+// These are mutable bindings reassigned by applyTheme() at the top of the
+// page render (driven by useAdminDark()), so the ~40 self-contained
+// sub-components read the active theme without threading a prop through every
+// call site. Pattern + THEMES map copied verbatim from
+// handoff/press-catalog/PressPackagePricingCatalog.tsx.
+type Theme = {
+  BLUE: string;
+  INK: string;
+  SUBINK: string;
+  FAINT: string;      // #a1a1a6 family — captions, muted icons
+  HAIRLINE: string;
+  CANVAS: string;
+  RAIL: string;
+  CARD: string;       // raised card surface (was bg-white / #ffffff)
+  CARD_SOFT: string;  // airier card wash (was #fbfbfd)
+  TRACK: string;      // segmented-control pill track (was #f0f0f2)
+  HEADER_BG: string;  // translucent sticky header
+  HOVER_WASH: string; // neutral hover tint (was hover:bg-slate-*)
+  BLUE_WASH: string;  // blue text-button hover wash (was #f0f7fc)
+  DASHED: string;     // dashed "add" cell border (was #c7c7cc)
+  RING: string;       // avatar/search ring (was slate-200)
+  CHECK_HALO: string; // selected-swatch check halo behind the tick
+  READY: string;
+  WARN: string;
+  CRITICAL: string;
+  PILL_SHADOW: string;
+};
+
+const THEMES: Record<'light' | 'dark', Theme> = {
+  light: {
+    BLUE: '#319ED8',
+    INK: '#1d1d1f',
+    SUBINK: '#6e6e73',
+    FAINT: '#a1a1a6',
+    HAIRLINE: '#e6e6ea',
+    CANVAS: '#f5f5f7',
+    RAIL: '#f5f5f7',
+    CARD: '#ffffff',
+    CARD_SOFT: '#fbfbfd',
+    TRACK: '#f0f0f2',
+    HEADER_BG: 'rgba(255,255,255,0.72)',
+    HOVER_WASH: 'rgba(0,0,0,0.05)',
+    BLUE_WASH: '#f0f7fc',
+    DASHED: '#c7c7cc',
+    RING: '#e2e8f0',
+    CHECK_HALO: 'rgba(255,255,255,0.85)',
+    READY: '#1c8a5b',
+    WARN: '#c98a00',
+    CRITICAL: '#e0245e',
+    PILL_SHADOW: '0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)',
+  },
+  dark: {
+    BLUE: '#319ED8',
+    INK: '#f5f5f7',
+    SUBINK: '#98989d',
+    FAINT: '#6e6e73',
+    HAIRLINE: 'rgba(255,255,255,0.10)',
+    CANVAS: '#161617',
+    RAIL: '#1c1c1e',
+    CARD: '#1e1e20',
+    CARD_SOFT: '#232326',
+    TRACK: '#26262a',
+    HEADER_BG: 'rgba(22,22,23,0.72)',
+    HOVER_WASH: 'rgba(255,255,255,0.05)',
+    BLUE_WASH: 'rgba(49,158,216,0.14)',
+    DASHED: 'rgba(255,255,255,0.22)',
+    RING: 'rgba(255,255,255,0.14)',
+    CHECK_HALO: 'rgba(0,0,0,0.55)',
+    READY: '#3fbf62',
+    WARN: '#d99a3d',
+    CRITICAL: '#f2555a',
+    PILL_SHADOW: '0 1px 3px rgba(0,0,0,0.4)',
+  },
+};
+
+// Mutable active-theme bindings (default light = unchanged render).
+let BLUE = THEMES.light.BLUE;
+let INK = THEMES.light.INK;
+let SUBINK = THEMES.light.SUBINK;
+let FAINT = THEMES.light.FAINT;
+let HAIRLINE = THEMES.light.HAIRLINE;
+let CANVAS = THEMES.light.CANVAS;
+let RAIL = THEMES.light.RAIL;
+let CARD = THEMES.light.CARD;
+let CARD_SOFT = THEMES.light.CARD_SOFT;
+let TRACK = THEMES.light.TRACK;
+let HEADER_BG = THEMES.light.HEADER_BG;
+let HOVER_WASH = THEMES.light.HOVER_WASH;
+let BLUE_WASH = THEMES.light.BLUE_WASH;
+let DASHED = THEMES.light.DASHED;
+let RING = THEMES.light.RING;
+let CHECK_HALO = THEMES.light.CHECK_HALO;
+let READY = THEMES.light.READY;
+let WARN = THEMES.light.WARN;
+let CRITICAL = THEMES.light.CRITICAL;
+let PILL_SHADOW = THEMES.light.PILL_SHADOW;
+
+// True while the dark theme is active.
+let IS_DARK = false;
+
+// ─── App-only tokens (not carried by the handoff THEMES) — both theme
+// values derived so no surface is ever single-theme hardcoded. Light values
+// are the prior light-era literals; dark values are the charcoal canon.
+let SEL_WASH = "#f0f7fc"; // selection tint (light #f0f7fc / dark blue tint)
+let CRITICAL_WASH = "#fdeef2"; // destructive hover wash
+let PILL_ACTIVE = "#ffffff"; // raised active segmented pill
+let DISC_RIM = "none"; // light rim separating a dark disc from a dark page
+let FROSTED_BG = "rgba(255,255,255,0.82)"; // frosted popover surface
+let FROSTED_SHADOW = "0 20px 48px rgba(0,0,0,0.16)"; // frosted popover shadow
+// The jacket / center label / brand dialog render the press mark as a WHITE
+// silhouette on black — theme-independent (the vinyl product renders identically
+// light or dark, per apple-canon "Vinyl artwork on dark surfaces").
+const PRESS_LABEL_LOGO_FILTER = "invert(1) brightness(1.7)";
+const FORCE_WHITE_MARK = "brightness(0) invert(1)";
+
+function applyTheme(mode: 'light' | 'dark') {
+  IS_DARK = mode === 'dark';
+  const th = THEMES[mode];
+  BLUE = th.BLUE;
+  INK = th.INK;
+  SUBINK = th.SUBINK;
+  FAINT = th.FAINT;
+  HAIRLINE = th.HAIRLINE;
+  CANVAS = th.CANVAS;
+  RAIL = th.RAIL;
+  CARD = th.CARD;
+  CARD_SOFT = th.CARD_SOFT;
+  TRACK = th.TRACK;
+  HEADER_BG = th.HEADER_BG;
+  HOVER_WASH = th.HOVER_WASH;
+  BLUE_WASH = th.BLUE_WASH;
+  DASHED = th.DASHED;
+  RING = th.RING;
+  CHECK_HALO = th.CHECK_HALO;
+  READY = th.READY;
+  WARN = th.WARN;
+  CRITICAL = th.CRITICAL;
+  PILL_SHADOW = th.PILL_SHADOW;
+  // App-only tokens, both themes:
+  SEL_WASH = IS_DARK ? "rgba(49,158,216,0.16)" : "#f0f7fc";
+  CRITICAL_WASH = IS_DARK ? "rgba(255,107,138,0.14)" : "#fdeef2";
+  PILL_ACTIVE = IS_DARK ? "#3a3a3e" : "#ffffff";
+  DISC_RIM = IS_DARK
+    ? "0 0 0 0.5px rgba(255,255,255,0.14), 0 1px 3px rgba(0,0,0,0.5)"
+    : "none";
+  FROSTED_BG = IS_DARK ? "rgba(28,28,30,0.82)" : "rgba(255,255,255,0.82)";
+  FROSTED_SHADOW = IS_DARK ? "0 20px 48px rgba(0,0,0,0.55)" : "0 20px 48px rgba(0,0,0,0.16)";
+}
+
 /** Destructive red — brightened to rose on charcoal for legibility (dark canon). */
 function criticalColor(dark: boolean): string {
-  return dark ? "#ff6b8a" : CRITICAL;
+  return IS_DARK ? "#ff6b8a" : "#e0245e";
 }
 
 function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
 }
 
-// ─── Dark-mode surface constants (character-identical to the Dark reference).
-// The catalog page renders inside body.gt-admin(.gt-admin-dark); tokens that
-// are CSS vars flip automatically. The values below are the ones the reference
-// hard-codes as literals — frosted panels, selection washes, disc rims — so
-// they're picked inline via `useAdminDark()` where the surface differs.
-const SEL_WASH = "rgba(49,158,216,0.16)"; // dark blue selection tint (light #f0f7fc)
-const CRITICAL_WASH = "rgba(255,107,138,0.14)"; // dark destructive hover (light #fdeef2)
-const CARD = "var(--apple-card)"; // base card surface (light #fff, dark #1e1e20)
-const CARD_SOFT = "#26262a"; // inset chip / input surface (light #fff)
-const PILL_ACTIVE = "#3a3a3e"; // raised active segmented pill (light #fff)
-// Subtle light rim that separates a dark disc silhouette from the dark page.
-const DISC_RIM = "0 0 0 0.5px rgba(255,255,255,0.14), 0 1px 3px rgba(0,0,0,0.5)";
-// Reference-verbatim frosted pill shadow + label-logo recolor filter (Item 28).
-const PILL_SHADOW = "0 1px 2px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.06)";
-const PRESS_LABEL_LOGO_FILTER = "invert(1) brightness(1.7)";
-// The jacket / center label / brand dialog render the press mark as a WHITE
-// silhouette on black. Assets arrive in any ink (MRP's is already white,
-// others are near-black) — brightness(0) flattens every opaque pixel to
-// black, invert(1) lifts it to pure white, deterministically.
-const FORCE_WHITE_MARK = "brightness(0) invert(1)";
-
 // ─── Frosted editor popovers (same feel as Add Your Vinyl / handoff ref) ──
 function frostedPanel(dark: boolean): React.CSSProperties {
   return {
     border: `1px solid ${HAIRLINE}`,
-    backgroundColor: dark ? "rgba(28,28,30,0.82)" : "rgba(255,255,255,0.82)",
+    backgroundColor: FROSTED_BG,
     backdropFilter: "blur(24px)",
     WebkitBackdropFilter: "blur(24px)",
-    boxShadow: dark ? "0 20px 48px rgba(0,0,0,0.55)" : "0 20px 48px rgba(0,0,0,0.16)",
-    ...(dark ? { color: INK } : null),
+    boxShadow: FROSTED_SHADOW,
+    ...(IS_DARK ? { color: INK } : null),
   };
 }
 
@@ -120,7 +245,7 @@ function fieldInput(dark: boolean): React.CSSProperties {
     borderRadius: 10,
     padding: "0 12px",
     color: INK,
-    background: dark ? CARD_SOFT : "#fff",
+    background: IS_DARK ? CARD_SOFT : "#fff",
   };
 }
 
@@ -935,6 +1060,7 @@ export function JacketStage({
   typeName?: string | null;
 }) {
   const dark = useAdminDark();
+  applyTheme(dark ? "dark" : "light");
   const isDouble = format === "12_double";
   const jacketPx = format === "7_inch" ? 175 : 300;
   const DISC = Math.round(jacketPx * 0.96);
@@ -1783,6 +1909,7 @@ export function PressPackagePricingCatalog({
 }) {
   const { toast } = useToast();
   const dark = useAdminDark();
+  applyTheme(dark ? "dark" : "light");
 
   // Role gate — identical to the legacy panel.
   const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
@@ -3715,6 +3842,8 @@ export function TemplateTilesGrid({
   allowHide?: boolean;
 }) {
   const { toast } = useToast();
+  const dark = useAdminDark();
+  applyTheme(dark ? "dark" : "light");
   const qk = ["/api/admin/manufacturers", pressId, "template-specs"];
   const { data } = useQuery<{ specs: PressTemplateSpecRow[] }>({ queryKey: qk });
   const specsForFmt = (data?.specs ?? []).filter((s) => s.format === fmt && s.variantKey === "" && s.discCount === 0);

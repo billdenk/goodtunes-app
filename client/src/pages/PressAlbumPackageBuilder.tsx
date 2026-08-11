@@ -17,8 +17,13 @@
 //   • templates are the press's real uploads from the invited-press payload;
 //   • jacket fallback (rule 1/2): real album art center-cropped square →
 //     press default jacket → white pmp icon at ~45% width on #1d1d1f ink.
-// Dark mode: all tokens are the same CSS vars the catalog page uses, which
-// flip under `gt-admin-dark` (charcoal, never navy).
+// Theming: the handoff ships a THEMES map (light + dark token sets) with
+// mutable module bindings reassigned by applyTheme() at the top of the page
+// render, so the self-contained sub-components read the active theme without
+// threading a prop through every call site. Mode comes from the shell's active
+// admin theme via useAdminDark() — no local toggle. Dark is charcoal, never
+// navy. The CD/cassette-style catalog bodies are now theme-aware (the older
+// dark-only convention is superseded).
 // ─────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -47,17 +52,141 @@ import {
   type CatalogFormat as CatalogFormatRow,
 } from "./AdminManufacturer";
 import type { PressTemplate } from "@/components/admin/PressTemplateDownloads";
+import { useAdminDark } from "@/lib/adminAppearance";
 
-// ─── Design tokens (Apple canon; vars flip under gt-admin-dark) ──────
-const BLUE = "var(--brand-blue)";
-const INK = "var(--apple-ink)";
-const SUBINK = "var(--apple-subink)";
-const HAIRLINE = "var(--apple-hairline)";
-const FAINT = "var(--apple-faint)";
-const READY = "#1c8a5b";
+// ─── Theme-aware brand tokens (Apple calm visual language) ───────────
+// Theme-aware: light = the ratified press-portal palette (apple-canon light);
+// dark = apple-canon "Dark controls & surfaces" (charcoal, never navy). The
+// mode comes from the shell's active admin theme (useAdminDark) — there is no
+// per-page toggle. Handoff's mock-only light/dark pill is intentionally dropped.
+//
+// Mutable bindings reassigned by applyTheme() at the top of the page render,
+// so the self-contained sub-components read the active theme without threading
+// a prop through every call site.
+type Theme = {
+  BLUE: string;
+  INK: string;
+  SUBINK: string;
+  FAINT: string;      // #a1a1a6 family — captions, muted icons
+  HAIRLINE: string;
+  CANVAS: string;
+  RAIL: string;
+  CARD: string;       // raised card surface (was bg-white / #ffffff / #fff)
+  TRACK: string;      // segmented-control pill track (was #f0f0f2)
+  HEADER_BG: string;  // translucent sticky header
+  HOVER_WASH: string; // neutral hover tint (was hover:bg-slate-*)
+  BLUE_WASH: string;  // blue text-button hover wash (was #f0f7fc)
+  BLUE_TINT_TOP: string; // top stop of the GoodDeed blue-tinted card gradient
+  RING: string;       // avatar/search ring (was slate-200)
+  CHECK_HALO: string; // selected-swatch check halo behind the tick
+  READY: string;
+  PILL_SHADOW: string;
+};
+
+const THEMES: Record<"light" | "dark", Theme> = {
+  light: {
+    BLUE: "#319ED8",
+    INK: "#1d1d1f",
+    SUBINK: "#6e6e73",
+    FAINT: "#a1a1a6",
+    HAIRLINE: "#e6e6ea",
+    CANVAS: "#f5f5f7",
+    RAIL: "#f5f5f7",
+    CARD: "#ffffff",
+    TRACK: "#f0f0f2",
+    HEADER_BG: "rgba(255,255,255,0.72)",
+    HOVER_WASH: "rgba(0,0,0,0.05)",
+    BLUE_WASH: "#f0f7fc",
+    BLUE_TINT_TOP: "#f4faff",
+    RING: "#e2e8f0",
+    CHECK_HALO: "rgba(255,255,255,0.85)",
+    READY: "#1c8a5b",
+    PILL_SHADOW: "0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)",
+  },
+  dark: {
+    BLUE: "#319ED8",
+    INK: "#f5f5f7",
+    SUBINK: "#98989d",
+    FAINT: "#6e6e73",
+    HAIRLINE: "rgba(255,255,255,0.10)",
+    CANVAS: "#161617",
+    RAIL: "#1c1c1e",
+    CARD: "#1e1e20",
+    TRACK: "#26262a",
+    HEADER_BG: "rgba(22,22,23,0.72)",
+    HOVER_WASH: "rgba(255,255,255,0.05)",
+    BLUE_WASH: "rgba(49,158,216,0.14)",
+    BLUE_TINT_TOP: "rgba(49,158,216,0.10)",
+    RING: "rgba(255,255,255,0.14)",
+    CHECK_HALO: "rgba(0,0,0,0.55)",
+    READY: "#3fbf62",
+    PILL_SHADOW: "0 1px 3px rgba(0,0,0,0.4)",
+  },
+};
+
+// Mutable active-theme bindings (default light = unchanged render).
+let BLUE = THEMES.light.BLUE;
+let INK = THEMES.light.INK;
+let SUBINK = THEMES.light.SUBINK;
+let FAINT = THEMES.light.FAINT;
+let HAIRLINE = THEMES.light.HAIRLINE;
+let CANVAS = THEMES.light.CANVAS;
+let RAIL = THEMES.light.RAIL;
+let CARD = THEMES.light.CARD;
+let TRACK = THEMES.light.TRACK;
+let HEADER_BG = THEMES.light.HEADER_BG;
+let HOVER_WASH = THEMES.light.HOVER_WASH;
+let BLUE_WASH = THEMES.light.BLUE_WASH;
+let BLUE_TINT_TOP = THEMES.light.BLUE_TINT_TOP;
+let RING = THEMES.light.RING;
+let CHECK_HALO = THEMES.light.CHECK_HALO;
+let READY = THEMES.light.READY;
+let PILL_SHADOW = THEMES.light.PILL_SHADOW;
+
+// True while the dark theme is active — flips dark-only logo assets to white
+// via CSS invert on dark surfaces, per apple-canon Logos.
+let IS_DARK = false;
+
+function applyTheme(mode: "light" | "dark") {
+  IS_DARK = mode === "dark";
+  const th = THEMES[mode];
+  BLUE = th.BLUE;
+  INK = th.INK;
+  SUBINK = th.SUBINK;
+  FAINT = th.FAINT;
+  HAIRLINE = th.HAIRLINE;
+  CANVAS = th.CANVAS;
+  RAIL = th.RAIL;
+  CARD = th.CARD;
+  TRACK = th.TRACK;
+  HEADER_BG = th.HEADER_BG;
+  HOVER_WASH = th.HOVER_WASH;
+  BLUE_WASH = th.BLUE_WASH;
+  BLUE_TINT_TOP = th.BLUE_TINT_TOP;
+  RING = th.RING;
+  CHECK_HALO = th.CHECK_HALO;
+  READY = th.READY;
+  PILL_SHADOW = th.PILL_SHADOW;
+}
 
 function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
+}
+
+// Stacks the sticky two-column body when the viewport gets too narrow for the
+// preview rail + the earnings column (avoids horizontal overflow < 1440), so
+// the grid collapses gracefully at 1024/768 instead of relying on fixed widths.
+function useNarrow(maxWidth = 1080): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia(`(max-width: ${maxWidth}px)`);
+    setNarrow(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setNarrow(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [maxWidth]);
+  return narrow;
 }
 
 const money = (cents: number) => formatUsdCents(Math.round(cents));
@@ -144,8 +273,8 @@ function AlbumBanner({
 }) {
   return (
     <div
-      className="flex items-center gap-4 rounded-2xl bg-white"
-      style={{ border: `1px solid ${HAIRLINE}`, padding: 16 }}
+      className="flex items-center gap-4 rounded-2xl"
+      style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, padding: 16 }}
       data-testid="album-banner"
     >
       {coverUrl ? (
@@ -204,8 +333,9 @@ function SizeCards({
             onClick={() => onChange(f)}
             aria-pressed={active}
             data-testid={`size-${f}`}
-            className="rounded-2xl bg-white transition-all hover:-translate-y-px focus:outline-none"
+            className="rounded-2xl transition-all hover:-translate-y-px focus:outline-none"
             style={{
+              backgroundColor: CARD,
               flex: 1,
               padding: "16px 12px",
               border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
@@ -250,8 +380,8 @@ function TypeCards({
             onClick={() => onChange(t.id)}
             aria-pressed={active}
             data-testid={`type-${t.id}`}
-            className="rounded-2xl bg-white text-left transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
-            style={{ padding: 14, border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
+            className="rounded-2xl text-left transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
+            style={{ backgroundColor: CARD, padding: 14, border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
           >
             <div className="flex justify-center" style={{ marginBottom: 10 }}>
               <VinylDisc size={84} color={preview} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
@@ -290,8 +420,8 @@ function ColorCards({
             onClick={() => onChange(c.id)}
             aria-pressed={on}
             data-testid={`color-${c.id}`}
-            className="rounded-2xl bg-white text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
-            style={{ padding: "16px 10px 12px", border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
+            className="rounded-2xl text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
+            style={{ backgroundColor: CARD, padding: "16px 10px 12px", border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
           >
             <div className="relative flex justify-center" style={{ marginBottom: 8 }}>
               <ColorBall color={c} size={48} />
@@ -301,7 +431,7 @@ function ColorCards({
                   style={{
                     width: 18,
                     height: 18,
-                    backgroundColor: "rgba(255,255,255,0.85)",
+                    backgroundColor: CHECK_HALO,
                     top: "50%",
                     left: "50%",
                     transform: "translate(-50%, -50%)",
@@ -363,7 +493,7 @@ function MiniGoodDeed({ coverSrc }: { coverSrc: string | null }) {
         <div className="block w-full" style={{ aspectRatio: "1 / 1.1", backgroundColor: "#1d1d1f" }} />
       )}
       <div style={{ backgroundColor: "#101d36", padding: "4px 4px 3px" }}>
-        <div style={{ height: 2, width: "70%", backgroundColor: "rgba(255,255,255,0.85)", borderRadius: 1 }} />
+        <div style={{ height: 2, width: "70%", backgroundColor: CHECK_HALO, borderRadius: 1 }} />
         <div style={{ height: 1.5, width: "50%", backgroundColor: "rgba(255,255,255,0.4)", borderRadius: 1, marginTop: 2.5 }} />
         <div className="flex items-end justify-between" style={{ marginTop: 3 }}>
           <div style={{ height: 1.5, width: "40%", backgroundColor: "rgba(255,255,255,0.3)", borderRadius: 1, marginBottom: 1 }} />
@@ -377,7 +507,7 @@ function MiniGoodDeed({ coverSrc }: { coverSrc: string | null }) {
 // ─── Segmented run control (options from the tier's ladder) ──────────
 function RunControl({ options, value, onChange }: { options: number[]; value: number; onChange: (v: number) => void }) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-full p-1" style={{ backgroundColor: "var(--apple-wash, #f0f0f2)" }} data-testid="control-run">
+    <div className="inline-flex items-center gap-1 rounded-full p-1" style={{ backgroundColor: TRACK }} data-testid="control-run">
       {options.map((q) => {
         const active = q === value;
         return (
@@ -393,7 +523,7 @@ function RunControl({ options, value, onChange }: { options: number[]; value: nu
               fontSize: 13,
               fontWeight: 600,
               color: active ? INK : SUBINK,
-              backgroundColor: active ? "var(--apple-card, #ffffff)" : "transparent",
+              backgroundColor: active ? CARD : "transparent",
               boxShadow: active ? "0 1px 3px rgba(0,0,0,0.08)" : undefined,
             }}
           >
@@ -423,7 +553,7 @@ function RetailControl({
   return (
     <label
       className="inline-flex items-center h-11 rounded-xl transition-shadow focus-within:ring-1 focus-within:ring-slate-300"
-      style={{ border: `1px solid ${HAIRLINE}`, background: "var(--apple-card, #fff)", cursor: "text", padding: "0 14px" }}
+      style={{ border: `1px solid ${HAIRLINE}`, background: CARD, cursor: "text", padding: "0 14px" }}
       data-testid={`${testId}-field`}
     >
       <span className="text-[16px] font-semibold" style={{ color: FAINT, marginRight: 2 }}>$</span>
@@ -493,7 +623,9 @@ function GoodDeedCard({
       className="rounded-2xl overflow-hidden transition-all"
       style={{
         border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
-        background: on ? "linear-gradient(180deg, var(--apple-wash, #f4faff) 0%, var(--apple-card, #ffffff) 55%)" : "var(--apple-card, #fff)",
+        background: on
+          ? `linear-gradient(180deg, ${BLUE_TINT_TOP} 0%, ${CARD} 55%)`
+          : CARD,
       }}
       data-testid="addon-gooddeed"
     >
@@ -506,7 +638,7 @@ function GoodDeedCard({
             </span>
             <span
               className="inline-flex items-center gap-1 rounded-full text-[10px] font-bold uppercase tracking-wider px-2 h-5"
-              style={{ color: BLUE, backgroundColor: "var(--apple-wash, #e8f4fc)" }}
+              style={{ color: BLUE, backgroundColor: BLUE_WASH }}
             >
               <Sparkles className="w-3 h-3" /> Flagship
             </span>
@@ -536,11 +668,11 @@ function GoodDeedCard({
           onClick={onToggle}
           data-testid="toggle-gooddeed"
           className="relative flex-shrink-0 rounded-full transition-colors focus:outline-none"
-          style={{ width: 46, height: 28, backgroundColor: on ? BLUE : "var(--apple-faint, #d1d1d6)" }}
+          style={{ width: 46, height: 28, backgroundColor: on ? BLUE : FAINT }}
         >
           <span
-            className="absolute rounded-full bg-white transition-transform"
-            style={{ width: 22, height: 22, top: 3, left: 3, transform: on ? "translateX(18px)" : "translateX(0)", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }}
+            className="absolute rounded-full transition-transform"
+            style={{ backgroundColor: CARD, width: 22, height: 22, top: 3, left: 3, transform: on ? "translateX(18px)" : "translateX(0)", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }}
           />
         </button>
       </div>
@@ -572,8 +704,9 @@ function GoodDeedCard({
                       type="button"
                       onClick={() => onMode(m)}
                       data-testid={`deed-mode-${m}`}
-                      className="rounded-xl bg-white text-left transition-all"
+                      className="rounded-xl text-left transition-all"
                       style={{
+                        backgroundColor: CARD,
                         padding: "12px 14px",
                         border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
                         margin: active ? 0 : 1,
@@ -587,13 +720,15 @@ function GoodDeedCard({
               </div>
               {mode === "cap" && (
                 <div className="flex items-center gap-3" style={{ marginTop: 10 }}>
-                  <div className="inline-flex items-center rounded-xl bg-white overflow-hidden" style={{ border: `1px solid ${HAIRLINE}` }}>
+                  <div className="inline-flex items-center rounded-xl overflow-hidden" style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}>
                     <button
                       type="button"
                       onClick={() => onCap(Math.max(50, cap - 50))}
                       data-testid="deed-cap-minus"
-                      className="flex items-center justify-center transition-colors hover:bg-slate-50"
+                      className="flex items-center justify-center transition-colors"
                       style={{ width: 36, height: 38, color: SUBINK, fontSize: 16 }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = HOVER_WASH)}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                     >
                       −
                     </button>
@@ -607,8 +742,10 @@ function GoodDeedCard({
                       type="button"
                       onClick={() => onCap(Math.min(runQty, cap + 50))}
                       data-testid="deed-cap-plus"
-                      className="flex items-center justify-center transition-colors hover:bg-slate-50"
+                      className="flex items-center justify-center transition-colors"
                       style={{ width: 36, height: 38, color: SUBINK, fontSize: 16 }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = HOVER_WASH)}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                     >
                       +
                     </button>
@@ -627,8 +764,10 @@ function GoodDeedCard({
                   type="button"
                   onClick={() => setShowDeedCost((v) => !v)}
                   data-testid="button-deed-cost-breakdown"
-                  className="flex items-center gap-1 text-[11.5px] transition-colors hover:text-slate-600"
+                  className="flex items-center gap-1 text-[11.5px] transition-colors"
                   style={{ color: FAINT, marginTop: 2 }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = SUBINK)}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = FAINT)}
                 >
                   {costCents != null ? <>After the {money(costCents)} cost per signed certificate</> : costPending ? "Pricing the certificate…" : "Certificate cost unavailable"}
                   <ChevronRight className="w-3 h-3 transition-transform" style={{ transform: showDeedCost ? "rotate(90deg)" : "none" }} />
@@ -715,11 +854,11 @@ function TemplateTile({ tpl }: { tpl: PressTemplate }) {
   const label = COMPONENT_LABEL[tpl.componentKey] ?? tpl.componentKey;
   return (
     <div
-      className="group relative flex flex-col items-center justify-center rounded-xl bg-white text-center"
-      style={{ border: `1px solid ${HAIRLINE}`, padding: "18px 12px" }}
+      className="group relative flex flex-col items-center justify-center rounded-xl text-center"
+      style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, padding: "18px 12px" }}
       data-testid={`template-${tpl.componentKey}`}
     >
-      <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: "var(--apple-wash, #f5f5f7)" }}>
+      <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: CANVAS }}>
         <FileText className="w-4 h-4" style={{ color: BLUE }} />
       </span>
       <div className="text-[13px] font-semibold" style={{ color: INK, marginTop: 8 }}>
@@ -734,8 +873,10 @@ function TemplateTile({ tpl }: { tpl: PressTemplate }) {
         target="_blank"
         rel="noreferrer"
         data-testid={`template-download-${tpl.componentKey}`}
-        className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-slate-100"
+        className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
         style={{ color: SUBINK }}
+        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = HOVER_WASH)}
+        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
         aria-label={`Download ${label} template`}
       >
         <Download className="w-3.5 h-3.5" />
@@ -763,6 +904,13 @@ export function PressAlbumPackageBuilder({
   artworkUrl: string | null;
   trackCount: number;
 }) {
+  // Theme mode comes from the shell's active admin theme — no local toggle.
+  // Reassign the active-theme token bindings synchronously before any child
+  // renders this pass (mode = dark ? 'dark' : 'light').
+  const dark = useAdminDark();
+  applyTheme(dark ? "dark" : "light");
+  const narrow = useNarrow(1080);
+
   const { toast } = useToast();
 
   const { data: sell } = useQuery<SellResponse>({
@@ -1019,7 +1167,7 @@ export function PressAlbumPackageBuilder({
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1240px]" data-testid="panel-package-builder">
+    <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: "32px 40px 96px" }} data-testid="panel-package-builder">
       {/* Page header + quiet save state */}
       <div className="flex items-start justify-between gap-6">
         <div className="min-w-0">
@@ -1062,32 +1210,41 @@ export function PressAlbumPackageBuilder({
       <Divider />
 
       <fieldset disabled={!canEdit} className="min-w-0">
-        {/* Two-column body — jacket preview left (sticky), decisions right */}
-        <div className="flex flex-col gap-12 lg:flex-row">
+        {/* Two-column body — jacket preview left (sticky), decisions right.
+            Collapses to a single column when the viewport gets too narrow. */}
+        <div
+          className="grid gap-16"
+          style={{ gridTemplateColumns: narrow ? "1fr" : "minmax(0, 1fr) minmax(0, 620px)" }}
+        >
           {/* LEFT — the record, no card around it */}
-          <div className="hidden flex-shrink-0 lg:block" style={{ width: 340 }}>
-            <div className="sticky top-8">
-              {format && (
-                <JacketStage
-                  format={format}
-                  jacketUrl={jacketUrl}
-                  color={selectedColor}
-                  labelLogoUrl={labelLogoUrl}
-                  labelBgColor={labelBgColor}
-                  placeholderIconUrl={PMP_ICON}
-                />
-              )}
-              {activeTier && (
-                <div className="text-[12.5px]" style={{ marginTop: 14, color: SUBINK, lineHeight: 1.4 }}>
-                  <span className="font-semibold" style={{ color: INK }}>{activeTier.name}</span>
-                  {selectedColor ? <> · {selectedColor.name}</> : null}
-                </div>
-              )}
-            </div>
+          <div
+            className="flex flex-col items-center"
+            style={
+              narrow
+                ? { minHeight: 560, paddingTop: 24 }
+                : { position: "sticky", top: 24, alignSelf: "start", minHeight: 560, paddingTop: 24 }
+            }
+          >
+            {format && (
+              <JacketStage
+                format={format}
+                jacketUrl={jacketUrl}
+                color={selectedColor}
+                labelLogoUrl={labelLogoUrl}
+                labelBgColor={labelBgColor}
+                placeholderIconUrl={PMP_ICON}
+              />
+            )}
+            {activeTier && (
+              <div className="text-[12.5px]" style={{ marginTop: 14, color: SUBINK, lineHeight: 1.4 }}>
+                <span className="font-semibold" style={{ color: INK }}>{activeTier.name}</span>
+                {selectedColor ? <> · {selectedColor.name}</> : null}
+              </div>
+            )}
           </div>
 
-          {/* RIGHT — the decisions */}
-          <div className="min-w-0 flex-1" style={{ maxWidth: 660 }}>
+          {/* RIGHT — the decisions. Above the sliding jacket, opaque canvas bg. */}
+          <div className="min-w-0" style={{ position: "relative", zIndex: 2, backgroundColor: CANVAS }}>
             {/* Pick a size */}
             <TwoTone lead="Pick a size." rest="Prices follow the record." />
             <SizeCards
@@ -1174,8 +1331,8 @@ export function PressAlbumPackageBuilder({
 
             {/* The earnings receipt */}
             <div
-              className="rounded-2xl overflow-hidden bg-white"
-              style={{ border: `1px solid ${HAIRLINE}`, marginTop: 20 }}
+              className="rounded-2xl overflow-hidden"
+              style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, marginTop: 20 }}
               data-testid="earnings-panel"
             >
               <div style={{ padding: "4px 18px" }}>
@@ -1190,8 +1347,10 @@ export function PressAlbumPackageBuilder({
                           type="button"
                           onClick={() => setShowCost((v) => !v)}
                           data-testid="button-cost-breakdown"
-                          className="flex items-center gap-1 text-[11.5px] transition-colors hover:text-slate-600"
+                          className="flex items-center gap-1 text-[11.5px] transition-colors"
                           style={{ color: FAINT, marginTop: 2 }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = SUBINK)}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = FAINT)}
                         >
                           After the {money(packageCostCents)} package cost{press?.name ? <> from {press.name}</> : null}
                           <ChevronRight className="w-3 h-3 transition-transform" style={{ transform: showCost ? "rotate(90deg)" : "none" }} />
@@ -1271,7 +1430,7 @@ export function PressAlbumPackageBuilder({
                 style={{
                   padding: 18,
                   borderTop: `1px solid ${HAIRLINE}`,
-                  background: "linear-gradient(180deg, var(--apple-wash, #f4faff) 0%, var(--apple-card, #ffffff) 100%)",
+                  background: `linear-gradient(180deg, ${BLUE_TINT_TOP} 0%, ${CARD} 100%)`,
                 }}
                 data-testid="artist-net"
               >
