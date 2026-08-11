@@ -844,7 +844,26 @@ function PreviewArtDialog({
         </DialogHeader>
 
         <div className="rounded-md border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center min-h-[280px]">
-          {component.previewUrl ? (
+          {component.previewUrl && componentId === "labels" ? (
+            // Task #3020 — center labels: both faces (Side A / Side B when
+            // available), cropped to the trim square, in the circular mask.
+            <div className="flex items-center justify-center gap-6 p-6 flex-wrap">
+              {[
+                { url: component.previewUrl, side: "Side A" },
+                ...(component.previewUrl2 ? [{ url: component.previewUrl2, side: "Side B" }] : []),
+              ].map(({ url, side }) => (
+                <div key={side} className="flex flex-col items-center gap-2">
+                  <img
+                    src={url}
+                    alt=""
+                    className="w-[220px] h-[220px] sm:w-[260px] sm:h-[260px] rounded-full object-cover border border-slate-200 bg-white"
+                    data-testid={`img-completed-large-${componentId}-${side === "Side A" ? "a" : "b"}`}
+                  />
+                  <span className="text-xs font-medium text-slate-500">{side}</span>
+                </div>
+              ))}
+            </div>
+          ) : component.previewUrl ? (
             <img
               src={component.previewUrl}
               alt=""

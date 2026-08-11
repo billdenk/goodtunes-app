@@ -70,6 +70,13 @@ export type CompletedTemplateComponent = {
    * the client shows a generic PDF tile, never a fake.
    */
   previewUrl?: string | null;
+  /**
+   * Task #3020 — second preview face, currently only for center labels
+   * (page 2 = Side B), cropped to the trim square like `previewUrl`.
+   * Null/absent when the file has no second page or no preview could be
+   * produced.
+   */
+  previewUrl2?: string | null;
   /** Per-rule finished-template check results (empty for a missing slot). */
   checks: CheckResult[];
   /** Worst status across `checks`; null when nothing has been run yet. */

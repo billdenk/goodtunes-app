@@ -88,6 +88,13 @@ import { applyAppleFirstAuthName } from "./auth/appleName";
 import { getUserRole, getUserMemberships, pickPrimaryMembership } from "./auth/roles";
 import { resolveInviterBranding } from "./inviteBranding";
 import {
+  parsePdfBoxes,
+  resolveFinishedRectPx,
+  frontPanelRect,
+  clampCrop,
+  type ContentBBox,
+} from "./completedArtPreview";
+import {
   requiredFinishedComponents,
   resolveFinishedComponents,
   completedTemplateConfigToAlbumFormat,
@@ -99,6 +106,7 @@ import {
   type VendorId,
   type CompletedTemplateConfig,
   type AudioSpecOverride,
+  type FinishedComponentSpec,
 } from "@shared/vendorSpecs";
 import {
   rollupCompletedTemplate,
@@ -33667,56 +33675,165 @@ export async function registerRoutes(
   // those get the client's generic PDF tile). Returns null on any failure;
   // the check itself never fails because a preview couldn't be produced.
   const PREVIEW_MAX_SOURCE_BYTES = 300 * 1024 * 1024;
-  async function generateCompletedPreview(objectPath: string): Promise<string | null> {
+
+  // Task #3020 — geometry for trim-area previews lives in
+  // server/completedArtPreview.ts (pure + unit-tested). The only IO here
+  // is running `pdfinfo -box` for one page.
+  async function readPageBoxes(pdfPath: string, page: number) {
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const run = promisify(execFile);
+    const { stdout } = await run(
+      "pdfinfo",
+      ["-f", String(page), "-l", String(page), "-box", pdfPath],
+      { timeout: 30_000 },
+    );
+    return parsePdfBoxes(stdout, page);
+  }
+
+  // Task #2705 (reworked for Task #3020) — best-effort trim-area thumbnail
+  // for a direct-uploaded completed-art PDF: download to /tmp, rasterize
+  // with pdftoppm, crop to the finished/front-panel area (TrimBox first,
+  // template-spec fallback; full page when neither resolves), shrink with
+  // sharp, store the PNG(s) back in object storage (public ACL). Center
+  // labels also rasterize page 2 (Side B) → `previewUrl2`. Only ever runs
+  // against our own objects. Returns nulls on any failure; the check itself
+  // never fails because a preview couldn't be produced.
+  async function generateCompletedPreview(
+    objectPath: string,
+    spec?: FinishedComponentSpec | null,
+  ): Promise<{ previewUrl: string | null; previewUrl2: string | null }> {
     const fsp = await import("node:fs/promises");
     const os = await import("node:os");
     const path = await import("node:path");
     const { execFile } = await import("node:child_process");
     const { promisify } = await import("node:util");
     const run = promisify(execFile);
+    const none = { previewUrl: null, previewUrl2: null };
     let tmpDir: string | null = null;
     try {
       const file = await objectStorage.getObjectEntityFile(objectPath);
       const [meta] = await file.getMetadata();
       const size = Number(meta?.size ?? 0);
-      if (!Number.isFinite(size) || size <= 0 || size > PREVIEW_MAX_SOURCE_BYTES) return null;
+      if (!Number.isFinite(size) || size <= 0 || size > PREVIEW_MAX_SOURCE_BYTES) return none;
       tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "completed-art-"));
       const pdfPath = path.join(tmpDir, "src.pdf");
       await file.download({ destination: pdfPath });
-      const outBase = path.join(tmpDir, "page1");
-      await run("pdftoppm", ["-f", "1", "-l", "1", "-png", "-r", "96", pdfPath, outBase], {
-        timeout: 60_000,
-      });
-      // pdftoppm names the output page1-1.png (or page1-01.png etc.)
-      const files = await fsp.readdir(tmpDir);
-      const pageFile = files.find((f) => f.startsWith("page1") && f.endsWith(".png"));
-      if (!pageFile) return null;
+
+      const componentId = spec?.id ?? "";
+      // Only jacket / labels / inner sleeves get the trim crop; booklet and
+      // unknown components keep the original full-page behavior.
+      const cropEligible =
+        componentId === "jacket" ||
+        componentId === "labels" ||
+        componentId.startsWith("inner_sleeve");
+
       const sharp = (await import("sharp")).default;
-      const png = await sharp(path.join(tmpDir, pageFile))
-        .resize(1000, 1000, { fit: "inside", withoutEnlargement: true })
-        .png()
-        .toBuffer();
-      const id = `${randomUUID()}.png`;
-      const { bucketName, objectName } = uploadDestination(id);
-      const putUrl = await signGcsUrl(bucketName, objectName, "PUT", 900);
-      const putRes = await fetch(putUrl, {
-        method: "PUT",
-        headers: { "Content-Type": "image/png" },
-        body: png,
-      });
-      if (!putRes.ok) return null;
-      const finalPath = `/objects/uploads/${id}`;
-      const stored = await objectStorage.getObjectEntityFile(finalPath);
-      try {
-        await stored.setMetadata({ contentType: "image/png" });
-      } catch {
-        /* non-fatal */
-      }
-      await setObjectAclPolicy(stored, { owner: "admin", visibility: "public" });
-      return finalPath;
+
+      const storePng = async (png: Buffer): Promise<string | null> => {
+        const id = `${randomUUID()}.png`;
+        const { bucketName, objectName } = uploadDestination(id);
+        const putUrl = await signGcsUrl(bucketName, objectName, "PUT", 900);
+        const putRes = await fetch(putUrl, {
+          method: "PUT",
+          headers: { "Content-Type": "image/png" },
+          body: png,
+        });
+        if (!putRes.ok) return null;
+        const finalPath = `/objects/uploads/${id}`;
+        const stored = await objectStorage.getObjectEntityFile(finalPath);
+        try {
+          await stored.setMetadata({ contentType: "image/png" });
+        } catch {
+          /* non-fatal */
+        }
+        await setObjectAclPolicy(stored, { owner: "admin", visibility: "public" });
+        return finalPath;
+      };
+
+      const renderPage = async (page: number): Promise<string | null> => {
+        const outBase = path.join(tmpDir!, `page${page}`);
+        try {
+          await run(
+            "pdftoppm",
+            ["-f", String(page), "-l", String(page), "-png", "-r", "96", pdfPath, outBase],
+            { timeout: 60_000 },
+          );
+        } catch {
+          return null; // e.g. the page doesn't exist
+        }
+        const files = await fsp.readdir(tmpDir!);
+        const pageFile = files.find((f) => f.startsWith(`page${page}-`) && f.endsWith(".png"));
+        if (!pageFile) return null;
+
+        const pagePng = path.join(tmpDir!, pageFile);
+        let pipeline = sharp(pagePng);
+        if (cropEligible) {
+          // Crop/rotate is strictly best-effort: any geometry hiccup falls
+          // back to the full-page render (never a failed preview).
+          try {
+            const meta2 = await sharp(pagePng).metadata();
+            const pxW = meta2.width ?? 0;
+            const pxH = meta2.height ?? 0;
+            const boxes = await readPageBoxes(pdfPath, page);
+
+            // Jacket / sleeve without a TrimBox: MRP-style template
+            // artboards carry big flap/margin whitespace around the placed
+            // art (dieline layers hidden), so detect the content bounding
+            // box (art + bleed) in the raster. Labels don't need it (their
+            // artboards are often full-bleed edge to edge — the spec's
+            // centered finished square is used instead).
+            let contentBBox: ContentBBox | null = null;
+            if (!boxes.trim && componentId !== "labels") {
+              const { info } = await sharp(pagePng)
+                .trim({ threshold: 20 })
+                .toBuffer({ resolveWithObject: true });
+              contentBBox = {
+                left: Math.max(0, -(info.trimOffsetLeft ?? 0)),
+                top: Math.max(0, -(info.trimOffsetTop ?? 0)),
+                width: info.width ?? 0,
+                height: info.height ?? 0,
+              };
+            }
+
+            const finished = resolveFinishedRectPx({
+              componentId,
+              boxes,
+              pxW,
+              pxH,
+              finishedInches: spec?.finishedInches ?? null,
+              bleedInches: spec?.bleedInches ?? null,
+              contentBBox,
+            });
+            if (finished && finished.width >= 8 && finished.height >= 8) {
+              const { rect, rotate180 } = frontPanelRect(componentId, finished);
+              const crop = clampCrop(rect, pxW, pxH);
+              if (crop) {
+                pipeline = pipeline.extract(crop);
+                if (rotate180) pipeline = pipeline.rotate(180);
+              }
+            }
+          } catch (e) {
+            console.warn(`[completed-art] trim crop failed for ${objectPath} p${page} — using full page`, e);
+            pipeline = sharp(pagePng);
+          }
+        }
+        const png = await pipeline
+          .resize(1000, 1000, { fit: "inside", withoutEnlargement: true })
+          .png()
+          .toBuffer();
+        return storePng(png);
+      };
+
+      const previewUrl = await renderPage(1);
+      // Center labels: also render Side B (page 2) so the preview dialog
+      // can show both faces.
+      const previewUrl2 =
+        previewUrl && componentId === "labels" ? await renderPage(2) : null;
+      return { previewUrl, previewUrl2 };
     } catch (e) {
       console.warn(`[completed-art] preview generation failed for ${objectPath}`, e);
-      return null;
+      return none;
     } finally {
       if (tmpDir) {
         try {
@@ -33943,6 +34060,7 @@ export async function registerRoutes(
     let assetUrl: string;
     let fileName: string | null;
     let previewUrl: string | null = null;
+    let previewUrl2: string | null = null;
     const isOwnObject = /^\/objects\/uploads\/[a-zA-Z0-9._-]+$/.test(body.data.url);
     if (isOwnObject) {
       try {
@@ -33957,7 +34075,11 @@ export async function registerRoutes(
       if (!scan.isPdf) return res.status(400).json({ message: "That file isn't a PDF — supply the print-ready PDF." });
       assetUrl = body.data.url;
       fileName = body.data.fileName || null;
-      previewUrl = await generateCompletedPreview(body.data.url);
+      // Task #3020 — trim-area preview (front panel / label trim square),
+      // with a second face for center labels.
+      const previews = await generateCompletedPreview(body.data.url, spec);
+      previewUrl = previews.previewUrl;
+      previewUrl2 = previews.previewUrl2;
     } else {
       const fetched = await fetchAndScanPdf(body.data.url);
       if (!fetched.ok) return res.status(400).json({ message: fetched.error });
@@ -33974,6 +34096,7 @@ export async function registerRoutes(
       assetUrl,
       fileName,
       previewUrl,
+      previewUrl2,
       checks,
       status: rollupStatus(checks),
       override: null,
