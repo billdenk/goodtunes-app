@@ -8,11 +8,14 @@
 // Shell duplicated from PressRailCatalogToggleDark (header, rail, tokens).
 // Footer duplicated IDENTICALLY from the canonical press-portal footer
 // (PressCatalogHellbenderDark): "Powered by" 9px caps + goodtunes-logo.png
-// inverted. HARD RULE per Bill — no drift.
+// inverted on dark. HARD RULE per Bill — no drift.
 //
 // Apple canon: exactly one filled blue pill on the page ("Save audio specs"),
 // quiet text buttons everywhere else, status = icon/dot + label never
 // color-only.
+//
+// Theme-aware: light + dark via the THEMES map; toggle floats on the mock
+// page (mock-only chrome). Dark is the canon default and unchanged.
 
 import { useState } from 'react';
 import {
@@ -34,22 +37,71 @@ import {
   Clock,
   Waves,
   Info,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import mrpLogo from '../assets/mrp-logo.svg';
 import goodtunesLogo from '../assets/goodtunes-logo.png';
 
-// ─── Dark charcoal tokens (canon) ────────────────────────────────────
-const BLUE = '#319ED8';
-const INK = '#f5f5f7';
-const SUBINK = '#98989d';
-const FAINT = '#6e6e73';
-const HAIRLINE = 'rgba(255,255,255,0.10)';
-const CANVAS = '#161617';
-const RAIL = '#1c1c1e';
-const CARD = '#1e1e20';
-const CARD_SOFT = '#26262a';
-const PILL_ACTIVE = '#3a3a3e'; // raised active pill on the charcoal track (canon)
-const PILL_SHADOW = '0 1px 2px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.06)';
+// ─── Themes — dark = canon charcoal (unchanged); light = apple-canon ──
+
+type Theme = {
+  blue: string;
+  ink: string;
+  subink: string;
+  faint: string;
+  hairline: string;
+  canvas: string;
+  rail: string;
+  card: string;
+  cardSoft: string;
+  pillActive: string;   // raised active pill on the segmented track
+  pillShadow: string;
+  headerBg: string;     // sticky translucent header
+  searchPlaceholder: string; // input placeholder class
+  avatarRing: string;   // logo/avatar carrier ring
+  hoverWash: string;    // rail/nav hover class
+  logoFilter?: string;  // CSS invert for the dark-only wordmark asset
+};
+
+const THEMES: Record<'light' | 'dark', Theme> = {
+  light: {
+    blue: '#319ED8',
+    ink: '#1d1d1f',
+    subink: 'rgba(0,0,0,0.62)',
+    faint: 'rgba(0,0,0,0.4)',
+    hairline: 'rgba(0,0,0,0.08)',
+    canvas: '#ffffff',
+    rail: '#f5f5f7',
+    card: '#ffffff',
+    cardSoft: '#f0f0f2',
+    pillActive: '#ffffff',
+    pillShadow: '0 1px 3px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)',
+    headerBg: 'rgba(255,255,255,0.72)',
+    searchPlaceholder: 'placeholder:text-black/30',
+    avatarRing: 'ring-black/10',
+    hoverWash: 'hover:bg-black/5',
+    logoFilter: undefined,
+  },
+  dark: {
+    blue: '#319ED8',
+    ink: '#f5f5f7',
+    subink: '#98989d',
+    faint: '#6e6e73',
+    hairline: 'rgba(255,255,255,0.10)',
+    canvas: '#161617',
+    rail: '#1c1c1e',
+    card: '#1e1e20',
+    cardSoft: '#26262a',
+    pillActive: '#3a3a3e',
+    pillShadow: '0 1px 2px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.06)',
+    headerBg: 'rgba(22,22,23,0.72)',
+    searchPlaceholder: 'placeholder:text-white/30',
+    avatarRing: 'ring-white/15',
+    hoverWash: 'hover:bg-white/5',
+    logoFilter: 'invert(1) brightness(1.8)',
+  },
+};
 
 const PARTNER_NAME = 'Memphis Record Pressing';
 
@@ -70,21 +122,21 @@ const NAV_BELOW: TopItem[] = [
   { label: 'Referrals', icon: Gift },
 ];
 
-function NavRow({ label, icon: Icon, active }: TopItem & { active?: boolean }) {
+function NavRow({ label, icon: Icon, active, t }: TopItem & { active?: boolean; t: Theme }) {
   return (
     <a
       href="#"
       onClick={(e) => e.preventDefault()}
-      className={cn('flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors', !active && 'hover:bg-white/5')}
+      className={cn('flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors', !active && t.hoverWash)}
       style={{
         fontWeight: active ? 600 : 500,
-        color: active ? INK : SUBINK,
-        backgroundColor: active ? CARD : undefined,
-        boxShadow: active ? PILL_SHADOW : undefined,
+        color: active ? t.ink : t.subink,
+        backgroundColor: active ? t.card : undefined,
+        boxShadow: active ? t.pillShadow : undefined,
       }}
       data-testid={`nav-${label.toLowerCase()}`}
     >
-      <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? INK : FAINT }} />
+      <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? t.ink : t.faint }} />
       <span className="truncate flex-1">{label}</span>
     </a>
   );
@@ -131,16 +183,16 @@ const MOCK_CASSETTE_AUDIO = {
 };
 
 // ─── Small form atoms ────────────────────────────────────────────────
-function Field({ label, value, suffix, wide }: { label: string; value: string; suffix?: string; wide?: boolean }) {
+function Field({ label, value, suffix, wide, t }: { label: string; value: string; suffix?: string; wide?: boolean; t: Theme }) {
   return (
     <label className={cn('block', wide && 'col-span-2')}>
-      <span className="block text-[12px] font-medium mb-1.5" style={{ color: SUBINK }}>
+      <span className="block text-[12px] font-medium mb-1.5" style={{ color: t.subink }}>
         {label}
       </span>
-      <span className="flex items-center h-9 rounded-lg px-3" style={{ backgroundColor: CARD_SOFT, border: `1px solid ${HAIRLINE}` }}>
-        <input className="flex-1 bg-transparent text-[13.5px] focus:outline-none" style={{ color: INK, minWidth: 0, width: '100%' }} defaultValue={value} readOnly />
+      <span className="flex items-center h-9 rounded-lg px-3" style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}>
+        <input className="flex-1 bg-transparent text-[13.5px] focus:outline-none" style={{ color: t.ink, minWidth: 0, width: '100%' }} defaultValue={value} readOnly />
         {suffix && (
-          <span className="text-[12px] flex-shrink-0 pl-2" style={{ color: FAINT }}>
+          <span className="text-[12px] flex-shrink-0 pl-2" style={{ color: t.faint }}>
             {suffix}
           </span>
         )}
@@ -149,13 +201,13 @@ function Field({ label, value, suffix, wide }: { label: string; value: string; s
   );
 }
 
-function ChoiceRow({ label, options, selected }: { label: string; options: string[]; selected: string }) {
+function ChoiceRow({ label, options, selected, t }: { label: string; options: string[]; selected: string; t: Theme }) {
   return (
     <div>
-      <span className="block text-[12px] font-medium mb-1.5" style={{ color: SUBINK }}>
+      <span className="block text-[12px] font-medium mb-1.5" style={{ color: t.subink }}>
         {label}
       </span>
-      <div className="inline-flex items-center p-0.5 rounded-full" style={{ backgroundColor: CARD_SOFT, border: `1px solid ${HAIRLINE}` }}>
+      <div className="inline-flex flex-wrap items-center p-0.5 rounded-full" style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}>
         {options.map((o) => {
           const on = o === selected;
           return (
@@ -163,7 +215,7 @@ function ChoiceRow({ label, options, selected }: { label: string; options: strin
               key={o}
               type="button"
               className="h-7 px-3.5 rounded-full text-[12.5px] font-semibold transition-colors"
-              style={{ color: on ? INK : SUBINK, backgroundColor: on ? PILL_ACTIVE : undefined, boxShadow: on ? PILL_SHADOW : undefined }}
+              style={{ color: on ? t.ink : t.subink, backgroundColor: on ? t.pillActive : undefined, boxShadow: on ? t.pillShadow : undefined }}
             >
               {o}
             </button>
@@ -174,18 +226,18 @@ function ChoiceRow({ label, options, selected }: { label: string; options: strin
   );
 }
 
-function SpecCard({ icon: Icon, title, sub, children }: { icon: typeof FileAudio; title: string; sub: string; children: React.ReactNode }) {
+function SpecCard({ icon: Icon, title, sub, children, t }: { icon: typeof FileAudio; title: string; sub: string; children: React.ReactNode; t: Theme }) {
   return (
-    <section className="rounded-2xl p-6" style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}>
+    <section className="rounded-2xl p-6" style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }}>
       <div className="flex items-center gap-3">
-        <span className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: CARD_SOFT, border: `1px solid ${HAIRLINE}` }}>
-          <Icon className="w-4 h-4" style={{ color: SUBINK }} />
+        <span className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}>
+          <Icon className="w-4 h-4" style={{ color: t.subink }} />
         </span>
         <div>
-          <h2 className="text-[15px] font-semibold" style={{ color: INK }}>
+          <h2 className="text-[15px] font-semibold" style={{ color: t.ink }}>
             {title}
           </h2>
-          <p className="text-[12px]" style={{ color: FAINT }}>
+          <p className="text-[12px]" style={{ color: t.faint }}>
             {sub}
           </p>
         </div>
@@ -196,81 +248,81 @@ function SpecCard({ icon: Icon, title, sub, children }: { icon: typeof FileAudio
 }
 
 // ─── Per-format field sets ───────────────────────────────────────────
-function VinylFields() {
+function VinylFields({ t }: { t: Theme }) {
   return (
     <div className="space-y-4">
-      <SpecCard icon={FileAudio} title="Master files" sub="What you accept from artists — the digital inputs for a physical run.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' }}>
-          <Field label="Accepted formats" value={MOCK_VINYL_AUDIO.formats} />
-          <Field label="Bit depth (minimum)" value={MOCK_VINYL_AUDIO.bitDepth} suffix="bit" />
-          <Field label="Sample rate" value={MOCK_VINYL_AUDIO.sampleRate} suffix="kHz" />
-          <Field label="One file per side" value={MOCK_VINYL_AUDIO.onePerSide} />
+      <SpecCard icon={FileAudio} title="Master files" sub="What you accept from artists — the digital inputs for a physical run." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          <Field label="Accepted formats" value={MOCK_VINYL_AUDIO.formats} t={t} />
+          <Field label="Bit depth (minimum)" value={MOCK_VINYL_AUDIO.bitDepth} suffix="bit" t={t} />
+          <Field label="Sample rate" value={MOCK_VINYL_AUDIO.sampleRate} suffix="kHz" t={t} />
+          <Field label="One file per side" value={MOCK_VINYL_AUDIO.onePerSide} t={t} />
         </div>
       </SpecCard>
 
-      <SpecCard icon={Clock} title="Side lengths" sub="Longer sides press quieter. These are your cutting limits per size and speed.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)' }}>
-          <Field label={'12″ · 33⅓ RPM'} value={MOCK_VINYL_AUDIO.side12_33} suffix="min/side" />
-          <Field label={'12″ · 45 RPM'} value={MOCK_VINYL_AUDIO.side12_45} suffix="min/side" />
-          <Field label={'10″ · 33⅓ RPM'} value={MOCK_VINYL_AUDIO.side10_33} suffix="min/side" />
-          <Field label={'10″ · 45 RPM'} value={MOCK_VINYL_AUDIO.side10_45} suffix="min/side" />
-          <Field label={'7″ · 45 RPM'} value={MOCK_VINYL_AUDIO.side7_45} suffix="min/side" />
+      <SpecCard icon={Clock} title="Side lengths" sub="Longer sides press quieter. These are your cutting limits per size and speed." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+          <Field label={'12″ · 33⅓ RPM'} value={MOCK_VINYL_AUDIO.side12_33} suffix="min/side" t={t} />
+          <Field label={'12″ · 45 RPM'} value={MOCK_VINYL_AUDIO.side12_45} suffix="min/side" t={t} />
+          <Field label={'10″ · 33⅓ RPM'} value={MOCK_VINYL_AUDIO.side10_33} suffix="min/side" t={t} />
+          <Field label={'10″ · 45 RPM'} value={MOCK_VINYL_AUDIO.side10_45} suffix="min/side" t={t} />
+          <Field label={'7″ · 45 RPM'} value={MOCK_VINYL_AUDIO.side7_45} suffix="min/side" t={t} />
         </div>
-        <p className="mt-3 text-[12px] flex items-start gap-1.5" style={{ color: FAINT }}>
+        <p className="mt-3 text-[12px] flex items-start gap-1.5" style={{ color: t.faint }}>
           <Info className="w-3.5 h-3.5 mt-[1px] flex-shrink-0" />
           Sides past these lengths get a heads-up at upload — artists can proceed, but we flag the level trade-off.
         </p>
       </SpecCard>
 
-      <SpecCard icon={Waves} title="Cutting guidance" sub="Advisories shown to artists before they submit.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' }}>
-          <Field label="Low end mono below" value={MOCK_VINYL_AUDIO.monoBelow} suffix="Hz" />
-          <Field label="Sibilance / de-ess advisory" value={MOCK_VINYL_AUDIO.deEss} />
-          <ChoiceRow label="Cutting method" options={['Lacquer', 'DMM']} selected={MOCK_VINYL_AUDIO.cuttingMethod} />
-          <ChoiceRow label="Test pressings" options={['Included', 'Optional add-on']} selected={MOCK_VINYL_AUDIO.testPressings} />
+      <SpecCard icon={Waves} title="Cutting guidance" sub="Advisories shown to artists before they submit." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+          <Field label="Low end mono below" value={MOCK_VINYL_AUDIO.monoBelow} suffix="Hz" t={t} />
+          <Field label="Sibilance / de-ess advisory" value={MOCK_VINYL_AUDIO.deEss} t={t} />
+          <ChoiceRow label="Cutting method" options={['Lacquer', 'DMM']} selected={MOCK_VINYL_AUDIO.cuttingMethod} t={t} />
+          <ChoiceRow label="Test pressings" options={['Included', 'Optional add-on']} selected={MOCK_VINYL_AUDIO.testPressings} t={t} />
         </div>
       </SpecCard>
     </div>
   );
 }
 
-function CDFields() {
+function CDFields({ t }: { t: Theme }) {
   return (
     <div className="space-y-4">
-      <SpecCard icon={FileAudio} title="Master files" sub="Red Book is the spec — CDs are less forgiving than vinyl about formats.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' }}>
-          <Field label="Accepted masters" value={MOCK_CD_AUDIO.masters} />
-          <Field label="Bit depth / sample rate" value={MOCK_CD_AUDIO.bitRate} suffix="Red Book" />
-          <Field label="Max disc length" value={MOCK_CD_AUDIO.maxLength} suffix="min" />
-          <Field label="ISRC / CD-Text" value={MOCK_CD_AUDIO.isrc} />
+      <SpecCard icon={FileAudio} title="Master files" sub="Red Book is the spec — CDs are less forgiving than vinyl about formats." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          <Field label="Accepted masters" value={MOCK_CD_AUDIO.masters} t={t} />
+          <Field label="Bit depth / sample rate" value={MOCK_CD_AUDIO.bitRate} suffix="Red Book" t={t} />
+          <Field label="Max disc length" value={MOCK_CD_AUDIO.maxLength} suffix="min" t={t} />
+          <Field label="ISRC / CD-Text" value={MOCK_CD_AUDIO.isrc} t={t} />
         </div>
       </SpecCard>
-      <SpecCard icon={Waves} title="Guidance" sub="Advisories shown to artists before they submit.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' }}>
-          <Field label="Gap between tracks" value={MOCK_CD_AUDIO.trackGap} />
-          <ChoiceRow label="Hidden / pregap tracks" options={['Allowed', 'Not supported']} selected={MOCK_CD_AUDIO.pregap} />
+      <SpecCard icon={Waves} title="Guidance" sub="Advisories shown to artists before they submit." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+          <Field label="Gap between tracks" value={MOCK_CD_AUDIO.trackGap} t={t} />
+          <ChoiceRow label="Hidden / pregap tracks" options={['Allowed', 'Not supported']} selected={MOCK_CD_AUDIO.pregap} t={t} />
         </div>
       </SpecCard>
     </div>
   );
 }
 
-function CassetteFields() {
+function CassetteFields({ t }: { t: Theme }) {
   return (
     <div className="space-y-4">
-      <SpecCard icon={FileAudio} title="Master files" sub="Same digital inputs — the shell length is the constraint.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' }}>
-          <Field label="Accepted formats" value={MOCK_CASSETTE_AUDIO.formats} />
-          <Field label="Bit depth (minimum)" value={MOCK_CASSETTE_AUDIO.bitDepth} suffix="bit" />
+      <SpecCard icon={FileAudio} title="Master files" sub="Same digital inputs — the shell length is the constraint." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          <Field label="Accepted formats" value={MOCK_CASSETTE_AUDIO.formats} t={t} />
+          <Field label="Bit depth (minimum)" value={MOCK_CASSETTE_AUDIO.bitDepth} suffix="bit" t={t} />
         </div>
       </SpecCard>
-      <SpecCard icon={Clock} title="Side lengths" sub="Program must balance across Side A and Side B of the shell.">
-        <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)' }}>
-          <Field label="C-30" value={MOCK_CASSETTE_AUDIO.c30} suffix="min/side" />
-          <Field label="C-45" value={MOCK_CASSETTE_AUDIO.c45} suffix="min/side" />
-          <Field label="C-60" value={MOCK_CASSETTE_AUDIO.c60} suffix="min/side" />
+      <SpecCard icon={Clock} title="Side lengths" sub="Program must balance across Side A and Side B of the shell." t={t}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+          <Field label="C-30" value={MOCK_CASSETTE_AUDIO.c30} suffix="min/side" t={t} />
+          <Field label="C-45" value={MOCK_CASSETTE_AUDIO.c45} suffix="min/side" t={t} />
+          <Field label="C-60" value={MOCK_CASSETTE_AUDIO.c60} suffix="min/side" t={t} />
         </div>
-        <p className="mt-3 text-[12px] flex items-start gap-1.5" style={{ color: FAINT }}>
+        <p className="mt-3 text-[12px] flex items-start gap-1.5" style={{ color: t.faint }}>
           <Info className="w-3.5 h-3.5 mt-[1px] flex-shrink-0" />
           Sides more than 3 minutes apart get an advisory — the longer side sets the tape length.
         </p>
@@ -281,33 +333,35 @@ function CassetteFields() {
 
 // ─── The mock ────────────────────────────────────────────────────────
 export default function PressSpecsAudioDark() {
+  const [mode, setMode] = useState<'light' | 'dark'>('dark');
+  const t = THEMES[mode];
   const [format, setFormat] = useState<'vinyl' | 'cd' | 'cassette'>('vinyl');
 
   return (
-    <div className="h-screen flex flex-col font-sans" style={{ backgroundColor: CANVAS, color: INK }}>
+    <div className="h-screen flex flex-col font-sans" style={{ backgroundColor: t.canvas, color: t.ink }}>
       {/* Header */}
       <header
         className="h-14 flex-shrink-0 flex items-center justify-between gap-4 pl-3 pr-6 sticky top-0 z-20"
         style={{
-          backgroundColor: 'rgba(22,22,23,0.72)',
+          backgroundColor: t.headerBg,
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
-          borderBottom: `1px solid ${HAIRLINE}`,
+          borderBottom: `1px solid ${t.hairline}`,
         }}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="h-9 w-9 rounded-full bg-white ring-1 ring-white/15 flex items-center justify-center flex-shrink-0 p-1">
+          <span className={cn('h-9 w-9 rounded-full bg-white ring-1 flex items-center justify-center flex-shrink-0 p-1', t.avatarRing)}>
             <img src={mrpLogo} alt={PARTNER_NAME} className="w-full h-full object-contain" />
           </span>
-          <span className="text-[15px] font-semibold whitespace-nowrap" style={{ color: INK }}>
+          <span className="text-[15px] font-semibold whitespace-nowrap" style={{ color: t.ink }}>
             {PARTNER_NAME}
           </span>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
-          <button type="button" className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-white/5" style={{ color: SUBINK }} aria-label="Notifications">
+          <button type="button" className={cn('w-8 h-8 rounded-full flex items-center justify-center transition-colors', t.hoverWash)} style={{ color: t.subink }} aria-label="Notifications">
             <Bell className="w-4 h-4" />
           </button>
-          <span className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-semibold ring-1 ring-white/15" style={{ backgroundColor: CARD_SOFT, color: INK }}>
+          <span className={cn('w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-semibold ring-1', t.avatarRing)} style={{ backgroundColor: t.cardSoft, color: t.ink }}>
             BG
           </span>
         </div>
@@ -315,17 +369,17 @@ export default function PressSpecsAudioDark() {
 
       <div className="flex-1 min-h-0 flex">
         {/* Rail */}
-        <aside className="w-64 flex-shrink-0 flex flex-col" style={{ backgroundColor: RAIL, borderRight: `1px solid ${HAIRLINE}` }}>
+        <aside className="w-64 flex-shrink-0 flex flex-col" style={{ backgroundColor: t.rail, borderRight: `1px solid ${t.hairline}` }}>
           <div className="px-2.5 py-2.5">
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: FAINT }} />
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: t.faint }} />
               <input
-                className="w-full h-9 pl-8 pr-10 rounded-full text-[12.5px] placeholder:text-white/30 focus:outline-none"
-                style={{ border: `1px solid ${HAIRLINE}`, color: INK, backgroundColor: CARD_SOFT }}
+                className={cn('w-full h-9 pl-8 pr-10 rounded-full text-[12.5px] focus:outline-none', t.searchPlaceholder)}
+                style={{ border: `1px solid ${t.hairline}`, color: t.ink, backgroundColor: t.cardSoft }}
                 placeholder="Search…"
                 readOnly
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] pointer-events-none" style={{ color: FAINT }}>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] pointer-events-none" style={{ color: t.faint }}>
                 ⌘K
               </span>
             </div>
@@ -333,19 +387,19 @@ export default function PressSpecsAudioDark() {
 
           <nav className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 overflow-y-auto">
             {NAV_ABOVE.map((item) => (
-              <NavRow key={item.label} {...item} />
+              <NavRow key={item.label} {...item} t={t} />
             ))}
             <button
               type="button"
               aria-expanded
-              className="w-full flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors hover:bg-white/5"
-              style={{ fontWeight: 600, color: INK }}
+              className={cn('w-full flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors', t.hoverWash)}
+              style={{ fontWeight: 600, color: t.ink }}
             >
-              <Library className="w-4 h-4 flex-shrink-0" style={{ color: FAINT }} />
+              <Library className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />
               <span className="truncate flex-1 text-left">Catalog</span>
-              <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" style={{ color: FAINT, transform: 'rotate(90deg)' }} />
+              <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.faint, transform: 'rotate(90deg)' }} />
             </button>
-            <div className="relative ml-[18px] pl-3 space-y-0.5" style={{ borderLeft: `1px solid ${HAIRLINE}` }}>
+            <div className="relative ml-[18px] pl-3 space-y-0.5" style={{ borderLeft: `1px solid ${t.hairline}` }}>
               {CATALOG_CHILDREN.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -353,20 +407,20 @@ export default function PressSpecsAudioDark() {
                     key={item.label}
                     href="#"
                     onClick={(e) => e.preventDefault()}
-                    className={cn('flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13px] transition-colors', !item.active && 'hover:bg-white/5')}
+                    className={cn('flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13px] transition-colors', !item.active && t.hoverWash)}
                     style={{
                       fontWeight: item.active ? 600 : 500,
-                      color: item.active ? INK : item.soon ? FAINT : SUBINK,
-                      backgroundColor: item.active ? CARD : undefined,
-                      boxShadow: item.active ? PILL_SHADOW : undefined,
+                      color: item.active ? t.ink : item.soon ? t.faint : t.subink,
+                      backgroundColor: item.active ? t.card : undefined,
+                      boxShadow: item.active ? t.pillShadow : undefined,
                     }}
                   >
-                    <Icon className="w-4 h-4 flex-shrink-0" style={{ color: item.active ? INK : FAINT, opacity: item.soon ? 0.7 : 1 }} />
+                    <Icon className="w-4 h-4 flex-shrink-0" style={{ color: item.active ? t.ink : t.faint, opacity: item.soon ? 0.7 : 1 }} />
                     <span className="truncate flex-1">{item.label}</span>
                     {item.soon && (
                       <span
                         className="ml-auto flex-shrink-0 px-2 h-[18px] rounded-full text-[10px] font-semibold tracking-wide flex items-center"
-                        style={{ color: SUBINK, backgroundColor: CARD_SOFT, border: `1px solid ${HAIRLINE}` }}
+                        style={{ color: t.subink, backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}
                       >
                         Soon
                       </span>
@@ -376,16 +430,16 @@ export default function PressSpecsAudioDark() {
               })}
             </div>
             {NAV_BELOW.map((item) => (
-              <NavRow key={item.label} {...item} />
+              <NavRow key={item.label} {...item} t={t} />
             ))}
           </nav>
 
           {/* Canonical footer — duplicated identically, no drift */}
-          <div className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
-            <span className="text-[9px] uppercase tracking-wider font-bold flex-shrink-0" style={{ color: FAINT }}>
+          <div className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderTop: `1px solid ${t.hairline}` }}>
+            <span className="text-[9px] uppercase tracking-wider font-bold flex-shrink-0" style={{ color: t.faint }}>
               Powered by
             </span>
-            <img src={goodtunesLogo} alt="GoodTunes" className="h-5 w-auto" style={{ filter: 'invert(1) brightness(1.8)' }} />
+            <img src={goodtunesLogo} alt="GoodTunes" className="h-5 w-auto" style={{ filter: t.logoFilter }} />
           </div>
         </aside>
 
@@ -394,11 +448,11 @@ export default function PressSpecsAudioDark() {
           <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
             {/* Audio / Art left · Save (idle until changes) right — consistent header on both views */}
             <div className="flex items-center justify-between gap-4">
-              <div className="inline-flex items-center p-1 rounded-full" style={{ backgroundColor: CARD_SOFT, border: `1px solid ${HAIRLINE}` }} role="tablist" aria-label="Spec type">
-                <button type="button" role="tab" aria-selected className="h-8 px-5 rounded-full text-[13px] font-semibold" style={{ color: INK, backgroundColor: PILL_ACTIVE, boxShadow: PILL_SHADOW }}>
+              <div className="inline-flex items-center p-1 rounded-full" style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }} role="tablist" aria-label="Spec type">
+                <button type="button" role="tab" aria-selected className="h-8 px-5 rounded-full text-[13px] font-semibold" style={{ color: t.ink, backgroundColor: t.pillActive, boxShadow: t.pillShadow }}>
                   Audio
                 </button>
-                <button type="button" role="tab" className="h-8 px-5 rounded-full text-[13px] font-semibold" style={{ color: SUBINK }}>
+                <button type="button" role="tab" className="h-8 px-5 rounded-full text-[13px] font-semibold" style={{ color: t.subink }}>
                   Art
                 </button>
               </div>
@@ -406,22 +460,22 @@ export default function PressSpecsAudioDark() {
                 type="button"
                 disabled
                 className="h-9 px-4 rounded-full text-[13px] font-semibold flex-shrink-0"
-                style={{ backgroundColor: 'transparent', color: FAINT, border: `1px solid ${HAIRLINE}`, cursor: 'default' }}
+                style={{ backgroundColor: 'transparent', color: t.faint, border: `1px solid ${t.hairline}`, cursor: 'default' }}
                 title="Enabled once you change something"
                 data-testid="button-save-audio-specs"
               >Save</button>
             </div>
 
-            <h1 className="mt-6 text-[30px] font-semibold" style={{ color: INK, letterSpacing: '-0.02em' }}>
-              Specs. <span style={{ color: SUBINK }}>The numbers artists press against.</span>
+            <h1 className="mt-6 text-[30px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.02em' }}>
+              Specs. <span style={{ color: t.subink }}>The numbers artists press against.</span>
             </h1>
-            <p className="mt-2 text-[13.5px]" style={{ color: SUBINK }}>
+            <p className="mt-2 text-[13.5px]" style={{ color: t.subink }}>
               Artists see these at upload. Anything outside your numbers gets flagged before it reaches you.
             </p>
 
             {/* Format switcher — sits with the content it controls, below the shared header */}
             <div className="mt-8">
-              <div className="inline-flex items-center p-0.5 rounded-full" style={{ backgroundColor: CARD_SOFT, border: `1px solid ${HAIRLINE}` }} role="tablist" aria-label="Format">
+              <div className="inline-flex items-center p-0.5 rounded-full" style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }} role="tablist" aria-label="Format">
                 {(['vinyl', 'cd', 'cassette'] as const).map((f) => {
                   const on = format === f;
                   return (
@@ -432,7 +486,7 @@ export default function PressSpecsAudioDark() {
                       aria-selected={on}
                       onClick={() => setFormat(f)}
                       className="h-7 px-3.5 rounded-full text-[12.5px] font-medium transition-colors"
-                      style={{ color: on ? INK : SUBINK, backgroundColor: on ? PILL_ACTIVE : undefined, boxShadow: on ? PILL_SHADOW : undefined }}
+                      style={{ color: on ? t.ink : t.subink, backgroundColor: on ? t.pillActive : undefined, boxShadow: on ? t.pillShadow : undefined }}
                       data-testid={`tab-format-${f}`}
                     >
                       {f === 'vinyl' ? 'Vinyl' : f === 'cd' ? 'CD' : 'Cassette'}
@@ -443,13 +497,25 @@ export default function PressSpecsAudioDark() {
             </div>
 
             <div className="mt-4">
-              {format === 'vinyl' && <VinylFields />}
-              {format === 'cd' && <CDFields />}
-              {format === 'cassette' && <CassetteFields />}
+              {format === 'vinyl' && <VinylFields t={t} />}
+              {format === 'cd' && <CDFields t={t} />}
+              {format === 'cassette' && <CassetteFields t={t} />}
             </div>
           </div>
         </main>
       </div>
+
+      {/* Mock-only theme toggle */}
+      <button
+        type="button"
+        onClick={() => setMode((m) => (m === 'light' ? 'dark' : 'light'))}
+        className="fixed bottom-4 right-4 z-30 h-9 px-3.5 rounded-full inline-flex items-center gap-2 text-[12.5px] font-medium shadow-lg"
+        style={{ backgroundColor: t.card, color: t.ink, border: `1px solid ${t.hairline}` }}
+        data-testid="button-theme-toggle"
+      >
+        {mode === 'light' ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
+        {mode === 'light' ? 'View dark' : 'View light'}
+      </button>
     </div>
   );
 }
