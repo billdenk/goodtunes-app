@@ -49,6 +49,9 @@ Agent names: Bill calls the main workspace agent "Otis" and the Playground/desig
 
 Bill found it confusing when a task finishes by pausing on a non-blocking, optional preference ("let me know if you'd prefer X instead"). Don't do that. Make the sensible default call, ship it, and state plainly what you chose and how to change it later. Only pause for genuine blockers — missing access/secrets, a destructive/irreversible action, or a real fork where you can't infer the intent.
 
+### Always propose relevant follow-up tasks
+Standing rule (Bill, 2026-08-11): DO propose relevant follow-up tasks when work surfaces them. An earlier session summary recorded the opposite ("never propose") — that was wrong; ignore any such note.
+
 ### Who's who
 - **Bill** is the operator / decision-maker running GoodTunes — talk to Bill as the customer for everything in this repo (plans, copy approvals, deal math, roadmap calls).
 - **Nick** is an artist on the platform (Nick Carter). Do not assign him operator/PM responsibilities in tasks or docs.

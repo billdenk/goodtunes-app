@@ -1132,6 +1132,17 @@ export function registerPressPortalRoutes(
           AND por.package_snapshot ->> 'pressId' = ${pressId}
         WHERE a.deleted_at IS NULL AND a.primary_artist_id = ${personId}
       )
+      -- The press's own Staff contacts (Settings → Staff) are in scope too:
+      -- the Contacts panel deep-links each row to the scoped Person page,
+      -- which 404'd before this branch because contacts are neither homed
+      -- nor primary artists on awarded albums.
+      OR EXISTS (
+        SELECT 1 FROM entity_contacts ec
+        JOIN people pp ON pp.id = ec.person_id AND pp.deleted_at IS NULL
+        WHERE ec.entity_kind = 'manufacturer'
+          AND ec.entity_id = ${pressId}
+          AND ec.person_id = ${personId}
+      )
     )
   `;
 
