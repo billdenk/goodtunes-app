@@ -538,8 +538,8 @@ function AttentionSection({ ops, pending }: { ops?: OpsData; pending?: ReferralP
   const [open, setOpen] = useState(true);
   const cards = [
     ops?.stuckFulfillments.count ? { Icon: Truck, title: `${ops.stuckFulfillments.count} orders failed to reach fulfillment`, detail: "Paid, but never pushed to the press. Fans are waiting.", action: "Push to fulfillment", href: "/admin/orders?needsPush=1", tone: "critical", link: false } : null,
-    ops?.failedCheckouts.last24hCount ? { Icon: CreditCard, title: `${ops.failedCheckouts.last24hCount} checkouts failed in the last 24h`, detail: `${ops.failedCheckouts.last7dCount} in the last 7 days. Lost revenue if unresolved.`, action: "Investigate", href: "/admin/reports", tone: "critical", link: true } : null,
-    ops?.stuckPayoutCount ? { Icon: Clock3, title: `${ops.stuckPayoutCount} payouts stuck in transit`, detail: "Transfer created but not confirmed by Stripe. Retry or inspect.", action: "Review", href: "/admin/reports", tone: "warning", link: true } : null,
+    ops?.failedCheckouts.last24hCount ? { Icon: CreditCard, title: `${ops.failedCheckouts.last24hCount} checkouts failed in the last 24h`, detail: `${ops.failedCheckouts.last7dCount} in the last 7 days. Lost revenue if unresolved.`, action: "Investigate", href: "/admin/reports?tab=ops", tone: "critical", link: true } : null,
+    ops?.stuckPayoutCount ? { Icon: Clock3, title: `${ops.stuckPayoutCount} payouts stuck in transit`, detail: "Transfer created but not confirmed by Stripe. Retry or inspect.", action: "Review", href: "/admin/reports?tab=ops", tone: "warning", link: true } : null,
     pending?.payableCount ? { Icon: Banknote, title: `${fmtUsd(pending.totalCents)} in referral payouts ready to run`, detail: `${pending.payableCount} payees clear${pending.blockedCount ? `, ${pending.blockedCount} blocked on Stripe setup` : ""}.`, action: "Run payouts", href: "#", tone: "ready", link: false } : null,
   ].filter(Boolean) as Array<any>;
   // Zero items → the caught-up state is the SAME slim bar in its second
