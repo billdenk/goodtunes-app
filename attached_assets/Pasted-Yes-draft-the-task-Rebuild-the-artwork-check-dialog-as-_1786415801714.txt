@@ -1,0 +1,11 @@
+Yes — draft the task. Rebuild the artwork check dialog as "Prepress review" to match Ruby's mock, preserving the override flow exactly as it works today. Mock handoff is coming (self-contained file: replace presentational code verbatim, wire your data in).
+
+Structure of the final mock:
+- Header: two-tone title — "Prepress review." bold + component lighter ("Cover: 12″ (gatefold).") — with the standard gray-circle close chip on the same line. No other header actions.
+- Full-width verdict card under the header: soft rose, filled red circle with white ✕, "Not ready — 2 blockers, 1 warning." plus one gray sentence: "Fix the blockers below, re-upload, and this re-checks automatically."
+- Left column: artwork preview pane with ONE overflow control — a gray ··· circle over the top-right corner of the art. Its menu holds all file actions: Replace file, Refresh for preview, Download artwork, Download report. Below the pane: release title + artist (e.g. "Nightswim / Nina Soleil"), then the filename caption (name · pages · size). No other buttons in this column.
+- Right column, in urgency order: "Needs attention" (warnings + fails), "Check by eye" (advisory rows, no verdict tags on the rows), then "Passed · N checks" — collapsed by default, the only collapsible section.
+- Check rows: quiet hairline-divided list, verdict = small icon + word (Pass/Warning/Fail) right-aligned. Never color alone (colorblind rule).
+- Footer: single outline pill button "Override with justification" (operator-only, hidden from artists) with a small ⓘ beside it explaining: blockers stop the file from going to the press; override accepts it anyway, requires a justification, and is logged with name/time.
+- Keep your existing override behavior untouched: min-8-char justification, who/why/when stamped, rollup shows "overridden" (not a clean pass), justification displayed inline afterward. The mock shows the pre-override state; an overridden-state variant will follow — don't wait on it.
+- The mock is theme-aware (light + dark token sets included in the file). Use the light theme in artist-facing contexts and the dark set inside the charcoal admin.
