@@ -1,12 +1,14 @@
 // SuperAdminPressSpecsDark — the SUPER ADMIN view of one press
 // (Memphis Record Pressing), Catalog tab → Specs section, 1440×1100.
 //
-// Shell duplicated IDENTICALLY from SuperAdminPressCatalogPulldownDark
-// (rail, breadcrumb, identity, tabs). HARD RULE per Bill — no drift.
-// Below the Catalog heading, a quiet section pull-down picks between
-// GoodTunes Packages / White Label / GoodDeed Certificates / Specs —
-// here it shows Specs, rendering the same Specs page the press sees
-// (shared header: Audio | Art left, idle Save right; Audio · Vinyl shown).
+// CORRECTED Aug 11 2026 per Bill to match the real app shell:
+// - Full-width TOP BAR (GoodTunes logo left · bell + avatar right); the
+//   rail sits below it and starts with the ⌘K search.
+// - The CATALOG TAB ITSELF is the pull-down (GoodTunes Packages / White
+//   Label / GoodDeed Certificates / Specs) — no separate "Catalog"
+//   heading or stray pill. With Specs picked, the specs page renders
+//   directly (shared header: Audio | Art left, idle Save right).
+// - Memphis mark = white bullseye on black, matching the real app.
 //
 // Canon: super-admin charcoal (never fan navy), one blue pill max,
 // dot+label for status, h1 two-tone -0.02em.
@@ -65,6 +67,8 @@ const MOCK_VINYL_AUDIO = {
   deEss: 'Heavy de-essing above 8 kHz',
 };
 
+const MOCK_TOPBAR = { initials: 'B' };
+
 const RAIL_TOP = [
   { name: 'Dashboard', icon: Grid2x2 },
   { name: 'People', icon: Users, count: '223' },
@@ -96,11 +100,12 @@ const TABS = ['Dashboard', 'Overview', 'People', 'Albums', 'Catalog', 'Analytics
 
 const CATALOG_SECTIONS = ['GoodTunes Packages', 'White Label', 'GoodDeed Certificates', 'Specs'];
 
+// White bullseye on black — matches the real app's Memphis mark.
 function MemphisMark({ size = 34 }: { size?: number }) {
   return (
-    <span className="relative rounded-full inline-block flex-shrink-0" style={{ width: size, height: size, backgroundColor: '#e8e6df' }}>
-      <span className="absolute rounded-full" style={{ inset: size * 0.15, border: '2px solid #0d0d0e' }} />
-      <span className="absolute rounded-full" style={{ inset: size * 0.38, backgroundColor: '#0d0d0e' }} />
+    <span className="relative rounded-full inline-block flex-shrink-0" style={{ width: size, height: size, backgroundColor: '#0d0d0e' }}>
+      <span className="absolute rounded-full" style={{ inset: size * 0.12, border: `${Math.max(2, size * 0.12)}px solid #ffffff` }} />
+      <span className="absolute rounded-full" style={{ inset: size * 0.4, backgroundColor: '#ffffff' }} />
     </span>
   );
 }
@@ -149,14 +154,23 @@ export function SuperAdminPressSpecsDark() {
   const [sectionOpen, setSectionOpen] = useState(false);
 
   return (
-    <div className="h-screen w-full flex font-sans overflow-hidden" style={{ backgroundColor: CANVAS, color: INK }}>
+    <div className="h-screen w-full flex flex-col font-sans overflow-hidden" style={{ backgroundColor: CANVAS, color: INK }}>
+      {/* Top bar — full width: logo left, bell + avatar right */}
+      <header className="h-12 flex-shrink-0 flex items-center justify-between px-4" style={{ backgroundColor: RAIL, borderBottom: `1px solid ${HAIRLINE}` }}>
+        <img src={goodtunesLogo} alt="GoodTunes" className="h-6 w-auto object-contain" style={{ filter: 'invert(1) brightness(2)' }} />
+        <span className="flex items-center gap-3">
+          <Bell className="w-4 h-4" style={{ color: SUBINK }} />
+          <span className="w-7 h-7 rounded-full flex items-center justify-center text-[11.5px] font-semibold" style={{ backgroundColor: PILL_ACTIVE, color: INK, boxShadow: PILL_SHADOW }}>
+            {MOCK_TOPBAR.initials}
+          </span>
+        </span>
+      </header>
+
+      <div className="flex-1 min-h-0 flex">
       {/* Left rail */}
       <aside className="w-52 flex-shrink-0 flex flex-col overflow-hidden" style={{ backgroundColor: RAIL, borderRight: `1px solid ${HAIRLINE}` }}>
-        <div className="h-12 flex items-center px-4 flex-shrink-0">
-          <img src={goodtunesLogo} alt="GoodTunes" className="h-6 w-auto object-contain" style={{ filter: 'invert(1) brightness(2)' }} />
-        </div>
-        <div className="px-3 pb-2 flex-shrink-0">
-          <div className="h-8 rounded-lg flex items-center gap-2 px-3" style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}>
+        <div className="px-3 pt-3 pb-2 flex-shrink-0">
+          <div className="h-8 rounded-full flex items-center gap-2 px-3" style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}>
             <Search className="w-3.5 h-3.5 flex-shrink-0" style={{ color: FAINT }} />
             <span className="text-[12px] flex-1" style={{ color: FAINT }}>
               Search admin...
@@ -235,11 +249,55 @@ export function SuperAdminPressSpecsDark() {
             </div>
           </div>
 
-          {/* Tabs — Catalog active, plain (no pull-down) */}
+          {/* Tabs — the Catalog TAB is the pull-down (Specs picked) */}
           <div className="flex items-center mt-5" style={{ borderBottom: `1px solid ${HAIRLINE}` }}>
             <div className="flex items-center gap-6 flex-1">
               {TABS.map((t) => {
                 const active = t === 'Catalog';
+                if (t === 'Catalog') {
+                  return (
+                    <div key={t} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setSectionOpen((o) => !o)}
+                        className="pb-2.5 text-[13.5px] inline-flex items-center gap-1"
+                        style={{
+                          color: INK,
+                          fontWeight: 600,
+                          borderBottom: `2px solid ${BLUE}`,
+                          marginBottom: -1,
+                        }}
+                        data-testid="tab-catalog"
+                      >
+                        Catalog
+                        <ChevronDown className="w-3.5 h-3.5" style={{ color: FAINT, transform: sectionOpen ? 'rotate(180deg)' : undefined }} />
+                      </button>
+                      {sectionOpen && (
+                        <div
+                          className="absolute left-0 top-9 w-56 rounded-xl py-1.5 z-10"
+                          style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.55)' }}
+                        >
+                          {CATALOG_SECTIONS.map((s) => {
+                            const on = s === 'Specs';
+                            return (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => setSectionOpen(false)}
+                                className="w-full flex items-center px-3.5 h-8 text-[12.5px] text-left transition-colors hover:bg-white/5"
+                                style={{ color: on ? INK : SUBINK, fontWeight: on ? 600 : 400 }}
+                                data-testid={`option-section-${s.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                              >
+                                <span className="flex-1 truncate">{s}</span>
+                                {on && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: BLUE }} />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
                 return (
                   <span
                     key={t}
@@ -260,48 +318,6 @@ export function SuperAdminPressSpecsDark() {
               <RefreshCw className="w-4 h-4" style={{ color: FAINT }} />
               <Trash2 className="w-4 h-4" style={{ color: FAINT }} />
             </span>
-          </div>
-
-          {/* Catalog heading + section pull-down (open, Specs chosen) */}
-          <div className="flex items-center gap-4 mt-6">
-            <h2 className="text-[26px] font-semibold" style={{ letterSpacing: '-0.02em' }}>
-              Catalog
-            </h2>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setSectionOpen((o) => !o)}
-                className="h-8 pl-3.5 pr-2.5 rounded-full inline-flex items-center gap-1.5 text-[12.5px] font-semibold"
-                style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, color: INK }}
-                data-testid="button-catalog-section"
-              >
-                Specs
-                <ChevronDown className="w-3.5 h-3.5" style={{ color: FAINT, transform: sectionOpen ? 'rotate(180deg)' : undefined }} />
-              </button>
-              {sectionOpen && (
-                <div
-                  className="absolute left-0 top-9 w-56 rounded-xl py-1.5 z-10"
-                  style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.55)' }}
-                >
-                  {CATALOG_SECTIONS.map((s) => {
-                    const on = s === 'Specs';
-                    return (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => setSectionOpen(false)}
-                        className="w-full flex items-center px-3.5 h-8 text-[12.5px] text-left transition-colors hover:bg-white/5"
-                        style={{ color: on ? INK : SUBINK, fontWeight: on ? 600 : 400 }}
-                        data-testid={`option-section-${s.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-                      >
-                        <span className="flex-1 truncate">{s}</span>
-                        {on && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: BLUE }} />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
           </div>
 
           {/* ── Specs page — same shared header the press sees ── */}
@@ -388,6 +404,7 @@ export function SuperAdminPressSpecsDark() {
             </div>
           </div>
         </main>
+      </div>
       </div>
     </div>
   );
