@@ -75,6 +75,10 @@ accents on ~14%-alpha translucent washes — see tokens).
 - No per-page narrow caps (`max-w-3xl`, 720/920px wrappers, etc.). If a page
   looks sparse at full width, split it into columns inside the container
   (e.g. two-column form cards) instead of shrinking the container.
+- **GoodTunes Packages (PressPackagePricingCatalog) is ratified as-is (Bill,
+  Aug 11 2026).** It already uses this exact container — theme work (dark/light)
+  is welcome, but do NOT change its width, padding, or internal column layout
+  in any sweep.
 - Individual text blocks may still cap their measure for readability
   (~640px for paragraphs), but cards, tables, and forms span the container.
     - **Containers fill the container (ratified Aug 11 2026).** Every card,
