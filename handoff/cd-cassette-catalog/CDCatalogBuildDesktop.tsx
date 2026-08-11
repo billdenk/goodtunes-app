@@ -28,31 +28,88 @@ import {
   Library,
   Settings as Cog,
   Gift,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import { Button } from '@workspace/goodtunes-design-system/components/ui/button';
-import goodtunesLogo from './assets/goodtunes-logo.png';
-import cdShiny from './assets/cd-shiny.png';
-import cdWhite from './assets/cd-white.png';
-import mrpLabelLogo from './assets/mrp-logo.svg';
-import brandonPhoto from './assets/brandon-seavers.png';
+import goodtunesLogo from '../assets/goodtunes-logo.png';
+import cdShiny from '../assets/cd-shiny.png';
+import cdWhite from '../assets/cd-white.png';
+import mrpLabelLogo from '../assets/mrp-logo.svg';
+import brandonPhoto from '../assets/brandon-seavers.png';
 
-const BLUE = '#319ED8';
-const INK = '#f5f5f7';
-const SUBINK = '#98989d';
-const FAINT = '#6e6e73';
-const HAIRLINE = 'rgba(255,255,255,0.10)';
-const CANVAS = '#161617';
-const RAIL = '#1c1c1e';
-const CARD = '#1e1e20';
-const CARD_SOFT = '#26262a';
-const PILL_ACTIVE = '#3a3a3e';
-const PILL_SHADOW = '0 1px 2px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.06)';
+// ─── Themes — dark = canon charcoal (unchanged); light = apple-canon light ──
+// Only page SURFACES / ink / rail / cards / hairlines are theme tokens. The
+// realistic product renders (jewel case, disc, sleeve) are built from their
+// own dark-tinted literals and stay identical in both themes — a black
+// sleeve is black in light mode too.
+type Theme = {
+  blue: string;
+  ink: string;
+  subink: string;
+  faint: string;
+  hairline: string;
+  canvas: string;
+  rail: string;
+  card: string;
+  cardSoft: string;
+  pillActive: string;
+  pillShadow: string;
+  dashed: string;        // dashed "add" cell borders
+  headerBg: string;      // sticky translucent header
+  navHoverClass: string; // hover wash utility class for nav/icon buttons
+  placeholderClass: string;
+  logoFilter: string;    // GoodTunes wordmark: invert on dark, none on light
+  railLogoRing: string;  // ring for avatar/logo carriers
+};
+
+const THEMES: Record<'light' | 'dark', Theme> = {
+  light: {
+    blue: '#319ED8',
+    ink: '#1d1d1f',
+    subink: 'rgba(0,0,0,0.62)',
+    faint: 'rgba(0,0,0,0.4)',
+    hairline: 'rgba(0,0,0,0.08)',
+    canvas: '#ffffff',
+    rail: '#f5f5f7',
+    card: '#ffffff',
+    cardSoft: '#f0f0f2',
+    pillActive: '#ffffff',
+    pillShadow: '0 1px 3px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)',
+    dashed: 'rgba(0,0,0,0.18)',
+    headerBg: 'rgba(255,255,255,0.72)',
+    navHoverClass: 'hover:bg-black/5',
+    placeholderClass: 'placeholder:text-black/30',
+    logoFilter: 'none',
+    railLogoRing: 'ring-black/10',
+  },
+  dark: {
+    blue: '#319ED8',
+    ink: '#f5f5f7',
+    subink: '#98989d',
+    faint: '#6e6e73',
+    hairline: 'rgba(255,255,255,0.10)',
+    canvas: '#161617',
+    rail: '#1c1c1e',
+    card: '#1e1e20',
+    cardSoft: '#26262a',
+    pillActive: '#3a3a3e',
+    pillShadow: '0 1px 2px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.06)',
+    dashed: 'rgba(255,255,255,0.18)',
+    headerBg: 'rgba(22,22,23,0.72)',
+    navHoverClass: 'hover:bg-white/5',
+    placeholderClass: 'placeholder:text-white/30',
+    logoFilter: 'invert(1) brightness(1.8)',
+    railLogoRing: 'ring-white/15',
+  },
+};
+
 const COVER_GREEN = '#8fbc7f';
 
 type Print = { name: string; sub: string; art: boolean };
 // Spot colors the press keeps on the silkscreen bench — samples, not the
 // full ink book. Same glossy-ball language as the vinyl color pick.
-const MOCK_SPOT_COLORS = [
+const SPOT_COLORS = [
   { name: 'White', base: '#f4f4f2' },
   { name: 'Black', base: '#1a1b1e' },
   { name: 'Red', base: '#d1322e' },
@@ -61,12 +118,12 @@ const MOCK_SPOT_COLORS = [
   { name: 'Silver', base: '#a9adb4' },
 ];
 
-const MOCK_PRINTS: Print[] = [
+const PRINTS: Print[] = [
   { name: 'Silkscreen', sub: 'Up to 3 spot colors', art: false },
   { name: 'Full-color offset', sub: 'Photo-quality artwork', art: true },
 ];
 
-const MOCK_CASES = [
+const CASES = [
   { name: 'Sleeve', sub: 'Printed cardboard wallet' },
   { name: 'Jewel case', sub: 'Standard clear case · booklet + tray card' },
 ];
@@ -193,7 +250,7 @@ function RealisticDisc({ size, print }: { size: number; print: Print }) {
           height: size * 0.06,
           left: '47%',
           top: '47%',
-          backgroundColor: CANVAS,
+          backgroundColor: '#161617',
           boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.16)',
         }}
       />
@@ -414,12 +471,12 @@ function CdRender({ caseName, print, spots }: { caseName: string; print: Print; 
   );
 }
 
-function PageHeading({ lead, rest }: { lead: string; rest: string }) {
+function PageHeading({ lead, rest, t }: { lead: string; rest: string; t: Theme }) {
   // Render a registered mark small and light, Apple-style, never bold.
   const parts = lead.split('®');
   return (
     <h1 className="tracking-tight" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.05, marginTop: 10 }}>
-      <span style={{ color: INK }}>
+      <span style={{ color: t.ink }}>
         {parts.map((chunk, i) => (
           <span key={i}>
             {i > 0 && (
@@ -431,24 +488,24 @@ function PageHeading({ lead, rest }: { lead: string; rest: string }) {
           </span>
         ))}{' '}
       </span>
-      <span style={{ color: FAINT, fontWeight: 600 }}>{rest}</span>
+      <span style={{ color: t.faint, fontWeight: 600 }}>{rest}</span>
     </h1>
   );
 }
 
-function SectionLabel({ children }: { children: ReactNode }) {
+function SectionLabel({ children, t }: { children: ReactNode; t: Theme }) {
   return (
-    <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT }}>
+    <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: t.faint }}>
       {children}
     </div>
   );
 }
 
-function TwoTone({ a, b, size = 24 }: { a: string; b: string; size?: number }) {
+function TwoTone({ a, b, size = 24, t }: { a: string; b: string; size?: number; t: Theme }) {
   return (
     <h2 style={{ fontSize: size, letterSpacing: '-0.02em', fontWeight: 600, lineHeight: 1.15 }}>
-      <span style={{ color: INK }}>{a} </span>
-      <span style={{ color: SUBINK, fontWeight: 500 }}>{b}</span>
+      <span style={{ color: t.ink }}>{a} </span>
+      <span style={{ color: t.subink, fontWeight: 500 }}>{b}</span>
     </h2>
   );
 }
@@ -512,88 +569,88 @@ const PRESS_NAV: NavItem[] = [
 ];
 const PARTNER_NAME = 'Memphis Record Pressing';
 
-function NavRow({ label, icon: Icon, active }: NavItem) {
+function NavRow({ label, icon: Icon, active, t }: NavItem & { t: Theme }) {
   return (
     <a
       href="#"
       onClick={(e) => e.preventDefault()}
-      className={`flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors ${active ? '' : 'hover:bg-white/5'}`}
+      className={`flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors ${active ? '' : t.navHoverClass}`}
       style={{
         fontWeight: active ? 600 : 500,
-        color: active ? INK : SUBINK,
-        backgroundColor: active ? CARD : undefined,
-        boxShadow: active ? PILL_SHADOW : undefined,
+        color: active ? t.ink : t.subink,
+        backgroundColor: active ? t.card : undefined,
+        boxShadow: active ? t.pillShadow : undefined,
       }}
     >
-      <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? INK : FAINT }} />
+      <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? t.ink : t.faint }} />
       <span className="truncate flex-1">{label}</span>
     </a>
   );
 }
 
-function PressShell({ children }: { children: ReactNode }) {
+function PressShell({ children, t }: { children: ReactNode; t: Theme }) {
   return (
-    <div className="min-h-screen flex flex-col font-sans" style={{ backgroundColor: CANVAS, color: INK }}>
+    <div className="min-h-screen flex flex-col font-sans" style={{ backgroundColor: t.canvas, color: t.ink }}>
       <header
         className="h-14 flex-shrink-0 flex items-center justify-between gap-4 pl-3 pr-6 sticky top-0 z-30"
         style={{
-          backgroundColor: 'rgba(22,22,23,0.72)',
+          backgroundColor: t.headerBg,
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
-          borderBottom: `1px solid ${HAIRLINE}`,
+          borderBottom: `1px solid ${t.hairline}`,
         }}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="h-9 w-9 rounded-full bg-white ring-1 ring-white/15 flex items-center justify-center flex-shrink-0 p-1">
+          <span className={`h-9 w-9 rounded-full bg-white ring-1 ${t.railLogoRing} flex items-center justify-center flex-shrink-0 p-1`}>
             <img src={mrpLabelLogo} alt={PARTNER_NAME} className="w-full h-full object-contain" style={{ filter: 'brightness(0)' }} />
           </span>
-          <span className="text-[15px] font-semibold whitespace-nowrap" style={{ color: INK }}>
+          <span className="text-[15px] font-semibold whitespace-nowrap" style={{ color: t.ink }}>
             {PARTNER_NAME}
           </span>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
-          <Button size="sm" variant="ghost" className="rounded-full" style={{ color: SUBINK, paddingLeft: 12, paddingRight: 12 }}>
+          <Button size="sm" variant="ghost" className="rounded-full" style={{ color: t.subink, paddingLeft: 12, paddingRight: 12 }}>
             <MessageSquarePlus className="w-3.5 h-3.5" />
             Feedback
           </Button>
-          <button type="button" className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/5" style={{ color: SUBINK }} aria-label="Search">
+          <button type="button" className={`w-9 h-9 rounded-full flex items-center justify-center ${t.navHoverClass}`} style={{ color: t.subink }} aria-label="Search">
             <Search style={{ width: 18, height: 18 }} />
           </button>
-          <button type="button" className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/5" style={{ color: SUBINK }} aria-label="Notifications">
+          <button type="button" className={`w-9 h-9 rounded-full flex items-center justify-center ${t.navHoverClass}`} style={{ color: t.subink }} aria-label="Notifications">
             <Bell style={{ width: 18, height: 18 }} />
           </button>
-          <button type="button" className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/15" aria-label="Account menu">
+          <button type="button" className={`w-8 h-8 rounded-full overflow-hidden ring-1 ${t.railLogoRing}`} aria-label="Account menu">
             <img src={brandonPhoto} alt="BS" className="w-full h-full object-cover" />
           </button>
         </div>
       </header>
 
       <div className="flex-1 min-h-0 flex">
-        <aside className="w-60 flex-shrink-0 flex flex-col" style={{ backgroundColor: RAIL, borderRight: `1px solid ${HAIRLINE}` }}>
+        <aside className="w-60 flex-shrink-0 flex flex-col" style={{ backgroundColor: t.rail, borderRight: `1px solid ${t.hairline}` }}>
           <div className="px-2.5 py-2.5">
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: FAINT }} />
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: t.faint }} />
               <input
-                className="w-full h-9 pl-8 pr-10 rounded-full text-[12.5px] placeholder:text-white/30 focus:outline-none"
-                style={{ border: `1px solid ${HAIRLINE}`, color: INK, backgroundColor: CARD_SOFT }}
+                className={`w-full h-9 pl-8 pr-10 rounded-full text-[12.5px] ${t.placeholderClass} focus:outline-none`}
+                style={{ border: `1px solid ${t.hairline}`, color: t.ink, backgroundColor: t.cardSoft }}
                 placeholder="Search…"
                 readOnly
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] pointer-events-none" style={{ color: FAINT }}>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] pointer-events-none" style={{ color: t.faint }}>
                 ⌘K
               </span>
             </div>
           </div>
           <nav className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 overflow-y-auto">
             {PRESS_NAV.map((item) => (
-              <NavRow key={item.label} {...item} />
+              <NavRow key={item.label} {...item} t={t} />
             ))}
           </nav>
-          <div className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
-            <span className="text-[9px] uppercase tracking-wider font-bold flex-shrink-0" style={{ color: FAINT }}>
+          <div className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderTop: `1px solid ${t.hairline}` }}>
+            <span className="text-[9px] uppercase tracking-wider font-bold flex-shrink-0" style={{ color: t.faint }}>
               Powered by
             </span>
-            <img src={goodtunesLogo} alt="GoodTunes" className="h-5 w-auto" style={{ filter: 'invert(1) brightness(1.8)' }} />
+            <img src={goodtunesLogo} alt="GoodTunes" className="h-5 w-auto" style={{ filter: t.logoFilter }} />
           </div>
         </aside>
 
@@ -603,16 +660,16 @@ function PressShell({ children }: { children: ReactNode }) {
   );
 }
 
-export function CDCatalogBuildDesktop() {
+export function CDCatalogBuildDesktopDark() {
   const [cs, setCs] = useState('Sleeve');
-  const [print, setPrint] = useState<Print>(MOCK_PRINTS[0]);
+  const [print, setPrint] = useState<Print>(PRINTS[0]);
   const [printOpen, setPrintOpen] = useState(false);
   const [spots, setSpots] = useState<string[]>([]);
   const [customSpots, setCustomSpots] = useState<{ name: string; base: string }[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [addName, setAddName] = useState('');
   const [addHex, setAddHex] = useState('#4ecb71');
-  const allSpots = [...MOCK_SPOT_COLORS, ...customSpots];
+  const allSpots = [...SPOT_COLORS, ...customSpots];
   const spotHexes = spots
     .map((n) => allSpots.find((c) => c.name === n)?.base)
     .filter((b): b is string => Boolean(b));
@@ -630,20 +687,22 @@ export function CDCatalogBuildDesktop() {
   };
   const [booklet, setBooklet] = useState('4 panels');
   const jewel = cs === 'Jewel case';
+  const [mode, setMode] = useState<'light' | 'dark'>('dark');
+  const t = THEMES[mode];
 
   return (
-    <PressShell>
+    <PressShell t={t}>
       <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
         {/* Page header — verbatim from the vinyl Catalog page */}
         <div className="flex items-start justify-between gap-6">
           <div className="min-w-0">
-            <h1 className="tracking-tight" style={{ color: INK, fontSize: 32, lineHeight: 1.1, fontWeight: 700 }}>
+            <h1 className="tracking-tight" style={{ color: t.ink, fontSize: 32, lineHeight: 1.1, fontWeight: 700 }}>
               Catalog
             </h1>
             {/* Format switcher — same control as vinyl, CD turned on */}
             <div
               className="inline-flex items-center rounded-full"
-              style={{ marginTop: 16, padding: 3, backgroundColor: CARD_SOFT }}
+              style={{ marginTop: 16, padding: 3, backgroundColor: t.cardSoft }}
               role="tablist"
               aria-label="Catalog format"
             >
@@ -663,9 +722,9 @@ export function CDCatalogBuildDesktop() {
                     padding: '6px 18px',
                     fontSize: 13.5,
                     fontWeight: f.enabled ? 600 : 500,
-                    color: f.enabled ? INK : FAINT,
-                    backgroundColor: f.enabled ? PILL_ACTIVE : 'transparent',
-                    boxShadow: f.enabled ? '0 1px 3px rgba(0,0,0,0.4)' : 'none',
+                    color: f.enabled ? t.ink : t.faint,
+                    backgroundColor: f.enabled ? t.pillActive : 'transparent',
+                    boxShadow: f.enabled ? t.pillShadow : 'none',
                     cursor: 'pointer',
                   }}
                 >
@@ -674,35 +733,44 @@ export function CDCatalogBuildDesktop() {
               ))}
             </div>
             <div style={{ marginTop: 24 }}>
-              <SectionLabel>CD · Package pricing</SectionLabel>
-              <PageHeading lead="Build your GoodTunes® packages." rest="On disc." />
+              <SectionLabel t={t}>CD · Package pricing</SectionLabel>
+              <PageHeading lead="Build your GoodTunes® packages." rest="On disc." t={t} />
             </div>
-            <p className="text-[15px]" style={{ color: SUBINK, marginTop: 12, maxWidth: 560, lineHeight: 1.5 }}>
+            <p className="text-[15px]" style={{ color: t.subink, marginTop: 12, maxWidth: 560, lineHeight: 1.5 }}>
               Every CD is a 12 cm silver disc. No size, no type, no color builds — pick the case, pick the print, price the runs.
             </p>
           </div>
         </div>
 
-        <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />
+        <div className="h-px w-full" style={{ backgroundColor: t.hairline, margin: '28px 0' }} />
 
-        {/* Two-column body — everything below the rule is CD-specific */}
-        <div className="grid gap-16" style={{ gridTemplateColumns: 'minmax(0, 1fr) 620px' }}>
+        {/* Two-column body — everything below the rule is CD-specific.
+            Grid wraps (single column) below ~1100px so the sticky product and
+            the choices don't overflow horizontally on narrow viewports. */}
+        <div className="cd-build-grid grid gap-16">
+          <style>{`
+            .cd-build-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 620px); }
+            @media (max-width: 1100px) {
+              .cd-build-grid { grid-template-columns: minmax(0, 1fr); }
+              .cd-build-grid > .cd-build-product { position: static !important; }
+            }
+          `}</style>
         {/* Pinned product — sticky left, the case choice IS this object */}
         <div
-          className="flex flex-col items-center justify-center"
+          className="cd-build-product flex flex-col items-center justify-center"
           style={{ position: 'sticky', top: 24, alignSelf: 'start', minHeight: 545, paddingBottom: 38 }}
         >
           <CdRender caseName={cs} print={print} spots={spotHexes} />
           {/* Captions — shifted left so they center under the case, not the whole stage (vinyl canon) */}
           <div className="flex flex-col items-center" style={{ transform: 'translateX(-55px)' }}>
-          <div className="flex items-center gap-2 text-[13px]" style={{ color: SUBINK, marginTop: 28 }}>
+          <div className="flex items-center gap-2 text-[13px]" style={{ color: t.subink, marginTop: 28 }}>
             <span>CD</span>
-            <span style={{ color: FAINT }}>·</span>
+            <span style={{ color: t.faint }}>·</span>
             <span>{cs}</span>
-            <span style={{ color: FAINT }}>·</span>
-            <span style={{ color: INK, fontWeight: 600 }}>{print.name}</span>
+            <span style={{ color: t.faint }}>·</span>
+            <span style={{ color: t.ink, fontWeight: 600 }}>{print.name}</span>
           </div>
-          <p className="text-[12px]" style={{ color: FAINT, marginTop: 8, marginBottom: 16 }}>
+          <p className="text-[12px]" style={{ color: t.faint, marginTop: 8, marginBottom: 16 }}>
             {print.name === 'Silkscreen' ? 'Silkscreened disc' : 'Full-color printed disc'}, {jewel ? 'booklet and tray card' : 'wallet'} included.
           </p>
           </div>
@@ -712,9 +780,9 @@ export function CDCatalogBuildDesktop() {
         <div className="flex-1 min-w-0 flex flex-col" style={{ gap: 56, maxWidth: 620 }}>
           {/* Step 1: the case */}
           <section>
-            <TwoTone a="Pick a case." b="It sets the look of everything." />
+            <TwoTone a="Pick a case." b="It sets the look of everything." t={t} />
             <div className="grid gap-3 mt-5" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-              {MOCK_CASES.map((c) => {
+              {CASES.map((c) => {
                 const active = cs === c.name;
                 return (
                   <button
@@ -722,12 +790,12 @@ export function CDCatalogBuildDesktop() {
                     type="button"
                     onClick={() => setCs(c.name)}
                     className="rounded-2xl flex flex-col items-start justify-center px-5 transition-colors text-left"
-                    style={{ height: 84, backgroundColor: CARD, border: `1.5px solid ${active ? BLUE : HAIRLINE}` }}
+                    style={{ height: 84, backgroundColor: t.card, border: `1.5px solid ${active ? t.blue : t.hairline}` }}
                   >
-                    <span className="text-[14.5px] font-semibold" style={{ color: active ? BLUE : INK }}>
+                    <span className="text-[14.5px] font-semibold" style={{ color: active ? t.blue : t.ink }}>
                       {c.name}
                     </span>
-                    <span className="text-[12px] mt-0.5" style={{ color: SUBINK }}>
+                    <span className="text-[12px] mt-0.5" style={{ color: t.subink }}>
                       {c.sub}
                     </span>
                   </button>
@@ -738,18 +806,18 @@ export function CDCatalogBuildDesktop() {
 
           {/* Step 2: disc print */}
           <section>
-            <TwoTone a="Pick a print." b="The disc is the label." />
+            <TwoTone a="Pick a print." b="The disc is the label." t={t} />
             {!printOpen ? (
               // Collapsed — same summary-row pattern as the vinyl type pick
               <div
                 className="flex items-center gap-3.5 rounded-2xl"
-                style={{ marginTop: 14, padding: '12px 18px', backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}
+                style={{ marginTop: 14, padding: '12px 18px', backgroundColor: t.card, border: `1px solid ${t.hairline}` }}
                 data-testid="print-summary-row"
               >
                 <DiscChip size={44} art={print.art} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-semibold truncate" style={{ color: INK }}>{print.name}</div>
-                  <div className="text-[11.5px]" style={{ marginTop: 1, color: FAINT }}>
+                  <div className="text-[14px] font-semibold truncate" style={{ color: t.ink }}>{print.name}</div>
+                  <div className="text-[11.5px]" style={{ marginTop: 1, color: t.faint }}>
                     {print.name === 'Silkscreen' ? `Print · ${spots.length} of 3 colors` : `Print · ${print.sub.toLowerCase()}`}
                   </div>
                 </div>
@@ -757,7 +825,7 @@ export function CDCatalogBuildDesktop() {
                   type="button"
                   onClick={() => setPrintOpen(true)}
                   className="text-[13px] font-medium focus:outline-none"
-                  style={{ color: BLUE, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  style={{ color: t.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                   data-testid="button-change-print"
                 >
                   Change
@@ -765,7 +833,7 @@ export function CDCatalogBuildDesktop() {
               </div>
             ) : (
               <div className="grid gap-3 mt-5" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-                {MOCK_PRINTS.map((p) => {
+                {PRINTS.map((p) => {
                   const active = print.name === p.name;
                   return (
                     <button
@@ -776,14 +844,14 @@ export function CDCatalogBuildDesktop() {
                         setPrintOpen(false);
                       }}
                       className="rounded-2xl flex items-center gap-4 px-5 transition-colors text-left"
-                      style={{ height: 84, backgroundColor: CARD, border: `1.5px solid ${active ? BLUE : HAIRLINE}` }}
+                      style={{ height: 84, backgroundColor: t.card, border: `1.5px solid ${active ? t.blue : t.hairline}` }}
                     >
                       <DiscChip size={44} art={p.art} />
                       <span>
-                        <span className="block text-[14px] font-semibold" style={{ color: active ? BLUE : INK }}>
+                        <span className="block text-[14px] font-semibold" style={{ color: active ? t.blue : t.ink }}>
                           {p.name}
                         </span>
-                        <span className="block text-[12px] mt-0.5" style={{ color: SUBINK }}>
+                        <span className="block text-[12px] mt-0.5" style={{ color: t.subink }}>
                           {p.sub}
                         </span>
                       </span>
@@ -797,10 +865,10 @@ export function CDCatalogBuildDesktop() {
             {print.name === 'Silkscreen' && (
               <div style={{ marginTop: 16 }}>
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] font-semibold" style={{ color: SUBINK }}>
+                  <span className="text-[12px] font-semibold" style={{ color: t.subink }}>
                     Build colors · pick up to 3
                   </span>
-                  <span className="text-[12px]" style={{ color: FAINT }}>
+                  <span className="text-[12px]" style={{ color: t.faint }}>
                     {spots.length} of 3
                   </span>
                 </div>
@@ -815,8 +883,8 @@ export function CDCatalogBuildDesktop() {
                         className="rounded-2xl text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
                         style={{
                           padding: '16px 10px 12px',
-                          backgroundColor: CARD,
-                          border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
+                          backgroundColor: t.card,
+                          border: on ? `2px solid ${t.blue}` : `1px solid ${t.hairline}`,
                         }}
                       >
                         <span className="relative flex justify-center" style={{ marginBottom: 8 }}>
@@ -834,11 +902,11 @@ export function CDCatalogBuildDesktop() {
                               className="absolute flex items-center justify-center rounded-full"
                               style={{ width: 18, height: 18, backgroundColor: 'rgba(255,255,255,0.85)', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
                             >
-                              <Check className="w-3 h-3" style={{ color: BLUE }} strokeWidth={3} />
+                              <Check className="w-3 h-3" style={{ color: t.blue }} strokeWidth={3} />
                             </span>
                           )}
                         </span>
-                        <span className="block text-[12.5px] font-semibold leading-tight" style={{ color: on ? BLUE : INK }}>
+                        <span className="block text-[12.5px] font-semibold leading-tight" style={{ color: on ? t.blue : t.ink }}>
                           {c.name}
                         </span>
                       </button>
@@ -850,13 +918,13 @@ export function CDCatalogBuildDesktop() {
                       type="button"
                       onClick={() => setAddOpen((v) => !v)}
                       className="w-full h-full rounded-2xl text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer flex flex-col items-center justify-center"
-                      style={{ padding: '16px 10px 12px', border: '1.5px dashed rgba(255,255,255,0.18)', minHeight: 104 }}
+                      style={{ padding: '16px 10px 12px', border: `1.5px dashed ${t.dashed}`, minHeight: 104 }}
                       data-testid="button-add-spot-color"
                     >
-                      <span className="flex items-center justify-center rounded-full" style={{ width: 32, height: 32, border: `1.5px solid ${BLUE}` }}>
-                        <span className="text-[18px] leading-none" style={{ color: BLUE }}>+</span>
+                      <span className="flex items-center justify-center rounded-full" style={{ width: 32, height: 32, border: `1.5px solid ${t.blue}` }}>
+                        <span className="text-[18px] leading-none" style={{ color: t.blue }}>+</span>
                       </span>
-                      <span className="block text-[12.5px] font-semibold" style={{ marginTop: 8, color: BLUE }}>
+                      <span className="block text-[12.5px] font-semibold" style={{ marginTop: 8, color: t.blue }}>
                         Add color
                       </span>
                     </button>
@@ -868,8 +936,8 @@ export function CDCatalogBuildDesktop() {
                           right: 0,
                           width: 224,
                           padding: 14,
-                          backgroundColor: CARD_SOFT,
-                          border: `1px solid ${HAIRLINE}`,
+                          backgroundColor: t.cardSoft,
+                          border: `1px solid ${t.hairline}`,
                           boxShadow: '0 18px 44px rgba(0,0,0,0.55)',
                         }}
                       >
@@ -888,7 +956,7 @@ export function CDCatalogBuildDesktop() {
                             onKeyDown={(e) => e.key === 'Enter' && addCustomSpot()}
                             placeholder="Name the ink"
                             className="flex-1 min-w-0 rounded-lg text-[13px] focus:outline-none"
-                            style={{ padding: '7px 10px', backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, color: INK }}
+                            style={{ padding: '7px 10px', backgroundColor: t.card, border: `1px solid ${t.hairline}`, color: t.ink }}
                           />
                         </div>
                         <div className="flex justify-end gap-3" style={{ marginTop: 12 }}>
@@ -896,7 +964,7 @@ export function CDCatalogBuildDesktop() {
                             type="button"
                             onClick={() => setAddOpen(false)}
                             className="text-[13px] font-medium"
-                            style={{ color: FAINT, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                            style={{ color: t.faint, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                           >
                             Cancel
                           </button>
@@ -904,7 +972,7 @@ export function CDCatalogBuildDesktop() {
                             type="button"
                             onClick={addCustomSpot}
                             className="text-[13px] font-semibold"
-                            style={{ color: BLUE, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                            style={{ color: t.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                           >
                             Add
                           </button>
@@ -920,9 +988,9 @@ export function CDCatalogBuildDesktop() {
           {/* Step 3: booklet — jewel case only */}
           <section style={{ opacity: jewel ? 1 : 0.45, transition: 'opacity 0.25s ease' }}>
             <div className="flex items-end justify-between gap-3 flex-wrap">
-              <TwoTone a="Pick a booklet." b="Liner notes, lyrics, credits." />
+              <TwoTone a="Pick a booklet." b="Liner notes, lyrics, credits." t={t} />
               {!jewel && (
-                <span className="text-[12px]" style={{ color: FAINT }}>
+                <span className="text-[12px]" style={{ color: t.faint }}>
                   Sleeves print on the wallet itself
                 </span>
               )}
@@ -937,9 +1005,9 @@ export function CDCatalogBuildDesktop() {
                     disabled={!jewel}
                     onClick={() => setBooklet(b)}
                     className="rounded-2xl flex items-center justify-center transition-colors"
-                    style={{ height: 60, backgroundColor: CARD, border: `1.5px solid ${active ? BLUE : HAIRLINE}` }}
+                    style={{ height: 60, backgroundColor: t.card, border: `1.5px solid ${active ? t.blue : t.hairline}` }}
                   >
-                    <span className="text-[13.5px] font-medium" style={{ color: active ? BLUE : INK }}>
+                    <span className="text-[13.5px] font-medium" style={{ color: active ? t.blue : t.ink }}>
                       {b}
                     </span>
                   </button>
@@ -950,53 +1018,53 @@ export function CDCatalogBuildDesktop() {
 
           {/* Price */}
           <section>
-            <TwoTone a="Set your price." b="They’ll show you the money." />
-            <p className="text-[12.5px] mt-2" style={{ color: FAINT }}>
+            <TwoTone a="Set your price." b="They’ll show you the money." t={t} />
+            <p className="text-[12.5px] mt-2" style={{ color: t.faint }}>
               {cs} · one price covers disc, print and packaging.
             </p>
-            <div className="mt-5 rounded-2xl overflow-hidden" style={{ border: `1px solid ${HAIRLINE}` }}>
+            <div className="mt-5 rounded-2xl overflow-hidden" style={{ border: `1px solid ${t.hairline}` }}>
               {PRICES.map(([units, price], i) => (
                 <div
                   key={units}
                   className="flex items-center justify-between px-5"
-                  style={{ height: 56, backgroundColor: CARD, borderTop: i ? `1px solid ${HAIRLINE}` : 'none' }}
+                  style={{ height: 56, backgroundColor: t.card, borderTop: i ? `1px solid ${t.hairline}` : 'none' }}
                 >
-                  <span className="text-[14px] font-semibold tabular-nums" style={{ color: INK }}>
+                  <span className="text-[14px] font-semibold tabular-nums" style={{ color: t.ink }}>
                     {units.toLocaleString()}
-                    <span className="text-[10px] uppercase ml-2 font-normal" style={{ color: SUBINK, letterSpacing: '0.08em' }}>
+                    <span className="text-[10px] uppercase ml-2 font-normal" style={{ color: t.subink, letterSpacing: '0.08em' }}>
                       units
                     </span>
                   </span>
                   <span
                     className="inline-flex items-center justify-center rounded-lg tabular-nums text-[14px] font-semibold"
-                    style={{ width: 88, height: 36, backgroundColor: PILL_ACTIVE, color: INK }}
+                    style={{ width: 88, height: 36, backgroundColor: t.pillActive, color: t.ink }}
                   >
                     {price}
                   </span>
                 </div>
               ))}
             </div>
-            <p className="text-[12px] mt-3" style={{ color: FAINT }}>
+            <p className="text-[12px] mt-3" style={{ color: t.faint }}>
               Prices are per unit, per finished package.
             </p>
           </section>
 
           {/* Turnaround */}
           <section>
-            <TwoTone a="Turnaround time." b="From order, to out the door." />
+            <TwoTone a="Turnaround time." b="From order, to out the door." t={t} />
             <div className="flex items-center gap-3 mt-5 flex-wrap">
-              <span className="inline-flex items-center justify-center rounded-xl tabular-nums text-[16px] font-semibold" style={{ width: 64, height: 44, backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, color: INK }}>
+              <span className="inline-flex items-center justify-center rounded-xl tabular-nums text-[16px] font-semibold" style={{ width: 64, height: 44, backgroundColor: t.card, border: `1px solid ${t.hairline}`, color: t.ink }}>
                 3
               </span>
-              <span style={{ color: FAINT }}>–</span>
-              <span className="inline-flex items-center justify-center rounded-xl tabular-nums text-[16px] font-semibold" style={{ width: 64, height: 44, backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, color: INK }}>
+              <span style={{ color: t.faint }}>–</span>
+              <span className="inline-flex items-center justify-center rounded-xl tabular-nums text-[16px] font-semibold" style={{ width: 64, height: 44, backgroundColor: t.card, border: `1px solid ${t.hairline}`, color: t.ink }}>
                 5
               </span>
-              <span className="text-[13px]" style={{ color: SUBINK }}>
+              <span className="text-[13px]" style={{ color: t.subink }}>
                 weeks
               </span>
               <span className="flex-1" />
-              <button type="button" className="text-[12.5px] font-medium" style={{ color: BLUE }}>
+              <button type="button" className="text-[12.5px] font-medium" style={{ color: t.blue }}>
                 Use press default
               </button>
             </div>
@@ -1004,10 +1072,10 @@ export function CDCatalogBuildDesktop() {
 
           {/* Print prep */}
           <section>
-            <TwoTone a="Print prep." b="The template for your templates." />
-            <div className="mt-5 rounded-2xl flex items-center gap-3 px-5" style={{ height: 64, backgroundColor: CARD, border: `1px dashed rgba(255,255,255,0.2)` }}>
-              <Paperclip className="w-4 h-4 flex-shrink-0" style={{ color: SUBINK }} />
-              <span className="text-[13px]" style={{ color: SUBINK }}>
+            <TwoTone a="Print prep." b="The template for your templates." t={t} />
+            <div className="mt-5 rounded-2xl flex items-center gap-3 px-5" style={{ height: 64, backgroundColor: t.card, border: `1px dashed ${t.dashed}` }}>
+              <Paperclip className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} />
+              <span className="text-[13px]" style={{ color: t.subink }}>
                 Attach a file or paste a link to your print template…
               </span>
             </div>
@@ -1015,6 +1083,18 @@ export function CDCatalogBuildDesktop() {
         </div>
         </div>
       </div>
+
+      {/* Mock-only theme toggle — bottom-right floating pill */}
+      <button
+        type="button"
+        onClick={() => setMode((m) => (m === 'light' ? 'dark' : 'light'))}
+        className="fixed bottom-4 right-4 z-40 h-9 px-3.5 rounded-full inline-flex items-center gap-2 text-[12.5px] font-medium shadow-lg"
+        style={{ backgroundColor: t.card, color: t.ink, border: `1px solid ${t.hairline}` }}
+        data-testid="button-theme-toggle"
+      >
+        {mode === 'light' ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
+        {mode === 'light' ? 'View dark' : 'View light'}
+      </button>
     </PressShell>
   );
 }
