@@ -409,7 +409,7 @@ function VerdictBanner({
     bleedSources.length > 0 ? (
       <div className="mt-1 space-y-0.5">
         {bleedSources.map((s) => (
-          <div key={s} className="text-[11px] leading-snug font-normal opacity-80">
+          <div key={s} className="text-xs leading-snug font-normal opacity-80">
             Bleed · {s}
           </div>
         ))}
@@ -1009,7 +1009,7 @@ export function PreviewArtDialog({
                     {c.label}{" "}
                     {/* Task #3030 colorblind rule — every status renders as
                         icon + word, never color alone. */}
-                    <span className={`ml-1 text-[10px] font-bold tracking-wide ${cs.text}`}>
+                    <span className={`ml-1 text-xs font-bold tracking-wide ${cs.text}`}>
                       {cs.label}
                     </span>
                   </div>
