@@ -223,12 +223,9 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
 
   const resolveTab = (t: string | null, sub: string | null): TabId => {
     if (t === "settings" && sub === "catalog") return "catalog";
-    // Task #2222 — the standalone "GoodDeed pricing" view is hidden from
-    // press logins (they edit it inside Catalog → format dropdown →
-    // GoodDeeds). It stays reachable only in super-admin view, so a press
-    // hitting ?tab=pricing directly degrades to the dashboard rather than
-    // landing on a now-hidden section.
-    if (t === "pricing" && !isSuperAdminView) return "dashboard";
+    // "GoodDeed Certificates" (the pricing tab) is visible to press logins
+    // again per the press-specs handoff rail (Bill, Aug 11 2026 — supersedes
+    // the Task #2222 hide), so ?tab=pricing resolves normally for everyone.
     // The Customers tab was folded into People (People is now the single
     // directory). Old ?tab=customers deep-links degrade to People.
     if (t === "customers") return "people";

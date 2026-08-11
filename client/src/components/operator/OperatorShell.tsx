@@ -362,8 +362,8 @@ export function OperatorShell<TabId extends string>({
               searchEndpoint="/api/admin/search/scoped"
               placeholder="Search…"
               recentScopeKey={recentScopeKey}
-              allowedNavIds={tabs.map((t) => t.id)}
-              navPages={tabs.map((t) => ({
+              allowedNavIds={tabs.filter((t) => !t.soon).map((t) => t.id)}
+              navPages={tabs.filter((t) => !t.soon).map((t) => ({
                 kind: "page" as const,
                 id: t.id,
                 title: t.label,
@@ -579,8 +579,8 @@ export function OperatorShell<TabId extends string>({
               searchEndpoint="/api/admin/search/scoped"
               placeholder="Search…"
               recentScopeKey={recentScopeKey}
-              allowedNavIds={tabs.map((t) => t.id)}
-              navPages={tabs.map((t) => ({
+              allowedNavIds={tabs.filter((t) => !t.soon).map((t) => t.id)}
+              navPages={tabs.filter((t) => !t.soon).map((t) => ({
                 kind: "page" as const,
                 id: t.id,
                 title: t.label,
