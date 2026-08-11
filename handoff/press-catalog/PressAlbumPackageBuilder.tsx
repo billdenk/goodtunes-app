@@ -1,4 +1,6 @@
-// PressAlbumPackageBuilder — the artist-facing "Design your package" page.
+// PressAlbumPackageBuilder — the press-facing (white-glove) package builder page.
+// The press operator configures the package on the artist's behalf; copy speaks
+// to the press about the artist, never as the artist.
 //
 // A press (Memphis Record Pressing) has invited an artist (Niina Soleil) to
 // design the vinyl package for one album — CALIFORNIALAND — and see, honestly
@@ -55,6 +57,8 @@ import {
   Send,
   ChevronRight,
   Sparkles,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import { Button } from '@workspace/goodtunes-design-system/components/ui/button';
 import {
@@ -70,19 +74,127 @@ import niinaPhoto from '../assets/niina-soleil.webp';
 import californialandCover from '../assets/californialand-cover.jpg';
 
 // ── Per-press label branding (matches donor: black label, white logo always) ──
+// The MRP center-label logo is always white-on-black on the pressed disc, and
+// the jacket + spinning vinyl render identically in both themes — the product
+// preview never changes with the theme.
 const PRESS_LABEL_LOGO = mrpLabelLogo;
 const PRESS_LABEL_BG = '#0a0a0a';
 const PRESS_LABEL_LOGO_FILTER = 'invert(1) brightness(1.7)';
 
-// ─── Brand tokens (Apple calm visual language) ──────────────────────
-const BLUE = '#319ED8';
-const INK = '#1d1d1f';
-const SUBINK = '#6e6e73';
-const HAIRLINE = '#e6e6ea';
-const CANVAS = '#f5f5f7';
-const RAIL = '#f5f5f7';
-const READY = '#1c8a5b';
-const PILL_SHADOW = '0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)';
+// ─── Theme-aware brand tokens (Apple calm visual language) ───────────
+// Theme-aware: light = the ratified press-portal palette (apple-canon light);
+// dark = apple-canon "Dark controls & surfaces" (charcoal, never navy). A
+// floating light/dark toggle lives on the mock page (mock-only chrome). Light
+// is the default so this surface renders exactly as it did before.
+//
+// Mutable bindings reassigned by applyTheme() at the top of the page render,
+// so the self-contained sub-components read the active theme without threading
+// a prop through every call site.
+type Theme = {
+  BLUE: string;
+  INK: string;
+  SUBINK: string;
+  FAINT: string;      // #a1a1a6 family — captions, muted icons
+  HAIRLINE: string;
+  CANVAS: string;
+  RAIL: string;
+  CARD: string;       // raised card surface (was bg-white / #ffffff / #fff)
+  TRACK: string;      // segmented-control pill track (was #f0f0f2)
+  HEADER_BG: string;  // translucent sticky header
+  HOVER_WASH: string; // neutral hover tint (was hover:bg-slate-*)
+  BLUE_WASH: string;  // blue text-button hover wash (was #f0f7fc)
+  BLUE_TINT_TOP: string; // top stop of the GoodDeed blue-tinted card gradient
+  RING: string;       // avatar/search ring (was slate-200)
+  CHECK_HALO: string; // selected-swatch check halo behind the tick
+  READY: string;
+  PILL_SHADOW: string;
+};
+
+const THEMES: Record<'light' | 'dark', Theme> = {
+  light: {
+    BLUE: '#319ED8',
+    INK: '#1d1d1f',
+    SUBINK: '#6e6e73',
+    FAINT: '#a1a1a6',
+    HAIRLINE: '#e6e6ea',
+    CANVAS: '#f5f5f7',
+    RAIL: '#f5f5f7',
+    CARD: '#ffffff',
+    TRACK: '#f0f0f2',
+    HEADER_BG: 'rgba(255,255,255,0.72)',
+    HOVER_WASH: 'rgba(0,0,0,0.05)',
+    BLUE_WASH: '#f0f7fc',
+    BLUE_TINT_TOP: '#f4faff',
+    RING: '#e2e8f0',
+    CHECK_HALO: 'rgba(255,255,255,0.85)',
+    READY: '#1c8a5b',
+    PILL_SHADOW: '0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)',
+  },
+  dark: {
+    BLUE: '#319ED8',
+    INK: '#f5f5f7',
+    SUBINK: '#98989d',
+    FAINT: '#6e6e73',
+    HAIRLINE: 'rgba(255,255,255,0.10)',
+    CANVAS: '#161617',
+    RAIL: '#1c1c1e',
+    CARD: '#1e1e20',
+    TRACK: '#26262a',
+    HEADER_BG: 'rgba(22,22,23,0.72)',
+    HOVER_WASH: 'rgba(255,255,255,0.05)',
+    BLUE_WASH: 'rgba(49,158,216,0.14)',
+    BLUE_TINT_TOP: 'rgba(49,158,216,0.10)',
+    RING: 'rgba(255,255,255,0.14)',
+    CHECK_HALO: 'rgba(0,0,0,0.55)',
+    READY: '#3fbf62',
+    PILL_SHADOW: '0 1px 3px rgba(0,0,0,0.4)',
+  },
+};
+
+// Mutable active-theme bindings (default light = unchanged render).
+let BLUE = THEMES.light.BLUE;
+let INK = THEMES.light.INK;
+let SUBINK = THEMES.light.SUBINK;
+let FAINT = THEMES.light.FAINT;
+let HAIRLINE = THEMES.light.HAIRLINE;
+let CANVAS = THEMES.light.CANVAS;
+let RAIL = THEMES.light.RAIL;
+let CARD = THEMES.light.CARD;
+let TRACK = THEMES.light.TRACK;
+let HEADER_BG = THEMES.light.HEADER_BG;
+let HOVER_WASH = THEMES.light.HOVER_WASH;
+let BLUE_WASH = THEMES.light.BLUE_WASH;
+let BLUE_TINT_TOP = THEMES.light.BLUE_TINT_TOP;
+let RING = THEMES.light.RING;
+let CHECK_HALO = THEMES.light.CHECK_HALO;
+let READY = THEMES.light.READY;
+let PILL_SHADOW = THEMES.light.PILL_SHADOW;
+
+// True while the dark theme is active — flips the GoodTunes wordmark (dark
+// asset only) to white via CSS invert on dark surfaces, per apple-canon Logos.
+let IS_DARK = false;
+
+function applyTheme(mode: 'light' | 'dark') {
+  IS_DARK = mode === 'dark';
+  const th = THEMES[mode];
+  BLUE = th.BLUE;
+  INK = th.INK;
+  SUBINK = th.SUBINK;
+  FAINT = th.FAINT;
+  HAIRLINE = th.HAIRLINE;
+  CANVAS = th.CANVAS;
+  RAIL = th.RAIL;
+  CARD = th.CARD;
+  TRACK = th.TRACK;
+  HEADER_BG = th.HEADER_BG;
+  HOVER_WASH = th.HOVER_WASH;
+  BLUE_WASH = th.BLUE_WASH;
+  BLUE_TINT_TOP = th.BLUE_TINT_TOP;
+  RING = th.RING;
+  CHECK_HALO = th.CHECK_HALO;
+  READY = th.READY;
+  PILL_SHADOW = th.PILL_SHADOW;
+}
 
 function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
@@ -349,6 +461,21 @@ function usePrefersReducedMotion(): boolean {
     return () => mq.removeEventListener('change', onChange);
   }, []);
   return reduced;
+}
+
+// Stacks the sticky two-column body when the viewport gets too narrow for the
+// preview rail + a 620px earnings column (avoids horizontal overflow < 1440).
+function useNarrow(maxWidth = 1080): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia(`(max-width: ${maxWidth}px)`);
+    setNarrow(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setNarrow(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [maxWidth]);
+  return narrow;
 }
 
 const REWIND_MS = 700;
@@ -623,15 +750,17 @@ function NavRow({ label, icon: Icon, active }: PressNavItem) {
     <a
       href="#"
       onClick={(e) => e.preventDefault()}
-      className={cn('flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors', !active && 'hover:bg-slate-200')}
+      className="flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors"
       style={{
         fontWeight: active ? 600 : 500,
         color: active ? INK : SUBINK,
-        backgroundColor: active ? '#ffffff' : undefined,
+        backgroundColor: active ? CARD : undefined,
         boxShadow: active ? PILL_SHADOW : undefined,
       }}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.backgroundColor = HOVER_WASH; }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.backgroundColor = ''; }}
     >
-      <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? INK : '#a1a1a6' }} />
+      <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? INK : FAINT }} />
       <span className="truncate flex-1">{label}</span>
     </a>
   );
@@ -677,18 +806,18 @@ function UserMenu() {
               <button
                 key={m.label}
                 type="button"
-                className="w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] hover:bg-slate-50 transition-colors"
+                className="w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] transition-colors"
                 style={{ color: INK }}
               >
-                <Icon className="w-4 h-4 flex-shrink-0" style={{ color: '#a1a1a6' }} />
+                <Icon className="w-4 h-4 flex-shrink-0" style={{ color: FAINT }} />
                 <span>{m.label}</span>
               </button>
             );
           })}
         </div>
         <div className="py-1.5" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
-          <button type="button" className="w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] hover:bg-slate-50 transition-colors" style={{ color: INK }}>
-            <LogOut className="w-4 h-4 flex-shrink-0" style={{ color: '#a1a1a6' }} />
+          <button type="button" className="w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] transition-colors" style={{ color: INK }}>
+            <LogOut className="w-4 h-4 flex-shrink-0" style={{ color: FAINT }} />
             <span>Sign out</span>
           </button>
         </div>
@@ -703,7 +832,7 @@ function PressShell({ children }: { children: ReactNode }) {
       <header
         className="h-14 flex-shrink-0 flex items-center justify-between gap-4 pl-3 pr-6 sticky top-0 z-20"
         style={{
-          backgroundColor: 'rgba(255,255,255,0.72)',
+          backgroundColor: HEADER_BG,
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderBottom: `1px solid ${HAIRLINE}`,
@@ -722,7 +851,14 @@ function PressShell({ children }: { children: ReactNode }) {
             <MessageSquarePlus className="w-3.5 h-3.5" />
             Feedback
           </Button>
-          <button type="button" className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-slate-100" style={{ color: SUBINK }} aria-label="Notifications">
+          <button
+            type="button"
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+            style={{ color: SUBINK }}
+            aria-label="Notifications"
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = HOVER_WASH)}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          >
             <Bell className="w-4 h-4" />
           </button>
           <UserMenu />
@@ -733,10 +869,10 @@ function PressShell({ children }: { children: ReactNode }) {
         <aside className="w-60 flex-shrink-0 flex flex-col" style={{ backgroundColor: RAIL, borderRight: `1px solid ${HAIRLINE}` }}>
           <div className="px-2.5 py-2.5">
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: '#a1a1a6' }} />
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: FAINT }} />
               <input
-                className="w-full h-9 pl-8 pr-2 rounded-full bg-white text-[12.5px] placeholder:text-slate-400 focus:outline-none"
-                style={{ border: `1px solid ${HAIRLINE}`, color: INK }}
+                className="w-full h-9 pl-8 pr-2 rounded-full text-[12.5px] placeholder:text-slate-400 focus:outline-none"
+                style={{ border: `1px solid ${HAIRLINE}`, color: INK, backgroundColor: CARD }}
                 placeholder="Search…  ⌘K"
                 readOnly
               />
@@ -748,10 +884,15 @@ function PressShell({ children }: { children: ReactNode }) {
             ))}
           </nav>
           <div className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
-            <span className="text-[9px] uppercase tracking-wider font-bold flex-shrink-0" style={{ color: '#a1a1a6' }}>
+            <span className="text-[9px] uppercase tracking-wider font-bold flex-shrink-0" style={{ color: FAINT }}>
               Powered by
             </span>
-            <img src={goodtunesLogo} alt="GoodTunes" className="h-5 w-auto" />
+            <img
+              src={goodtunesLogo}
+              alt="GoodTunes"
+              className="h-5 w-auto"
+              style={{ filter: IS_DARK ? 'invert(1) brightness(2)' : undefined }}
+            />
           </div>
         </aside>
 
@@ -766,14 +907,14 @@ function PageHeading({ lead, rest }: { lead: string; rest: string }) {
   return (
     <h1 className="tracking-tight" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.05, marginTop: 10 }}>
       <span style={{ color: INK }}>{lead} </span>
-      <span style={{ color: '#a1a1a6', fontWeight: 600 }}>{rest}</span>
+      <span style={{ color: FAINT, fontWeight: 600 }}>{rest}</span>
     </h1>
   );
 }
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#a1a1a6' }}>
+    <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT }}>
       {children}
     </div>
   );
@@ -783,48 +924,13 @@ function TwoTone({ lead, rest }: { lead: string; rest: string }) {
   return (
     <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
       <span style={{ color: INK }}>{lead} </span>
-      <span style={{ color: '#a1a1a6' }}>{rest}</span>
+      <span style={{ color: FAINT }}>{rest}</span>
     </h2>
   );
 }
 
 function Divider() {
   return <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />;
-}
-
-// ─── Album-context banner (this page is scoped to one album) ─────────
-function AlbumBanner() {
-  return (
-    <div
-      className="flex items-center gap-4 rounded-2xl bg-white"
-      style={{ border: `1px solid ${HAIRLINE}`, padding: 16 }}
-      data-testid="album-banner"
-    >
-      <img
-        src={californialandCover}
-        alt="CALIFORNIALAND cover"
-        className="rounded-xl object-cover flex-shrink-0"
-        style={{ width: 64, height: 64 }}
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-[15px] font-semibold tracking-tight" style={{ color: INK }}>
-            CALIFORNIALAND
-          </span>
-          <span className="text-[13px]" style={{ color: '#a1a1a6' }}>·</span>
-          <span className="text-[13px]" style={{ color: SUBINK }}>Niina Soleil</span>
-        </div>
-        <div className="text-[12.5px]" style={{ color: '#a1a1a6', marginTop: 2 }}>
-          2026 · 12 tracks · Invited by {PARTNER_NAME}
-        </div>
-      </div>
-      {/* Status — quiet dot + phrase, canon severity restraint */}
-      <div className="flex items-center gap-2 flex-shrink-0" data-testid="album-status">
-        <span className="inline-block rounded-full" style={{ width: 7, height: 7, backgroundColor: READY }} />
-        <span className="text-[12.5px] font-medium" style={{ color: INK }}>At press</span>
-      </div>
-    </div>
-  );
 }
 
 // ─── Conversational album setup (title / artist / tracks) ────────────
@@ -845,7 +951,7 @@ function SetupField({
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: wide ? '2 1 0' : '1 1 0', minWidth: 0 }}>
-      <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#a1a1a6' }}>
+      <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT }}>
         {label}
       </label>
       <input
@@ -854,7 +960,7 @@ function SetupField({
         inputMode={numeric ? 'numeric' : undefined}
         data-testid={testId}
         className={cn('text-[14px] focus:outline-none focus:border-slate-400 transition-colors', numeric && 'tabular-nums')}
-        style={{ height: 44, width: '100%', minWidth: 0, border: `1px solid ${HAIRLINE}`, borderRadius: 12, padding: '0 14px', color: INK, background: '#fff', fontWeight: 600 }}
+        style={{ height: 44, width: '100%', minWidth: 0, border: `1px solid ${HAIRLINE}`, borderRadius: 12, padding: '0 14px', color: INK, background: CARD, fontWeight: 600 }}
       />
     </div>
   );
@@ -874,11 +980,11 @@ function SizeCards({ value, onChange }: { value: ProductTypeId; onChange: (v: Pr
             onClick={() => onChange(p.id)}
             aria-pressed={active}
             data-testid={`size-${p.id}`}
-            className="rounded-2xl bg-white transition-all hover:-translate-y-px focus:outline-none"
-            style={{ flex: 1, padding: '16px 12px', border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, textAlign: 'center', cursor: 'pointer' }}
+            className="rounded-2xl transition-all hover:-translate-y-px focus:outline-none"
+            style={{ backgroundColor: CARD, flex: 1, padding: '16px 12px', border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, textAlign: 'center', cursor: 'pointer' }}
           >
             <div className="text-[17px] font-semibold" style={{ color: active ? BLUE : INK }}>{big}</div>
-            <div className="text-[11px]" style={{ marginTop: 3, color: '#a1a1a6' }}>{rest.join(' ')}</div>
+            <div className="text-[11px]" style={{ marginTop: 3, color: FAINT }}>{rest.join(' ')}</div>
           </button>
         );
       })}
@@ -899,8 +1005,8 @@ function TypeCards({ value, onChange }: { value: SwatchKind; onChange: (v: Swatc
             onClick={() => onChange(t.id)}
             aria-pressed={active}
             data-testid={`type-${t.id}`}
-            className="rounded-2xl bg-white text-left transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
-            style={{ padding: 14, border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
+            className="rounded-2xl text-left transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
+            style={{ backgroundColor: CARD, padding: 14, border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
           >
             <div className="flex justify-center" style={{ marginBottom: 10 }}>
               <VinylDisc size={84} swatch={t.swatch} />
@@ -908,7 +1014,7 @@ function TypeCards({ value, onChange }: { value: SwatchKind; onChange: (v: Swatc
             <div className="text-[13.5px] font-semibold leading-tight" style={{ color: active ? BLUE : INK }}>
               {t.name}
             </div>
-            <div className="text-[11.5px]" style={{ marginTop: 2, color: '#a1a1a6' }}>
+            <div className="text-[11.5px]" style={{ marginTop: 2, color: FAINT }}>
               {t.blurb}
             </div>
           </button>
@@ -931,15 +1037,15 @@ function ColorCards({ colors, value, onChange }: { colors: Swatch[]; value: stri
             onClick={() => onChange(c.id)}
             aria-pressed={on}
             data-testid={`color-${c.id}`}
-            className="rounded-2xl bg-white text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
-            style={{ padding: '16px 10px 12px', border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
+            className="rounded-2xl text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
+            style={{ backgroundColor: CARD, padding: '16px 10px 12px', border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
           >
             <div className="relative flex justify-center" style={{ marginBottom: 8 }}>
               <ColorBall swatch={c} size={48} />
               {on && (
                 <span
                   className="absolute flex items-center justify-center rounded-full"
-                  style={{ width: 18, height: 18, backgroundColor: 'rgba(255,255,255,0.85)', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+                  style={{ width: 18, height: 18, backgroundColor: CHECK_HALO, top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
                 >
                   <Check className="w-3 h-3" style={{ color: BLUE }} strokeWidth={3} />
                 </span>
@@ -979,7 +1085,7 @@ function EarnLine({
           {label}
         </div>
         {hint && (
-          <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 2 }}>
+          <div className="text-[11.5px]" style={{ color: FAINT, marginTop: 2 }}>
             {hint}
           </div>
         )}
@@ -1012,7 +1118,7 @@ function MiniGoodDeed({ coverSrc }: { coverSrc: string }) {
       <img src={coverSrc} alt="Album art on the GoodDeed certificate" className="block w-full object-cover" style={{ aspectRatio: '1 / 1.1' }} />
       {/* The certificate plate */}
       <div style={{ backgroundColor: '#101d36', padding: '4px 4px 3px' }}>
-        <div style={{ height: 2, width: '70%', backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: 1 }} />
+        <div style={{ height: 2, width: '70%', backgroundColor: CHECK_HALO, borderRadius: 1 }} />
         <div style={{ height: 1.5, width: '50%', backgroundColor: 'rgba(255,255,255,0.4)', borderRadius: 1, marginTop: 2.5 }} />
         <div className="flex items-end justify-between" style={{ marginTop: 3 }}>
           <div style={{ height: 1.5, width: '40%', backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 1, marginBottom: 1 }} />
@@ -1037,6 +1143,8 @@ function GoodDeedCard({
   onMode,
   cap,
   onCap,
+  take,
+  onTake,
   mfg,
   fee,
   cost,
@@ -1054,6 +1162,8 @@ function GoodDeedCard({
   onMode: (m: 'nolimit' | 'cap') => void;
   cap: number;
   onCap: (v: number) => void;
+  take: number;
+  onTake: (v: number) => void;
   mfg: number;
   fee: number;
   cost: number;
@@ -1065,8 +1175,8 @@ function GoodDeedCard({
       style={{
         border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
         background: on
-          ? 'linear-gradient(180deg, #f4faff 0%, #ffffff 55%)'
-          : '#fff',
+          ? `linear-gradient(180deg, ${BLUE_TINT_TOP} 0%, ${CARD} 55%)`
+          : CARD,
       }}
       data-testid="addon-gooddeed"
     >
@@ -1085,10 +1195,10 @@ function GoodDeedCard({
             </span>
           </div>
           <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 5, lineHeight: 1.45, maxWidth: 460 }}>
-            You sign each certificate. We handle printing, the holographic authenticity seal, and
+            The artist signs each certificate. GoodTunes handles printing, the holographic authenticity seal, and
             fulfillment with the record. One per vinyl — a true collectible that helps the record sell.
           </p>
-          <div className="text-[12px]" style={{ color: '#a1a1a6', marginTop: 8 }}>
+          <div className="text-[12px]" style={{ color: FAINT, marginTop: 8 }}>
             {mode === 'cap' ? (
               <>Capped at <span className="font-semibold tabular-nums" style={{ color: INK }}>{deedUnits.toLocaleString('en-US')}</span> certificates
                 {' · '}run of <span className="tabular-nums">{runQty.toLocaleString('en-US')}</span></>
@@ -1109,8 +1219,8 @@ function GoodDeedCard({
           style={{ width: 46, height: 28, backgroundColor: on ? BLUE : '#d1d1d6' }}
         >
           <span
-            className="absolute rounded-full bg-white transition-transform"
-            style={{ width: 22, height: 22, top: 3, left: 3, transform: on ? 'translateX(18px)' : 'translateX(0)', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}
+            className="absolute rounded-full transition-transform"
+            style={{ backgroundColor: CARD, width: 22, height: 22, top: 3, left: 3, transform: on ? 'translateX(18px)' : 'translateX(0)', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}
           />
         </button>
       </div>
@@ -1118,17 +1228,17 @@ function GoodDeedCard({
       {on && (
         <>
           <div
-            className="flex flex-wrap items-end gap-x-10 gap-y-5"
+            className="flex flex-col gap-5"
             style={{ padding: '16px 18px', borderTop: `1px solid ${HAIRLINE}`, background: 'rgba(255,255,255,0.6)' }}
           >
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#a1a1a6', marginBottom: 8 }}>
+              <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT, marginBottom: 8 }}>
                 Certificate price
               </div>
               <RetailControl value={retail} onChange={onRetail} />
             </div>
-            <div className="flex-1" style={{ minWidth: 320 }}>
-              <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#a1a1a6', marginBottom: 8 }}>
+            <div style={{ maxWidth: 460 }}>
+              <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT, marginBottom: 8 }}>
                 How many
               </div>
               <div className="grid grid-cols-2 gap-2.5">
@@ -1143,8 +1253,9 @@ function GoodDeedCard({
                       type="button"
                       onClick={() => onMode(m)}
                       data-testid={`deed-mode-${m}`}
-                      className="rounded-xl bg-white text-left transition-all"
+                      className="rounded-xl text-left transition-all"
                       style={{
+                        backgroundColor: CARD,
                         padding: '12px 14px',
                         border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
                         margin: active ? 0 : 1,
@@ -1156,14 +1267,55 @@ function GoodDeedCard({
                   );
                 })}
               </div>
+              {mode === 'nolimit' && (
+                <div className="grid grid-cols-2 gap-2.5" style={{ marginTop: 14 }}>
+                <div style={{ gridColumn: 1 }}>
+                  <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT, marginBottom: 6 }}>
+                    Expected take rate
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="inline-flex items-center rounded-xl overflow-hidden" style={{ border: `1px solid ${HAIRLINE}`, backgroundColor: CARD }}>
+                      <button
+                        type="button"
+                        onClick={() => onTake(Math.max(5, take - 5))}
+                        data-testid="deed-take-minus"
+                        className="flex items-center justify-center transition-colors"
+                        style={{ width: 36, height: 38, color: SUBINK, fontSize: 16 }}
+                      >
+                        −
+                      </button>
+                      <div className="tabular-nums text-[14px] font-semibold text-center" style={{ color: INK, minWidth: 64, borderLeft: `1px solid ${HAIRLINE}`, borderRight: `1px solid ${HAIRLINE}`, padding: '8px 10px' }}>
+                        {take} <span className="font-normal" style={{ color: SUBINK }}>%</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onTake(Math.min(100, take + 5))}
+                        data-testid="deed-take-plus"
+                        className="flex items-center justify-center transition-colors"
+                        style={{ width: 36, height: 38, color: SUBINK, fontSize: 16 }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-[11.5px]" style={{ color: FAINT, marginTop: 6 }}>
+                    of vinyl buyers — an example of what typically sells
+                  </div>
+                </div>
+                </div>
+              )}
               {mode === 'cap' && (
-                <div className="flex items-center gap-3" style={{ marginTop: 10 }}>
-                  <div className="inline-flex items-center rounded-xl bg-white overflow-hidden" style={{ border: `1px solid ${HAIRLINE}` }}>
+                <div className="grid grid-cols-2 gap-2.5" style={{ marginTop: 14 }}>
+                <div style={{ gridColumn: 2 }}>
+                  <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT, marginBottom: 6 }}>
+                    Cap
+                  </div>
+                  <div className="inline-flex items-center rounded-xl overflow-hidden" style={{ border: `1px solid ${HAIRLINE}`, backgroundColor: CARD }}>
                     <button
                       type="button"
                       onClick={() => onCap(Math.max(50, cap - 50))}
                       data-testid="deed-cap-minus"
-                      className="flex items-center justify-center transition-colors hover:bg-slate-50"
+                      className="flex items-center justify-center transition-colors"
                       style={{ width: 36, height: 38, color: SUBINK, fontSize: 16 }}
                     >
                       −
@@ -1175,13 +1327,14 @@ function GoodDeedCard({
                       type="button"
                       onClick={() => onCap(Math.min(runQty, cap + 50))}
                       data-testid="deed-cap-plus"
-                      className="flex items-center justify-center transition-colors hover:bg-slate-50"
+                      className="flex items-center justify-center transition-colors"
                       style={{ width: 36, height: 38, color: SUBINK, fontSize: 16 }}
                     >
                       +
                     </button>
                   </div>
-                  <span className="text-[11.5px]" style={{ color: '#a1a1a6' }}>Never more than one per vinyl sold.</span>
+                  <div className="text-[11.5px]" style={{ color: FAINT, marginTop: 6 }}>Never more than one per vinyl sold.</div>
+                </div>
                 </div>
               )}
             </div>
@@ -1196,8 +1349,10 @@ function GoodDeedCard({
                   type="button"
                   onClick={() => setShowDeedCost((v) => !v)}
                   data-testid="button-deed-cost-breakdown"
-                  className="flex items-center gap-1 text-[11.5px] transition-colors hover:text-slate-600"
-                  style={{ color: '#a1a1a6', marginTop: 2 }}
+                  className="flex items-center gap-1 text-[11.5px] transition-colors"
+                  style={{ color: FAINT, marginTop: 2 }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = SUBINK)}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = FAINT)}
                 >
                   After the {money(cost)} cost per signed certificate
                   <ChevronRight className="w-3 h-3 transition-transform" style={{ transform: showDeedCost ? 'rotate(90deg)' : 'none' }} />
@@ -1242,6 +1397,9 @@ function GoodDeedCard({
               Adds <span className="font-semibold tabular-nums" style={{ color: INK }}>{money(perUnit)}</span> per certified unit
               {' · '}
               <span className="tabular-nums">{deedUnits.toLocaleString('en-US')}</span> certificates
+              <div className="text-[11.5px]" style={{ color: FAINT, marginTop: 2 }}>
+                This is an estimate — the artist is billed on actual sales.
+              </div>
             </div>
             <div className="text-[15px] font-semibold tabular-nums" style={{ color: READY }}>
               + {money(total)}
@@ -1262,16 +1420,65 @@ function middleTruncate(s: string, max = 26): string {
   return `${s.slice(0, max - 1 - keep)}…${s.slice(-keep)}`;
 }
 
+// Blueprint icons — line drawings of the actual piece, drawn like a die-line.
+// Solid strokes are edges; dashed strokes are folds, holes, and hidden parts.
+function BlueprintIcon({ kind }: { kind: string }) {
+  const s: React.SVGProps<SVGSVGElement> = {
+    width: 44,
+    height: 44,
+    viewBox: '0 0 26 26',
+    fill: 'none',
+    stroke: BLUE,
+    strokeWidth: 0.9,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+  };
+  switch (kind) {
+    case 'jacket': // square jacket, dashed spine fold, record peeking out the right
+      return (
+        <svg {...s}>
+          <circle cx="17.5" cy="13" r="6.5" strokeDasharray="2 2.2" opacity={0.7} />
+          <circle cx="17.5" cy="13" r="1.4" strokeDasharray="1.2 1.6" opacity={0.7} />
+          <rect x="3" y="4" width="18" height="18" rx="1.2" fill="#fff" />
+        </svg>
+      );
+    case 'labels': // center label — dashed record as context, solid label as the piece
+      return (
+        <svg {...s}>
+          <circle cx="13" cy="13" r="11" strokeDasharray="2 2.2" opacity={0.7} />
+          <circle cx="13" cy="13" r="6.5" fill="#fff" />
+          <circle cx="13" cy="13" r="1.3" />
+          <path d="M9.6 10.4a4.6 4.6 0 0 1 6.8 0" opacity={0.6} />
+        </svg>
+      );
+    case 'inner': // inner sleeve — square sleeve half-hidden behind the dashed jacket
+      return (
+        <svg {...s}>
+          <rect x="9" y="5.5" width="15" height="15" rx="1" fill="#fff" />
+          <rect x="2" y="5" width="16" height="16" rx="1.2" strokeDasharray="2 2.2" opacity={0.7} fill="#fff" />
+        </svg>
+      );
+    case 'booklet': // folded booklet — dashed center fold, text lines
+      return (
+        <svg {...s}>
+          <rect x="4" y="4.5" width="18" height="17" rx="1.2" fill="#fff" />
+          <path d="M13 4.5v17" strokeDasharray="2 2.2" opacity={0.7} />
+          <path d="M7 9.5h3.5M7 12.5h3.5M7 15.5h2.5M15.5 9.5h3.5M15.5 12.5h3.5" opacity={0.7} />
+        </svg>
+      );
+    default:
+      return <FileText className="w-4 h-4" style={{ color: BLUE }} />;
+  }
+}
+
 function TemplateTile({ tf }: { tf: TemplateFile }) {
   return (
     <div
-      className="group relative flex flex-col items-center justify-center rounded-xl bg-white text-center"
-      style={{ border: `1px solid ${HAIRLINE}`, padding: '18px 12px' }}
+      className="group relative flex flex-col items-center justify-center rounded-xl text-center"
+      style={{ border: `1px solid ${HAIRLINE}`, padding: '18px 12px', backgroundColor: CARD }}
       data-testid={`template-${tf.key}`}
     >
-      <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: CANVAS }}>
-        <FileText className="w-4 h-4" style={{ color: BLUE }} />
-      </span>
+      <BlueprintIcon kind={tf.key} />
       <div className="text-[13px] font-semibold" style={{ color: INK, marginTop: 8 }}>
         {tf.label}
       </div>
@@ -1281,7 +1488,7 @@ function TemplateTile({ tf }: { tf: TemplateFile }) {
       <button
         type="button"
         data-testid={`template-download-${tf.key}`}
-        className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-slate-100"
+        className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
         style={{ color: SUBINK }}
         aria-label={`Download ${tf.label} template`}
       >
@@ -1298,11 +1505,13 @@ const TEMPLATES: TemplateFile[] = [
 ];
 
 // ─── Segmented control for run quantity (canon segmented control) ────
-const RUN_OPTIONS = [500, 1000, 2000, 3000] as const;
+// In the real app these come from the press's priced runs in their catalog —
+// only run sizes the press actually offers appear. MRP prices six.
+const RUN_OPTIONS = [100, 300, 500, 1000, 2000, 3000] as const;
 
 function RunControl({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-full p-1" style={{ backgroundColor: '#f0f0f2' }} data-testid="control-run">
+    <div className="inline-flex items-center gap-1 rounded-full p-1" style={{ backgroundColor: TRACK }} data-testid="control-run">
       {RUN_OPTIONS.map((q) => {
         const active = q === value;
         return (
@@ -1314,11 +1523,11 @@ function RunControl({ value, onChange }: { value: number; onChange: (v: number) 
             data-testid={`run-${q}`}
             className="rounded-full transition-all focus:outline-none tabular-nums"
             style={{
-              padding: '7px 16px',
+              padding: '7px 13px',
               fontSize: 13,
               fontWeight: 600,
               color: active ? INK : SUBINK,
-              backgroundColor: active ? '#ffffff' : 'transparent',
+              backgroundColor: active ? CARD : 'transparent',
               boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : undefined,
             }}
           >
@@ -1335,10 +1544,10 @@ function RetailControl({ value, onChange }: { value: number; onChange: (v: numbe
   return (
     <label
       className="inline-flex items-center h-11 rounded-xl transition-shadow focus-within:ring-1 focus-within:ring-slate-300"
-      style={{ border: `1px solid ${HAIRLINE}`, background: '#fff', cursor: 'text', padding: '0 14px' }}
+      style={{ border: `1px solid ${HAIRLINE}`, background: CARD, cursor: 'text', padding: '0 14px' }}
       data-testid="retail-field"
     >
-      <span className="text-[16px] font-semibold" style={{ color: '#a1a1a6', marginRight: 2 }}>$</span>
+      <span className="text-[16px] font-semibold" style={{ color: FAINT, marginRight: 2 }}>$</span>
       <input
         value={value.toFixed(2)}
         onChange={(e) => {
@@ -1356,6 +1565,12 @@ function RetailControl({ value, onChange }: { value: number; onChange: (v: numbe
 
 // ─── Main page ───────────────────────────────────────────────────────
 export function PressAlbumPackageBuilder() {
+  // Theme-aware: default light (unchanged render). Reassign the active-theme
+  // token bindings synchronously before any child renders this pass.
+  const [mode, setMode] = useState<'light' | 'dark'>('light');
+  applyTheme(mode);
+  const narrow = useNarrow(1080);
+
   // Album context (editable in the conversational setup)
   const [albumTitle, setAlbumTitle] = useState('CALIFORNIALAND');
   const [artistName, setArtistName] = useState('Niina Soleil');
@@ -1394,7 +1609,8 @@ export function PressAlbumPackageBuilder() {
     const byType: Record<SwatchKind, number> = { black: 11.9, opaque: 13.1, translucent: 14.3, splatter: 16.6 };
     const sizeMult = product.id === 'single7' ? 0.72 : product.id === 'double12' ? 1.48 : 1;
     // Volume discount steps the cost down with the run.
-    const volMult = runQty >= 3000 ? 0.9 : runQty >= 2000 ? 0.95 : runQty >= 1000 ? 1 : 1.08;
+    const volMult =
+      runQty >= 3000 ? 0.9 : runQty >= 2000 ? 0.95 : runQty >= 1000 ? 1 : runQty >= 500 ? 1.08 : runQty >= 300 ? 1.28 : 1.6;
     return byType[activeType.id] * sizeMult * volMult;
   }, [activeType.id, product.id, runQty]);
 
@@ -1421,9 +1637,9 @@ export function PressAlbumPackageBuilder() {
   const [deedRetail, setDeedRetail] = useState(20);
   const [deedMode, setDeedMode] = useState<'nolimit' | 'cap'>('nolimit');
   const [deedCap, setDeedCap] = useState(200);
-  // No limit → estimate on a typical take rate; capped → the cap, never more than the run.
-  const DEED_TAKE_RATE = 0.25;
-  const deedUnits = deedMode === 'cap' ? Math.min(deedCap, runQty) : Math.round(runQty * DEED_TAKE_RATE);
+  // No limit → estimate on the artist's expected take rate; capped → the cap, never more than the run.
+  const [deedTake, setDeedTake] = useState(25); // % of vinyl buyers
+  const deedUnits = deedMode === 'cap' ? Math.min(deedCap, runQty) : Math.round((runQty * deedTake) / 100);
   // The certificate's own honest math — same shape as the record's.
   const deedMfg = 12; // manufacturing & shipping, printed + sealed + fulfilled
   const deedFee = deedRetail * 0.029 + 0.3; // payment processing
@@ -1437,7 +1653,7 @@ export function PressAlbumPackageBuilder() {
   useEffect(() => {
     markDirty();
     setShared(false);
-  }, [albumTitle, artistName, trackCount, sizeId, typeId, colorSel, retail, runQty, gooddeedOn, deedRetail, deedMode, deedCap]);
+  }, [albumTitle, artistName, trackCount, sizeId, typeId, colorSel, retail, runQty, gooddeedOn, deedRetail, deedMode, deedCap, deedTake]);
 
   const handleSave = () => setDirty(false);
   const handleShare = () => {
@@ -1446,20 +1662,26 @@ export function PressAlbumPackageBuilder() {
   };
 
   return (
+    <>
     <PressShell>
       <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
         {/* Page header + quiet save state */}
         <div className="flex items-start justify-between gap-6">
           <div className="min-w-0">
             <SectionLabel>Projects · {albumTitle}</SectionLabel>
-            <PageHeading lead="Design your package." rest="See what it earns." />
+            <PageHeading lead={`${albumTitle}.`} rest={artistName} />
             <p className="text-[15px]" style={{ color: SUBINK, marginTop: 12, maxWidth: 560, lineHeight: 1.5 }}>
-              One confident decision at a time — size, vinyl, price. Every choice updates the
-              record on the left and the artist&rsquo;s take-home on the right. Honest math, no surprises.
+              Size, vinyl, price — set on the artist&rsquo;s behalf. Every choice updates the
+              record on the left and their take-home on the right.
             </p>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0" style={{ marginTop: 24 }}>
-            <span className="text-[12.5px]" style={{ color: dirty ? SUBINK : '#a1a1a6' }}>
+            <span className="inline-flex items-center gap-2" data-testid="album-status">
+              <span className="inline-block rounded-full" style={{ width: 7, height: 7, backgroundColor: READY }} />
+              <span className="text-[12.5px] font-medium" style={{ color: INK }}>At press</span>
+            </span>
+            <span style={{ color: HAIRLINE }}>·</span>
+            <span className="text-[12.5px]" style={{ color: dirty ? SUBINK : FAINT }}>
               {dirty ? 'Edited' : 'All changes saved'}
             </span>
             <Button
@@ -1475,18 +1697,16 @@ export function PressAlbumPackageBuilder() {
           </div>
         </div>
 
-        <div style={{ marginTop: 20 }}>
-          <AlbumBanner />
-        </div>
-
         <Divider />
 
         {/* Two-column body — jacket preview left (sticky), decisions right */}
-        <div className="grid gap-16" style={{ gridTemplateColumns: 'minmax(0, 1fr) 620px' }}>
+        <div className="grid gap-16" style={{ gridTemplateColumns: narrow ? '1fr' : 'minmax(0, 1fr) minmax(0, 620px)' }}>
           {/* LEFT — the record, no card around it */}
           <div
             className="flex flex-col items-center justify-center"
-            style={{ position: 'sticky', top: 24, alignSelf: 'start', minHeight: 560, paddingTop: 24 }}
+            style={narrow
+              ? { minHeight: 560, paddingTop: 24 }
+              : { position: 'sticky', top: 24, alignSelf: 'start', minHeight: 560, paddingTop: 24 }}
           >
             <JacketStage swatch={previewSwatch} product={product} cover={californialandCover} />
             <div className="flex flex-col items-center" style={{ transform: `translateX(-${Math.round(300 * (product.inches / 12) * 0.25)}px)` }}>
@@ -1508,7 +1728,7 @@ export function PressAlbumPackageBuilder() {
               </div>
               <div className="flex items-center gap-2" style={{ marginTop: 18 }}>
                 <img src={niinaPhoto} alt={artistName} className="w-6 h-6 rounded-full object-cover ring-1 ring-slate-200" />
-                <span className="text-[12px]" style={{ color: '#a1a1a6' }}>
+                <span className="text-[12px]" style={{ color: FAINT }}>
                   Designed for <span className="font-semibold" style={{ color: INK }}>{artistName}</span>
                 </span>
               </div>
@@ -1520,7 +1740,7 @@ export function PressAlbumPackageBuilder() {
             {/* The album — conversational setup */}
             <TwoTone lead="The album." rest="What's it called?" />
             <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
-              This is what fans will see on the shelf. The press already has it — tweak if you like.
+              This is what fans will see on the shelf. Tweak it if the artist&rsquo;s details have changed.
             </p>
             <div className="flex items-end gap-3" style={{ marginTop: 14 }}>
               <SetupField label="Album title" value={albumTitle} onChange={setAlbumTitle} wide testId="input-album-title" />
@@ -1545,7 +1765,7 @@ export function PressAlbumPackageBuilder() {
             <TwoTone lead="Pick a color." rest="This is the one fans hold." />
             <p className="text-[12.5px]" style={{ marginTop: 6 }}>
               <span className="font-semibold" style={{ color: INK }}>{activeType.name}</span>
-              <span style={{ color: '#a1a1a6' }}> · {activeType.colors.length} colors</span>
+              <span style={{ color: FAINT }}> · {activeType.colors.length} colors</span>
             </p>
             <ColorCards
               colors={activeType.colors}
@@ -1556,22 +1776,22 @@ export function PressAlbumPackageBuilder() {
             <Divider />
 
             {/* Pricing & earnings — the delightful, honest moment */}
-            <TwoTone lead="Set your price." rest="Watch what you earn." />
+            <TwoTone lead="Set the price." rest="Watch what the artist earns." />
             <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
               Pick a retail price and a run. GoodTunes<sup style={{ fontSize: '0.6em', top: '-0.5em' }}>®</sup> does the math live —
-              this is your take-home, before a single record ships.
+              this is the artist&rsquo;s take-home, before a single record ships.
             </p>
 
             {/* Retail + run controls */}
             <div className="flex flex-wrap items-end gap-x-10 gap-y-5" style={{ marginTop: 18 }}>
               <div>
-                <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#a1a1a6', marginBottom: 8 }}>
+                <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT, marginBottom: 8 }}>
                   Retail price
                 </div>
                 <RetailControl value={retail} onChange={setRetail} />
               </div>
               <div>
-                <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#a1a1a6', marginBottom: 8 }}>
+                <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT, marginBottom: 8 }}>
                   Run quantity
                 </div>
                 <RunControl value={runQty} onChange={setRunQty} />
@@ -1581,7 +1801,7 @@ export function PressAlbumPackageBuilder() {
             {/* The earnings receipt */}
             <div
               className="rounded-2xl overflow-hidden"
-              style={{ border: `1px solid ${HAIRLINE}`, background: '#fff', marginTop: 20 }}
+              style={{ border: `1px solid ${HAIRLINE}`, background: CARD, marginTop: 20 }}
               data-testid="earnings-panel"
             >
               <div style={{ padding: '4px 18px' }}>
@@ -1594,8 +1814,10 @@ export function PressAlbumPackageBuilder() {
                       type="button"
                       onClick={() => setShowCost((v) => !v)}
                       data-testid="button-cost-breakdown"
-                      className="flex items-center gap-1 text-[11.5px] transition-colors hover:text-slate-600"
-                      style={{ color: '#a1a1a6', marginTop: 2 }}
+                      className="flex items-center gap-1 text-[11.5px] transition-colors"
+                      style={{ color: FAINT, marginTop: 2 }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = SUBINK)}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = FAINT)}
                     >
                       After the {money(packageCost)} package cost from {PARTNER_NAME}
                       <ChevronRight
@@ -1625,7 +1847,7 @@ export function PressAlbumPackageBuilder() {
                     ))}
                     <div className="flex items-baseline justify-between gap-4" style={{ padding: '6px 0 2px', borderTop: `1px solid ${HAIRLINE}`, marginTop: 4 }}>
                       <span className="text-[12px] font-semibold" style={{ color: INK }}>
-                        Cost per unit <span style={{ color: '#a1a1a6', fontWeight: 400 }}>({money(packageCost * runQty)} for the run)</span>
+                        Cost per unit <span style={{ color: FAINT, fontWeight: 400 }}>({money(packageCost * runQty)} for the run)</span>
                       </span>
                       <span className="tabular-nums text-[12px] font-semibold" style={{ color: INK }}>{money(packageCost)}</span>
                     </div>
@@ -1649,7 +1871,7 @@ export function PressAlbumPackageBuilder() {
                             GoodDeed<sup style={{ fontSize: '0.6em', top: '-0.5em' }}>®</sup> certificates
                           </span>
                         </div>
-                        <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 2 }}>
+                        <div className="text-[11.5px]" style={{ color: FAINT, marginTop: 2 }}>
                           {deedMode === 'cap' ? 'Capped at' : 'Est.'} {deedUnits.toLocaleString('en-US')} of {runQty.toLocaleString('en-US')} → {money(deedPerUnit)}/unit
                         </div>
                       </div>
@@ -1664,7 +1886,7 @@ export function PressAlbumPackageBuilder() {
               {/* Artist Net — the hero number */}
               <div
                 className="flex items-center justify-between"
-                style={{ padding: '18px', borderTop: `1px solid ${HAIRLINE}`, background: 'linear-gradient(180deg, #f4faff 0%, #ffffff 100%)' }}
+                style={{ padding: '18px', borderTop: `1px solid ${HAIRLINE}`, background: `linear-gradient(180deg, ${BLUE_TINT_TOP} 0%, ${CARD} 100%)` }}
                 data-testid="artist-net"
               >
                 <div>
@@ -1706,6 +1928,8 @@ export function PressAlbumPackageBuilder() {
                 onMode={setDeedMode}
                 cap={deedCap}
                 onCap={setDeedCap}
+                take={deedTake}
+                onTake={setDeedTake}
                 mfg={deedMfg}
                 fee={deedFee}
                 cost={deedCost}
@@ -1715,9 +1939,9 @@ export function PressAlbumPackageBuilder() {
             <Divider />
 
             {/* Print templates — download tiles from the press */}
-            <TwoTone lead="Print templates." rest="Everything your designer needs." />
+            <TwoTone lead="Print templates." rest="Everything the artwork team needs." />
             <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
-              Sized for this package by {PARTNER_NAME}. Download, hand to your artwork team, drop the files back in.
+              Sized for this package. Download, share with the artist&rsquo;s design team, and drop the finished files back in.
             </p>
             <div className="grid grid-cols-3 gap-3" style={{ marginTop: 14 }}>
               {TEMPLATES.map((tf) => (
@@ -1739,7 +1963,7 @@ export function PressAlbumPackageBuilder() {
                 data-testid="button-share-artist"
                 className="inline-flex items-center gap-2 text-[13.5px] font-semibold rounded-full px-4 h-10 transition-colors"
                 style={{ color: BLUE }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f0f7fc')}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = BLUE_WASH)}
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
               >
                 <Send className="w-4 h-4" />
@@ -1756,6 +1980,19 @@ export function PressAlbumPackageBuilder() {
         </div>
       </div>
     </PressShell>
+
+    {/* Mock-only theme toggle — not part of the product surface */}
+    <button
+      type="button"
+      onClick={() => setMode((m) => (m === 'light' ? 'dark' : 'light'))}
+      className="fixed bottom-4 right-4 z-50 h-9 px-3.5 rounded-full inline-flex items-center gap-2 text-[12.5px] font-medium shadow-lg"
+      style={{ backgroundColor: CARD, color: INK, border: `1px solid ${HAIRLINE}` }}
+      data-testid="button-theme-toggle"
+    >
+      {mode === 'light' ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
+      {mode === 'light' ? 'View dark' : 'View light'}
+    </button>
+    </>
   );
 }
 

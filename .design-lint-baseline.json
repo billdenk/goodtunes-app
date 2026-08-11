@@ -23240,6 +23240,11 @@
     "snippet": "className=\"w-9 h-9 rounded-full flex items-center justify-center text-white\""
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
+    "snippet": "BLUE: \"#319ED8\","
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
     "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: FAINT }}>"
@@ -23367,7 +23372,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
-    "snippet": "className=\"flex items-center gap-1 text-[11.5px] transition-colors hover:text-slate-600\""
+    "snippet": "className=\"flex items-center gap-1 text-[11.5px] transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -23515,39 +23520,49 @@
     "snippet": "<div className=\"text-[12px]\" style={{ color: SUBINK, marginTop: 3 }}>"
   },
   {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
+    "snippet": "<span className=\"w-9 h-9 rounded-full flex items-center justify-center\" style={{ backgroundColor: CANVAS }}>"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
+    "snippet": "className=\"absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity\""
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "const BLUE = '#319ED8';"
+    "snippet": "blue: '#319ED8',"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<div className=\"flex items-center gap-2 text-[13px]\" style={{ color: SUBINK, marginTop: 28 }}>"
+    "snippet": "<div className=\"flex items-center gap-2 text-[13px]\" style={{ color: t.subink, marginTop: 28 }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<p className=\"text-[12px]\" style={{ color: FAINT, marginTop: 8, marginBottom: 16 }}>"
+    "snippet": "<p className=\"text-[12px]\" style={{ color: t.faint, marginTop: 8, marginBottom: 16 }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"text-[14.5px] font-semibold\" style={{ color: active ? BLUE : INK }}>"
+    "snippet": "<span className=\"text-[14.5px] font-semibold\" style={{ color: active ? t.blue : t.ink }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"text-[12px] mt-0.5\" style={{ color: SUBINK }}>"
+    "snippet": "<span className=\"text-[12px] mt-0.5\" style={{ color: t.subink }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<div className=\"text-[14px] font-semibold truncate\" style={{ color: INK }}>{print.name}</div>"
+    "snippet": "<div className=\"text-[14px] font-semibold truncate\" style={{ color: t.ink }}>{print.name}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 1, color: FAINT }}>"
+    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 1, color: t.faint }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23557,37 +23572,37 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"block text-[14px] font-semibold\" style={{ color: active ? BLUE : INK }}>"
+    "snippet": "<span className=\"block text-[14px] font-semibold\" style={{ color: active ? t.blue : t.ink }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"block text-[12px] mt-0.5\" style={{ color: SUBINK }}>"
+    "snippet": "<span className=\"block text-[12px] mt-0.5\" style={{ color: t.subink }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"text-[12px] font-semibold\" style={{ color: SUBINK }}>"
+    "snippet": "<span className=\"text-[12px] font-semibold\" style={{ color: t.subink }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"text-[12px]\" style={{ color: FAINT }}>"
+    "snippet": "<span className=\"text-[12px]\" style={{ color: t.faint }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"block text-[12.5px] font-semibold leading-tight\" style={{ color: on ? BLUE : INK }}>"
+    "snippet": "<span className=\"block text-[12.5px] font-semibold leading-tight\" style={{ color: on ? t.blue : t.ink }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"text-[18px] leading-none\" style={{ color: BLUE }}>+</span>"
+    "snippet": "<span className=\"text-[18px] leading-none\" style={{ color: t.blue }}>+</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"block text-[12.5px] font-semibold\" style={{ marginTop: 8, color: BLUE }}>"
+    "snippet": "<span className=\"block text-[12.5px] font-semibold\" style={{ marginTop: 8, color: t.blue }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23607,22 +23622,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"text-[13.5px] font-medium\" style={{ color: active ? BLUE : INK }}>"
+    "snippet": "<span className=\"text-[13.5px] font-medium\" style={{ color: active ? t.blue : t.ink }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<p className=\"text-[12.5px] mt-2\" style={{ color: FAINT }}>"
+    "snippet": "<p className=\"text-[12.5px] mt-2\" style={{ color: t.faint }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"text-[14px] font-semibold tabular-nums\" style={{ color: INK }}>"
+    "snippet": "<span className=\"text-[14px] font-semibold tabular-nums\" style={{ color: t.ink }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"text-[10px] uppercase ml-2 font-normal\" style={{ color: SUBINK, letterSpacing: '0.08em' }}>"
+    "snippet": "<span className=\"text-[10px] uppercase ml-2 font-normal\" style={{ color: t.subink, letterSpacing: '0.08em' }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -23632,32 +23647,42 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<p className=\"text-[12px] mt-3\" style={{ color: FAINT }}>"
+    "snippet": "<p className=\"text-[12px] mt-3\" style={{ color: t.faint }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"inline-flex items-center justify-center rounded-xl tabular-nums text-[16px] font-semibold\" style={{ width: 64, height: 44, backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, colo"
+    "snippet": "<span className=\"inline-flex items-center justify-center rounded-xl tabular-nums text-[16px] font-semibold\" style={{ width: 64, height: 44, backgroundColor: t.card, border: `1px solid ${t.hairline}`, "
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"text-[13px]\" style={{ color: SUBINK }}>"
+    "snippet": "<span className=\"text-[13px]\" style={{ color: t.subink }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<button type=\"button\" onClick={() => useDefaultTurnaround.mutate()} className=\"text-[12.5px] font-medium\" style={{ color: BLUE }}>"
+    "snippet": "<button type=\"button\" onClick={() => useDefaultTurnaround.mutate()} className=\"text-[12.5px] font-medium\" style={{ color: t.blue }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressMediaCatalog.tsx",
-    "snippet": "<span className=\"text-[12.5px] font-medium mt-2.5 truncate max-w-full\" style={{ color: active ? BLUE : INK }}>"
+    "snippet": "<span className=\"text-[12.5px] font-medium mt-2.5 truncate max-w-full\" style={{ color: active ? t.blue : t.ink }}>"
   },
   {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/PressMediaCatalog.tsx",
     "snippet": "className=\"w-3.5 h-3.5 rounded-full inline-block\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "BLUE: '#319ED8',"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "dark ? \"placeholder:text-white/30 focus:border-white/30\" : \"placeholder:text-slate-400 focus:border-slate-400\","
   },
   {
     "rule": "hardcoded-font-size",
@@ -24260,6 +24285,16 @@
     "snippet": "<button type=\"button\" aria-label=\"Close\" data-testid=\"button-template-close\" onClick={onClose} className=\"rounded-full flex items-center justify-center transition-colors\" style={{ width: 24, height: 2"
   },
   {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "\"absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full transition-opacity hover:bg-slate-100\","
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<PopoverTrigger asChild><button type=\"button\" className=\"inline-flex items-center gap-1 rounded-full px-2 h-6 text-[11px] font-semibold transition-colors hover:bg-slate-50\" style={{ color: meta.color "
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/PressPortal.tsx",
     "snippet": "const PD_BLUE = \"#319ED8\";"
@@ -24537,12 +24572,12 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/PressSpecs.tsx",
-    "snippet": "const BLUE = \"#319ED8\";"
+    "snippet": "blue: '#319ED8',"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressSpecs.tsx",
-    "snippet": "<span className=\"block text-[12px] font-medium mb-1.5\" style={{ color: SUBINK }}>"
+    "snippet": "<span className=\"block text-[12px] font-medium mb-1.5\" style={{ color: t.subink }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -24552,7 +24587,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressSpecs.tsx",
-    "snippet": "<span className=\"text-[12px] flex-shrink-0 pl-2\" style={{ color: FAINT }}>"
+    "snippet": "<span className=\"text-[12px] flex-shrink-0 pl-2\" style={{ color: t.faint }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -24562,17 +24597,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressSpecs.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold\" style={{ color: INK }}>"
+    "snippet": "<h2 className=\"text-[15px] font-semibold\" style={{ color: t.ink }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressSpecs.tsx",
-    "snippet": "<p className=\"text-[12px]\" style={{ color: FAINT }}>"
+    "snippet": "<p className=\"text-[12px]\" style={{ color: t.faint }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressSpecs.tsx",
-    "snippet": "<p className=\"mt-3 text-[12px] flex items-start gap-1.5\" style={{ color: FAINT }}>"
+    "snippet": "<p className=\"mt-3 text-[12px] flex items-start gap-1.5\" style={{ color: t.faint }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -24587,12 +24622,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressSpecs.tsx",
-    "snippet": "<h1 className=\"mt-6 text-[30px] font-semibold\" style={{ color: INK, letterSpacing: \"-0.02em\" }}>"
+    "snippet": "<h1 className=\"mt-6 text-[30px] font-semibold\" style={{ color: t.ink, letterSpacing: \"-0.02em\" }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressSpecs.tsx",
-    "snippet": "<p className=\"mt-2 text-[13.5px]\" style={{ color: SUBINK }}>"
+    "snippet": "<p className=\"mt-2 text-[13.5px]\" style={{ color: t.subink }}>"
   },
   {
     "rule": "hardcoded-font-size",

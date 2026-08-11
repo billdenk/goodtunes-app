@@ -55,6 +55,8 @@ import {
   ChevronDown,
   MoreHorizontal,
   Trash2,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import { Button } from '@workspace/goodtunes-design-system/components/ui/button';
 import {
@@ -68,21 +70,142 @@ import mrpLabelLogo from '../assets/mrp-logo.svg';
 import brandonPhoto from '../assets/brandon-seavers.png';
 
 // ── Per-press label branding (matches donor: black label, white logo always) ──
+// The MRP center-label logo is always white-on-black on the pressed disc, in
+// both themes — the vinyl product renders identically light or dark.
 const PRESS_LABEL_LOGO = mrpLabelLogo;
 const PRESS_LABEL_BG = '#0a0a0a';
 const PRESS_LABEL_LOGO_FILTER = 'invert(1) brightness(1.7)';
 
-// ─── Brand tokens (Apple calm visual language) ──────────────────────
-const BLUE = '#319ED8';
-const INK = '#1d1d1f';
-const SUBINK = '#6e6e73';
-const HAIRLINE = '#e6e6ea';
-const CANVAS = '#f5f5f7';
-const RAIL = '#f5f5f7';
-const READY = '#1c8a5b';
-const WARN = '#c98a00';
-const CRITICAL = '#e0245e';
-const PILL_SHADOW = '0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)';
+// ─── Theme-aware brand tokens (Apple calm visual language) ───────────
+// Theme-aware: light = the ratified press-portal palette (apple-canon light);
+// dark = apple-canon "Dark controls & surfaces" (charcoal, never navy). The
+// mock page carries a floating light/dark toggle (mock-only chrome). Light is
+// the default so this surface renders exactly as it did before.
+//
+// These are mutable bindings reassigned by applyTheme() at the top of the
+// page render, so the ~40 self-contained sub-components read the active theme
+// without threading a prop through every call site.
+type Theme = {
+  BLUE: string;
+  INK: string;
+  SUBINK: string;
+  FAINT: string;      // #a1a1a6 family — captions, muted icons
+  HAIRLINE: string;
+  CANVAS: string;
+  RAIL: string;
+  CARD: string;       // raised card surface (was bg-white / #ffffff)
+  CARD_SOFT: string;  // airier card wash (was #fbfbfd)
+  TRACK: string;      // segmented-control pill track (was #f0f0f2)
+  HEADER_BG: string;  // translucent sticky header
+  HOVER_WASH: string; // neutral hover tint (was hover:bg-slate-*)
+  BLUE_WASH: string;  // blue text-button hover wash (was #f0f7fc)
+  DASHED: string;     // dashed "add" cell border (was #c7c7cc)
+  RING: string;       // avatar/search ring (was slate-200)
+  CHECK_HALO: string; // selected-swatch check halo behind the tick
+  READY: string;
+  WARN: string;
+  CRITICAL: string;
+  PILL_SHADOW: string;
+};
+
+const THEMES: Record<'light' | 'dark', Theme> = {
+  light: {
+    BLUE: '#319ED8',
+    INK: '#1d1d1f',
+    SUBINK: '#6e6e73',
+    FAINT: '#a1a1a6',
+    HAIRLINE: '#e6e6ea',
+    CANVAS: '#f5f5f7',
+    RAIL: '#f5f5f7',
+    CARD: '#ffffff',
+    CARD_SOFT: '#fbfbfd',
+    TRACK: '#f0f0f2',
+    HEADER_BG: 'rgba(255,255,255,0.72)',
+    HOVER_WASH: 'rgba(0,0,0,0.05)',
+    BLUE_WASH: '#f0f7fc',
+    DASHED: '#c7c7cc',
+    RING: '#e2e8f0',
+    CHECK_HALO: 'rgba(255,255,255,0.85)',
+    READY: '#1c8a5b',
+    WARN: '#c98a00',
+    CRITICAL: '#e0245e',
+    PILL_SHADOW: '0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)',
+  },
+  dark: {
+    BLUE: '#319ED8',
+    INK: '#f5f5f7',
+    SUBINK: '#98989d',
+    FAINT: '#6e6e73',
+    HAIRLINE: 'rgba(255,255,255,0.10)',
+    CANVAS: '#161617',
+    RAIL: '#1c1c1e',
+    CARD: '#1e1e20',
+    CARD_SOFT: '#232326',
+    TRACK: '#26262a',
+    HEADER_BG: 'rgba(22,22,23,0.72)',
+    HOVER_WASH: 'rgba(255,255,255,0.05)',
+    BLUE_WASH: 'rgba(49,158,216,0.14)',
+    DASHED: 'rgba(255,255,255,0.22)',
+    RING: 'rgba(255,255,255,0.14)',
+    CHECK_HALO: 'rgba(0,0,0,0.55)',
+    READY: '#3fbf62',
+    WARN: '#d99a3d',
+    CRITICAL: '#f2555a',
+    PILL_SHADOW: '0 1px 3px rgba(0,0,0,0.4)',
+  },
+};
+
+// Mutable active-theme bindings (default light = unchanged render).
+let BLUE = THEMES.light.BLUE;
+let INK = THEMES.light.INK;
+let SUBINK = THEMES.light.SUBINK;
+let FAINT = THEMES.light.FAINT;
+let HAIRLINE = THEMES.light.HAIRLINE;
+let CANVAS = THEMES.light.CANVAS;
+let RAIL = THEMES.light.RAIL;
+let CARD = THEMES.light.CARD;
+let CARD_SOFT = THEMES.light.CARD_SOFT;
+let TRACK = THEMES.light.TRACK;
+let HEADER_BG = THEMES.light.HEADER_BG;
+let HOVER_WASH = THEMES.light.HOVER_WASH;
+let BLUE_WASH = THEMES.light.BLUE_WASH;
+let DASHED = THEMES.light.DASHED;
+let RING = THEMES.light.RING;
+let CHECK_HALO = THEMES.light.CHECK_HALO;
+let READY = THEMES.light.READY;
+let WARN = THEMES.light.WARN;
+let CRITICAL = THEMES.light.CRITICAL;
+let PILL_SHADOW = THEMES.light.PILL_SHADOW;
+
+// True while the dark theme is active — used to flip the GoodTunes wordmark
+// (dark asset only) to white via CSS invert on dark surfaces, per apple-canon
+// Logos. Light mode renders the wordmark as-is (no filter).
+let IS_DARK = false;
+
+function applyTheme(mode: 'light' | 'dark') {
+  IS_DARK = mode === 'dark';
+  const th = THEMES[mode];
+  BLUE = th.BLUE;
+  INK = th.INK;
+  SUBINK = th.SUBINK;
+  FAINT = th.FAINT;
+  HAIRLINE = th.HAIRLINE;
+  CANVAS = th.CANVAS;
+  RAIL = th.RAIL;
+  CARD = th.CARD;
+  CARD_SOFT = th.CARD_SOFT;
+  TRACK = th.TRACK;
+  HEADER_BG = th.HEADER_BG;
+  HOVER_WASH = th.HOVER_WASH;
+  BLUE_WASH = th.BLUE_WASH;
+  DASHED = th.DASHED;
+  RING = th.RING;
+  CHECK_HALO = th.CHECK_HALO;
+  READY = th.READY;
+  WARN = th.WARN;
+  CRITICAL = th.CRITICAL;
+  PILL_SHADOW = th.PILL_SHADOW;
+}
 
 function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
@@ -351,6 +474,21 @@ function usePrefersReducedMotion(): boolean {
     return () => mq.removeEventListener('change', onChange);
   }, []);
   return reduced;
+}
+
+// Stacks the sticky two-column body when the viewport gets too narrow for a
+// 360px rail + a comfortable price book (avoids horizontal overflow below 1440).
+function useNarrow(maxWidth = 1000): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia(`(max-width: ${maxWidth}px)`);
+    setNarrow(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setNarrow(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [maxWidth]);
+  return narrow;
 }
 
 const SPIN_DPS = 360 / 8000;
@@ -695,15 +833,17 @@ function NavRow({ label, icon: Icon, active }: PressNavItem) {
     <a
       href="#"
       onClick={(e) => e.preventDefault()}
-      className={cn('flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors', !active && 'hover:bg-slate-200')}
+      className="flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors"
       style={{
         fontWeight: active ? 600 : 500,
         color: active ? INK : SUBINK,
-        backgroundColor: active ? '#ffffff' : undefined,
+        backgroundColor: active ? CARD : undefined,
         boxShadow: active ? PILL_SHADOW : undefined,
       }}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.backgroundColor = HOVER_WASH; }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.backgroundColor = ''; }}
     >
-      <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? INK : '#a1a1a6' }} />
+      <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? INK : FAINT }} />
       <span className="truncate flex-1">{label}</span>
     </a>
   );
@@ -749,18 +889,18 @@ function UserMenu() {
               <button
                 key={m.label}
                 type="button"
-                className="w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] hover:bg-slate-50 transition-colors"
+                className="w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] transition-colors"
                 style={{ color: INK }}
               >
-                <Icon className="w-4 h-4 flex-shrink-0" style={{ color: '#a1a1a6' }} />
+                <Icon className="w-4 h-4 flex-shrink-0" style={{ color: FAINT }} />
                 <span>{m.label}</span>
               </button>
             );
           })}
         </div>
         <div className="py-1.5" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
-          <button type="button" className="w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] hover:bg-slate-50 transition-colors" style={{ color: INK }}>
-            <LogOut className="w-4 h-4 flex-shrink-0" style={{ color: '#a1a1a6' }} />
+          <button type="button" className="w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] transition-colors" style={{ color: INK }}>
+            <LogOut className="w-4 h-4 flex-shrink-0" style={{ color: FAINT }} />
             <span>Sign out</span>
           </button>
         </div>
@@ -775,7 +915,7 @@ function PressShell({ children }: { children: ReactNode }) {
       <header
         className="h-14 flex-shrink-0 flex items-center justify-between gap-4 pl-3 pr-6 sticky top-0 z-20"
         style={{
-          backgroundColor: 'rgba(255,255,255,0.72)',
+          backgroundColor: HEADER_BG,
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderBottom: `1px solid ${HAIRLINE}`,
@@ -794,7 +934,14 @@ function PressShell({ children }: { children: ReactNode }) {
             <MessageSquarePlus className="w-3.5 h-3.5" />
             Feedback
           </Button>
-          <button type="button" className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-slate-100" style={{ color: SUBINK }} aria-label="Notifications">
+          <button
+            type="button"
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+            style={{ color: SUBINK }}
+            aria-label="Notifications"
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = HOVER_WASH)}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          >
             <Bell className="w-4 h-4" />
           </button>
           <UserMenu />
@@ -805,10 +952,10 @@ function PressShell({ children }: { children: ReactNode }) {
         <aside className="w-60 flex-shrink-0 flex flex-col" style={{ backgroundColor: RAIL, borderRight: `1px solid ${HAIRLINE}` }}>
           <div className="px-2.5 py-2.5">
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: '#a1a1a6' }} />
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: FAINT }} />
               <input
-                className="w-full h-9 pl-8 pr-2 rounded-full bg-white text-[12.5px] placeholder:text-slate-400 focus:outline-none"
-                style={{ border: `1px solid ${HAIRLINE}`, color: INK }}
+                className="w-full h-9 pl-8 pr-2 rounded-full text-[12.5px] placeholder:text-slate-400 focus:outline-none"
+                style={{ border: `1px solid ${HAIRLINE}`, color: INK, backgroundColor: CARD }}
                 placeholder="Search…  ⌘K"
                 readOnly
               />
@@ -820,10 +967,15 @@ function PressShell({ children }: { children: ReactNode }) {
             ))}
           </nav>
           <div className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
-            <span className="text-[9px] uppercase tracking-wider font-bold flex-shrink-0" style={{ color: '#a1a1a6' }}>
+            <span className="text-[9px] uppercase tracking-wider font-bold flex-shrink-0" style={{ color: FAINT }}>
               Powered by
             </span>
-            <img src={goodtunesLogo} alt="GoodTunes" className="h-5 w-auto" />
+            <img
+              src={goodtunesLogo}
+              alt="GoodTunes"
+              className="h-5 w-auto"
+              style={{ filter: IS_DARK ? 'invert(1) brightness(2)' : undefined }}
+            />
           </div>
         </aside>
 
@@ -838,14 +990,14 @@ function PageHeading({ lead, rest }: { lead: string; rest: string }) {
   return (
     <h1 className="tracking-tight" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.05, marginTop: 10 }}>
       <span style={{ color: INK }}>{lead} </span>
-      <span style={{ color: '#a1a1a6', fontWeight: 600 }}>{rest}</span>
+      <span style={{ color: FAINT, fontWeight: 600 }}>{rest}</span>
     </h1>
   );
 }
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#a1a1a6' }}>
+    <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT }}>
       {children}
     </div>
   );
@@ -854,7 +1006,7 @@ function SectionLabel({ children }: { children: ReactNode }) {
 // ─── Product-type segmented control (disc icon per option) ───────────
 function ProductTypeControl({ value, onChange }: { value: ProductTypeId; onChange: (v: ProductTypeId) => void }) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-full p-1" style={{ backgroundColor: '#f0f0f2' }} data-testid="control-product-type">
+    <div className="inline-flex items-center gap-1 rounded-full p-1" style={{ backgroundColor: TRACK }} data-testid="control-product-type">
       {PRODUCT_TYPES.map((pt) => {
         const active = pt.id === value;
         return (
@@ -870,11 +1022,11 @@ function ProductTypeControl({ value, onChange }: { value: ProductTypeId; onChang
               fontSize: 13.5,
               fontWeight: 600,
               color: active ? INK : SUBINK,
-              backgroundColor: active ? '#ffffff' : 'transparent',
+              backgroundColor: active ? CARD : 'transparent',
               boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : undefined,
             }}
           >
-            {pt.discs > 1 ? <Layers className="w-4 h-4" style={{ color: active ? INK : '#a1a1a6' }} /> : <Disc className="w-4 h-4" style={{ color: active ? INK : '#a1a1a6' }} />}
+            {pt.discs > 1 ? <Layers className="w-4 h-4" style={{ color: active ? INK : FAINT }} /> : <Disc className="w-4 h-4" style={{ color: active ? INK : FAINT }} />}
             {pt.name}
           </button>
         );
@@ -894,7 +1046,7 @@ const PACKAGE_ITEMS: Array<{ icon: typeof Disc; label: string; sub: string }> = 
 function PackageContentsCard({ product }: { product: ProductType }) {
   const items = product.discs > 1 ? [{ icon: Disc, label: `${product.discs} pressed records`, sub: 'Grooved & sleeved' }, ...PACKAGE_ITEMS.slice(1)] : PACKAGE_ITEMS;
   return (
-    <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${HAIRLINE}` }}>
+    <div className="rounded-2xl p-5" style={{ border: `1px solid ${HAIRLINE}`, backgroundColor: CARD }}>
       <div className="flex items-center gap-2">
         <Package className="w-4 h-4" style={{ color: BLUE }} />
         <span className="text-[13.5px] font-semibold" style={{ color: INK }}>
@@ -909,14 +1061,14 @@ function PackageContentsCard({ product }: { product: ProductType }) {
           const Icon = it.icon;
           return (
             <div key={it.label} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5" style={{ backgroundColor: CANVAS }}>
-              <span className="w-8 h-8 rounded-lg bg-white flex items-center justify-center flex-shrink-0" style={{ border: `1px solid ${HAIRLINE}` }}>
+              <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ border: `1px solid ${HAIRLINE}`, backgroundColor: CARD }}>
                 <Icon className="w-4 h-4" style={{ color: SUBINK }} />
               </span>
               <div className="min-w-0">
                 <div className="text-[12.5px] font-semibold truncate" style={{ color: INK }}>
                   {it.label}
                 </div>
-                <div className="text-[11px] truncate" style={{ color: '#a1a1a6' }}>
+                <div className="text-[11px] truncate" style={{ color: FAINT }}>
                   {it.sub}
                 </div>
               </div>
@@ -941,7 +1093,7 @@ function TurnaroundCard({
   onMax: (v: string) => void;
 }) {
   return (
-    <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${HAIRLINE}` }}>
+    <div className="rounded-2xl p-5" style={{ border: `1px solid ${HAIRLINE}`, backgroundColor: CARD }}>
       <SectionLabel>Turnaround</SectionLabel>
       <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 4, lineHeight: 1.4 }}>
         Weeks from approved test pressing to ship.
@@ -953,9 +1105,9 @@ function TurnaroundCard({
           inputMode="numeric"
           data-testid="input-turnaround-min"
           className="text-[14px] text-center tabular-nums focus:outline-none focus:border-slate-400 transition-colors"
-          style={{ width: 56, height: 40, border: `1px solid ${HAIRLINE}`, borderRadius: 10, color: INK, background: '#fff', fontWeight: 600 }}
+          style={{ width: 56, height: 40, border: `1px solid ${HAIRLINE}`, borderRadius: 10, color: INK, background: CARD, fontWeight: 600 }}
         />
-        <span className="text-[13px]" style={{ color: '#a1a1a6' }}>
+        <span className="text-[13px]" style={{ color: FAINT }}>
           –
         </span>
         <input
@@ -964,7 +1116,7 @@ function TurnaroundCard({
           inputMode="numeric"
           data-testid="input-turnaround-max"
           className="text-[14px] text-center tabular-nums focus:outline-none focus:border-slate-400 transition-colors"
-          style={{ width: 56, height: 40, border: `1px solid ${HAIRLINE}`, borderRadius: 10, color: INK, background: '#fff', fontWeight: 600 }}
+          style={{ width: 56, height: 40, border: `1px solid ${HAIRLINE}`, borderRadius: 10, color: INK, background: CARD, fontWeight: 600 }}
         />
         <span className="text-[13px] font-medium" style={{ color: SUBINK }}>
           weeks
@@ -1010,8 +1162,8 @@ function ColorGroupCard({
       }}
       aria-pressed={active}
       data-testid={`colorgroup-${group.id}`}
-      className="group relative rounded-2xl bg-white text-left transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
-      style={{ padding: 14, border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
+      className="group relative rounded-2xl text-left transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
+      style={{ padding: 14, border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, backgroundColor: CARD }}
     >
       <div
         className="absolute opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
@@ -1032,10 +1184,10 @@ function ColorGroupCard({
       <div className="text-[13.5px] font-semibold leading-tight" style={{ color: active ? BLUE : INK }}>
         {group.name}
       </div>
-      <div className="text-[11.5px]" style={{ marginTop: 2, color: '#a1a1a6' }}>
+      <div className="text-[11.5px]" style={{ marginTop: 2, color: FAINT }}>
         {group.colors.length} {group.colors.length === 1 ? 'color' : 'colors'}
       </div>
-      <div className="text-[11.5px]" style={{ marginTop: 1, color: count === 0 ? '#c2410c' : '#a1a1a6' }}>
+      <div className="text-[11.5px]" style={{ marginTop: 1, color: count === 0 ? '#c2410c' : FAINT }}>
         {count === 0 ? 'No prices yet' : `${count} of ${RUN_QTYS.length} runs priced`}
       </div>
     </div>
@@ -1057,7 +1209,7 @@ const FIELD_INPUT: React.CSSProperties = {
   borderRadius: 10,
   padding: '0 12px',
   color: INK,
-  background: '#fff',
+  background: CARD,
 };
 
 function FieldLabel({ children }: { children: ReactNode }) {
@@ -1154,7 +1306,7 @@ function GroupEditorPopover({
               onSave(name.trim());
               setOpen(false);
             }}
-            className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-slate-100 disabled:opacity-40"
+            className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors disabled:opacity-40"
             style={{ color: BLUE }}
             data-testid={`button-save-group-${group.id}`}
           >
@@ -1201,7 +1353,7 @@ function ColorField({
             if (/^#[0-9A-Fa-f]{6}$/.test(v)) onChange(v);
           }}
           className="font-mono text-[13px] focus:outline-none"
-          style={{ width: 100, height: 38, border: `1px solid ${HAIRLINE}`, borderRadius: 10, padding: '0 12px', color: INK, background: '#fff' }}
+          style={{ width: 100, height: 38, border: `1px solid ${HAIRLINE}`, borderRadius: 10, padding: '0 12px', color: INK, background: CARD }}
           aria-label={`${label} hex`}
           data-testid={`${testId}-hex`}
         />
@@ -1223,8 +1375,8 @@ function SizeChip({ size, active, onToggle }: { size: string; active: boolean; o
         padding: '8px 18px',
         fontSize: 13.5,
         fontWeight: 600,
-        color: active ? '#ffffff' : INK,
-        backgroundColor: active ? BLUE : '#fff',
+        color: active ? CARD : INK,
+        backgroundColor: active ? BLUE : CARD,
         border: active ? `1px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
       }}
     >
@@ -1325,7 +1477,7 @@ function SwatchEditorPopover({
             <div className="text-[15px] font-semibold tracking-tight" style={{ color: INK }}>
               {edit ? (
                 <>
-                  Edit color. <span style={{ color: '#a1a1a6', fontWeight: 600 }}>{edit.name}.</span>
+                  Edit color. <span style={{ color: FAINT, fontWeight: 600 }}>{edit.name}.</span>
                 </>
               ) : (
                 'New color'
@@ -1354,7 +1506,7 @@ function SwatchEditorPopover({
             </div>
 
             {!isBlack && (
-              <div className="rounded-xl bg-white" style={{ border: `1px solid ${HAIRLINE}`, padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="rounded-xl" style={{ border: `1px solid ${HAIRLINE}`, backgroundColor: CARD, padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <ColorField
                   label={kind === 'translucent' ? 'Translucent tint' : isSplatter ? 'Base color' : 'Vinyl color'}
                   value={base}
@@ -1377,8 +1529,8 @@ function SwatchEditorPopover({
               type="button"
               onClick={() => setUploaded((v) => !v)}
               data-testid="button-upload-swatch"
-              className="w-full rounded-xl flex flex-col items-center justify-center text-center transition-colors hover:bg-slate-50 focus:outline-none"
-              style={{ padding: '16px 12px', border: `1px dashed ${uploaded ? BLUE : '#d0d0d5'}`, background: uploaded ? '#f0f7fc' : '#fff' }}
+              className="w-full rounded-xl flex flex-col items-center justify-center text-center transition-colors focus:outline-none"
+              style={{ padding: '16px 12px', border: `1px dashed ${uploaded ? BLUE : DASHED}`, background: uploaded ? BLUE_WASH : CARD }}
             >
               {uploaded ? (
                 <>
@@ -1392,7 +1544,7 @@ function SwatchEditorPopover({
                 </>
               ) : (
                 <>
-                  <UploadCloud className="w-4 h-4" style={{ color: '#a1a1a6' }} />
+                  <UploadCloud className="w-4 h-4" style={{ color: FAINT }} />
                   <span className="text-[12.5px] font-semibold" style={{ color: INK, marginTop: 6 }}>
                     Upload a swatch
                   </span>
@@ -1440,7 +1592,7 @@ function SwatchEditorPopover({
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-slate-100"
+            className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors"
             style={{ color: SUBINK }}
             data-testid="button-color-cancel"
           >
@@ -1498,10 +1650,10 @@ function AddGroupPopover({ onAdd, trigger }: { onAdd: (name: string) => void; tr
           </div>
         </div>
         <div className="flex items-center justify-end gap-1" style={{ padding: '12px 18px', borderTop: `1px solid ${HAIRLINE}` }}>
-          <button type="button" onClick={() => setOpen(false)} className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-slate-100" style={{ color: SUBINK }}>
+          <button type="button" onClick={() => setOpen(false)} className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors" style={{ color: SUBINK }}>
             Cancel
           </button>
-          <button type="button" onClick={submit} disabled={!name.trim()} className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-slate-100 disabled:opacity-40" style={{ color: BLUE }} data-testid="button-add-group-confirm">
+          <button type="button" onClick={submit} disabled={!name.trim()} className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors disabled:opacity-40" style={{ color: BLUE }} data-testid="button-add-group-confirm">
             Add type
           </button>
         </div>
@@ -1511,14 +1663,18 @@ function AddGroupPopover({ onAdd, trigger }: { onAdd: (name: string) => void; tr
 }
 
 // ─── The mode picker for a single run cell (three-way, no eye-guessing) ─
-const MODE_META: Record<PriceMode, { label: string; hint: string; icon: typeof DollarSign; color: string }> = {
-  priced: { label: 'Priced', hint: 'Show artists this package price', icon: DollarSign, color: READY },
-  quote: { label: 'Quote on request', hint: 'Artist asks; you reply with a number', icon: HelpCircle, color: WARN },
-  off: { label: 'Not offered', hint: 'This run size is hidden from artists', icon: MinusCircle, color: '#a1a1a6' },
-};
+// Built per-render so the status colors track the active theme.
+function modeMeta(): Record<PriceMode, { label: string; hint: string; icon: typeof DollarSign; color: string }> {
+  return {
+    priced: { label: 'Priced', hint: 'Show artists this package price', icon: DollarSign, color: READY },
+    quote: { label: 'Quote on request', hint: 'Artist asks; you reply with a number', icon: HelpCircle, color: WARN },
+    off: { label: 'Not offered', hint: 'This run size is hidden from artists', icon: MinusCircle, color: FAINT },
+  };
+}
 
 function RunModePicker({ mode, onChange }: { mode: PriceMode; onChange: (m: PriceMode) => void }) {
   const [open, setOpen] = useState(false);
+  const MODE_META = modeMeta();
   const meta = MODE_META[mode];
   const MetaIcon = meta.icon;
   return (
@@ -1527,12 +1683,12 @@ function RunModePicker({ mode, onChange }: { mode: PriceMode; onChange: (m: Pric
         <button
           type="button"
           data-testid="button-run-mode"
-          className="flex items-center gap-1.5 rounded-full px-2.5 h-7 text-[11.5px] font-semibold transition-colors hover:bg-slate-50"
-          style={{ border: `1px solid ${HAIRLINE}`, color: meta.color, backgroundColor: '#fff' }}
+          className="flex items-center gap-1.5 rounded-full px-2.5 h-7 text-[11.5px] font-semibold transition-colors"
+          style={{ border: `1px solid ${HAIRLINE}`, color: meta.color, backgroundColor: CARD }}
         >
           <MetaIcon className="w-3.5 h-3.5" />
           <span>{meta.label}</span>
-          <ChevronDown className="w-3 h-3" style={{ color: '#a1a1a6' }} />
+          <ChevronDown className="w-3 h-3" style={{ color: FAINT }} />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" sideOffset={6} className="w-64 p-1.5 rounded-2xl" style={{ border: `1px solid ${HAIRLINE}` }} data-testid="menu-run-mode">
@@ -1548,10 +1704,10 @@ function RunModePicker({ mode, onChange }: { mode: PriceMode; onChange: (m: Pric
                 onChange(m);
                 setOpen(false);
               }}
-              className="w-full flex items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-slate-50"
+              className="w-full flex items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors"
               data-testid={`run-mode-${m}`}
             >
-              <span className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: on ? '#f0f7fc' : CANVAS }}>
+              <span className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: on ? BLUE_WASH : CANVAS }}>
                 <Icon className="w-3.5 h-3.5" style={{ color: mm.color }} />
               </span>
               <span className="min-w-0 flex-1">
@@ -1589,7 +1745,7 @@ function RunCard({
   onMode: (m: PriceMode) => void;
   onPrice: (v: string) => void;
 }) {
-  const meta = MODE_META[cell.mode];
+  const meta = modeMeta()[cell.mode];
   const isPriced = cell.mode === 'priced';
   const isOff = cell.mode === 'off';
   return (
@@ -1597,7 +1753,7 @@ function RunCard({
       className="rounded-2xl p-4 transition-colors"
       style={{
         border: isPriced ? `1px solid ${HAIRLINE}` : `1px dashed ${HAIRLINE}`,
-        backgroundColor: isOff ? CANVAS : '#fff',
+        backgroundColor: isOff ? CANVAS : CARD,
         opacity: isOff ? 0.78 : 1,
       }}
       data-testid={`run-card-${qty}`}
@@ -1607,7 +1763,7 @@ function RunCard({
           <div className="text-[19px] font-bold tabular-nums tracking-tight" style={{ color: INK }}>
             {formatQty(qty)}
           </div>
-          <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6' }}>
+          <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: FAINT }}>
             units per run
           </div>
         </div>
@@ -1619,7 +1775,7 @@ function RunCard({
       <div style={{ marginTop: 14, minHeight: 44 }}>
         {isPriced ? (
           <label className="relative flex items-center" data-testid={`price-field-${qty}`}>
-            <span className="absolute left-3 text-[15px] font-semibold" style={{ color: '#a1a1a6' }}>
+            <span className="absolute left-3 text-[15px] font-semibold" style={{ color: FAINT }}>
               $
             </span>
             <input
@@ -1629,14 +1785,14 @@ function RunCard({
               placeholder="0.00"
               data-testid={`input-price-${qty}`}
               className="w-full h-11 pl-7 pr-14 rounded-xl text-[17px] font-semibold tabular-nums focus:outline-none focus:border-slate-400 transition-colors"
-              style={{ border: `1px solid ${HAIRLINE}`, color: INK, background: '#fff' }}
+              style={{ border: `1px solid ${HAIRLINE}`, color: INK, background: CARD }}
             />
-            <span className="absolute right-3 text-[11px] font-medium" style={{ color: '#a1a1a6' }}>
+            <span className="absolute right-3 text-[11px] font-medium" style={{ color: FAINT }}>
               / unit
             </span>
           </label>
         ) : (
-          <div className="h-11 rounded-xl flex items-center px-3 text-[13px]" style={{ border: `1px dashed ${HAIRLINE}`, color: SUBINK, backgroundColor: isOff ? '#fff' : CANVAS }}>
+          <div className="h-11 rounded-xl flex items-center px-3 text-[13px]" style={{ border: `1px dashed ${HAIRLINE}`, color: SUBINK, backgroundColor: isOff ? CARD : CANVAS }}>
             {cell.mode === 'quote' ? 'Priced on request' : 'Hidden from artists'}
           </div>
         )}
@@ -1655,9 +1811,9 @@ type TemplateFile = { key: string; label: string; sub: string; file?: string };
 function TemplateRow({ tf, onAttach, onRemove }: { tf: TemplateFile; onAttach: () => void; onRemove: () => void }) {
   const has = !!tf.file;
   return (
-    <div className="flex items-center gap-3 rounded-xl px-3.5 py-3 bg-white" style={{ border: `1px solid ${HAIRLINE}` }} data-testid={`template-${tf.key}`}>
+    <div className="flex items-center gap-3 rounded-xl px-3.5 py-3" style={{ border: `1px solid ${HAIRLINE}`, backgroundColor: CARD }} data-testid={`template-${tf.key}`}>
       <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: CANVAS }}>
-        <FileText className="w-4 h-4" style={{ color: has ? BLUE : '#a1a1a6' }} />
+        <FileText className="w-4 h-4" style={{ color: has ? BLUE : FAINT }} />
       </span>
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-semibold" style={{ color: INK }}>
@@ -1668,7 +1824,7 @@ function TemplateRow({ tf, onAttach, onRemove }: { tf: TemplateFile; onAttach: (
             {tf.file}
           </div>
         ) : (
-          <div className="text-[11.5px]" style={{ color: '#a1a1a6' }}>
+          <div className="text-[11.5px]" style={{ color: FAINT }}>
             {tf.sub}
           </div>
         )}
@@ -1678,7 +1834,7 @@ function TemplateRow({ tf, onAttach, onRemove }: { tf: TemplateFile; onAttach: (
           type="button"
           onClick={onRemove}
           data-testid={`template-remove-${tf.key}`}
-          className="text-[12.5px] font-semibold rounded-full px-3 h-8 transition-colors hover:bg-slate-100"
+          className="text-[12.5px] font-semibold rounded-full px-3 h-8 transition-colors"
           style={{ color: SUBINK }}
         >
           Replace
@@ -1691,7 +1847,7 @@ function TemplateRow({ tf, onAttach, onRemove }: { tf: TemplateFile; onAttach: (
             data-testid={`template-upload-${tf.key}`}
             className="flex items-center gap-1.5 text-[12.5px] font-semibold rounded-full px-3 h-8 transition-colors"
             style={{ color: BLUE }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f0f7fc')}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = BLUE_WASH)}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             <UploadCloud className="w-3.5 h-3.5" />
@@ -1701,7 +1857,7 @@ function TemplateRow({ tf, onAttach, onRemove }: { tf: TemplateFile; onAttach: (
             type="button"
             onClick={onAttach}
             data-testid={`template-link-${tf.key}`}
-            className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-slate-100"
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
             style={{ color: SUBINK }}
             aria-label="Paste a link"
           >
@@ -1715,6 +1871,12 @@ function TemplateRow({ tf, onAttach, onRemove }: { tf: TemplateFile; onAttach: (
 
 // ─── Main page ───────────────────────────────────────────────────────
 export function PressPackagePricing() {
+  // Theme-aware: default light (unchanged render). Reassign the active-theme
+  // token bindings synchronously before any child renders this pass.
+  const [mode, setMode] = useState<'light' | 'dark'>('light');
+  applyTheme(mode);
+  const narrow = useNarrow(1000);
+
   const [productTypeId, setProductTypeId] = useState<ProductTypeId>('lp12');
   const [activeGroupId, setActiveGroupId] = useState<string>('black');
   const [book, setBook] = useState<PriceBook>(() => seedBook());
@@ -1808,6 +1970,7 @@ export function PressPackagePricing() {
   const handleSave = () => setDirty(false);
 
   return (
+    <>
     <PressShell>
       <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
         {/* Page header + save */}
@@ -1843,7 +2006,7 @@ export function PressPackagePricing() {
           <SectionLabel>Product type</SectionLabel>
           <div className="flex items-center gap-4" style={{ marginTop: 10 }}>
             <ProductTypeControl value={productTypeId} onChange={setProductTypeId} />
-            <span className="text-[12.5px]" style={{ color: '#a1a1a6' }}>
+            <span className="text-[12.5px]" style={{ color: FAINT }}>
               {product.format}
             </span>
           </div>
@@ -1852,11 +2015,11 @@ export function PressPackagePricing() {
         <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '28px 0' }} />
 
         {/* Two-column body */}
-        <div className="grid gap-8" style={{ gridTemplateColumns: '360px 1fr' }}>
+        <div className="grid gap-8" style={{ gridTemplateColumns: narrow ? '1fr' : '360px 1fr' }}>
           {/* LEFT — disc preview + package contents + turnaround */}
-          <div className="flex flex-col gap-5" style={{ position: 'sticky', top: 24, alignSelf: 'start' }}>
-            <div className="rounded-2xl bg-white overflow-hidden" style={{ border: `1px solid ${HAIRLINE}` }}>
-              <div className="flex items-center justify-center px-6 pt-8 pb-6" style={{ background: 'linear-gradient(180deg, #fbfbfd 0%, #ffffff 100%)' }}>
+          <div className="flex flex-col gap-5" style={narrow ? undefined : { position: 'sticky', top: 24, alignSelf: 'start' }}>
+            <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${HAIRLINE}`, backgroundColor: CARD }}>
+              <div className="flex items-center justify-center px-6 pt-8 pb-6" style={{ background: `linear-gradient(180deg, ${CARD_SOFT} 0%, ${CARD} 100%)` }}>
                 <DiscStage swatch={previewSwatch} product={product} />
               </div>
               <div className="px-5 py-4 flex items-center gap-3" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
@@ -1878,7 +2041,7 @@ export function PressPackagePricing() {
             {/* Pick a type */}
             <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
               <span style={{ color: INK }}>Pick a type. </span>
-              <span style={{ color: '#a1a1a6' }}>Each keeps its own package prices.</span>
+              <span style={{ color: FAINT }}>Each keeps its own package prices.</span>
             </h2>
             <div className="grid grid-cols-4 gap-3" style={{ marginTop: 12 }}>
               {groups.map((g) => (
@@ -1902,7 +2065,7 @@ export function PressPackagePricing() {
                   data-testid="button-add-colorgroup"
                   className="flex items-center gap-1.5 text-[12.5px] font-semibold rounded-full px-3 h-8 transition-colors"
                   style={{ color: BLUE, marginTop: 10 }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f0f7fc')}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = BLUE_WASH)}
                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -1916,11 +2079,11 @@ export function PressPackagePricing() {
             {/* Pick a color */}
             <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
               <span style={{ color: INK }}>Pick a color. </span>
-              <span style={{ color: '#a1a1a6' }}>Or add a new one.</span>
+              <span style={{ color: FAINT }}>Or add a new one.</span>
             </h2>
             <p className="text-[12.5px]" style={{ marginTop: 6 }}>
               <span className="font-semibold" style={{ color: INK }}>{activeGroup.name}</span>
-              <span style={{ color: '#a1a1a6' }}> · {activeGroup.colors.length} colors</span>
+              <span style={{ color: FAINT }}> · {activeGroup.colors.length} colors</span>
             </p>
             <div className="grid grid-cols-4 gap-3" style={{ marginTop: 12 }}>
               {activeGroup.colors.map((c) => {
@@ -1939,8 +2102,8 @@ export function PressPackagePricing() {
                     }}
                     aria-pressed={on}
                     data-testid={`color-${c.id}`}
-                    className="group relative rounded-2xl bg-white text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
-                    style={{ padding: '16px 10px 12px', border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
+                    className="group relative rounded-2xl text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
+                    style={{ padding: '16px 10px 12px', border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, backgroundColor: CARD }}
                   >
                     <div
                       className="absolute opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
@@ -1960,7 +2123,7 @@ export function PressPackagePricing() {
                       {on && (
                         <span
                           className="absolute flex items-center justify-center rounded-full"
-                          style={{ width: 18, height: 18, backgroundColor: 'rgba(255,255,255,0.85)', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+                          style={{ width: 18, height: 18, backgroundColor: CHECK_HALO, top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
                         >
                           <Check className="w-3 h-3" style={{ color: BLUE }} strokeWidth={3} />
                         </span>
@@ -1981,7 +2144,7 @@ export function PressPackagePricing() {
                     tabIndex={0}
                     data-testid="button-add-color"
                     className="rounded-2xl text-center transition-all hover:-translate-y-px focus:outline-none cursor-pointer flex flex-col items-center justify-center"
-                    style={{ padding: '16px 10px 12px', border: `1.5px dashed #c7c7cc`, minHeight: 104 }}
+                    style={{ padding: '16px 10px 12px', border: `1.5px dashed ${DASHED}`, minHeight: 104 }}
                   >
                     <span className="flex items-center justify-center rounded-full" style={{ width: 32, height: 32, border: `1.5px solid ${BLUE}` }}>
                       <Plus className="w-4 h-4" style={{ color: BLUE }} />
@@ -1999,11 +2162,11 @@ export function PressPackagePricing() {
             {/* Price book */}
             <h2 className="tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, fontWeight: 600 }}>
               <span style={{ color: INK }}>Name your price. </span>
-              <span style={{ color: '#a1a1a6' }}>Per package, per run.</span>
+              <span style={{ color: FAINT }}>Per package, per run.</span>
             </h2>
             <p className="text-[12.5px]" style={{ marginTop: 6 }}>
               <span className="font-semibold" style={{ color: INK }}>{activeGroup.name}</span>
-              <span style={{ color: '#a1a1a6' }}>
+              <span style={{ color: FAINT }}>
                 {activeGroup.colors.length > 0
                   ? ` · one price covers all ${activeGroup.colors.length} colors`
                   : ' · add colors in the step above'}
@@ -2032,6 +2195,19 @@ export function PressPackagePricing() {
         </div>
       </div>
     </PressShell>
+
+    {/* Mock-only theme toggle — not part of the product surface */}
+    <button
+      type="button"
+      onClick={() => setMode((m) => (m === 'light' ? 'dark' : 'light'))}
+      className="fixed bottom-4 right-4 z-50 h-9 px-3.5 rounded-full inline-flex items-center gap-2 text-[12.5px] font-medium shadow-lg"
+      style={{ backgroundColor: CARD, color: INK, border: `1px solid ${HAIRLINE}` }}
+      data-testid="button-theme-toggle"
+    >
+      {mode === 'light' ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
+      {mode === 'light' ? 'View dark' : 'View light'}
+    </button>
+    </>
   );
 }
 
