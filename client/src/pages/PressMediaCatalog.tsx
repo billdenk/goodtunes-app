@@ -537,11 +537,20 @@ export function CdCatalogBody({
     <fieldset disabled={!canEdit} data-testid="panel-cd-catalog">
       <div className="h-px w-full" style={{ backgroundColor: t.hairline, margin: '28px 0' }} />
 
-      {/* Two-column body — everything below the rule is CD-specific */}
-      <div className="grid gap-16" style={{ gridTemplateColumns: 'minmax(0, 1fr) 620px' }}>
+      {/* Two-column body — everything below the rule is CD-specific.
+          Grid wraps (single column) below ~1100px so the sticky product and
+          the choices don't overflow horizontally on narrow viewports. */}
+      <div className="cd-build-grid grid gap-16">
+        <style>{`
+          .cd-build-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 620px); }
+          @media (max-width: 1100px) {
+            .cd-build-grid { grid-template-columns: minmax(0, 1fr); }
+            .cd-build-grid > .cd-build-product { position: static !important; }
+          }
+        `}</style>
         {/* Pinned product — sticky left, the case choice IS this object */}
         <div
-          className="flex flex-col items-center justify-center"
+          className="cd-build-product flex flex-col items-center justify-center"
           style={{ position: 'sticky', top: 24, alignSelf: 'start', minHeight: 545, paddingBottom: 38 }}
         >
           <CdRender caseName={cs} print={print} spots={spotHexes} logoUrl={logoUrl} />
@@ -1087,11 +1096,20 @@ export function CassetteCatalogBody({
     <fieldset disabled={!canEdit} data-testid="panel-cassette-catalog">
       <div className="h-px w-full" style={{ backgroundColor: t.hairline, margin: '28px 0' }} />
 
-      {/* Two-column body — everything below the rule is cassette-specific */}
-      <div className="grid gap-16" style={{ gridTemplateColumns: 'minmax(0, 1fr) 620px' }}>
+      {/* Two-column body — everything below the rule is cassette-specific.
+          Grid wraps (single column) below ~1100px so the sticky product and
+          the choices don't overflow horizontally on narrow viewports. */}
+      <div className="cassette-build-grid grid gap-16">
+        <style>{`
+          .cassette-build-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 620px); }
+          @media (max-width: 1100px) {
+            .cassette-build-grid { grid-template-columns: minmax(0, 1fr); }
+            .cassette-build-grid > .cassette-build-product { position: static !important; }
+          }
+        `}</style>
         {/* Pinned product */}
         <div
-          className="flex flex-col items-center justify-center"
+          className="cassette-build-product flex flex-col items-center justify-center"
           style={{ position: 'sticky', top: 24, alignSelf: 'start', minHeight: 545, paddingBottom: 38 }}
         >
           <CassetteRender caseName={cs} shell={shell} imprint={imprint} logoUrl={logoUrl} />

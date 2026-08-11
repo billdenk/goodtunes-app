@@ -37,4 +37,10 @@
     in the rail.
     - Catalog tab itself is the pull-down (wired open/close) — no separate
     heading pull-down.
-    
+
+## Theme-aware update (Aug 11 2026)
+All files in this drop now ship a THEMES map with BOTH light and dark token
+sets (default mode preserves each file's previous look byte-for-byte). Wire
+the mode to your shell's active theme; the floating "View light / View dark"
+pill is mock-only chrome — do not ship it. See style-guide/apple-canon.md
+"Theming & breakpoints" for the standing rules and acceptance gate.
