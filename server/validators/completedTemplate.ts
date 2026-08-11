@@ -454,6 +454,12 @@ export function validateCompletedComponent(
   // 1. Page / face count.
   const isLabels = spec.id === "labels";
   const unit = isLabels ? "face" : "page";
+  // Task #3011 — when the expected values were measured from the press's
+  // uploaded template file, say so ("vs MRP template on file") instead of
+  // the generic vendor-template wording.
+  const measuredLabel = spec.measuredFromLabel?.trim() || "the press";
+  const sizeFromMeasured = spec.sizeSource === "measured";
+  const pagesFromMeasured = spec.pagesSource === "measured";
   if (spec.expectedPages <= 0) {
     // No authoritative page count for this slot (e.g. a booklet whose page
     // count isn't specified in the press catalog) — advisory only.
@@ -478,14 +484,14 @@ export function validateCompletedComponent(
       key: "tmpl.pages",
       label: isLabels ? "Faces" : "Pages",
       status: "pass",
-      message: `${scan.pageCount} ${unit}${scan.pageCount === 1 ? "" : "s"} — matches.`,
+      message: `${scan.pageCount} ${unit}${scan.pageCount === 1 ? "" : "s"} — matches${pagesFromMeasured ? ` the ${measuredLabel} template on file` : ""}.`,
     });
   } else {
     checks.push({
       key: "tmpl.pages",
       label: isLabels ? "Faces" : "Pages",
       status: "fail",
-      message: `${scan.pageCount} ${unit}${scan.pageCount === 1 ? "" : "s"} — expected ${spec.expectedPages}.`,
+      message: `${scan.pageCount} ${unit}${scan.pageCount === 1 ? "" : "s"} — expected ${spec.expectedPages}${pagesFromMeasured ? ` (from the ${measuredLabel} template on file)` : ""}.`,
     });
   }
 
@@ -501,7 +507,7 @@ export function validateCompletedComponent(
       key: "tmpl.size",
       label: "Artboard size",
       status: "warn",
-      message: `Couldn't read a page size — expected ${dim(target)}${exact ? " (vendor template)" : " (computed finished + bleed)"}.`,
+      message: `Couldn't read a page size — expected ${dim(target)}${exact ? (sizeFromMeasured ? ` (${measuredLabel} template on file)` : " (vendor template)") : " (computed finished + bleed)"}.`,
     });
   } else {
     const bad = pages.find((p) => !matchesBox(p, target, SIZE_TOL));
@@ -511,14 +517,16 @@ export function validateCompletedComponent(
           key: "tmpl.size",
           label: "Artboard size",
           status: "pass",
-          message: `${dim(pages[0])} — matches the ${spec.label} vendor template exactly.`,
+          message: sizeFromMeasured
+            ? `${dim(pages[0])} — matches the ${measuredLabel} template on file exactly.`
+            : `${dim(pages[0])} — matches the ${spec.label} vendor template exactly.`,
         });
       } else {
         checks.push({
           key: "tmpl.size",
           label: "Artboard size",
           status: "fail",
-          message: `${dim(bad)} — expected ${dim(target)} (vendor template). Override with justification if this is a legitimate variant.`,
+          message: `${dim(bad)} — expected ${dim(target)} (${sizeFromMeasured ? `measured from the ${measuredLabel} template on file` : "vendor template"}). Override with justification if this is a legitimate variant.`,
         });
       }
     } else {

@@ -11806,3 +11806,51 @@ SQL
 }
 seed_mrp_print_rules_20260811 dev  "${DATABASE_URL:-}"
 seed_mrp_print_rules_20260811 prod "${PROD_DATABASE_URL:-}"
+# Task #3011 — measured-from-template columns on press_template_specs.
+# Idempotent ADD COLUMN so schema-drift stays green on both DBs.
+migrate_template_spec_measurements() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping template-spec-measurements migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_artboard_w_inches double precision;
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_artboard_h_inches double precision;
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_pages integer;
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_has_cmyk boolean;
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_has_rgb boolean;
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_has_spot boolean;
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_has_live_text boolean;
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_has_embedded_fonts boolean;
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_has_dieline boolean;
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_at timestamp;
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_error text;
+SQL
+  then
+    echo "post-merge: template-spec-measurements migration ok on $label"
+  else
+    echo "post-merge: WARNING — template-spec-measurements migration failed on $label (continuing)"
+  fi
+}
+migrate_template_spec_measurements dev  "${DATABASE_URL:-}"
+migrate_template_spec_measurements prod "${PROD_DATABASE_URL:-}"
+
+# Task #3011 — one-time backfill: measure already-attached template files.
+# Naturally idempotent (only touches rows with measured_at IS NULL), bounded
+# so a slow external fetch can't blow the post-merge timeout. Failures are
+# recorded on the row and retryable via the editor's Re-scan button.
+backfill_template_measurements() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping template-measurement backfill on $label (no URL set)"
+    return 0
+  fi
+  if DATABASE_URL="$url" timeout 180 npx tsx scripts/backfill-template-spec-measurements.ts; then
+    echo "post-merge: template-measurement backfill ok on $label"
+  else
+    echo "post-merge: WARNING — template-measurement backfill failed/timed out on $label (continuing; Re-scan is available in the catalog editor)"
+  fi
+}
+backfill_template_measurements dev  "${DATABASE_URL:-}"
+backfill_template_measurements prod "${PROD_DATABASE_URL:-}"

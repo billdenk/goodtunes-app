@@ -573,6 +573,18 @@ export type FinishedComponentSpec = {
   /** Short press name for verdict wording ("MRP requires ≥0.125″ bleed").
    * Null = generic platform spec. */
   pressName?: string | null;
+  /**
+   * Task #3011 — provenance of `templatePageInches` / `expectedPages`:
+   *   "operator"  — an explicit catalog edit (always wins);
+   *   "measured"  — measured from the press's uploaded template file;
+   *   "baseline"  — the hardcoded measured-from-real-files constant;
+   *   null        — computed finished+bleed fallback (advisory only).
+   * Drives the check wording ("vs <press> template on file").
+   */
+  sizeSource?: "operator" | "measured" | "baseline" | null;
+  pagesSource?: "operator" | "measured" | "baseline" | null;
+  /** Press display name when a measured template drives this slot. */
+  measuredFromLabel?: string | null;
 };
 
 // Measured flat artboard sizes (inches) keyed by
@@ -707,6 +719,14 @@ export function requiredFinishedComponents(
     }
   }
 
+  // Task #3011 — stamp provenance for the baseline values so the resolver
+  // (and the check wording) can tell where each number came from.
+  for (const spec of out) {
+    spec.sizeSource = spec.templatePageInches ? "baseline" : null;
+    spec.pagesSource = spec.expectedPages > 0 ? "baseline" : null;
+    spec.measuredFromLabel = null;
+  }
+
   return out;
 }
 
@@ -746,6 +766,13 @@ export type PressTemplateSpecRow = {
   /** Task #3012 — per-component print-rule overrides (jsonb, loosely typed
    * so drizzle rows pass structurally). */
   printRules?: unknown;
+  // Task #3011 — measured-from-template values (server scans the attached
+  // template PDF). An explicit operator edit above always wins; a measured
+  // value fills in only when the matching operator field is null.
+  measuredArtboardWInches?: number | null;
+  measuredArtboardHInches?: number | null;
+  measuredPages?: number | null;
+  measuredError?: string | null;
 };
 
 /**
@@ -795,7 +822,9 @@ export function resolveFinishedComponents(args: {
   storeRows?: PressTemplateSpecRow[];
   /** Task #3012 — press-level print-rule defaults (manufacturers.print_rules). */
   pressPrintRules?: PressPrintRules | null;
-  /** Task #3012 — press display name for verdict wording. */
+  /** Task #3012 — press display name for verdict wording. Also used by
+   * Task #3011 for measured-from-template wording ("vs MRP template on
+   * file"). */
   pressName?: string | null;
 }): FinishedComponentSpec[] {
   const rawBaseline = requiredFinishedComponents(args.vendorId, args.config);
@@ -837,10 +866,25 @@ export function resolveFinishedComponents(args: {
     }
     if (!match) return spec;
     const next: FinishedComponentSpec = { ...spec };
+    // Task #3011 precedence per field: explicit operator/press edit →
+    // measured-from-template value → hardcoded baseline (already on the
+    // spec) → computed finished+bleed fallback (templatePageInches null).
     if (match.artboardWInches != null && match.artboardHInches != null) {
       next.templatePageInches = { w: match.artboardWInches, h: match.artboardHInches };
+      next.sizeSource = "operator";
+    } else if (match.measuredArtboardWInches != null && match.measuredArtboardHInches != null) {
+      next.templatePageInches = { w: match.measuredArtboardWInches, h: match.measuredArtboardHInches };
+      next.sizeSource = "measured";
+      next.measuredFromLabel = args.pressName ?? next.measuredFromLabel ?? null;
     }
-    if (match.expectedPages != null) next.expectedPages = match.expectedPages;
+    if (match.expectedPages != null) {
+      next.expectedPages = match.expectedPages;
+      next.pagesSource = "operator";
+    } else if (match.measuredPages != null && match.measuredPages > 0) {
+      next.expectedPages = match.measuredPages;
+      next.pagesSource = "measured";
+      next.measuredFromLabel = args.pressName ?? next.measuredFromLabel ?? null;
+    }
     if (match.color === "process-4c" || match.color === "cmyk-or-pms") next.color = match.color;
     if (match.minPpi != null && match.minPpi > 0) next.minPpi = match.minPpi;
     if (match.templateFileUrl) next.templateFileUrl = match.templateFileUrl;

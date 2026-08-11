@@ -2654,7 +2654,9 @@ export type PressTierJacketLadder = typeof pressTierJacketLadders.$inferSelect;
 // "" (no variant) for labels / inner sleeves; discCount 0 = generic
 // (applies to any disc count), a positive value pins the row to that
 // exact count. templateFileUrl / fontsRule are operator reference
-// metadata only — never fetched server-side (no SSRF surface).
+// metadata (download link for artists) — and, since Task #3011, is also
+// measured server-side on attach (SSRF-guarded fetch) to fill the
+// measured_* columns that drive the completed-artwork checks.
 export const pressTemplateSpecs = pgTable(
   "press_template_specs",
   {
@@ -2677,6 +2679,22 @@ export const pressTemplateSpecs = pgTable(
     // Task #2705 — minimum placed-image resolution (PPI) the press requires
     // for this component; null = no check (never fabricated).
     minPpi: integer("min_ppi"),
+    // Task #3011 — measured-from-template fields. When a template file is
+    // attached, the server scans the PDF and stores what's actually in the
+    // file. These NEVER overwrite the operator-entered columns above; the
+    // resolver prefers explicit edits over measured values. measuredError
+    // non-null = last scan failed (row keeps working on baseline/computed).
+    measuredArtboardWInches: doublePrecision("measured_artboard_w_inches"),
+    measuredArtboardHInches: doublePrecision("measured_artboard_h_inches"),
+    measuredPages: integer("measured_pages"),
+    measuredHasCmyk: boolean("measured_has_cmyk"),
+    measuredHasRgb: boolean("measured_has_rgb"),
+    measuredHasSpot: boolean("measured_has_spot"),
+    measuredHasLiveText: boolean("measured_has_live_text"),
+    measuredHasEmbeddedFonts: boolean("measured_has_embedded_fonts"),
+    measuredHasDieline: boolean("measured_has_dieline"),
+    measuredAt: timestamp("measured_at"),
+    measuredError: text("measured_error"),
     // Task #3012 — per-component press print-rule overrides (bleed min/
     // recommended, safety margin, bitmap PPI floor, grayscale/Pantone-only
     // toggles, placed-image format rule, advisories). Shape:

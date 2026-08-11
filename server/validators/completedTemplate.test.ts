@@ -316,6 +316,107 @@ describe("resolveFinishedComponents — catalog specs merged over baseline", () 
     });
     assert.deepEqual(resolved.find((s) => s.id === "jacket")!.templatePageInches, { w: 31, h: 31 });
   });
+
+  // ── Task #3011 — measured-from-template precedence ──────────────────
+  test("measured template values fill in when no explicit edit exists (edit > measured > baseline)", () => {
+    const resolved = resolveFinishedComponents({
+      vendorId: "mrp",
+      config: CFG,
+      pressName: "Memphis Record Pressing",
+      storeRows: [
+        row({ measuredArtboardWInches: 28.0, measuredArtboardHInches: 26.5, measuredPages: 1 }),
+      ],
+    });
+    const jacket = resolved.find((s) => s.id === "jacket")!;
+    assert.deepEqual(jacket.templatePageInches, { w: 28.0, h: 26.5 });
+    assert.equal(jacket.sizeSource, "measured");
+    assert.equal(jacket.expectedPages, 1);
+    assert.equal(jacket.pagesSource, "measured");
+    assert.equal(jacket.measuredFromLabel, "Memphis Record Pressing");
+  });
+
+  test("an explicit operator edit wins over the measured template value", () => {
+    const resolved = resolveFinishedComponents({
+      vendorId: "mrp",
+      config: CFG,
+      storeRows: [
+        row({
+          artboardWInches: 30,
+          artboardHInches: 30,
+          expectedPages: 4,
+          measuredArtboardWInches: 28.0,
+          measuredArtboardHInches: 26.5,
+          measuredPages: 1,
+        }),
+      ],
+    });
+    const jacket = resolved.find((s) => s.id === "jacket")!;
+    assert.deepEqual(jacket.templatePageInches, { w: 30, h: 30 });
+    assert.equal(jacket.sizeSource, "operator");
+    assert.equal(jacket.expectedPages, 4);
+    assert.equal(jacket.pagesSource, "operator");
+  });
+
+  test("a failed scan (measuredError, no measured dims) keeps the baseline exactly as today", () => {
+    const resolved = resolveFinishedComponents({
+      vendorId: "mrp",
+      config: CFG,
+      storeRows: [row({ measuredError: "Couldn't fetch the file (HTTP 404)." })],
+    });
+    const jacket = resolved.find((s) => s.id === "jacket")!;
+    assert.deepEqual(jacket.templatePageInches, baseJacket.templatePageInches);
+    assert.equal(jacket.sizeSource, "baseline");
+  });
+
+  test("two presses with different measured templates produce different expected specs", () => {
+    const a = resolveFinishedComponents({
+      vendorId: "mrp",
+      config: CFG,
+      pressName: "Memphis Record Pressing",
+      storeRows: [row({ measuredArtboardWInches: 27.25, measuredArtboardHInches: 27.0 })],
+    });
+    const b = resolveFinishedComponents({
+      vendorId: "hellbender",
+      config: CFG,
+      pressName: "Hellbender Vinyl",
+      storeRows: [row({ measuredArtboardWInches: 33.0, measuredArtboardHInches: 32.53 })],
+    });
+    assert.deepEqual(a.find((s) => s.id === "jacket")!.templatePageInches, { w: 27.25, h: 27.0 });
+    assert.deepEqual(b.find((s) => s.id === "jacket")!.templatePageInches, { w: 33.0, h: 32.53 });
+    assert.equal(a.find((s) => s.id === "jacket")!.measuredFromLabel, "Memphis Record Pressing");
+    assert.equal(b.find((s) => s.id === "jacket")!.measuredFromLabel, "Hellbender Vinyl");
+  });
+});
+
+describe("Task #3011 — measured-template check wording", () => {
+  test("a measured template drives authoritative wording naming the press", () => {
+    const spec = {
+      ...SPECS.jacket,
+      templatePageInches: { w: 27.25, h: 27.0 },
+      sizeSource: "measured" as const,
+      pagesSource: "measured" as const,
+      expectedPages: 1,
+      measuredFromLabel: "Memphis Record Pressing",
+    };
+    const good = scanBuffer(fakePdf({ pages: 1, wIn: 27.25, hIn: 27.0, color: "cmyk", fonts: "outlined" }));
+    const checks = validateCompletedComponent(good, spec);
+    const size = checks.find((c) => c.key === "tmpl.size")!;
+    assert.equal(size.status, "pass");
+    assert.match(size.message, /Memphis Record Pressing template on file/);
+    assert.doesNotMatch(size.message, /No vendor template on file/);
+
+    const bad = scanBuffer(fakePdf({ pages: 1, wIn: 24.25, hIn: 12.25, color: "cmyk", fonts: "outlined" }));
+    const badSize = validateCompletedComponent(bad, spec).find((c) => c.key === "tmpl.size")!;
+    assert.equal(badSize.status, "fail");
+    assert.match(badSize.message, /measured from the Memphis Record Pressing template on file/);
+  });
+
+  test("the advisory 'no vendor template' wording still appears when nothing is on file", () => {
+    const spec = { ...SPECS.booklet ?? SPECS.jacket, templatePageInches: null, sizeSource: null };
+    const scan = scanBuffer(fakePdf({ pages: 2, wIn: 12.25, hIn: 12.25, color: "cmyk", fonts: "outlined" }));
+    const size = validateCompletedComponent(scan, spec).find((c) => c.key === "tmpl.size")!;
+    assert.match(size.message, /No vendor template on file/);
+  });
 });
 
 // ─── Task #3012 — press-specific print-rule fields + checks ──────────────

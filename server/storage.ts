@@ -972,6 +972,27 @@ export interface IStorage {
     updatedByUserId: string | null,
   ): Promise<PressTemplateSpec>;
   deletePressTemplateSpec(pressId: string, specId: string): Promise<void>;
+  getPressTemplateSpecById(pressId: string, specId: string): Promise<PressTemplateSpec | null>;
+  updatePressTemplateSpecMeasured(
+    pressId: string,
+    specId: string,
+    patch: Partial<
+      Pick<
+        PressTemplateSpec,
+        | "measuredArtboardWInches"
+        | "measuredArtboardHInches"
+        | "measuredPages"
+        | "measuredHasCmyk"
+        | "measuredHasRgb"
+        | "measuredHasSpot"
+        | "measuredHasLiveText"
+        | "measuredHasEmbeddedFonts"
+        | "measuredHasDieline"
+        | "measuredAt"
+        | "measuredError"
+      >
+    >,
+  ): Promise<PressTemplateSpec | null>;
 
   // ---- Task #2324 — Operator-editable press AUDIO spec override ------
   // One row per press (keyed manufacturers.id). The audio preflight
@@ -5501,6 +5522,44 @@ export class DbStorage implements IStorage {
     await db
       .delete(pressTemplateSpecs)
       .where(and(eq(pressTemplateSpecs.pressId, pressId), eq(pressTemplateSpecs.id, specId)));
+  }
+  async getPressTemplateSpecById(pressId: string, specId: string): Promise<PressTemplateSpec | null> {
+    const [row] = await db
+      .select()
+      .from(pressTemplateSpecs)
+      .where(and(eq(pressTemplateSpecs.pressId, pressId), eq(pressTemplateSpecs.id, specId)))
+      .limit(1);
+    return row ?? null;
+  }
+  // Task #3011 — write ONLY the measured-from-template columns; never
+  // touches the operator-entered fields, so a re-scan can't clobber an
+  // explicit override.
+  async updatePressTemplateSpecMeasured(
+    pressId: string,
+    specId: string,
+    patch: Partial<
+      Pick<
+        PressTemplateSpec,
+        | "measuredArtboardWInches"
+        | "measuredArtboardHInches"
+        | "measuredPages"
+        | "measuredHasCmyk"
+        | "measuredHasRgb"
+        | "measuredHasSpot"
+        | "measuredHasLiveText"
+        | "measuredHasEmbeddedFonts"
+        | "measuredHasDieline"
+        | "measuredAt"
+        | "measuredError"
+      >
+    >,
+  ): Promise<PressTemplateSpec | null> {
+    const [row] = await db
+      .update(pressTemplateSpecs)
+      .set(patch)
+      .where(and(eq(pressTemplateSpecs.pressId, pressId), eq(pressTemplateSpecs.id, specId)))
+      .returning();
+    return row ?? null;
   }
 
   // ---- Task #3012 — press-level print-rule defaults ------------------

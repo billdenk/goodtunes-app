@@ -33611,10 +33611,13 @@ export async function registerRoutes(
   // truth for which press's specs to compare against. Returns null when no
   // manufacturer name maps to the vendor → resolveRequired falls back to
   // the measured constants (never worse than before this table existed).
-  async function pressIdForVendor(vendorId: VendorId): Promise<string | null> {
+  async function pressForVendor(vendorId: VendorId): Promise<{ id: string; name: string } | null> {
     const all = await storage.getManufacturers();
     const match = all.find((m) => matchInvitedPressToVendor(m.name) === vendorId);
-    return match?.id ?? null;
+    return match ? { id: match.id, name: match.name } : null;
+  }
+  async function pressIdForVendor(vendorId: VendorId): Promise<string | null> {
+    return (await pressForVendor(vendorId))?.id ?? null;
   }
 
   // Task #2324 — load the operator/partner-editable AUDIO override for a
@@ -33648,7 +33651,8 @@ export async function registerRoutes(
     let storeRows: Awaited<ReturnType<typeof storage.listPressTemplateSpecs>> = [];
     // Task #3012 — press-level print-rule defaults + press name ride on
     // every resolved slot (fallback-safe: both null when no press maps or
-    // the press has entered nothing → validator behavior unchanged).
+    // the press has entered nothing → validator behavior unchanged). The
+    // same pressName also labels Task #3011 measured-from-template wording.
     let pressPrintRules: ReturnType<typeof sanitizePrintRules> = null;
     let pressName: string | null = null;
     const pressId = await pressIdForVendor(vendorId);
@@ -34251,8 +34255,13 @@ export async function registerRoutes(
   // spec-entry UI lands with the redesigned catalog; these endpoints are
   // the data layer behind it. variantKey is meaningful for jacket rows
   // only ("" = applies to any jacket); labels / inner sleeves are
-  // variant-less. templateFileUrl is stored as reference metadata and is
-  // NEVER fetched server-side (no SSRF surface).
+  // variant-less. templateFileUrl WAS pure reference metadata; since
+  // Task #3011 an attached template is measured server-side (artboard
+  // size, page count, convention flags) so the checks can be driven by
+  // what's actually in the file. The fetch is guarded: our own
+  // /objects/uploads paths stream straight from object storage, and
+  // external URLs go through the SSRF-safe fetchAndScanPdf (https-only,
+  // DNS-checked, redirect-revalidated, size/time capped).
   const templateSpecBodySchema = z.object({
     format: z.enum(["7_inch", "12_lp", "12_double", "cassette", "cd"]),
     // Vinyl pieces + cassette pieces (Bill 2026-08-10: cassette gets the
@@ -34367,6 +34376,82 @@ export async function registerRoutes(
     res.json({ printRules: updated?.printRules ?? null });
   });
 
+  // Task #3011 — measure an attached template file and persist what's in
+  // it (artboard dims, page count, convention observations) onto the spec
+  // row's measured-* columns. Never touches operator-entered fields. Any
+  // failure is recorded (measuredError) and the row keeps working on the
+  // baseline / computed fallback — a broken scan never breaks the check.
+  const TEMPLATE_SCAN_MAX_BYTES = 300 * 1024 * 1024;
+  async function measureTemplateSpecRow(pressId: string, specId: string): Promise<void> {
+    const row = await storage.getPressTemplateSpecById(pressId, specId);
+    if (!row?.templateFileUrl) return;
+    const url = row.templateFileUrl;
+    let scan: import("./validators/completedTemplate").CompletedPdfScan | null = null;
+    let error: string | null = null;
+    try {
+      if (url.startsWith("/objects/uploads/")) {
+        // Our own object storage — no SSRF surface.
+        scan = await scanObjectPdf(url);
+        if (!scan.isPdf) {
+          error = "The attached file isn't a PDF — only PDF templates can be measured.";
+          scan = null;
+        }
+      } else if (/^https?:\/\//i.test(url)) {
+        const fetched = await fetchAndScanPdf(url, {
+          maxBytes: TEMPLATE_SCAN_MAX_BYTES,
+          timeoutMs: 60_000,
+        });
+        if (fetched.ok) scan = fetched.scan;
+        else error = fetched.error;
+      } else {
+        error = "Unsupported template location — upload the file or paste an https:// link.";
+      }
+    } catch (e: any) {
+      error = e?.message ? `Couldn't measure this template: ${e.message}` : "Couldn't measure this template.";
+    }
+
+    if (scan) {
+      // Use the FIRST page's MediaBox as the artboard (all real vendor
+      // templates are uniform; a mixed-size file still records page 1).
+      const first = scan.pageSizesInches[0] ?? null;
+      await storage.updatePressTemplateSpecMeasured(pressId, specId, {
+        measuredArtboardWInches: first ? Math.round(first.w * 10000) / 10000 : null,
+        measuredArtboardHInches: first ? Math.round(first.h * 10000) / 10000 : null,
+        measuredPages: scan.pageCount > 0 ? scan.pageCount : null,
+        measuredHasCmyk: scan.hasCMYK,
+        measuredHasRgb: scan.hasRGB,
+        measuredHasSpot: scan.hasSpot,
+        measuredHasLiveText: scan.hasFontDicts,
+        measuredHasEmbeddedFonts: scan.hasEmbeddedFonts,
+        measuredHasDieline: scan.hasDieline,
+        measuredAt: new Date(),
+        measuredError: null,
+      });
+    } else {
+      await storage.updatePressTemplateSpecMeasured(pressId, specId, {
+        measuredAt: new Date(),
+        measuredError: error ?? "Couldn't measure this template.",
+      });
+    }
+  }
+
+  /** Blank every measured-* column (template removed or replaced). */
+  async function clearTemplateSpecMeasurements(pressId: string, specId: string): Promise<void> {
+    await storage.updatePressTemplateSpecMeasured(pressId, specId, {
+      measuredArtboardWInches: null,
+      measuredArtboardHInches: null,
+      measuredPages: null,
+      measuredHasCmyk: null,
+      measuredHasRgb: null,
+      measuredHasSpot: null,
+      measuredHasLiveText: null,
+      measuredHasEmbeddedFonts: null,
+      measuredHasDieline: null,
+      measuredAt: null,
+      measuredError: null,
+    });
+  }
+
   app.get("/api/admin/manufacturers/:id/template-specs", requireAdminBearer, async (req, res) => {
     if (!(await requirePressManager(req, res, req.params.id))) return;
     const press = await storage.getManufacturerById(req.params.id);
@@ -34385,6 +34470,14 @@ export async function registerRoutes(
     // ("" = applies to any jacket); labels / inner sleeves are always
     // variant-less so the unique key + resolver lookup agree.
     const variantKey = body.data.componentKey === "jacket" ? (body.data.variantKey ?? "") : "";
+    // Task #3011 — detect a template attach/replace so we can (re)measure.
+    const prevRows = await storage.listPressTemplateSpecs(req.params.id, body.data.format);
+    const prev = prevRows.find(
+      (r) =>
+        r.componentKey === body.data.componentKey &&
+        (r.variantKey ?? "") === variantKey &&
+        r.discCount === (body.data.discCount ?? 0),
+    );
     const spec = await storage.upsertPressTemplateSpec(
       {
         pressId: req.params.id,
@@ -34404,8 +34497,41 @@ export async function registerRoutes(
       },
       req.session.userId ?? null,
     );
-    res.json({ spec });
+    // Task #3011 — measure the attached template when it's new/changed (or
+    // was never measured). Removal/replacement clears stale measurements
+    // first. Await so the editor sees measured values on refetch; failures
+    // are recorded on the row, never thrown.
+    const newUrl = spec.templateFileUrl ?? null;
+    const urlChanged = (prev?.templateFileUrl ?? null) !== newUrl;
+    let outSpec = spec;
+    if (!newUrl) {
+      if (urlChanged || spec.measuredAt) await clearTemplateSpecMeasurements(req.params.id, spec.id);
+      outSpec = (await storage.getPressTemplateSpecById(req.params.id, spec.id)) ?? spec;
+    } else if (urlChanged || !spec.measuredAt) {
+      if (urlChanged) await clearTemplateSpecMeasurements(req.params.id, spec.id);
+      await measureTemplateSpecRow(req.params.id, spec.id);
+      outSpec = (await storage.getPressTemplateSpecById(req.params.id, spec.id)) ?? spec;
+    }
+    res.json({ spec: outSpec });
   });
+
+  // Task #3011 — manual re-scan of an attached template (e.g. after a
+  // transient fetch failure). Same guard set as the PUT.
+  app.post(
+    "/api/admin/manufacturers/:id/template-specs/:specId/measure",
+    requireAdminBearer,
+    async (req, res) => {
+      if (!(await requirePressManager(req, res, req.params.id, { requireEdit: true }))) return;
+      const row = await storage.getPressTemplateSpecById(req.params.id, req.params.specId);
+      if (!row) return res.status(404).json({ message: "Spec row not found" });
+      if (!row.templateFileUrl) {
+        return res.status(400).json({ message: "No template file attached to this row." });
+      }
+      await measureTemplateSpecRow(req.params.id, req.params.specId);
+      const fresh = await storage.getPressTemplateSpecById(req.params.id, req.params.specId);
+      res.json({ spec: fresh });
+    },
+  );
 
   app.delete(
     "/api/admin/manufacturers/:id/template-specs/:specId",

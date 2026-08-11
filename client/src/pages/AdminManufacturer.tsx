@@ -3635,6 +3635,19 @@ type PressTemplateSpec = {
   // Task #3012 — per-component print-rule overrides (null = inherit the
   // press-level defaults saved in the Print rules card below).
   printRules: PressPrintRulesDraftShape | null;
+  // Task #3011 — measured-from-template values (server scans the attached
+  // PDF). Explicit fields above always win; these fill in when blank.
+  measuredArtboardWInches: number | null;
+  measuredArtboardHInches: number | null;
+  measuredPages: number | null;
+  measuredHasCmyk: boolean | null;
+  measuredHasRgb: boolean | null;
+  measuredHasSpot: boolean | null;
+  measuredHasLiveText: boolean | null;
+  measuredHasEmbeddedFonts: boolean | null;
+  measuredHasDieline: boolean | null;
+  measuredAt: string | null;
+  measuredError: string | null;
 };
 
 // Task #3012 — shared shape for print rules (press-level defaults +
@@ -3699,6 +3712,19 @@ export function PressTemplateSpecsCard({ pressId, fmt }: { pressId: string; fmt:
     onError: (e: any) =>
       toast({ title: e?.message || "Couldn't remove template", variant: "destructive" }),
   });
+  // Task #3011 — manual re-measure of an attached template file.
+  const rescan = useMutation({
+    mutationFn: async (specId: string) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/admin/manufacturers/${pressId}/template-specs/${specId}/measure`,
+      );
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk }),
+    onError: (e: any) =>
+      toast({ title: e?.message || "Couldn't measure the template", variant: "destructive" }),
+  });
 
   return (
     <div className="border-t border-slate-100 px-5 py-4">
@@ -3734,6 +3760,8 @@ export function PressTemplateSpecsCard({ pressId, fmt }: { pressId: string; fmt:
               });
             }}
             onRemove={(specId) => remove.mutate(specId)}
+            onRescan={(specId) => rescan.mutate(specId)}
+            rescanBusy={rescan.isPending}
           />
         ))}
       </div>
@@ -4436,6 +4464,8 @@ function TemplateComponentRow({
   busy,
   onSave,
   onRemove,
+  onRescan,
+  rescanBusy,
 }: {
   label: string;
   hint: string;
@@ -4443,6 +4473,8 @@ function TemplateComponentRow({
   busy: boolean;
   onSave: (body: Partial<PressTemplateSpec>) => void;
   onRemove: (specId: string) => void;
+  onRescan: (specId: string) => void;
+  rescanBusy: boolean;
 }) {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -4679,6 +4711,87 @@ function TemplateComponentRow({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* Task #3011 — measured-from-template summary. Shown whenever a
+          template file is attached: what the scan actually found (size,
+          pages, color mode, live text, dieline), the "couldn't measure"
+          note on failure, and a Re-scan action. Mismatch flags against
+          explicit operator values so the press confirms conventions
+          instead of inheriting them blind. */}
+      {fileUrl && spec && (spec.measuredAt || spec.measuredError) && (
+        <div className="mt-1.5" data-testid={`template-measured-${spec.componentKey}`}>
+          {spec.measuredError ? (
+            <div className="flex items-center gap-2 text-xs text-amber-700">
+              <span data-testid={`text-template-measure-error-${spec.componentKey}`}>
+                Couldn't measure this template — checks fall back to the baseline/computed spec.{" "}
+                <span className="text-amber-600/80">({spec.measuredError})</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => onRescan(spec.id)}
+                disabled={busy || rescanBusy}
+                className="shrink-0 text-[var(--brand-blue)] hover:underline disabled:opacity-50"
+                data-testid={`button-template-rescan-${spec.componentKey}`}
+              >
+                {rescanBusy ? "Measuring…" : "Re-scan"}
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+              <span className="font-medium text-slate-600">Measured from template:</span>
+              {spec.measuredArtboardWInches != null && spec.measuredArtboardHInches != null && (
+                <span data-testid={`text-template-measured-size-${spec.componentKey}`}>
+                  {spec.measuredArtboardWInches.toFixed(2)}″ × {spec.measuredArtboardHInches.toFixed(2)}″
+                </span>
+              )}
+              {spec.measuredPages != null && (
+                <span>· {spec.measuredPages} {spec.measuredPages === 1 ? "page" : "pages"}</span>
+              )}
+              <span>
+                ·{" "}
+                {[
+                  spec.measuredHasCmyk ? "CMYK" : null,
+                  spec.measuredHasSpot ? "spot/PMS" : null,
+                  spec.measuredHasRgb ? "RGB" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" + ") || "color mode unknown"}
+              </span>
+              <span>
+                · {spec.measuredHasLiveText ? (spec.measuredHasEmbeddedFonts ? "live text (fonts embedded)" : "live text (fonts NOT embedded)") : "text outlined"}
+              </span>
+              <span>· {spec.measuredHasDieline ? "dieline/template layer present" : "no dieline layer"}</span>
+              {/* Mismatch flags: explicit operator values vs the template's own contents. */}
+              {spec.artboardWInches != null &&
+                spec.artboardHInches != null &&
+                spec.measuredArtboardWInches != null &&
+                spec.measuredArtboardHInches != null &&
+                (Math.abs(spec.artboardWInches - spec.measuredArtboardWInches) > 0.02 ||
+                  Math.abs(spec.artboardHInches - spec.measuredArtboardHInches) > 0.02) && (
+                  <span className="text-amber-700" data-testid={`text-template-size-mismatch-${spec.componentKey}`}>
+                    ⚠ manual size override differs from the template — the manual value wins
+                  </span>
+                )}
+              {spec.expectedPages != null &&
+                spec.measuredPages != null &&
+                spec.expectedPages !== spec.measuredPages && (
+                  <span className="text-amber-700" data-testid={`text-template-pages-mismatch-${spec.componentKey}`}>
+                    ⚠ manual page count ({spec.expectedPages}) differs from the template ({spec.measuredPages}) — the manual value wins
+                  </span>
+                )}
+              <button
+                type="button"
+                onClick={() => onRescan(spec.id)}
+                disabled={busy || rescanBusy}
+                className="shrink-0 text-[var(--brand-blue)] hover:underline disabled:opacity-50"
+                data-testid={`button-template-rescan-${spec.componentKey}`}
+              >
+                {rescanBusy ? "Measuring…" : "Re-scan"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Template preview panel — floating, resizable */}
       {previewOpen && fileUrl && (

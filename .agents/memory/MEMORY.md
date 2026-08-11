@@ -154,3 +154,4 @@
 - [Session-save race on redirect flows](oauth-challenge-session-save-race.md) — await req.session.save() before any redirect whose landing page immediately calls back, or the follow-up loads a pre-save session.
 - [Payment-state resets fail closed](payment-state-reset-fail-closed.md) — reverting a "Paying" row needs resource_missing-only fail-open, expire re-verify, and an UPDATE predicate matching the full verified snapshot (status+session id+PI col).
 - [Completed-art trim previews](completed-art-trim-previews.md) — pdfinfo always prints a defaulted TrimBox (==CropBox = absent); real TrimBox = finished area (no bleed inset), content-bbox approximations must inset bleed; panel choice shape-driven; always fall back to full page.
+- [Press template measurement](press-template-measurement.md) — attached templates are measured and drive checks (edit > measured > baseline > computed); truncated/partial scans always rejected; ShareFile share links can't measure.
