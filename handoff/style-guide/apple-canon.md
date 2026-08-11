@@ -77,6 +77,13 @@ accents on ~14%-alpha translucent washes — see tokens).
   (e.g. two-column form cards) instead of shrinking the container.
 - Individual text blocks may still cap their measure for readability
   (~640px for paragraphs), but cards, tables, and forms span the container.
+    - **Containers fill the container (ratified Aug 11 2026).** Every card,
+    form section, table, and content block spans the FULL width of the page
+    container — never a narrower cap that leaves a dead gap on the right.
+    If a card's content doesn't need the width, lay the content out in
+    columns inside the full-width card; do not shrink the card. A page whose
+    cards stop short of the right gutter while the container keeps going is
+    a bug.
 
 ## Content patterns
 
@@ -152,3 +159,24 @@ Reference implementation: the dark Catalog mockup
 - Admin dark is charcoal, never navy — navy belongs to the fan shell only.
 - Nothing shouts: severity is communicated with restraint (dot + label, quiet
   washes), not banners.
+
+
+## Theming & breakpoints (ratified Aug 11 2026)
+
+- **Theme tokens only.** No component hardcodes surface/ink/hairline hex
+  values. Colors come from the active theme's tokens (a THEMES map with
+  light + dark sets, or CSS variables). Handoff mocks ship BOTH token sets;
+  a floating "View light / View dark" toggle is mock-only chrome — never
+  ship it.
+- **No mixed surfaces.** Every surface on a page inherits the page's active
+  theme. A dark card on a light page (or vice versa) is a bug, even if it
+  matches a mock drawn for the other theme.
+- **Which theme where:** artist-facing contexts = light; the charcoal
+  admin/operator shell = dark. Screens serving both are theme-aware from
+  day one, never forked.
+- **Breakpoints:** no fixed pixel widths that overflow the viewport. Grids
+  collapse gracefully at 1024 and 768 (prefer auto-fit/minmax grids and
+  flex-wrap over breakpoint classes).
+- **Acceptance gate:** before a screen is done, screenshot it in both
+  themes (where both apply) at 1440 / 1024 / 768. Off-theme surfaces or
+  horizontal overflow = failure.
