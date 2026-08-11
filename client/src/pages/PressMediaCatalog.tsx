@@ -131,16 +131,10 @@ function CdRender({ caseName, print, spots, logoUrl }: { caseName: string; print
   const silk = print.name === 'Silkscreen';
   // Silkscreen inks band the white disc: first pick owns the disc, each
   // extra pick pushes the earlier ones out into rings (outermost = first).
-  // Band boundaries are equal-AREA so every ink reads as an even share.
-  const bands = spots;
-  let tint: string | undefined;
-  if (silk && bands.length === 1) {
-    tint = `radial-gradient(circle, transparent 12%, ${bands[0]} 12.5% 95.5%, transparent 96%)`;
-  } else if (silk && bands.length === 2) {
-    tint = `radial-gradient(circle, transparent 12%, ${bands[1]} 12.5% 68%, ${bands[0]} 68.5% 95.5%, transparent 96%)`;
-  } else if (silk && bands.length >= 3) {
-    tint = `radial-gradient(circle, transparent 12%, ${bands[2]} 12.5% 56%, ${bands[1]} 56.5% 78%, ${bands[0]} 78.5% 95.5%, transparent 96%)`;
-  }
+  // Bands split the radius EVENLY so every ink reads as an equal ring.
+  const tint = silk ? silkBandGradient(spots) : undefined;
+  // Near-black outermost ink needs an edge ring against the dark canvas.
+  const darkEdge = silk && spots.length > 0 && isDarkInk(spots[0]);
   return (
     <div className="relative cd-render" style={{ width: S * 1.42, height: S * 1.06 }}>
       {/* floor shadow so the object sits on the page */}
@@ -174,6 +168,15 @@ function CdRender({ caseName, print, spots, logoUrl }: { caseName: string; print
             aria-hidden
             className="absolute inset-0 rounded-full"
             style={{ background: tint, mixBlendMode: 'multiply', transition: 'background 0.25s ease' }}
+          />
+        )}
+        {darkEdge && (
+          // 1px light ring at the printed edge so a black outermost ink
+          // still reads against the dark canvas (multiply tint can't do it).
+          <div
+            aria-hidden
+            className="absolute rounded-full pointer-events-none"
+            style={{ inset: '2%', boxShadow: `0 0 0 1px ${DARK_DISC_RING}` }}
           />
         )}
       </div>
@@ -348,14 +351,18 @@ function TwoTone({ a, b, size = 24 }: { a: string; b: string; size?: number }) {
 }
 
 // A small realistic disc chip for the print-choice cards + preview swatch.
-function DiscChip({ size, art }: { size: number; art: boolean }) {
+function DiscChip({ size, art, bands }: { size: number; art: boolean; bands?: string[] }) {
+  // Silkscreen summary chip: paint the picked inks as even rings over the
+  // white disc, mirroring the big preview. Dark outermost ink gets the ring.
+  const tint = bands && bands.length > 0 ? silkBandGradient(bands) : undefined;
+  const darkEdge = !!bands && bands.length > 0 && isDarkInk(bands[0]);
   return (
     <span
       className="relative rounded-full flex-shrink-0"
       style={{
         width: size,
         height: size,
-        boxShadow: '0 2px 6px rgba(0,0,0,0.45), 0 0 0 0.5px rgba(255,255,255,0.14)',
+        boxShadow: `0 2px 6px rgba(0,0,0,0.45), 0 0 0 ${darkEdge ? `1px ${DARK_DISC_RING}` : '0.5px rgba(255,255,255,0.14)'}`,
       }}
     >
       <span
@@ -366,6 +373,12 @@ function DiscChip({ size, art }: { size: number; art: boolean }) {
             : 'radial-gradient(circle at 36% 30%, #fbfcfe, #dcdfe6 45%, #b7bcc6 78%)',
         }}
       />
+      {tint && (
+        <span
+          className="absolute inset-0 rounded-full"
+          style={{ background: tint, mixBlendMode: 'multiply' }}
+        />
+      )}
       <span
         className="absolute rounded-full"
         style={{
@@ -520,7 +533,7 @@ export function CdCatalogBody({
                 style={{ marginTop: 14, padding: '12px 18px', backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}
                 data-testid="print-summary-row"
               >
-                <DiscChip size={44} art={print.art} />
+                <DiscChip size={44} art={print.art} bands={print.name === 'Silkscreen' ? spotHexes : undefined} />
                 <div className="flex-1 min-w-0">
                   <div className="text-[14px] font-semibold truncate" style={{ color: INK }}>{print.name}</div>
                   <div className="text-[11.5px]" style={{ marginTop: 1, color: FAINT }}>
@@ -596,7 +609,7 @@ export function CdCatalogBody({
                         <span className="relative flex justify-center" style={{ marginBottom: 8 }}>
                           <span
                             className="relative block rounded-full"
-                            style={{ width: 48, height: 48, boxShadow: '0 0 0 1px rgba(255,255,255,0.14), 0 3px 8px rgba(0,0,0,0.5)' }}
+                            style={{ width: 48, height: 48, boxShadow: `0 0 0 1px ${isDarkInk(c.base) ? DARK_DISC_RING : 'rgba(255,255,255,0.14)'}, 0 3px 8px rgba(0,0,0,0.5)` }}
                           >
                             <span
                               className="absolute inset-0 rounded-full"

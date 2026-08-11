@@ -4350,6 +4350,18 @@ export type InsertAlbumManufacturerQuote = z.infer<
   typeof insertAlbumManufacturerQuoteSchema
 >;
 
+// handoff/press-specs — per-press Specs (Catalog › Specs). Two jsonb blobs
+// on manufacturers, resolved over the handoff defaults server-side (see
+// server/pressCatalog.ts resolvePressSpecs): audio is keyed per format
+// (vinyl/cd/cassette master-file rules), art is one set of rules for all
+// components (templates carry their own dimensions).
+export type PressAudioSpecsData = {
+  vinyl?: Record<string, string>;
+  cd?: Record<string, string>;
+  cassette?: Record<string, string>;
+};
+export type PressArtSpecsData = Record<string, string>;
+
 export const manufacturerPaymentSteps = pgTable(
   "manufacturer_payment_steps",
   {
@@ -4538,6 +4550,11 @@ export const manufacturers = pgTable("manufacturers", {
   // press hasn't customized anything; the server resolves handoff defaults.
   cdCatalog: jsonb("cd_catalog").$type<PressMediaCatalogData>(),
   cassetteCatalog: jsonb("cassette_catalog").$type<PressMediaCatalogData>(),
+  // handoff/press-specs — Catalog › Specs. Audio specs keyed per format
+  // (vinyl/cd/cassette), art specs one flat blob. Null = press hasn't
+  // customized; the server resolves handoff defaults (resolvePressSpecs).
+  audioSpecs: jsonb("audio_specs").$type<PressAudioSpecsData>(),
+  artSpecs: jsonb("art_specs").$type<PressArtSpecsData>(),
   // Stable per-press series color for cross-press charts (combined Press
   // Dashboard stacked trend, legends, leaderboard bars). Assigned ONCE when
   // the press is onboarded (next unused slot in PRESS_CHART_PALETTE) so a

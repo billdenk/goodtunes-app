@@ -2341,6 +2341,78 @@ export const mediaCatalogPatchSchema = z
     }
   });
 
+// ─── handoff/press-specs — per-press Specs defaults + resolution ────────────
+// Handoff MOCK_ values are the platform defaults until a press edits them.
+const VINYL_AUDIO_SPEC_DEFAULTS = {
+  formats: "WAV, AIFF",
+  bitDepth: "24",
+  sampleRate: "44.1 – 192",
+  onePerSide: "Required, with track sheet",
+  side12_33: "22",
+  side12_45: "12",
+  side10_33: "14",
+  side10_45: "9",
+  side7_45: "4:30",
+  monoBelow: "150",
+  deEss: "Heavy de-essing above 8 kHz",
+  cuttingMethod: "Lacquer",
+  testPressings: "Included",
+};
+const CD_AUDIO_SPEC_DEFAULTS = {
+  masters: "DDP 2.0 image, WAV",
+  bitRate: "16-bit / 44.1 kHz",
+  maxLength: "79:57",
+  isrc: "Optional, embedded in DDP",
+  trackGap: "2 s default, editable",
+  pregap: "Allowed",
+};
+const CASSETTE_AUDIO_SPEC_DEFAULTS = {
+  formats: "WAV, AIFF",
+  bitDepth: "16",
+  c30: "15",
+  c45: "22:30",
+  c60: "30",
+};
+const ART_SPEC_DEFAULTS = {
+  minResolution: "300",
+  bitmapMin: "1200",
+  bleedMin: "0.125",
+  bleedRec: "0.25",
+  safetyMargin: "0.25",
+  colorMode: "CMYK + PMS",
+  pantone: "Official only",
+  maxSpots: "2",
+  placedImages: "CMYK or grayscale TIFF, PSD",
+  acceptedFormats: "PDF/X-4, AI, PSD (flattened)",
+  fonts: "Outlined or embedded",
+};
+
+const specValue = z.string().trim().max(200);
+const specPatchSchema = (keys: readonly string[]) =>
+  z.object(Object.fromEntries(keys.map((k) => [k, specValue.optional()]))).strict();
+
+const AUDIO_SPECS_PATCH_SCHEMAS = {
+  vinyl: specPatchSchema(Object.keys(VINYL_AUDIO_SPEC_DEFAULTS)),
+  cd: specPatchSchema(Object.keys(CD_AUDIO_SPEC_DEFAULTS)),
+  cassette: specPatchSchema(Object.keys(CASSETTE_AUDIO_SPEC_DEFAULTS)),
+} as const;
+const artSpecsPatchSchema = specPatchSchema(Object.keys(ART_SPEC_DEFAULTS));
+
+export function resolvePressSpecs(press: {
+  audioSpecs?: { vinyl?: Record<string, string>; cd?: Record<string, string>; cassette?: Record<string, string> } | null;
+  artSpecs?: Record<string, string> | null;
+}) {
+  const stored = press.audioSpecs ?? {};
+  return {
+    audio: {
+      vinyl: { ...VINYL_AUDIO_SPEC_DEFAULTS, ...(stored.vinyl ?? {}) },
+      cd: { ...CD_AUDIO_SPEC_DEFAULTS, ...(stored.cd ?? {}) },
+      cassette: { ...CASSETTE_AUDIO_SPEC_DEFAULTS, ...(stored.cassette ?? {}) },
+    },
+    art: { ...ART_SPEC_DEFAULTS, ...(press.artSpecs ?? {}) },
+  };
+}
+
 export function registerPressCatalogRoutes(
   app: Express,
   requireAdmin: any,
@@ -2414,6 +2486,82 @@ export function registerPressCatalogRoutes(
       `);
       const updated = await storage.getManufacturerById(pressId);
       res.json(resolveMediaCatalog(format, updated as any));
+    },
+  );
+
+  // ─── handoff/press-specs — Catalog › Specs (audio + art) ───────────
+  // Per-press master-file specs shown to artists at upload. Stored as two
+  // jsonb blobs on manufacturers (audio_specs keyed per format, art_specs
+  // flat); handoff defaults resolve underneath until the press edits.
+
+  // GET resolved specs for a press.
+  app.get("/api/admin/manufacturers/:id/specs", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+    const userId = (req as any).adminUserId as string | undefined;
+    let canEdit = false;
+    if (userId) {
+      const { pressUserCanEdit } = await import("./auth/partnerPermissions");
+      canEdit = await pressUserCanEdit(userId, pressId);
+    }
+    res.json({ ...resolvePressSpecs(press as any), canEdit });
+  });
+
+  // PUT one audio format's specs (merge-patch at the format key).
+  app.put(
+    "/api/admin/manufacturers/:id/specs/audio/:format",
+    requireAdmin,
+    requirePressScope,
+    requirePressEditor,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const format = String(req.params.format) as keyof typeof AUDIO_SPECS_PATCH_SCHEMAS;
+      const schema = AUDIO_SPECS_PATCH_SCHEMAS[format];
+      if (!schema) return res.status(400).json({ message: "Unknown audio format" });
+      const press = await storage.getManufacturerById(pressId);
+      if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+      const parsed = schema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid specs data", errors: parsed.error.flatten() });
+      }
+      // Atomic nested merge so concurrent saves of DIFFERENT formats (or
+      // different keys of the same format) can't clobber each other.
+      await db.execute(sql`
+        UPDATE manufacturers
+           SET audio_specs = jsonb_set(
+                 COALESCE(audio_specs, '{}'::jsonb),
+                 ARRAY[${format}]::text[],
+                 COALESCE(audio_specs -> ${format}, '{}'::jsonb) || ${JSON.stringify(parsed.data)}::jsonb
+               )
+         WHERE id = ${pressId}
+      `);
+      const updated = await storage.getManufacturerById(pressId);
+      res.json(resolvePressSpecs(updated as any));
+    },
+  );
+
+  // PUT art specs (flat merge-patch).
+  app.put(
+    "/api/admin/manufacturers/:id/specs/art",
+    requireAdmin,
+    requirePressScope,
+    requirePressEditor,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const press = await storage.getManufacturerById(pressId);
+      if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+      const parsed = artSpecsPatchSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid specs data", errors: parsed.error.flatten() });
+      }
+      await db.execute(sql`
+        UPDATE manufacturers
+           SET art_specs = COALESCE(art_specs, '{}'::jsonb) || ${JSON.stringify(parsed.data)}::jsonb
+         WHERE id = ${pressId}
+      `);
+      const updated = await storage.getManufacturerById(pressId);
+      res.json(resolvePressSpecs(updated as any));
     },
   );
 

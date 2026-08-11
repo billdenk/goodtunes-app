@@ -55,6 +55,7 @@ import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { SaveLink, CardHeader, EditPencil } from "@/components/admin/EditCardChrome";
 import { IconButton } from "@/components/ui/IconButton";
 import { PressPackagePricingCatalog } from "@/pages/PressPackagePricingCatalog";
+import { PressSpecs } from "@/pages/PressSpecs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -271,6 +272,24 @@ export function AdminManufacturer() {
       const u = new URL(window.location.href);
       if (next === "dashboard") u.searchParams.delete("tab");
       else u.searchParams.set("tab", next);
+      window.history.replaceState({}, "", u.toString());
+    } catch {}
+  };
+
+  // handoff/press-specs — which Catalog section the quiet pull-down shows
+  // (GoodTunes Packages / White Label / GoodDeed Certificates / Specs).
+  // Deep-linkable via ?section= (partner-portal tab-in-URL convention).
+  const [catalogSection, setCatalogSectionState] = useState<CatalogSection>(() => {
+    if (typeof window === "undefined") return "packages";
+    const q = new URLSearchParams(window.location.search).get("section");
+    return q === "specs" || q === "gooddeeds" ? q : "packages";
+  });
+  const setCatalogSection = (next: CatalogSection) => {
+    setCatalogSectionState(next);
+    try {
+      const u = new URL(window.location.href);
+      if (next === "packages") u.searchParams.delete("section");
+      else u.searchParams.set("section", next);
       window.history.replaceState({}, "", u.toString());
     } catch {}
   };
@@ -691,13 +710,43 @@ export function AdminManufacturer() {
             />
           </div>
         )}
-        {tab === "catalog" && (
+        {tab === "catalog" && catalogSection === "specs" && (
+          <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: "32px 40px 96px" }}>
+            {/* handoff/press-specs — Catalog heading + quiet section pull-down
+                (SuperAdminPressSpecsDark), rendering the same Specs page the
+                press sees. */}
+            <div className="flex items-center gap-4">
+              <h1 className="tracking-tight" style={{ color: adminDark ? "#f5f5f7" : "var(--apple-ink)", fontSize: 32, lineHeight: 1.1, fontWeight: 700 }}>
+                Catalog
+              </h1>
+              <CatalogSectionPulldown value={catalogSection} onChange={setCatalogSection} dark={adminDark} />
+            </div>
+            <PressSpecs pressId={id} variant="admin" />
+          </div>
+        )}
+        {tab === "catalog" && catalogSection === "gooddeeds" && (
+          <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: "32px 40px 96px" }}>
+            <div className="flex items-center gap-4">
+              <h1 className="tracking-tight" style={{ color: adminDark ? "#f5f5f7" : "var(--apple-ink)", fontSize: 32, lineHeight: 1.1, fontWeight: 700 }}>
+                Catalog
+              </h1>
+              <CatalogSectionPulldown value={catalogSection} onChange={setCatalogSection} dark={adminDark} />
+            </div>
+            <div className="mt-6 max-w-3xl">
+              <GoodDeedPrintingEditor pressId={id} />
+            </div>
+          </div>
+        )}
+        {tab === "catalog" && catalogSection === "packages" && (
           <>
             <PressPackagePricingCatalog
               pressId={id}
               pressDomain={m?.domain ?? null}
               placeholderUrl={m?.vinylPlaceholderUrl ?? null}
               pressLogoUrl={m?.logoUrl ?? null}
+              sectionPulldown={
+                <CatalogSectionPulldown value={catalogSection} onChange={setCatalogSection} dark={adminDark} />
+              }
             />
           </>
         )}
@@ -3024,6 +3073,84 @@ export function FormatDropdown({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+    </div>
+  );
+}
+
+// ─── handoff/press-specs — Catalog section pull-down (super admin) ──────────
+// Quiet pill next to the Catalog heading picking between GoodTunes Packages /
+// White Label / GoodDeed Certificates / Specs. Styles verbatim from
+// SuperAdminPressSpecsDark (dark tokens), with light-theme equivalents.
+type CatalogSection = "packages" | "white-label" | "gooddeeds" | "specs";
+const CATALOG_SECTION_LABELS: Record<CatalogSection, string> = {
+  packages: "GoodTunes Packages",
+  "white-label": "White Label",
+  gooddeeds: "GoodDeed Certificates",
+  specs: "Specs",
+};
+function CatalogSectionPulldown({ value, onChange, dark }: { value: CatalogSection; onChange: (s: CatalogSection) => void; dark: boolean }) {
+  const [open, setOpen] = useState(false);
+  const CARD = dark ? "#1e1e20" : "#ffffff";
+  const HAIRLINE = dark ? "rgba(255,255,255,0.10)" : "var(--apple-hairline)";
+  const INK = dark ? "#f5f5f7" : "var(--apple-ink)";
+  const SUBINK = dark ? "#98989d" : "var(--apple-subink)";
+  const FAINT = dark ? "#6e6e73" : "var(--apple-faint)";
+  const BLUE = "#319ED8";
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [open]);
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="h-8 pl-3.5 pr-2.5 rounded-full inline-flex items-center gap-1.5 text-[12.5px] font-semibold"
+        style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, color: INK }}
+        data-testid="button-catalog-section"
+      >
+        {CATALOG_SECTION_LABELS[value]}
+        <ChevronDown className="w-3.5 h-3.5" style={{ color: FAINT, transform: open ? "rotate(180deg)" : undefined }} />
+      </button>
+      {open && (
+        <div
+          className="absolute left-0 top-9 w-56 rounded-xl py-1.5 z-10"
+          style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: dark ? "0 12px 32px rgba(0,0,0,0.55)" : "0 12px 32px rgba(0,0,0,0.16)" }}
+        >
+          {(Object.keys(CATALOG_SECTION_LABELS) as CatalogSection[]).map((s) => {
+            const on = s === value;
+            const soon = s === "white-label";
+            return (
+              <button
+                key={s}
+                type="button"
+                disabled={soon}
+                onClick={() => {
+                  if (soon) return;
+                  onChange(s);
+                  setOpen(false);
+                }}
+                className={`w-full flex items-center px-3.5 h-8 text-[12.5px] text-left transition-colors ${soon ? "" : dark ? "hover:bg-white/5" : "hover:bg-black/5"}`}
+                style={{ color: soon ? FAINT : on ? INK : SUBINK, fontWeight: on ? 600 : 400 }}
+                data-testid={`option-section-${CATALOG_SECTION_LABELS[s].toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+              >
+                <span className="flex-1 truncate">{CATALOG_SECTION_LABELS[s]}</span>
+                {soon && (
+                  <span className="ml-auto flex-shrink-0 px-2 h-[18px] rounded-full text-[10px] font-semibold tracking-wide flex items-center" style={{ color: SUBINK, backgroundColor: dark ? "#26262a" : "#f2f2f4", border: `1px solid ${HAIRLINE}` }}>
+                    Soon
+                  </span>
+                )}
+                {on && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: BLUE }} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -43,6 +43,7 @@ import {
   ScrollText,
   Wrench,
   Library,
+  AudioLines,
   Gift,
   Receipt,
   Cog,
@@ -184,6 +185,10 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "albums",     label: "Projects",         icon: Disc3,            roles: ["press"] },
   { id: "acquisition", label: "Acquisition",    icon: UserPlus,         roles: ["press"] },
   { id: "catalog",    label: "Catalog",          icon: Library,          roles: ["press"] },
+  // handoff/press-specs — per-press master-file specs (audio + art) shown
+  // to artists at upload. Sits right under Catalog (rail stays flat per
+  // Bill, Task #2838 — the handoff's Catalog children are decorative).
+  { id: "specs",      label: "Specs",            icon: AudioLines,       roles: ["press"] },
   { id: "pricing",    label: "GoodDeed pricing", icon: Receipt,          roles: ["press"] },
   { id: "settings",   label: "Settings",         icon: Cog,              roles: ["press"] },
   { id: "referrals",  label: "Referrals",        icon: Gift,             roles: ["press"] },

@@ -55,6 +55,7 @@ import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { AdminGoodDeedPricing } from "@/pages/AdminGoodDeedPricing";
 import { PressPackagePricingCatalog } from "@/pages/PressPackagePricingCatalog";
 import { PressVinylColors } from "@/pages/PressVinylColors";
+import { PressSpecs } from "@/pages/PressSpecs";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
@@ -77,9 +78,9 @@ import { PRIMARY_CREATIVE_CREDITS } from "@/components/admin/RolePicker";
 
 // pipeline + reports stay in the union so direct ?tab= URLs still render
 // their content (they're just hidden from the nav per Task #2188).
-type TabId = "dashboard" | "people" | "catalog" | "albums" | "pipeline" | "reports" | "pricing" | "referrals" | "acquisition" | "settings";
+type TabId = "dashboard" | "people" | "catalog" | "specs" | "albums" | "pipeline" | "reports" | "pricing" | "referrals" | "acquisition" | "settings";
 
-const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "catalog", "albums", "pipeline", "reports", "pricing", "referrals", "acquisition", "settings"];
+const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "catalog", "specs", "albums", "pipeline", "reports", "pricing", "referrals", "acquisition", "settings"];
 
 interface MeRole { role: string; roleScopeId: string | null; }
 interface PressMe {
@@ -333,7 +334,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       // while the embedded album view is open (it brings its own chrome).
       pageTitle={
         albumViewId ||
-        ["dashboard", "catalog", "pricing", "referrals", "reports", "people", "albums", "acquisition"].includes(tab)
+        ["dashboard", "catalog", "specs", "pricing", "referrals", "reports", "people", "albums", "acquisition"].includes(tab)
           ? undefined
           : tab === "pipeline"
             ? "Pipeline"
@@ -384,6 +385,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
           />
         </div>
       ))}
+      {tab === "specs" && <PressSpecs pressId={pressId} />}
       {tab === "pipeline" && <PipelineTab pressId={pressId} />}
       {tab === "reports" && <AdminReports embedded />}
       {tab === "pricing" && <AdminGoodDeedPricing embedded />}

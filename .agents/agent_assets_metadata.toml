@@ -312,3 +312,10 @@ uri = "file://attached_assets/exports/goodtunes-design-system-pack.zip"
 type = "unspecified"
 title = "GoodTunes Design System Pack (Super-Admin)"
 description = "Self-contained handoff bundle: README for AI design tools, full design-system + admin-conventions docs, live CSS tokens (incl. the gt-admin light theme), and the style-guide components."
+
+[[outputs]]
+id = "0sMMRuEv5gY3_mV-h-xUW"
+uri = "file://.local/tasks/press-print-spec-design-brief.md"
+type = "text"
+title = "Press Print-Spec Design Brief (for Ruby)"
+description = "Design brief for the press spec-entry cards and upgraded artwork check dialog — includes the design-system mandate (build from existing stylesheets, no new visual language)."

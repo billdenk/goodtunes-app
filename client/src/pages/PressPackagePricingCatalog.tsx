@@ -1767,6 +1767,7 @@ export function PressPackagePricingCatalog({
   pressLogoUrl = null,
   hideHeading = false,
   onOpenColors,
+  sectionPulldown,
 }: {
   pressId: string;
   pressDomain: string | null;
@@ -1774,6 +1775,10 @@ export function PressPackagePricingCatalog({
   pressLogoUrl?: string | null;
   hideHeading?: boolean;
   onOpenColors?: () => void;
+  // handoff/press-specs — super-admin quiet section pull-down (GoodTunes
+  // Packages / White Label / GoodDeed Certificates / Specs), rendered next
+  // to the Catalog heading. Only AdminManufacturer passes it.
+  sectionPulldown?: React.ReactNode;
 }) {
   const { toast } = useToast();
   const dark = useAdminDark();
@@ -2550,9 +2555,12 @@ export function PressPackagePricingCatalog({
       <div className="flex items-start justify-between gap-6">
         <div>
           <div>
-            <h1 className="tracking-tight" style={{ color: INK, fontSize: 32, lineHeight: 1.1, fontWeight: 700 }}>
-              Catalog
-            </h1>
+            <div className="flex items-center gap-4">
+              <h1 className="tracking-tight" style={{ color: INK, fontSize: 32, lineHeight: 1.1, fontWeight: 700 }}>
+                Catalog
+              </h1>
+              {sectionPulldown}
+            </div>
             <div className="inline-flex items-center rounded-full" style={{ marginTop: 16, padding: 3, backgroundColor: dark ? CARD_SOFT : "#ececf0" }} role="tablist" aria-label="Catalog format">
               {(() => {
                 const vinylActive = mediaTab === "vinyl" && !!fmt && VINYL_FORMATS.includes(fmt);

@@ -11712,3 +11712,23 @@ SQL
 }
 migrate_vendor_payouts dev  "${DATABASE_URL:-}"
 migrate_vendor_payouts prod "${PROD_DATABASE_URL:-}"
+
+# handoff/press-specs — Catalog › Specs jsonb columns on manufacturers.
+migrate_press_specs() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press-specs migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS audio_specs jsonb;
+ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS art_specs jsonb;
+SQL
+  then
+    echo "post-merge: press-specs migration ok on $label"
+  else
+    echo "post-merge: WARNING — press-specs migration failed on $label (continuing)"
+  fi
+}
+migrate_press_specs dev  "${DATABASE_URL:-}"
+migrate_press_specs prod "${PROD_DATABASE_URL:-}"
